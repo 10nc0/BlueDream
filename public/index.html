@@ -496,56 +496,144 @@
         let textInterval = null;
         let currentStatus = { connected: false, number: null };
 
-        // Black cat (void) pixel art frames
-        const catFrames = {
-            idle: [
-                "     ▄▄▄▄▄     ",
-                "   ▄███████▄   ",
-                "  ███ ▀ ▀ ███  ",
-                "  ███  ▼  ███  ",
-                "  ▀███████▀▀   ",
-                "    ▀▀▀▀▀▀     ",
-                "   ▐█  █  █▌   "
-            ],
-            tailSwish: [
-                "     ▄▄▄▄▄     ",
-                "   ▄███████▄   ",
-                "  ███ ▀ ▀ ███  ",
-                "  ███  ▼  ███  ",
-                "  ▀███████▀▀   ",
-                "    ▀▀▀▀▀▀     ",
-                "   ▐█  █   █   "
-            ],
-            blink: [
-                "     ▄▄▄▄▄     ",
-                "   ▄███████▄   ",
-                "  ███ ─ ─ ███  ",
-                "  ███  ▼  ███  ",
-                "  ▀███████▀▀   ",
-                "    ▀▀▀▀▀▀     ",
-                "   ▐█  █  █▌   "
-            ]
-        };
+        // Cities with pixel art backgrounds
+        const cities = [
+            {
+                name: 'Tokyo Sakura',
+                building: '🌸🏯🌸',
+                color: '#ff9eb5',
+                accent: '#ff6b9d'
+            },
+            {
+                name: 'LA Downtown', 
+                building: '🌴🏙️🌴',
+                color: '#ffd700',
+                accent: '#ff8c00'
+            },
+            {
+                name: 'Ho Chi Minh',
+                building: '🏮🏛️🏮',
+                color: '#ff4d4d',
+                accent: '#ffaa00'
+            },
+            {
+                name: 'Singapore',
+                building: '🌺🏢🌺',
+                color: '#00d4ff',
+                accent: '#9d4edd'
+            }
+        ];
+        
+        let currentCityIndex = 0;
+        let cityScrollX = 0;
+        let lastCityChange = Date.now();
+        
+        // Smooth walking cat animation frames
+        const catWalk = [
+            // Frame 1: Left paw forward
+            {
+                body: [
+                    '  ▄▀▀▄',
+                    ' █▀●●▀█',
+                    '█▀▀▀▀▀█',
+                    '█▄▄▄▄▄█',
+                    '▐█ ▐█  '
+                ],
+                tail: '╱'
+            },
+            // Frame 2: Both paws down
+            {
+                body: [
+                    '  ▄▀▀▄',
+                    ' █▀●●▀█',
+                    '█▀▀▀▀▀█',
+                    '█▄▄▄▄▄█',
+                    '▐█ ▐█  '
+                ],
+                tail: '│'
+            },
+            // Frame 3: Right paw forward
+            {
+                body: [
+                    '  ▄▀▀▄',
+                    ' █▀●●▀█',
+                    '█▀▀▀▀▀█',
+                    '█▄▄▄▄▄█',
+                    ' ▐█ ▐█ '
+                ],
+                tail: '╲'
+            },
+            // Frame 4: Both paws down
+            {
+                body: [
+                    '  ▄▀▀▄',
+                    ' █▀●●▀█',
+                    '█▀▀▀▀▀█',
+                    '█▄▄▄▄▄█',
+                    '▐█ ▐█  '
+                ],
+                tail: '│'
+            }
+        ];
 
-        function drawCat(frameData, borderColor) {
+        function drawScene(statusColor) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Draw the black void cat
-            ctx.fillStyle = '#1a1a1a'; // Dark black for the cat body
-            ctx.font = '16px monospace';
+            const city = cities[currentCityIndex];
             
-            const startY = 5;
-            frameData.forEach((line, i) => {
-                ctx.fillText(line, 10, startY + (i * 8));
+            // Draw cityscape background
+            ctx.fillStyle = city.color + '20'; // Semi-transparent
+            ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+            
+            // Draw scrolling buildings
+            ctx.font = '24px Arial';
+            const buildingWidth = 60;
+            const numBuildings = Math.ceil(canvas.width / buildingWidth) + 2;
+            
+            for (let i = 0; i < numBuildings; i++) {
+                const x = (i * buildingWidth + cityScrollX) % (canvas.width + buildingWidth) - buildingWidth;
+                ctx.fillText(city.building, x, canvas.height - 3);
+            }
+            
+            // Draw ground line
+            ctx.strokeStyle = city.accent;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height - 18);
+            ctx.lineTo(canvas.width, canvas.height - 18);
+            ctx.stroke();
+            
+            // Draw city name tag in corner
+            ctx.font = '10px monospace';
+            ctx.fillStyle = city.accent + '80';
+            ctx.fillText(city.name, 5, 12);
+            
+            // Draw the walking void cat
+            const walkFrame = catWalk[Math.floor(animationFrame / 8) % catWalk.length];
+            const catX = 100;
+            const catY = 10;
+            
+            // Draw cat body (black)
+            ctx.fillStyle = '#0a0a0a';
+            ctx.font = '12px monospace';
+            walkFrame.body.forEach((line, i) => {
+                ctx.fillText(line, catX, catY + (i * 10));
             });
             
-            // Draw eyes in the status color
-            ctx.fillStyle = borderColor;
-            const eyeLine = 2; // Line where eyes are
-            const eyeY = startY + (eyeLine * 8);
-            // Draw small colored dots for eyes
-            ctx.fillRect(55, eyeY - 4, 3, 3); // Left eye
-            ctx.fillRect(75, eyeY - 4, 3, 3); // Right eye
+            // Draw tail
+            ctx.fillText(walkFrame.tail, catX - 8, catY + 30);
+            
+            // Draw glowing eyes with status color
+            ctx.fillStyle = statusColor;
+            ctx.fillRect(catX + 15, catY + 5, 2, 2); // Left eye
+            ctx.fillRect(catX + 22, catY + 5, 2, 2); // Right eye
+            
+            // Add a subtle glow effect to eyes
+            ctx.shadowColor = statusColor;
+            ctx.shadowBlur = 3;
+            ctx.fillRect(catX + 15, catY + 5, 2, 2);
+            ctx.fillRect(catX + 22, catY + 5, 2, 2);
+            ctx.shadowBlur = 0;
         }
 
         function animateCat() {
@@ -554,31 +642,19 @@
                 return;
             }
             
-            const color = currentStatus.connected ? '#25D366' : '#ff9500';
+            const statusColor = currentStatus.connected ? '#25D366' : '#ff9500';
             
-            // Animation sequence: idle -> tail swish -> idle -> blink
-            const sequence = [
-                { frame: 'idle', duration: 30 },
-                { frame: 'tailSwish', duration: 10 },
-                { frame: 'idle', duration: 30 },
-                { frame: 'blink', duration: 5 },
-            ];
+            // Scroll the city
+            cityScrollX -= 0.5;
             
-            let totalFrames = sequence.reduce((sum, s) => sum + s.duration, 0);
-            let currentFrame = animationFrame % totalFrames;
-            
-            let accumulated = 0;
-            let selectedFrame = 'idle';
-            
-            for (let s of sequence) {
-                if (currentFrame < accumulated + s.duration) {
-                    selectedFrame = s.frame;
-                    break;
-                }
-                accumulated += s.duration;
+            // Change city every 10 seconds
+            if (Date.now() - lastCityChange > 10000) {
+                currentCityIndex = (currentCityIndex + 1) % cities.length;
+                lastCityChange = Date.now();
+                cityScrollX = 0;
             }
             
-            drawCat(catFrames[selectedFrame], color);
+            drawScene(statusColor);
             animationFrame++;
             
             requestAnimationFrame(animateCat);
