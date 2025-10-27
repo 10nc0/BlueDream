@@ -34,6 +34,39 @@ let client = null;
 
 async function initializeDatabase() {
     try {
+        // Create bots table first
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS bots (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                input_platform TEXT NOT NULL,
+                output_platform TEXT NOT NULL,
+                input_credentials JSONB,
+                output_credentials JSONB,
+                status TEXT DEFAULT 'inactive',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        `);
+        
+        // Create default bot if none exists (needed before messages migration)
+        const botsCount = await pool.query('SELECT COUNT(*) FROM bots');
+        if (parseInt(botsCount.rows[0].count) === 0) {
+            await pool.query(`
+                INSERT INTO bots (name, input_platform, output_platform, input_credentials, output_credentials, status)
+                VALUES ($1, $2, $3, $4, $5, $6)
+            `, [
+                'WhatsApp → Discord Bridge',
+                'WhatsApp',
+                'Discord',
+                JSON.stringify({}),
+                JSON.stringify({ webhook_url: process.env.DISCORD_WEBHOOK_URL || '' }),
+                'active'
+            ]);
+            console.log('✅ Created default bot');
+        }
+        
+        // Create messages table if it doesn't exist
         await pool.query(`
             CREATE TABLE IF NOT EXISTS messages (
                 id SERIAL PRIMARY KEY,
@@ -50,8 +83,28 @@ async function initializeDatabase() {
             )
         `);
         
+        // Add bot_id column if it doesn't exist (migration for existing tables)
+        const columnCheck = await pool.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='messages' AND column_name='bot_id'
+        `);
+        
+        if (columnCheck.rows.length === 0) {
+            console.log('📝 Adding bot_id column to messages table...');
+            await pool.query(`
+                ALTER TABLE messages 
+                ADD COLUMN bot_id INTEGER DEFAULT 1 REFERENCES bots(id) ON DELETE CASCADE
+            `);
+            console.log('✅ Added bot_id column');
+        }
+        
         await pool.query(`
             CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp DESC)
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_messages_bot_id ON messages(bot_id)
         `);
         
         console.log('✅ Database initialized successfully');
@@ -61,13 +114,14 @@ async function initializeDatabase() {
     }
 }
 
-async function saveMessage(message) {
+async function saveMessage(message, botId = 1) {
     try {
         const result = await pool.query(
-            `INSERT INTO messages (timestamp, sender_name, sender_contact, message_content, discord_status, discord_error, has_media, media_type, media_data)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            `INSERT INTO messages (bot_id, timestamp, sender_name, sender_contact, message_content, discord_status, discord_error, has_media, media_type, media_data)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              RETURNING id`,
             [
+                botId,
                 message.timestamp,
                 message.senderName,
                 message.senderContact,
@@ -479,6 +533,111 @@ app.get('/api/messages', async (req, res) => {
 app.get('/api/stats', async (req, res) => {
     const stats = await getMessageStats();
     res.json(stats);
+});
+
+// Bot management endpoints
+app.get('/api/bots', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM bots ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/bots', async (req, res) => {
+    try {
+        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials } = req.body;
+        const result = await pool.query(
+            `INSERT INTO bots (name, input_platform, output_platform, input_credentials, output_credentials, status)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [name, inputPlatform, outputPlatform, inputCredentials || {}, outputCredentials || {}, 'inactive']
+        );
+        res.json(result.rows[0]);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.put('/api/bots/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, status } = req.body;
+        const result = await pool.query(
+            `UPDATE bots 
+             SET name = $1, input_platform = $2, output_platform = $3, 
+                 input_credentials = $4, output_credentials = $5, status = $6, updated_at = NOW()
+             WHERE id = $7 RETURNING *`,
+            [name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, status, id]
+        );
+        res.json(result.rows[0]);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/bots/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Prevent deleting the default active bot
+        if (parseInt(id) === 1) {
+            return res.status(400).json({ 
+                error: 'Cannot delete the default bot (currently active). Create and activate a new bot first.' 
+            });
+        }
+        
+        await pool.query('DELETE FROM bots WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/bots/:id/stats', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query(`
+            SELECT 
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE discord_status = 'success') as success,
+                COUNT(*) FILTER (WHERE discord_status = 'failed') as failed,
+                COUNT(*) FILTER (WHERE discord_status = 'pending') as pending
+            FROM messages WHERE bot_id = $1
+        `, [id]);
+        res.json(result.rows[0]);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/bots/:id/messages', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { search, status } = req.query;
+        
+        let query = 'SELECT * FROM messages WHERE bot_id = $1';
+        const params = [id];
+        let paramCount = 2;
+        
+        if (search) {
+            query += ` AND (LOWER(sender_name) LIKE $${paramCount} OR sender_contact LIKE $${paramCount} OR LOWER(message_content) LIKE $${paramCount})`;
+            params.push(`%${search.toLowerCase()}%`);
+            paramCount++;
+        }
+        
+        if (status && status !== 'all') {
+            query += ` AND discord_status = $${paramCount}`;
+            params.push(status);
+        }
+        
+        query += ' ORDER BY timestamp DESC LIMIT 1000';
+        
+        const result = await pool.query(query, params);
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 app.listen(5000, '0.0.0.0', async () => {
