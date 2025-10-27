@@ -35,37 +35,43 @@
             font-size: 1.5rem;
             color: #ffffff;
         }
-        .status-badge {
+        .status-display {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            background: #25D366;
-            color: #064e1d;
-            border-radius: 9999px;
+            gap: 1rem;
+            padding: 0.75rem 1.25rem;
+            background: #1e293b;
+            border: 2px solid #25D366;
+            border-radius: 0.75rem;
+            min-width: 280px;
+            height: 80px;
+            position: relative;
+            overflow: hidden;
+        }
+        .status-display.offline {
+            border-color: #ff9500;
+        }
+        #statusCanvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        .status-text {
+            font-family: 'Courier New', monospace;
             font-size: 0.875rem;
             font-weight: 600;
+            color: #25D366;
+            position: absolute;
+            left: 0;
+            right: 0;
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.3s;
         }
-        .status-badge.offline {
-            background: #ff9500;
-            color: #1e293b;
+        .status-display.offline .status-text {
+            color: #ff9500;
         }
-        .status-badge .status-dot {
-            background: #064e1d;
-        }
-        .status-badge.offline .status-dot {
-            background: #1e293b;
-        }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            background: white;
-            border-radius: 50%;
-            animation: pulse 2s ease-in-out infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        .status-text.show {
+            opacity: 1;
         }
         .container {
             max-width: 1400px;
@@ -409,9 +415,9 @@
                     <p style="font-size: 0.875rem; color: #94a3b8;">Real-time message forwarding</p>
                 </div>
             </div>
-            <div class="status-badge" id="statusBadge">
-                <span class="status-dot"></span>
-                <span id="statusText">Connecting...</span>
+            <div class="status-display" id="statusDisplay">
+                <canvas id="statusCanvas" width="240" height="60"></canvas>
+                <div class="status-text" id="statusText">Connecting...</div>
             </div>
         </div>
     </header>
@@ -482,24 +488,134 @@
             media: ''
         };
 
+        // Pixel art cat animation (Flipper Zero style)
+        const canvas = document.getElementById('statusCanvas');
+        const ctx = canvas.getContext('2d');
+        let animationFrame = 0;
+        let showText = false;
+        let textInterval = null;
+        let currentStatus = { connected: false, number: null };
+
+        // Cat pixel art frames (simple 8-bit style)
+        const catFrames = {
+            idle: [
+                "     ▄▄▄▄▄     ",
+                "   ▄▀     ▀▄   ",
+                "  █  ●   ●  █  ",
+                "  █    ▼    █  ",
+                "  ▀▄       ▄▀  ",
+                "    ▀▄▄▄▄▄▀    ",
+                "   ▐▌  ▐▌  ▐▌  "
+            ],
+            tailSwish: [
+                "     ▄▄▄▄▄     ",
+                "   ▄▀     ▀▄   ",
+                "  █  ●   ●  █  ",
+                "  █    ▼    █  ",
+                "  ▀▄       ▄▀  ",
+                "    ▀▄▄▄▄▄▀    ",
+                "   ▐▌  ▐▌   ▌  "
+            ],
+            blink: [
+                "     ▄▄▄▄▄     ",
+                "   ▄▀     ▀▄   ",
+                "  █  ─   ─  █  ",
+                "  █    ▼    █  ",
+                "  ▀▄       ▄▀  ",
+                "    ▀▄▄▄▄▄▀    ",
+                "   ▐▌  ▐▌  ▐▌  "
+            ]
+        };
+
+        function drawCat(frameData, color) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = color;
+            ctx.font = '16px monospace';
+            
+            const startY = 5;
+            frameData.forEach((line, i) => {
+                ctx.fillText(line, 10, startY + (i * 8));
+            });
+        }
+
+        function animateCat() {
+            if (showText) {
+                requestAnimationFrame(animateCat);
+                return;
+            }
+            
+            const color = currentStatus.connected ? '#25D366' : '#ff9500';
+            
+            // Animation sequence: idle -> tail swish -> idle -> blink
+            const sequence = [
+                { frame: 'idle', duration: 30 },
+                { frame: 'tailSwish', duration: 10 },
+                { frame: 'idle', duration: 30 },
+                { frame: 'blink', duration: 5 },
+            ];
+            
+            let totalFrames = sequence.reduce((sum, s) => sum + s.duration, 0);
+            let currentFrame = animationFrame % totalFrames;
+            
+            let accumulated = 0;
+            let selectedFrame = 'idle';
+            
+            for (let s of sequence) {
+                if (currentFrame < accumulated + s.duration) {
+                    selectedFrame = s.frame;
+                    break;
+                }
+                accumulated += s.duration;
+            }
+            
+            drawCat(catFrames[selectedFrame], color);
+            animationFrame++;
+            
+            requestAnimationFrame(animateCat);
+        }
+
+        function toggleTextDisplay() {
+            const textEl = document.getElementById('statusText');
+            showText = !showText;
+            
+            if (showText) {
+                canvas.style.opacity = '0';
+                textEl.classList.add('show');
+            } else {
+                canvas.style.opacity = '1';
+                textEl.classList.remove('show');
+            }
+        }
+
         async function fetchStatus() {
             try {
                 const res = await fetch('/api/status');
                 const data = await res.json();
-                const badge = document.getElementById('statusBadge');
+                
+                const display = document.getElementById('statusDisplay');
                 const text = document.getElementById('statusText');
                 
+                currentStatus.connected = data.whatsappReady;
+                currentStatus.number = data.botNumber;
+                
                 if (data.whatsappReady) {
-                    badge.className = 'status-badge';
+                    display.className = 'status-display';
                     text.textContent = `Connected: ${data.botNumber || 'Unknown'}`;
                 } else {
-                    badge.className = 'status-badge offline';
+                    display.className = 'status-display offline';
                     text.textContent = data.hasQR ? 'Waiting for scan' : 'Connecting...';
                 }
             } catch (error) {
                 console.error('Error fetching status:', error);
             }
         }
+
+        // Start animations
+        canvas.style.transition = 'opacity 0.3s';
+        animateCat();
+        
+        // Toggle between cat and text every 4 seconds
+        textInterval = setInterval(toggleTextDisplay, 4000);
 
         async function fetchStats() {
             try {
