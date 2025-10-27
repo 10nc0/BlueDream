@@ -1901,7 +1901,7 @@
             }
         }
 
-        // Draw animated pixel character
+        // Draw animated pixel black cat (Flipper Zero style)
         function initHopAnimation() {
             const canvas = document.getElementById('hopCanvas');
             if (!canvas) return;
@@ -1909,41 +1909,59 @@
             const ctx = canvas.getContext('2d');
             let frame = 0;
             
-            function drawPixelBunny(frameNum) {
+            function drawPixelCat(frameNum) {
                 ctx.clearRect(0, 0, 40, 40);
                 
                 const isJump = Math.floor(frameNum / 15) % 2 === 0;
+                const yOffset = isJump ? -3 : 0;
                 
-                // Body (light blue)
-                ctx.fillStyle = '#93c5fd';
-                ctx.fillRect(15, isJump ? 22 : 20, 10, 10);
+                // Black cat body
+                ctx.fillStyle = '#1a1a1a';
+                
+                // Body (main)
+                ctx.fillRect(14, 22 + yOffset, 12, 8);
                 
                 // Head
-                ctx.fillRect(15, isJump ? 14 : 12, 10, 8);
+                ctx.fillRect(15, 15 + yOffset, 10, 7);
                 
-                // Ears
-                ctx.fillRect(16, isJump ? 8 : 6, 3, 6);
-                ctx.fillRect(21, isJump ? 8 : 6, 3, 6);
+                // Ears (pointy cat ears)
+                ctx.fillRect(15, 12 + yOffset, 3, 3);
+                ctx.fillRect(22, 12 + yOffset, 3, 3);
                 
-                // Eyes
-                ctx.fillStyle = '#1e293b';
-                ctx.fillRect(17, isJump ? 16 : 14, 2, 2);
-                ctx.fillRect(21, isJump ? 16 : 14, 2, 2);
+                // Tail (curved up)
+                ctx.fillRect(25, 23 + yOffset, 2, 4);
+                ctx.fillRect(26, 20 + yOffset, 2, 3);
                 
-                // Nose
+                // Eyes (green glow)
+                ctx.fillStyle = '#22c55e';
+                ctx.fillRect(17, 17 + yOffset, 2, 2);
+                ctx.fillRect(21, 17 + yOffset, 2, 2);
+                
+                // Nose (pink)
                 ctx.fillStyle = '#ec4899';
-                ctx.fillRect(19, isJump ? 18 : 16, 2, 1);
+                ctx.fillRect(19, 20 + yOffset, 2, 1);
                 
-                // Feet
-                ctx.fillStyle = '#93c5fd';
+                // Whiskers (white)
+                ctx.fillStyle = '#ffffff';
                 if (!isJump) {
-                    ctx.fillRect(15, 30, 4, 3);
-                    ctx.fillRect(21, 30, 4, 3);
+                    // Left whiskers
+                    ctx.fillRect(12, 19, 2, 1);
+                    ctx.fillRect(12, 21, 2, 1);
+                    // Right whiskers
+                    ctx.fillRect(26, 19, 2, 1);
+                    ctx.fillRect(26, 21, 2, 1);
+                }
+                
+                // Feet/paws
+                ctx.fillStyle = '#1a1a1a';
+                if (!isJump) {
+                    ctx.fillRect(15, 30, 3, 2);
+                    ctx.fillRect(22, 30, 3, 2);
                 }
             }
             
             function animate() {
-                drawPixelBunny(frame);
+                drawPixelCat(frame);
                 frame++;
                 requestAnimationFrame(animate);
             }
