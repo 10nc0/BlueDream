@@ -175,6 +175,13 @@
             min-height: 44px; /* iOS touch target */
             box-shadow: 0 2px 8px rgba(29, 78, 216, 0.2);
         }
+        @media (max-width: 768px) {
+            .btn {
+                font-size: 1rem; /* Larger text on mobile */
+                min-height: 48px; /* Better touch target */
+                padding: 0.875rem 1.25rem;
+            }
+        }
         .btn:hover { 
             background: rgba(30, 64, 175, 0.95);
             transform: translateY(-1px);
@@ -267,6 +274,12 @@
         .bot-card.expanded .bot-header::after {
             content: 'Click to collapse';
         }
+        /* Hide hint on mobile to prevent overlap with buttons */
+        @media (max-width: 768px) {
+            .bot-header::after {
+                display: none;
+            }
+        }
         .bot-info {
             flex: 1;
         }
@@ -284,6 +297,12 @@
             display: flex;
             gap: 2rem;
             font-size: 0.875rem;
+        }
+        @media (max-width: 768px) {
+            .bot-stats {
+                font-size: 0.95rem; /* Larger for mobile readability */
+                gap: 1.25rem;
+            }
         }
         .bot-stat {
             text-align: center;
@@ -353,7 +372,15 @@
         }
         @media (max-width: 768px) {
             .messages-table {
-                min-width: 800px;
+                min-width: 640px; /* Reduced from 800px for better mobile fit */
+            }
+            .messages-table th {
+                padding: 0.5rem;
+                font-size: 0.85rem; /* Larger, more readable on mobile */
+            }
+            .messages-table td {
+                padding: 0.5rem;
+                font-size: 0.95rem; /* Larger, more readable on mobile */
             }
             .bot-messages {
                 padding: 1rem;
