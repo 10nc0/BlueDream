@@ -51,9 +51,10 @@
             display: none; /* Hide on mobile by default */
         }
         .header-user-info button {
-            padding: 0.5rem 1rem;
+            padding: 0.625rem 1rem;
             font-size: 0.875rem;
             white-space: nowrap;
+            min-height: 44px; /* iOS touch target */
         }
         
         /* Mobile Responsive */
@@ -163,6 +164,7 @@
             font-size: 0.875rem;
             font-weight: 600;
             transition: background 0.2s;
+            min-height: 44px; /* iOS touch target */
         }
         .btn:hover { background: #1e40af; }
         .btn-success { background: #25D366; }
@@ -402,6 +404,7 @@
             font-size: 0.95rem;
             font-weight: 600;
             transition: all 0.2s;
+            min-height: 44px; /* iOS touch target */
         }
         .tab:hover {
             color: #e2e8f0;
