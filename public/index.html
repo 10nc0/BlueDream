@@ -316,6 +316,26 @@
             </div>
         </div>
 
+        <!-- Filter/Search Bar -->
+        <div style="margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+            <input 
+                type="text" 
+                id="botSearch" 
+                class="form-input" 
+                placeholder="🔍 Search bots by name, platform, contact, or tag..."
+                style="flex: 1; min-width: 300px;"
+                onkeyup="filterBots()"
+            >
+            <select id="platformFilter" class="form-select" style="width: 200px;" onchange="filterBots()">
+                <option value="">All Platforms</option>
+                <option value="WhatsApp">WhatsApp</option>
+                <option value="Telegram">Telegram</option>
+                <option value="Discord">Discord</option>
+                <option value="Slack">Slack</option>
+                <option value="X (Twitter)">X (Twitter)</option>
+            </select>
+        </div>
+
         <!-- Bot List -->
         <div id="botList" class="bot-list">
             <div class="empty-state">
@@ -331,8 +351,21 @@
             <form id="botForm" onsubmit="saveBotForm(event)">
                 <div class="form-group">
                     <label class="form-label">Bot Name</label>
-                    <input type="text" id="botName" class="form-input" placeholder="e.g., WhatsApp → Discord" required>
+                    <input type="text" id="botName" class="form-input" placeholder="e.g., Support WhatsApp Bot" required>
                 </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Contact Info (Phone/Username)</label>
+                    <input type="text" id="contactInfo" class="form-input" placeholder="e.g., +1234567890 or @username">
+                    <small style="color: #64748b; font-size: 0.75rem;">Phone number or username for identification</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Tags (comma-separated)</label>
+                    <input type="text" id="botTags" class="form-input" placeholder="e.g., support, sales, personal">
+                    <small style="color: #64748b; font-size: 0.75rem;">Organize bots with tags like "work", "personal", "sales"</small>
+                </div>
+                
                 <div class="form-group">
                     <label class="form-label">Input Platform</label>
                     <select id="inputPlatform" class="form-select" required>
@@ -373,6 +406,7 @@
 
     <script>
         let bots = [];
+        let filteredBots = [];
         let editingBotId = null;
         let expandedBots = new Set();
         let messageCache = {}; // Cache messages to avoid re-fetching on expand/collapse
@@ -493,10 +527,43 @@
             try {
                 const res = await fetch('/api/bots');
                 bots = await res.json();
+                filteredBots = bots; // Initially show all bots
                 renderBots();
             } catch (error) {
                 console.error('Error loading bots:', error);
             }
+        }
+        
+        // Filter bots by search term and platform
+        function filterBots() {
+            const searchTerm = document.getElementById('botSearch').value.toLowerCase();
+            const platformFilter = document.getElementById('platformFilter').value;
+            
+            filteredBots = bots.filter(bot => {
+                // Platform filter
+                if (platformFilter && bot.input_platform !== platformFilter && bot.output_platform !== platformFilter) {
+                    return false;
+                }
+                
+                // Search filter (name, platform, contact, tags)
+                if (searchTerm) {
+                    const searchableText = [
+                        bot.name,
+                        bot.input_platform,
+                        bot.output_platform,
+                        bot.contact_info || '',
+                        ...(bot.tags || [])
+                    ].join(' ').toLowerCase();
+                    
+                    if (!searchableText.includes(searchTerm)) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+            
+            renderBots();
         }
 
         // OPTIMIZED: No more N+1 queries! Stats come with bots from API
@@ -508,10 +575,15 @@
                 return;
             }
             
+            if (filteredBots.length === 0) {
+                list.innerHTML = '<div class="empty-state"><h3>No bots found</h3><p>Try adjusting your search or filter</p></div>';
+                return;
+            }
+            
             list.innerHTML = '';
             
             // Stats are already in the bot object from the optimized API
-            for (const bot of bots) {
+            for (const bot of filteredBots) {
                 const stats = {
                     total: parseInt(bot.total_messages) || 0,
                     success: parseInt(bot.success_count) || 0,
@@ -531,11 +603,20 @@
         function createBotCard(bot, stats) {
             const card = document.createElement('div');
             card.className = `bot-card ${bot.status === 'active' ? 'active' : ''} ${expandedBots.has(bot.id) ? 'expanded' : ''}`;
+            
+            // Prepare tags display
+            const tagsHtml = (bot.tags && bot.tags.length > 0) ? 
+                bot.tags.map(tag => `<span style="display: inline-block; padding: 0.25rem 0.5rem; background: #334155; border-radius: 0.25rem; font-size: 0.75rem; margin-right: 0.5rem;">${tag}</span>`).join('') : '';
+            
             card.innerHTML = `
                 <div class="bot-header" onclick="toggleBot(${bot.id})">
                     <div class="bot-info">
                         <div class="bot-name">${bot.name}</div>
-                        <div class="bot-platforms">${bot.input_platform} → ${bot.output_platform}</div>
+                        <div class="bot-platforms" style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                            <span>${bot.input_platform} → ${bot.output_platform}</span>
+                            ${bot.contact_info ? `<span style="color: #94a3b8; font-size: 0.875rem;">📞 ${bot.contact_info}</span>` : ''}
+                            ${tagsHtml}
+                        </div>
                     </div>
                     <div class="bot-stats">
                         <div class="bot-stat">
@@ -728,6 +809,8 @@
             editingBotId = botId;
             document.getElementById('modalTitle').textContent = 'Edit Bot';
             document.getElementById('botName').value = bot.name;
+            document.getElementById('contactInfo').value = bot.contact_info || '';
+            document.getElementById('botTags').value = (bot.tags || []).join(', ');
             document.getElementById('inputPlatform').value = bot.input_platform;
             document.getElementById('outputPlatform').value = bot.output_platform;
             
@@ -748,6 +831,10 @@
             
             const outputPlatform = document.getElementById('outputPlatform').value;
             const outputCredValue = document.getElementById('outputCredential').value;
+            const tagsInput = document.getElementById('botTags').value;
+            
+            // Parse tags from comma-separated input
+            const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t) : [];
             
             // Store credential with appropriate key based on platform
             let outputCredentials = {};
@@ -762,6 +849,8 @@
             
             const data = {
                 name: document.getElementById('botName').value,
+                contactInfo: document.getElementById('contactInfo').value || null,
+                tags: tags,
                 inputPlatform: document.getElementById('inputPlatform').value,
                 outputPlatform: outputPlatform,
                 inputCredentials: {}, // Will be filled via QR login later

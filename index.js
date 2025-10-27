@@ -99,6 +99,23 @@ async function initializeDatabase() {
             console.log('✅ Added bot_id column');
         }
         
+        // Add contact_info column if it doesn't exist
+        const contactCheck = await pool.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name='bots' AND column_name='contact_info'
+        `);
+        
+        if (contactCheck.rows.length === 0) {
+            console.log('📝 Adding contact_info and tags columns to bots table...');
+            await pool.query(`
+                ALTER TABLE bots 
+                ADD COLUMN contact_info TEXT,
+                ADD COLUMN tags TEXT[]
+            `);
+            console.log('✅ Added contact_info and tags columns');
+        }
+        
         // Create performance indexes for frequently queried columns
         await pool.query(`
             CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp DESC)
@@ -569,11 +586,11 @@ app.get('/api/bots', async (req, res) => {
 
 app.post('/api/bots', async (req, res) => {
     try {
-        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials } = req.body;
+        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags } = req.body;
         const result = await pool.query(
-            `INSERT INTO bots (name, input_platform, output_platform, input_credentials, output_credentials, status)
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [name, inputPlatform, outputPlatform, inputCredentials || {}, outputCredentials || {}, 'inactive']
+            `INSERT INTO bots (name, input_platform, output_platform, input_credentials, output_credentials, contact_info, tags, status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [name, inputPlatform, outputPlatform, inputCredentials || {}, outputCredentials || {}, contactInfo || null, tags || [], 'inactive']
         );
         res.json(result.rows[0]);
     } catch (error) {
@@ -584,13 +601,13 @@ app.post('/api/bots', async (req, res) => {
 app.put('/api/bots/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, status } = req.body;
+        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status } = req.body;
         const result = await pool.query(
             `UPDATE bots 
              SET name = $1, input_platform = $2, output_platform = $3, 
-                 input_credentials = $4, output_credentials = $5, status = $6, updated_at = NOW()
-             WHERE id = $7 RETURNING *`,
-            [name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, status, id]
+                 input_credentials = $4, output_credentials = $5, contact_info = $6, tags = $7, status = $8, updated_at = NOW()
+             WHERE id = $9 RETURNING *`,
+            [name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo || null, tags || [], status, id]
         );
         res.json(result.rows[0]);
     } catch (error) {
