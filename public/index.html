@@ -29,35 +29,47 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 1rem;
+            gap: 1.618rem; /* Golden ratio spacing */
         }
         .logo {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.618rem; /* Golden ratio */
+            flex: 0 0 auto;
         }
         .logo h1 {
-            font-size: 1.125rem;
+            font-size: 1.618rem; /* Golden ratio: 16px * 1.618 = ~26px */
             color: #ffffff;
             white-space: nowrap;
+            font-weight: 700;
+            letter-spacing: -0.02em;
         }
         
         /* User info in header */
         .header-user-info {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 1rem;
+            flex: 0 0 auto;
         }
         .header-user-info span {
             color: #94a3b8;
-            font-size: 0.875rem;
+            font-size: 1rem; /* Golden ratio base: 16px */
             display: none; /* Hide on mobile by default */
         }
+        .header-user-info .status-indicator {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+        }
         .header-user-info button {
-            padding: 0.625rem 1rem;
-            font-size: 0.875rem;
+            padding: 0.618rem 1.618rem; /* Golden ratio proportions */
+            font-size: 1rem; /* Golden ratio base */
             white-space: nowrap;
             min-height: 44px; /* iOS touch target */
+            font-weight: 600;
         }
         
         /* Mobile Responsive */
@@ -93,30 +105,32 @@
             }
         }
         
-        /* Cat Animation - Desktop Only - Apple Glass Style */
+        /* Cat Animation - Desktop Only - Apple Glass Style - Golden Ratio */
         .status-display {
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 1rem;
-            padding: 0.75rem;
-            background: rgba(37, 211, 102, 0.1);
-            backdrop-filter: blur(10px) saturate(180%);
-            -webkit-backdrop-filter: blur(10px) saturate(180%);
-            border: 1px solid rgba(37, 211, 102, 0.2);
-            border-radius: 1rem;
-            width: 100%;
-            max-width: 320px;
+            padding: 1rem 1.618rem; /* Golden ratio padding */
+            background: rgba(37, 211, 102, 0.12);
+            backdrop-filter: blur(15px) saturate(200%) brightness(1.15);
+            -webkit-backdrop-filter: blur(15px) saturate(200%) brightness(1.15);
+            border: 1px solid rgba(37, 211, 102, 0.25);
+            border-radius: 1.25rem;
+            flex: 1 1 auto; /* Allow cat to take center space */
+            max-width: 420px; /* Golden ratio relative to header width */
             position: relative;
             overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), 
+                        inset 0 1px 0 rgba(255, 255, 255, 0.15),
+                        0 0 40px rgba(37, 211, 102, 0.1);
         }
         #statusCanvas {
             image-rendering: pixelated;
             image-rendering: crisp-edges;
             width: 100%;
             height: auto;
-            max-width: 280px;
+            max-width: 340px; /* Golden ratio proportions */
             display: block;
         }
         
@@ -126,17 +140,18 @@
             padding: 1.5rem;
         }
         
-        /* Bot Library Header */
+        /* Bot Library Header - Golden Ratio */
         .library-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1.5rem;
-            gap: 1rem;
+            margin-bottom: 1.618rem; /* Golden ratio margin */
+            gap: 1.618rem; /* Golden ratio spacing */
         }
         .library-title {
-            font-size: 1.25rem;
-            font-weight: bold;
+            font-size: 1.618rem; /* Golden ratio: 16px * 1.618 = ~26px */
+            font-weight: 700;
+            letter-spacing: -0.02em;
         }
         .library-controls {
             display: flex;
@@ -507,14 +522,14 @@
             margin-bottom: 0.5rem;
         }
         
-        /* Tabs - Segmented Control Style - Apple Glass */
+        /* Tabs - Segmented Control Style - Apple Glass - Golden Ratio */
         .tabs {
             display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1.5rem;
+            gap: 0.618rem; /* Golden ratio spacing */
+            margin-bottom: 1.618rem; /* Golden ratio margin */
         }
         .tab {
-            padding: 0.75rem 1.5rem;
+            padding: 0.618rem 1.618rem; /* Golden ratio proportions */
             background: rgba(30, 41, 59, 0.4);
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
@@ -522,7 +537,7 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 0.625rem;
             cursor: pointer;
-            font-size: 0.95rem;
+            font-size: 1rem; /* Golden ratio base: 16px */
             font-weight: 600;
             transition: all 0.3s;
             min-height: 44px; /* iOS touch target */
@@ -646,6 +661,7 @@
             </div>
             <!-- User Info & Logout in Header -->
             <div class="header-user-info">
+                <div class="status-indicator"></div>
                 <span id="userInfo"></span>
                 <button class="btn btn-danger" onclick="logout()">Logout</button>
             </div>
@@ -1007,12 +1023,12 @@
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Simple solid background
-            ctx.fillStyle = '#1e293b';
+            // Lighter background for better cat visibility
+            ctx.fillStyle = '#374151';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Ground line
-            ctx.strokeStyle = '#334155';
+            // Ground line - more visible
+            ctx.strokeStyle = '#4b5563';
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(0, 175);
@@ -1032,12 +1048,12 @@
             const startY = 25;
             const startX = 50;
             
-            // Draw HIGH-FIDELITY SITTING BLACK CAT - centered
+            // Draw HIGH-FIDELITY SITTING BLACK CAT - centered with VISIBLE colors
             sprite.forEach((row, y) => {
                 row.forEach((pixel, x) => {
                     if (pixel === 1) {
-                        // Cat body - BLACK
-                        ctx.fillStyle = '#1a1a1a';
+                        // Cat body - Dark charcoal (VISIBLE against blue background)
+                        ctx.fillStyle = '#2d2d2d';
                         ctx.fillRect(startX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
                     } else if (pixel === 2) {
                         // Cat eyes - Golden glow
