@@ -653,7 +653,8 @@
     <div class="header">
         <div class="header-content">
             <div class="logo">
-                <h1>🌉 Bridge</h1>
+                <h1>🌈 Nyan Bridge</h1>
+                <p style="font-size: 0.618rem; color: #94a3b8; margin-top: 0.25rem;">apps to apps hopping, nyan~</p>
             </div>
             <!-- Desktop: Cat Animation -->
             <div class="status-display" id="statusDisplay">
@@ -914,18 +915,18 @@
         let users = [];
         let sessions = [];
 
-        // Flipper Zero-style Cat Animation - SIMPLE & RECOGNIZABLE
+        // NYAN CAT ANIMATION - Dark Void Theme
         const canvas = document.getElementById('statusCanvas');
         const ctx = canvas.getContext('2d');
         let catX = 0;
         let animationFrame = 0;
+        let rainbowTrail = [];
+        let catWalkCycle = [];
 
-        // FLIPPER ZERO SPEC CAT - 64x32 pixels (2:1 ratio like Flipper's 128x64)
-        // 8 FPS animation (8 ticks per frame)
-        // SIMPLE 2-color pixel art - sitting cat with tail swish
-        const catWalkCycle = [
-            // Frame 1: Sitting - tail neutral
-            [
+        // NYAN CAT - Complete pixel art with ALL features
+        // Colors: 0 = transparent, 1 = dark body, 2 = white eyes, 3 = pink details, 4 = rainbow
+        
+        const nyanCatFrame1 = [
                 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  // Row 0
                 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],  // Ear tips
                 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
@@ -1019,41 +1020,77 @@
             ]
         ];
 
+        // Color palette - VISIBLE colors
+        const colors = {
+            0: null, // transparent
+            1: '#2D2D2D', // dark gray cat body
+            2: '#FFFFFF', // white eyes
+            3: '#FF69B4', // hot pink for ears/nose/paws
+            4: '#FF1493', // deeper pink
+            5: '#FFD700', // gold
+            6: '#333333', // whiskers/outlines
+        };
+
+        // Rainbow trail effect
+        function drawRainbowTrail() {
+            const rainbowColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082'];
+            const stripeHeight = 6;
+            
+            // Add current position to trail
+            if (animationFrame % 2 === 0) {
+                rainbowTrail.push({ x: canvas.width, time: animationFrame });
+            }
+            
+            // Remove old trail positions
+            rainbowTrail = rainbowTrail.filter(pos => pos.x > -50);
+            
+            // Draw rainbow stripes
+            rainbowTrail.forEach((pos, index) => {
+                pos.x -= 2; // Move trail left
+                
+                for (let i = 0; i < rainbowColors.length; i++) {
+                    ctx.fillStyle = rainbowColors[i];
+                    ctx.fillRect(
+                        pos.x - 60,
+                        80 + i * stripeHeight,
+                        60,
+                        stripeHeight
+                    );
+                }
+            });
+        }
+
         function drawCat() {
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Medium-dark background for better glassmorphism blend
-            ctx.fillStyle = '#475569'; // Slate gray background
+            // Dark void background
+            ctx.fillStyle = '#1a1a2e'; // Very dark blue-black
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Ground line
-            ctx.strokeStyle = '#64748b';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(0, 175);
-            ctx.lineTo(canvas.width, 175);
-            ctx.stroke();
+            // Draw rainbow trail first (behind cat)
+            drawRainbowTrail();
             
-            // Get current frame - 8 FPS Flipper Zero-style (8 ticks per frame)
-            const frameIndex = Math.floor(animationFrame / 8) % 2; // 2 frames, 8 FPS
-            const sprite = catWalkCycle[frameIndex];
+            // Get current frame - 8 FPS animation (8 ticks per frame)
+            const frameIndex = Math.floor(animationFrame / 8) % 2; // 2 frames
+            const sprite = nyanCatFrame1; // Use frame 1 for now
             
-            // Safety check - ensure sprite exists
+            // Safety check
             if (!sprite || !Array.isArray(sprite)) {
-                console.error('Cat sprite not loaded correctly');
+                console.error('Cat sprite not loaded');
                 return;
             }
-            const pixelSize = 3.2;  // Slightly bigger for visibility
-            const startY = 25;
-            const startX = 50;
             
-            // Draw cat sprite - visible dark cat on medium background
+            const pixelSize = 4;  // Bigger pixels for visibility
+            const startY = 60;
+            const startX = 100;
+            
+            // Draw cat sprite with VISIBLE colors
             sprite.forEach((row, y) => {
                 row.forEach((pixel, x) => {
-                    if (pixel === 1) {
-                        // Cat body - Dark charcoal (visible against slate background)
-                        ctx.fillStyle = '#1a1a1a';
+                    const color = colors[pixel];
+                    if (color) {
+                        ctx.fillStyle = color;
                         ctx.fillRect(startX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
                     } else if (pixel === 2) {
                         // Cat eyes - Golden yellow
@@ -1069,6 +1106,40 @@
                         ctx.fillRect(startX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
                     }
                 });
+            });
+            
+            // Draw whiskers on top of cat
+            drawWhiskers(startX + 100, startY + 80);
+        }
+        
+        function drawWhiskers(catX, catY) {
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 2;
+            
+            // Left whiskers (3 lines)
+            const leftWhiskers = [
+                [catX - 20, catY - 5, catX - 40, catY - 15],
+                [catX - 20, catY, catX - 40, catY],
+                [catX - 20, catY + 5, catX - 40, catY + 15]
+            ];
+            leftWhiskers.forEach(w => {
+                ctx.beginPath();
+                ctx.moveTo(w[0], w[1]);
+                ctx.lineTo(w[2], w[3]);
+                ctx.stroke();
+            });
+            
+            // Right whiskers (3 lines)
+            const rightWhiskers = [
+                [catX + 20, catY - 5, catX + 40, catY - 15],
+                [catX + 20, catY, catX + 40, catY],
+                [catX + 20, catY + 5, catX + 40, catY + 15]
+            ];
+            rightWhiskers.forEach(w => {
+                ctx.beginPath();
+                ctx.moveTo(w[0], w[1]);
+                ctx.lineTo(w[2], w[3]);
+                ctx.stroke();
             });
         }
 
