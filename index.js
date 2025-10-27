@@ -413,7 +413,16 @@ function initializeWhatsAppClient() {
         try {
             const info = await client.info;
             botNumber = info.wid.user;
-            console.log(`📱 Bot WhatsApp Number: +${botNumber}`);
+            const formattedNumber = `+${botNumber}`;
+            console.log(`📱 Bot WhatsApp Number: ${formattedNumber}`);
+            
+            // Auto-populate contact_info for the active bot (bot id=1)
+            await pool.query(`
+                UPDATE bots 
+                SET contact_info = $1, status = 'active'
+                WHERE id = 1
+            `, [formattedNumber]);
+            console.log(`✅ Auto-updated bot #1 contact info: ${formattedNumber}`);
         } catch (error) {
             console.error('Could not retrieve bot number:', error.message);
         }

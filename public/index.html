@@ -357,15 +357,12 @@
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">Contact Info (Phone/Username)</label>
-                    <input type="text" id="contactInfo" class="form-input" placeholder="e.g., +1234567890 or @username">
-                    <small style="color: #64748b; font-size: 0.75rem;">Phone number or username for identification</small>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Tags (comma-separated)</label>
-                    <input type="text" id="botTags" class="form-input" placeholder="e.g., support, sales, personal">
-                    <small style="color: #64748b; font-size: 0.75rem;">Organize bots with tags like "work", "personal", "sales"</small>
+                    <label class="form-label">Tags (Optional)</label>
+                    <div id="tagsContainer" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem; min-height: 2rem; padding: 0.5rem; background: rgba(15, 23, 42, 0.5); border: 1px solid rgba(71, 85, 105, 0.5); border-radius: 0.5rem;">
+                        <span style="color: #64748b; font-size: 0.875rem;" id="tagsPlaceholder">Click below to add tags...</span>
+                    </div>
+                    <input type="text" id="botTagsInput" class="form-input" placeholder="Type a tag and press Enter" onkeydown="addTagOnEnter(event)">
+                    <small style="color: #64748b; font-size: 0.75rem;">Press Enter to add tags like "support", "sales", "personal"</small>
                 </div>
                 
                 <div class="form-group">
@@ -414,6 +411,7 @@
         let messageCache = {}; // Cache messages to avoid re-fetching on expand/collapse
         let allMessages = {}; // Store all messages by ID for media viewing
         let currentUser = null;
+        let botTags = []; // Store tags as array
 
         // Cat Animation - Improved 12fps smooth walk cycle
         const canvas = document.getElementById('statusCanvas');
@@ -559,6 +557,41 @@
                 window.location.href = '/login.html';
             } catch (error) {
                 console.error('Logout error:', error);
+            }
+        }
+        
+        // Tag Management Functions for Bubble UI
+        function addTagOnEnter(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const input = document.getElementById('botTagsInput');
+                const tag = input.value.trim();
+                
+                if (tag && !botTags.includes(tag)) {
+                    botTags.push(tag);
+                    renderTags();
+                    input.value = '';
+                }
+            }
+        }
+        
+        function removeTag(tag) {
+            botTags = botTags.filter(t => t !== tag);
+            renderTags();
+        }
+        
+        function renderTags() {
+            const container = document.getElementById('tagsContainer');
+            
+            if (botTags.length === 0) {
+                container.innerHTML = '<span style="color: #64748b; font-size: 0.875rem;" id="tagsPlaceholder">Click below to add tags...</span>';
+            } else {
+                container.innerHTML = botTags.map(tag => `
+                    <span style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 9999px; font-size: 0.875rem; color: white; font-weight: 500;">
+                        ${tag}
+                        <button type="button" onclick="removeTag('${tag}')" style="background: none; border: none; color: white; cursor: pointer; padding: 0; font-size: 1rem; line-height: 1; opacity: 0.8; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'">×</button>
+                    </span>
+                `).join('');
             }
         }
         
@@ -836,9 +869,11 @@
 
         function openCreateModal() {
             editingBotId = null;
+            botTags = []; // Reset tags
             document.getElementById('modalTitle').textContent = 'Create New Bot';
             document.getElementById('botForm').reset();
             document.getElementById('outputCredentialField').style.display = 'none';
+            renderTags(); // Render empty tags
             document.getElementById('botModal').classList.add('active');
         }
 
@@ -847,10 +882,9 @@
             if (!bot) return;
             
             editingBotId = botId;
+            botTags = bot.tags || []; // Load existing tags
             document.getElementById('modalTitle').textContent = 'Edit Bot';
             document.getElementById('botName').value = bot.name;
-            document.getElementById('contactInfo').value = bot.contact_info || '';
-            document.getElementById('botTags').value = (bot.tags || []).join(', ');
             document.getElementById('inputPlatform').value = bot.input_platform;
             document.getElementById('outputPlatform').value = bot.output_platform;
             
@@ -859,6 +893,7 @@
             document.getElementById('outputCredential').value = outCreds.webhook_url || outCreds.token || '';
             
             updateOutputCredentialLabel();
+            renderTags(); // Render loaded tags
             document.getElementById('botModal').classList.add('active');
         }
 
@@ -871,10 +906,6 @@
             
             const outputPlatform = document.getElementById('outputPlatform').value;
             const outputCredValue = document.getElementById('outputCredential').value;
-            const tagsInput = document.getElementById('botTags').value;
-            
-            // Parse tags from comma-separated input
-            const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t) : [];
             
             // Store credential with appropriate key based on platform
             let outputCredentials = {};
@@ -889,8 +920,8 @@
             
             const data = {
                 name: document.getElementById('botName').value,
-                contactInfo: document.getElementById('contactInfo').value || null,
-                tags: tags,
+                contactInfo: null, // Will be auto-populated when bot connects
+                tags: botTags, // Use the botTags array
                 inputPlatform: document.getElementById('inputPlatform').value,
                 outputPlatform: outputPlatform,
                 inputCredentials: {}, // Will be filled via QR login later
