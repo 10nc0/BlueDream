@@ -736,7 +736,7 @@
     <div class="header">
         <div class="header-left">
             <div class="animated-character">
-                <canvas id="hopCanvas" class="character-canvas" width="40" height="40"></canvas>
+                <canvas id="hopCanvas" class="character-canvas" width="100" height="100"></canvas>
             </div>
             <div style="display: flex; flex-direction: column; gap: 0.25rem;">
                 <div class="logo">
@@ -1901,67 +1901,112 @@
             }
         }
 
-        // Draw animated pixel black cat (Flipper Zero style)
+        // Draw animated pixel black cat (Flipper Zero style) - 2.5x bigger with cursor interaction
         function initHopAnimation() {
             const canvas = document.getElementById('hopCanvas');
             if (!canvas) return;
             
             const ctx = canvas.getContext('2d');
             let frame = 0;
+            let mouseX = -1000; // Start off-screen
+            let mouseY = -1000;
+            let catX = 50; // Center of canvas
+            let catY = 50;
             
-            function drawPixelCat(frameNum) {
-                ctx.clearRect(0, 0, 40, 40);
+            // Track mouse position globally
+            document.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+            
+            function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, fleeing = false) {
+                ctx.clearRect(0, 0, 100, 100);
                 
+                const scale = 2.5;
                 const isJump = Math.floor(frameNum / 15) % 2 === 0;
-                const yOffset = isJump ? -3 : 0;
+                const yOffset = isJump ? -3 * scale : 0;
+                
+                // Flip cat if fleeing (running away)
+                if (fleeing) {
+                    ctx.save();
+                    ctx.translate(100, 0);
+                    ctx.scale(-1, 1);
+                }
                 
                 // Black cat body
                 ctx.fillStyle = '#1a1a1a';
                 
                 // Body (main)
-                ctx.fillRect(14, 22 + yOffset, 12, 8);
+                ctx.fillRect(14 * scale + offsetX, 22 * scale + yOffset + offsetY, 12 * scale, 8 * scale);
                 
                 // Head
-                ctx.fillRect(15, 15 + yOffset, 10, 7);
+                ctx.fillRect(15 * scale + offsetX, 15 * scale + yOffset + offsetY, 10 * scale, 7 * scale);
                 
                 // Ears (pointy cat ears)
-                ctx.fillRect(15, 12 + yOffset, 3, 3);
-                ctx.fillRect(22, 12 + yOffset, 3, 3);
+                ctx.fillRect(15 * scale + offsetX, 12 * scale + yOffset + offsetY, 3 * scale, 3 * scale);
+                ctx.fillRect(22 * scale + offsetX, 12 * scale + yOffset + offsetY, 3 * scale, 3 * scale);
                 
                 // Tail (curved up)
-                ctx.fillRect(25, 23 + yOffset, 2, 4);
-                ctx.fillRect(26, 20 + yOffset, 2, 3);
+                ctx.fillRect(25 * scale + offsetX, 23 * scale + yOffset + offsetY, 2 * scale, 4 * scale);
+                ctx.fillRect(26 * scale + offsetX, 20 * scale + yOffset + offsetY, 2 * scale, 3 * scale);
                 
                 // Eyes (green glow)
                 ctx.fillStyle = '#22c55e';
-                ctx.fillRect(17, 17 + yOffset, 2, 2);
-                ctx.fillRect(21, 17 + yOffset, 2, 2);
+                ctx.fillRect(17 * scale + offsetX, 17 * scale + yOffset + offsetY, 2 * scale, 2 * scale);
+                ctx.fillRect(21 * scale + offsetX, 17 * scale + yOffset + offsetY, 2 * scale, 2 * scale);
                 
                 // Nose (pink)
                 ctx.fillStyle = '#ec4899';
-                ctx.fillRect(19, 20 + yOffset, 2, 1);
+                ctx.fillRect(19 * scale + offsetX, 20 * scale + yOffset + offsetY, 2 * scale, 1 * scale);
                 
                 // Whiskers (white)
                 ctx.fillStyle = '#ffffff';
                 if (!isJump) {
                     // Left whiskers
-                    ctx.fillRect(12, 19, 2, 1);
-                    ctx.fillRect(12, 21, 2, 1);
+                    ctx.fillRect(12 * scale + offsetX, 19 * scale + offsetY, 2 * scale, 1 * scale);
+                    ctx.fillRect(12 * scale + offsetX, 21 * scale + offsetY, 2 * scale, 1 * scale);
                     // Right whiskers
-                    ctx.fillRect(26, 19, 2, 1);
-                    ctx.fillRect(26, 21, 2, 1);
+                    ctx.fillRect(26 * scale + offsetX, 19 * scale + offsetY, 2 * scale, 1 * scale);
+                    ctx.fillRect(26 * scale + offsetX, 21 * scale + offsetY, 2 * scale, 1 * scale);
                 }
                 
                 // Feet/paws
                 ctx.fillStyle = '#1a1a1a';
                 if (!isJump) {
-                    ctx.fillRect(15, 30, 3, 2);
-                    ctx.fillRect(22, 30, 3, 2);
+                    ctx.fillRect(15 * scale + offsetX, 30 * scale + offsetY, 3 * scale, 2 * scale);
+                    ctx.fillRect(22 * scale + offsetX, 30 * scale + offsetY, 3 * scale, 2 * scale);
+                }
+                
+                if (fleeing) {
+                    ctx.restore();
                 }
             }
             
             function animate() {
-                drawPixelCat(frame);
+                // Get canvas position relative to viewport
+                const rect = canvas.getBoundingClientRect();
+                const canvasCenterX = rect.left + rect.width / 2;
+                const canvasCenterY = rect.top + rect.height / 2;
+                
+                // Calculate distance from mouse to canvas center
+                const dx = mouseX - canvasCenterX;
+                const dy = mouseY - canvasCenterY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Cat behavior: flee if cursor is close (within 200px), otherwise neutral
+                let offsetX = 0;
+                let offsetY = 0;
+                let fleeing = false;
+                
+                if (distance < 200) {
+                    // Flee away from cursor
+                    fleeing = true;
+                    const fleeStrength = 15 * (1 - distance / 200); // Stronger flee when closer
+                    offsetX = -(dx / distance) * fleeStrength;
+                    offsetY = -(dy / distance) * fleeStrength;
+                }
+                
+                drawPixelCat(frame, offsetX, offsetY, fleeing);
                 frame++;
                 requestAnimationFrame(animate);
             }
