@@ -27,6 +27,22 @@ const pool = new Pool({
     ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
 });
 
+// Timestamp helper function with timezone
+function getTimestamp() {
+    const now = new Date();
+    return now.toLocaleString('en-US', { 
+        timeZone: 'America/Los_Angeles',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+        timeZoneName: 'short'
+    });
+}
+
 const app = express();
 
 // Trust proxy - required for HTTPS cookie support in Replit environment
@@ -63,7 +79,7 @@ app.use((req, res, next) => {
 
 // Serve login page without authentication (must come before requireAuth check)
 app.get('/login.html', (req, res) => {
-    console.log(`📱 Login page accessed - IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
+    console.log(`[${getTimestamp()}] 📱 Login page accessed - IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
     res.sendFile(__dirname + '/public/login.html');
 });
 
@@ -785,7 +801,7 @@ async function createSessionRecord(userId, sessionId, req) {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `, [userId, sessionId, req.ip, userAgent, deviceType, browser, os, location]);
         
-        console.log(`📱 Session created - User: ${userId}, Device: ${deviceType}, Browser: ${browser}, OS: ${os}, IP: ${req.ip}, Location: ${location}`);
+        console.log(`[${getTimestamp()}] 📱 Session created - User: ${userId}, Device: ${deviceType}, Browser: ${browser}, OS: ${os}, IP: ${req.ip}, Location: ${location}`);
     } catch (error) {
         console.error('Error creating session record:', error.message);
     }
@@ -877,7 +893,7 @@ app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
     
     // Log all login attempts
-    console.log(`🔐 Login attempt - Email: ${email}, IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
+    console.log(`[${getTimestamp()}] 🔐 Login attempt - Email: ${email}, IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
     
     try {
         const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
