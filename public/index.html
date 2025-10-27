@@ -616,47 +616,51 @@
         let catX = 0;
         let animationFrame = 0;
 
-        // Simple 4-frame walk cycle (Flipper Zero style)
+        // Cute orange cat with proper ears, whiskers, and tail!
         const catWalkCycle = [
             // Frame 1: Standing
             [
-                [0,0,1,1,0,0,0,0,0,0,1,1],
-                [0,1,2,1,1,0,0,0,0,1,1,0],
-                [0,1,1,1,1,1,1,1,1,1,0,0],
-                [0,0,1,1,1,1,1,1,1,0,0,0],
-                [0,0,0,1,0,0,0,1,0,0,0,0],
-                [0,0,0,1,0,0,0,1,0,0,0,0],
-                [0,0,1,1,0,0,1,1,0,0,0,0]
+                [0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0],  // Ear tips
+                [0,1,1,1,0,0,0,0,0,1,1,1,0,0,0,0],  // Ears
+                [0,1,2,1,1,0,0,0,1,1,2,1,0,0,0,0],  // Eyes
+                [0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0],  // Head
+                [3,3,0,1,1,1,1,1,1,1,0,3,3,0,0,0],  // Whiskers
+                [0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0],  // Body
+                [0,0,0,1,0,1,0,1,0,0,0,0,0,1,1,0],  // Legs + tail
+                [0,0,0,1,0,1,0,1,0,0,0,0,1,1,0,0],  // Paws + tail
             ],
             // Frame 2: Right leg forward
             [
-                [0,0,1,1,0,0,0,0,0,0,1,1],
-                [0,1,2,1,1,0,0,0,0,1,1,0],
-                [0,1,1,1,1,1,1,1,1,1,0,0],
-                [0,0,1,1,1,1,1,1,1,0,0,0],
-                [0,0,0,1,0,0,0,0,0,0,0,0],
-                [0,0,1,1,0,0,0,1,0,0,0,0],
-                [0,0,0,0,0,0,1,1,0,0,0,0]
+                [0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0],
+                [0,1,1,1,0,0,0,0,0,1,1,1,0,0,0,0],
+                [0,1,2,1,1,0,0,0,1,1,2,1,0,0,0,0],
+                [0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
+                [3,3,0,1,1,1,1,1,1,1,0,3,3,0,0,0],
+                [0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0],
+                [0,0,1,0,0,1,0,1,0,0,0,0,0,1,1,0],
+                [0,0,1,0,0,1,0,1,0,0,0,0,1,1,0,0],
             ],
             // Frame 3: Standing
             [
-                [0,0,1,1,0,0,0,0,0,0,1,1],
-                [0,1,2,1,1,0,0,0,0,1,1,0],
-                [0,1,1,1,1,1,1,1,1,1,0,0],
-                [0,0,1,1,1,1,1,1,1,0,0,0],
-                [0,0,0,1,0,0,0,1,0,0,0,0],
-                [0,0,0,1,0,0,0,1,0,0,0,0],
-                [0,0,1,1,0,0,1,1,0,0,0,0]
+                [0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0],
+                [0,1,1,1,0,0,0,0,0,1,1,1,0,0,0,0],
+                [0,1,2,1,1,0,0,0,1,1,2,1,0,0,0,0],
+                [0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
+                [3,3,0,1,1,1,1,1,1,1,0,3,3,0,0,0],
+                [0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0],
+                [0,0,0,1,0,1,0,1,0,0,0,0,0,1,1,0],
+                [0,0,0,1,0,1,0,1,0,0,0,0,1,1,0,0],
             ],
             // Frame 4: Left leg forward
             [
-                [0,0,1,1,0,0,0,0,0,0,1,1],
-                [0,1,2,1,1,0,0,0,0,1,1,0],
-                [0,1,1,1,1,1,1,1,1,1,0,0],
-                [0,0,1,1,1,1,1,1,1,0,0,0],
-                [0,0,0,0,0,0,0,1,0,0,0,0],
-                [0,0,0,1,0,0,1,1,0,0,0,0],
-                [0,0,1,1,0,0,0,0,0,0,0,0]
+                [0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0],
+                [0,1,1,1,0,0,0,0,0,1,1,1,0,0,0,0],
+                [0,1,2,1,1,0,0,0,1,1,2,1,0,0,0,0],
+                [0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0],
+                [3,3,0,1,1,1,1,1,1,1,0,3,3,0,0,0],
+                [0,0,0,0,1,1,1,1,1,0,0,0,0,0,0,0],
+                [0,0,0,1,0,1,1,0,0,0,0,0,0,1,1,0],
+                [0,0,0,1,0,1,1,0,0,0,0,0,1,1,0,0],
             ]
         ];
 
@@ -677,21 +681,25 @@
             ctx.stroke();
             
             // Get current frame
-            const frameIndex = Math.floor(animationFrame / 12) % catWalkCycle.length;
+            const frameIndex = Math.floor(animationFrame / 10) % catWalkCycle.length;
             const sprite = catWalkCycle[frameIndex];
-            const pixelSize = 4;
-            const startY = 15;
+            const pixelSize = 3.5;
+            const startY = 12;
             
             // Draw cat sprite
             sprite.forEach((row, y) => {
                 row.forEach((pixel, x) => {
                     if (pixel === 1) {
-                        // Cat body
-                        ctx.fillStyle = '#ffffff';
+                        // Cat body (orange)
+                        ctx.fillStyle = '#FF8C42';
                         ctx.fillRect(catX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
                     } else if (pixel === 2) {
-                        // Cat eye (green glow)
+                        // Cat eyes (green glow)
                         ctx.fillStyle = '#25D366';
+                        ctx.fillRect(catX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
+                    } else if (pixel === 3) {
+                        // Whiskers (white)
+                        ctx.fillStyle = '#ffffff';
                         ctx.fillRect(catX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
                     }
                 });
@@ -1183,16 +1191,21 @@
         function switchTab(tabName) {
             // Update tab buttons
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-            event.target.classList.add('active');
+            if (event && event.target) {
+                event.target.classList.add('active');
+            }
             
             // Update tab content
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            document.getElementById(tabName + 'Tab').classList.add('active');
-            
-            // Load data when switching to users tab
-            if (tabName === 'users') {
-                loadUsers();
-                loadSessions();
+            const targetTab = document.getElementById(tabName + 'Tab');
+            if (targetTab) {
+                targetTab.classList.add('active');
+                
+                // Load data when switching to users tab
+                if (tabName === 'users') {
+                    loadUsers();
+                    loadSessions();
+                }
             }
         }
         
