@@ -1150,6 +1150,16 @@ app.post('/api/auth/otp/verify', async (req, res) => {
         `, [user.id]);
         
         req.session.userId = user.id;
+        req.session.userEmail = user.email;
+        req.session.userRole = user.role;
+        
+        // Generate JWT tokens
+        const accessToken = authService.signAccessToken(user.id, user.email || user.phone, user.role);
+        const { token: refreshToken, tokenId } = authService.signRefreshToken(user.id, user.email || user.phone, user.role);
+        
+        // Store refresh token in database
+        const deviceInfo = req.get('user-agent') || 'unknown';
+        await authService.storeRefreshToken(pool, user.id, tokenId, deviceInfo, req.ip);
         
         // Save session explicitly before sending response
         req.session.save(async (err) => {
@@ -1164,7 +1174,8 @@ app.post('/api/auth/otp/verify', async (req, res) => {
             // Log successful OTP login
             logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.phone, {
                 method: 'phone_otp',
-                role: user.role
+                role: user.role,
+                authType: 'jwt+cookie'
             });
             
             res.json({ 
@@ -1173,7 +1184,11 @@ app.post('/api/auth/otp/verify', async (req, res) => {
                     id: user.id, 
                     phone: user.phone, 
                     role: user.role 
-                } 
+                },
+                // JWT tokens for token-based auth
+                accessToken,
+                refreshToken,
+                tokenExpiry: authService.ACCESS_TOKEN_EXPIRY
             });
         });
     } catch (error) {

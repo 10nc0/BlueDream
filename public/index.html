@@ -943,10 +943,68 @@
                 .replace(/'/g, "&#039;");
         }
 
+        // JWT-enabled fetch wrapper - automatically adds Authorization header
+        async function authFetch(url, options = {}) {
+            const accessToken = localStorage.getItem('accessToken');
+            
+            // Add Authorization header if token exists
+            if (accessToken) {
+                options.headers = {
+                    ...options.headers,
+                    'Authorization': `Bearer ${accessToken}`
+                };
+            }
+            
+            let response = await fetch(url, options);
+            
+            // If token expired (401), try to refresh
+            if (response.status === 401 && accessToken) {
+                const refreshToken = localStorage.getItem('refreshToken');
+                
+                if (refreshToken) {
+                    try {
+                        // Try to refresh the access token
+                        const refreshResponse = await fetch('/api/auth/refresh', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ refreshToken })
+                        });
+                        
+                        if (refreshResponse.ok) {
+                            const refreshData = await refreshResponse.json();
+                            localStorage.setItem('accessToken', refreshData.accessToken);
+                            
+                            // Retry original request with new token
+                            options.headers['Authorization'] = `Bearer ${refreshData.accessToken}`;
+                            response = await fetch(url, options);
+                        } else {
+                            // Refresh failed, clear tokens and redirect to login
+                            localStorage.removeItem('accessToken');
+                            localStorage.removeItem('refreshToken');
+                            window.location.href = '/login.html';
+                            return response;
+                        }
+                    } catch (refreshError) {
+                        console.error('Token refresh failed:', refreshError);
+                        localStorage.removeItem('accessToken');
+                        localStorage.removeItem('refreshToken');
+                        window.location.href = '/login.html';
+                        return response;
+                    }
+                } else {
+                    // No refresh token, redirect to login
+                    window.location.href = '/login.html';
+                    return response;
+                }
+            }
+            
+            return response;
+        }
+
         // Check authentication on page load
         async function checkAuth() {
             try {
-                const res = await fetch('/api/auth/status');
+                const res = await authFetch('/api/auth/status');
                 const data = await res.json();
                 
                 if (!data.authenticated) {
@@ -973,7 +1031,10 @@
         // Logout function
         async function logout() {
             try {
-                await fetch('/api/auth/logout', { method: 'POST' });
+                await authFetch('/api/auth/logout', { method: 'POST' });
+                // Clear JWT tokens from localStorage
+                localStorage.removeItem('accessToken');
+                localStorage.removeItem('refreshToken');
                 window.location.href = '/login.html';
             } catch (error) {
                 console.error('Logout error:', error);
@@ -1074,7 +1135,7 @@
         // Bot CRUD Functions
         async function loadBots() {
             try {
-                const response = await fetch('/api/bots');
+                const response = await authFetch('/api/bots');
                 bots = await response.json();
                 filteredBots = bots;
                 renderBots();
@@ -1542,7 +1603,7 @@
         // User Management
         async function loadUsers() {
             try {
-                const response = await fetch('/api/users');
+                const response = await authFetch('/api/users');
                 users = await response.json();
                 renderUsers();
             } catch (error) {
@@ -1592,7 +1653,7 @@
             };
 
             try {
-                const response = await fetch('/api/users', {
+                const response = await authFetch('/api/users', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(userData)
@@ -1830,7 +1891,7 @@
             if (!confirm('⚠️ WARNING: This will revoke ALL active sessions except your current one. All other users will be logged out immediately. Are you sure?')) return;
             
             try {
-                const response = await fetch('/api/sessions/revoke-all', { 
+                const response = await authFetch('/api/sessions/revoke-all', { 
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({})

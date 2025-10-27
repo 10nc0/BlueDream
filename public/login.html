@@ -385,6 +385,14 @@
                 const data = await res.json();
                 
                 if (res.ok) {
+                    // Store JWT tokens in localStorage (for Safari/iPad compatibility)
+                    if (data.accessToken) {
+                        localStorage.setItem('accessToken', data.accessToken);
+                    }
+                    if (data.refreshToken) {
+                        localStorage.setItem('refreshToken', data.refreshToken);
+                    }
+                    
                     showSuccess('Login successful! Redirecting...');
                     setTimeout(() => {
                         window.location.href = '/';
@@ -442,6 +450,14 @@
                 const data = await res.json();
                 
                 if (res.ok) {
+                    // Store JWT tokens in localStorage (for Safari/iPad compatibility)
+                    if (data.accessToken) {
+                        localStorage.setItem('accessToken', data.accessToken);
+                    }
+                    if (data.refreshToken) {
+                        localStorage.setItem('refreshToken', data.refreshToken);
+                    }
+                    
                     showSuccess('Login successful! Redirecting...');
                     setTimeout(() => {
                         window.location.href = '/';
