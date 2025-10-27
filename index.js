@@ -1023,6 +1023,46 @@ app.get('/api/sessions', requireRole('admin'), async (req, res) => {
     }
 });
 
+// Get audit logs (admin only)
+app.get('/api/audit-logs', requireRole('admin'), async (req, res) => {
+    try {
+        const { limit = 100, offset = 0, action_type, target_type } = req.query;
+        
+        let query = `
+            SELECT 
+                id, timestamp, actor_email, action_type, target_type, 
+                target_id, target_email, details, ip_address
+            FROM audit_logs
+        `;
+        
+        const conditions = [];
+        const params = [];
+        let paramIndex = 1;
+        
+        if (action_type) {
+            conditions.push(`action_type = $${paramIndex++}`);
+            params.push(action_type);
+        }
+        
+        if (target_type) {
+            conditions.push(`target_type = $${paramIndex++}`);
+            params.push(target_type);
+        }
+        
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
+        }
+        
+        query += ` ORDER BY timestamp DESC LIMIT $${paramIndex++} OFFSET $${paramIndex}`;
+        params.push(limit, offset);
+        
+        const result = await pool.query(query, params);
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Revoke session (admin only)
 app.delete('/api/sessions/:sid', requireRole('admin'), async (req, res) => {
     const { sid } = req.params;
