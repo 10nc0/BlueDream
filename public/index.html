@@ -534,13 +534,15 @@
 <body>
     <div class="header">
         <div class="header-left">
-            <div class="logo">
-                <span>🌈 Nyan Bridge</span>
-            </div>
-            <!-- Nyan Cat Animation with running text -->
-            <div class="cat-container">
-                <canvas id="statusCanvas"></canvas>
-                <div style="text-align: center; margin-top: 0.5rem;">
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <div class="logo">
+                    <span>🌈 Nyan Bridge</span>
+                </div>
+                <!-- Nyan Cat Animation with running text below -->
+                <div class="cat-container">
+                    <canvas id="statusCanvas"></canvas>
+                </div>
+                <div style="text-align: left;">
                     <span class="tagline">apps to apps hopping, nyan~</span>
                 </div>
             </div>
@@ -758,65 +760,159 @@
         let rainbowTrail = [];
         let stars = []; // Sparkle stars
 
-        // Create 6-frame smooth catwalk animation with higher resolution
+        // HIGH FIDELITY NYAN CAT - 12-frame 60fps animation with detailed pixel art
+        // Using a much larger 70x50 pixel sprite with detailed shading
         const catFrames = [];
         
-        // Generate smooth walking frames dynamically
-        for (let f = 0; f < 6; f++) {
-            const legOffset = Math.sin((f / 6) * Math.PI * 2) * 2;
-            const tailWave = Math.cos((f / 6) * Math.PI * 2) * 3;
+        // Detailed color palette with shading and highlights
+        const colors = {
+            0: null,              // transparent
+            1: '#000000',         // pure black outline
+            2: '#1a1a1a',         // dark gray body base
+            3: '#2d2d2d',         // medium gray body shading
+            4: '#FFD700',         // bright golden yellow eyes
+            5: '#FFF8DC',         // cornsilk eye highlights
+            6: '#FF1493',         // deep pink ears/paws
+            7: '#FF69B4',         // hot pink highlights
+            8: '#FFB6C1',         // light pink blush
+            9: '#FFFFFF',         // pure white whiskers/teeth
+            10: '#808080',        // gray for depth
+            11: '#C0C0C0',        // silver highlights
+            12: '#8B0000',        // dark red mouth
+            13: '#FF6347'         // tomato nose
+        };
+        
+        // Create 12 detailed animation frames for ultra-smooth 60fps movement
+        for (let frameNum = 0; frameNum < 12; frameNum++) {
             const frame = [];
+            const phase = (frameNum / 12) * Math.PI * 2;
             
-            for (let y = 0; y < 32; y++) {
+            // Leg animation - alternate walking
+            const frontLegOffset = Math.floor(Math.sin(phase) * 3);
+            const backLegOffset = Math.floor(Math.cos(phase) * 3);
+            
+            // Tail wave animation
+            const tailCurve = Math.floor(Math.sin(phase * 2) * 4);
+            
+            // Eye blink cycle
+            const eyeOpen = (frameNum % 12) < 11;
+            
+            for (let y = 0; y < 50; y++) {
                 const row = [];
-                for (let x = 0; x < 40; x++) {
-                    // Head and ears
-                    if (y < 8 && ((x >= 8 && x <= 12) || (x >= 16 && x <= 20))) {
-                        row.push((y < 2) ? 1 : (y < 4 ? 3 : 1));
+                for (let x = 0; x < 70; x++) {
+                    let pixel = 0;
+                    
+                    // === EARS === (triangular, with pink inside)
+                    // Left ear
+                    if (y >= 0 && y < 8 && x >= 10 && x <= 18) {
+                        if (x >= 12 && x <= 16 && y >= 2 && y < 6) pixel = 6; // pink inside
+                        else if (y <= 7 - Math.abs(x - 14)) pixel = 1; // black outline
                     }
-                    // Eyes
-                    else if (y >= 6 && y <= 9 && ((x >= 9 && x <= 11) || (x >= 17 && x <= 19))) {
-                        row.push(y === 7 || y === 8 ? 2 : 1);
+                    // Right ear
+                    if (y >= 0 && y < 8 && x >= 32 && x <= 40) {
+                        if (x >= 34 && x <= 38 && y >= 2 && y < 6) pixel = 6; // pink inside
+                        else if (y <= 7 - Math.abs(x - 36)) pixel = 1; // black outline
                     }
-                    // Whiskers
-                    else if (y === 10 && (x < 7 || x > 21)) {
-                        row.push(4);
+                    
+                    // === HEAD === (rounded with detailed shading)
+                    if (y >= 8 && y < 22 && x >= 8 && x < 42) {
+                        // Outline
+                        if (y === 8 || y === 21 || x === 8 || x === 41) pixel = 1;
+                        // Dark base
+                        else if (y < 20 && x > 9 && x < 40) pixel = 2;
+                        // Shading on right side
+                        else if (x > 35 && x < 40 && y > 10 && y < 20) pixel = 3;
                     }
-                    // Body
-                    else if (y >= 10 && y <= 20 && x >= 10 && x <= 25) {
-                        row.push(1);
+                    
+                    // === EYES === (large, expressive with highlights)
+                    // Left eye
+                    if (eyeOpen && y >= 12 && y < 18 && x >= 14 && x < 20) {
+                        if (y === 12 || y === 17 || x === 14 || x === 19) pixel = 1; // outline
+                        else if (x === 15 && y === 13) pixel = 5; // highlight
+                        else pixel = 4; // yellow
+                    } else if (!eyeOpen && y === 15 && x >= 14 && x < 20) {
+                        pixel = 1; // closed eye line
                     }
-                    // Tail with wave
-                    else if (y >= 12 && y <= 18 && x >= 26 && x <= 35 + tailWave) {
-                        row.push(1);
+                    // Right eye
+                    if (eyeOpen && y >= 12 && y < 18 && x >= 30 && x < 36) {
+                        if (y === 12 || y === 17 || x === 30 || x === 35) pixel = 1;
+                        else if (x === 31 && y === 13) pixel = 5;
+                        else pixel = 4;
+                    } else if (!eyeOpen && y === 15 && x >= 30 && x < 36) {
+                        pixel = 1;
                     }
-                    // Front legs with walking motion
-                    else if (y >= 20 && y <= 28 && ((x >= 13 + legOffset && x <= 15 + legOffset) || (x >= 19 - legOffset && x <= 21 - legOffset))) {
-                        row.push(1);
+                    
+                    // === NOSE === (small pink triangle)
+                    if (y >= 18 && y < 20 && x >= 23 && x < 27) {
+                        if (y === 19 && x >= 24 && x < 26) pixel = 13;
                     }
-                    // Pink paws
-                    else if (y >= 28 && y <= 30 && ((x >= 13 + legOffset && x <= 15 + legOffset) || (x >= 19 - legOffset && x <= 21 - legOffset))) {
-                        row.push(3);
+                    
+                    // === WHISKERS === (white, extending from face)
+                    if (y === 16) {
+                        if (x >= 2 && x < 8) pixel = 9; // left whiskers
+                        if (x >= 42 && x < 48) pixel = 9; // right whiskers
                     }
-                    else {
-                        row.push(0);
+                    if (y === 18) {
+                        if (x >= 3 && x < 8) pixel = 9;
+                        if (x >= 42 && x < 47) pixel = 9;
                     }
+                    
+                    // === CHEEK BLUSH === (pink circles)
+                    if (y >= 16 && y < 19 && ((x >= 10 && x < 13) || (x >= 37 && x < 40))) {
+                        pixel = 8;
+                    }
+                    
+                    // === BODY === (Pop-Tart shaped with dark gray)
+                    if (y >= 22 && y < 36 && x >= 6 && x < 44) {
+                        if (y === 22 || y === 35 || x === 6 || x === 43) pixel = 1; // outline
+                        else if (x > 7 && x < 42) pixel = 2; // dark body
+                        // Body shading
+                        if (x > 36 && x < 42 && y > 24 && y < 34) pixel = 3;
+                    }
+                    
+                    // === TAIL === (long, curved, with wave animation)
+                    for (let t = 0; t < 20; t++) {
+                        const tailX = 44 + t;
+                        const tailY = 28 + Math.floor(Math.sin((t / 5) + phase * 2) * tailCurve);
+                        if (x === tailX && y >= tailY - 2 && y <= tailY + 2) {
+                            if (y === tailY - 2 || y === tailY + 2) pixel = 1;
+                            else pixel = 2;
+                        }
+                    }
+                    
+                    // === LEGS === (four legs with walking animation)
+                    // Front left leg
+                    if (x >= 16 && x < 20 && y >= 36 && y < 46 + frontLegOffset) {
+                        if (x === 16 || x === 19) pixel = 1;
+                        else pixel = 2;
+                        // Pink paw
+                        if (y >= 44 + frontLegOffset) pixel = 6;
+                    }
+                    // Front right leg
+                    if (x >= 28 && x < 32 && y >= 36 && y < 46 - frontLegOffset) {
+                        if (x === 28 || x === 31) pixel = 1;
+                        else pixel = 2;
+                        if (y >= 44 - frontLegOffset) pixel = 6;
+                    }
+                    // Back left leg
+                    if (x >= 10 && x < 14 && y >= 36 && y < 46 - backLegOffset) {
+                        if (x === 10 || x === 13) pixel = 1;
+                        else pixel = 2;
+                        if (y >= 44 - backLegOffset) pixel = 6;
+                    }
+                    // Back right leg
+                    if (x >= 34 && x < 38 && y >= 36 && y < 46 + backLegOffset) {
+                        if (x === 34 || x === 37) pixel = 1;
+                        else pixel = 2;
+                        if (y >= 44 + backLegOffset) pixel = 6;
+                    }
+                    
+                    row.push(pixel);
                 }
                 frame.push(row);
             }
             catFrames.push(frame);
         }
-
-        // Enhanced color palette with more vibrant colors
-        const colors = {
-            0: null,             // transparent
-            1: '#1a1a1a',        // rich black body
-            2: '#FFE55C',        // bright yellow eyes with glow
-            3: '#FF6B9D',        // vibrant pink
-            4: '#FFFFFF',        // pure white whiskers/sparkles
-            5: '#333333',        // dark gray shading
-            6: '#FFB6C1'         // light pink glow
-        };
 
         // Enhanced rainbow trail with gradient and glow
         function drawRainbowTrail() {
@@ -936,22 +1032,27 @@
             // Draw sparkles
             drawSparkles();
             
-            // Use 6-frame smooth walking animation - 5 FPS (every 5 frames)
-            const frameIndex = Math.floor(animationFrame / 5) % 6;
+            // Use 12-frame ultra-smooth 60fps animation - update every frame
+            const frameIndex = Math.floor(animationFrame / 5) % 12;
             const sprite = catFrames[frameIndex];
             
-            const pixelSize = 2.5;  // Slightly bigger for better visibility
+            const pixelSize = 2;  // Scale for detailed 70x50 sprite
             
-            // Draw cat sprite with slight wiggle
+            // Draw cat sprite with slight wiggle and enhanced effects
             sprite.forEach((row, y) => {
                 row.forEach((pixel, x) => {
                     const color = colors[pixel];
                     if (color) {
                         ctx.fillStyle = color;
-                        // Add eye glow effect
-                        if (pixel === 2) {
-                            ctx.shadowColor = '#FFE55C';
-                            ctx.shadowBlur = 6;
+                        // Add eye glow effect for golden eyes
+                        if (pixel === 4) {
+                            ctx.shadowColor = '#FFD700';
+                            ctx.shadowBlur = 8;
+                        }
+                        // Add pink glow for paws and ears
+                        else if (pixel === 6) {
+                            ctx.shadowColor = '#FF1493';
+                            ctx.shadowBlur = 4;
                         }
                         ctx.fillRect(
                             catX + x * pixelSize + Math.sin(animationFrame * 0.1) * wiggle * 0.1, 
@@ -959,7 +1060,8 @@
                             pixelSize, 
                             pixelSize
                         );
-                        if (pixel === 2) ctx.shadowBlur = 0;
+                        // Reset shadow
+                        if (pixel === 4 || pixel === 6) ctx.shadowBlur = 0;
                     }
                 });
             });
