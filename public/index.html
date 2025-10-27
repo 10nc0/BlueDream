@@ -610,112 +610,104 @@
         let users = [];
         let sessions = [];
 
-        // Cat Animation - Improved 12fps smooth walk cycle
+        // Flipper Zero-style Cat Animation - Clean & Minimalist
         const canvas = document.getElementById('statusCanvas');
         const ctx = canvas.getContext('2d');
-        let catX = -25;
-        let catY = 18;
+        let catX = 0;
         let animationFrame = 0;
-        let currentWonderIndex = 0;
-        let animationPhase = 'walking';
 
-        // 7 Wonders backgrounds
-        const wonders = [
-            { name: 'Great Wall', skyColor: '#87CEEB', groundColor: '#8B7355' },
-            { name: 'Petra', skyColor: '#FFB347', groundColor: '#D2691E' },
-            { name: 'Colosseum', skyColor: '#F0E68C', groundColor: '#A0522D' },
-            { name: 'Machu Picchu', skyColor: '#87CEFA', groundColor: '#556B2F' },
-            { name: 'Taj Mahal', skyColor: '#E6E6FA', groundColor: '#90EE90' },
-            { name: 'Christ Redeemer', skyColor: '#00BFFF', groundColor: '#228B22' },
-            { name: 'Chichen Itza', skyColor: '#87CEEB', groundColor: '#8FBC8F' }
-        ];
-
-        // True 12-frame cat walk cycle with smooth leg motion
+        // Simple 4-frame walk cycle (Flipper Zero style)
         const catWalkCycle = [
-            // Frame 1: Contact (both front paws down)
-            [[0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0,0,0,0,0,0,0],[0,1,1,2,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0],[0,0,1,0,1,1,0,1,1,0,1,0,1,0],[0,0,1,0,0,1,0,0,1,0,0,0,1,0],[0,0,1,1,0,1,1,0,1,1,0,0,0,0]],
-            // Frame 2: Left leg lifts
-            [[0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0,0,0,0,0,0,0],[0,1,1,2,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0],[0,1,0,0,1,1,0,1,1,0,1,0,1,0],[0,1,0,0,0,1,0,0,1,0,0,0,1,0],[0,0,0,0,0,1,1,0,1,1,0,0,0,0]],
-            // Frame 3: Left leg forward mid-swing
-            [[0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0,0,0,0,0,0,0],[0,1,1,2,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0],[0,1,1,0,1,1,0,1,1,0,1,0,1,0],[0,0,1,0,0,1,0,0,1,0,0,0,1,0],[0,0,0,0,0,1,1,0,1,1,0,0,0,0]],
-            // Frame 4: Passing pose (left passes right)
-            [[0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0,0,0,0,0,0,0],[0,1,1,2,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0],[0,1,1,0,1,1,0,1,0,0,1,0,1,0],[0,0,1,0,0,1,0,0,0,0,0,0,1,0],[0,0,0,0,0,1,1,0,0,0,0,0,1,1]],
-            // Frame 5: Left contact, right starts to lift
-            [[0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0,0,0,0,0,0,0],[0,1,1,2,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0],[0,1,1,0,1,1,0,1,0,0,1,0,1,0],[0,0,1,0,0,1,0,0,0,0,0,0,1,0],[0,0,1,1,0,1,1,0,0,0,0,0,0,1]],
-            // Frame 6: Up pose (body higher)
-            [[0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0,0,0,0,0,0,0],[0,1,1,2,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0],[0,0,1,0,1,1,0,1,1,0,1,0,1,0],[0,0,1,0,1,1,0,0,1,0,1,0,1,0],[0,0,1,1,1,1,0,0,1,1,1,1,0,0]],
-            // Frame 7: Contact (right front paw down)
-            [[0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0,0,0,0,0,0,0],[0,1,1,2,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0],[0,0,1,0,1,1,0,0,1,0,1,0,1,0],[0,0,1,0,0,1,0,0,0,0,1,0,1,0],[0,0,1,1,0,1,1,0,0,0,1,1,0,0]],
-            // Frame 8: Right leg lifts
-            [[0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0,0,0,0,0,0,0],[0,1,1,2,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0],[0,0,1,0,1,1,0,0,1,0,1,0,0,0],[0,0,1,0,0,1,0,0,0,0,0,0,1,0],[0,0,1,1,0,1,1,0,0,0,0,0,1,1]],
-            // Frame 9: Right forward mid-swing
-            [[0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0,0,0,0,0,0,0],[0,1,1,2,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0],[0,0,1,0,1,1,0,0,1,1,1,0,0,0],[0,0,1,0,0,1,0,0,0,0,1,0,1,0],[0,0,1,1,0,1,1,0,0,0,0,0,1,1]],
-            // Frame 10: Passing pose (right passes left)
-            [[0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0,0,0,0,0,0,0],[0,1,1,2,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0],[0,0,1,0,1,0,0,0,1,1,1,0,1,0],[0,0,1,0,0,0,0,0,0,0,1,0,1,0],[0,0,1,1,0,0,0,0,0,0,1,1,0,0]],
-            // Frame 11: Right contact, left prepares
-            [[0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0,0,0,0,0,0,0],[0,1,1,2,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0],[0,0,1,0,1,0,0,1,1,0,1,0,1,0],[0,0,1,0,0,0,0,0,1,0,0,0,1,0],[0,0,1,1,0,0,0,0,1,1,0,0,0,0]],
-            // Frame 12: Down pose (body lower, cycle restart)
-            [[0,0,0,1,1,0,0,0,0,0,0,0,0,0],[0,0,1,1,1,1,0,0,0,0,0,0,0,0],[0,1,1,2,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,0,0,0,0,0,0,0],[0,1,1,1,1,1,1,1,1,0,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,0,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,0,0],[0,0,1,0,1,1,0,1,1,0,1,0,1,0],[0,0,1,0,0,1,0,0,1,0,0,0,1,0],[0,0,1,1,0,1,1,0,1,1,0,0,0,0]]
+            // Frame 1: Standing
+            [
+                [0,0,1,1,0,0,0,0,0,0,1,1],
+                [0,1,2,1,1,0,0,0,0,1,1,0],
+                [0,1,1,1,1,1,1,1,1,1,0,0],
+                [0,0,1,1,1,1,1,1,1,0,0,0],
+                [0,0,0,1,0,0,0,1,0,0,0,0],
+                [0,0,0,1,0,0,0,1,0,0,0,0],
+                [0,0,1,1,0,0,1,1,0,0,0,0]
+            ],
+            // Frame 2: Right leg forward
+            [
+                [0,0,1,1,0,0,0,0,0,0,1,1],
+                [0,1,2,1,1,0,0,0,0,1,1,0],
+                [0,1,1,1,1,1,1,1,1,1,0,0],
+                [0,0,1,1,1,1,1,1,1,0,0,0],
+                [0,0,0,1,0,0,0,0,0,0,0,0],
+                [0,0,1,1,0,0,0,1,0,0,0,0],
+                [0,0,0,0,0,0,1,1,0,0,0,0]
+            ],
+            // Frame 3: Standing
+            [
+                [0,0,1,1,0,0,0,0,0,0,1,1],
+                [0,1,2,1,1,0,0,0,0,1,1,0],
+                [0,1,1,1,1,1,1,1,1,1,0,0],
+                [0,0,1,1,1,1,1,1,1,0,0,0],
+                [0,0,0,1,0,0,0,1,0,0,0,0],
+                [0,0,0,1,0,0,0,1,0,0,0,0],
+                [0,0,1,1,0,0,1,1,0,0,0,0]
+            ],
+            // Frame 4: Left leg forward
+            [
+                [0,0,1,1,0,0,0,0,0,0,1,1],
+                [0,1,2,1,1,0,0,0,0,1,1,0],
+                [0,1,1,1,1,1,1,1,1,1,0,0],
+                [0,0,1,1,1,1,1,1,1,0,0,0],
+                [0,0,0,0,0,0,0,1,0,0,0,0],
+                [0,0,0,1,0,0,1,1,0,0,0,0],
+                [0,0,1,1,0,0,0,0,0,0,0,0]
+            ]
         ];
 
-        function drawCatScene() {
-            const wonder = wonders[currentWonderIndex];
-            
-            // Clear and draw gradient background
+        function drawCat() {
+            // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            gradient.addColorStop(0, wonder.skyColor);
-            gradient.addColorStop(1, wonder.groundColor);
-            ctx.fillStyle = gradient;
+            
+            // Simple solid background
+            ctx.fillStyle = '#1e293b';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Draw ground
-            ctx.fillStyle = wonder.groundColor;
-            ctx.fillRect(0, canvas.height - 8, canvas.width, 8);
+            // Ground line
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, 48);
+            ctx.lineTo(canvas.width, 48);
+            ctx.stroke();
             
-            // Draw cat with vertical bobbing (12fps animation)
-            const frameIndex = Math.floor(animationFrame / 5) % catWalkCycle.length;
+            // Get current frame
+            const frameIndex = Math.floor(animationFrame / 12) % catWalkCycle.length;
             const sprite = catWalkCycle[frameIndex];
-            const bobOffset = Math.sin(animationFrame * 0.3) * 1.5; // Vertical bob
-            const drawY = catY + bobOffset;
-            const pixelSize = 2.8;
+            const pixelSize = 4;
+            const startY = 15;
             
+            // Draw cat sprite
             sprite.forEach((row, y) => {
                 row.forEach((pixel, x) => {
                     if (pixel === 1) {
-                        ctx.fillStyle = '#000000';
-                        ctx.fillRect(catX * 2 + x * pixelSize, drawY * 2 + y * pixelSize, pixelSize, pixelSize);
+                        // Cat body
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(catX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
                     } else if (pixel === 2) {
+                        // Cat eye (green glow)
                         ctx.fillStyle = '#25D366';
-                        ctx.shadowColor = '#25D366';
-                        ctx.shadowBlur = 2;
-                        ctx.fillRect(catX * 2 + x * pixelSize, drawY * 2 + y * pixelSize, pixelSize, pixelSize);
-                        ctx.shadowBlur = 0;
+                        ctx.fillRect(catX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
                     }
                 });
             });
-            
-            // Wonder label
-            ctx.font = '8px monospace';
-            ctx.fillStyle = 'rgba(255,255,255,0.6)';
-            ctx.fillText(wonder.name, 4, 10);
         }
 
         function animateCat() {
-            if (animationPhase === 'walking') {
-                drawCatScene();
-                catX += 0.5;
-                animationFrame++;
-                
-                if (catX > 125) {
-                    animationPhase = 'showStatus';
-                    setTimeout(() => {
-                        catX = -25;
-                        currentWonderIndex = (currentWonderIndex + 1) % wonders.length;
-                        animationPhase = 'walking';
-                    }, 3000);
-                }
+            drawCat();
+            catX += 0.8;
+            animationFrame++;
+            
+            // Loop when cat walks off screen
+            if (catX > canvas.width) {
+                catX = -50;
             }
+            
             requestAnimationFrame(animateCat);
         }
         animateCat();
