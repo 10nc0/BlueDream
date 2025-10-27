@@ -15,7 +15,7 @@
         .header {
             background: #1e293b;
             border-bottom: 1px solid #334155;
-            padding: 1rem;
+            padding: 0.75rem 1rem;
             position: sticky;
             top: 0;
             z-index: 100;
@@ -27,42 +27,69 @@
             justify-content: space-between;
             align-items: center;
             gap: 1rem;
-            flex-wrap: wrap;
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
         .logo h1 {
-            font-size: 1.25rem;
+            font-size: 1.125rem;
             color: #ffffff;
+            white-space: nowrap;
+        }
+        
+        /* User info in header */
+        .header-user-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .header-user-info span {
+            color: #94a3b8;
+            font-size: 0.875rem;
+            display: none; /* Hide on mobile by default */
+        }
+        .header-user-info button {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            white-space: nowrap;
         }
         
         /* Mobile Responsive */
         @media (max-width: 768px) {
             .header {
-                padding: 0.75rem;
-            }
-            .header-content {
-                flex-direction: column;
-                gap: 0.75rem;
+                padding: 0.625rem 0.75rem;
             }
             .logo h1 {
-                font-size: 1rem;
+                font-size: 0.875rem;
             }
+            /* HIDE CAT ANIMATION ON MOBILE */
             .status-display {
-                max-width: 100%;
+                display: none !important;
             }
             .container {
-                padding: 1rem !important;
+                padding: 0.75rem !important;
             }
             .tabs {
-                flex-wrap: wrap;
                 gap: 0.5rem;
+                margin-bottom: 1rem;
             }
             .tab {
                 font-size: 0.875rem;
                 padding: 0.625rem 1rem;
+                flex: 1;
             }
         }
         
-        /* Cat Animation */
+        /* Desktop - show user email and cat */
+        @media (min-width: 769px) {
+            .header-user-info span {
+                display: inline;
+            }
+        }
+        
+        /* Cat Animation - Desktop Only */
         .status-display {
             display: flex;
             align-items: center;
@@ -73,7 +100,7 @@
             border: 2px solid #25D366;
             border-radius: 0.75rem;
             width: 100%;
-            max-width: 420px;
+            max-width: 300px;
             position: relative;
             overflow: hidden;
         }
@@ -82,14 +109,14 @@
             image-rendering: crisp-edges;
             width: 100%;
             height: auto;
-            max-width: 400px;
+            max-width: 280px;
             display: block;
         }
         
         .container {
             max-width: 1400px;
             margin: 0 auto;
-            padding: 2rem;
+            padding: 1.5rem;
         }
         
         /* Bot Library Header */
@@ -326,19 +353,18 @@
             margin-bottom: 0.5rem;
         }
         
-        /* Tabs */
+        /* Tabs - Segmented Control Style */
         .tabs {
             display: flex;
             gap: 0.5rem;
-            margin-bottom: 2rem;
-            border-bottom: 2px solid #334155;
+            margin-bottom: 1.5rem;
         }
         .tab {
             padding: 0.75rem 1.5rem;
             background: transparent;
             color: #94a3b8;
-            border: none;
-            border-bottom: 3px solid transparent;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
             cursor: pointer;
             font-size: 0.95rem;
             font-weight: 600;
@@ -349,8 +375,9 @@
             background: rgba(255, 255, 255, 0.05);
         }
         .tab.active {
-            color: #60a5fa;
-            border-bottom-color: #60a5fa;
+            color: #ffffff;
+            background: #3b82f6;
+            border-color: #3b82f6;
         }
         .tab-content {
             display: none;
@@ -422,26 +449,26 @@
     <div class="header">
         <div class="header-content">
             <div class="logo">
-                <h1>🌉 Multi-Platform Bridge</h1>
+                <h1>🌉 Bridge</h1>
             </div>
+            <!-- Desktop: Cat Animation -->
             <div class="status-display" id="statusDisplay">
                 <canvas id="statusCanvas" width="400" height="200" style="border-radius: 8px;"></canvas>
+            </div>
+            <!-- User Info & Logout in Header -->
+            <div class="header-user-info">
+                <span id="userInfo"></span>
+                <button class="btn" onclick="logout()" style="background: #ef4444;">Logout</button>
             </div>
         </div>
     </div>
 
     <!-- Main Container -->
     <div class="container">
-        <!-- User Info & Logout -->
-        <div style="display: flex; justify-content: flex-end; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
-            <span id="userInfo" style="color: #94a3b8; font-size: 0.875rem;"></span>
-            <button class="btn" onclick="logout()" style="background: #ef4444;">Logout</button>
-        </div>
-        
         <!-- Tabs -->
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('bots')">🤖 Bot Library</button>
-            <button class="tab" onclick="switchTab('users')" id="usersTabButton" style="display: none;">👥 User Management</button>
+            <button class="tab active" onclick="switchTab('bots')">🤖 Bots</button>
+            <button class="tab" onclick="switchTab('users')" id="usersTabButton" style="display: none;">👥 Users</button>
         </div>
         
         <!-- Bot Library Tab -->
