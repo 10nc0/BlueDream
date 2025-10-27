@@ -553,20 +553,20 @@
 
     <div class="container">
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('bots')">🤖 Bots</button>
+            <button class="tab active" onclick="switchTab('bots')">🌉 Bridges</button>
             <button class="tab" onclick="switchTab('users')">👥 Users</button>
             <button class="tab" onclick="switchTab('sessions')">🔐 Sessions</button>
         </div>
 
-        <!-- Bots Tab -->
+        <!-- Bridges Tab -->
         <div id="botsTab" class="tab-content active">
             <div class="section-header">
-                <h1 class="section-title">Bot Library</h1>
-                <button class="create-bot-btn" onclick="openCreateBotModal()">+ Create Bot</button>
+                <h1 class="section-title">Bridge Library</h1>
+                <button class="create-bot-btn" onclick="openCreateBotModal()">+ Create Bridge</button>
             </div>
 
             <div class="search-filter">
-                <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search bots by name, platform, contact, or tag..." oninput="filterBots()">
+                <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search bridges by name, platform, contact, or tag..." oninput="filterBots()">
                 <select class="filter-dropdown" id="platformFilter" onchange="filterBots()">
                     <option value="">All Platforms</option>
                 </select>
@@ -622,11 +622,11 @@
         </div>
     </div>
 
-    <!-- Create/Edit Bot Modal -->
+    <!-- Create/Edit Bridge Modal -->
     <div id="botModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 class="modal-title" id="modalTitle">Create New Bot</h2>
+                <h2 class="modal-title" id="modalTitle">Create New Bridge</h2>
                 <button class="close-btn" onclick="closeBotModal()">×</button>
             </div>
             <form id="botForm" onsubmit="saveBotClicked(event)">
@@ -1028,7 +1028,7 @@
 
         function openCreateBotModal() {
             editingBotId = null;
-            document.getElementById('modalTitle').textContent = 'Create New Bot';
+            document.getElementById('modalTitle').textContent = 'Create New Bridge';
             document.getElementById('botForm').reset();
             botTags = [];
             renderTags();
@@ -1040,7 +1040,7 @@
             if (!bot) return;
             
             editingBotId = id;
-            document.getElementById('modalTitle').textContent = 'Edit Bot';
+            document.getElementById('modalTitle').textContent = 'Edit Bridge';
             document.getElementById('botPlatform').value = bot.input_platform;
             document.getElementById('botDestinationPlatform').value = bot.output_platform;
             document.getElementById('botContact').value = bot.contact_info || '';
