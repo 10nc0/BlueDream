@@ -726,6 +726,17 @@
         let users = [];
         let sessions = [];
 
+        // HTML sanitization to prevent XSS attacks
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return String(unsafe)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
         // Check authentication on page load
         async function checkAuth() {
             try {
@@ -858,10 +869,59 @@
                         ${bot.input_platform === 'WhatsApp' ? `<button class="btn btn-qr" onclick="showQR('${bot.id}')">📱 QR Login</button>` : ''}
                         <button class="btn btn-edit" onclick="editBot('${bot.id}')">Edit</button>
                         <button class="btn btn-delete" onclick="deleteBot('${bot.id}')">Delete</button>
-                        <button class="btn" onclick="toggleMessages('${bot.id}')">▼</button>
+                        <button class="btn" id="toggle-btn-${bot.id}" onclick="toggleMessages('${bot.id}')">
+                            ${expandedBots.has(bot.id) ? '▲ Hide Messages' : '▼ Show Messages'}
+                        </button>
+                    </div>
+                    <div id="messages-${bot.id}" class="messages-container" style="display: ${expandedBots.has(bot.id) ? 'block' : 'none'};">
+                        ${messageCache[bot.id] ? renderMessages(messageCache[bot.id], bot.id) : '<div style="text-align: center; padding: 1rem; color: #94a3b8;">Loading messages...</div>'}
                     </div>
                 </div>
             `).join('');
+        }
+
+        function renderMessages(data, botId) {
+            if (!data || !data.messages || data.messages.length === 0) {
+                return '<div style="text-align: center; padding: 1rem; color: #94a3b8;">No messages yet</div>';
+            }
+            
+            const { messages, page, totalPages, total } = data;
+            
+            return `
+                <div style="padding: 1rem; background: rgba(15, 23, 42, 0.5); border-radius: 0.5rem; margin-top: 1rem;">
+                    <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: #94a3b8; font-size: 0.875rem;">Total: ${total} messages</span>
+                        ${totalPages > 1 ? `
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <button class="btn" ${page <= 1 ? 'disabled' : ''} onclick="loadBotMessages('${botId}', ${page - 1})" style="padding: 0.25rem 0.75rem;">← Prev</button>
+                                <span style="color: #94a3b8; font-size: 0.875rem;">Page ${page} / ${totalPages}</span>
+                                <button class="btn" ${page >= totalPages ? 'disabled' : ''} onclick="loadBotMessages('${botId}', ${page + 1})" style="padding: 0.25rem 0.75rem;">Next →</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
+                        ${messages.map(msg => `
+                            <div style="background: rgba(30, 41, 59, 0.6); padding: 0.75rem; border-radius: 0.375rem; border-left: 3px solid ${msg.discord_status === 'success' ? '#10b981' : msg.discord_status === 'failed' ? '#ef4444' : '#f59e0b'};">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                    <div>
+                                        <strong style="color: #fff;">${escapeHtml(msg.sender_name || 'Unknown')}</strong>
+                                        <span style="color: #94a3b8; font-size: 0.875rem; margin-left: 0.5rem;">${escapeHtml(msg.sender_contact || '')}</span>
+                                    </div>
+                                    <span style="color: #94a3b8; font-size: 0.75rem;">${new Date(msg.timestamp).toLocaleString()}</span>
+                                </div>
+                                <div style="color: #e2e8f0; margin-bottom: 0.5rem;">${escapeHtml(msg.message_content)}</div>
+                                ${msg.has_media ? `<div style="color: #60a5fa; font-size: 0.875rem;">📎 ${escapeHtml(msg.media_type || 'Media')}</div>` : ''}
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+                                    <span style="font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; background: ${msg.discord_status === 'success' ? 'rgba(16, 185, 129, 0.2)' : msg.discord_status === 'failed' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)'}; color: ${msg.discord_status === 'success' ? '#10b981' : msg.discord_status === 'failed' ? '#ef4444' : '#f59e0b'};">
+                                        ${escapeHtml(msg.discord_status.toUpperCase())}
+                                    </span>
+                                    ${msg.discord_error ? `<span style="color: #ef4444; font-size: 0.75rem;">${escapeHtml(msg.discord_error)}</span>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
         }
 
         function filterBots() {
@@ -988,9 +1048,50 @@
             }
         }
 
-        function toggleMessages(botId) {
-            // Placeholder for message expand/collapse
+        async function toggleMessages(botId) {
             console.log('Toggle messages for bot:', botId);
+            
+            const container = document.getElementById(`messages-${botId}`);
+            const button = document.getElementById(`toggle-btn-${botId}`);
+            
+            if (expandedBots.has(botId)) {
+                // Collapse
+                expandedBots.delete(botId);
+                container.style.display = 'none';
+                button.innerHTML = '▼ Show Messages';
+            } else {
+                // Expand
+                expandedBots.add(botId);
+                container.style.display = 'block';
+                button.innerHTML = '▲ Hide Messages';
+                
+                // Load messages if not cached
+                if (!messageCache[botId]) {
+                    await loadBotMessages(botId, 1);
+                }
+            }
+        }
+        
+        async function loadBotMessages(botId, page = 1) {
+            try {
+                const response = await fetch(`/api/bots/${botId}/messages?page=${page}&limit=50`);
+                const data = await response.json();
+                
+                // Cache the data
+                messageCache[botId] = data;
+                
+                // Re-render messages
+                const container = document.getElementById(`messages-${botId}`);
+                if (container) {
+                    container.innerHTML = renderMessages(data, botId);
+                }
+            } catch (error) {
+                console.error('Error loading messages:', error);
+                const container = document.getElementById(`messages-${botId}`);
+                if (container) {
+                    container.innerHTML = '<div style="text-align: center; padding: 1rem; color: #ef4444;">Error loading messages</div>';
+                }
+            }
         }
 
         // User Management
