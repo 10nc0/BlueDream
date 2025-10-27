@@ -677,6 +677,41 @@ function initializeWhatsAppClient() {
     });
 }
 
+// ============ AUDIT LOGGING SYSTEM ============
+
+// Helper function to log audit events
+async function logAudit(req, actionType, targetType, targetId, targetEmail, details = {}) {
+    try {
+        const actorUserId = req.session?.userId || null;
+        let actorEmail = null;
+        
+        if (actorUserId) {
+            const userResult = await pool.query('SELECT email FROM users WHERE id = $1', [actorUserId]);
+            actorEmail = userResult.rows[0]?.email || null;
+        }
+        
+        await pool.query(`
+            INSERT INTO audit_logs (
+                actor_user_id, actor_email, action_type, target_type, 
+                target_id, target_email, details, ip_address, user_agent
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [
+            actorUserId,
+            actorEmail,
+            actionType,
+            targetType,
+            targetId,
+            targetEmail,
+            JSON.stringify(details),
+            req.ip || req.connection?.remoteAddress || 'unknown',
+            req.get('user-agent') || 'unknown'
+        ]);
+    } catch (error) {
+        console.error('Audit logging failed:', error);
+        // Don't throw - audit logging failure shouldn't break the main operation
+    }
+}
+
 // ============ AUTHENTICATION MIDDLEWARE ============
 
 // Middleware to check if user is authenticated
@@ -741,6 +776,13 @@ app.post('/api/auth/login', async (req, res) => {
         }
         
         req.session.userId = user.id;
+        
+        // Log successful login
+        await logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.email, {
+            method: 'email_password',
+            role: user.role
+        });
+        
         res.json({ 
             success: true, 
             user: { 
@@ -818,6 +860,13 @@ app.post('/api/auth/otp/verify', async (req, res) => {
         `, [user.id]);
         
         req.session.userId = user.id;
+        
+        // Log successful OTP login
+        await logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.phone, {
+            method: 'phone_otp',
+            role: user.role
+        });
+        
         res.json({ 
             success: true, 
             user: { 
@@ -844,7 +893,15 @@ app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
             RETURNING id, email, phone, role
         `, [email || null, phone || null, passwordHash, role || 'read-only']);
         
-        res.json({ success: true, user: result.rows[0] });
+        const newUser = result.rows[0];
+        
+        // Log user creation
+        await logAudit(req, 'CREATE_USER', 'USER', newUser.id.toString(), newUser.email || newUser.phone, {
+            role: newUser.role,
+            created_with: email ? 'email' : 'phone'
+        });
+        
+        res.json({ success: true, user: newUser });
     } catch (error) {
         if (error.code === '23505') { // Unique violation
             res.status(400).json({ error: 'Email or phone already exists' });
@@ -855,13 +912,20 @@ app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
 });
 
 // Logout
-app.post('/api/auth/logout', (req, res) => {
-    req.session.destroy((err) => {
-        if (err) {
-            return res.status(500).json({ error: 'Logout failed' });
-        }
-        res.json({ success: true });
-    });
+app.post('/api/auth/logout', async (req, res) => {
+    try {
+        // Log logout before destroying session
+        await logAudit(req, 'LOGOUT', 'USER', req.session?.userId?.toString() || 'unknown', null, {});
+        
+        req.session.destroy((err) => {
+            if (err) {
+                return res.status(500).json({ error: 'Logout failed' });
+            }
+            res.json({ success: true });
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Get all users (admin only)
@@ -880,6 +944,10 @@ app.put('/api/users/:id/role', requireRole('admin'), async (req, res) => {
     const { role } = req.body;
     
     try {
+        // Get old role before update
+        const oldData = await pool.query('SELECT role, email, phone FROM users WHERE id = $1', [id]);
+        const oldRole = oldData.rows[0]?.role;
+        
         const result = await pool.query(`
             UPDATE users 
             SET role = $1, updated_at = NOW()
@@ -887,7 +955,15 @@ app.put('/api/users/:id/role', requireRole('admin'), async (req, res) => {
             RETURNING id, email, phone, role
         `, [role, id]);
         
-        res.json(result.rows[0]);
+        const updatedUser = result.rows[0];
+        
+        // Log role change
+        await logAudit(req, 'UPDATE_ROLE', 'USER', id, updatedUser.email || updatedUser.phone, {
+            old_role: oldRole,
+            new_role: role
+        });
+        
+        res.json(updatedUser);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -903,11 +979,20 @@ app.delete('/api/users/:id', requireRole('admin'), async (req, res) => {
             return res.status(400).json({ error: 'Cannot delete your own account' });
         }
         
-        const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
-        
-        if (result.rows.length === 0) {
+        // Get user info before deletion for audit log
+        const userData = await pool.query('SELECT email, phone, role FROM users WHERE id = $1', [id]);
+        if (userData.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
+        
+        const deletedUser = userData.rows[0];
+        
+        const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
+        
+        // Log user deletion
+        await logAudit(req, 'DELETE_USER', 'USER', id, deletedUser.email || deletedUser.phone, {
+            role: deletedUser.role
+        });
         
         res.json({ success: true });
     } catch (error) {
@@ -948,11 +1033,26 @@ app.delete('/api/sessions/:sid', requireRole('admin'), async (req, res) => {
             return res.status(400).json({ error: 'Cannot revoke your own session' });
         }
         
+        // Get session info before deletion for audit log
+        const sessionData = await pool.query(`
+            SELECT s.sess->>'userId' as user_id, u.email, u.phone
+            FROM sessions s
+            LEFT JOIN users u ON (s.sess->>'userId')::integer = u.id
+            WHERE s.sid = $1
+        `, [sid]);
+        
         const result = await pool.query('DELETE FROM sessions WHERE sid = $1 RETURNING sid', [sid]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Session not found' });
         }
+        
+        const sessionInfo = sessionData.rows[0];
+        
+        // Log session revocation
+        await logAudit(req, 'REVOKE_SESSION', 'SESSION', sid, sessionInfo?.email || sessionInfo?.phone, {
+            target_user_id: sessionInfo?.user_id
+        });
         
         res.json({ success: true });
     } catch (error) {
