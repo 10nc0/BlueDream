@@ -536,11 +536,13 @@
         <div class="header-left">
             <div class="logo">
                 <span>🌈 Nyan Bridge</span>
-                <span class="tagline">apps to apps hopping, nyan~</span>
             </div>
-            <!-- Nyan Cat Animation -->
+            <!-- Nyan Cat Animation with running text -->
             <div class="cat-container">
                 <canvas id="statusCanvas"></canvas>
+                <div style="text-align: center; margin-top: 0.5rem;">
+                    <span class="tagline">apps to apps hopping, nyan~</span>
+                </div>
             </div>
         </div>
         <div class="header-right">
@@ -964,9 +966,9 @@
                 <div class="bot-card">
                     <div class="bot-header">
                         <div class="bot-info">
-                            <h3>${bot.platform} → ${bot.destination_platform} Bridge</h3>
-                            <div class="bot-platform">${bot.platform} → ${bot.destination_platform}</div>
-                            <div class="bot-contact">📞 ${bot.contact}</div>
+                            <h3>${bot.input_platform} → ${bot.output_platform} Bridge</h3>
+                            <div class="bot-platform">${bot.input_platform} → ${bot.output_platform}</div>
+                            <div class="bot-contact">📞 ${bot.contact_info || 'No contact'}</div>
                         </div>
                         <div class="bot-stats">
                             <div class="stat">
@@ -989,7 +991,7 @@
                         </div>
                     ` : ''}
                     <div class="bot-actions">
-                        ${bot.platform === 'WhatsApp' ? `<button class="btn btn-qr" onclick="showQR('${bot.id}')">📱 QR Login</button>` : ''}
+                        ${bot.input_platform === 'WhatsApp' ? `<button class="btn btn-qr" onclick="showQR('${bot.id}')">📱 QR Login</button>` : ''}
                         <button class="btn btn-edit" onclick="editBot('${bot.id}')">Edit</button>
                         <button class="btn btn-delete" onclick="deleteBot('${bot.id}')">Delete</button>
                         <button class="btn" onclick="toggleMessages('${bot.id}')">▼</button>
@@ -1004,12 +1006,12 @@
             
             filteredBots = bots.filter(bot => {
                 const matchesSearch = 
-                    bot.platform.toLowerCase().includes(searchTerm) ||
-                    bot.destination_platform.toLowerCase().includes(searchTerm) ||
-                    bot.contact.toLowerCase().includes(searchTerm) ||
+                    bot.input_platform.toLowerCase().includes(searchTerm) ||
+                    bot.output_platform.toLowerCase().includes(searchTerm) ||
+                    (bot.contact_info && bot.contact_info.toLowerCase().includes(searchTerm)) ||
                     (bot.tags && bot.tags.some(tag => tag.toLowerCase().includes(searchTerm)));
                 
-                const matchesPlatform = !platformFilter || bot.platform === platformFilter;
+                const matchesPlatform = !platformFilter || bot.input_platform === platformFilter;
                 
                 return matchesSearch && matchesPlatform;
             });
@@ -1018,7 +1020,7 @@
         }
 
         function updatePlatformFilter() {
-            const platforms = [...new Set(bots.map(bot => bot.platform))];
+            const platforms = [...new Set(bots.map(bot => bot.input_platform))];
             const filter = document.getElementById('platformFilter');
             filter.innerHTML = '<option value="">All Platforms</option>' + 
                 platforms.map(p => `<option value="${p}">${p}</option>`).join('');
@@ -1039,9 +1041,9 @@
             
             editingBotId = id;
             document.getElementById('modalTitle').textContent = 'Edit Bot';
-            document.getElementById('botPlatform').value = bot.platform;
-            document.getElementById('botDestinationPlatform').value = bot.destination_platform;
-            document.getElementById('botContact').value = bot.contact;
+            document.getElementById('botPlatform').value = bot.input_platform;
+            document.getElementById('botDestinationPlatform').value = bot.output_platform;
+            document.getElementById('botContact').value = bot.contact_info || '';
             botTags = bot.tags || [];
             renderTags();
             document.getElementById('botModal').classList.add('active');
