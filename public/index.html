@@ -918,10 +918,10 @@
         // NYAN CAT ANIMATION - Dark Void Theme
         const canvas = document.getElementById('statusCanvas');
         const ctx = canvas.getContext('2d');
-        let catX = 0;
+        let catX = -200; // Start off-screen left
+        let catY = 60; // Base Y position
         let animationFrame = 0;
         let rainbowTrail = [];
-        let catWalkCycle = [];
 
         // NYAN CAT - Complete pixel art with ALL features
         // Colors: 0 = transparent, 1 = dark body, 2 = white eyes, 3 = pink details, 4 = rainbow
@@ -1036,24 +1036,22 @@
             const rainbowColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082'];
             const stripeHeight = 6;
             
-            // Add current position to trail
-            if (animationFrame % 2 === 0) {
-                rainbowTrail.push({ x: canvas.width, time: animationFrame });
+            // Add current position to trail (behind cat)
+            if (animationFrame % 3 === 0) {
+                rainbowTrail.push({ x: catX - 10, y: catY + 70 });
             }
             
             // Remove old trail positions
-            rainbowTrail = rainbowTrail.filter(pos => pos.x > -50);
+            rainbowTrail = rainbowTrail.filter(pos => pos.x > -100);
             
-            // Draw rainbow stripes
+            // Draw rainbow stripes (6 horizontal stripes)
             rainbowTrail.forEach((pos, index) => {
-                pos.x -= 2; // Move trail left
-                
                 for (let i = 0; i < rainbowColors.length; i++) {
                     ctx.fillStyle = rainbowColors[i];
                     ctx.fillRect(
-                        pos.x - 60,
-                        80 + i * stripeHeight,
-                        60,
+                        pos.x - 80,
+                        pos.y + i * stripeHeight,
+                        80,
                         stripeHeight
                     );
                 }
@@ -1068,12 +1066,25 @@
             ctx.fillStyle = '#1a1a2e'; // Very dark blue-black
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
+            // Move cat across screen
+            catX += 2; // Move right at 2 pixels per frame
+            
+            // Reset position when off screen
+            if (catX > canvas.width + 300) {
+                catX = -200;
+                rainbowTrail = []; // Clear trail when wrapping
+            }
+            
+            // Floating/bouncing effect (sine wave)
+            const bounce = Math.sin(animationFrame * 0.1) * 8;
+            catY = 60 + bounce;
+            
             // Draw rainbow trail first (behind cat)
             drawRainbowTrail();
             
-            // Get current frame - 8 FPS animation (8 ticks per frame)
-            const frameIndex = Math.floor(animationFrame / 8) % 2; // 2 frames
-            const sprite = nyanCatFrame1; // Use frame 1 for now
+            // Alternate between frames for walking animation - 8 FPS (8 ticks per frame)
+            const frameIndex = Math.floor(animationFrame / 8) % 2;
+            const sprite = frameIndex === 0 ? nyanCatFrame1 : nyanCatFrame2;
             
             // Safety check
             if (!sprite || !Array.isArray(sprite)) {
@@ -1082,8 +1093,6 @@
             }
             
             const pixelSize = 4;  // Bigger pixels for visibility
-            const startY = 60;
-            const startX = 100;
             
             // Draw cat sprite with VISIBLE colors
             sprite.forEach((row, y) => {
@@ -1091,25 +1100,25 @@
                     const color = colors[pixel];
                     if (color) {
                         ctx.fillStyle = color;
-                        ctx.fillRect(startX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
+                        ctx.fillRect(catX + x * pixelSize, catY + y * pixelSize, pixelSize, pixelSize);
                     } else if (pixel === 2) {
-                        // Cat eyes - Golden yellow
-                        ctx.fillStyle = '#FFD700';
-                        ctx.fillRect(startX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
+                        // Cat eyes - White
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.fillRect(catX + x * pixelSize, catY + y * pixelSize, pixelSize, pixelSize);
                     } else if (pixel === 4) {
                         // Pink inner ears
-                        ctx.fillStyle = '#FF6B9D';
-                        ctx.fillRect(startX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
+                        ctx.fillStyle = '#FF69B4';
+                        ctx.fillRect(catX + x * pixelSize, catY + y * pixelSize, pixelSize, pixelSize);
                     } else if (pixel === 5) {
                         // Pink nose
-                        ctx.fillStyle = '#FF6B9D';
-                        ctx.fillRect(startX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
+                        ctx.fillStyle = '#FF69B4';
+                        ctx.fillRect(catX + x * pixelSize, catY + y * pixelSize, pixelSize, pixelSize);
                     }
                 });
             });
             
-            // Draw whiskers on top of cat
-            drawWhiskers(startX + 100, startY + 80);
+            // Draw whiskers on top of cat (centered on face)
+            drawWhiskers(catX + 100, catY + 80);
         }
         
         function drawWhiskers(catX, catY) {
