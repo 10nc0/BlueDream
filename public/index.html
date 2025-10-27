@@ -747,108 +747,160 @@
         let users = [];
         let sessions = [];
 
-        // NYAN CAT ANIMATION
+        // NYAN CAT ANIMATION - Enhanced Lively Version!
         const canvas = document.getElementById('statusCanvas');
         const ctx = canvas.getContext('2d');
         ctx.imageSmoothingEnabled = false; // Crisp pixel art
         
-        let catX = -50; // Start off-screen left
-        let catY = 40; // Base Y position
+        let catX = -80; // Start off-screen left
+        let catY = 30; // Base Y position
         let animationFrame = 0;
         let rainbowTrail = [];
+        let stars = []; // Sparkle stars
 
-        // Black Cat Sprite - Proper pixel art based on reference
-        // Colors: 0 = transparent, 1 = black, 2 = yellow eyes, 3 = pink, 4 = white
+        // Create 6-frame smooth catwalk animation with higher resolution
+        const catFrames = [];
         
-        // Frame 1: Walking left paw forward
-        const catFrame1 = [
-            [0,0,0,0,0,0,1,1,1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,1,1,3,1,1,0,0,1,1,3,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,1,3,3,3,1,0,0,1,3,3,3,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,1,3,1,1,1,1,1,1,3,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,2,2,2,1,1,1,1,2,2,2,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,2,2,2,1,1,1,1,2,2,2,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,4,4,1,1,1,2,1,1,1,1,1,1,2,1,1,1,4,4,0,0,0,0,0,0,0,0,0,0],
-            [0,4,4,4,1,1,1,1,1,1,3,3,1,1,1,1,1,1,4,4,4,0,0,0,0,0,0,0,0,0],
-            [4,4,0,0,1,1,1,1,1,3,3,3,3,1,1,1,1,1,0,0,4,4,0,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,1,1,1,1,3,3,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0],
-            [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0],
-            [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0],
-            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0],
-            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0],
-            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
-            [0,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
-            [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
-            [0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1],
-            [0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,1,1],
-            [0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1]
-        ];
+        // Generate smooth walking frames dynamically
+        for (let f = 0; f < 6; f++) {
+            const legOffset = Math.sin((f / 6) * Math.PI * 2) * 2;
+            const tailWave = Math.cos((f / 6) * Math.PI * 2) * 3;
+            const frame = [];
+            
+            for (let y = 0; y < 32; y++) {
+                const row = [];
+                for (let x = 0; x < 40; x++) {
+                    // Head and ears
+                    if (y < 8 && ((x >= 8 && x <= 12) || (x >= 16 && x <= 20))) {
+                        row.push((y < 2) ? 1 : (y < 4 ? 3 : 1));
+                    }
+                    // Eyes
+                    else if (y >= 6 && y <= 9 && ((x >= 9 && x <= 11) || (x >= 17 && x <= 19))) {
+                        row.push(y === 7 || y === 8 ? 2 : 1);
+                    }
+                    // Whiskers
+                    else if (y === 10 && (x < 7 || x > 21)) {
+                        row.push(4);
+                    }
+                    // Body
+                    else if (y >= 10 && y <= 20 && x >= 10 && x <= 25) {
+                        row.push(1);
+                    }
+                    // Tail with wave
+                    else if (y >= 12 && y <= 18 && x >= 26 && x <= 35 + tailWave) {
+                        row.push(1);
+                    }
+                    // Front legs with walking motion
+                    else if (y >= 20 && y <= 28 && ((x >= 13 + legOffset && x <= 15 + legOffset) || (x >= 19 - legOffset && x <= 21 - legOffset))) {
+                        row.push(1);
+                    }
+                    // Pink paws
+                    else if (y >= 28 && y <= 30 && ((x >= 13 + legOffset && x <= 15 + legOffset) || (x >= 19 - legOffset && x <= 21 - legOffset))) {
+                        row.push(3);
+                    }
+                    else {
+                        row.push(0);
+                    }
+                }
+                frame.push(row);
+            }
+            catFrames.push(frame);
+        }
 
-        // Frame 2: Walking right paw forward, tail up
-        const catFrame2 = [
-            [0,0,0,0,0,0,1,1,1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,1,1,0,0,0,0,0],
-            [0,0,0,0,0,1,1,3,1,1,0,0,1,1,3,1,1,0,0,0,0,0,1,1,1,0,0,0,0,0],
-            [0,0,0,0,0,1,3,3,3,1,0,0,1,3,3,3,1,0,0,0,0,0,1,1,0,0,0,0,0,0],
-            [0,0,0,0,1,1,1,3,1,1,1,1,1,1,3,1,1,1,0,0,0,0,1,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,2,2,2,1,1,1,1,2,2,2,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,2,2,2,1,1,1,1,2,2,2,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,4,4,1,1,1,2,1,1,1,1,1,1,2,1,1,1,4,4,0,0,0,0,0,0,0,0,0,0],
-            [0,4,4,4,1,1,1,1,1,1,3,3,1,1,1,1,1,1,4,4,4,0,0,0,0,0,0,0,0,0],
-            [4,4,0,0,1,1,1,1,1,3,3,3,3,1,1,1,1,1,0,0,4,4,0,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,1,1,1,1,3,3,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0],
-            [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0],
-            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0],
-            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0],
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0],
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0],
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0],
-            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0],
-            [0,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,0,0,0,0],
-            [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,1,0,0,0],
-            [0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1,0,0],
-            [0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,0]
-        ];
-
-        // Color palette
+        // Enhanced color palette with more vibrant colors
         const colors = {
             0: null,             // transparent
-            1: '#000000',        // black body
-            2: '#FFD700',        // yellow eyes
-            3: '#FF9AB8',        // pink
-            4: '#FFFFFF'         // white whiskers
+            1: '#1a1a1a',        // rich black body
+            2: '#FFE55C',        // bright yellow eyes with glow
+            3: '#FF6B9D',        // vibrant pink
+            4: '#FFFFFF',        // pure white whiskers/sparkles
+            5: '#333333',        // dark gray shading
+            6: '#FFB6C1'         // light pink glow
         };
 
-        // Rainbow trail effect
+        // Enhanced rainbow trail with gradient and glow
         function drawRainbowTrail() {
-            const rainbowColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#8B00FF'];
-            const stripeHeight = 6;
+            const rainbowColors = [
+                '#FF3366', '#FF6B35', '#FFB800', '#4CAF50', '#2196F3', '#9C27B0', '#E91E63'
+            ];
+            const stripeHeight = 8;
             
-            // Add current position to trail (behind cat)
-            if (animationFrame % 2 === 0 && catX > 0) {
-                rainbowTrail.push({ x: catX - 5, y: catY + 30 });
+            // Add current position to trail (behind cat) - more frequently
+            if (catX > 0) {
+                rainbowTrail.push({ x: catX - 10, y: catY + 40, alpha: 1.0 });
             }
             
-            // Remove old trail positions
-            rainbowTrail = rainbowTrail.filter(pos => pos.x > -100);
+            // Remove old trail positions and fade
+            rainbowTrail = rainbowTrail.filter(pos => {
+                pos.alpha -= 0.01;
+                return pos.alpha > 0 && pos.x > -120;
+            });
             
-            // Draw rainbow stripes (6 horizontal stripes)
+            // Draw rainbow stripes with glow effect
             rainbowTrail.forEach((pos) => {
+                ctx.globalAlpha = pos.alpha;
                 for (let i = 0; i < rainbowColors.length; i++) {
+                    // Add shadow glow
+                    ctx.shadowColor = rainbowColors[i];
+                    ctx.shadowBlur = 10;
+                    
                     ctx.fillStyle = rainbowColors[i];
                     ctx.fillRect(
-                        pos.x - 60,
+                        pos.x - 80,
                         pos.y + i * stripeHeight,
-                        60,
+                        80,
                         stripeHeight
                     );
                 }
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1.0;
+            });
+        }
+
+        // Draw sparkle stars around the cat
+        function drawSparkles() {
+            // Add new sparkles randomly
+            if (Math.random() < 0.3 && catX > 0) {
+                stars.push({
+                    x: catX + Math.random() * 60 - 10,
+                    y: catY + Math.random() * 60,
+                    size: Math.random() * 3 + 2,
+                    life: 1.0,
+                    twinkle: Math.random() * Math.PI * 2
+                });
+            }
+            
+            // Update and draw stars
+            stars = stars.filter(star => {
+                star.life -= 0.02;
+                star.twinkle += 0.2;
+                
+                if (star.life > 0) {
+                    ctx.globalAlpha = star.life * (0.5 + Math.sin(star.twinkle) * 0.5);
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.shadowColor = '#FFE55C';
+                    ctx.shadowBlur = 5;
+                    
+                    // Draw 4-point star
+                    ctx.save();
+                    ctx.translate(star.x, star.y);
+                    ctx.beginPath();
+                    for (let i = 0; i < 4; i++) {
+                        const angle = (i * Math.PI / 2) + star.twinkle;
+                        const x = Math.cos(angle) * star.size;
+                        const y = Math.sin(angle) * star.size;
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
+                    
+                    ctx.shadowBlur = 0;
+                    ctx.globalAlpha = 1.0;
+                    return true;
+                }
+                return false;
             });
         }
 
@@ -856,44 +908,58 @@
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Light blue sky background
-            ctx.fillStyle = '#87CEEB';
+            // Light blue sky background with gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(1, '#B0E0E6');
+            ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Move cat across screen
-            catX += 1.5; // Move right at 1.5 pixels per frame
+            // Move cat across screen - faster and more lively
+            catX += 2.5;
             
             // Reset position when off screen
-            if (catX > canvas.width + 50) {
-                catX = -50;
-                rainbowTrail = []; // Clear trail when wrapping
+            if (catX > canvas.width + 80) {
+                catX = -80;
+                rainbowTrail = [];
+                stars = [];
             }
             
-            // Gentle floating/bouncing effect (sine wave)
-            const bounce = Math.sin(animationFrame * 0.08) * 6;
-            catY = 40 + bounce;
+            // More dynamic bouncing effect (sine wave + speed variation)
+            const bounce = Math.sin(animationFrame * 0.12) * 8;
+            const wiggle = Math.cos(animationFrame * 0.15) * 3;
+            catY = 30 + bounce;
             
             // Draw rainbow trail first (behind cat)
             drawRainbowTrail();
             
-            // Alternate between frames for walking animation - 8 FPS (every 8 frames)
-            const frameIndex = Math.floor(animationFrame / 8) % 2;
-            const sprite = frameIndex === 0 ? catFrame1 : catFrame2;
+            // Draw sparkles
+            drawSparkles();
             
-            const pixelSize = 3;  // 3x scale for visibility
+            // Use 6-frame smooth walking animation - 5 FPS (every 5 frames)
+            const frameIndex = Math.floor(animationFrame / 5) % 6;
+            const sprite = catFrames[frameIndex];
             
-            // Draw cat sprite
+            const pixelSize = 2.5;  // Slightly bigger for better visibility
+            
+            // Draw cat sprite with slight wiggle
             sprite.forEach((row, y) => {
                 row.forEach((pixel, x) => {
                     const color = colors[pixel];
                     if (color) {
                         ctx.fillStyle = color;
+                        // Add eye glow effect
+                        if (pixel === 2) {
+                            ctx.shadowColor = '#FFE55C';
+                            ctx.shadowBlur = 6;
+                        }
                         ctx.fillRect(
-                            catX + x * pixelSize, 
+                            catX + x * pixelSize + Math.sin(animationFrame * 0.1) * wiggle * 0.1, 
                             catY + y * pixelSize, 
                             pixelSize, 
                             pixelSize
                         );
+                        if (pixel === 2) ctx.shadowBlur = 0;
                     }
                 });
             });
