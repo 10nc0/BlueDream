@@ -700,20 +700,20 @@
             const pixelSize = 3.5;
             const startY = 12;
             
-            // Draw cat sprite
+            // Draw cat sprite - BLACK VOID CAT
             sprite.forEach((row, y) => {
                 row.forEach((pixel, x) => {
                     if (pixel === 1) {
-                        // Cat body (orange)
-                        ctx.fillStyle = '#FF8C42';
+                        // Cat body - BLACK/VOID
+                        ctx.fillStyle = '#1a1a1a';
                         ctx.fillRect(catX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
                     } else if (pixel === 2) {
-                        // Cat eyes (green glow)
-                        ctx.fillStyle = '#25D366';
+                        // Cat eyes - Bright yellow/green glow for void cat
+                        ctx.fillStyle = '#FFD700';
                         ctx.fillRect(catX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
                     } else if (pixel === 3) {
-                        // Whiskers (white)
-                        ctx.fillStyle = '#ffffff';
+                        // Whiskers - Light gray for subtle contrast
+                        ctx.fillStyle = '#888888';
                         ctx.fillRect(catX + x * pixelSize, startY + y * pixelSize, pixelSize, pixelSize);
                     }
                 });
