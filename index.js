@@ -1,13 +1,47 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const axios = require('axios');
+const { execSync } = require('child_process');
+const fs = require('fs');
 
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1432251247611875339/0bygzUiOuhKnnMX93SRza8DrGavtyWHe2mswJXYIgdxj85BEUeDZCJABNAwK6X8yYLlU';
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+
+if (!DISCORD_WEBHOOK_URL) {
+    console.error('❌ ERROR: DISCORD_WEBHOOK_URL environment variable is required!');
+    console.error('Please set your Discord webhook URL in the Secrets tab.');
+    process.exit(1);
+}
+
+function getChromiumPath() {
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+        return process.env.PUPPETEER_EXECUTABLE_PATH;
+    }
+    
+    try {
+        const path = execSync('which chromium-browser || which chromium', { encoding: 'utf8' }).trim();
+        if (path && fs.existsSync(path)) {
+            return path;
+        }
+    } catch (error) {
+        console.warn('Warning: Could not auto-detect Chromium path');
+    }
+    
+    return undefined;
+}
+
+const chromiumPath = getChromiumPath();
+if (!chromiumPath) {
+    console.error('❌ ERROR: Could not find Chromium executable!');
+    console.error('Please set PUPPETEER_EXECUTABLE_PATH environment variable.');
+    process.exit(1);
+}
+
+console.log(`✅ Using Chromium at: ${chromiumPath}`);
 
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium-browser',
+        executablePath: chromiumPath,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -51,12 +85,12 @@ client.on('message', async (message) => {
         const senderName = contact.pushname || contact.number;
         const timestamp = new Date(message.timestamp * 1000).toLocaleString();
         
-        let embedDescription = message.body;
+        let embedDescription = message.body || '_(No text content)_';
         let embedColor = 0x25D366;
         
         const embed = {
             title: `📱 WhatsApp Message from ${senderName}`,
-            description: embedDescription || '_(No text content)_',
+            description: embedDescription,
             color: embedColor,
             fields: [
                 {
@@ -71,7 +105,7 @@ client.on('message', async (message) => {
                 }
             ],
             footer: {
-                text: `WhatsApp Bridge • ID: ${message.id._serialized}`
+                text: 'WhatsApp Bridge'
             }
         };
 
@@ -85,20 +119,42 @@ client.on('message', async (message) => {
             try {
                 const media = await message.downloadMedia();
                 if (media) {
-                    embed.fields.push({
-                        name: '📎 Attachment',
-                        value: `Type: ${media.mimetype}`,
-                        inline: false
-                    });
-                    
                     if (media.mimetype.startsWith('image/')) {
-                        const base64Data = media.data;
-                        const imageUrl = `data:${media.mimetype};base64,${base64Data}`;
-                        embed.image = { url: imageUrl };
+                        const buffer = Buffer.from(media.data, 'base64');
+                        const filename = `whatsapp_image_${Date.now()}.${media.mimetype.split('/')[1]}`;
+                        
+                        const FormData = require('form-data');
+                        const form = new FormData();
+                        
+                        form.append('file', buffer, {
+                            filename: filename,
+                            contentType: media.mimetype
+                        });
+                        
+                        embed.fields.push({
+                            name: '📎 Attachment',
+                            value: `Image (${media.mimetype})`,
+                            inline: false
+                        });
+                        
+                        form.append('payload_json', JSON.stringify(discordPayload));
+                        
+                        await axios.post(DISCORD_WEBHOOK_URL, form, {
+                            headers: form.getHeaders()
+                        });
+                        
+                        console.log(`✅ Forwarded message with image from ${senderName} (${chatName}) to Discord`);
+                        return;
+                    } else {
+                        embed.fields.push({
+                            name: '📎 Attachment',
+                            value: `Media type: ${media.mimetype} (not displayed)`,
+                            inline: false
+                        });
                     }
                 }
             } catch (mediaError) {
-                console.error('Error downloading media:', mediaError);
+                console.error('Error downloading media:', mediaError.message);
                 embed.fields.push({
                     name: '⚠️ Media',
                     value: 'Media download failed',
