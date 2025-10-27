@@ -691,6 +691,50 @@
         </div>
     </div>
 
+    <!-- Change Email Modal -->
+    <div id="changeEmailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Change Email Address</h2>
+                <button class="close-btn" onclick="closeChangeEmailModal()">×</button>
+            </div>
+            <form id="changeEmailForm" onsubmit="saveNewEmail(event)">
+                <input type="hidden" id="changeEmailUserId">
+                <div class="form-group">
+                    <label class="form-label">Current Email</label>
+                    <input type="email" class="form-input" id="currentEmailDisplay" disabled>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">New Email</label>
+                    <input type="email" class="form-input" id="newEmail" required>
+                </div>
+                <button type="submit" class="submit-btn">Update Email</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Change Password</h2>
+                <button class="close-btn" onclick="closeChangePasswordModal()">×</button>
+            </div>
+            <form id="changePasswordForm" onsubmit="saveNewPassword(event)">
+                <input type="hidden" id="changePasswordUserId">
+                <div class="form-group">
+                    <label class="form-label">New Password</label>
+                    <input type="password" class="form-input" id="newPassword" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Confirm New Password</label>
+                    <input type="password" class="form-input" id="confirmPassword" required minlength="6">
+                </div>
+                <button type="submit" class="submit-btn">Update Password</button>
+            </form>
+        </div>
+    </div>
+
     <script>
         let bots = [];
         let filteredBots = [];
@@ -1148,39 +1192,18 @@
                         <div class="user-email">${user.email || user.phone}</div>
                         <span class="role-badge role-${user.role}">${user.role}</span>
                     </div>
-                    <div style="display: flex; gap: 0.5rem;">
+                    <div class="user-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
                         <select class="form-select" onchange="changeUserRole('${user.id}', this.value)" style="width: auto; padding: 0.5rem;">
                             <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
                             <option value="read-only" ${user.role === 'read-only' ? 'selected' : ''}>Read Only</option>
                             <option value="write-only" ${user.role === 'write-only' ? 'selected' : ''}>Write Only</option>
                         </select>
+                        ${user.email ? `<button class="btn" style="flex: none; padding: 0.5rem 1rem; background: #3b82f6;" onclick="changeUserEmail('${user.id}', '${user.email}')">✉️ Change Email</button>` : ''}
+                        ${user.email ? `<button class="btn" style="flex: none; padding: 0.5rem 1rem; background: #8b5cf6;" onclick="changeUserPassword('${user.id}')">🔒 Change Password</button>` : ''}
                         ${user.email !== currentUser.email && user.phone !== currentUser.phone ? 
                             `<button class="btn btn-delete" style="flex: none; padding: 0.5rem 1rem;" onclick="deleteUser('${user.id}')">Delete</button>` : 
                             '<span style="color: #94a3b8; font-size: 0.875rem;">(You)</span>'}
                     </div>
-                </div>
-            `).join('');
-        }
-
-        async function loadSessions() {
-            try {
-                const response = await fetch('/api/sessions');
-                sessions = await response.json();
-                renderSessions();
-            } catch (error) {
-                console.error('Error loading sessions:', error);
-            }
-        }
-
-        function renderSessions() {
-            const sessionList = document.getElementById('sessionList');
-            sessionList.innerHTML = sessions.map(session => `
-                <div class="user-item">
-                    <div class="user-details">
-                        <div class="user-email">${session.user_email || session.user_phone}</div>
-                        <div class="user-role">Last active: ${new Date(session.last_active).toLocaleString()}</div>
-                    </div>
-                    <button class="btn btn-delete" style="flex: none; padding: 0.5rem 1rem;" onclick="revokeSession('${session.id}')">Revoke</button>
                 </div>
             `).join('');
         }
@@ -1253,6 +1276,87 @@
                 }
             } catch (error) {
                 console.error('Error deleting user:', error);
+            }
+        }
+
+        function changeUserEmail(userId, currentEmail) {
+            document.getElementById('changeEmailUserId').value = userId;
+            document.getElementById('currentEmailDisplay').value = currentEmail;
+            document.getElementById('newEmail').value = '';
+            document.getElementById('changeEmailModal').classList.add('active');
+        }
+
+        function closeChangeEmailModal() {
+            document.getElementById('changeEmailModal').classList.remove('active');
+        }
+
+        async function saveNewEmail(event) {
+            event.preventDefault();
+            
+            const userId = document.getElementById('changeEmailUserId').value;
+            const newEmail = document.getElementById('newEmail').value;
+
+            try {
+                const response = await fetch(`/api/users/${userId}/email`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: newEmail })
+                });
+
+                if (response.ok) {
+                    closeChangeEmailModal();
+                    loadUsers();
+                    alert('Email updated successfully!');
+                } else {
+                    const error = await response.json();
+                    alert(error.error || 'Failed to update email');
+                }
+            } catch (error) {
+                console.error('Error updating email:', error);
+                alert('Error updating email');
+            }
+        }
+
+        function changeUserPassword(userId) {
+            document.getElementById('changePasswordUserId').value = userId;
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+            document.getElementById('changePasswordModal').classList.add('active');
+        }
+
+        function closeChangePasswordModal() {
+            document.getElementById('changePasswordModal').classList.remove('active');
+        }
+
+        async function saveNewPassword(event) {
+            event.preventDefault();
+            
+            const userId = document.getElementById('changePasswordUserId').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (newPassword !== confirmPassword) {
+                alert('Passwords do not match!');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/users/${userId}/password`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: newPassword })
+                });
+
+                if (response.ok) {
+                    closeChangePasswordModal();
+                    alert('Password updated successfully!');
+                } else {
+                    const error = await response.json();
+                    alert(error.error || 'Failed to update password');
+                }
+            } catch (error) {
+                console.error('Error updating password:', error);
+                alert('Error updating password');
             }
         }
 
