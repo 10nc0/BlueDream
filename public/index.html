@@ -730,7 +730,7 @@
             </div>
             
             <!-- Active Sessions Section -->
-            <div>
+            <div style="margin-bottom: 3rem;">
                 <h3 style="margin-bottom: 1rem; color: #94a3b8; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Active Sessions</h3>
                 <div class="table-container">
                     <table class="data-table">
@@ -745,6 +745,44 @@
                         <tbody id="sessionsTableBody">
                             <tr>
                                 <td colspan="4" style="text-align: center; color: #64748b;">Loading sessions...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Audit Trail Section -->
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="color: #94a3b8; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">🔍 Audit Trail</h3>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <select id="auditFilterAction" onchange="loadAuditLogs()" style="background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); color: #e2e8f0; padding: 0.5rem; border-radius: 0.5rem; font-size: 0.875rem;">
+                            <option value="">All Actions</option>
+                            <option value="LOGIN">Logins</option>
+                            <option value="LOGOUT">Logouts</option>
+                            <option value="CREATE_USER">User Created</option>
+                            <option value="DELETE_USER">User Deleted</option>
+                            <option value="UPDATE_ROLE">Role Changes</option>
+                            <option value="REVOKE_SESSION">Session Revoked</option>
+                        </select>
+                        <button class="btn btn-ghost btn-small" onclick="loadAuditLogs()">🔄 Refresh</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Actor</th>
+                                <th>Action</th>
+                                <th>Target</th>
+                                <th>Details</th>
+                                <th>IP Address</th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditLogsTableBody">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: #64748b;">Loading audit logs...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -1509,6 +1547,7 @@
                 // Load data when switching to users tab
                 if (tabName === 'users') {
                     loadUsers();
+                    loadAuditLogs();
                     loadSessions();
                 }
             }
@@ -1727,10 +1766,94 @@
                 }
                 
                 await loadSessions();
+                await loadAuditLogs(); // Refresh audit logs to show revocation
             } catch (error) {
                 console.error('Error revoking session:', error);
                 alert('Error revoking session');
             }
+        }
+        
+        // ========== AUDIT LOG MANAGEMENT ==========
+        async function loadAuditLogs() {
+            try {
+                const actionFilter = document.getElementById('auditFilterAction').value;
+                const queryParams = new URLSearchParams();
+                if (actionFilter) {
+                    queryParams.append('action_type', actionFilter);
+                }
+                queryParams.append('limit', '50');
+                
+                const res = await fetch(`/api/audit-logs?${queryParams}`, {
+                    credentials: 'same-origin'
+                });
+                
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+                
+                const auditLogs = await res.json();
+                renderAuditLogs(auditLogs);
+            } catch (error) {
+                console.error('Error loading audit logs:', error);
+                document.getElementById('auditLogsTableBody').innerHTML = '<tr><td colspan="6" style="text-align: center; color: #ef4444;">Error loading audit logs</td></tr>';
+            }
+        }
+        
+        function renderAuditLogs(logs) {
+            const tbody = document.getElementById('auditLogsTableBody');
+            
+            if (logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #64748b;">No audit logs found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = logs.map(log => {
+                const timestamp = new Date(log.timestamp).toLocaleString();
+                const details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
+                
+                // Format action with color coding
+                let actionBadge = '';
+                switch(log.action_type) {
+                    case 'LOGIN':
+                        actionBadge = '<span class="badge badge-success">Login</span>';
+                        break;
+                    case 'LOGOUT':
+                        actionBadge = '<span class="badge badge-read">Logout</span>';
+                        break;
+                    case 'CREATE_USER':
+                        actionBadge = '<span class="badge badge-success">User Created</span>';
+                        break;
+                    case 'DELETE_USER':
+                        actionBadge = '<span class="badge badge-danger">User Deleted</span>';
+                        break;
+                    case 'UPDATE_ROLE':
+                        actionBadge = '<span class="badge badge-warning">Role Changed</span>';
+                        break;
+                    case 'REVOKE_SESSION':
+                        actionBadge = '<span class="badge badge-danger">Session Revoked</span>';
+                        break;
+                    default:
+                        actionBadge = `<span class="badge">${log.action_type}</span>`;
+                }
+                
+                // Format details nicely
+                let detailsText = '';
+                if (details.method) detailsText += `Method: ${details.method}<br>`;
+                if (details.old_role && details.new_role) detailsText += `${details.old_role} → ${details.new_role}`;
+                if (details.role && !details.old_role) detailsText += `Role: ${details.role}`;
+                if (!detailsText) detailsText = '-';
+                
+                return `
+                    <tr>
+                        <td>${timestamp}</td>
+                        <td>${log.actor_email || '<span style="color: #64748b;">System</span>'}</td>
+                        <td>${actionBadge}</td>
+                        <td>${log.target_email || log.target_id || '-'}</td>
+                        <td style="font-size: 0.8rem; color: #94a3b8;">${detailsText}</td>
+                        <td style="font-size: 0.75rem; color: #64748b;">${log.ip_address}</td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         // Initialize app with authentication check
@@ -1742,6 +1865,7 @@
                 // Show user management tab for admins only
                 if (currentUser && currentUser.role === 'admin') {
                     document.getElementById('usersTabButton').style.display = 'block';
+                    loadAuditLogs(); // Load audit logs on init for admins
                 }
             }
         }
