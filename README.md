@@ -4,8 +4,11 @@ A bridge that automatically forwards WhatsApp messages to a Discord channel usin
 
 ## Features
 
+- 📊 **Professional Web Dashboard** - Monitor messages, stats, and manage connections
 - ✅ Real-time message forwarding from WhatsApp to Discord
 - 🔒 **Privacy-focused**: Only forwards messages sent TO the bot by default
+- 🔍 **Message filtering and search** - Search by sender or content
+- 🔄 **Easy QR relinking** - Button to connect a new WhatsApp number
 - 🎯 Optional filtering by specific groups or phone numbers
 - 📱 Displays sender name, chat name, and timestamp
 - 🖼️ Supports image attachments (uploaded to Discord)
@@ -61,12 +64,39 @@ To monitor specific groups or numbers, add these secrets:
 ### 4. Run the Bridge
 
 1. Click the "Run" button to start the bridge
-2. A QR code will appear in the console
-3. Open WhatsApp on your phone
-4. Go to Settings → Linked Devices → Link a Device
-5. Scan the QR code displayed in the console
-6. Once connected, the bridge will display your bot's WhatsApp number
-7. Share this number with people who should contact the bot!
+2. The web dashboard will open automatically
+3. Click the **"Relink WhatsApp"** button to see the QR code
+4. Open WhatsApp on your phone
+5. Go to Settings → Linked Devices → Link a Device
+6. Scan the QR code from the dashboard modal
+7. Once connected, the dashboard will show your bot's WhatsApp number
+8. Share this number with people who should contact the bot!
+
+## Web Dashboard
+
+The bridge includes a professional web dashboard accessible at the webview when you run the app.
+
+### Dashboard Features
+
+- **Real-time Stats**: View total, successful, failed, and pending messages
+- **Message Preview**: See all forwarded messages with timestamps and sender info
+- **Search & Filter**: 
+  - Search by sender name, contact, or message content
+  - Filter by status (All, Success, Failed, Pending)
+- **Connection Status**: Live indicator showing WhatsApp connection status and bot number
+- **QR Code Management**: 
+  - Click "Relink WhatsApp" to view current QR code
+  - Generate new QR code to connect a different number
+  - Useful for switching from temporary to permanent numbers
+- **Auto-refresh**: Dashboard updates every 5 seconds automatically
+
+### Using the Dashboard
+
+1. **Monitor Messages**: See all forwarded messages in real-time
+2. **Search**: Type in the search box to find specific messages
+3. **Filter**: Use the status dropdown to show only successful, failed, or pending messages
+4. **Relink**: Click "Relink WhatsApp" button to disconnect and connect a new number
+5. **Stats**: View summary statistics at the top of the dashboard
 
 ## Usage
 
