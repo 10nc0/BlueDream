@@ -113,9 +113,26 @@
             justify-content: space-between;
             align-items: center;
             gap: 1rem;
+            position: relative;
         }
         .bot-header:hover {
             background: #1f2937;
+        }
+        .bot-header::after {
+            content: 'Click to view messages';
+            position: absolute;
+            right: 1.5rem;
+            bottom: 0.5rem;
+            font-size: 0.75rem;
+            color: #64748b;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .bot-header:hover::after {
+            opacity: 1;
+        }
+        .bot-card.expanded .bot-header::after {
+            content: 'Click to collapse';
         }
         .bot-info {
             flex: 1;
@@ -502,6 +519,11 @@
                 };
                 const card = createBotCard(bot, stats);
                 list.appendChild(card);
+                
+                // If this bot is expanded and we have cached messages, render them immediately
+                if (expandedBots.has(bot.id) && messageCache[bot.id]) {
+                    renderBotMessages(bot.id, messageCache[bot.id]);
+                }
             }
         }
 
@@ -554,14 +576,15 @@
         async function toggleBot(botId) {
             if (expandedBots.has(botId)) {
                 expandedBots.delete(botId);
+                renderBots();
             } else {
                 expandedBots.add(botId);
-                // Only load if not already cached
+                renderBots(); // Re-render to show expanded state
+                // Load messages if not cached (renderBots will display cached ones)
                 if (!messageCache[botId]) {
                     await loadBotMessages(botId);
                 }
             }
-            renderBots();
         }
 
         // OPTIMIZED: Pagination + Caching (loads 50 at a time, caches results)
