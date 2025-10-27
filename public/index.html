@@ -1212,7 +1212,14 @@
         // ========== USER MANAGEMENT ==========
         async function loadUsers() {
             try {
-                const res = await fetch('/api/users');
+                const res = await fetch('/api/users', {
+                    credentials: 'same-origin'
+                });
+                
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+                
                 users = await res.json();
                 renderUsers();
             } catch (error) {
@@ -1350,7 +1357,14 @@
         // ========== SESSION MANAGEMENT ==========
         async function loadSessions() {
             try {
-                const res = await fetch('/api/sessions');
+                const res = await fetch('/api/sessions', {
+                    credentials: 'same-origin'
+                });
+                
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+                
                 sessions = await res.json();
                 renderSessions();
             } catch (error) {
