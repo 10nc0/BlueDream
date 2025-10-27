@@ -553,6 +553,7 @@
         <div class="tabs">
             <button class="tab active" onclick="switchTab('bots')">🤖 Bots</button>
             <button class="tab" onclick="switchTab('users')">👥 Users</button>
+            <button class="tab" onclick="switchTab('sessions')">🔐 Sessions</button>
         </div>
 
         <!-- Bots Tab -->
@@ -579,9 +580,43 @@
                 <button class="create-bot-btn" onclick="openCreateUserModal()">+ Create User</button>
             </div>
             <div id="userList" class="user-list"></div>
+        </div>
 
-            <h2 style="margin-top: 2rem; margin-bottom: 1rem;">Active Sessions</h2>
-            <div id="sessionList" class="user-list"></div>
+        <!-- Sessions Tab -->
+        <div id="sessionsTab" class="tab-content">
+            <div class="section-header">
+                <h1 class="section-title">Active Sessions</h1>
+                <button class="create-bot-btn" style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);" onclick="revokeAllSessions()">🚫 Revoke All Sessions</button>
+            </div>
+            
+            <div class="search-filter">
+                <input type="text" class="search-box" id="sessionLocationFilter" placeholder="🌍 Filter by location..." oninput="loadSessions()">
+                <select class="filter-dropdown" id="sessionDeviceFilter" onchange="loadSessions()">
+                    <option value="">All Devices</option>
+                    <option value="Desktop">Desktop</option>
+                    <option value="Mobile">Mobile</option>
+                    <option value="Tablet">Tablet</option>
+                </select>
+                <select class="filter-dropdown" id="sessionBrowserFilter" onchange="loadSessions()">
+                    <option value="">All Browsers</option>
+                    <option value="Chrome">Chrome</option>
+                    <option value="Safari">Safari</option>
+                    <option value="Firefox">Firefox</option>
+                    <option value="Edge">Edge</option>
+                </select>
+                <select class="filter-dropdown" id="sessionSortBy" onchange="loadSessions()">
+                    <option value="login_time">Sort by: Login Time</option>
+                    <option value="last_activity">Sort by: Last Activity</option>
+                    <option value="ip_address">Sort by: IP Address</option>
+                    <option value="location">Sort by: Location</option>
+                </select>
+                <select class="filter-dropdown" id="sessionSortOrder" onchange="loadSessions()">
+                    <option value="desc">Newest First</option>
+                    <option value="asc">Oldest First</option>
+                </select>
+            </div>
+            
+            <div id="sessionsList" class="user-list"></div>
         </div>
     </div>
 
@@ -1219,16 +1254,103 @@
             }
         }
 
+        // Session Management
+        async function loadSessions() {
+            try {
+                const locationFilter = document.getElementById('sessionLocationFilter')?.value || '';
+                const deviceFilter = document.getElementById('sessionDeviceFilter')?.value || '';
+                const browserFilter = document.getElementById('sessionBrowserFilter')?.value || '';
+                const sortBy = document.getElementById('sessionSortBy')?.value || 'login_time';
+                const sortOrder = document.getElementById('sessionSortOrder')?.value || 'desc';
+                
+                const params = new URLSearchParams();
+                if (locationFilter) params.append('filterLocation', locationFilter);
+                if (deviceFilter) params.append('filterDevice', deviceFilter);
+                if (browserFilter) params.append('filterBrowser', browserFilter);
+                params.append('sortBy', sortBy);
+                params.append('sortOrder', sortOrder);
+                
+                const response = await fetch(`/api/sessions?${params}`);
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                const sessionsList = document.getElementById('sessionsList');
+                
+                if (data.sessions.length === 0) {
+                    sessionsList.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No active sessions found</p>';
+                    return;
+                }
+                
+                sessionsList.innerHTML = data.sessions.map(session => {
+                    const loginDate = new Date(session.login_time).toLocaleString();
+                    const lastActivity = new Date(session.last_activity).toLocaleString();
+                    const statusBadge = session.is_active 
+                        ? '<span style="color: #10b981; font-weight: 600;">● Active</span>' 
+                        : '<span style="color: #94a3b8;">○ Inactive</span>';
+                    
+                    return `
+                        <div class="user-card" style="opacity: ${session.is_active ? '1' : '0.6'}">
+                            <div class="user-info">
+                                <div class="user-email">${session.email || session.phone || 'Unknown User'}</div>
+                                <div class="user-role">${statusBadge}</div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; font-size: 0.875rem; color: #cbd5e1;">
+                                <div><strong>Device:</strong> ${session.device_type || 'Unknown'}</div>
+                                <div><strong>Browser:</strong> ${session.browser || 'Unknown'}</div>
+                                <div><strong>OS:</strong> ${session.os || 'Unknown'}</div>
+                                <div><strong>IP:</strong> ${session.ip_address || 'Unknown'}</div>
+                                <div><strong>Location:</strong> 🌍 ${session.location || 'Unknown Location'}</div>
+                                <div><strong>Login:</strong> ${loginDate}</div>
+                                <div><strong>Last Activity:</strong> ${lastActivity}</div>
+                            </div>
+                            <div class="user-actions">
+                                ${session.is_active ? `<button class="btn btn-delete" onclick="revokeSession(${session.id})">Revoke</button>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+            }
+        }
+
         async function revokeSession(sessionId) {
-            if (!confirm('Are you sure you want to revoke this session?')) return;
+            if (!confirm('Are you sure you want to revoke this session? The user will be logged out immediately.')) return;
             
             try {
                 const response = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
                 if (response.ok) {
                     loadSessions();
+                    alert('Session revoked successfully');
+                } else {
+                    alert('Failed to revoke session');
                 }
             } catch (error) {
                 console.error('Error revoking session:', error);
+                alert('Error revoking session');
+            }
+        }
+
+        async function revokeAllSessions() {
+            if (!confirm('⚠️ WARNING: This will revoke ALL active sessions except your current one. All other users will be logged out immediately. Are you sure?')) return;
+            
+            try {
+                const response = await fetch('/api/sessions/revoke-all', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    loadSessions();
+                    alert(`Successfully revoked ${data.count} session(s)`);
+                } else {
+                    alert('Failed to revoke all sessions');
+                }
+            } catch (error) {
+                console.error('Error revoking all sessions:', error);
+                alert('Error revoking all sessions');
             }
         }
 
@@ -1245,6 +1367,7 @@
             // Load data for the tab
             if (tabName === 'users') {
                 loadUsers();
+            } else if (tabName === 'sessions') {
                 loadSessions();
             }
         }

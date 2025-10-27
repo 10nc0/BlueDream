@@ -201,6 +201,36 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire)
         `);
         
+        // Create active_sessions table for tracking session metadata
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS active_sessions (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                session_id VARCHAR NOT NULL,
+                ip_address TEXT,
+                user_agent TEXT,
+                device_type TEXT,
+                browser TEXT,
+                os TEXT,
+                location TEXT,
+                login_time TIMESTAMPTZ DEFAULT NOW(),
+                last_activity TIMESTAMPTZ DEFAULT NOW(),
+                is_active BOOLEAN DEFAULT TRUE
+            )
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_active_sessions_user ON active_sessions(user_id)
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_active_sessions_session ON active_sessions(session_id)
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_active_sessions_active ON active_sessions(is_active, last_activity DESC)
+        `);
+        
         // Create audit_logs table for tracking all user and session changes
         await pool.query(`
             CREATE TABLE IF NOT EXISTS audit_logs (
@@ -684,6 +714,83 @@ function initializeWhatsAppClient() {
     });
 }
 
+// ============ SESSION TRACKING SYSTEM ============
+
+// Parse user agent to extract device, browser, and OS
+function parseUserAgent(userAgent) {
+    const ua = userAgent || '';
+    
+    // Detect device type
+    let deviceType = 'Desktop';
+    if (/Mobile|Android|iPhone|iPod/i.test(ua)) deviceType = 'Mobile';
+    else if (/iPad|Tablet/i.test(ua)) deviceType = 'Tablet';
+    
+    // Detect browser
+    let browser = 'Unknown';
+    if (/Edg/i.test(ua)) browser = 'Edge';
+    else if (/Chrome/i.test(ua)) browser = 'Chrome';
+    else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = 'Safari';
+    else if (/Firefox/i.test(ua)) browser = 'Firefox';
+    else if (/MSIE|Trident/i.test(ua)) browser = 'Internet Explorer';
+    
+    // Detect OS
+    let os = 'Unknown';
+    if (/Windows/i.test(ua)) os = 'Windows';
+    else if (/Mac OS X|Macintosh/i.test(ua)) os = 'macOS';
+    else if (/Linux/i.test(ua)) os = 'Linux';
+    else if (/Android/i.test(ua)) os = 'Android';
+    else if (/iOS|iPhone|iPad|iPod/i.test(ua)) os = 'iOS';
+    
+    return { deviceType, browser, os };
+}
+
+// Simple location detection from IP (basic implementation)
+async function getLocationFromIP(ipAddress) {
+    try {
+        // For local/private IPs, return Unknown
+        if (!ipAddress || ipAddress === '::1' || ipAddress.startsWith('127.') || ipAddress.startsWith('192.168.') || ipAddress.startsWith('10.')) {
+            return 'Local Network';
+        }
+        
+        // Use free ipapi.co service for geolocation (no API key needed)
+        const response = await fetch(`https://ipapi.co/${ipAddress}/json/`, {
+            timeout: 3000 // 3 second timeout
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.city && data.country_name) {
+                return `${data.city}, ${data.country_name}`;
+            } else if (data.country_name) {
+                return data.country_name;
+            }
+        }
+        
+        return 'Unknown Location';
+    } catch (error) {
+        console.error('Error getting location:', error.message);
+        return 'Unknown Location';
+    }
+}
+
+// Create session tracking record
+async function createSessionRecord(userId, sessionId, req) {
+    try {
+        const userAgent = req.get('user-agent') || '';
+        const { deviceType, browser, os } = parseUserAgent(userAgent);
+        const location = await getLocationFromIP(req.ip);
+        
+        await pool.query(`
+            INSERT INTO active_sessions (user_id, session_id, ip_address, user_agent, device_type, browser, os, location)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [userId, sessionId, req.ip, userAgent, deviceType, browser, os, location]);
+        
+        console.log(`📱 Session created - User: ${userId}, Device: ${deviceType}, Browser: ${browser}, OS: ${os}, IP: ${req.ip}, Location: ${location}`);
+    } catch (error) {
+        console.error('Error creating session record:', error.message);
+    }
+}
+
 // ============ AUDIT LOGGING SYSTEM ============
 
 // Helper function to log audit events
@@ -788,10 +895,14 @@ app.post('/api/auth/login', async (req, res) => {
         req.session.userId = user.id;
         
         // Save session explicitly before sending response
-        req.session.save((err) => {
+        req.session.save(async (err) => {
             if (err) {
+                console.error('Session save error:', err);
                 return res.status(500).json({ error: 'Session save failed' });
             }
+            
+            // Create session tracking record
+            await createSessionRecord(user.id, req.sessionID, req);
             
             // Log successful login
             logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.email, {
@@ -879,10 +990,14 @@ app.post('/api/auth/otp/verify', async (req, res) => {
         req.session.userId = user.id;
         
         // Save session explicitly before sending response
-        req.session.save((err) => {
+        req.session.save(async (err) => {
             if (err) {
+                console.error('Session save error:', err);
                 return res.status(500).json({ error: 'Session save failed' });
             }
+            
+            // Create session tracking record
+            await createSessionRecord(user.id, req.sessionID, req);
             
             // Log successful OTP login
             logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.phone, {
@@ -938,8 +1053,20 @@ app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
 // Logout
 app.post('/api/auth/logout', async (req, res) => {
     try {
+        const userId = req.session?.userId;
+        const sessionId = req.sessionID;
+        
+        // Mark session as inactive
+        if (userId && sessionId) {
+            await pool.query(`
+                UPDATE active_sessions 
+                SET is_active = FALSE
+                WHERE user_id = $1 AND session_id = $2
+            `, [userId, sessionId]);
+        }
+        
         // Log logout before destroying session
-        await logAudit(req, 'LOGOUT', 'USER', req.session?.userId?.toString() || 'unknown', null, {});
+        await logAudit(req, 'LOGOUT', 'USER', userId?.toString() || 'unknown', null, {});
         
         req.session.destroy((err) => {
             if (err) {
@@ -948,6 +1075,166 @@ app.post('/api/auth/logout', async (req, res) => {
             res.json({ success: true });
         });
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============ SESSION MANAGEMENT ROUTES ============
+
+// Get all active sessions (admin only) with filtering and sorting
+app.get('/api/sessions', requireRole('admin'), async (req, res) => {
+    try {
+        const { userId, sortBy = 'login_time', sortOrder = 'desc', filterDevice, filterBrowser, filterLocation } = req.query;
+        
+        let query = `
+            SELECT 
+                s.id, s.user_id, s.session_id, s.ip_address, s.user_agent,
+                s.device_type, s.browser, s.os, s.location, s.login_time, s.last_activity,
+                s.is_active,
+                u.email, u.phone
+            FROM active_sessions s
+            LEFT JOIN users u ON s.user_id = u.id
+            WHERE 1=1
+        `;
+        const params = [];
+        let paramCount = 1;
+        
+        // Filter by user ID
+        if (userId) {
+            query += ` AND s.user_id = $${paramCount}`;
+            params.push(userId);
+            paramCount++;
+        }
+        
+        // Filter by device type
+        if (filterDevice) {
+            query += ` AND s.device_type = $${paramCount}`;
+            params.push(filterDevice);
+            paramCount++;
+        }
+        
+        // Filter by browser
+        if (filterBrowser) {
+            query += ` AND s.browser = $${paramCount}`;
+            params.push(filterBrowser);
+            paramCount++;
+        }
+        
+        // Filter by location (partial match)
+        if (filterLocation) {
+            query += ` AND s.location ILIKE $${paramCount}`;
+            params.push(`%${filterLocation}%`);
+            paramCount++;
+        }
+        
+        // Add sorting
+        const validColumns = ['login_time', 'last_activity', 'device_type', 'browser', 'ip_address', 'location'];
+        const sortColumn = validColumns.includes(sortBy) ? sortBy : 'login_time';
+        const order = sortOrder === 'asc' ? 'ASC' : 'DESC';
+        query += ` ORDER BY s.${sortColumn} ${order}`;
+        
+        const result = await pool.query(query, params);
+        
+        res.json({ sessions: result.rows });
+    } catch (error) {
+        console.error('Error fetching sessions:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Revoke a specific session (admin only)
+app.delete('/api/sessions/:id', requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Get session details before deletion for audit log
+        const sessionResult = await pool.query(`
+            SELECT user_id, session_id FROM active_sessions WHERE id = $1
+        `, [id]);
+        
+        if (sessionResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+        
+        const session = sessionResult.rows[0];
+        
+        // Mark session as inactive
+        await pool.query(`
+            UPDATE active_sessions SET is_active = FALSE WHERE id = $1
+        `, [id]);
+        
+        // Destroy the actual session from sessions table
+        await pool.query(`
+            DELETE FROM sessions WHERE sid = $1
+        `, [session.session_id]);
+        
+        // Log session revocation
+        await logAudit(req, 'REVOKE_SESSION', 'SESSION', id.toString(), null, {
+            target_user_id: session.user_id,
+            session_id: session.session_id
+        });
+        
+        res.json({ success: true, message: 'Session revoked' });
+    } catch (error) {
+        console.error('Error revoking session:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Revoke all sessions for current user or all users (admin only)
+app.post('/api/sessions/revoke-all', requireRole('admin'), async (req, res) => {
+    try {
+        const { userId } = req.body; // Optional: revoke all for specific user
+        
+        let sessionQuery;
+        let params = [];
+        
+        if (userId) {
+            // Revoke all sessions for specific user
+            sessionQuery = 'SELECT session_id FROM active_sessions WHERE user_id = $1';
+            params = [userId];
+        } else {
+            // Revoke ALL sessions for ALL users (except current session)
+            sessionQuery = 'SELECT session_id FROM active_sessions WHERE session_id != $1';
+            params = [req.sessionID];
+        }
+        
+        const sessionsResult = await pool.query(sessionQuery, params);
+        const sessionIds = sessionsResult.rows.map(row => row.session_id);
+        
+        if (sessionIds.length === 0) {
+            return res.json({ success: true, message: 'No sessions to revoke', count: 0 });
+        }
+        
+        // Mark all as inactive
+        if (userId) {
+            await pool.query(`
+                UPDATE active_sessions SET is_active = FALSE WHERE user_id = $1
+            `, [userId]);
+        } else {
+            await pool.query(`
+                UPDATE active_sessions SET is_active = FALSE WHERE session_id != $1
+            `, [req.sessionID]);
+        }
+        
+        // Destroy all sessions from sessions table
+        for (const sessionId of sessionIds) {
+            await pool.query('DELETE FROM sessions WHERE sid = $1', [sessionId]);
+        }
+        
+        // Log mass revocation
+        await logAudit(req, 'REVOKE_ALL_SESSIONS', 'SESSION', userId || 'all', null, {
+            count: sessionIds.length,
+            target_user_id: userId || 'all'
+        });
+        
+        res.json({ 
+            success: true, 
+            message: `${sessionIds.length} session(s) revoked`,
+            count: sessionIds.length
+        });
+    } catch (error) {
+        console.error('Error revoking all sessions:', error);
         res.status(500).json({ error: error.message });
     }
 });
