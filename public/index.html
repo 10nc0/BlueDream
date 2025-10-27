@@ -93,24 +93,7 @@
             gap: 1rem;
             margin-bottom: 2rem;
             flex-wrap: wrap;
-        }
-        .search-box {
-            flex: 1;
-            min-width: 200px;
-            display: flex;
-            align-items: center;
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 0.5rem;
-            padding: 0.75rem 1rem;
-        }
-        .search-box input {
-            flex: 1;
-            background: none;
-            border: none;
-            color: #e2e8f0;
-            font-size: 0.875rem;
-            outline: none;
+            justify-content: flex-end;
         }
         .btn {
             padding: 0.75rem 1.5rem;
@@ -131,15 +114,6 @@
         }
         .btn-danger:hover {
             background: #dc2626;
-        }
-        select {
-            padding: 0.75rem 1rem;
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 0.5rem;
-            color: #e2e8f0;
-            cursor: pointer;
-            font-size: 0.875rem;
         }
         .messages-section {
             background: #1e293b;
@@ -170,18 +144,50 @@
             border-bottom: 1px solid #334155;
         }
         th {
-            padding: 1rem;
+            padding: 0.75rem 1rem;
             text-align: left;
             font-size: 0.75rem;
             font-weight: 600;
             color: #94a3b8;
             text-transform: uppercase;
             letter-spacing: 0.05em;
+            vertical-align: top;
         }
         th:nth-child(1) { width: 150px; }
         th:nth-child(2) { width: 200px; }
         th:nth-child(3) { width: auto; }
         th:nth-child(4) { width: 120px; }
+        .th-content {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            user-select: none;
+            margin-bottom: 0.5rem;
+        }
+        .th-content:hover {
+            color: #cbd5e1;
+        }
+        .sort-icon {
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+        .sort-icon.active {
+            color: #3b82f6;
+        }
+        .filter-input {
+            width: 100%;
+            padding: 0.5rem;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.375rem;
+            color: #e2e8f0;
+            font-size: 0.75rem;
+            outline: none;
+        }
+        .filter-input:focus {
+            border-color: #3b82f6;
+        }
         tbody tr {
             border-bottom: 1px solid #334155;
             transition: background 0.2s;
@@ -249,6 +255,12 @@
             border-radius: 9999px;
             font-size: 0.75rem;
             color: #94a3b8;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .media-badge:hover {
+            background: #3b82f6;
+            color: white;
         }
         .status-badge-table {
             display: inline-block;
@@ -299,10 +311,11 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0, 0, 0, 0.75);
+            background: rgba(0, 0, 0, 0.85);
             z-index: 1000;
             align-items: center;
             justify-content: center;
+            padding: 2rem;
         }
         .modal.active {
             display: flex;
@@ -332,6 +345,41 @@
             display: flex;
             gap: 1rem;
             justify-content: center;
+        }
+        .image-modal-content {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            max-width: 90vw;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .image-modal-content img {
+            max-width: 100%;
+            max-height: 80vh;
+            object-fit: contain;
+            border-radius: 0.5rem;
+        }
+        .image-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .close-btn {
+            background: #334155;
+            border: none;
+            color: #e2e8f0;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        .close-btn:hover {
+            background: #475569;
         }
     </style>
 </head>
@@ -375,19 +423,6 @@
         </div>
 
         <div class="controls">
-            <div class="search-box">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <path d="m21 21-4.35-4.35"></path>
-                </svg>
-                <input type="text" id="searchInput" placeholder="Search by sender or content...">
-            </div>
-            <select id="statusFilter">
-                <option value="all">All Statuses</option>
-                <option value="success">Success</option>
-                <option value="failed">Failed</option>
-                <option value="pending">Pending</option>
-            </select>
             <button class="btn" onclick="fetchMessages()">Refresh</button>
             <button class="btn btn-danger" onclick="showQRModal()">Relink WhatsApp</button>
         </div>
@@ -412,8 +447,26 @@
         </div>
     </div>
 
+    <div class="modal" id="imageModal" onclick="closeImageModal()">
+        <div class="image-modal-content" onclick="event.stopPropagation()">
+            <div class="image-modal-header">
+                <h3 style="margin: 0; color: #ffffff;">Image Preview</h3>
+                <button class="close-btn" onclick="closeImageModal()">Close</button>
+            </div>
+            <img id="imagePreview" src="" alt="Image preview">
+        </div>
+    </div>
+
     <script>
-        let searchTimeout;
+        let allMessages = [];
+        let sortColumn = 'timestamp';
+        let sortDirection = 'desc';
+        let columnFilters = {
+            timestamp: '',
+            sender: '',
+            message: '',
+            media: ''
+        };
 
         async function fetchStatus() {
             try {
@@ -447,6 +500,85 @@
             }
         }
 
+        function sortMessages(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            renderMessages();
+        }
+
+        function filterColumn(column, value) {
+            columnFilters[column] = value.toLowerCase();
+            renderMessages();
+        }
+
+        function applyFiltersAndSort(messages) {
+            let filtered = [...messages];
+            
+            if (columnFilters.timestamp) {
+                filtered = filtered.filter(m => {
+                    const date = new Date(m.timestamp).toLocaleString().toLowerCase();
+                    return date.includes(columnFilters.timestamp);
+                });
+            }
+            
+            if (columnFilters.sender) {
+                filtered = filtered.filter(m => 
+                    m.senderName.toLowerCase().includes(columnFilters.sender) ||
+                    m.chatName.toLowerCase().includes(columnFilters.sender) ||
+                    m.senderContact.includes(columnFilters.sender)
+                );
+            }
+            
+            if (columnFilters.message) {
+                filtered = filtered.filter(m => 
+                    (m.messageContent || '').toLowerCase().includes(columnFilters.message) ||
+                    m.discordStatus.toLowerCase().includes(columnFilters.message)
+                );
+            }
+            
+            if (columnFilters.media) {
+                filtered = filtered.filter(m => {
+                    if (!m.mediaType) return columnFilters.media === '';
+                    return m.mediaType.toLowerCase().includes(columnFilters.media);
+                });
+            }
+            
+            filtered.sort((a, b) => {
+                let aVal, bVal;
+                
+                switch(sortColumn) {
+                    case 'timestamp':
+                        aVal = new Date(a.timestamp).getTime();
+                        bVal = new Date(b.timestamp).getTime();
+                        break;
+                    case 'sender':
+                        aVal = a.senderName.toLowerCase();
+                        bVal = b.senderName.toLowerCase();
+                        break;
+                    case 'message':
+                        aVal = (a.messageContent || '').toLowerCase();
+                        bVal = (b.messageContent || '').toLowerCase();
+                        break;
+                    case 'media':
+                        aVal = a.mediaType || '';
+                        bVal = b.mediaType || '';
+                        break;
+                    default:
+                        return 0;
+                }
+                
+                if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+                if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+            
+            return filtered;
+        }
+
         function toggleMessage(id) {
             const element = document.getElementById(`msg-${id}`);
             const btn = document.getElementById(`btn-${id}`);
@@ -460,89 +592,139 @@
             }
         }
 
+        function showImagePreview(imageData) {
+            const modal = document.getElementById('imageModal');
+            const img = document.getElementById('imagePreview');
+            img.src = imageData;
+            modal.classList.add('active');
+        }
+
+        function closeImageModal() {
+            document.getElementById('imageModal').classList.remove('active');
+        }
+
         async function fetchMessages() {
-            const search = document.getElementById('searchInput').value;
-            const status = document.getElementById('statusFilter').value;
-            
             try {
-                const params = new URLSearchParams();
-                if (search) params.append('search', search);
-                if (status !== 'all') params.append('status', status);
-                
-                const res = await fetch(`/api/messages?${params}`);
-                const messages = await res.json();
-                
-                const container = document.getElementById('messagesList');
-                
-                if (messages.length === 0) {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
-                            </svg>
-                            <h3>No messages found</h3>
-                            <p>${search || status !== 'all' ? 'Try adjusting your filters' : 'Messages will appear here once forwarding starts'}</p>
-                        </div>
-                    `;
-                    return;
-                }
-                
-                const tableRows = messages.map((msg, index) => {
-                    const date = new Date(msg.timestamp);
-                    const dateStr = date.toLocaleDateString();
-                    const timeStr = date.toLocaleTimeString();
-                    const messageContent = msg.messageContent || '(No text content)';
-                    const needsTruncation = messageContent.length > 100;
-                    
-                    return `
-                        <tr>
-                            <td class="timestamp">
-                                <div>${dateStr}</div>
-                                <div style="color: #64748b; font-size: 0.75rem;">${timeStr}</div>
-                            </td>
-                            <td class="sender-cell">
-                                <div class="sender-name">${escapeHtml(msg.senderName)}</div>
-                                <div class="sender-contact">${escapeHtml(msg.chatName)}</div>
-                                <div class="sender-contact">${msg.senderContact}</div>
-                            </td>
-                            <td class="message-cell">
-                                <div class="message-text ${needsTruncation ? 'truncated' : ''}" id="msg-${index}">
-                                    ${escapeHtml(messageContent)}
-                                </div>
-                                ${needsTruncation ? `<span class="expand-btn" id="btn-${index}" onclick="toggleMessage(${index})">Show more</span>` : ''}
-                                ${msg.errorMessage ? `<div class="error-message">Error: ${escapeHtml(msg.errorMessage)}</div>` : ''}
-                                <div style="margin-top: 0.5rem;">
-                                    <span class="status-badge-table ${msg.discordStatus}">${msg.discordStatus}</span>
-                                </div>
-                            </td>
-                            <td class="media-cell">
-                                ${msg.mediaType ? `<span class="media-badge">📎 ${msg.mediaType}</span>` : '<span style="color: #64748b; font-size: 0.75rem;">—</span>'}
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
-                
-                container.innerHTML = `
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Timestamp</th>
-                                    <th>Sender</th>
-                                    <th>Message</th>
-                                    <th>Media/Attachments</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${tableRows}
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-                
+                const res = await fetch('/api/messages');
+                allMessages = await res.json();
+                renderMessages();
             } catch (error) {
                 console.error('Error fetching messages:', error);
             }
+        }
+
+        function renderMessages() {
+            const messages = applyFiltersAndSort(allMessages);
+            const container = document.getElementById('messagesList');
+            
+            if (messages.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                        <h3>No messages found</h3>
+                        <p>Try adjusting your filters or wait for messages</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const tableRows = messages.map((msg, index) => {
+                const date = new Date(msg.timestamp);
+                const dateStr = date.toLocaleDateString();
+                const timeStr = date.toLocaleTimeString();
+                const messageContent = msg.messageContent || '(No text content)';
+                const needsTruncation = messageContent.length > 100;
+                
+                return `
+                    <tr>
+                        <td class="timestamp">
+                            <div>${dateStr}</div>
+                            <div style="color: #64748b; font-size: 0.75rem;">${timeStr}</div>
+                        </td>
+                        <td class="sender-cell">
+                            <div class="sender-name">${escapeHtml(msg.senderName)}</div>
+                            <div class="sender-contact">${escapeHtml(msg.chatName)}</div>
+                            <div class="sender-contact">${msg.senderContact}</div>
+                        </td>
+                        <td class="message-cell">
+                            <div class="message-text ${needsTruncation ? 'truncated' : ''}" id="msg-${index}">
+                                ${escapeHtml(messageContent)}
+                            </div>
+                            ${needsTruncation ? `<span class="expand-btn" id="btn-${index}" onclick="toggleMessage(${index})">Show more</span>` : ''}
+                            ${msg.errorMessage ? `<div class="error-message">Error: ${escapeHtml(msg.errorMessage)}</div>` : ''}
+                            <div style="margin-top: 0.5rem;">
+                                <span class="status-badge-table ${msg.discordStatus}">${msg.discordStatus}</span>
+                            </div>
+                        </td>
+                        <td class="media-cell">
+                            ${msg.mediaType && msg.mediaData ? 
+                                `<span class="media-badge" onclick='showImagePreview(\`${msg.mediaData}\`)'>📎 ${msg.mediaType} (click to view)</span>` : 
+                                msg.mediaType ? 
+                                `<span class="media-badge">📎 ${msg.mediaType}</span>` :
+                                '<span style="color: #64748b; font-size: 0.75rem;">—</span>'}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            const sortIcon = (column) => {
+                if (sortColumn === column) {
+                    return `<span class="sort-icon active">${sortDirection === 'asc' ? '▲' : '▼'}</span>`;
+                }
+                return `<span class="sort-icon">⇅</span>`;
+            };
+            
+            container.innerHTML = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>
+                                    <div class="th-content" onclick="sortMessages('timestamp')">
+                                        <span>Timestamp</span>
+                                        ${sortIcon('timestamp')}
+                                    </div>
+                                    <input type="text" class="filter-input" placeholder="Filter..." 
+                                        value="${columnFilters.timestamp}" 
+                                        oninput="filterColumn('timestamp', this.value)">
+                                </th>
+                                <th>
+                                    <div class="th-content" onclick="sortMessages('sender')">
+                                        <span>Sender</span>
+                                        ${sortIcon('sender')}
+                                    </div>
+                                    <input type="text" class="filter-input" placeholder="Filter..." 
+                                        value="${columnFilters.sender}" 
+                                        oninput="filterColumn('sender', this.value)">
+                                </th>
+                                <th>
+                                    <div class="th-content" onclick="sortMessages('message')">
+                                        <span>Message</span>
+                                        ${sortIcon('message')}
+                                    </div>
+                                    <input type="text" class="filter-input" placeholder="Filter..." 
+                                        value="${columnFilters.message}" 
+                                        oninput="filterColumn('message', this.value)">
+                                </th>
+                                <th>
+                                    <div class="th-content" onclick="sortMessages('media')">
+                                        <span>Media/Attachments</span>
+                                        ${sortIcon('media')}
+                                    </div>
+                                    <input type="text" class="filter-input" placeholder="Filter..." 
+                                        value="${columnFilters.media}" 
+                                        oninput="filterColumn('media', this.value)">
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tableRows}
+                        </tbody>
+                    </table>
+                </div>
+            `;
         }
 
         function escapeHtml(text) {
@@ -605,15 +787,6 @@
                 message.textContent = 'Error relinking: ' + error.message;
             }
         }
-
-        document.getElementById('searchInput').addEventListener('input', (e) => {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                fetchMessages();
-            }, 300);
-        });
-
-        document.getElementById('statusFilter').addEventListener('change', fetchMessages);
 
         fetchStatus();
         fetchStats();

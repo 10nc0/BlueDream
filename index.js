@@ -177,6 +177,7 @@ function initializeWhatsAppClient() {
                 chatName,
                 messageContent,
                 mediaType: message.hasMedia ? 'image' : null,
+                mediaData: null,
                 timestamp: timestamp.toISOString(),
                 discordStatus: 'pending'
             };
@@ -220,6 +221,8 @@ function initializeWhatsAppClient() {
                 try {
                     const media = await message.downloadMedia();
                     if (media && media.mimetype.startsWith('image/')) {
+                        messageRecord.mediaData = `data:${media.mimetype};base64,${media.data}`;
+                        
                         const buffer = Buffer.from(media.data, 'base64');
                         const filename = `whatsapp_image_${Date.now()}.${media.mimetype.split('/')[1]}`;
                         
