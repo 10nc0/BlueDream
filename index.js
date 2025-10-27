@@ -118,6 +118,9 @@ async function initializeDatabase() {
                 input_credentials JSONB,
                 output_credentials JSONB,
                 status TEXT DEFAULT 'inactive',
+                contact_info TEXT,
+                tags TEXT[],
+                archived BOOLEAN DEFAULT false NOT NULL,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )
@@ -927,8 +930,10 @@ app.post('/api/auth/login', async (req, res) => {
                 role: user.role
             });
             
+            console.log(`[${getTimestamp()}] ✅ Login successful - User: ${user.email}, SessionID: ${req.sessionID}, Cookie: ${req.headers.cookie || 'none'}`);
+            
             res.json({ 
-                success: true, 
+                success: true,
                 user: { 
                     id: user.id, 
                     email: user.email, 
@@ -1710,12 +1715,13 @@ app.get('/api/bots', requireAuth, async (req, res) => {
         const result = await pool.query(`
             SELECT 
                 b.*,
-                COUNT(m.id) as total_messages,
-                COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as success_count,
+                COUNT(m.id) as message_count,
+                COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count
             FROM bots b
             LEFT JOIN messages m ON b.id = m.bot_id
+            WHERE b.archived = false
             GROUP BY b.id
             ORDER BY b.created_at DESC
         `);
@@ -1756,19 +1762,63 @@ app.put('/api/bots/:id', requireRole('admin', 'write-only'), async (req, res) =>
     }
 });
 
-app.delete('/api/bots/:id', requireRole('admin'), async (req, res) => {
+// Archive bot (soft delete - keeps all message history)
+app.post('/api/bots/:id/archive', requireRole('admin'), async (req, res) => {
     try {
         const { id } = req.params;
         
-        // Prevent deleting the default active bot
+        // Prevent archiving the default active bot
         if (parseInt(id) === 1) {
             return res.status(400).json({ 
-                error: 'Cannot delete the default bot (currently active). Create and activate a new bot first.' 
+                error: 'Cannot archive the default bot (currently active). Create and activate a new bot first.' 
             });
         }
         
-        await pool.query('DELETE FROM bots WHERE id = $1', [id]);
-        res.json({ success: true });
+        await pool.query('UPDATE bots SET archived = true, status = $1 WHERE id = $2', ['archived', id]);
+        
+        logAudit(req, 'ARCHIVE', 'BOT', id, null, {
+            message: 'Bot archived - message history preserved'
+        });
+        
+        res.json({ success: true, message: 'Bot archived. All message history preserved.' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Unarchive bot (restore archived bot)
+app.post('/api/bots/:id/unarchive', requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        await pool.query('UPDATE bots SET archived = false, status = $1 WHERE id = $2', ['inactive', id]);
+        
+        logAudit(req, 'UNARCHIVE', 'BOT', id, null, {
+            message: 'Bot unarchived and restored'
+        });
+        
+        res.json({ success: true, message: 'Bot restored successfully.' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get archived bots (with message history)
+app.get('/api/bots/archived', requireAuth, async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT 
+                b.*,
+                COUNT(m.id) as message_count,
+                COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
+                COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
+                COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count
+            FROM bots b
+            LEFT JOIN messages m ON b.id = m.bot_id
+            WHERE b.archived = true
+            GROUP BY b.id
+            ORDER BY b.created_at DESC
+        `);
+        res.json(result.rows);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -1801,6 +1851,34 @@ app.get('/api/bots/:id/qr', requireAuth, (req, res) => {
         res.json({ message: 'WhatsApp is already connected', connected: true });
     } else {
         res.json({ message: 'QR code not available yet. Please wait...', connected: false });
+    }
+});
+
+// Get media for a specific message
+app.get('/api/messages/:id/media', requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query(
+            'SELECT media_data, media_type, sender_name FROM messages WHERE id = $1',
+            [id]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Message not found' });
+        }
+        
+        const message = result.rows[0];
+        if (!message.media_data) {
+            return res.status(404).json({ error: 'No media attached to this message' });
+        }
+        
+        res.json({
+            media_data: message.media_data,
+            media_type: message.media_type,
+            sender_name: message.sender_name
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 

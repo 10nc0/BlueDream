@@ -696,6 +696,15 @@
         </div>
     </div>
 
+    <!-- Media Preview Modal -->
+    <div id="mediaModal" class="media-modal" onclick="if(event.target === this) closeMediaModal()">
+        <div class="media-modal-content">
+            <button class="media-modal-close" onclick="closeMediaModal()">×</button>
+            <div id="mediaModalCaption" style="color: white; text-align: center; margin-bottom: 1rem; font-weight: 600;"></div>
+            <div id="mediaModalContent"></div>
+        </div>
+    </div>
+
     <div class="container">
         <div class="tabs">
             <button class="tab active" onclick="switchTab('bots')">🌉 Bridges</button>
@@ -1034,7 +1043,6 @@
                     <div class="bot-actions">
                         ${bot.input_platform === 'WhatsApp' ? `<button class="btn btn-qr" onclick="showQR('${bot.id}')">📱 QR Login</button>` : ''}
                         <button class="btn btn-edit" onclick="editBot('${bot.id}')">Edit</button>
-                        <button class="btn btn-delete" onclick="deleteBot('${bot.id}')">Delete</button>
                         <button class="btn" id="toggle-btn-${bot.id}" onclick="toggleMessages('${bot.id}')">
                             ${expandedBots.has(bot.id) ? '▲ Hide Messages' : '▼ Show Messages'}
                         </button>
@@ -1111,7 +1119,7 @@
                         </thead>
                         <tbody>
                             ${messages.map((msg, index) => `
-                                <tr data-timestamp="${msg.timestamp}" data-contact="${escapeHtml(msg.sender_contact || '')}" data-message="${escapeHtml(msg.message_content)}" data-status="${msg.discord_status}">
+                                <tr data-timestamp="${msg.timestamp}" data-contact="${escapeHtml(msg.sender_contact || '')}" data-message="${escapeHtml(msg.message_content)}" data-status="${msg.discord_status}" data-msg-id="${msg.id}">
                                     <td class="timestamp-col">${formatTimestampWithTZ(msg.timestamp)}</td>
                                     <td class="contact-col">
                                         <div style="font-weight: 600;">${escapeHtml(msg.sender_name || 'Unknown')}</div>
@@ -1125,7 +1133,7 @@
                                     </td>
                                     <td class="attachment-col">
                                         ${msg.has_media ? `
-                                            <span class="attachment-icon" onclick="showMediaPreview('${botId}', ${index})" title="${escapeHtml(msg.media_type || 'Media')}">
+                                            <span class="attachment-icon" onclick="showMediaPreview(${msg.id})" title="${escapeHtml(msg.media_type || 'Media')}">
                                                 📎
                                             </span>
                                         ` : '-'}
@@ -1206,13 +1214,43 @@
             });
         }
 
-        // Show media preview (placeholder for now)
-        function showMediaPreview(botId, messageIndex) {
-            const data = messageCache[botId];
-            if (!data || !data.messages[messageIndex]) return;
-            
-            const msg = data.messages[messageIndex];
-            alert(`Media Preview\n\nType: ${msg.media_type || 'Unknown'}\nFilename: ${msg.media_filename || 'N/A'}\n\nNote: Full media preview coming soon!`);
+        // Show media preview with actual image/video
+        async function showMediaPreview(messageId) {
+            try {
+                const response = await fetch(`/api/messages/${messageId}/media`);
+                if (!response.ok) {
+                    alert('Media not available');
+                    return;
+                }
+                
+                const data = await response.json();
+                const modal = document.getElementById('mediaModal');
+                const modalContent = document.getElementById('mediaModalContent');
+                const modalCaption = document.getElementById('mediaModalCaption');
+                
+                modalCaption.textContent = `${data.sender_name || 'Unknown'} - ${data.media_type || 'Media'}`;
+                
+                if (data.media_type?.startsWith('image/')) {
+                    modalContent.innerHTML = `<img src="${data.media_data}" alt="Media Preview">`;
+                } else if (data.media_type?.startsWith('video/')) {
+                    modalContent.innerHTML = `<video controls autoplay><source src="${data.media_data}" type="${data.media_type}"></video>`;
+                } else if (data.media_type?.startsWith('audio/')) {
+                    modalContent.innerHTML = `<audio controls autoplay><source src="${data.media_data}" type="${data.media_type}"></audio>`;
+                } else {
+                    modalContent.innerHTML = `<div style="color: white; padding: 2rem;">Preview not available for ${data.media_type}</div>`;
+                }
+                
+                modal.classList.add('active');
+            } catch (error) {
+                console.error('Error loading media:', error);
+                alert('Error loading media preview');
+            }
+        }
+        
+        function closeMediaModal() {
+            const modal = document.getElementById('mediaModal');
+            modal.classList.remove('active');
+            document.getElementById('mediaModalContent').innerHTML = '';
         }
 
         function filterBots() {
@@ -1302,18 +1340,6 @@
             }
         }
 
-        async function deleteBot(id) {
-            if (!confirm('Are you sure you want to delete this bot?')) return;
-            
-            try {
-                const response = await fetch(`/api/bots/${id}`, { method: 'DELETE' });
-                if (response.ok) {
-                    loadBots();
-                }
-            } catch (error) {
-                console.error('Error deleting bot:', error);
-            }
-        }
 
         async function showQR(botId) {
             try {
