@@ -1261,10 +1261,10 @@ app.post('/api/auth/refresh', async (req, res) => {
     }
 });
 
-// Logout
-app.post('/api/auth/logout', async (req, res) => {
+// Logout (requires authentication)
+app.post('/api/auth/logout', requireAuth, async (req, res) => {
     try {
-        const userId = req.session?.userId || req.userId;
+        const userId = req.userId;
         const sessionId = req.sessionID;
         
         // Revoke all refresh tokens for this user (JWT logout)
