@@ -40,13 +40,21 @@
             align-items: center;
             gap: 0.5rem;
             padding: 0.5rem 1rem;
-            background: #10b981;
+            background: #25D366;
+            color: #064e1d;
             border-radius: 9999px;
             font-size: 0.875rem;
             font-weight: 600;
         }
         .status-badge.offline {
-            background: #ef4444;
+            background: #ff9500;
+            color: #1e293b;
+        }
+        .status-badge .status-dot {
+            background: #064e1d;
+        }
+        .status-badge.offline .status-dot {
+            background: #1e293b;
         }
         .status-dot {
             width: 8px;
@@ -97,7 +105,7 @@
         }
         .btn {
             padding: 0.75rem 1.5rem;
-            background: #3b82f6;
+            background: #1d4ed8;
             color: white;
             border: none;
             border-radius: 0.5rem;
@@ -107,13 +115,19 @@
             transition: background 0.2s;
         }
         .btn:hover {
-            background: #2563eb;
+            background: #1e40af;
         }
-        .btn-danger {
-            background: #ef4444;
+        .btn-whatsapp {
+            background: #25D366;
         }
-        .btn-danger:hover {
-            background: #dc2626;
+        .btn-whatsapp:hover {
+            background: #20ba5a;
+        }
+        .btn-orange {
+            background: #ff9500;
+        }
+        .btn-orange:hover {
+            background: #e68600;
         }
         .messages-section {
             background: #1e293b;
@@ -173,7 +187,7 @@
             color: #64748b;
         }
         .sort-icon.active {
-            color: #3b82f6;
+            color: #60a5fa;
         }
         .filter-input {
             width: 100%;
@@ -186,7 +200,7 @@
             outline: none;
         }
         .filter-input:focus {
-            border-color: #3b82f6;
+            border-color: #60a5fa;
         }
         tbody tr {
             border-bottom: 1px solid #334155;
@@ -213,7 +227,7 @@
             margin-bottom: 0.25rem;
         }
         .sender-contact {
-            color: #64748b;
+            color: #94a3b8;
             font-size: 0.75rem;
         }
         .message-cell {
@@ -232,7 +246,7 @@
             overflow: hidden;
         }
         .expand-btn {
-            color: #3b82f6;
+            color: #60a5fa;
             cursor: pointer;
             font-size: 0.75rem;
             margin-top: 0.25rem;
@@ -240,7 +254,7 @@
             font-weight: 600;
         }
         .expand-btn:hover {
-            color: #2563eb;
+            color: #93c5fd;
             text-decoration: underline;
         }
         .media-cell {
@@ -254,12 +268,12 @@
             background: #334155;
             border-radius: 9999px;
             font-size: 0.75rem;
-            color: #94a3b8;
+            color: #e2e8f0;
             cursor: pointer;
             transition: background 0.2s;
         }
         .media-badge:hover {
-            background: #3b82f6;
+            background: #1d4ed8;
             color: white;
         }
         .status-badge-table {
@@ -270,19 +284,19 @@
             font-weight: 600;
         }
         .status-badge-table.success {
-            background: #10b98120;
-            color: #10b981;
+            background: #25D36620;
+            color: #25D366;
         }
         .status-badge-table.failed {
-            background: #ef444420;
-            color: #ef4444;
+            background: #ff950020;
+            color: #ff9500;
         }
         .status-badge-table.pending {
-            background: #f59e0b20;
-            color: #f59e0b;
+            background: #1e40af;
+            color: #ffffff;
         }
         .error-message {
-            color: #ef4444;
+            color: #ff9500;
             font-size: 0.75rem;
             margin-top: 0.5rem;
         }
@@ -424,7 +438,7 @@
 
         <div class="controls">
             <button class="btn" onclick="fetchMessages()">Refresh</button>
-            <button class="btn btn-danger" onclick="showQRModal()">Relink WhatsApp</button>
+            <button class="btn btn-whatsapp" onclick="showQRModal()">Relink WhatsApp</button>
         </div>
 
         <div class="messages-section">
@@ -442,7 +456,7 @@
             <div id="qrCodeContainer"></div>
             <div class="modal-buttons">
                 <button class="btn" onclick="closeQRModal()">Close</button>
-                <button class="btn btn-danger" onclick="relinkWhatsApp()">Generate New QR</button>
+                <button class="btn btn-whatsapp" onclick="relinkWhatsApp()">Generate New QR</button>
             </div>
         </div>
     </div>
