@@ -11,6 +11,7 @@ const session = require('express-session');
 const connectPg = require('connect-pg-simple');
 const bcrypt = require('bcrypt');
 const twilio = require('twilio');
+const authService = require('./auth-service');
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
@@ -931,23 +932,49 @@ async function logAudit(req, actionType, targetType, targetId, targetEmail, deta
 
 // ============ AUTHENTICATION MIDDLEWARE ============
 
-// Middleware to check if user is authenticated
+// Middleware to check if user is authenticated (supports both JWT and cookies)
 function requireAuth(req, res, next) {
+    // Try JWT authentication first (Authorization header)
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const decoded = authService.verifyToken(token);
+        
+        if (decoded && decoded.type === 'access') {
+            // Valid JWT token
+            req.userId = decoded.userId;
+            req.userEmail = decoded.email;
+            req.userRole = decoded.role;
+            req.authMethod = 'jwt';
+            return next();
+        }
+    }
+    
+    // Fall back to cookie-based session auth
     if (req.session && req.session.userId) {
+        req.userId = req.session.userId;
+        req.userEmail = req.session.userEmail;
+        req.userRole = req.session.userRole;
+        req.authMethod = 'cookie';
         return next();
     }
-    // Redirect to login page instead of returning JSON error
+    
+    // No valid authentication found
+    if (req.originalUrl.startsWith('/api/')) {
+        return res.status(401).json({ error: 'Authentication required' });
+    }
+    // Redirect to login page for browser requests
     return res.redirect('/login.html');
 }
 
 // Middleware to check roles
 function requireRole(...allowedRoles) {
     return async (req, res, next) => {
-        if (!req.session || !req.session.userId) {
+        if (!req.userId) {
             return res.status(401).json({ error: 'Authentication required' });
         }
         
-        const result = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
+        const result = await pool.query('SELECT role FROM users WHERE id = $1', [req.userId]);
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'User not found' });
         }
@@ -964,12 +991,27 @@ function requireRole(...allowedRoles) {
 
 // ============ AUTHENTICATION ROUTES ============
 
-// Check if user is logged in
+// Check if user is logged in (supports both JWT and cookies)
 app.get('/api/auth/status', async (req, res) => {
+    // Check JWT first
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const decoded = authService.verifyToken(token);
+        
+        if (decoded && decoded.type === 'access') {
+            const result = await pool.query('SELECT id, email, phone, role FROM users WHERE id = $1', [decoded.userId]);
+            if (result.rows.length > 0) {
+                return res.json({ authenticated: true, user: result.rows[0], authMethod: 'jwt' });
+            }
+        }
+    }
+    
+    // Fall back to session
     if (req.session && req.session.userId) {
         const result = await pool.query('SELECT id, email, phone, role FROM users WHERE id = $1', [req.session.userId]);
         if (result.rows.length > 0) {
-            return res.json({ authenticated: true, user: result.rows[0] });
+            return res.json({ authenticated: true, user: result.rows[0], authMethod: 'cookie' });
         }
     }
     res.json({ authenticated: false });
@@ -996,6 +1038,16 @@ app.post('/api/auth/login', async (req, res) => {
         }
         
         req.session.userId = user.id;
+        req.session.userEmail = user.email;
+        req.session.userRole = user.role;
+        
+        // Generate JWT tokens
+        const accessToken = authService.signAccessToken(user.id, user.email, user.role);
+        const { token: refreshToken, tokenId } = authService.signRefreshToken(user.id, user.email, user.role);
+        
+        // Store refresh token in database
+        const deviceInfo = req.get('user-agent') || 'unknown';
+        await authService.storeRefreshToken(pool, user.id, tokenId, deviceInfo, req.ip);
         
         // Save session explicitly before sending response
         req.session.save(async (err) => {
@@ -1010,10 +1062,11 @@ app.post('/api/auth/login', async (req, res) => {
             // Log successful login
             logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.email, {
                 method: 'email_password',
-                role: user.role
+                role: user.role,
+                authType: 'jwt+cookie'
             });
             
-            console.log(`[${getTimestamp()}] ✅ Login successful - User: ${user.email}, SessionID: ${req.sessionID}, Cookie: ${req.headers.cookie || 'none'}`);
+            console.log(`[${getTimestamp()}] ✅ Login successful - User: ${user.email}, SessionID: ${req.sessionID}, JWT issued`);
             
             res.json({ 
                 success: true,
@@ -1021,7 +1074,11 @@ app.post('/api/auth/login', async (req, res) => {
                     id: user.id, 
                     email: user.email, 
                     role: user.role 
-                } 
+                },
+                // JWT tokens for token-based auth
+                accessToken,
+                refreshToken,
+                tokenExpiry: authService.ACCESS_TOKEN_EXPIRY
             });
         });
     } catch (error) {
@@ -1155,30 +1212,74 @@ app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
     }
 });
 
+// Token Refresh - Get new access token using refresh token
+app.post('/api/auth/refresh', async (req, res) => {
+    try {
+        const { refreshToken } = req.body;
+        
+        if (!refreshToken) {
+            return res.status(401).json({ error: 'Refresh token required' });
+        }
+        
+        // Verify refresh token
+        const decoded = authService.verifyToken(refreshToken);
+        if (!decoded || decoded.type !== 'refresh') {
+            return res.status(401).json({ error: 'Invalid refresh token' });
+        }
+        
+        // Check if refresh token is still valid in database
+        const isValid = await authService.isRefreshTokenValid(pool, decoded.tokenId, decoded.userId);
+        if (!isValid) {
+            return res.status(401).json({ error: 'Refresh token revoked or expired' });
+        }
+        
+        // Generate new access token
+        const accessToken = authService.signAccessToken(decoded.userId, decoded.email, decoded.role);
+        
+        res.json({ 
+            success: true,
+            accessToken,
+            tokenExpiry: authService.ACCESS_TOKEN_EXPIRY
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Logout
 app.post('/api/auth/logout', async (req, res) => {
     try {
-        const userId = req.session?.userId;
+        const userId = req.session?.userId || req.userId;
         const sessionId = req.sessionID;
         
-        // Mark session as inactive
-        if (userId && sessionId) {
-            await pool.query(`
-                UPDATE active_sessions 
-                SET is_active = FALSE
-                WHERE user_id = $1 AND session_id = $2
-            `, [userId, sessionId]);
+        // Revoke all refresh tokens for this user (JWT logout)
+        if (userId) {
+            await authService.revokeAllUserTokens(pool, userId);
+            
+            // Mark session as inactive (cookie-based logout)
+            if (sessionId) {
+                await pool.query(`
+                    UPDATE active_sessions 
+                    SET is_active = FALSE
+                    WHERE user_id = $1 AND session_id = $2
+                `, [userId, sessionId]);
+            }
         }
         
         // Log logout before destroying session
         await logAudit(req, 'LOGOUT', 'USER', userId?.toString() || 'unknown', null, {});
         
-        req.session.destroy((err) => {
-            if (err) {
-                return res.status(500).json({ error: 'Logout failed' });
-            }
+        // Destroy session if it exists
+        if (req.session) {
+            req.session.destroy((err) => {
+                if (err) {
+                    return res.status(500).json({ error: 'Logout failed' });
+                }
+                res.json({ success: true });
+            });
+        } else {
             res.json({ success: true });
-        });
+        }
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
