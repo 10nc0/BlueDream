@@ -5,6 +5,8 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
+const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
+const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBERS.split(',').map(n => n.trim()) : [];
 
 if (!DISCORD_WEBHOOK_URL) {
     console.error('❌ ERROR: DISCORD_WEBHOOK_URL environment variable is required!');
@@ -56,15 +58,36 @@ const client = new Client({
     }
 });
 
+let botNumber = null;
+
 client.on('qr', (qr) => {
     console.log('QR Code received! Scan this with WhatsApp:');
     qrcode.generate(qr, { small: true });
     console.log('\nOr scan the QR code above with your WhatsApp mobile app.');
 });
 
-client.on('ready', () => {
+client.on('ready', async () => {
     console.log('✅ WhatsApp client is ready!');
     console.log('🔗 Connected to Discord webhook');
+    
+    try {
+        const info = await client.info;
+        botNumber = info.wid.user;
+        console.log(`📱 Bot WhatsApp Number: +${botNumber}`);
+    } catch (error) {
+        console.error('Could not retrieve bot number:', error.message);
+    }
+    
+    if (ALLOWED_GROUPS.length > 0) {
+        console.log(`🔍 Monitoring specific groups: ${ALLOWED_GROUPS.join(', ')}`);
+    }
+    if (ALLOWED_NUMBERS.length > 0) {
+        console.log(`🔍 Monitoring specific numbers: ${ALLOWED_NUMBERS.join(', ')}`);
+    }
+    if (ALLOWED_GROUPS.length === 0 && ALLOWED_NUMBERS.length === 0) {
+        console.log('📬 Only forwarding messages sent TO this bot number');
+    }
+    
     console.log('📱 Listening for WhatsApp messages...\n');
 });
 
@@ -76,10 +99,38 @@ client.on('auth_failure', (msg) => {
     console.error('❌ Authentication failed:', msg);
 });
 
+function shouldForwardMessage(message, chat, contact) {
+    if (ALLOWED_GROUPS.length > 0 && chat.isGroup) {
+        const groupName = chat.name || '';
+        if (ALLOWED_GROUPS.some(g => groupName.toLowerCase().includes(g.toLowerCase()))) {
+            return true;
+        }
+    }
+    
+    if (ALLOWED_NUMBERS.length > 0) {
+        const contactNumber = contact.number || contact.id.user;
+        if (ALLOWED_NUMBERS.some(n => contactNumber.includes(n))) {
+            return true;
+        }
+    }
+    
+    if (ALLOWED_GROUPS.length === 0 && ALLOWED_NUMBERS.length === 0) {
+        if (!chat.isGroup && message.fromMe === false) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
 client.on('message', async (message) => {
     try {
         const chat = await message.getChat();
         const contact = await message.getContact();
+        
+        if (!shouldForwardMessage(message, chat, contact)) {
+            return;
+        }
         
         const chatName = chat.name || contact.pushname || contact.number;
         const senderName = contact.pushname || contact.number;
