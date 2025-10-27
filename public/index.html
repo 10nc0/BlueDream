@@ -312,7 +312,9 @@
         <div class="library-header">
             <h2 class="library-title">Bot Library</h2>
             <div class="library-controls">
+                <span id="userInfo" style="color: #94a3b8; font-size: 0.875rem; margin-right: 1rem;"></span>
                 <button class="btn btn-success" onclick="openCreateModal()">+ Create Bot</button>
+                <button class="btn" onclick="logout()" style="background: #ef4444;">Logout</button>
             </div>
         </div>
 
@@ -411,6 +413,7 @@
         let expandedBots = new Set();
         let messageCache = {}; // Cache messages to avoid re-fetching on expand/collapse
         let allMessages = {}; // Store all messages by ID for media viewing
+        let currentUser = null;
 
         // Cat Animation - Improved 12fps smooth walk cycle
         const canvas = document.getElementById('statusCanvas');
@@ -522,6 +525,43 @@
         }
         animateCat();
 
+        // Check authentication on page load
+        async function checkAuth() {
+            try {
+                const res = await fetch('/api/auth/status');
+                const data = await res.json();
+                
+                if (!data.authenticated) {
+                    window.location.href = '/login.html';
+                    return false;
+                }
+                
+                currentUser = data.user;
+                const userInfo = document.getElementById('userInfo');
+                const roleColors = {
+                    'admin': '#10b981',
+                    'read-only': '#f59e0b',
+                    'write-only': '#3b82f6'
+                };
+                userInfo.innerHTML = `<span style="color: ${roleColors[currentUser.role] || '#94a3b8'};">● ${currentUser.email || currentUser.phone} (${currentUser.role})</span>`;
+                
+                return true;
+            } catch (error) {
+                window.location.href = '/login.html';
+                return false;
+            }
+        }
+        
+        // Logout function
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/login.html';
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+        
         // Bot Management Functions
         async function loadBots() {
             try {
@@ -904,8 +944,15 @@
             // TODO: Implement QR code generation and WhatsApp authentication flow
         }
 
-        // Initialize
-        loadBots();
+        // Initialize app with authentication check
+        async function init() {
+            const authenticated = await checkAuth();
+            if (authenticated) {
+                loadBots();
+            }
+        }
+        
+        init();
     </script>
 </body>
 </html>

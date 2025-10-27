@@ -7,6 +7,10 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const QRCode = require('qrcode');
 const { Pool } = require('pg');
+const session = require('express-session');
+const connectPg = require('connect-pg-simple');
+const bcrypt = require('bcrypt');
+const twilio = require('twilio');
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
@@ -18,14 +22,60 @@ if (!DISCORD_WEBHOOK_URL) {
     process.exit(1);
 }
 
-const app = express();
-app.use(bodyParser.json());
-app.use(express.static('public'));
-
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
 });
+
+const app = express();
+app.use(bodyParser.json());
+
+// Configure session management with PostgreSQL store
+const PgSession = connectPg(session);
+app.use(session({
+    store: new PgSession({
+        pool: pool,
+        tableName: 'sessions'
+    }),
+    secret: process.env.SESSION_SECRET || 'bridge-secret-key-change-in-production',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
+        httpOnly: true,
+        secure: false // Set to true in production with HTTPS
+    }
+}));
+
+// Middleware to block HTML files from static serving
+app.use((req, res, next) => {
+    if (req.path.endsWith('.html') && req.path !== '/login.html') {
+        return next(); // Let explicit routes handle HTML files
+    }
+    next();
+});
+
+// Serve login page without authentication (must come before requireAuth check)
+app.get('/login.html', (req, res) => {
+    res.sendFile(__dirname + '/public/login.html');
+});
+
+// Protect main dashboard - require authentication
+app.get('/', requireAuth, (req, res) => {
+    res.sendFile(__dirname + '/public/index.html');
+});
+
+// Block direct access to index.html - require authentication
+app.get('/index.html', requireAuth, (req, res) => {
+    res.sendFile(__dirname + '/public/index.html');
+});
+
+// Serve only non-HTML static files without authentication
+// HTML files are served through explicit authenticated routes above
+app.use(express.static('public', { 
+    index: false,
+    ignore: ['*.html'] // Don't serve HTML files through static middleware
+}));
 
 let currentQR = null;
 let botNumber = null;
@@ -114,6 +164,46 @@ async function initializeDatabase() {
                 ADD COLUMN tags TEXT[]
             `);
             console.log('✅ Added contact_info and tags columns');
+        }
+        
+        // Create users table for authentication
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                email TEXT UNIQUE,
+                phone TEXT UNIQUE,
+                password_hash TEXT,
+                role TEXT DEFAULT 'read-only' CHECK (role IN ('admin', 'read-only', 'write-only')),
+                otp_code TEXT,
+                otp_expires_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        `);
+        
+        // Create sessions table for session storage
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS sessions (
+                sid VARCHAR NOT NULL PRIMARY KEY,
+                sess JSON NOT NULL,
+                expire TIMESTAMP(6) NOT NULL
+            )
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire)
+        `);
+        
+        // Create default admin user if none exists
+        const usersCount = await pool.query('SELECT COUNT(*) FROM users');
+        if (parseInt(usersCount.rows[0].count) === 0) {
+            const bcrypt = require('bcrypt');
+            const defaultPassword = await bcrypt.hash('admin123', 10);
+            await pool.query(`
+                INSERT INTO users (email, password_hash, role)
+                VALUES ($1, $2, $3)
+            `, ['admin@bridge.local', defaultPassword, 'admin']);
+            console.log('✅ Created default admin user (email: admin@bridge.local, password: admin123)');
         }
         
         // Create performance indexes for frequently queried columns
@@ -411,8 +501,41 @@ function initializeWhatsAppClient() {
             
             messageDbId = await saveMessage(messageRecord);
             
+            // Check if this is an annotation for a recent media message
+            let isAnnotation = false;
+            if (!message.hasMedia && messageContent && (messageContent.includes('#') || messageContent.toLowerCase().includes('note:'))) {
+                // Check if user sent media in the last 5 minutes
+                const recentMediaCheck = await pool.query(`
+                    SELECT id FROM messages 
+                    WHERE sender_contact = $1 
+                    AND has_media = true 
+                    AND timestamp > NOW() - INTERVAL '5 minutes'
+                    ORDER BY timestamp DESC LIMIT 1
+                `, [senderContact]);
+                
+                if (recentMediaCheck.rows.length > 0) {
+                    isAnnotation = true;
+                    // Update the media message with the annotation
+                    await pool.query(`
+                        UPDATE messages 
+                        SET message_content = CASE 
+                            WHEN message_content = '' THEN $1
+                            ELSE message_content || E'\n\n📝 Annotation: ' || $1
+                        END
+                        WHERE id = $2
+                    `, [messageContent, recentMediaCheck.rows[0].id]);
+                    console.log(`📝 Annotation added to media message for ${senderName}`);
+                }
+            }
+            
             let embedDescription = messageContent || '_(No text content)_';
             let embedColor = 0x25D366;
+            
+            // Add annotation indicator to embed if this is an annotation
+            if (isAnnotation) {
+                embedDescription = `📝 **Media Annotation**\n\n${embedDescription}`;
+                embedColor = 0x5865F2; // Discord blue for annotations
+            }
             
             const embed = {
                 title: `📱 WhatsApp Message from ${senderName}`,
@@ -474,6 +597,14 @@ function initializeWhatsAppClient() {
                             await updateMessageStatus(messageDbId, 'success', null, mediaData);
                         }
                         console.log(`✅ Forwarded message with image from ${senderName} (${chatName}) to Discord`);
+                        
+                        // Prompt for annotation if media was sent without text
+                        if (!messageContent || messageContent.trim().length < 3) {
+                            const annotationPrompt = `📝 Media received! To help with organization and future searching, please reply with:\n\n• Hashtags (e.g., #meeting #sales)\n• Brief description\n• Any relevant notes\n\nThis will help index this media for easy discovery later in Discord.`;
+                            await message.reply(annotationPrompt);
+                            console.log(`📝 Prompted ${senderName} for media annotation`);
+                        }
+                        
                         return;
                     }
                 } catch (mediaError) {
@@ -508,7 +639,225 @@ function initializeWhatsAppClient() {
     });
 }
 
-app.get('/api/status', async (req, res) => {
+// ============ AUTHENTICATION MIDDLEWARE ============
+
+// Middleware to check if user is authenticated
+function requireAuth(req, res, next) {
+    if (req.session && req.session.userId) {
+        return next();
+    }
+    return res.status(401).json({ error: 'Authentication required' });
+}
+
+// Middleware to check roles
+function requireRole(...allowedRoles) {
+    return async (req, res, next) => {
+        if (!req.session || !req.session.userId) {
+            return res.status(401).json({ error: 'Authentication required' });
+        }
+        
+        const result = await pool.query('SELECT role FROM users WHERE id = $1', [req.session.userId]);
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: 'User not found' });
+        }
+        
+        const userRole = result.rows[0].role;
+        if (!allowedRoles.includes(userRole)) {
+            return res.status(403).json({ error: 'Insufficient permissions' });
+        }
+        
+        req.userRole = userRole;
+        next();
+    };
+}
+
+// ============ AUTHENTICATION ROUTES ============
+
+// Check if user is logged in
+app.get('/api/auth/status', async (req, res) => {
+    if (req.session && req.session.userId) {
+        const result = await pool.query('SELECT id, email, phone, role FROM users WHERE id = $1', [req.session.userId]);
+        if (result.rows.length > 0) {
+            return res.json({ authenticated: true, user: result.rows[0] });
+        }
+    }
+    res.json({ authenticated: false });
+});
+
+// Email/Password Login
+app.post('/api/auth/login', async (req, res) => {
+    const { email, password } = req.body;
+    
+    try {
+        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        
+        const user = result.rows[0];
+        const validPassword = await bcrypt.compare(password, user.password_hash);
+        
+        if (!validPassword) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        
+        req.session.userId = user.id;
+        res.json({ 
+            success: true, 
+            user: { 
+                id: user.id, 
+                email: user.email, 
+                role: user.role 
+            } 
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Phone OTP: Request OTP
+app.post('/api/auth/otp/request', async (req, res) => {
+    const { phone } = req.body;
+    
+    try {
+        // Generate 6-digit OTP
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+        
+        // Check if user exists, if not create one
+        const existingUser = await pool.query('SELECT id FROM users WHERE phone = $1', [phone]);
+        
+        if (existingUser.rows.length === 0) {
+            await pool.query(`
+                INSERT INTO users (phone, otp_code, otp_expires_at)
+                VALUES ($1, $2, $3)
+            `, [phone, otpCode, otpExpiresAt]);
+        } else {
+            await pool.query(`
+                UPDATE users 
+                SET otp_code = $1, otp_expires_at = $2
+                WHERE phone = $3
+            `, [otpCode, otpExpiresAt, phone]);
+        }
+        
+        // TODO: Send OTP via Twilio (requires TWILIO credentials in env)
+        // For now, return OTP in response (DEV ONLY - remove in production!)
+        console.log(`📱 OTP for ${phone}: ${otpCode}`);
+        
+        res.json({ 
+            success: true, 
+            message: 'OTP sent',
+            // DEV ONLY - remove this in production!
+            devOtp: otpCode 
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Phone OTP: Verify OTP
+app.post('/api/auth/otp/verify', async (req, res) => {
+    const { phone, otp } = req.body;
+    
+    try {
+        const result = await pool.query(`
+            SELECT * FROM users 
+            WHERE phone = $1 AND otp_code = $2 AND otp_expires_at > NOW()
+        `, [phone, otp]);
+        
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: 'Invalid or expired OTP' });
+        }
+        
+        const user = result.rows[0];
+        
+        // Clear OTP after successful verification
+        await pool.query(`
+            UPDATE users 
+            SET otp_code = NULL, otp_expires_at = NULL
+            WHERE id = $1
+        `, [user.id]);
+        
+        req.session.userId = user.id;
+        res.json({ 
+            success: true, 
+            user: { 
+                id: user.id, 
+                phone: user.phone, 
+                role: user.role 
+            } 
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Register new user (admin only)
+app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
+    const { email, phone, password, role } = req.body;
+    
+    try {
+        const passwordHash = password ? await bcrypt.hash(password, 10) : null;
+        
+        const result = await pool.query(`
+            INSERT INTO users (email, phone, password_hash, role)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, email, phone, role
+        `, [email || null, phone || null, passwordHash, role || 'read-only']);
+        
+        res.json({ success: true, user: result.rows[0] });
+    } catch (error) {
+        if (error.code === '23505') { // Unique violation
+            res.status(400).json({ error: 'Email or phone already exists' });
+        } else {
+            res.status(500).json({ error: error.message });
+        }
+    }
+});
+
+// Logout
+app.post('/api/auth/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            return res.status(500).json({ error: 'Logout failed' });
+        }
+        res.json({ success: true });
+    });
+});
+
+// Get all users (admin only)
+app.get('/api/users', requireRole('admin'), async (req, res) => {
+    try {
+        const result = await pool.query('SELECT id, email, phone, role, created_at FROM users ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update user role (admin only)
+app.put('/api/users/:id/role', requireRole('admin'), async (req, res) => {
+    const { id } = req.params;
+    const { role } = req.body;
+    
+    try {
+        const result = await pool.query(`
+            UPDATE users 
+            SET role = $1, updated_at = NOW()
+            WHERE id = $2
+            RETURNING id, email, phone, role
+        `, [role, id]);
+        
+        res.json(result.rows[0]);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============ PROTECTED API ROUTES ============
+// All routes below require authentication, with role-based access where specified
+
+app.get('/api/status', requireAuth, async (req, res) => {
     const stats = await getMessageStats();
     res.json({
         whatsappReady,
@@ -518,7 +867,7 @@ app.get('/api/status', async (req, res) => {
     });
 });
 
-app.get('/api/qr', (req, res) => {
+app.get('/api/qr', requireAuth, (req, res) => {
     if (currentQR) {
         res.json({ qr: currentQR });
     } else if (whatsappReady) {
@@ -528,7 +877,7 @@ app.get('/api/qr', (req, res) => {
     }
 });
 
-app.post('/api/relink', async (req, res) => {
+app.post('/api/relink', requireRole('admin', 'write-only'), async (req, res) => {
     try {
         whatsappReady = false;
         currentQR = null;
@@ -551,20 +900,20 @@ app.post('/api/relink', async (req, res) => {
     }
 });
 
-app.get('/api/messages', async (req, res) => {
+app.get('/api/messages', requireAuth, async (req, res) => {
     const { search, status } = req.query;
     const filtered = await getMessages(search, status);
     res.json(filtered);
 });
 
-app.get('/api/stats', async (req, res) => {
+app.get('/api/stats', requireAuth, async (req, res) => {
     const stats = await getMessageStats();
     res.json(stats);
 });
 
 // Bot management endpoints
 // OPTIMIZED: Get all bots with stats in ONE query (eliminates N+1 problem)
-app.get('/api/bots', async (req, res) => {
+app.get('/api/bots', requireAuth, async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT 
@@ -584,7 +933,7 @@ app.get('/api/bots', async (req, res) => {
     }
 });
 
-app.post('/api/bots', async (req, res) => {
+app.post('/api/bots', requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags } = req.body;
         const result = await pool.query(
@@ -598,7 +947,7 @@ app.post('/api/bots', async (req, res) => {
     }
 });
 
-app.put('/api/bots/:id', async (req, res) => {
+app.put('/api/bots/:id', requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const { id } = req.params;
         const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status } = req.body;
@@ -615,7 +964,7 @@ app.put('/api/bots/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/bots/:id', async (req, res) => {
+app.delete('/api/bots/:id', requireRole('admin'), async (req, res) => {
     try {
         const { id } = req.params;
         
@@ -633,7 +982,7 @@ app.delete('/api/bots/:id', async (req, res) => {
     }
 });
 
-app.get('/api/bots/:id/stats', async (req, res) => {
+app.get('/api/bots/:id/stats', requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
         const result = await pool.query(`
@@ -651,7 +1000,7 @@ app.get('/api/bots/:id/stats', async (req, res) => {
 });
 
 // OPTIMIZED: Added pagination to prevent loading 1000 messages at once
-app.get('/api/bots/:id/messages', async (req, res) => {
+app.get('/api/bots/:id/messages', requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
         const { search, status, page = 1, limit = 50 } = req.query;
