@@ -407,7 +407,7 @@
         <!-- Tabs -->
         <div class="tabs">
             <button class="tab active" onclick="switchTab('bots')">🤖 Bot Library</button>
-            <button class="tab" onclick="switchTab('users')" id="usersTab" style="display: none;">👥 User Management</button>
+            <button class="tab" onclick="switchTab('users')" id="usersTabButton" style="display: none;">👥 User Management</button>
         </div>
         
         <!-- Bot Library Tab -->
@@ -1436,7 +1436,7 @@
                 
                 // Show user management tab for admins only
                 if (currentUser && currentUser.role === 'admin') {
-                    document.getElementById('usersTab').style.display = 'block';
+                    document.getElementById('usersTabButton').style.display = 'block';
                 }
             }
         }
