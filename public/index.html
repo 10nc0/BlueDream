@@ -586,12 +586,27 @@
             if (botTags.length === 0) {
                 container.innerHTML = '<span style="color: #64748b; font-size: 0.875rem;" id="tagsPlaceholder">Click below to add tags...</span>';
             } else {
-                container.innerHTML = botTags.map(tag => `
-                    <span style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 9999px; font-size: 0.875rem; color: white; font-weight: 500;">
-                        ${tag}
-                        <button type="button" onclick="removeTag('${tag}')" style="background: none; border: none; color: white; cursor: pointer; padding: 0; font-size: 1rem; line-height: 1; opacity: 0.8; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'">×</button>
-                    </span>
-                `).join('');
+                // Clear container and build tags safely with DOM APIs (prevents XSS)
+                container.innerHTML = '';
+                
+                botTags.forEach(tag => {
+                    const tagSpan = document.createElement('span');
+                    tagSpan.style.cssText = 'display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 9999px; font-size: 0.875rem; color: white; font-weight: 500;';
+                    
+                    const tagText = document.createTextNode(tag);
+                    tagSpan.appendChild(tagText);
+                    
+                    const removeBtn = document.createElement('button');
+                    removeBtn.type = 'button';
+                    removeBtn.textContent = '×';
+                    removeBtn.style.cssText = 'background: none; border: none; color: white; cursor: pointer; padding: 0; font-size: 1rem; line-height: 1; opacity: 0.8; transition: opacity 0.2s;';
+                    removeBtn.onmouseover = () => removeBtn.style.opacity = '1';
+                    removeBtn.onmouseout = () => removeBtn.style.opacity = '0.8';
+                    removeBtn.onclick = () => removeTag(tag);
+                    
+                    tagSpan.appendChild(removeBtn);
+                    container.appendChild(tagSpan);
+                });
             }
         }
         
