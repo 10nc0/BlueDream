@@ -1437,6 +1437,79 @@ app.delete('/api/users/:id', requireRole('admin'), async (req, res) => {
     }
 });
 
+// Update user email (admin only)
+app.put('/api/users/:id/email', requireRole('admin'), async (req, res) => {
+    const { id } = req.params;
+    const { email } = req.body;
+    
+    try {
+        // Check if email already exists
+        const existingUser = await pool.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, id]);
+        if (existingUser.rows.length > 0) {
+            return res.status(400).json({ error: 'Email already exists' });
+        }
+        
+        // Get old email before update
+        const oldData = await pool.query('SELECT email FROM users WHERE id = $1', [id]);
+        const oldEmail = oldData.rows[0]?.email;
+        
+        const result = await pool.query(`
+            UPDATE users 
+            SET email = $1, updated_at = NOW()
+            WHERE id = $2
+            RETURNING id, email, phone, role
+        `, [email, id]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const updatedUser = result.rows[0];
+        
+        // Log email change
+        await logAudit(req, 'UPDATE_EMAIL', 'USER', id, updatedUser.email, {
+            old_email: oldEmail,
+            new_email: email
+        });
+        
+        res.json(updatedUser);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update user password (admin only)
+app.put('/api/users/:id/password', requireRole('admin'), async (req, res) => {
+    const { id } = req.params;
+    const { password } = req.body;
+    
+    try {
+        // Get user info for audit log
+        const userData = await pool.query('SELECT email, phone FROM users WHERE id = $1', [id]);
+        if (userData.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const user = userData.rows[0];
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        await pool.query(`
+            UPDATE users 
+            SET password = $1, updated_at = NOW()
+            WHERE id = $2
+        `, [hashedPassword, id]);
+        
+        // Log password change
+        await logAudit(req, 'UPDATE_PASSWORD', 'USER', id, user.email || user.phone, {
+            updated_by_admin: true
+        });
+        
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Get all active sessions (admin only)
 app.get('/api/sessions', requireRole('admin'), async (req, res) => {
     try {
