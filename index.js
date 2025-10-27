@@ -317,6 +317,101 @@ async function initializeDatabase() {
     }
 }
 
+// Helper function to send message to all configured webhooks (1-to-many support)
+async function sendToAllWebhooks(payload, options = {}, messageDbId = null, mediaData = null) {
+    try {
+        // Get webhooks from bot configuration
+        const botResult = await pool.query(`
+            SELECT output_credentials FROM bots WHERE id = 1 LIMIT 1
+        `);
+        
+        if (botResult.rows.length === 0) {
+            console.error('❌ No bot configuration found');
+            return;
+        }
+        
+        const webhooks = botResult.rows[0].output_credentials?.webhooks || [];
+        
+        // Fallback to legacy webhook_url if webhooks array is empty
+        if (webhooks.length === 0 && botResult.rows[0].output_credentials?.webhook_url) {
+            webhooks.push({
+                name: 'Main Channel',
+                url: botResult.rows[0].output_credentials.webhook_url
+            });
+        }
+        
+        // Fallback to DISCORD_WEBHOOK_URL if still no webhooks
+        if (webhooks.length === 0 && DISCORD_WEBHOOK_URL) {
+            webhooks.push({
+                name: 'Default Channel',
+                url: DISCORD_WEBHOOK_URL
+            });
+        }
+        
+        if (webhooks.length === 0) {
+            throw new Error('No webhooks configured');
+        }
+        
+        // Send to all webhooks
+        let successCount = 0;
+        let failures = [];
+        
+        for (const webhook of webhooks) {
+            if (!webhook.url) continue;
+            
+            try {
+                // For media messages, create fresh FormData for each webhook (streams are single-use)
+                if (options.isMedia && options.mediaBuffer) {
+                    const FormData = require('form-data');
+                    const form = new FormData();
+                    
+                    // Create a new buffer for each webhook to avoid stream consumption issues
+                    const freshBuffer = Buffer.from(options.mediaBuffer);
+                    
+                    form.append('file', freshBuffer, {
+                        filename: options.filename,
+                        contentType: options.mimetype
+                    });
+                    
+                    form.append('payload_json', JSON.stringify(payload));
+                    
+                    await axios.post(webhook.url, form, {
+                        headers: form.getHeaders()
+                    });
+                } else {
+                    // For text-only messages, send JSON payload directly
+                    await axios.post(webhook.url, payload);
+                }
+                
+                successCount++;
+                console.log(`  ✅ Sent to webhook: ${webhook.name || webhook.url.substring(0, 50)}`);
+            } catch (error) {
+                const errorMsg = `Failed to send to ${webhook.name || 'webhook'}: ${error.message}`;
+                failures.push(errorMsg);
+                console.error(`  ❌ ${errorMsg}`);
+            }
+        }
+        
+        // Update message status based on results
+        if (messageDbId) {
+            if (successCount > 0) {
+                await updateMessageStatus(messageDbId, 'success', null, mediaData);
+            } else if (failures.length > 0) {
+                await updateMessageStatus(messageDbId, 'failed', failures.join('; '));
+            }
+        }
+        
+        console.log(`📤 Sent to ${successCount}/${webhooks.length} webhooks`);
+        
+    } catch (error) {
+        console.error('❌ Error sending to webhooks:', error.message);
+        if (messageDbId) {
+            await updateMessageStatus(messageDbId, 'failed', error.message);
+        }
+        throw error;
+    }
+}
+
 async function saveMessage(message, botId = 1) {
     try {
         const result = await pool.query(
@@ -668,30 +763,20 @@ function initializeWhatsAppClient() {
                         const buffer = Buffer.from(media.data, 'base64');
                         const filename = `whatsapp_image_${Date.now()}.${media.mimetype.split('/')[1]}`;
                         
-                        const FormData = require('form-data');
-                        const form = new FormData();
-                        
-                        form.append('file', buffer, {
-                            filename: filename,
-                            contentType: media.mimetype
-                        });
-                        
                         embed.fields.push({
                             name: '📎 Attachment',
                             value: `Image (${media.mimetype})`,
                             inline: false
                         });
                         
-                        form.append('payload_json', JSON.stringify(discordPayload));
-                        
-                        await axios.post(DISCORD_WEBHOOK_URL, form, {
-                            headers: form.getHeaders()
-                        });
-                        
-                        if (messageDbId) {
-                            await updateMessageStatus(messageDbId, 'success', null, mediaData);
-                        }
-                        console.log(`✅ Forwarded message with image from ${senderName} (${chatName}) to Discord`);
+                        // Send to all configured webhooks (1-to-many) with media
+                        await sendToAllWebhooks(discordPayload, {
+                            isMedia: true,
+                            mediaBuffer: buffer,
+                            filename: filename,
+                            mimetype: media.mimetype
+                        }, messageDbId, mediaData);
+                        console.log(`✅ Forwarded message with image from ${senderName} (${chatName}) to all Discord webhooks`);
                         
                         // Prompt for annotation if media was sent without text
                         if (!messageContent || messageContent.trim().length < 3) {
@@ -711,11 +796,9 @@ function initializeWhatsAppClient() {
                 }
             }
 
-            await axios.post(DISCORD_WEBHOOK_URL, discordPayload);
-            if (messageDbId) {
-                await updateMessageStatus(messageDbId, 'success');
-            }
-            console.log(`✅ Forwarded message from ${senderName} (${chatName}) to Discord`);
+            // Send to all configured webhooks (1-to-many)
+            await sendToAllWebhooks(discordPayload, {}, messageDbId);
+            console.log(`✅ Forwarded message from ${senderName} (${chatName}) to all Discord webhooks`);
             
         } catch (error) {
             console.error('❌ Error forwarding message to Discord:', error.message);

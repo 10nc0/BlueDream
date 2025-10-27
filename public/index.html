@@ -859,6 +859,13 @@
                     </select>
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Webhook Outputs (1-to-Many)</label>
+                    <div id="webhooksList" style="margin-bottom: 0.5rem;">
+                        <!-- Webhook items will be added here -->
+                    </div>
+                    <button type="button" class="btn" onclick="addWebhookInput()" style="width: 100%; background: rgba(59, 130, 246, 0.1); border: 1px dashed rgba(59, 130, 246, 0.3); color: #60a5fa;">+ Add Webhook Output</button>
+                </div>
+                <div class="form-group">
                     <label class="form-label">Contact (Phone/Username)</label>
                     <input type="text" class="form-input" id="botContact" required>
                 </div>
@@ -955,6 +962,7 @@
         let allMessages = {}; // Store all messages by ID for media viewing
         let currentUser = null;
         let botTags = []; // Store tags as array
+        let botWebhooks = []; // Store webhook outputs for 1-to-many feature
         let users = [];
         let sessions = [];
 
@@ -1046,6 +1054,55 @@
             
             // Re-add input
             container.appendChild(input);
+        }
+
+        // Webhook Management Functions for 1-to-Many Output
+        function addWebhookInput() {
+            const webhookId = Date.now();
+            botWebhooks.push({ id: webhookId, url: '', name: '' });
+            renderWebhooks();
+        }
+
+        function removeWebhook(webhookId) {
+            botWebhooks = botWebhooks.filter(w => w.id !== webhookId);
+            renderWebhooks();
+        }
+
+        function updateWebhook(webhookId, field, value) {
+            const webhook = botWebhooks.find(w => w.id === webhookId);
+            if (webhook) {
+                webhook[field] = value;
+            }
+        }
+
+        function renderWebhooks() {
+            const container = document.getElementById('webhooksList');
+            container.innerHTML = botWebhooks.map(webhook => `
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;">
+                    <input 
+                        type="text" 
+                        class="form-input" 
+                        placeholder="Webhook Name (e.g., Main Channel)" 
+                        value="${escapeHtml(webhook.name)}"
+                        oninput="updateWebhook(${webhook.id}, 'name', this.value)"
+                        style="flex: 0 0 30%;"
+                    >
+                    <input 
+                        type="url" 
+                        class="form-input" 
+                        placeholder="Webhook URL" 
+                        value="${escapeHtml(webhook.url)}"
+                        oninput="updateWebhook(${webhook.id}, 'url', this.value)"
+                        style="flex: 1;"
+                    >
+                    <button 
+                        type="button" 
+                        class="btn" 
+                        onclick="removeWebhook(${webhook.id})"
+                        style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 0.5rem 1rem;"
+                    >×</button>
+                </div>
+            `).join('');
         }
 
         // Bot CRUD Functions
@@ -1343,7 +1400,9 @@
             document.getElementById('modalTitle').textContent = 'Create New Bridge';
             document.getElementById('botForm').reset();
             botTags = [];
+            botWebhooks = [];
             renderTags();
+            renderWebhooks();
             document.getElementById('botModal').classList.add('active');
         }
 
@@ -1357,7 +1416,26 @@
             document.getElementById('botDestinationPlatform').value = bot.output_platform;
             document.getElementById('botContact').value = bot.contact_info || '';
             botTags = bot.tags || [];
+            
+            // Load webhooks from output_credentials
+            const webhooks = bot.output_credentials?.webhooks || [];
+            botWebhooks = webhooks.map((w, idx) => ({
+                id: Date.now() + idx,
+                name: w.name || '',
+                url: w.url || w.webhook_url || ''
+            }));
+            
+            // If no webhooks but has legacy webhook_url, migrate it
+            if (botWebhooks.length === 0 && bot.output_credentials?.webhook_url) {
+                botWebhooks = [{
+                    id: Date.now(),
+                    name: 'Main Channel',
+                    url: bot.output_credentials.webhook_url
+                }];
+            }
+            
             renderTags();
+            renderWebhooks();
             document.getElementById('botModal').classList.add('active');
         }
 
@@ -1365,16 +1443,41 @@
             document.getElementById('botModal').classList.remove('active');
             editingBotId = null;
             botTags = [];
+            botWebhooks = [];
         }
 
         async function saveBotClicked(event) {
             event.preventDefault();
             
+            const inputPlatform = document.getElementById('botPlatform').value;
+            const outputPlatform = document.getElementById('botDestinationPlatform').value;
+            const contact = document.getElementById('botContact').value;
+            
+            // Filter out empty webhooks
+            const validWebhooks = botWebhooks.filter(w => w.url && w.url.trim());
+            
+            // Prepare output credentials with webhooks
+            const outputCredentials = {
+                webhooks: validWebhooks.map(w => ({ name: w.name, url: w.url }))
+            };
+            
+            // If no webhooks provided, add a placeholder entry
+            if (validWebhooks.length === 0 && outputPlatform === 'Discord') {
+                outputCredentials.webhooks = [{ 
+                    name: 'Main Channel', 
+                    url: process.env.DISCORD_WEBHOOK_URL || '' 
+                }];
+            }
+            
             const botData = {
-                platform: document.getElementById('botPlatform').value,
-                destination_platform: document.getElementById('botDestinationPlatform').value,
-                contact: document.getElementById('botContact').value,
-                tags: botTags
+                name: `${inputPlatform} → ${outputPlatform} Bridge`,
+                inputPlatform: inputPlatform,
+                outputPlatform: outputPlatform,
+                inputCredentials: {},
+                outputCredentials: outputCredentials,
+                contactInfo: contact,
+                tags: botTags,
+                status: 'active'
             };
 
             try {
