@@ -496,46 +496,56 @@
         let textInterval = null;
         let currentStatus = { connected: false, number: null };
 
-        // Cat pixel art frames (simple 8-bit style)
+        // Black cat (void) pixel art frames
         const catFrames = {
             idle: [
                 "     ▄▄▄▄▄     ",
-                "   ▄▀     ▀▄   ",
-                "  █  ●   ●  █  ",
-                "  █    ▼    █  ",
-                "  ▀▄       ▄▀  ",
-                "    ▀▄▄▄▄▄▀    ",
-                "   ▐▌  ▐▌  ▐▌  "
+                "   ▄███████▄   ",
+                "  ███ ▀ ▀ ███  ",
+                "  ███  ▼  ███  ",
+                "  ▀███████▀▀   ",
+                "    ▀▀▀▀▀▀     ",
+                "   ▐█  █  █▌   "
             ],
             tailSwish: [
                 "     ▄▄▄▄▄     ",
-                "   ▄▀     ▀▄   ",
-                "  █  ●   ●  █  ",
-                "  █    ▼    █  ",
-                "  ▀▄       ▄▀  ",
-                "    ▀▄▄▄▄▄▀    ",
-                "   ▐▌  ▐▌   ▌  "
+                "   ▄███████▄   ",
+                "  ███ ▀ ▀ ███  ",
+                "  ███  ▼  ███  ",
+                "  ▀███████▀▀   ",
+                "    ▀▀▀▀▀▀     ",
+                "   ▐█  █   █   "
             ],
             blink: [
                 "     ▄▄▄▄▄     ",
-                "   ▄▀     ▀▄   ",
-                "  █  ─   ─  █  ",
-                "  █    ▼    █  ",
-                "  ▀▄       ▄▀  ",
-                "    ▀▄▄▄▄▄▀    ",
-                "   ▐▌  ▐▌  ▐▌  "
+                "   ▄███████▄   ",
+                "  ███ ─ ─ ███  ",
+                "  ███  ▼  ███  ",
+                "  ▀███████▀▀   ",
+                "    ▀▀▀▀▀▀     ",
+                "   ▐█  █  █▌   "
             ]
         };
 
-        function drawCat(frameData, color) {
+        function drawCat(frameData, borderColor) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = color;
+            
+            // Draw the black void cat
+            ctx.fillStyle = '#1a1a1a'; // Dark black for the cat body
             ctx.font = '16px monospace';
             
             const startY = 5;
             frameData.forEach((line, i) => {
                 ctx.fillText(line, 10, startY + (i * 8));
             });
+            
+            // Draw eyes in the status color
+            ctx.fillStyle = borderColor;
+            const eyeLine = 2; // Line where eyes are
+            const eyeY = startY + (eyeLine * 8);
+            // Draw small colored dots for eyes
+            ctx.fillRect(55, eyeY - 4, 3, 3); // Left eye
+            ctx.fillRect(75, eyeY - 4, 3, 3); // Right eye
         }
 
         function animateCat() {
