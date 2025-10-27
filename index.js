@@ -63,9 +63,10 @@ async function initializeDatabase() {
 
 async function saveMessage(message) {
     try {
-        await pool.query(
+        const result = await pool.query(
             `INSERT INTO messages (timestamp, sender_name, sender_contact, message_content, discord_status, discord_error, has_media, media_type, media_data)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+             RETURNING id`,
             [
                 message.timestamp,
                 message.senderName,
@@ -78,8 +79,23 @@ async function saveMessage(message) {
                 message.mediaData || null
             ]
         );
+        return result.rows[0].id;
     } catch (error) {
         console.error('Error saving message to database:', error.message);
+        return null;
+    }
+}
+
+async function updateMessageStatus(messageId, status, errorMessage = null, mediaData = null) {
+    try {
+        await pool.query(
+            `UPDATE messages 
+             SET discord_status = $1, discord_error = $2, media_data = COALESCE($3, media_data)
+             WHERE id = $4`,
+            [status, errorMessage, mediaData, messageId]
+        );
+    } catch (error) {
+        console.error('Error updating message status:', error.message);
     }
 }
 
@@ -283,6 +299,8 @@ function initializeWhatsAppClient() {
     }
 
     client.on('message', async (message) => {
+        let messageDbId = null;
+        
         try {
             const chat = await message.getChat();
             const contact = await message.getContact();
@@ -310,7 +328,7 @@ function initializeWhatsAppClient() {
                 discordStatus: 'pending'
             };
             
-            await saveMessage(messageRecord);
+            messageDbId = await saveMessage(messageRecord);
             
             let embedDescription = messageContent || '_(No text content)_';
             let embedColor = 0x25D366;
@@ -346,7 +364,7 @@ function initializeWhatsAppClient() {
                 try {
                     const media = await message.downloadMedia();
                     if (media && media.mimetype.startsWith('image/')) {
-                        messageRecord.mediaData = `data:${media.mimetype};base64,${media.data}`;
+                        const mediaData = `data:${media.mimetype};base64,${media.data}`;
                         
                         const buffer = Buffer.from(media.data, 'base64');
                         const filename = `whatsapp_image_${Date.now()}.${media.mimetype.split('/')[1]}`;
@@ -371,27 +389,31 @@ function initializeWhatsAppClient() {
                             headers: form.getHeaders()
                         });
                         
-                        messageRecord.discordStatus = 'success';
+                        if (messageDbId) {
+                            await updateMessageStatus(messageDbId, 'success', null, mediaData);
+                        }
                         console.log(`✅ Forwarded message with image from ${senderName} (${chatName}) to Discord`);
                         return;
                     }
                 } catch (mediaError) {
                     console.error('Error downloading media:', mediaError.message);
-                    messageRecord.discordStatus = 'failed';
-                    messageRecord.errorMessage = mediaError.message;
+                    if (messageDbId) {
+                        await updateMessageStatus(messageDbId, 'failed', mediaError.message);
+                    }
+                    return;
                 }
             }
 
             await axios.post(DISCORD_WEBHOOK_URL, discordPayload);
-            messageRecord.discordStatus = 'success';
+            if (messageDbId) {
+                await updateMessageStatus(messageDbId, 'success');
+            }
             console.log(`✅ Forwarded message from ${senderName} (${chatName}) to Discord`);
             
         } catch (error) {
             console.error('❌ Error forwarding message to Discord:', error.message);
-            if (messageRecord) {
-                messageRecord.discordStatus = 'failed';
-                messageRecord.discordError = error.message;
-                await saveMessage(messageRecord);
+            if (messageDbId) {
+                await updateMessageStatus(messageDbId, 'failed', error.message);
             }
         }
     });
