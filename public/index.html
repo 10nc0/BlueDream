@@ -376,6 +376,7 @@
         let editingBotId = null;
         let expandedBots = new Set();
         let messageCache = {}; // Cache messages to avoid re-fetching on expand/collapse
+        let allMessages = {}; // Store all messages by ID for media viewing
 
         // Cat Animation - Improved 12fps smooth walk cycle
         const canvas = document.getElementById('statusCanvas');
@@ -593,10 +594,39 @@
                 const res = await fetch(`/api/bots/${botId}/messages?page=${page}&limit=50`);
                 const data = await res.json();
                 messageCache[botId] = data.messages; // Cache for future toggles
+                // Store messages by ID for media viewing
+                data.messages.forEach(m => allMessages[m.id] = m);
                 renderBotMessages(botId, data.messages, data);
             } catch (error) {
                 console.error('Error loading messages:', error);
             }
+        }
+
+        // Show media attachment in a modal
+        function showMedia(messageId) {
+            const msg = allMessages[messageId];
+            if (!msg || !msg.has_media || !msg.media_data) {
+                alert('Media not available');
+                return;
+            }
+            
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 9999; display: flex; align-items: center; justify-content: center; cursor: pointer;';
+            modal.onclick = () => modal.remove();
+            
+            let content = '';
+            if (msg.media_type === 'image') {
+                content = `<img src="${msg.media_data}" style="max-width: 90%; max-height: 90%; border-radius: 8px;">`;
+            } else if (msg.media_type === 'video') {
+                content = `<video controls style="max-width: 90%; max-height: 90%; border-radius: 8px;"><source src="${msg.media_data}"></video>`;
+            } else if (msg.media_type === 'audio') {
+                content = `<audio controls style="width: 400px;"><source src="${msg.media_data}"></audio>`;
+            } else {
+                content = `<div style="color: white; padding: 2rem;">Media type: ${msg.media_type}</div>`;
+            }
+            
+            modal.innerHTML = content + '<div style="position: absolute; top: 20px; right: 20px; color: white; font-size: 2rem; cursor: pointer;" onclick="this.parentElement.remove()">×</div>';
+            document.body.appendChild(modal);
         }
 
         function renderBotMessages(botId, messages, paginationData = null) {
@@ -615,6 +645,7 @@
                             <th>Time</th>
                             <th>Sender</th>
                             <th>Message</th>
+                            <th>Media</th>
                             <th>Status</th>
                         </tr>
                     </thead>
@@ -624,6 +655,16 @@
                                 <td>${new Date(m.timestamp).toLocaleString()}</td>
                                 <td>${m.sender_name}</td>
                                 <td>${m.message_content.substring(0, 50)}${m.message_content.length > 50 ? '...' : ''}</td>
+                                <td>
+                                    ${m.has_media ? `
+                                        <a href="#" onclick="showMedia(${m.id}); return false;" style="color: #3b82f6; text-decoration: underline;">
+                                            ${m.media_type === 'image' ? '🖼️ Image' : 
+                                              m.media_type === 'video' ? '🎥 Video' :
+                                              m.media_type === 'audio' ? '🔊 Audio' :
+                                              m.media_type === 'document' ? '📄 Doc' : '📎 File'}
+                                        </a>
+                                    ` : '-'}
+                                </td>
                                 <td><span class="status-badge status-${m.discord_status}">${m.discord_status}</span></td>
                             </tr>
                         `).join('')}
