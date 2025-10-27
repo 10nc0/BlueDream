@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp → Discord Bridge Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+        .header {
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            padding: 1.5rem 2rem;
+        }
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .logo h1 {
+            font-size: 1.5rem;
+            color: #ffffff;
+        }
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: #10b981;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+        .status-badge.offline {
+            background: #ef4444;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+        }
+        .stat-card h3 {
+            font-size: 0.875rem;
+            color: #94a3b8;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .stat-value {
+            font-size: 2.25rem;
+            font-weight: bold;
+            color: #ffffff;
+        }
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+            display: flex;
+            align-items: center;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+        }
+        .search-box input {
+            flex: 1;
+            background: none;
+            border: none;
+            color: #e2e8f0;
+            font-size: 0.875rem;
+            outline: none;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        .btn:hover {
+            background: #2563eb;
+        }
+        .btn-danger {
+            background: #ef4444;
+        }
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        select {
+            padding: 0.75rem 1rem;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+            color: #e2e8f0;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .messages-section {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+        }
+        .messages-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        .messages-header h2 {
+            font-size: 1.25rem;
+            color: #ffffff;
+        }
+        .message-card {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            transition: border-color 0.2s;
+        }
+        .message-card:hover {
+            border-color: #475569;
+        }
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 0.75rem;
+        }
+        .sender-info h4 {
+            font-size: 1rem;
+            color: #ffffff;
+            margin-bottom: 0.25rem;
+        }
+        .sender-info p {
+            font-size: 0.875rem;
+            color: #94a3b8;
+        }
+        .status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .status.success {
+            background: #10b98120;
+            color: #10b981;
+        }
+        .status.failed {
+            background: #ef444420;
+            color: #ef4444;
+        }
+        .status.pending {
+            background: #f59e0b20;
+            color: #f59e0b;
+        }
+        .message-content {
+            color: #cbd5e1;
+            margin-bottom: 0.75rem;
+            line-height: 1.6;
+        }
+        .message-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1rem;
+            color: #475569;
+        }
+        .empty-state h3 {
+            font-size: 1.25rem;
+            color: #cbd5e1;
+            margin-bottom: 0.5rem;
+        }
+        .empty-state p {
+            color: #64748b;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.75rem;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+        }
+        .modal-content h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .modal-content img {
+            max-width: 100%;
+            margin: 1.5rem 0;
+        }
+        .modal-content p {
+            color: #94a3b8;
+            margin-bottom: 1.5rem;
+        }
+        .modal-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <div>
+                    <h1>WhatsApp → Discord Bridge</h1>
+                    <p style="font-size: 0.875rem; color: #94a3b8;">Real-time message forwarding</p>
+                </div>
+            </div>
+            <div class="status-badge" id="statusBadge">
+                <span class="status-dot"></span>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Messages</h3>
+                <div class="stat-value" id="totalMessages">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Successful</h3>
+                <div class="stat-value" id="successMessages">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Failed</h3>
+                <div class="stat-value" id="failedMessages">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Pending</h3>
+                <div class="stat-value" id="pendingMessages">0</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="search-box">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Search by sender or content...">
+            </div>
+            <select id="statusFilter">
+                <option value="all">All Statuses</option>
+                <option value="success">Success</option>
+                <option value="failed">Failed</option>
+                <option value="pending">Pending</option>
+            </select>
+            <button class="btn" onclick="fetchMessages()">Refresh</button>
+            <button class="btn btn-danger" onclick="showQRModal()">Relink WhatsApp</button>
+        </div>
+
+        <div class="messages-section">
+            <div class="messages-header">
+                <h2>Recent Messages</h2>
+            </div>
+            <div id="messagesList"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="qrModal">
+        <div class="modal-content">
+            <h3>Relink WhatsApp</h3>
+            <p id="qrMessage">Loading QR code...</p>
+            <div id="qrCodeContainer"></div>
+            <div class="modal-buttons">
+                <button class="btn" onclick="closeQRModal()">Close</button>
+                <button class="btn btn-danger" onclick="relinkWhatsApp()">Generate New QR</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let searchTimeout;
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                const badge = document.getElementById('statusBadge');
+                const text = document.getElementById('statusText');
+                
+                if (data.whatsappReady) {
+                    badge.className = 'status-badge';
+                    text.textContent = `Connected: ${data.botNumber || 'Unknown'}`;
+                } else {
+                    badge.className = 'status-badge offline';
+                    text.textContent = data.hasQR ? 'Waiting for scan' : 'Connecting...';
+                }
+            } catch (error) {
+                console.error('Error fetching status:', error);
+            }
+        }
+
+        async function fetchStats() {
+            try {
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+                document.getElementById('totalMessages').textContent = data.total;
+                document.getElementById('successMessages').textContent = data.success;
+                document.getElementById('failedMessages').textContent = data.failed;
+                document.getElementById('pendingMessages').textContent = data.pending;
+            } catch (error) {
+                console.error('Error fetching stats:', error);
+            }
+        }
+
+        async function fetchMessages() {
+            const search = document.getElementById('searchInput').value;
+            const status = document.getElementById('statusFilter').value;
+            
+            try {
+                const params = new URLSearchParams();
+                if (search) params.append('search', search);
+                if (status !== 'all') params.append('status', status);
+                
+                const res = await fetch(`/api/messages?${params}`);
+                const messages = await res.json();
+                
+                const container = document.getElementById('messagesList');
+                
+                if (messages.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                            </svg>
+                            <h3>No messages found</h3>
+                            <p>${search || status !== 'all' ? 'Try adjusting your filters' : 'Messages will appear here once forwarding starts'}</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = messages.map(msg => {
+                    const date = new Date(msg.timestamp).toLocaleString();
+                    return `
+                        <div class="message-card">
+                            <div class="message-header">
+                                <div class="sender-info">
+                                    <h4>${escapeHtml(msg.senderName)}</h4>
+                                    <p>${escapeHtml(msg.chatName)} • ${msg.senderContact}</p>
+                                </div>
+                                <span class="status ${msg.discordStatus}">${msg.discordStatus}</span>
+                            </div>
+                            <div class="message-content">${escapeHtml(msg.messageContent || '(No text content)')}</div>
+                            <div class="message-footer">
+                                <span>${date}</span>
+                                ${msg.mediaType ? '<span>📎 ' + msg.mediaType + '</span>' : ''}
+                            </div>
+                            ${msg.errorMessage ? `<div style="color: #ef4444; font-size: 0.75rem; margin-top: 0.5rem;">Error: ${escapeHtml(msg.errorMessage)}</div>` : ''}
+                        </div>
+                    `;
+                }).join('');
+                
+            } catch (error) {
+                console.error('Error fetching messages:', error);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function showQRModal() {
+            const modal = document.getElementById('qrModal');
+            const container = document.getElementById('qrCodeContainer');
+            const message = document.getElementById('qrMessage');
+            
+            modal.classList.add('active');
+            container.innerHTML = '';
+            message.textContent = 'Loading QR code...';
+            
+            try {
+                const res = await fetch('/api/qr');
+                const data = await res.json();
+                
+                if (data.qr) {
+                    container.innerHTML = `<img src="${data.qr}" alt="QR Code">`;
+                    message.textContent = 'Scan this QR code with your WhatsApp mobile app';
+                } else if (data.connected) {
+                    message.textContent = 'WhatsApp is already connected! Click "Generate New QR" to relink.';
+                } else {
+                    message.textContent = data.message || 'QR code not available yet';
+                }
+            } catch (error) {
+                message.textContent = 'Error loading QR code: ' + error.message;
+            }
+        }
+
+        function closeQRModal() {
+            document.getElementById('qrModal').classList.remove('active');
+        }
+
+        async function relinkWhatsApp() {
+            if (!confirm('This will disconnect the current WhatsApp session. Are you sure?')) {
+                return;
+            }
+            
+            const message = document.getElementById('qrMessage');
+            message.textContent = 'Relinking WhatsApp...';
+            
+            try {
+                const res = await fetch('/api/relink', { method: 'POST' });
+                const data = await res.json();
+                
+                if (data.success) {
+                    message.textContent = 'Relinking... QR code will appear shortly.';
+                    setTimeout(() => {
+                        showQRModal();
+                    }, 3000);
+                } else {
+                    message.textContent = 'Error: ' + data.error;
+                }
+            } catch (error) {
+                message.textContent = 'Error relinking: ' + error.message;
+            }
+        }
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                fetchMessages();
+            }, 300);
+        });
+
+        document.getElementById('statusFilter').addEventListener('change', fetchMessages);
+
+        fetchStatus();
+        fetchStats();
+        fetchMessages();
+
+        setInterval(() => {
+            fetchStatus();
+            fetchStats();
+            fetchMessages();
+        }, 5000);
+    </script>
+</body>
+</html>
