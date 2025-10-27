@@ -329,7 +329,7 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Output Platform</label>
-                    <select id="outputPlatform" class="form-select" required onchange="updateCredentialFields()">
+                    <select id="outputPlatform" class="form-select" required onchange="updateOutputCredentialLabel()">
                         <option value="">Select...</option>
                         <option value="Discord">Discord</option>
                         <option value="Slack">Slack</option>
@@ -339,33 +339,11 @@
                     </select>
                 </div>
                 
-                <!-- Credentials Section -->
-                <div id="credentialsSection" style="display: none;">
-                    <hr style="border-color: #334155; margin: 1.5rem 0;">
-                    <h3 style="font-size: 1rem; margin-bottom: 1rem; color: #94a3b8;">🔐 Platform Credentials</h3>
-                    
-                    <div class="form-group" id="discordWebhookField" style="display: none;">
-                        <label class="form-label">Discord Webhook URL</label>
-                        <input type="url" id="discordWebhook" class="form-input" placeholder="https://discord.com/api/webhooks/...">
-                        <small style="color: #64748b; font-size: 0.75rem;">Create in Server Settings → Integrations → Webhooks</small>
-                    </div>
-                    
-                    <div class="form-group" id="telegramTokenField" style="display: none;">
-                        <label class="form-label">Telegram Bot Token</label>
-                        <input type="text" id="telegramToken" class="form-input" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
-                        <small style="color: #64748b; font-size: 0.75rem;">Get from @BotFather on Telegram</small>
-                    </div>
-                    
-                    <div class="form-group" id="slackWebhookField" style="display: none;">
-                        <label class="form-label">Slack Webhook URL</label>
-                        <input type="url" id="slackWebhook" class="form-input" placeholder="https://hooks.slack.com/services/...">
-                        <small style="color: #64748b; font-size: 0.75rem;">Create in Slack App → Incoming Webhooks</small>
-                    </div>
-                    
-                    <div class="form-group" id="webhookUrlField" style="display: none;">
-                        <label class="form-label">Webhook URL</label>
-                        <input type="url" id="webhookUrl" class="form-input" placeholder="https://your-api.com/webhook">
-                    </div>
+                <!-- Output Credentials (simple single field) -->
+                <div class="form-group" id="outputCredentialField" style="display: none;">
+                    <label class="form-label" id="outputCredentialLabel">Output Webhook URL</label>
+                    <input type="text" id="outputCredential" class="form-input" placeholder="https://...">
+                    <small id="outputCredentialHint" style="color: #64748b; font-size: 0.75rem;">You'll authenticate the input platform after creation</small>
                 </div>
                 
                 <div class="form-actions">
@@ -551,6 +529,11 @@
                         </div>
                     </div>
                     <div class="bot-actions">
+                        ${bot.input_platform === 'WhatsApp' ? `
+                            <button class="btn" onclick="event.stopPropagation(); connectWhatsApp(${bot.id})" style="background: #25D366;">
+                                📱 QR Login
+                            </button>
+                        ` : ''}
                         <button class="btn" onclick="event.stopPropagation(); editBot(${bot.id})">Edit</button>
                         <button class="btn btn-danger" onclick="event.stopPropagation(); deleteBot(${bot.id})">Delete</button>
                         <span class="bot-expand-icon">▼</span>
@@ -627,27 +610,42 @@
             container.innerHTML = table;
         }
 
-        function updateCredentialFields() {
+        // SIMPLIFIED: Single credential field that changes label based on output platform
+        function updateOutputCredentialLabel() {
             const outputPlatform = document.getElementById('outputPlatform').value;
-            const section = document.getElementById('credentialsSection');
+            const field = document.getElementById('outputCredentialField');
+            const label = document.getElementById('outputCredentialLabel');
+            const input = document.getElementById('outputCredential');
+            const hint = document.getElementById('outputCredentialHint');
             
-            // Hide all credential fields
-            document.getElementById('discordWebhookField').style.display = 'none';
-            document.getElementById('telegramTokenField').style.display = 'none';
-            document.getElementById('slackWebhookField').style.display = 'none';
-            document.getElementById('webhookUrlField').style.display = 'none';
+            if (!outputPlatform) {
+                field.style.display = 'none';
+                return;
+            }
             
-            // Show relevant fields based on output platform
-            section.style.display = outputPlatform ? 'block' : 'none';
+            field.style.display = 'block';
             
+            // Update label and placeholder based on platform
             if (outputPlatform === 'Discord') {
-                document.getElementById('discordWebhookField').style.display = 'block';
+                label.textContent = 'Discord Webhook URL';
+                input.placeholder = 'https://discord.com/api/webhooks/...';
+                hint.textContent = 'Create in Server Settings → Integrations → Webhooks';
             } else if (outputPlatform === 'Telegram') {
-                document.getElementById('telegramTokenField').style.display = 'block';
+                label.textContent = 'Telegram Bot Token';
+                input.placeholder = '123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11';
+                hint.textContent = 'Get from @BotFather on Telegram';
             } else if (outputPlatform === 'Slack') {
-                document.getElementById('slackWebhookField').style.display = 'block';
+                label.textContent = 'Slack Webhook URL';
+                input.placeholder = 'https://hooks.slack.com/services/...';
+                hint.textContent = 'Create in Slack App → Incoming Webhooks';
             } else if (outputPlatform === 'Webhook') {
-                document.getElementById('webhookUrlField').style.display = 'block';
+                label.textContent = 'Webhook URL';
+                input.placeholder = 'https://your-api.com/webhook';
+                hint.textContent = 'Your custom webhook endpoint';
+            } else {
+                label.textContent = 'Output Credential';
+                input.placeholder = 'Enter credential';
+                hint.textContent = 'Platform-specific authentication';
             }
         }
 
@@ -655,7 +653,7 @@
             editingBotId = null;
             document.getElementById('modalTitle').textContent = 'Create New Bot';
             document.getElementById('botForm').reset();
-            document.getElementById('credentialsSection').style.display = 'none';
+            document.getElementById('outputCredentialField').style.display = 'none';
             document.getElementById('botModal').classList.add('active');
         }
 
@@ -669,18 +667,11 @@
             document.getElementById('inputPlatform').value = bot.input_platform;
             document.getElementById('outputPlatform').value = bot.output_platform;
             
-            // Load existing credentials
+            // Load existing output credential
             const outCreds = bot.output_credentials || {};
-            if (outCreds.webhook_url) {
-                document.getElementById('discordWebhook').value = outCreds.webhook_url;
-                document.getElementById('slackWebhook').value = outCreds.webhook_url;
-                document.getElementById('webhookUrl').value = outCreds.webhook_url;
-            }
-            if (outCreds.token) {
-                document.getElementById('telegramToken').value = outCreds.token;
-            }
+            document.getElementById('outputCredential').value = outCreds.webhook_url || outCreds.token || '';
             
-            updateCredentialFields();
+            updateOutputCredentialLabel();
             document.getElementById('botModal').classList.add('active');
         }
 
@@ -692,28 +683,24 @@
             e.preventDefault();
             
             const outputPlatform = document.getElementById('outputPlatform').value;
+            const outputCredValue = document.getElementById('outputCredential').value;
             
-            // Collect credentials based on selected platform
+            // Store credential with appropriate key based on platform
             let outputCredentials = {};
-            if (outputPlatform === 'Discord') {
-                const webhook = document.getElementById('discordWebhook').value;
-                if (webhook) outputCredentials.webhook_url = webhook;
-            } else if (outputPlatform === 'Telegram') {
-                const token = document.getElementById('telegramToken').value;
-                if (token) outputCredentials.token = token;
-            } else if (outputPlatform === 'Slack') {
-                const webhook = document.getElementById('slackWebhook').value;
-                if (webhook) outputCredentials.webhook_url = webhook;
-            } else if (outputPlatform === 'Webhook') {
-                const webhook = document.getElementById('webhookUrl').value;
-                if (webhook) outputCredentials.webhook_url = webhook;
+            if (outputCredValue) {
+                if (outputPlatform === 'Telegram') {
+                    outputCredentials.token = outputCredValue;
+                } else {
+                    // Discord, Slack, Webhook all use webhook_url
+                    outputCredentials.webhook_url = outputCredValue;
+                }
             }
             
             const data = {
                 name: document.getElementById('botName').value,
                 inputPlatform: document.getElementById('inputPlatform').value,
                 outputPlatform: outputPlatform,
-                inputCredentials: {},
+                inputCredentials: {}, // Will be filled via QR login later
                 outputCredentials: outputCredentials,
                 status: 'inactive'
             };
@@ -745,12 +732,23 @@
             if (!confirm('Are you sure you want to delete this bot and all its messages?')) return;
             
             try {
-                await fetch(`/api/bots/${botId}`, { method: 'DELETE' });
+                const res = await fetch(`/api/bots/${botId}`, { method: 'DELETE' });
+                const result = await res.json();
+                if (!res.ok) {
+                    alert(result.error || 'Error deleting bot');
+                    return;
+                }
                 await loadBots();
             } catch (error) {
                 console.error('Error deleting bot:', error);
                 alert('Error deleting bot');
             }
+        }
+
+        // QR Login placeholder for future WhatsApp authentication
+        function connectWhatsApp(botId) {
+            alert('🔐 QR Login Feature\n\nThis will open a QR code scanner to authenticate your WhatsApp account.\n\n📱 Scan the QR code with WhatsApp on your phone to link this bot.\n\n(Feature coming in next update!)');
+            // TODO: Implement QR code generation and WhatsApp authentication flow
         }
 
         // Initialize
