@@ -634,6 +634,7 @@
                 const date = new Date(msg.timestamp);
                 const dateStr = date.toLocaleDateString();
                 const timeStr = date.toLocaleTimeString();
+                const timezone = date.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').slice(-2).join(' ');
                 const messageContent = msg.messageContent || '(No text content)';
                 const needsTruncation = messageContent.length > 100;
                 
@@ -641,7 +642,8 @@
                     <tr>
                         <td class="timestamp">
                             <div>${dateStr}</div>
-                            <div style="color: #64748b; font-size: 0.75rem;">${timeStr}</div>
+                            <div style="color: #94a3b8; font-size: 0.75rem;">${timeStr}</div>
+                            <div style="color: #64748b; font-size: 0.7rem;">${timezone}</div>
                         </td>
                         <td class="sender-cell">
                             <div class="sender-name">${escapeHtml(msg.senderName)}</div>
