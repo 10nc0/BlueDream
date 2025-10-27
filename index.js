@@ -48,7 +48,7 @@ app.use(session({
         maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
         httpOnly: true,
         secure: true, // Required for Safari/iPad over HTTPS
-        sameSite: 'lax' // Allow cookies to be sent from same site
+        sameSite: 'none' // Changed from 'lax' to 'none' for Safari/iPad compatibility
     },
     name: 'bridge.sid' // Custom session cookie name
 }));
