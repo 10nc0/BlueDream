@@ -18,7 +18,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 2rem;
+            padding: 1rem;
         }
 
         .login-container {
@@ -26,10 +26,31 @@
             backdrop-filter: blur(10px);
             border: 1px solid rgba(71, 85, 105, 0.3);
             border-radius: 1rem;
-            padding: 2.5rem;
+            padding: 2rem;
             width: 100%;
             max-width: 420px;
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Mobile Responsive */
+        @media (max-width: 480px) {
+            body {
+                padding: 0.75rem;
+            }
+            .login-container {
+                padding: 1.5rem;
+                border-radius: 0.75rem;
+            }
+            .logo h1 {
+                font-size: 1.5rem;
+            }
+            .logo p {
+                font-size: 0.8rem;
+            }
+            .btn {
+                padding: 0.875rem;
+                font-size: 0.9rem;
+            }
         }
 
         .logo {
