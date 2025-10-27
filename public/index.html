@@ -496,143 +496,273 @@
         let textInterval = null;
         let currentStatus = { connected: false, number: null };
 
-        // Cities with pixel art backgrounds
+        // Cities with atmospheric pixel art backgrounds
         const cities = [
             {
-                name: 'Tokyo Sakura',
-                building: '🌸🏯🌸',
-                color: '#ff9eb5',
-                accent: '#ff6b9d'
+                name: 'Tokyo',
+                skyColor: '#ff9eb5',
+                buildingColors: ['#2a2a3e', '#1f1f2e', '#3a3a4e'],
+                accentColor: '#ff6b9d',
+                windowColor: '#ffeb3b'
             },
             {
-                name: 'LA Downtown', 
-                building: '🌴🏙️🌴',
-                color: '#ffd700',
-                accent: '#ff8c00'
+                name: 'Los Angeles', 
+                skyColor: '#ff8c42',
+                buildingColors: ['#1a1a2e', '#0f0f1e', '#2a2a3e'],
+                accentColor: '#ffd700',
+                windowColor: '#ff6b35'
             },
             {
                 name: 'Ho Chi Minh',
-                building: '🏮🏛️🏮',
-                color: '#ff4d4d',
-                accent: '#ffaa00'
+                skyColor: '#ff6b6b',
+                buildingColors: ['#2e2e3a', '#1e1e2a', '#3e3e4a'],
+                accentColor: '#ffaa00',
+                windowColor: '#ffe66d'
             },
             {
                 name: 'Singapore',
-                building: '🌺🏢🌺',
-                color: '#00d4ff',
-                accent: '#9d4edd'
+                skyColor: '#6c5ce7',
+                buildingColors: ['#1e1e30', '#141424', '#2e2e40'],
+                accentColor: '#00d4ff',
+                windowColor: '#a29bfe'
             }
         ];
         
         let currentCityIndex = 0;
         let cityScrollX = 0;
         let lastCityChange = Date.now();
+        let cachedBuildings = {};
         
-        // Smooth walking cat animation frames
-        const catWalk = [
+        // Pixel-perfect cat sprite (walking animation)
+        // 1 = cat body, 0 = transparent
+        const catSprites = [
             // Frame 1: Left paw forward
-            {
-                body: [
-                    '  ▄▀▀▄',
-                    ' █▀●●▀█',
-                    '█▀▀▀▀▀█',
-                    '█▄▄▄▄▄█',
-                    '▐█ ▐█  '
-                ],
-                tail: '╱'
-            },
-            // Frame 2: Both paws down
-            {
-                body: [
-                    '  ▄▀▀▄',
-                    ' █▀●●▀█',
-                    '█▀▀▀▀▀█',
-                    '█▄▄▄▄▄█',
-                    '▐█ ▐█  '
-                ],
-                tail: '│'
-            },
+            [
+                [0,0,0,1,1,1,1,0,0,0],
+                [0,0,1,1,1,1,1,1,0,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [0,1,1,0,1,1,0,1,1,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [0,0,1,1,1,1,1,1,0,0],
+                [0,0,0,1,1,1,1,0,1,0],
+                [0,0,1,0,0,1,0,0,0,1],
+                [0,0,1,0,0,0,0,0,0,0]
+            ],
+            // Frame 2: Mid-step
+            [
+                [0,0,0,1,1,1,1,0,0,0],
+                [0,0,1,1,1,1,1,1,0,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [0,1,1,0,1,1,0,1,1,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [0,0,1,1,1,1,1,1,0,0],
+                [0,0,0,1,1,1,1,0,0,1],
+                [0,0,1,0,0,1,0,0,0,0],
+                [0,0,0,0,0,0,0,0,0,1]
+            ],
             // Frame 3: Right paw forward
-            {
-                body: [
-                    '  ▄▀▀▄',
-                    ' █▀●●▀█',
-                    '█▀▀▀▀▀█',
-                    '█▄▄▄▄▄█',
-                    ' ▐█ ▐█ '
-                ],
-                tail: '╲'
-            },
-            // Frame 4: Both paws down
-            {
-                body: [
-                    '  ▄▀▀▄',
-                    ' █▀●●▀█',
-                    '█▀▀▀▀▀█',
-                    '█▄▄▄▄▄█',
-                    '▐█ ▐█  '
-                ],
-                tail: '│'
-            }
+            [
+                [0,0,0,1,1,1,1,0,0,0],
+                [0,0,1,1,1,1,1,1,0,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [0,1,1,0,1,1,0,1,1,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [0,0,1,1,1,1,1,1,0,0],
+                [0,0,1,0,1,1,1,0,0,0],
+                [0,1,0,0,0,1,0,0,1,0],
+                [0,0,0,0,0,0,0,0,0,0]
+            ],
+            // Frame 4: Mid-step
+            [
+                [0,0,0,1,1,1,1,0,0,0],
+                [0,0,1,1,1,1,1,1,0,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [0,1,1,0,1,1,0,1,1,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [0,1,1,1,1,1,1,1,1,0],
+                [0,0,1,1,1,1,1,1,0,0],
+                [0,1,0,0,1,1,1,0,0,0],
+                [0,0,0,0,0,1,0,0,1,0],
+                [0,1,0,0,0,0,0,0,0,0]
+            ]
         ];
 
-        function drawScene(statusColor) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            const city = cities[currentCityIndex];
-            
-            // Draw cityscape background
-            ctx.fillStyle = city.color + '20'; // Semi-transparent
-            ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
-            
-            // Draw scrolling buildings
-            ctx.font = '24px Arial';
-            const buildingWidth = 60;
-            const numBuildings = Math.ceil(canvas.width / buildingWidth) + 2;
-            
-            for (let i = 0; i < numBuildings; i++) {
-                const x = (i * buildingWidth + cityScrollX) % (canvas.width + buildingWidth) - buildingWidth;
-                ctx.fillText(city.building, x, canvas.height - 3);
+        function drawPixel(x, y, color, size = 2) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x * size, y * size, size, size);
+        }
+        
+        function generateCityBuildings(cityIndex) {
+            const cacheKey = `city_${cityIndex}`;
+            if (cachedBuildings[cacheKey]) {
+                return cachedBuildings[cacheKey];
             }
             
-            // Draw ground line
-            ctx.strokeStyle = city.accent;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(0, canvas.height - 18);
-            ctx.lineTo(canvas.width, canvas.height - 18);
-            ctx.stroke();
+            const city = cities[cityIndex];
+            const layers = [];
+            const seed = cityIndex * 1000; // Deterministic randomness per city
             
-            // Draw city name tag in corner
-            ctx.font = '10px monospace';
-            ctx.fillStyle = city.accent + '80';
-            ctx.fillText(city.name, 5, 12);
+            const seededRandom = (min, max, offset = 0) => {
+                const x = Math.sin(seed + offset) * 10000;
+                return min + Math.floor((x - Math.floor(x)) * (max - min + 1));
+            };
             
-            // Draw the walking void cat
-            const walkFrame = catWalk[Math.floor(animationFrame / 8) % catWalk.length];
-            const catX = 100;
-            const catY = 10;
+            // Generate 3 layers
+            for (let layerIdx = 0; layerIdx < 3; layerIdx++) {
+                const buildings = [];
+                let totalWidth = 0;
+                let buildingId = 0;
+                
+                while (totalWidth < 250) {
+                    const width = seededRandom(8, 14, buildingId * 7 + layerIdx * 100);
+                    const height = layerIdx === 0 ? seededRandom(8, 12, buildingId * 3) :
+                                   layerIdx === 1 ? seededRandom(12, 16, buildingId * 5) :
+                                   seededRandom(18, 22, buildingId * 9);
+                    
+                    const windows = [];
+                    for (let i = 1; i < width - 1; i += 2) {
+                        for (let j = 2; j < height - 1; j += 3) {
+                            if (seededRandom(0, 10, buildingId * 13 + i * j) > 3) {
+                                windows.push({ x: i, y: j });
+                            }
+                        }
+                    }
+                    
+                    const hasAntenna = seededRandom(0, 1, buildingId * 17) === 1;
+                    
+                    buildings.push({
+                        x: totalWidth,
+                        width,
+                        height,
+                        windows,
+                        hasAntenna,
+                        color: city.buildingColors[layerIdx % city.buildingColors.length]
+                    });
+                    
+                    totalWidth += width + 2;
+                    buildingId++;
+                }
+                
+                layers.push(buildings);
+            }
             
-            // Draw cat body (black)
-            ctx.fillStyle = '#0a0a0a';
-            ctx.font = '12px monospace';
-            walkFrame.body.forEach((line, i) => {
-                ctx.fillText(line, catX, catY + (i * 10));
+            cachedBuildings[cacheKey] = layers;
+            return layers;
+        }
+        
+        function drawBuilding(building, offsetX, offsetY, city) {
+            const pixelSize = 2;
+            const baseY = offsetY - building.height;
+            
+            // Building body
+            for (let i = 0; i < building.width; i++) {
+                for (let j = 0; j < building.height; j++) {
+                    drawPixel(offsetX + building.x + i, baseY + j, building.color, pixelSize);
+                }
+            }
+            
+            // Windows
+            building.windows.forEach(win => {
+                drawPixel(offsetX + building.x + win.x, baseY + win.y, city.windowColor, pixelSize);
             });
             
-            // Draw tail
-            ctx.fillText(walkFrame.tail, catX - 8, catY + 30);
+            // Antenna
+            if (building.hasAntenna) {
+                const antennaX = offsetX + building.x + Math.floor(building.width / 2);
+                drawPixel(antennaX, baseY - 1, city.accentColor, pixelSize);
+                drawPixel(antennaX, baseY - 2, city.accentColor, pixelSize);
+            }
+        }
+        
+        function drawScene(statusColor) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const pixelSize = 2;
+            const city = cities[currentCityIndex];
             
-            // Draw glowing eyes with status color
+            // Atmospheric gradient sky
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, city.skyColor + '40');
+            gradient.addColorStop(0.7, city.skyColor + '10');
+            gradient.addColorStop(1, '#0a0a1a');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Get cached buildings for this city
+            const cityBuildings = generateCityBuildings(currentCityIndex);
+            
+            // Draw layered cityscape (3 layers for depth with parallax)
+            const layerSpeeds = [0.3, 0.6, 1.0];
+            const layerAlphas = [0.4, 0.7, 1.0];
+            
+            cityBuildings.forEach((buildings, layerIndex) => {
+                ctx.globalAlpha = layerAlphas[layerIndex];
+                const scrollOffset = cityScrollX * layerSpeeds[layerIndex];
+                const baseY = 30;
+                
+                // Calculate total width of this layer
+                const lastBuilding = buildings[buildings.length - 1];
+                const totalWidth = lastBuilding.x + lastBuilding.width;
+                
+                // Properly handle negative modulo for wrapping
+                const normalizedOffset = Math.floor(scrollOffset / pixelSize);
+                const startX = ((normalizedOffset % totalWidth) + totalWidth) % totalWidth;
+                
+                buildings.forEach(building => {
+                    // Calculate initial draw position
+                    let drawX = building.x - startX;
+                    
+                    // Ensure we draw buildings that wrap around
+                    if (drawX < -building.width) {
+                        drawX += totalWidth;
+                    }
+                    
+                    // Draw the building and any wrapped instances
+                    while (drawX < 120) {
+                        if (drawX + building.width > 0) {
+                            drawBuilding(building, drawX, baseY, city);
+                        }
+                        drawX += totalWidth;
+                    }
+                });
+            });
+            
+            ctx.globalAlpha = 1.0;
+            
+            // Draw ground/street
+            ctx.fillStyle = '#1a1a2a';
+            ctx.fillRect(0, canvas.height - 4, canvas.width, 4);
+            ctx.fillStyle = city.accentColor + '60';
+            ctx.fillRect(0, canvas.height - 5, canvas.width, 1);
+            
+            // City name tag
+            ctx.font = '8px monospace';
+            ctx.fillStyle = city.accentColor;
+            ctx.fillText(city.name, 3, 8);
+            
+            // Draw pixel art cat
+            const sprite = catSprites[Math.floor(animationFrame / 10) % catSprites.length];
+            const catX = 50;
+            const catY = 15;
+            const catPixelSize = 2;
+            
+            // Draw cat silhouette
+            sprite.forEach((row, y) => {
+                row.forEach((pixel, x) => {
+                    if (pixel === 1) {
+                        drawPixel(catX + x, catY + y, '#0a0a0a', catPixelSize);
+                    }
+                });
+            });
+            
+            // Draw glowing eyes
             ctx.fillStyle = statusColor;
-            ctx.fillRect(catX + 15, catY + 5, 2, 2); // Left eye
-            ctx.fillRect(catX + 22, catY + 5, 2, 2); // Right eye
-            
-            // Add a subtle glow effect to eyes
             ctx.shadowColor = statusColor;
-            ctx.shadowBlur = 3;
-            ctx.fillRect(catX + 15, catY + 5, 2, 2);
-            ctx.fillRect(catX + 22, catY + 5, 2, 2);
+            ctx.shadowBlur = 4;
+            drawPixel(catX + 3, catY + 3, statusColor, catPixelSize);
+            drawPixel(catX + 6, catY + 3, statusColor, catPixelSize);
             ctx.shadowBlur = 0;
         }
 
@@ -647,8 +777,8 @@
             // Scroll the city
             cityScrollX -= 0.5;
             
-            // Change city every 10 seconds
-            if (Date.now() - lastCityChange > 10000) {
+            // Change city every 15 seconds
+            if (Date.now() - lastCityChange > 15000) {
                 currentCityIndex = (currentCityIndex + 1) % cities.length;
                 lastCityChange = Date.now();
                 cityScrollX = 0;
