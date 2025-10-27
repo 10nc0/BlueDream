@@ -329,7 +329,7 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Output Platform</label>
-                    <select id="outputPlatform" class="form-select" required>
+                    <select id="outputPlatform" class="form-select" required onchange="updateCredentialFields()">
                         <option value="">Select...</option>
                         <option value="Discord">Discord</option>
                         <option value="Slack">Slack</option>
@@ -338,6 +338,36 @@
                         <option value="Webhook">Webhook</option>
                     </select>
                 </div>
+                
+                <!-- Credentials Section -->
+                <div id="credentialsSection" style="display: none;">
+                    <hr style="border-color: #334155; margin: 1.5rem 0;">
+                    <h3 style="font-size: 1rem; margin-bottom: 1rem; color: #94a3b8;">🔐 Platform Credentials</h3>
+                    
+                    <div class="form-group" id="discordWebhookField" style="display: none;">
+                        <label class="form-label">Discord Webhook URL</label>
+                        <input type="url" id="discordWebhook" class="form-input" placeholder="https://discord.com/api/webhooks/...">
+                        <small style="color: #64748b; font-size: 0.75rem;">Create in Server Settings → Integrations → Webhooks</small>
+                    </div>
+                    
+                    <div class="form-group" id="telegramTokenField" style="display: none;">
+                        <label class="form-label">Telegram Bot Token</label>
+                        <input type="text" id="telegramToken" class="form-input" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+                        <small style="color: #64748b; font-size: 0.75rem;">Get from @BotFather on Telegram</small>
+                    </div>
+                    
+                    <div class="form-group" id="slackWebhookField" style="display: none;">
+                        <label class="form-label">Slack Webhook URL</label>
+                        <input type="url" id="slackWebhook" class="form-input" placeholder="https://hooks.slack.com/services/...">
+                        <small style="color: #64748b; font-size: 0.75rem;">Create in Slack App → Incoming Webhooks</small>
+                    </div>
+                    
+                    <div class="form-group" id="webhookUrlField" style="display: none;">
+                        <label class="form-label">Webhook URL</label>
+                        <input type="url" id="webhookUrl" class="form-input" placeholder="https://your-api.com/webhook">
+                    </div>
+                </div>
+                
                 <div class="form-actions">
                     <button type="button" class="btn" onclick="closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-success">Save Bot</button>
@@ -350,6 +380,7 @@
         let bots = [];
         let editingBotId = null;
         let expandedBots = new Set();
+        let messageCache = {}; // Cache messages to avoid re-fetching on expand/collapse
 
         // Cat Animation - Improved 12fps smooth walk cycle
         const canvas = document.getElementById('statusCanvas');
@@ -472,6 +503,7 @@
             }
         }
 
+        // OPTIMIZED: No more N+1 queries! Stats come with bots from API
         async function renderBots() {
             const list = document.getElementById('botList');
             
@@ -482,19 +514,16 @@
             
             list.innerHTML = '';
             
+            // Stats are already in the bot object from the optimized API
             for (const bot of bots) {
-                const stats = await fetchBotStats(bot.id);
+                const stats = {
+                    total: parseInt(bot.total_messages) || 0,
+                    success: parseInt(bot.success_count) || 0,
+                    failed: parseInt(bot.failed_count) || 0,
+                    pending: parseInt(bot.pending_count) || 0
+                };
                 const card = createBotCard(bot, stats);
                 list.appendChild(card);
-            }
-        }
-
-        async function fetchBotStats(botId) {
-            try {
-                const res = await fetch(`/api/bots/${botId}/stats`);
-                return await res.json();
-            } catch (error) {
-                return { total: 0, success: 0, failed: 0, pending: 0 };
             }
         }
 
@@ -544,22 +573,27 @@
                 expandedBots.delete(botId);
             } else {
                 expandedBots.add(botId);
-                await loadBotMessages(botId);
+                // Only load if not already cached
+                if (!messageCache[botId]) {
+                    await loadBotMessages(botId);
+                }
             }
             renderBots();
         }
 
-        async function loadBotMessages(botId) {
+        // OPTIMIZED: Pagination + Caching (loads 50 at a time, caches results)
+        async function loadBotMessages(botId, page = 1) {
             try {
-                const res = await fetch(`/api/bots/${botId}/messages`);
-                const messages = await res.json();
-                renderBotMessages(botId, messages);
+                const res = await fetch(`/api/bots/${botId}/messages?page=${page}&limit=50`);
+                const data = await res.json();
+                messageCache[botId] = data.messages; // Cache for future toggles
+                renderBotMessages(botId, data.messages, data);
             } catch (error) {
                 console.error('Error loading messages:', error);
             }
         }
 
-        function renderBotMessages(botId, messages) {
+        function renderBotMessages(botId, messages, paginationData = null) {
             const container = document.getElementById(`message-list-${botId}`);
             if (!container) return;
             
@@ -593,10 +627,35 @@
             container.innerHTML = table;
         }
 
+        function updateCredentialFields() {
+            const outputPlatform = document.getElementById('outputPlatform').value;
+            const section = document.getElementById('credentialsSection');
+            
+            // Hide all credential fields
+            document.getElementById('discordWebhookField').style.display = 'none';
+            document.getElementById('telegramTokenField').style.display = 'none';
+            document.getElementById('slackWebhookField').style.display = 'none';
+            document.getElementById('webhookUrlField').style.display = 'none';
+            
+            // Show relevant fields based on output platform
+            section.style.display = outputPlatform ? 'block' : 'none';
+            
+            if (outputPlatform === 'Discord') {
+                document.getElementById('discordWebhookField').style.display = 'block';
+            } else if (outputPlatform === 'Telegram') {
+                document.getElementById('telegramTokenField').style.display = 'block';
+            } else if (outputPlatform === 'Slack') {
+                document.getElementById('slackWebhookField').style.display = 'block';
+            } else if (outputPlatform === 'Webhook') {
+                document.getElementById('webhookUrlField').style.display = 'block';
+            }
+        }
+
         function openCreateModal() {
             editingBotId = null;
             document.getElementById('modalTitle').textContent = 'Create New Bot';
             document.getElementById('botForm').reset();
+            document.getElementById('credentialsSection').style.display = 'none';
             document.getElementById('botModal').classList.add('active');
         }
 
@@ -609,6 +668,19 @@
             document.getElementById('botName').value = bot.name;
             document.getElementById('inputPlatform').value = bot.input_platform;
             document.getElementById('outputPlatform').value = bot.output_platform;
+            
+            // Load existing credentials
+            const outCreds = bot.output_credentials || {};
+            if (outCreds.webhook_url) {
+                document.getElementById('discordWebhook').value = outCreds.webhook_url;
+                document.getElementById('slackWebhook').value = outCreds.webhook_url;
+                document.getElementById('webhookUrl').value = outCreds.webhook_url;
+            }
+            if (outCreds.token) {
+                document.getElementById('telegramToken').value = outCreds.token;
+            }
+            
+            updateCredentialFields();
             document.getElementById('botModal').classList.add('active');
         }
 
@@ -619,12 +691,30 @@
         async function saveBotForm(e) {
             e.preventDefault();
             
+            const outputPlatform = document.getElementById('outputPlatform').value;
+            
+            // Collect credentials based on selected platform
+            let outputCredentials = {};
+            if (outputPlatform === 'Discord') {
+                const webhook = document.getElementById('discordWebhook').value;
+                if (webhook) outputCredentials.webhook_url = webhook;
+            } else if (outputPlatform === 'Telegram') {
+                const token = document.getElementById('telegramToken').value;
+                if (token) outputCredentials.token = token;
+            } else if (outputPlatform === 'Slack') {
+                const webhook = document.getElementById('slackWebhook').value;
+                if (webhook) outputCredentials.webhook_url = webhook;
+            } else if (outputPlatform === 'Webhook') {
+                const webhook = document.getElementById('webhookUrl').value;
+                if (webhook) outputCredentials.webhook_url = webhook;
+            }
+            
             const data = {
                 name: document.getElementById('botName').value,
                 inputPlatform: document.getElementById('inputPlatform').value,
-                outputPlatform: document.getElementById('outputPlatform').value,
+                outputPlatform: outputPlatform,
                 inputCredentials: {},
-                outputCredentials: {},
+                outputCredentials: outputCredentials,
                 status: 'inactive'
             };
             

@@ -99,12 +99,22 @@ async function initializeDatabase() {
             console.log('✅ Added bot_id column');
         }
         
+        // Create performance indexes for frequently queried columns
         await pool.query(`
             CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp DESC)
         `);
         
         await pool.query(`
             CREATE INDEX IF NOT EXISTS idx_messages_bot_id ON messages(bot_id)
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_messages_status ON messages(discord_status)
+        `);
+        
+        // Composite index for bot + timestamp (most common query pattern)
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_messages_bot_timestamp ON messages(bot_id, timestamp DESC)
         `);
         
         console.log('✅ Database initialized successfully');
@@ -536,9 +546,21 @@ app.get('/api/stats', async (req, res) => {
 });
 
 // Bot management endpoints
+// OPTIMIZED: Get all bots with stats in ONE query (eliminates N+1 problem)
 app.get('/api/bots', async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM bots ORDER BY created_at DESC');
+        const result = await pool.query(`
+            SELECT 
+                b.*,
+                COUNT(m.id) as total_messages,
+                COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as success_count,
+                COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
+                COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count
+            FROM bots b
+            LEFT JOIN messages m ON b.id = m.bot_id
+            GROUP BY b.id
+            ORDER BY b.created_at DESC
+        `);
         res.json(result.rows);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -611,10 +633,13 @@ app.get('/api/bots/:id/stats', async (req, res) => {
     }
 });
 
+// OPTIMIZED: Added pagination to prevent loading 1000 messages at once
 app.get('/api/bots/:id/messages', async (req, res) => {
     try {
         const { id } = req.params;
-        const { search, status } = req.query;
+        const { search, status, page = 1, limit = 50 } = req.query;
+        
+        const offset = (parseInt(page) - 1) * parseInt(limit);
         
         let query = 'SELECT * FROM messages WHERE bot_id = $1';
         const params = [id];
@@ -629,12 +654,34 @@ app.get('/api/bots/:id/messages', async (req, res) => {
         if (status && status !== 'all') {
             query += ` AND discord_status = $${paramCount}`;
             params.push(status);
+            paramCount++;
         }
         
-        query += ' ORDER BY timestamp DESC LIMIT 1000';
+        query += ` ORDER BY timestamp DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+        params.push(parseInt(limit), offset);
         
         const result = await pool.query(query, params);
-        res.json(result.rows);
+        
+        // Get total count for pagination
+        let countQuery = 'SELECT COUNT(*) FROM messages WHERE bot_id = $1';
+        const countParams = [id];
+        if (search) {
+            countQuery += ` AND (LOWER(sender_name) LIKE $2 OR sender_contact LIKE $2 OR LOWER(message_content) LIKE $2)`;
+            countParams.push(`%${search.toLowerCase()}%`);
+        }
+        if (status && status !== 'all') {
+            countQuery += ` AND discord_status = $${countParams.length + 1}`;
+            countParams.push(status);
+        }
+        const countResult = await pool.query(countQuery, countParams);
+        
+        res.json({
+            messages: result.rows,
+            total: parseInt(countResult.rows[0].count),
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(parseInt(countResult.rows[0].count) / parseInt(limit))
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
