@@ -864,6 +864,73 @@ app.put('/api/users/:id/role', requireRole('admin'), async (req, res) => {
     }
 });
 
+// Delete user (admin only)
+app.delete('/api/users/:id', requireRole('admin'), async (req, res) => {
+    const { id } = req.params;
+    
+    try {
+        // Prevent deleting yourself
+        if (parseInt(id) === req.session.userId) {
+            return res.status(400).json({ error: 'Cannot delete your own account' });
+        }
+        
+        const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get all active sessions (admin only)
+app.get('/api/sessions', requireRole('admin'), async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT 
+                s.sid,
+                s.sess->>'userId' as user_id,
+                u.email,
+                u.role,
+                s.expire as expires_at,
+                EXTRACT(EPOCH FROM (s.expire - NOW())) as seconds_until_expire
+            FROM session s
+            LEFT JOIN users u ON (s.sess->>'userId')::integer = u.id
+            WHERE s.expire > NOW()
+            ORDER BY s.expire DESC
+        `);
+        
+        res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Revoke session (admin only)
+app.delete('/api/sessions/:sid', requireRole('admin'), async (req, res) => {
+    const { sid } = req.params;
+    
+    try {
+        // Prevent revoking your own session
+        if (sid === req.sessionID) {
+            return res.status(400).json({ error: 'Cannot revoke your own session' });
+        }
+        
+        const result = await pool.query('DELETE FROM session WHERE sid = $1 RETURNING sid', [sid]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+        
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ============ PROTECTED API ROUTES ============
 // All routes below require authentication, with role-based access where specified
 

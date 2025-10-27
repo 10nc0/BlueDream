@@ -291,6 +291,96 @@
             font-size: 1.25rem;
             margin-bottom: 0.5rem;
         }
+        
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid #334155;
+        }
+        .tab {
+            padding: 0.75rem 1.5rem;
+            background: transparent;
+            color: #94a3b8;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .tab:hover {
+            color: #e2e8f0;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .tab.active {
+            color: #60a5fa;
+            border-bottom-color: #60a5fa;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* User Management Table */
+        .table-container {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .data-table th {
+            background: #0f172a;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: #94a3b8;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid #334155;
+        }
+        .data-table td {
+            padding: 1rem;
+            border-bottom: 1px solid #334155;
+        }
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+        .data-table tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-admin { background: #7c3aed; color: white; }
+        .badge-read { background: #3b82f6; color: white; }
+        .badge-write { background: #10b981; color: white; }
+        .btn-small {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.75rem;
+        }
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid #475569;
+            color: #94a3b8;
+        }
+        .btn-ghost:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: #64748b;
+            color: #e2e8f0;
+        }
     </style>
 </head>
 <body>
@@ -308,15 +398,26 @@
 
     <!-- Main Container -->
     <div class="container">
-        <!-- Library Header -->
-        <div class="library-header">
-            <h2 class="library-title">Bot Library</h2>
-            <div class="library-controls">
-                <span id="userInfo" style="color: #94a3b8; font-size: 0.875rem; margin-right: 1rem;"></span>
-                <button class="btn btn-success" onclick="openCreateModal()">+ Create Bot</button>
-                <button class="btn" onclick="logout()" style="background: #ef4444;">Logout</button>
-            </div>
+        <!-- User Info & Logout -->
+        <div style="display: flex; justify-content: flex-end; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+            <span id="userInfo" style="color: #94a3b8; font-size: 0.875rem;"></span>
+            <button class="btn" onclick="logout()" style="background: #ef4444;">Logout</button>
         </div>
+        
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('bots')">🤖 Bot Library</button>
+            <button class="tab" onclick="switchTab('users')" id="usersTab" style="display: none;">👥 User Management</button>
+        </div>
+        
+        <!-- Bot Library Tab -->
+        <div id="botsTab" class="tab-content active">
+            <div class="library-header">
+                <h2 class="library-title">Bot Library</h2>
+                <div class="library-controls">
+                    <button class="btn btn-success" onclick="openCreateModal()">+ Create Bot</button>
+                </div>
+            </div>
 
         <!-- Filter/Search Bar -->
         <div style="margin-bottom: 1.5rem; display: flex; gap: 1rem; flex-wrap: wrap;">
@@ -342,6 +443,62 @@
         <div id="botList" class="bot-list">
             <div class="empty-state">
                 <h3>Loading bots...</h3>
+            </div>
+        </div>
+        </div>
+        
+        <!-- User Management Tab -->
+        <div id="usersTab" class="tab-content">
+            <div class="library-header">
+                <h2 class="library-title">User & Session Management</h2>
+                <div class="library-controls">
+                    <button class="btn btn-success" onclick="openCreateUserModal()">+ Create User</button>
+                    <button class="btn btn-ghost btn-small" onclick="loadSessions()">🔄 Refresh Sessions</button>
+                </div>
+            </div>
+            
+            <!-- Users Section -->
+            <div style="margin-bottom: 3rem;">
+                <h3 style="margin-bottom: 1rem; color: #94a3b8; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">All Users</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Email / Phone</th>
+                                <th>Role</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: #64748b;">Loading users...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Active Sessions Section -->
+            <div>
+                <h3 style="margin-bottom: 1rem; color: #94a3b8; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">Active Sessions</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Role</th>
+                                <th>Expires In</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sessionsTableBody">
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: #64748b;">Loading sessions...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -402,6 +559,44 @@
             </form>
         </div>
     </div>
+    
+    <!-- Create User Modal -->
+    <div id="userModal" class="modal">
+        <div class="modal-content">
+            <h2 class="modal-title">Create New User</h2>
+            <form id="userForm" onsubmit="saveUserForm(event)">
+                <div class="form-group">
+                    <label class="form-label">Email *</label>
+                    <input type="email" id="userEmail" class="form-input" placeholder="user@example.com" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Phone (Optional)</label>
+                    <input type="tel" id="userPhone" class="form-input" placeholder="+1234567890">
+                    <small style="color: #64748b; font-size: 0.75rem;">For phone OTP login</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Password *</label>
+                    <input type="password" id="userPassword" class="form-input" placeholder="Min 6 characters" required minlength="6">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Role *</label>
+                    <select id="userRole" class="form-select" required>
+                        <option value="read-only">Read-Only (View only)</option>
+                        <option value="write-only">Write-Only (Create & edit)</option>
+                        <option value="admin">Admin (Full access)</option>
+                    </select>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn" onclick="closeUserModal()">Cancel</button>
+                    <button type="submit" class="btn btn-success">Create User</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script>
         let bots = [];
@@ -412,6 +607,8 @@
         let allMessages = {}; // Store all messages by ID for media viewing
         let currentUser = null;
         let botTags = []; // Store tags as array
+        let users = [];
+        let sessions = [];
 
         // Cat Animation - Improved 12fps smooth walk cycle
         const canvas = document.getElementById('statusCanvas');
@@ -990,11 +1187,238 @@
             // TODO: Implement QR code generation and WhatsApp authentication flow
         }
 
+        // ========== TAB SWITCHING ==========
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(tabName + 'Tab').classList.add('active');
+            
+            // Load data when switching to users tab
+            if (tabName === 'users') {
+                loadUsers();
+                loadSessions();
+            }
+        }
+        
+        // ========== USER MANAGEMENT ==========
+        async function loadUsers() {
+            try {
+                const res = await fetch('/api/users');
+                users = await res.json();
+                renderUsers();
+            } catch (error) {
+                console.error('Error loading users:', error);
+                document.getElementById('usersTableBody').innerHTML = '<tr><td colspan="4" style="text-align: center; color: #ef4444;">Error loading users</td></tr>';
+            }
+        }
+        
+        function renderUsers() {
+            const tbody = document.getElementById('usersTableBody');
+            
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #64748b;">No users found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = users.map(user => {
+                const roleClass = user.role === 'admin' ? 'badge-admin' : user.role === 'read-only' ? 'badge-read' : 'badge-write';
+                const createdDate = new Date(user.created_at).toLocaleDateString();
+                const isCurrentUser = user.id === currentUser.id;
+                
+                return `
+                    <tr>
+                        <td>
+                            ${user.email || '-'}
+                            ${user.phone ? `<br><small style="color: #64748b;">${user.phone}</small>` : ''}
+                            ${isCurrentUser ? '<span style="color: #3b82f6; font-size: 0.75rem;"> (You)</span>' : ''}
+                        </td>
+                        <td>
+                            <select class="form-select" style="max-width: 150px; padding: 0.375rem 0.75rem; font-size: 0.75rem;" 
+                                    onchange="changeUserRole(${user.id}, this.value)" 
+                                    ${isCurrentUser ? 'disabled' : ''}>
+                                <option value="read-only" ${user.role === 'read-only' ? 'selected' : ''}>Read-Only</option>
+                                <option value="write-only" ${user.role === 'write-only' ? 'selected' : ''}>Write-Only</option>
+                                <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
+                            </select>
+                        </td>
+                        <td style="color: #94a3b8;">${createdDate}</td>
+                        <td>
+                            ${isCurrentUser ? 
+                                '<span style="color: #64748b; font-size: 0.75rem;">Cannot delete yourself</span>' :
+                                `<button class="btn btn-danger btn-small" onclick="deleteUser(${user.id})">Delete</button>`
+                            }
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        async function changeUserRole(userId, newRole) {
+            try {
+                const res = await fetch(`/api/users/${userId}/role`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role: newRole })
+                });
+                
+                if (!res.ok) {
+                    const error = await res.json();
+                    alert(error.error || 'Error updating role');
+                    await loadUsers(); // Reload to reset dropdown
+                    return;
+                }
+                
+                await loadUsers();
+            } catch (error) {
+                console.error('Error updating role:', error);
+                alert('Error updating role');
+                await loadUsers();
+            }
+        }
+        
+        async function deleteUser(userId) {
+            if (!confirm('Are you sure you want to delete this user? This will also terminate their active sessions.')) return;
+            
+            try {
+                const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+                const result = await res.json();
+                
+                if (!res.ok) {
+                    alert(result.error || 'Error deleting user');
+                    return;
+                }
+                
+                await loadUsers();
+                await loadSessions(); // Refresh sessions as they may be affected
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                alert('Error deleting user');
+            }
+        }
+        
+        function openCreateUserModal() {
+            document.getElementById('userForm').reset();
+            document.getElementById('userModal').classList.add('active');
+        }
+        
+        function closeUserModal() {
+            document.getElementById('userModal').classList.remove('active');
+        }
+        
+        async function saveUserForm(e) {
+            e.preventDefault();
+            
+            const data = {
+                email: document.getElementById('userEmail').value,
+                phone: document.getElementById('userPhone').value || null,
+                password: document.getElementById('userPassword').value,
+                role: document.getElementById('userRole').value
+            };
+            
+            try {
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await res.json();
+                
+                if (!res.ok) {
+                    alert(result.error || 'Error creating user');
+                    return;
+                }
+                
+                closeUserModal();
+                await loadUsers();
+                alert(`User created successfully!\n\nEmail: ${data.email}\nPassword: ${data.password}\n\nMake sure to share these credentials securely.`);
+            } catch (error) {
+                console.error('Error creating user:', error);
+                alert('Error creating user');
+            }
+        }
+        
+        // ========== SESSION MANAGEMENT ==========
+        async function loadSessions() {
+            try {
+                const res = await fetch('/api/sessions');
+                sessions = await res.json();
+                renderSessions();
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+                document.getElementById('sessionsTableBody').innerHTML = '<tr><td colspan="4" style="text-align: center; color: #ef4444;">Error loading sessions</td></tr>';
+            }
+        }
+        
+        function renderSessions() {
+            const tbody = document.getElementById('sessionsTableBody');
+            
+            if (sessions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #64748b;">No active sessions</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = sessions.map(session => {
+                const roleClass = session.role === 'admin' ? 'badge-admin' : session.role === 'read-only' ? 'badge-read' : 'badge-write';
+                const secondsLeft = Math.round(session.seconds_until_expire);
+                const hoursLeft = Math.floor(secondsLeft / 3600);
+                const daysLeft = Math.floor(hoursLeft / 24);
+                
+                let timeLeft = '';
+                if (daysLeft > 0) {
+                    timeLeft = `${daysLeft}d ${hoursLeft % 24}h`;
+                } else if (hoursLeft > 0) {
+                    timeLeft = `${hoursLeft}h ${Math.floor((secondsLeft % 3600) / 60)}m`;
+                } else {
+                    timeLeft = `${Math.floor(secondsLeft / 60)}m`;
+                }
+                
+                return `
+                    <tr>
+                        <td>${session.email || 'Unknown'}</td>
+                        <td><span class="badge ${roleClass}">${session.role}</span></td>
+                        <td style="color: #94a3b8;">${timeLeft}</td>
+                        <td>
+                            <button class="btn btn-danger btn-small" onclick="revokeSession('${session.sid}')">Revoke</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        async function revokeSession(sid) {
+            if (!confirm('Are you sure you want to revoke this session? The user will be logged out immediately.')) return;
+            
+            try {
+                const res = await fetch(`/api/sessions/${sid}`, { method: 'DELETE' });
+                const result = await res.json();
+                
+                if (!res.ok) {
+                    alert(result.error || 'Error revoking session');
+                    return;
+                }
+                
+                await loadSessions();
+            } catch (error) {
+                console.error('Error revoking session:', error);
+                alert('Error revoking session');
+            }
+        }
+
         // Initialize app with authentication check
         async function init() {
             const authenticated = await checkAuth();
             if (authenticated) {
                 loadBots();
+                
+                // Show user management tab for admins only
+                if (currentUser && currentUser.role === 'admin') {
+                    document.getElementById('usersTab').style.display = 'block';
+                }
             }
         }
         
