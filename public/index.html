@@ -314,12 +314,15 @@
             transition: max-height 0.3s ease-out;
         }
         .bot-card.expanded .bot-content {
-            max-height: 2000px;
+            max-height: none;
+            overflow: visible;
         }
         .bot-messages {
             padding: 1.5rem;
             border-top: 1px solid rgba(255, 255, 255, 0.05);
             background: rgba(15, 23, 42, 0.3);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
         .messages-header {
             display: flex;
@@ -345,7 +348,17 @@
         }
         .messages-table {
             width: 100%;
+            min-width: 600px;
             border-collapse: collapse;
+        }
+        @media (max-width: 768px) {
+            .messages-table {
+                min-width: 800px;
+            }
+            .bot-messages {
+                padding: 1rem;
+                border-radius: 0.5rem;
+            }
         }
         .messages-table th {
             background: rgba(15, 23, 42, 0.7);
