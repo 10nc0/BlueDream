@@ -6,6 +6,7 @@ const fs = require('fs');
 const express = require('express');
 const bodyParser = require('body-parser');
 const QRCode = require('qrcode');
+const { Pool } = require('pg');
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
@@ -21,12 +22,138 @@ const app = express();
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-const messages = [];
-const MAX_MESSAGES = 1000;
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
+});
+
 let currentQR = null;
 let botNumber = null;
 let whatsappReady = false;
 let client = null;
+
+async function initializeDatabase() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS messages (
+                id SERIAL PRIMARY KEY,
+                timestamp TIMESTAMPTZ DEFAULT NOW(),
+                sender_name TEXT NOT NULL,
+                sender_contact TEXT NOT NULL,
+                message_content TEXT NOT NULL,
+                discord_status TEXT NOT NULL,
+                discord_error TEXT,
+                has_media BOOLEAN DEFAULT FALSE,
+                media_type TEXT,
+                media_data TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp DESC)
+        `);
+        
+        console.log('✅ Database initialized successfully');
+    } catch (error) {
+        console.error('❌ Database initialization error:', error.message);
+        throw error;
+    }
+}
+
+async function saveMessage(message) {
+    try {
+        await pool.query(
+            `INSERT INTO messages (timestamp, sender_name, sender_contact, message_content, discord_status, discord_error, has_media, media_type, media_data)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [
+                message.timestamp,
+                message.senderName,
+                message.senderContact,
+                message.messageContent,
+                message.discordStatus,
+                message.discordError || null,
+                message.hasMedia || false,
+                message.mediaType || null,
+                message.mediaData || null
+            ]
+        );
+    } catch (error) {
+        console.error('Error saving message to database:', error.message);
+    }
+}
+
+async function getMessages(searchFilter = null, statusFilter = null) {
+    try {
+        let query = 'SELECT * FROM messages';
+        const conditions = [];
+        const params = [];
+        let paramCount = 1;
+        
+        if (searchFilter) {
+            conditions.push(`(
+                LOWER(sender_name) LIKE $${paramCount} OR
+                sender_contact LIKE $${paramCount} OR
+                LOWER(message_content) LIKE $${paramCount}
+            )`);
+            params.push(`%${searchFilter.toLowerCase()}%`);
+            paramCount++;
+        }
+        
+        if (statusFilter && statusFilter !== 'all') {
+            conditions.push(`discord_status = $${paramCount}`);
+            params.push(statusFilter);
+            paramCount++;
+        }
+        
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
+        }
+        
+        query += ' ORDER BY timestamp DESC LIMIT 1000';
+        
+        const result = await pool.query(query, params);
+        
+        return result.rows.map(row => ({
+            id: row.id,
+            timestamp: row.timestamp,
+            senderName: row.sender_name,
+            senderContact: row.sender_contact,
+            messageContent: row.message_content,
+            discordStatus: row.discord_status,
+            discordError: row.discord_error,
+            hasMedia: row.has_media,
+            mediaType: row.media_type,
+            mediaData: row.media_data
+        }));
+    } catch (error) {
+        console.error('Error retrieving messages from database:', error.message);
+        return [];
+    }
+}
+
+async function getMessageStats() {
+    try {
+        const result = await pool.query(`
+            SELECT 
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE discord_status = 'success') as success,
+                COUNT(*) FILTER (WHERE discord_status = 'failed') as failed,
+                COUNT(*) FILTER (WHERE discord_status = 'pending') as pending
+            FROM messages
+        `);
+        
+        return {
+            total: parseInt(result.rows[0].total),
+            success: parseInt(result.rows[0].success),
+            failed: parseInt(result.rows[0].failed),
+            pending: parseInt(result.rows[0].pending)
+        };
+    } catch (error) {
+        console.error('Error retrieving stats from database:', error.message);
+        return { total: 0, success: 0, failed: 0, pending: 0 };
+    }
+}
 
 function getChromiumPath() {
     if (process.env.PUPPETEER_EXECUTABLE_PATH) {
@@ -176,16 +303,14 @@ function initializeWhatsAppClient() {
                 senderContact,
                 chatName,
                 messageContent,
+                hasMedia: message.hasMedia,
                 mediaType: message.hasMedia ? 'image' : null,
                 mediaData: null,
                 timestamp: timestamp.toISOString(),
                 discordStatus: 'pending'
             };
             
-            messages.unshift(messageRecord);
-            if (messages.length > MAX_MESSAGES) {
-                messages.pop();
-            }
+            await saveMessage(messageRecord);
             
             let embedDescription = messageContent || '_(No text content)_';
             let embedColor = 0x25D366;
@@ -263,10 +388,10 @@ function initializeWhatsAppClient() {
             
         } catch (error) {
             console.error('❌ Error forwarding message to Discord:', error.message);
-            const idx = messages.findIndex(m => m.id === message.id._serialized);
-            if (idx !== -1) {
-                messages[idx].discordStatus = 'failed';
-                messages[idx].errorMessage = error.message;
+            if (messageRecord) {
+                messageRecord.discordStatus = 'failed';
+                messageRecord.discordError = error.message;
+                await saveMessage(messageRecord);
             }
         }
     });
@@ -280,12 +405,13 @@ function initializeWhatsAppClient() {
     });
 }
 
-app.get('/api/status', (req, res) => {
+app.get('/api/status', async (req, res) => {
+    const stats = await getMessageStats();
     res.json({
         whatsappReady,
         botNumber: botNumber ? `+${botNumber}` : null,
         hasQR: currentQR !== null,
-        messagesCount: messages.length
+        messagesCount: stats.total
     });
 });
 
@@ -322,38 +448,20 @@ app.post('/api/relink', async (req, res) => {
     }
 });
 
-app.get('/api/messages', (req, res) => {
+app.get('/api/messages', async (req, res) => {
     const { search, status } = req.query;
-    let filtered = [...messages];
-    
-    if (search) {
-        const searchLower = search.toLowerCase();
-        filtered = filtered.filter(m => 
-            m.senderName.toLowerCase().includes(searchLower) ||
-            m.senderContact.includes(search) ||
-            m.messageContent.toLowerCase().includes(searchLower)
-        );
-    }
-    
-    if (status && status !== 'all') {
-        filtered = filtered.filter(m => m.discordStatus === status);
-    }
-    
+    const filtered = await getMessages(search, status);
     res.json(filtered);
 });
 
-app.get('/api/stats', (req, res) => {
-    const stats = {
-        total: messages.length,
-        success: messages.filter(m => m.discordStatus === 'success').length,
-        failed: messages.filter(m => m.discordStatus === 'failed').length,
-        pending: messages.filter(m => m.discordStatus === 'pending').length
-    };
+app.get('/api/stats', async (req, res) => {
+    const stats = await getMessageStats();
     res.json(stats);
 });
 
-app.listen(5000, '0.0.0.0', () => {
+app.listen(5000, '0.0.0.0', async () => {
     console.log('🌐 Dashboard available at http://localhost:5000');
+    await initializeDatabase();
 });
 
 initializeWhatsAppClient();
