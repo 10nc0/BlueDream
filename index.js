@@ -194,6 +194,35 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire)
         `);
         
+        // Create audit_logs table for tracking all user and session changes
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id SERIAL PRIMARY KEY,
+                timestamp TIMESTAMPTZ DEFAULT NOW(),
+                actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                actor_email TEXT,
+                action_type TEXT NOT NULL,
+                target_type TEXT NOT NULL,
+                target_id TEXT,
+                target_email TEXT,
+                details JSONB,
+                ip_address TEXT,
+                user_agent TEXT
+            )
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC)
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_user_id)
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action_type)
+        `);
+        
         // Create default admin user if none exists
         const usersCount = await pool.query('SELECT COUNT(*) FROM users');
         if (parseInt(usersCount.rows[0].count) === 0) {
