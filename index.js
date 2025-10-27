@@ -59,6 +59,7 @@ app.use((req, res, next) => {
 
 // Serve login page without authentication (must come before requireAuth check)
 app.get('/login.html', (req, res) => {
+    console.log(`📱 Login page accessed - IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
     res.sendFile(__dirname + '/public/login.html');
 });
 
@@ -763,6 +764,9 @@ app.get('/api/auth/status', async (req, res) => {
 // Email/Password Login
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
+    
+    // Log all login attempts
+    console.log(`🔐 Login attempt - Email: ${email}, IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
     
     try {
         const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
