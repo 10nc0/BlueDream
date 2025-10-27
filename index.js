@@ -928,6 +928,132 @@ app.post('/api/auth/logout', async (req, res) => {
     }
 });
 
+// Public registration (no auth required)
+app.post('/api/auth/register/public', async (req, res) => {
+    const { email, password } = req.body;
+    
+    try {
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+
+        if (password.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        }
+
+        const passwordHash = await bcrypt.hash(password, 10);
+        
+        const result = await pool.query(`
+            INSERT INTO users (email, password_hash, role)
+            VALUES ($1, $2, $3)
+            RETURNING id, email, role
+        `, [email, passwordHash, 'user']);
+        
+        const newUser = result.rows[0];
+        
+        // Log user registration (no req session yet, so use a special log)
+        await pool.query(`
+            INSERT INTO audit_logs (actor, action, target, details, ip_address)
+            VALUES ($1, $2, $3, $4, $5)
+        `, [
+            newUser.email,
+            'SELF_REGISTER',
+            newUser.id.toString(),
+            JSON.stringify({ role: newUser.role }),
+            req.ip || req.connection?.remoteAddress || 'unknown'
+        ]);
+        
+        res.json({ success: true, user: newUser });
+    } catch (error) {
+        if (error.code === '23505') {
+            res.status(400).json({ error: 'Email already exists' });
+        } else {
+            res.status(500).json({ error: error.message });
+        }
+    }
+});
+
+// Forgot password: Request reset code
+app.post('/api/auth/forgot-password/request', async (req, res) => {
+    const { phone } = req.body;
+    
+    try {
+        // Check if user exists
+        const existingUser = await pool.query('SELECT id FROM users WHERE phone = $1', [phone]);
+        
+        if (existingUser.rows.length === 0) {
+            return res.status(404).json({ error: 'No account found with this phone number' });
+        }
+
+        // Generate 6-digit OTP
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+        
+        await pool.query(`
+            UPDATE users 
+            SET otp_code = $1, otp_expires_at = $2
+            WHERE phone = $3
+        `, [otpCode, otpExpiresAt, phone]);
+        
+        console.log(`🔑 Password Reset OTP for ${phone}: ${otpCode}`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Reset code sent',
+            devOtp: otpCode
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Forgot password: Reset password with OTP
+app.post('/api/auth/forgot-password/reset', async (req, res) => {
+    const { phone, otp, newPassword } = req.body;
+    
+    try {
+        if (!newPassword || newPassword.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        }
+
+        // Verify OTP
+        const result = await pool.query(`
+            SELECT * FROM users 
+            WHERE phone = $1 AND otp_code = $2 AND otp_expires_at > NOW()
+        `, [phone, otp]);
+        
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: 'Invalid or expired reset code' });
+        }
+        
+        const user = result.rows[0];
+        const passwordHash = await bcrypt.hash(newPassword, 10);
+        
+        // Update password and clear OTP
+        await pool.query(`
+            UPDATE users 
+            SET password_hash = $1, otp_code = NULL, otp_expires_at = NULL
+            WHERE id = $2
+        `, [passwordHash, user.id]);
+        
+        // Log password reset
+        await pool.query(`
+            INSERT INTO audit_logs (actor, action, target, details, ip_address)
+            VALUES ($1, $2, $3, $4, $5)
+        `, [
+            user.email || user.phone,
+            'PASSWORD_RESET',
+            user.id.toString(),
+            JSON.stringify({ method: 'phone_otp' }),
+            req.ip || req.connection?.remoteAddress || 'unknown'
+        ]);
+        
+        res.json({ success: true, message: 'Password reset successful' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Get all users (admin only)
 app.get('/api/users', requireRole('admin'), async (req, res) => {
     try {
