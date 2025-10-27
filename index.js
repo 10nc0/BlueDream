@@ -777,19 +777,26 @@ app.post('/api/auth/login', async (req, res) => {
         
         req.session.userId = user.id;
         
-        // Log successful login
-        await logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.email, {
-            method: 'email_password',
-            role: user.role
-        });
-        
-        res.json({ 
-            success: true, 
-            user: { 
-                id: user.id, 
-                email: user.email, 
-                role: user.role 
-            } 
+        // Save session explicitly before sending response
+        req.session.save((err) => {
+            if (err) {
+                return res.status(500).json({ error: 'Session save failed' });
+            }
+            
+            // Log successful login
+            logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.email, {
+                method: 'email_password',
+                role: user.role
+            });
+            
+            res.json({ 
+                success: true, 
+                user: { 
+                    id: user.id, 
+                    email: user.email, 
+                    role: user.role 
+                } 
+            });
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -861,19 +868,26 @@ app.post('/api/auth/otp/verify', async (req, res) => {
         
         req.session.userId = user.id;
         
-        // Log successful OTP login
-        await logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.phone, {
-            method: 'phone_otp',
-            role: user.role
-        });
-        
-        res.json({ 
-            success: true, 
-            user: { 
-                id: user.id, 
-                phone: user.phone, 
-                role: user.role 
-            } 
+        // Save session explicitly before sending response
+        req.session.save((err) => {
+            if (err) {
+                return res.status(500).json({ error: 'Session save failed' });
+            }
+            
+            // Log successful OTP login
+            logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.phone, {
+                method: 'phone_otp',
+                role: user.role
+            });
+            
+            res.json({ 
+                success: true, 
+                user: { 
+                    id: user.id, 
+                    phone: user.phone, 
+                    role: user.role 
+                } 
+            });
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
