@@ -28,6 +28,10 @@ const pool = new Pool({
 });
 
 const app = express();
+
+// Trust proxy - required for HTTPS cookie support in Replit environment
+app.set('trust proxy', 1);
+
 app.use(bodyParser.json());
 
 // Configure session management with PostgreSQL store
@@ -43,7 +47,7 @@ app.use(session({
     cookie: {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
         httpOnly: true,
-        secure: false, // Set to true in production with HTTPS
+        secure: true, // Required for Safari/iPad over HTTPS
         sameSite: 'lax' // Allow cookies to be sent from same site
     },
     name: 'bridge.sid' // Custom session cookie name
