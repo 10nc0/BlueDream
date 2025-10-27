@@ -43,8 +43,10 @@ app.use(session({
     cookie: {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
         httpOnly: true,
-        secure: false // Set to true in production with HTTPS
-    }
+        secure: false, // Set to true in production with HTTPS
+        sameSite: 'lax' // Allow cookies to be sent from same site
+    },
+    name: 'bridge.sid' // Custom session cookie name
 }));
 
 // Middleware to block HTML files from static serving
