@@ -1791,6 +1791,19 @@ app.get('/api/bots/:id/stats', requireAuth, async (req, res) => {
     }
 });
 
+// QR code for specific bot (currently returns global QR since we have one WhatsApp client)
+app.get('/api/bots/:id/qr', requireAuth, (req, res) => {
+    // For now, return the global QR code regardless of bot ID
+    // In the future, this could support multiple WhatsApp clients per bot
+    if (currentQR) {
+        res.json({ qr: currentQR });
+    } else if (whatsappReady) {
+        res.json({ message: 'WhatsApp is already connected', connected: true });
+    } else {
+        res.json({ message: 'QR code not available yet. Please wait...', connected: false });
+    }
+});
+
 // OPTIMIZED: Added pagination to prevent loading 1000 messages at once
 app.get('/api/bots/:id/messages', requireAuth, async (req, res) => {
     try {

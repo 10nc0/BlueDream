@@ -492,6 +492,172 @@
         .role-read-only { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
         .role-write-only { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
 
+        /* Message Table Styles */
+        .message-table-container {
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            overflow-x: auto;
+        }
+
+        .message-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+
+        .message-table th {
+            background: rgba(30, 41, 59, 0.8);
+            color: #cbd5e1;
+            font-weight: 600;
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 2px solid rgba(148, 163, 184, 0.2);
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .message-table th:hover {
+            background: rgba(51, 65, 85, 0.9);
+        }
+
+        .message-table th .sort-icon {
+            margin-left: 0.25rem;
+            opacity: 0.5;
+        }
+
+        .message-table th.sorted .sort-icon {
+            opacity: 1;
+        }
+
+        .message-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            color: #e2e8f0;
+        }
+
+        .message-table tr:hover {
+            background: rgba(30, 41, 59, 0.4);
+        }
+
+        .message-table .timestamp-col {
+            white-space: nowrap;
+            color: #94a3b8;
+            font-size: 0.8125rem;
+        }
+
+        .message-table .contact-col {
+            white-space: nowrap;
+            color: #fff;
+            font-weight: 500;
+        }
+
+        .message-table .message-col {
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .message-table .attachment-col {
+            text-align: center;
+            width: 80px;
+        }
+
+        .attachment-icon {
+            cursor: pointer;
+            color: #60a5fa;
+            font-size: 1.25rem;
+        }
+
+        .attachment-icon:hover {
+            color: #93c5fd;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+        }
+
+        .status-failed {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .status-pending {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+        }
+
+        .table-filters {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .table-filters input,
+        .table-filters select {
+            padding: 0.5rem;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 0.375rem;
+            color: #e2e8f0;
+            font-size: 0.875rem;
+        }
+
+        /* Media Preview Modal */
+        .media-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .media-modal.active {
+            display: flex;
+        }
+
+        .media-modal-content {
+            max-width: 90%;
+            max-height: 90%;
+            position: relative;
+        }
+
+        .media-modal img,
+        .media-modal video {
+            max-width: 100%;
+            max-height: 90vh;
+            border-radius: 0.5rem;
+        }
+
+        .media-modal-close {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0.5rem;
+        }
+
         @media (max-width: 768px) {
             .header {
                 padding: 1rem;
@@ -880,6 +1046,31 @@
             `).join('');
         }
 
+        // Helper function to format timestamp with timezone
+        function formatTimestampWithTZ(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleString('en-US', {
+                timeZone: 'America/Los_Angeles',
+                month: '2-digit',
+                day: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+                timeZoneName: 'short'
+            });
+        }
+
+        // Helper function to format phone number with + sign
+        function formatPhoneNumber(contact) {
+            if (!contact) return 'Unknown';
+            // Remove any existing + and whitespace
+            const cleaned = contact.replace(/[+\s]/g, '');
+            // Add + prefix if it's a number
+            return /^\d+$/.test(cleaned) ? `+${cleaned}` : contact;
+        }
+
         function renderMessages(data, botId) {
             if (!data || !data.messages || data.messages.length === 0) {
                 return '<div style="text-align: center; padding: 1rem; color: #94a3b8;">No messages yet</div>';
@@ -888,40 +1079,140 @@
             const { messages, page, totalPages, total } = data;
             
             return `
-                <div style="padding: 1rem; background: rgba(15, 23, 42, 0.5); border-radius: 0.5rem; margin-top: 1rem;">
-                    <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                <div class="message-table-container">
+                    <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <input type="text" id="msg-filter-${botId}" placeholder="🔍 Filter messages..." style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;" oninput="filterMessagesTable('${botId}')">
+                            <select id="status-filter-${botId}" onchange="filterMessagesTable('${botId}')" style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;">
+                                <option value="all">All Status</option>
+                                <option value="success">Success</option>
+                                <option value="failed">Failed</option>
+                                <option value="pending">Pending</option>
+                            </select>
+                        </div>
                         <span style="color: #94a3b8; font-size: 0.875rem;">Total: ${total} messages</span>
-                        ${totalPages > 1 ? `
-                            <div style="display: flex; gap: 0.5rem; align-items: center;">
-                                <button class="btn" ${page <= 1 ? 'disabled' : ''} onclick="loadBotMessages('${botId}', ${page - 1})" style="padding: 0.25rem 0.75rem;">← Prev</button>
-                                <span style="color: #94a3b8; font-size: 0.875rem;">Page ${page} / ${totalPages}</span>
-                                <button class="btn" ${page >= totalPages ? 'disabled' : ''} onclick="loadBotMessages('${botId}', ${page + 1})" style="padding: 0.25rem 0.75rem;">Next →</button>
-                            </div>
-                        ` : ''}
                     </div>
-                    <div style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
-                        ${messages.map(msg => `
-                            <div style="background: rgba(30, 41, 59, 0.6); padding: 0.75rem; border-radius: 0.375rem; border-left: 3px solid ${msg.discord_status === 'success' ? '#10b981' : msg.discord_status === 'failed' ? '#ef4444' : '#f59e0b'};">
-                                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                                    <div>
-                                        <strong style="color: #fff;">${escapeHtml(msg.sender_name || 'Unknown')}</strong>
-                                        <span style="color: #94a3b8; font-size: 0.875rem; margin-left: 0.5rem;">${escapeHtml(msg.sender_contact || '')}</span>
-                                    </div>
-                                    <span style="color: #94a3b8; font-size: 0.75rem;">${new Date(msg.timestamp).toLocaleString()}</span>
-                                </div>
-                                <div style="color: #e2e8f0; margin-bottom: 0.5rem;">${escapeHtml(msg.message_content)}</div>
-                                ${msg.has_media ? `<div style="color: #60a5fa; font-size: 0.875rem;">📎 ${escapeHtml(msg.media_type || 'Media')}</div>` : ''}
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
-                                    <span style="font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; background: ${msg.discord_status === 'success' ? 'rgba(16, 185, 129, 0.2)' : msg.discord_status === 'failed' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)'}; color: ${msg.discord_status === 'success' ? '#10b981' : msg.discord_status === 'failed' ? '#ef4444' : '#f59e0b'};">
-                                        ${escapeHtml(msg.discord_status.toUpperCase())}
-                                    </span>
-                                    ${msg.discord_error ? `<span style="color: #ef4444; font-size: 0.75rem;">${escapeHtml(msg.discord_error)}</span>` : ''}
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
+
+                    <table class="message-table" id="msg-table-${botId}">
+                        <thead>
+                            <tr>
+                                <th onclick="sortMessagesTable('${botId}', 'timestamp')" style="min-width: 200px;">
+                                    Timestamp<span class="sort-icon">↕</span>
+                                </th>
+                                <th onclick="sortMessagesTable('${botId}', 'contact')" style="min-width: 180px;">
+                                    Contact / Phone<span class="sort-icon">↕</span>
+                                </th>
+                                <th onclick="sortMessagesTable('${botId}', 'message')">
+                                    Message<span class="sort-icon">↕</span>
+                                </th>
+                                <th style="text-align: center; width: 100px;">Status</th>
+                                <th style="text-align: center; width: 100px;">Attachments</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${messages.map((msg, index) => `
+                                <tr data-timestamp="${msg.timestamp}" data-contact="${escapeHtml(msg.sender_contact || '')}" data-message="${escapeHtml(msg.message_content)}" data-status="${msg.discord_status}">
+                                    <td class="timestamp-col">${formatTimestampWithTZ(msg.timestamp)}</td>
+                                    <td class="contact-col">
+                                        <div style="font-weight: 600;">${escapeHtml(msg.sender_name || 'Unknown')}</div>
+                                        <div style="color: #94a3b8; font-size: 0.75rem;">${formatPhoneNumber(msg.sender_contact)}</div>
+                                    </td>
+                                    <td class="message-col">${escapeHtml(msg.message_content)}</td>
+                                    <td style="text-align: center;">
+                                        <span class="status-badge status-${msg.discord_status}">
+                                            ${escapeHtml(msg.discord_status.toUpperCase())}
+                                        </span>
+                                    </td>
+                                    <td class="attachment-col">
+                                        ${msg.has_media ? `
+                                            <span class="attachment-icon" onclick="showMediaPreview('${botId}', ${index})" title="${escapeHtml(msg.media_type || 'Media')}">
+                                                📎
+                                            </span>
+                                        ` : '-'}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    ${totalPages > 1 ? `
+                        <div style="margin-top: 1rem; display: flex; justify-content: center; gap: 0.5rem; align-items: center;">
+                            <button class="btn" ${page <= 1 ? 'disabled' : ''} onclick="loadBotMessages('${botId}', ${page - 1})" style="padding: 0.375rem 0.75rem;">← Prev</button>
+                            <span style="color: #94a3b8; font-size: 0.875rem;">Page ${page} / ${totalPages}</span>
+                            <button class="btn" ${page >= totalPages ? 'disabled' : ''} onclick="loadBotMessages('${botId}', ${page + 1})" style="padding: 0.375rem 0.75rem;">Next →</button>
+                        </div>
+                    ` : ''}
                 </div>
             `;
+        }
+
+        // Sort messages table by column
+        let messageSortState = {};
+        function sortMessagesTable(botId, column) {
+            if (!messageSortState[botId]) messageSortState[botId] = {};
+            const table = document.getElementById(`msg-table-${botId}`);
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // Toggle sort direction
+            const currentDir = messageSortState[botId][column] || 'asc';
+            const newDir = currentDir === 'asc' ? 'desc' : 'asc';
+            messageSortState[botId] = { [column]: newDir };
+            
+            rows.sort((a, b) => {
+                let aVal, bVal;
+                if (column === 'timestamp') {
+                    aVal = new Date(a.dataset.timestamp);
+                    bVal = new Date(b.dataset.timestamp);
+                } else if (column === 'contact') {
+                    aVal = a.dataset.contact.toLowerCase();
+                    bVal = b.dataset.contact.toLowerCase();
+                } else if (column === 'message') {
+                    aVal = a.dataset.message.toLowerCase();
+                    bVal = b.dataset.message.toLowerCase();
+                }
+                
+                if (newDir === 'asc') {
+                    return aVal > bVal ? 1 : -1;
+                } else {
+                    return aVal < bVal ? 1 : -1;
+                }
+            });
+            
+            // Update table
+            rows.forEach(row => tbody.appendChild(row));
+            
+            // Update sort icons
+            table.querySelectorAll('th').forEach(th => th.classList.remove('sorted'));
+            table.querySelector(`th[onclick*="${column}"]`).classList.add('sorted');
+        }
+
+        // Filter messages table
+        function filterMessagesTable(botId) {
+            const textFilter = document.getElementById(`msg-filter-${botId}`).value.toLowerCase();
+            const statusFilter = document.getElementById(`status-filter-${botId}`).value;
+            const table = document.getElementById(`msg-table-${botId}`);
+            const rows = table.querySelectorAll('tbody tr');
+            
+            rows.forEach(row => {
+                const message = row.dataset.message.toLowerCase();
+                const contact = row.dataset.contact.toLowerCase();
+                const status = row.dataset.status;
+                
+                const matchesText = !textFilter || message.includes(textFilter) || contact.includes(textFilter);
+                const matchesStatus = statusFilter === 'all' || status === statusFilter;
+                
+                row.style.display = (matchesText && matchesStatus) ? '' : 'none';
+            });
+        }
+
+        // Show media preview (placeholder for now)
+        function showMediaPreview(botId, messageIndex) {
+            const data = messageCache[botId];
+            if (!data || !data.messages[messageIndex]) return;
+            
+            const msg = data.messages[messageIndex];
+            alert(`Media Preview\n\nType: ${msg.media_type || 'Unknown'}\nFilename: ${msg.media_filename || 'N/A'}\n\nNote: Full media preview coming soon!`);
         }
 
         function filterBots() {
