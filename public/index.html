@@ -1294,7 +1294,19 @@
             event.preventDefault();
             
             const userId = document.getElementById('changeEmailUserId').value;
-            const newEmail = document.getElementById('newEmail').value;
+            const newEmail = document.getElementById('newEmail').value.trim();
+
+            // Client-side validation
+            if (!newEmail) {
+                alert('Email is required');
+                return;
+            }
+            
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(newEmail)) {
+                alert('Please enter a valid email address');
+                return;
+            }
 
             try {
                 const response = await fetch(`/api/users/${userId}/email`, {
@@ -1334,6 +1346,17 @@
             const userId = document.getElementById('changePasswordUserId').value;
             const newPassword = document.getElementById('newPassword').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
+
+            // Client-side validation
+            if (!newPassword || !newPassword.trim()) {
+                alert('Password is required');
+                return;
+            }
+            
+            if (newPassword.length < 6) {
+                alert('Password must be at least 6 characters long');
+                return;
+            }
 
             if (newPassword !== confirmPassword) {
                 alert('Passwords do not match!');

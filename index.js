@@ -1443,6 +1443,16 @@ app.put('/api/users/:id/email', requireRole('admin'), async (req, res) => {
     const { email } = req.body;
     
     try {
+        // Validate email presence and format
+        if (!email || !email.trim()) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+        
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ error: 'Invalid email format' });
+        }
+        
         // Check if email already exists
         const existingUser = await pool.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, id]);
         if (existingUser.rows.length > 0) {
@@ -1484,6 +1494,15 @@ app.put('/api/users/:id/password', requireRole('admin'), async (req, res) => {
     const { password } = req.body;
     
     try {
+        // Validate password presence and strength
+        if (!password || !password.trim()) {
+            return res.status(400).json({ error: 'Password is required' });
+        }
+        
+        if (password.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+        }
+        
         // Get user info for audit log
         const userData = await pool.query('SELECT email, phone FROM users WHERE id = $1', [id]);
         if (userData.rows.length === 0) {
