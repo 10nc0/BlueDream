@@ -485,6 +485,13 @@
             }
         }
 
+        // Auto-refresh bot counts every 10 seconds to keep message counts updated
+        setInterval(() => {
+            if (document.getElementById('botsTab')?.classList.contains('active')) {
+                loadBots();
+            }
+        }, 10000);
+
         let selectedBotId = null;
 
         function renderBots() {
@@ -544,56 +551,44 @@
             
             const detail = document.getElementById('bridgeDetail');
             detail.innerHTML = `
-                <div class="detail-header">
-                    <h2>${bot.input_platform} → ${bot.output_platform} Bridge</h2>
-                    <div class="detail-meta">
-                        <span class="platform-badge">${bot.input_platform} → ${bot.output_platform}</span>
-                        <span class="contact-info">📞 ${bot.contact_info || 'No contact'}</span>
+                <div class="discord-header">
+                    <div class="discord-channel-info">
+                        <span class="discord-channel-name"># ${bot.input_platform}-${bot.output_platform}</span>
+                        <span class="discord-stats">
+                            <span class="stat-badge">📊 ${bot.message_count || 0}</span>
+                            <span class="stat-badge success">✓ ${bot.forwarded_count || 0}</span>
+                            <span class="stat-badge error">✗ ${bot.failed_count || 0}</span>
+                        </span>
+                    </div>
+                    <div class="discord-actions">
+                        ${bot.input_platform === 'WhatsApp' ? `<button class="btn-icon" onclick="showQR('${bot.id}')" title="QR Login">📱</button>` : ''}
+                        <button class="btn-icon" onclick="editBot('${bot.id}')" title="Edit Bridge">✏️</button>
+                        <button class="btn-icon btn-danger" onclick="confirmDeleteBot('${bot.id}')" title="Delete Bridge">🗑️</button>
                     </div>
                 </div>
 
-                <div class="detail-stats">
-                    <div class="stat-card">
-                        <span class="stat-value">${bot.message_count || 0}</span>
-                        <span class="stat-label">Total</span>
-                    </div>
-                    <div class="stat-card success">
-                        <span class="stat-value">${bot.forwarded_count || 0}</span>
-                        <span class="stat-label">Forwarded</span>
-                    </div>
-                    <div class="stat-card error">
-                        <span class="stat-value">${bot.failed_count || 0}</span>
-                        <span class="stat-label">Failed</span>
-                    </div>
+                <div class="discord-search">
+                    <input 
+                        type="text" 
+                        id="msg-search-${bot.id}" 
+                        class="discord-search-input" 
+                        placeholder="🔍 Search messages..." 
+                        oninput="filterDiscordMessages('${bot.id}')"
+                    >
+                    <select 
+                        id="status-filter-${bot.id}" 
+                        class="discord-filter-select" 
+                        onchange="filterDiscordMessages('${bot.id}')"
+                    >
+                        <option value="all">All Status</option>
+                        <option value="success">✓ Success</option>
+                        <option value="failed">✗ Failed</option>
+                        <option value="pending">⏳ Pending</option>
+                    </select>
                 </div>
 
-                ${bot.tags && bot.tags.length > 0 ? `
-                    <div class="detail-tags">
-                        ${bot.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
-                    </div>
-                ` : ''}
-
-                <div class="detail-actions">
-                    ${bot.input_platform === 'WhatsApp' ? `<button class="btn btn-qr" onclick="showQR('${bot.id}')">📱 QR Login</button>` : ''}
-                    <button class="btn btn-edit" onclick="editBot('${bot.id}')">✏️ Edit</button>
-                    <button class="btn btn-delete" onclick="confirmDeleteBot('${bot.id}')">🗑️ Delete</button>
-                </div>
-
-                <div class="detail-messages">
-                    <div class="messages-header">
-                        <h3>Messages</h3>
-                        <div class="search-filter" style="margin: 0;">
-                            <input type="text" class="search-box" placeholder="🔍 Filter messages..." style="margin: 0;">
-                            <select class="filter-dropdown" style="margin: 0;">
-                                <option value="">All Status</option>
-                                <option value="SUCCESS">Success</option>
-                                <option value="FAILED">Failed</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="messages-list">
-                        ${messageCache[bot.id] ? renderMessages(messageCache[bot.id], bot.id) : '<div style="text-align: center; padding: 2rem; color: #94a3b8;">Loading messages...</div>'}
-                    </div>
+                <div class="discord-messages" id="discord-messages-${bot.id}">
+                    ${messageCache[bot.id] ? renderDiscordMessages(messageCache[bot.id], bot.id) : '<div class="loading-msg">Loading messages...</div>'}
                 </div>
             `;
         }
@@ -621,6 +616,81 @@
             const cleaned = contact.replace(/[+\s]/g, '');
             // Add + prefix if it's a number
             return /^\d+$/.test(cleaned) ? `+${cleaned}` : contact;
+        }
+
+        // Format timestamp Discord-style (Today at 3:45 PM)
+        function formatDiscordTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            
+            const timeStr = date.toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            });
+            
+            if (msgDate.getTime() === today.getTime()) {
+                return `Today at ${timeStr}`;
+            } else if (msgDate.getTime() === today.getTime() - 86400000) {
+                return `Yesterday at ${timeStr}`;
+            } else {
+                return date.toLocaleDateString('en-US', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    year: 'numeric'
+                }) + ` at ${timeStr}`;
+            }
+        }
+
+        // Render Discord-style messages
+        function renderDiscordMessages(data, botId) {
+            const messages = Array.isArray(data) ? data : data?.messages;
+            
+            if (!messages || messages.length === 0) {
+                return '<div class="no-messages">No messages yet. Messages will appear here when they arrive.</div>';
+            }
+            
+            return messages.map(msg => `
+                <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml((msg.sender_name || '') + ' ' + msg.message_content + ' ' + (msg.sender_contact || '')).toLowerCase()}" data-status="${msg.discord_status}">
+                    <div class="discord-avatar">
+                        ${msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?'}
+                    </div>
+                    <div class="discord-content">
+                        <div class="discord-header-row">
+                            <span class="discord-username">${escapeHtml(msg.sender_name || 'Unknown')}</span>
+                            <span class="discord-timestamp">${formatDiscordTime(msg.timestamp)}</span>
+                            <span class="discord-status-badge status-${msg.discord_status}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
+                        </div>
+                        <div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>
+                        <div class="discord-text">${escapeHtml(msg.message_content)}</div>
+                        ${msg.has_media ? `
+                            <div class="discord-attachment">
+                                <span class="attachment-icon">📎</span>
+                                <span class="attachment-type">${escapeHtml(msg.media_type || 'Attachment')}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Filter Discord messages
+        function filterDiscordMessages(botId) {
+            const searchText = document.getElementById(`msg-search-${botId}`)?.value.toLowerCase() || '';
+            const statusFilter = document.getElementById(`status-filter-${botId}`)?.value || 'all';
+            const messages = document.querySelectorAll(`#discord-messages-${botId} .discord-message`);
+            
+            messages.forEach(msg => {
+                const msgText = msg.getAttribute('data-search-text') || '';
+                const msgStatus = msg.getAttribute('data-status') || '';
+                
+                const matchesSearch = searchText === '' || msgText.includes(searchText);
+                const matchesStatus = statusFilter === 'all' || msgStatus === statusFilter;
+                
+                msg.style.display = (matchesSearch && matchesStatus) ? 'flex' : 'none';
+            });
         }
 
         function renderMessages(data, botId) {
