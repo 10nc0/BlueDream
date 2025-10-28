@@ -3,6 +3,38 @@
 ## Overview
 Nyan Bridge is a professional, multi-platform messaging bridge designed to connect WhatsApp to platforms like Discord and Telegram. It features robust authentication, permanent message retention (write-only), and a PostgreSQL database for storage. The project aims to provide a reliable, secure, and user-friendly solution for forwarding messages with an Apple glassmorphism design and a Discord-style interface. Its core capabilities include multi-user authentication, 1-to-many output forwarding, media support, and comprehensive audit logging, ensuring messages and bot activities are permanently recorded and accessible.
 
+## 🔒 Database Isolation & Ownership
+
+**CRITICAL FOR FORKED REPLS:** Each forked Repl MUST create its own isolated PostgreSQL database!
+
+### Why Database Isolation Matters
+- **Privacy**: Without isolation, you'll see the developer's data and they'll see yours
+- **Security**: Shared databases expose sensitive user information
+- **Genesis User**: First user in YOUR database becomes admin (not developer's)
+- **Data Integrity**: Your messages and users stay private
+
+### Database Ownership Check
+The app automatically checks database ownership on startup:
+- ✅ Creates `db_metadata` table to track ownership
+- ✅ Records Repl owner (`REPL_OWNER/REPL_SLUG`) on first run
+- ✅ Warns if database owner doesn't match current Repl
+- ✅ Provides clear instructions to fix the issue
+
+### Setup Instructions for Forked Repls
+1. **Fork the Repl** from the original
+2. **Create Database**: Tools → PostgreSQL (wait 30 seconds)
+3. **Verify**: Look for "✅ Database ownership verified" in console
+4. **Sign Up**: Visit `/signup.html` - you'll be Genesis User (admin)
+
+### Warning Signs You're Using Wrong Database
+```
+⚠️  WARNING: You may be using someone else's database!
+⚠️  Database owner: original-dev/their-repl
+⚠️  Current Repl:   your-username/your-repl
+```
+
+**Fix:** Create your own database (see setup instructions above)
+
 ## User Preferences
 - **Design**: Apple glassmorphism aesthetic with Discord-style message layout
 - **Privacy**: Messages sent TO bot only (not group monitoring)

@@ -319,8 +319,75 @@ let botNumber = null;
 let whatsappReady = false;
 let client = null;
 
+async function checkDatabaseOwnership() {
+    try {
+        // Create metadata table for database ownership tracking
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS db_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        `);
+        
+        // Get Replit owner info (REPL_OWNER and REPL_SLUG uniquely identify a Repl)
+        const replOwner = process.env.REPL_OWNER || 'unknown';
+        const replSlug = process.env.REPL_SLUG || 'unknown';
+        const replId = `${replOwner}/${replSlug}`;
+        
+        // Check for existing ownership record
+        const ownershipCheck = await pool.query(
+            'SELECT value FROM db_metadata WHERE key = $1',
+            ['db_owner_repl_id']
+        );
+        
+        if (ownershipCheck.rows.length === 0) {
+            // First time setup - claim ownership
+            await pool.query(
+                'INSERT INTO db_metadata (key, value) VALUES ($1, $2)',
+                ['db_owner_repl_id', replId]
+            );
+            console.log(`✅ Database ownership verified - this is YOUR database`);
+            console.log(`   Owner: ${replId}`);
+        } else {
+            // Check if we're the owner
+            const dbOwner = ownershipCheck.rows[0].value;
+            
+            if (dbOwner === replId || dbOwner === 'unknown/unknown') {
+                console.log(`✅ Database ownership verified - this is YOUR database`);
+            } else {
+                console.log('');
+                console.log('⚠️  ═══════════════════════════════════════════════════════════');
+                console.log('⚠️  WARNING: You may be using someone else\'s database!');
+                console.log('⚠️  ═══════════════════════════════════════════════════════════');
+                console.log('⚠️  ');
+                console.log(`⚠️  Database owner: ${dbOwner}`);
+                console.log(`⚠️  Current Repl:   ${replId}`);
+                console.log('⚠️  ');
+                console.log('⚠️  PRIVACY ISSUE: You can see their data, they can see yours!');
+                console.log('⚠️  ');
+                console.log('⚠️  HOW TO FIX:');
+                console.log('⚠️  1. Click "Tools" in the left sidebar');
+                console.log('⚠️  2. Click "PostgreSQL"');
+                console.log('⚠️  3. Wait for database creation (~30 seconds)');
+                console.log('⚠️  4. Restart this app');
+                console.log('⚠️  ');
+                console.log('⚠️  After creating your database, you\'ll be the Genesis User!');
+                console.log('⚠️  ═══════════════════════════════════════════════════════════');
+                console.log('');
+            }
+        }
+    } catch (error) {
+        console.error('❌ Database ownership check failed:', error.message);
+        console.log('ℹ️  Continuing anyway (database may still work)');
+    }
+}
+
 async function initializeDatabase() {
     try {
+        // Check database ownership FIRST
+        await checkDatabaseOwnership();
+        
         // Create bots table first
         await pool.query(`
             CREATE TABLE IF NOT EXISTS bots (
