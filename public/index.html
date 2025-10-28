@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🌈 Nyan Bridge - apps to apps hopping, nyan</title>
     <link rel="stylesheet" href="/css/dashboard.css">
+    <link rel="stylesheet" href="/css/components/tooltips.css">
+    <link rel="stylesheet" href="/css/components/analytics.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="header">
@@ -43,6 +46,7 @@
             <button class="tab active" onclick="switchTab('bots')">🌉 Bridges</button>
             <button class="tab" onclick="switchTab('users')">👥 Users</button>
             <button class="tab" onclick="switchTab('sessions')">🔐 Sessions</button>
+            <button class="tab" onclick="switchTab('analytics')">📊 Analytics</button>
         </div>
 
         <!-- Bridges Tab -->
@@ -113,6 +117,18 @@
             </div>
             
             <div id="sessionsList" class="user-list"></div>
+        </div>
+
+        <!-- Analytics Tab -->
+        <div id="analyticsTab" class="tab-content">
+            <div class="section-header">
+                <h1 class="section-title">Analytics Dashboard</h1>
+            </div>
+            <div id="analyticsContent" class="analytics-content">
+                <div style="text-align: center; padding: 3rem; color: #94a3b8;">
+                    <p>Loading analytics...</p>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -261,6 +277,124 @@
         </div>
     </div>
 
+    <!-- Onboarding Wizard Modal -->
+    <div id="onboardingModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2 class="modal-title">🌉 Create Your First Bridge</h2>
+                <button class="close-btn" onclick="closeOnboardingWizard()">×</button>
+            </div>
+            
+            <div class="onboarding-progress" style="display: flex; gap: 0.5rem; margin-bottom: 2rem; justify-content: center;">
+                <div class="onboarding-progress-step" style="padding: 0.5rem 1rem; border-radius: 8px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; font-size: 0.85rem;">1. Platform</div>
+                <div class="onboarding-progress-step" style="padding: 0.5rem 1rem; border-radius: 8px; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); color: #94a3b8; font-size: 0.85rem;">2. Connect</div>
+                <div class="onboarding-progress-step" style="padding: 0.5rem 1rem; border-radius: 8px; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); color: #94a3b8; font-size: 0.85rem;">3. Output</div>
+            </div>
+            
+            <div class="onboarding-step" id="onboarding-step-1" style="display: block;">
+                <h3 style="color: #e2e8f0; margin-bottom: 1rem;">Select Input Platform</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="platform-option" onclick="selectOnboardingPlatform('WhatsApp')" style="padding: 1.5rem; border-radius: 8px; background: rgba(37, 99, 235, 0.1); border: 2px solid rgba(37, 99, 235, 0.3); cursor: pointer; text-align: center; transition: all 0.2s;">
+                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📱</div>
+                        <div style="color: #e2e8f0; font-weight: 600;">WhatsApp</div>
+                    </div>
+                    <div class="platform-option" style="padding: 1.5rem; border-radius: 8px; background: rgba(148, 163, 184, 0.05); border: 2px solid rgba(148, 163, 184, 0.2); text-align: center; opacity: 0.5; cursor: not-allowed;">
+                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📞</div>
+                        <div style="color: #94a3b8; font-weight: 600;">Telegram</div>
+                        <div style="font-size: 0.7rem; color: #d8b4fe;">🚧 Coming Soon</div>
+                    </div>
+                </div>
+                <button id="step1-next" class="submit-btn" onclick="onboardingStep1Next()" disabled style="margin-top: 1.5rem; width: 100%;">Next →</button>
+            </div>
+            
+            <div class="onboarding-step" id="onboarding-step-2" style="display: none;">
+                <h3 style="color: #e2e8f0; margin-bottom: 1rem;">📱 Scan QR Code</h3>
+                <div style="text-align: center;">
+                    <img id="onboarding-qr" src="" alt="QR Code" style="width: 250px; height: 250px; border-radius: 8px; background: white;">
+                    <p style="margin-top: 1rem; color: #94a3b8; font-size: 0.9rem;">Open WhatsApp → Settings → Linked Devices → Link a Device</p>
+                </div>
+                <button class="submit-btn" onclick="onboardingStep2Next()" style="margin-top: 1.5rem; width: 100%;">Next →</button>
+            </div>
+            
+            <div class="onboarding-step" id="onboarding-step-3" style="display: none;">
+                <h3 style="color: #e2e8f0; margin-bottom: 1rem;">🎯 Discord Webhook URL</h3>
+                <div class="form-group">
+                    <label class="form-label">Webhook URL</label>
+                    <input type="url" class="form-input" id="onboarding-webhook-url" placeholder="https://discord.com/api/webhooks/..." required>
+                    <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #94a3b8;">
+                        Create webhook: Server Settings → Integrations → Webhooks → New Webhook
+                    </div>
+                </div>
+                <div id="onboarding-validation-status" style="margin-top: 0.5rem; min-height: 1.5rem;"></div>
+                <button class="submit-btn" onclick="onboardingStep3Complete()" style="margin-top: 1.5rem; width: 100%;">🎉 Complete Setup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Advanced Search Modal -->
+    <div id="advancedSearchModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 class="modal-title">🔍 Advanced Search</h2>
+                <button class="close-btn" onclick="closeAdvancedSearch()">×</button>
+            </div>
+            
+            <input type="hidden" id="advancedSearchBotId">
+            
+            <div class="form-group">
+                <label class="form-label">Search Query</label>
+                <input type="text" class="form-input" id="advancedSearchQuery" placeholder="Enter search terms...">
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="form-group">
+                    <label class="form-label">Date From</label>
+                    <input type="date" class="form-input" id="search-dateFrom" onchange="addSearchFilter('dateFrom')">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Date To</label>
+                    <input type="date" class="form-input" id="search-dateTo" onchange="addSearchFilter('dateTo')">
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="form-group">
+                    <label class="form-label">Sender ID</label>
+                    <input type="text" class="form-input" id="search-senderId" placeholder="Phone number or ID">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Message Type</label>
+                    <select class="form-select" id="search-messageType">
+                        <option value="all">All Types</option>
+                        <option value="text">Text</option>
+                        <option value="image">Image</option>
+                        <option value="video">Video</option>
+                        <option value="audio">Audio</option>
+                        <option value="document">Document</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Status</label>
+                <select class="form-select" id="search-status">
+                    <option value="all">All Status</option>
+                    <option value="success">✓ Success</option>
+                    <option value="failed">✗ Failed</option>
+                    <option value="pending">⏳ Pending</option>
+                </select>
+            </div>
+            
+            <div id="searchChips" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; min-height: 2rem;"></div>
+            
+            <button class="submit-btn" onclick="executeAdvancedSearch()" style="width: 100%;">🔍 Search</button>
+        </div>
+    </div>
+
+    <script src="/js/ui/tooltips.js"></script>
+    <script src="/js/ui/onboarding.js"></script>
+    <script src="/js/ui/search.js"></script>
+    <script src="/js/ui/analytics.js"></script>
     <script>
         let bots = [];
         let filteredBots = [];
@@ -524,7 +658,18 @@
                 groupedBots[bot.input_platform].push(bot);
             });
             
-            // Render sidebar
+            // Render sidebar with roadmap teaser
+            const roadmapCard = glossary?.platforms?.coming_soon ? `
+                <div class="roadmap-card" style="margin-top: 1rem;">
+                    <div class="roadmap-title">🚀 Coming Soon</div>
+                    <div class="roadmap-platforms">
+                        ${glossary.platforms.coming_soon.map(p => `
+                            <span class="roadmap-platform">${p}</span>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : '';
+            
             sidebar.innerHTML = Object.entries(groupedBots).map(([platform, bots]) => `
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
@@ -537,7 +682,7 @@
                         </button>
                     `).join('')}
                 </div>
-            `).join('');
+            `).join('') + roadmapCard;
             
             // Render detail panel
             renderBotDetail();
@@ -560,15 +705,19 @@
             const bot = filteredBots.find(b => b.id === selectedBotId);
             if (!bot) return;
             
+            // Get status colors based on thresholds
+            const failedClass = getStatusColor(bot.failed_count || 0);
+            const successClass = getSuccessBadgeClass(bot.forwarded_count || 0);
+            
             const detail = document.getElementById('bridgeDetail');
             detail.innerHTML = `
                 <div class="discord-header">
                     <div class="discord-channel-info">
                         <span class="discord-channel-name"># ${bot.input_platform}-${bot.output_platform}</span>
                         <span class="discord-stats">
-                            <span class="stat-badge">📊 ${bot.message_count || 0}</span>
-                            <span class="stat-badge success">✓ ${bot.forwarded_count || 0}</span>
-                            <span class="stat-badge error">✗ ${bot.failed_count || 0}</span>
+                            <span class="stat-badge" data-tooltip="message_count" title="${glossary?.tooltips?.message_count || ''}">📊 ${bot.message_count || 0}</span>
+                            <span class="stat-badge ${successClass}" data-tooltip="forwarded_count" title="${glossary?.tooltips?.forwarded_count || ''}">✓ ${bot.forwarded_count || 0}</span>
+                            <span class="stat-badge error ${failedClass}" data-tooltip="failed_count" title="${glossary?.tooltips?.failed_count || ''}">✗ ${bot.failed_count || 0}</span>
                         </span>
                     </div>
                     <div class="discord-actions">
@@ -1546,6 +1695,8 @@
                 loadUsers();
             } else if (tabName === 'sessions') {
                 loadSessions();
+            } else if (tabName === 'analytics') {
+                loadAnalyticsDashboard();
             }
         }
 
