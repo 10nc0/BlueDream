@@ -85,12 +85,7 @@
             </div>
 
             <div class="search-filter" style="flex-wrap: wrap;">
-                <div style="display: flex; gap: 0.5rem; flex: 1; min-width: 300px;">
-                    <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search bridges, messages, senders..." oninput="filterBots()" style="flex: 1;">
-                    <button class="filter-dropdown" onclick="toggleRegexMode()" id="regexToggle" title="Toggle regex mode for power users" style="padding: 0.5rem 0.75rem; cursor: pointer; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.5rem; color: #94a3b8; font-size: 0.875rem; font-weight: 600; min-width: 80px;">
-                        <span id="regexModeText">Search</span>
-                    </button>
-                </div>
+                <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search: bridges, messages, senders... or try 'yesterday', 'last week', 'today'..." oninput="debouncedFilterBots()" style="flex: 1; min-width: 300px;">
                 <select class="filter-dropdown" id="platformFilter" onchange="filterBots()">
                     <option value="">All Platforms</option>
                 </select>
@@ -102,8 +97,7 @@
                     <option value="audio">🎵 Audio</option>
                     <option value="document">📄 Documents</option>
                 </select>
-                <input type="date" class="filter-dropdown" id="dateFromFilter" onchange="filterBots()" placeholder="From date" title="Filter messages from this date" style="color: #e2e8f0;">
-                <input type="date" class="filter-dropdown" id="dateToFilter" onchange="filterBots()" placeholder="To date" title="Filter messages until this date" style="color: #e2e8f0;">
+                <div id="searchContextBadge" style="display: none; padding: 0.5rem 0.75rem; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 0.5rem; color: #3b82f6; font-size: 0.75rem; font-weight: 600; white-space: nowrap;"></div>
             </div>
 
             <div class="bridge-layout">
@@ -1248,19 +1242,74 @@
         }
 
         // Universal search state - shared across all search boxes
+        // Natural Language Date Parser
+        function parseNaturalLanguageDate(query) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            const patterns = {
+                'today': { start: new Date(today), end: new Date(today) },
+                'yesterday': { 
+                    start: new Date(today.getTime() - 86400000), 
+                    end: new Date(today.getTime() - 86400000) 
+                },
+                'this week': {
+                    start: new Date(today.getTime() - (today.getDay() * 86400000)),
+                    end: new Date(today)
+                },
+                'last week': {
+                    start: new Date(today.getTime() - ((today.getDay() + 7) * 86400000)),
+                    end: new Date(today.getTime() - (today.getDay() * 86400000))
+                },
+                'this month': {
+                    start: new Date(today.getFullYear(), today.getMonth(), 1),
+                    end: new Date(today)
+                },
+                'last month': {
+                    start: new Date(today.getFullYear(), today.getMonth() - 1, 1),
+                    end: new Date(today.getFullYear(), today.getMonth(), 0)
+                },
+                'last 7 days': {
+                    start: new Date(today.getTime() - (7 * 86400000)),
+                    end: new Date(today)
+                },
+                'last 30 days': {
+                    start: new Date(today.getTime() - (30 * 86400000)),
+                    end: new Date(today)
+                }
+            };
+            
+            const lowerQuery = query.toLowerCase().trim();
+            for (const [pattern, dates] of Object.entries(patterns)) {
+                if (lowerQuery.includes(pattern)) {
+                    return {
+                        dateFrom: dates.start.toISOString().split('T')[0],
+                        dateTo: dates.end.toISOString().split('T')[0],
+                        context: pattern
+                    };
+                }
+            }
+            
+            return null;
+        }
+
         window.searchState = {
             regexMode: false,
+            dateContext: null,
             performSearch: function(query, text, caseSensitive = false) {
                 if (!query) return true;
                 
-                if (this.regexMode) {
+                // Auto-detect regex pattern (starts with / or contains regex special chars)
+                const isLikelyRegex = query.startsWith('/') || /[\[\](){}.*+?^$|\\]/.test(query);
+                
+                if (isLikelyRegex) {
                     try {
+                        const cleanPattern = query.startsWith('/') ? query.slice(1, query.lastIndexOf('/') || query.length) : query;
                         const flags = caseSensitive ? '' : 'i';
-                        const regex = new RegExp(query, flags);
+                        const regex = new RegExp(cleanPattern, flags);
                         return regex.test(text);
                     } catch (e) {
                         // Invalid regex, fall back to literal search
-                        console.warn('Invalid regex pattern, falling back to literal search:', e);
                         return caseSensitive ? 
                             text.includes(query) : 
                             text.toLowerCase().includes(query.toLowerCase());
@@ -1273,50 +1322,61 @@
             }
         };
 
-        function toggleRegexMode() {
-            window.searchState.regexMode = !window.searchState.regexMode;
-            const toggle = document.getElementById('regexToggle');
-            const modeText = document.getElementById('regexModeText');
-            
-            if (window.searchState.regexMode) {
-                toggle.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
-                toggle.style.color = 'white';
-                toggle.style.borderColor = '#3b82f6';
-                modeText.textContent = 'Regex';
-            } else {
-                toggle.style.background = 'rgba(148, 163, 184, 0.1)';
-                toggle.style.color = '#94a3b8';
-                toggle.style.borderColor = 'rgba(148, 163, 184, 0.2)';
-                modeText.textContent = 'Search';
-            }
-            
-            filterBots();
+        // Debounce function for search
+        let searchDebounceTimer = null;
+        function debouncedFilterBots() {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                filterBots();
+            }, 300); // 300ms debounce
         }
 
         function filterBots() {
             const searchTerm = document.getElementById('searchBox').value;
             const platformFilter = document.getElementById('platformFilter').value;
             const messageTypeFilter = document.getElementById('messageTypeFilter')?.value || '';
-            const dateFrom = document.getElementById('dateFromFilter')?.value || '';
-            const dateTo = document.getElementById('dateToFilter')?.value || '';
+            
+            // Parse natural language dates from search query
+            const naturalDateRange = parseNaturalLanguageDate(searchTerm);
+            const contextBadge = document.getElementById('searchContextBadge');
+            
+            if (naturalDateRange) {
+                // Show context badge
+                contextBadge.textContent = `📅 ${naturalDateRange.context}`;
+                contextBadge.style.display = 'block';
+                window.searchState.dateContext = naturalDateRange;
+                console.log('🔍 Natural language date detected:', naturalDateRange);
+            } else {
+                // Hide context badge
+                contextBadge.style.display = 'none';
+                window.searchState.dateContext = null;
+            }
             
             filteredBots = bots.filter(bot => {
                 // Search match using universal search function
                 let matchesSearch = true;
                 if (searchTerm) {
-                    const searchableText = [
-                        bot.input_platform,
-                        bot.output_platform,
-                        bot.contact_info || '',
-                        ...(bot.tags || [])
-                    ].join(' ');
-                    matchesSearch = window.searchState.performSearch(searchTerm, searchableText);
+                    // Remove date keywords from search for text matching
+                    let cleanSearchTerm = searchTerm;
+                    if (naturalDateRange) {
+                        cleanSearchTerm = searchTerm.replace(new RegExp(naturalDateRange.context, 'gi'), '').trim();
+                    }
+                    
+                    if (cleanSearchTerm) {
+                        const searchableText = [
+                            bot.input_platform,
+                            bot.output_platform,
+                            bot.contact_info || '',
+                            ...(bot.tags || [])
+                        ].join(' ');
+                        matchesSearch = window.searchState.performSearch(cleanSearchTerm, searchableText);
+                    }
                 }
                 
                 const matchesPlatform = !platformFilter || bot.input_platform === platformFilter;
                 
-                // For message type and date filters, we need to check the bot's messages
-                // For now, we'll just filter by bot properties (we can enhance later with message-level filtering)
+                // Note: Date filtering would need to be applied at message level
+                // For now we filter bots, but can enhance to filter messages within each bot
                 
                 return matchesSearch && matchesPlatform;
             });
