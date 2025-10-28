@@ -11,6 +11,8 @@ const session = require('express-session');
 const connectPg = require('connect-pg-simple');
 const bcrypt = require('bcrypt');
 const twilio = require('twilio');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const authService = require('./auth-service');
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
@@ -70,6 +72,87 @@ app.use(session({
     },
     name: 'bridge.sid' // Custom session cookie name
 }));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Passport serialization
+passport.serializeUser((user, done) => {
+    done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+    try {
+        const result = await pool.query('SELECT id, email, role, google_id FROM users WHERE id = $1', [id]);
+        done(null, result.rows[0]);
+    } catch (error) {
+        done(error, null);
+    }
+});
+
+// Google OAuth Strategy (only if credentials are provided)
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'https://whats-app-discord-bridge.replit.app/api/auth/google/callback';
+    
+    passport.use(new GoogleStrategy({
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL: GOOGLE_CALLBACK_URL
+    }, async (accessToken, refreshToken, profile, done) => {
+        try {
+            const googleId = profile.id;
+            const email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
+            
+            // Check if user exists by Google ID
+            let result = await pool.query('SELECT * FROM users WHERE google_id = $1', [googleId]);
+            
+            if (result.rows.length > 0) {
+                // Existing user - log in
+                return done(null, result.rows[0]);
+            }
+            
+            // Check if user exists by email
+            if (email) {
+                result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+                if (result.rows.length > 0) {
+                    // Link Google ID to existing email account
+                    await pool.query('UPDATE users SET google_id = $1, provider = $2 WHERE id = $3', 
+                        [googleId, 'google', result.rows[0].id]);
+                    return done(null, result.rows[0]);
+                }
+            }
+            
+            // New user - check if this is first user (genesis)
+            const userCount = await pool.query('SELECT COUNT(*) FROM users');
+            const isFirstUser = parseInt(userCount.rows[0].count) === 0;
+            const role = isFirstUser ? 'admin' : 'read-only';
+            
+            // Create new user
+            result = await pool.query(`
+                INSERT INTO users (email, google_id, provider, role)
+                VALUES ($1, $2, 'google', $3)
+                RETURNING id, email, google_id, role
+            `, [email, googleId, role]);
+            
+            const newUser = result.rows[0];
+            
+            if (isFirstUser) {
+                console.log(`[${getTimestamp()}] 🌟 GENESIS USER created via Google - Email: ${email}, Role: admin`);
+            } else {
+                console.log(`[${getTimestamp()}] ✅ User created via Google - Email: ${email}, Role: ${role}`);
+            }
+            
+            return done(null, newUser);
+        } catch (error) {
+            return done(error, null);
+        }
+    }));
+    
+    console.log('✅ Google OAuth configured');
+} else {
+    console.log('ℹ️  Google OAuth not configured (missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET)');
+}
 
 // Middleware to block HTML files from static serving
 app.use((req, res, next) => {
@@ -1382,6 +1465,47 @@ app.post('/api/auth/signup', async (req, res) => {
         res.status(500).json({ error: 'Signup failed' });
     }
 });
+
+// Google OAuth Routes
+app.get('/api/auth/google', passport.authenticate('google', { 
+    scope: ['profile', 'email'] 
+}));
+
+app.get('/api/auth/google/callback', 
+    passport.authenticate('google', { failureRedirect: '/login.html' }),
+    async (req, res) => {
+        try {
+            const user = req.user;
+            
+            // Generate JWT tokens
+            const accessToken = authService.signAccessToken(user.id, user.email, user.role);
+            const { token: refreshToken, tokenId } = authService.signRefreshToken(user.id, user.email, user.role);
+            
+            // Store refresh token
+            const deviceInfo = req.get('user-agent') || 'unknown';
+            await authService.storeRefreshToken(pool, user.id, tokenId, deviceInfo, req.ip);
+            
+            // Create session tracking record
+            await createSessionRecord(user.id, req.sessionID, req);
+            
+            // Log Google OAuth login
+            logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.email, {
+                method: 'google_oauth',
+                role: user.role,
+                authType: 'jwt+cookie'
+            });
+            
+            console.log(`[${getTimestamp()}] ✅ Google OAuth login - User: ${user.email}, Role: ${user.role}`);
+            
+            // Redirect to dashboard with tokens in URL (will be saved to localStorage by client)
+            const redirectUrl = `/?accessToken=${encodeURIComponent(accessToken)}&refreshToken=${encodeURIComponent(refreshToken)}`;
+            res.redirect(redirectUrl);
+        } catch (error) {
+            console.error('Google OAuth callback error:', error);
+            res.redirect('/login.html?error=oauth_failed');
+        }
+    }
+);
 
 // Phone OTP: Request OTP
 app.post('/api/auth/otp/request', async (req, res) => {

@@ -189,7 +189,36 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 - **Compatibility**: Safari/iPad support critical
 - **UX**: Auto-expanding single bots, responsive sidebar collapse
 
+## Authentication Methods
+
+### Current Support
+1. **Email + Password** ✅ (Working)
+   - Signup at `/signup.html`
+   - Login at `/login.html`
+   - Returns JWT access + refresh tokens
+
+2. **Google OAuth** 🚧 (In Progress)
+   - Using passport-google-oauth20 strategy
+   - **Setup Required**: User needs to provide `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+   - **How to get credentials**:
+     1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+     2. Create a new project
+     3. Enable Google+ API
+     4. Create OAuth 2.0 credentials
+     5. Add authorized redirect URI: `https://your-repl-domain/api/auth/google/callback`
+     6. Save Client ID and Client Secret as Replit secrets
+
+### Dismissed Integrations
+- **Twilio** (dismissed 2025-10-28): User doesn't have Twilio account, won't implement phone+OTP signup
+- **Replit Auth Blueprint** (not used): Too complex for vanilla Express app, would require major refactoring
+
 ## Recent Changes
+
+### 2025-10-28: Google OAuth Implementation (In Progress) 🚧
+- Added `google_id` and `provider` columns to users table
+- Installed passport and passport-google-oauth20 packages
+- Preparing OAuth routes and UI integration
+- Next: Implement Google strategy and "Continue with Google" buttons
 
 ### 2025-10-28: Deployment Configuration + Health Checks ✅
 - **Fixed Autoscale Deployment Issues**:
