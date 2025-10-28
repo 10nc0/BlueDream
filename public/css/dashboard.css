@@ -344,9 +344,9 @@ body {
   backdrop-filter: blur(10px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
-  padding: var(--space-xl);
+  padding: 2rem;
   transition: all var(--transition-slow);
-  min-width: 0; /* Prevents overflow */
+  min-width: 0;
 }
 
 .bot-card:hover {
@@ -359,8 +359,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: start;
-  margin-bottom: var(--space-lg);
-  gap: var(--space-md);
+  margin-bottom: 2rem;
+  gap: 2rem;
   min-width: 0;
 }
 
@@ -370,33 +370,34 @@ body {
 }
 
 .bot-info h3 {
-  font-size: var(--text-lg);
-  margin-bottom: var(--space-sm);
+  font-size: 1.75rem;
+  margin-bottom: 1rem;
   color: var(--color-text-bright);
   overflow: hidden;
   text-overflow: ellipsis;
+  font-weight: 600;
 }
 
 .bot-platform {
   color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  margin-bottom: var(--space-xs);
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
 }
 
 .bot-contact {
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  font-size: 1rem;
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: 0.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .bot-stats {
   display: flex;
-  gap: var(--space-xl);
-  margin: var(--space-lg) 0;
+  gap: 2rem;
+  margin: 1.5rem 0;
   flex-wrap: wrap;
   justify-content: space-around;
 }
@@ -404,13 +405,14 @@ body {
 .stat {
   text-align: center;
   flex: 1;
-  min-width: 60px;
+  min-width: 80px;
 }
 
 .stat-value {
-  font-size: var(--text-xl);
+  font-size: 2.5rem;
   font-weight: 700;
   display: block;
+  margin-bottom: 0.5rem;
 }
 
 .stat-value.success { color: var(--color-green-500); }

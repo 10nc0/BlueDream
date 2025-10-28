@@ -57,7 +57,14 @@
                 </select>
             </div>
 
-            <div id="botList" class="bot-grid"></div>
+            <div class="bridge-layout">
+                <nav class="bridge-sidebar" id="bridgeSidebar">
+                    <!-- Bot list will render here -->
+                </nav>
+                <section class="bridge-detail" id="bridgeDetail">
+                    <!-- Selected bot details will render here -->
+                </section>
+            </div>
         </div>
 
         <!-- Users Tab -->
@@ -486,6 +493,15 @@
                 return;
             }
             
+            const singleBot = filteredBots.length === 1;
+            
+            if (singleBot && filteredBots.length > 0) {
+                expandedBots.add(filteredBots[0].id);
+                if (!messageCache[filteredBots[0].id]) {
+                    loadBotMessages(filteredBots[0].id, 1);
+                }
+            }
+            
             botList.innerHTML = filteredBots.map(bot => `
                 <div class="bot-card">
                     <div class="bot-header">
@@ -517,11 +533,11 @@
                     <div class="bot-actions">
                         ${bot.input_platform === 'WhatsApp' ? `<button class="btn btn-qr" onclick="showQR('${bot.id}')">📱 QR Login</button>` : ''}
                         <button class="btn btn-edit" onclick="editBot('${bot.id}')">Edit</button>
-                        <button class="btn" id="toggle-btn-${bot.id}" onclick="toggleMessages('${bot.id}')">
+                        ${!singleBot ? `<button class="btn" id="toggle-btn-${bot.id}" onclick="toggleMessages('${bot.id}')">
                             ${expandedBots.has(bot.id) ? '▲ Hide Messages' : '▼ Show Messages'}
-                        </button>
+                        </button>` : ''}
                     </div>
-                    <div id="messages-${bot.id}" class="messages-container" style="display: ${expandedBots.has(bot.id) ? 'block' : 'none'};">
+                    <div id="messages-${bot.id}" class="messages-container" style="display: ${expandedBots.has(bot.id) || singleBot ? 'block' : 'none'};">
                         ${messageCache[bot.id] ? renderMessages(messageCache[bot.id], bot.id) : '<div style="text-align: center; padding: 1rem; color: #94a3b8;">Loading messages...</div>'}
                     </div>
                 </div>
