@@ -892,7 +892,7 @@
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
                     ${bots.map(bot => `
-                        <button class="channel-item ${bot.id === selectedBotId ? 'active' : ''}" onclick="selectBot(${bot.id})">
+                        <button class="channel-item ${bot.id === selectedBotId ? 'active' : ''}" data-bot-id="${bot.id}" onclick="selectBot(${bot.id})">
                             <span class="channel-name">${bot.input_platform} → ${bot.output_platform}</span>
                             <div class="channel-badges">
                                 ${bot.message_count > 0 ? `<span class="badge">${bot.message_count}</span>` : ''}
@@ -929,7 +929,7 @@
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
                     ${bots.map(bot => `
-                        <button class="channel-item ${bot.id === selectedBotId ? 'active' : ''}" onclick="selectBot(${bot.id})">
+                        <button class="channel-item ${bot.id === selectedBotId ? 'active' : ''}" data-bot-id="${bot.id}" onclick="selectBot(${bot.id})">
                             <span class="channel-name">${bot.input_platform} → ${bot.output_platform}</span>
                             <div class="channel-badges">
                                 ${bot.message_count > 0 ? `<span class="badge">${bot.message_count}</span>` : ''}
@@ -1951,16 +1951,121 @@
                 });
                 
                 if (response.ok) {
-                    selectedBotId = null;
-                    loadBots();
-                    alert('✅ Bridge deleted successfully');
+                    // Animate bot card deletion with liquid glass effect
+                    const botCard = document.querySelector(`.channel-item[data-bot-id="${botId}"]`);
+                    if (botCard) {
+                        // Apply liquid glass delete animation
+                        botCard.style.transition = 'all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)';
+                        botCard.style.transform = 'scale(0.95)';
+                        botCard.style.opacity = '0.7';
+                        botCard.style.filter = 'blur(4px)';
+                        
+                        // Second phase: shrink and fade out with glass effect
+                        setTimeout(() => {
+                            botCard.style.transform = 'scale(0.85) translateX(-30px)';
+                            botCard.style.opacity = '0';
+                            botCard.style.filter = 'blur(15px)';
+                            botCard.style.maxHeight = '0';
+                            botCard.style.marginBottom = '0';
+                            botCard.style.paddingTop = '0';
+                            botCard.style.paddingBottom = '0';
+                            botCard.style.overflow = 'hidden';
+                        }, 150);
+                        
+                        // Remove from DOM and update state after animation
+                        setTimeout(() => {
+                            botCard.remove();
+                            
+                            // Update bots array and state
+                            bots = bots.filter(b => b.id !== botId);
+                            filteredBots = filteredBots.filter(b => b.id !== botId);
+                            
+                            // Clear selection and detail view if deleted bot was selected
+                            if (selectedBotId === botId) {
+                                selectedBotId = null;
+                                const detail = document.getElementById('bridgeDetail');
+                                if (detail) {
+                                    detail.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Select a bridge to view messages</p>';
+                                }
+                            }
+                            
+                            // Update bridge count in Bridges tab
+                            updateBridgeCount();
+                            
+                            // Show success toast
+                            showToast('✅ Bridge deleted successfully', 'success');
+                            
+                            // If no bots left, show empty state
+                            if (bots.length === 0) {
+                                const sidebar = document.getElementById('bridgeSidebar');
+                                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No bridges found</p>';
+                            }
+                        }, 750);
+                    } else {
+                        // Fallback: reload if card not found
+                        selectedBotId = null;
+                        loadBots();
+                        showToast('✅ Bridge deleted successfully', 'success');
+                    }
                 } else {
                     const error = await response.json();
-                    alert(`Failed to delete bridge: ${error.error || 'Unknown error'}`);
+                    showToast(`❌ Failed to delete: ${error.error || 'Unknown error'}`, 'error');
                 }
             } catch (error) {
                 console.error('Error deleting bot:', error);
-                alert('Error deleting bridge');
+                showToast('❌ Error deleting bridge', 'error');
+            }
+        }
+        
+        // Toast notification system with glassmorphism design
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = 'toast-notification';
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 2rem;
+                right: 2rem;
+                padding: 1rem 1.5rem;
+                background: ${type === 'success' ? 'rgba(16, 185, 129, 0.15)' : type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)'};
+                backdrop-filter: blur(20px);
+                -webkit-backdrop-filter: blur(20px);
+                border: 1px solid ${type === 'success' ? 'rgba(16, 185, 129, 0.3)' : type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'};
+                border-radius: 12px;
+                color: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+                font-weight: 500;
+                font-size: 0.95rem;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+                z-index: 10000;
+                opacity: 0;
+                transform: translateY(20px);
+                transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+                pointer-events: none;
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            // Trigger animation
+            setTimeout(() => {
+                toast.style.opacity = '1';
+                toast.style.transform = 'translateY(0)';
+            }, 10);
+            
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(20px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+        
+        // Helper to update bridge count badge
+        function updateBridgeCount() {
+            const bridgeButton = document.querySelector('[onclick="showTab(\'bridges\')"]');
+            if (bridgeButton) {
+                const badge = bridgeButton.querySelector('.tab-badge');
+                if (badge) {
+                    badge.textContent = bots.length;
+                }
             }
         }
 
