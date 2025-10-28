@@ -99,7 +99,7 @@
                     <!-- Bot list will render here -->
                 </nav>
                 <section class="bridge-detail" id="bridgeDetail">
-                    <!-- Selected bot details will render here -->
+                    <!-- Selected bridge details will render here -->
                 </section>
             </div>
         </div>
@@ -223,7 +223,7 @@
                             <option value="auth">Authentication</option>
                             <option value="session">Session Management</option>
                             <option value="user">User Management</option>
-                            <option value="bot">Bridge Management</option>
+                            <option value="bridge">Bridge Management</option>
                         </select>
                     </div>
                     <div id="adminAuditLogs" style="max-height: 500px; overflow-y: auto;"></div>
@@ -410,7 +410,7 @@
                     </p>
                     <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 1rem; margin-top: 1rem;">
                         <p style="margin: 0; color: #10b981; font-size: 0.9rem;">
-                            ✅ After scanning, your bot will connect automatically!
+                            ✅ After scanning, your bridge will connect automatically!
                         </p>
                     </div>
                 </div>
@@ -582,9 +582,9 @@
     <script src="/js/ui/analytics.js"></script>
     <script src="/js/ui/media-loader.js"></script>
     <script>
-        let bots = [];
-        let filteredBots = [];
-        let editingBotId = null;
+        let bridges = [];
+        let filteredBridges = [];
+        let editingBridgeId = null;
         let expandedBots = new Set();
         let messageCache = {}; // Cache messages to avoid re-fetching on expand/collapse
         let allMessages = {}; // Store all messages by ID for media viewing
@@ -819,9 +819,9 @@
         // Bot CRUD Functions
         async function loadBots() {
             try {
-                const response = await authFetch('/api/bots');
-                bots = await response.json();
-                filteredBots = bots;
+                const response = await authFetch('/api/bridges');
+                bridges = await response.json();
+                filteredBridges = bots;
                 renderBots();
                 updatePlatformFilter();
             } catch (error) {
@@ -829,7 +829,7 @@
             }
         }
 
-        // Auto-refresh bot counts every 10 seconds to keep message counts updated
+        // Auto-refresh bridge counts every 10 seconds to keep message counts updated
         // Use skipDetailRender=true to avoid destroying loaded media
         setInterval(() => {
             if (document.getElementById('botsTab')?.classList.contains('active')) {
@@ -837,43 +837,43 @@
             }
         }, 10000);
         
-        // Quiet refresh that updates bot counts without re-rendering detail panel
+        // Quiet refresh that updates bridge counts without re-rendering detail panel
         async function loadBotsQuietly() {
             try {
-                const response = await authFetch('/api/bots');
-                bots = await response.json();
-                filteredBots = bots;
+                const response = await authFetch('/api/bridges');
+                bridges = await response.json();
+                filteredBridges = bots;
                 renderBots(true); // Skip detail render to preserve loaded media
             } catch (error) {
                 console.error('Error loading bots:', error);
             }
         }
 
-        let selectedBotId = null;
+        let selectedBridgeId = null;
 
         function renderBots(skipDetailRender = false) {
             const sidebar = document.getElementById('bridgeSidebar');
             const detail = document.getElementById('bridgeDetail');
             
-            if (filteredBots.length === 0) {
-                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No bots found</p>';
-                detail.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Create your first bot to get started!</p>';
+            if (filteredBridges.length === 0) {
+                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No bridges found</p>';
+                detail.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Create your first bridge to get started!</p>';
                 return;
             }
             
-            // Auto-select first bot if none selected
-            const wasAutoSelected = !selectedBotId || !filteredBots.find(b => b.id === selectedBotId);
+            // Auto-select first bridge if none selected
+            const wasAutoSelected = !selectedBridgeId || !filteredBridges.find(b => b.id === selectedBridgeId);
             if (wasAutoSelected) {
-                selectedBotId = filteredBots[0].id;
+                selectedBridgeId = filteredBridges[0].id;
             }
             
             // Group bots by input platform
             const groupedBots = {};
-            filteredBots.forEach(bot => {
-                if (!groupedBots[bot.input_platform]) {
-                    groupedBots[bot.input_platform] = [];
+            filteredBridges.forEach(bridge => {
+                if (!groupedBots[bridge.input_platform]) {
+                    groupedBots[bridge.input_platform] = [];
                 }
-                groupedBots[bot.input_platform].push(bot);
+                groupedBots[bridge.input_platform].push(bridge);
             });
             
             // Render sidebar with roadmap teaser
@@ -891,11 +891,11 @@
             sidebar.innerHTML = Object.entries(groupedBots).map(([platform, bots]) => `
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
-                    ${bots.map(bot => `
-                        <button class="channel-item ${bot.id === selectedBotId ? 'active' : ''}" data-bot-id="${bot.id}" onclick="selectBot(${bot.id})">
-                            <span class="channel-name">${bot.input_platform} → ${bot.output_platform}</span>
+                    ${bridges.map(bridge => `
+                        <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bot-id="${bridge.id}" onclick="selectBot(${bridge.id})">
+                            <span class="channel-name">${bridge.input_platform} → ${bridge.output_platform}</span>
                             <div class="channel-badges">
-                                ${bot.message_count > 0 ? `<span class="badge">${bot.message_count}</span>` : ''}
+                                ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
                             </div>
                         </button>
                     `).join('')}
@@ -906,33 +906,33 @@
             if (!skipDetailRender) {
                 renderBotDetail();
                 
-                // Always load messages for selected bot to ensure they appear
-                loadBotMessages(selectedBotId, 1);
+                // Always load messages for selected bridge to ensure they appear
+                loadBotMessages(selectedBridgeId, 1);
             }
         }
 
-        async function selectBot(botId) {
-            // Convert string to number to match bot IDs in database
-            selectedBotId = parseInt(botId);
+        async function selectBot(bridgeId) {
+            // Convert string to number to match bridge IDs in database
+            selectedBridgeId = parseInt(bridgeId);
             
             // Re-render sidebar to update active state
             const sidebar = document.getElementById('bridgeSidebar');
             const groupedBots = {};
-            filteredBots.forEach(bot => {
-                if (!groupedBots[bot.input_platform]) {
-                    groupedBots[bot.input_platform] = [];
+            filteredBridges.forEach(bridge => {
+                if (!groupedBots[bridge.input_platform]) {
+                    groupedBots[bridge.input_platform] = [];
                 }
-                groupedBots[bot.input_platform].push(bot);
+                groupedBots[bridge.input_platform].push(bridge);
             });
             
             sidebar.innerHTML = Object.entries(groupedBots).map(([platform, bots]) => `
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
-                    ${bots.map(bot => `
-                        <button class="channel-item ${bot.id === selectedBotId ? 'active' : ''}" data-bot-id="${bot.id}" onclick="selectBot(${bot.id})">
-                            <span class="channel-name">${bot.input_platform} → ${bot.output_platform}</span>
+                    ${bridges.map(bridge => `
+                        <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bot-id="${bridge.id}" onclick="selectBot(${bridge.id})">
+                            <span class="channel-name">${bridge.input_platform} → ${bridge.output_platform}</span>
                             <div class="channel-badges">
-                                ${bot.message_count > 0 ? `<span class="badge">${bot.message_count}</span>` : ''}
+                                ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
                             </div>
                         </button>
                     `).join('')}
@@ -943,22 +943,22 @@
             await renderBotDetail();
             
             // Always load messages for newly selected bot
-            await loadBotMessages(selectedBotId, 1);
+            await loadBotMessages(selectedBridgeId, 1);
         }
 
         async function renderBotDetail() {
-            const bot = filteredBots.find(b => b.id === selectedBotId);
+            const bridge = filteredBridges.find(b => b.id === selectedBridgeId);
             if (!bot) return;
             
             // Get status colors based on thresholds
-            const failedClass = getStatusColor(bot.failed_count || 0);
-            const successClass = getSuccessBadgeClass(bot.forwarded_count || 0);
+            const failedClass = getStatusColor(bridge.failed_count || 0);
+            const successClass = getSuccessBadgeClass(bridge.forwarded_count || 0);
             
             // Fetch WhatsApp status if this is a WhatsApp bot
             let whatsappStatus = null;
-            if (bot.input_platform === 'WhatsApp') {
+            if (bridge.input_platform === 'WhatsApp') {
                 try {
-                    const statusResponse = await authFetch(`/api/bots/${bot.id}/status`);
+                    const statusResponse = await authFetch(`/api/bots/${bridge.id}/status`);
                     if (statusResponse.ok) {
                         whatsappStatus = await statusResponse.json();
                     }
@@ -989,40 +989,40 @@
                 if (!whatsappStatus) return '';
                 
                 // Button 1: Generate new QR (starts WhatsApp + shows QR modal)
-                return `<button class="btn-icon" onclick="generateNewQR('${bot.id}')" title="Generate New QR Code" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">🔗</button>`;
+                return `<button class="btn-icon" onclick="generateNewQR('${bridge.id}')" title="Generate New QR Code" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">🔗</button>`;
             };
             
             const detail = document.getElementById('bridgeDetail');
             detail.innerHTML = `
                 <div class="discord-header">
                     <div class="discord-channel-info">
-                        <span class="discord-channel-name"># ${bot.input_platform}-${bot.output_platform}</span>
+                        <span class="discord-channel-name"># ${bridge.input_platform}-${bridge.output_platform}</span>
                         <span class="discord-stats">
-                            ${bot.input_platform === 'WhatsApp' ? getWhatsAppStatusBadge() : ''}
-                            <span class="stat-badge" data-tooltip="${glossary?.tooltips?.message_count || 'Total messages received'}">${bot.message_count || 0} 📊</span>
-                            <span class="stat-badge ${successClass}" data-tooltip="${glossary?.tooltips?.forwarded_count || 'Successfully forwarded messages'}">${bot.forwarded_count || 0} ✓</span>
-                            <span class="stat-badge error ${failedClass}" data-tooltip="${glossary?.tooltips?.failed_count || 'Failed to forward'}">${bot.failed_count || 0} ✗</span>
+                            ${bridge.input_platform === 'WhatsApp' ? getWhatsAppStatusBadge() : ''}
+                            <span class="stat-badge" data-tooltip="${glossary?.tooltips?.message_count || 'Total messages received'}">${bridge.message_count || 0} 📊</span>
+                            <span class="stat-badge ${successClass}" data-tooltip="${glossary?.tooltips?.forwarded_count || 'Successfully forwarded messages'}">${bridge.forwarded_count || 0} ✓</span>
+                            <span class="stat-badge error ${failedClass}" data-tooltip="${glossary?.tooltips?.failed_count || 'Failed to forward'}">${bridge.failed_count || 0} ✗</span>
                         </span>
                     </div>
                     <div class="discord-actions">
-                        ${bot.input_platform === 'WhatsApp' ? getWhatsAppActions() : ''}
-                        <button class="btn-icon" onclick="editBot(${bot.id})" title="Edit Bridge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">✏️</button>
-                        <button class="btn-icon btn-danger" onclick="confirmDeleteBot(${bot.id})" title="Delete Bridge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🗑️</button>
+                        ${bridge.input_platform === 'WhatsApp' ? getWhatsAppActions() : ''}
+                        <button class="btn-icon" onclick="editBot(${bridge.id})" title="Edit Bridge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">✏️</button>
+                        <button class="btn-icon btn-danger" onclick="confirmDeleteBot(${bridge.id})" title="Delete Bridge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🗑️</button>
                     </div>
                 </div>
 
                 <div class="discord-search">
                     <input 
                         type="text" 
-                        id="msg-search-${bot.id}" 
+                        id="msg-search-${bridge.id}" 
                         class="discord-search-input" 
                         placeholder="🔍 Search messages..." 
-                        oninput="filterDiscordMessages('${bot.id}')"
+                        oninput="filterDiscordMessages('${bridge.id}')"
                     >
                     <select 
-                        id="status-filter-${bot.id}" 
+                        id="status-filter-${bridge.id}" 
                         class="discord-filter-select" 
-                        onchange="filterDiscordMessages('${bot.id}')"
+                        onchange="filterDiscordMessages('${bridge.id}')"
                     >
                         <option value="all">All Status</option>
                         <option value="success">✓ Success</option>
@@ -1031,8 +1031,8 @@
                     </select>
                 </div>
 
-                <div class="discord-messages" id="discord-messages-${bot.id}">
-                    ${messageCache[bot.id] ? renderDiscordMessages(messageCache[bot.id], bot.id) : '<div class="loading-msg">Loading messages...</div>'}
+                <div class="discord-messages" id="discord-messages-${bridge.id}">
+                    ${messageCache[bridge.id] ? renderDiscordMessages(messageCache[bridge.id], bridge.id) : '<div class="loading-msg">Loading messages...</div>'}
                 </div>
             `;
         }
@@ -1089,7 +1089,7 @@
         }
 
         // Render Discord-style messages
-        function renderDiscordMessages(data, botId) {
+        function renderDiscordMessages(data, bridgeId) {
             const messages = Array.isArray(data) ? data : data?.messages;
             
             if (!messages || messages.length === 0) {
@@ -1126,10 +1126,10 @@
         }
 
         // Filter Discord messages
-        function filterDiscordMessages(botId) {
-            const searchText = document.getElementById(`msg-search-${botId}`)?.value || '';
-            const statusFilter = document.getElementById(`status-filter-${botId}`)?.value || 'all';
-            const messages = document.querySelectorAll(`#discord-messages-${botId} .discord-message`);
+        function filterDiscordMessages(bridgeId) {
+            const searchText = document.getElementById(`msg-search-${bridgeId}`)?.value || '';
+            const statusFilter = document.getElementById(`status-filter-${bridgeId}`)?.value || 'all';
+            const messages = document.querySelectorAll(`#discord-messages-${bridgeId} .discord-message`);
             
             messages.forEach(msg => {
                 const msgText = msg.getAttribute('data-search-text') || '';
@@ -1142,7 +1142,7 @@
             });
         }
 
-        function renderMessages(data, botId) {
+        function renderMessages(data, bridgeId) {
             // Handle both array format and object format
             const messages = Array.isArray(data) ? data : data?.messages;
             const page = data?.page || 1;
@@ -1157,8 +1157,8 @@
                 <div class="message-table-container">
                     <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
                         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                            <input type="text" id="msg-filter-${botId}" placeholder="🔍 Filter messages..." style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;" oninput="filterMessagesTable('${botId}')">
-                            <select id="status-filter-${botId}" onchange="filterMessagesTable('${botId}')" style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;">
+                            <input type="text" id="msg-filter-${bridgeId}" placeholder="🔍 Filter messages..." style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;" oninput="filterMessagesTable('${bridgeId}')">
+                            <select id="status-filter-${bridgeId}" onchange="filterMessagesTable('${bridgeId}')" style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;">
                                 <option value="all">All Status</option>
                                 <option value="success">Success</option>
                                 <option value="failed">Failed</option>
@@ -1168,16 +1168,16 @@
                         <span style="color: #94a3b8; font-size: 0.875rem;">Total: ${total} messages</span>
                     </div>
 
-                    <table class="message-table" id="msg-table-${botId}">
+                    <table class="message-table" id="msg-table-${bridgeId}">
                         <thead>
                             <tr>
-                                <th onclick="sortMessagesTable('${botId}', 'timestamp')" style="min-width: 200px;">
+                                <th onclick="sortMessagesTable('${bridgeId}', 'timestamp')" style="min-width: 200px;">
                                     Timestamp<span class="sort-icon">↕</span>
                                 </th>
-                                <th onclick="sortMessagesTable('${botId}', 'contact')" style="min-width: 180px;">
+                                <th onclick="sortMessagesTable('${bridgeId}', 'contact')" style="min-width: 180px;">
                                     Contact / Phone<span class="sort-icon">↕</span>
                                 </th>
-                                <th onclick="sortMessagesTable('${botId}', 'message')">
+                                <th onclick="sortMessagesTable('${bridgeId}', 'message')">
                                     Message<span class="sort-icon">↕</span>
                                 </th>
                                 <th style="text-align: center; width: 100px;">Status</th>
@@ -1212,9 +1212,9 @@
 
                     ${totalPages > 1 ? `
                         <div style="margin-top: 1rem; display: flex; justify-content: center; gap: 0.5rem; align-items: center;">
-                            <button class="btn" ${page <= 1 ? 'disabled' : ''} onclick="loadBotMessages('${botId}', ${page - 1})" style="padding: 0.375rem 0.75rem;">← Prev</button>
+                            <button class="btn" ${page <= 1 ? 'disabled' : ''} onclick="loadBotMessages('${bridgeId}', ${page - 1})" style="padding: 0.375rem 0.75rem;">← Prev</button>
                             <span style="color: #94a3b8; font-size: 0.875rem;">Page ${page} / ${totalPages}</span>
-                            <button class="btn" ${page >= totalPages ? 'disabled' : ''} onclick="loadBotMessages('${botId}', ${page + 1})" style="padding: 0.375rem 0.75rem;">Next →</button>
+                            <button class="btn" ${page >= totalPages ? 'disabled' : ''} onclick="loadBotMessages('${bridgeId}', ${page + 1})" style="padding: 0.375rem 0.75rem;">Next →</button>
                         </div>
                     ` : ''}
                 </div>
@@ -1223,16 +1223,16 @@
 
         // Sort messages table by column
         let messageSortState = {};
-        function sortMessagesTable(botId, column) {
-            if (!messageSortState[botId]) messageSortState[botId] = {};
-            const table = document.getElementById(`msg-table-${botId}`);
+        function sortMessagesTable(bridgeId, column) {
+            if (!messageSortState[bridgeId]) messageSortState[bridgeId] = {};
+            const table = document.getElementById(`msg-table-${bridgeId}`);
             const tbody = table.querySelector('tbody');
             const rows = Array.from(tbody.querySelectorAll('tr'));
             
             // Toggle sort direction
-            const currentDir = messageSortState[botId][column] || 'asc';
+            const currentDir = messageSortState[bridgeId][column] || 'asc';
             const newDir = currentDir === 'asc' ? 'desc' : 'asc';
-            messageSortState[botId] = { [column]: newDir };
+            messageSortState[bridgeId] = { [column]: newDir };
             
             rows.sort((a, b) => {
                 let aVal, bVal;
@@ -1263,10 +1263,10 @@
         }
 
         // Filter messages table using universal search
-        function filterMessagesTable(botId) {
-            const textFilter = document.getElementById(`msg-filter-${botId}`).value;
-            const statusFilter = document.getElementById(`status-filter-${botId}`).value;
-            const table = document.getElementById(`msg-table-${botId}`);
+        function filterMessagesTable(bridgeId) {
+            const textFilter = document.getElementById(`msg-filter-${bridgeId}`).value;
+            const statusFilter = document.getElementById(`status-filter-${bridgeId}`).value;
+            const table = document.getElementById(`msg-table-${bridgeId}`);
             const rows = table.querySelectorAll('tbody tr');
             
             rows.forEach(row => {
@@ -1555,21 +1555,21 @@
                 window.searchState.dateContext = null;
             }
             
-            filteredBots = bots.filter(bot => {
+            filteredBridges = bridges.filter(bridge => {
                 // Search match using universal search function
                 let matchesSearch = true;
                 if (searchTerm && !naturalDateRange) {
                     // Only filter by text if NOT a pure date search
                     const searchableText = [
-                        bot.input_platform,
-                        bot.output_platform,
-                        bot.contact_info || '',
-                        ...(bot.tags || [])
+                        bridge.input_platform,
+                        bridge.output_platform,
+                        bridge.contact_info || '',
+                        ...(bridge.tags || [])
                     ].join(' ');
                     matchesSearch = window.searchState.performSearch(searchTerm, searchableText);
                 }
                 
-                const matchesPlatform = !platformFilter || bot.input_platform === platformFilter;
+                const matchesPlatform = !platformFilter || bridge.input_platform === platformFilter;
                 
                 return matchesSearch && matchesPlatform;
             });
@@ -1578,7 +1578,7 @@
         }
 
         function updatePlatformFilter() {
-            const platforms = [...new Set(bots.map(bot => bot.input_platform))];
+            const platforms = [...new Set(bridges.map(bridge => bridge.input_platform))];
             const filter = document.getElementById('platformFilter');
             filter.innerHTML = '<option value="">All Platforms</option>' + 
                 platforms.map(p => `<option value="${p}">${p}</option>`).join('');
@@ -1586,12 +1586,12 @@
 
         function openCreateBotModal() {
             // Show quick-start wizard for new users
-            if (bots.length === 0 || !localStorage.getItem('skipQuickStart')) {
+            if (bridges.length === 0 || !localStorage.getItem('skipQuickStart')) {
                 openQuickStartWizard();
                 return;
             }
             
-            editingBotId = null;
+            editingBridgeId = null;
             document.getElementById('modalTitle').textContent = 'Create New Bridge';
             document.getElementById('botForm').reset();
             botTags = [];
@@ -1603,22 +1603,22 @@
 
         function editBot(id) {
             // Convert string id to number for comparison
-            const botId = typeof id === 'string' ? parseInt(id) : id;
-            const bot = bots.find(b => b.id === botId);
+            const bridgeId = typeof id === 'string' ? parseInt(id) : id;
+            const bridge = bridges.find(b => b.id === bridgeId);
             if (!bot) {
-                console.error('Bot not found:', id, 'Available bots:', bots.map(b => b.id));
+                console.error('Bot not found:', id, 'Available bots:', bridges.map(b => b.id));
                 return;
             }
             
-            editingBotId = id;
+            editingBridgeId = id;
             document.getElementById('modalTitle').textContent = 'Edit Bridge';
-            document.getElementById('botPlatform').value = bot.input_platform;
-            document.getElementById('botDestinationPlatform').value = bot.output_platform;
-            document.getElementById('botContact').value = bot.contact_info || '';
-            botTags = bot.tags || [];
+            document.getElementById('botPlatform').value = bridge.input_platform;
+            document.getElementById('botDestinationPlatform').value = bridge.output_platform;
+            document.getElementById('botContact').value = bridge.contact_info || '';
+            botTags = bridge.tags || [];
             
             // Load webhooks from output_credentials
-            const webhooks = bot.output_credentials?.webhooks || [];
+            const webhooks = bridge.output_credentials?.webhooks || [];
             botWebhooks = webhooks.map((w, idx) => ({
                 id: Date.now() + idx,
                 name: w.name || '',
@@ -1626,11 +1626,11 @@
             }));
             
             // If no webhooks but has legacy webhook_url, migrate it
-            if (botWebhooks.length === 0 && bot.output_credentials?.webhook_url) {
+            if (bridgeWebhooks.length === 0 && bridge.output_credentials?.webhook_url) {
                 botWebhooks = [{
                     id: Date.now(),
                     name: 'Main Channel',
-                    url: bot.output_credentials.webhook_url
+                    url: bridge.output_credentials.webhook_url
                 }];
             }
             
@@ -1641,7 +1641,7 @@
 
         function closeBotModal() {
             document.getElementById('botModal').classList.remove('active');
-            editingBotId = null;
+            editingBridgeId = null;
             botTags = [];
             botWebhooks = [];
         }
@@ -1659,7 +1659,7 @@
             localStorage.setItem('skipQuickStart', 'true');
             closeQuickStartWizard();
             // Open regular create modal
-            editingBotId = null;
+            editingBridgeId = null;
             document.getElementById('modalTitle').textContent = 'Create New Bridge';
             document.getElementById('botForm').reset();
             botTags = [];
@@ -1672,7 +1672,7 @@
         function startBridgeSetup() {
             closeQuickStartWizard();
             // Open regular create modal with a hint banner
-            editingBotId = null;
+            editingBridgeId = null;
             document.getElementById('modalTitle').textContent = 'Create New Bridge';
             document.getElementById('botForm').reset();
             botTags = [];
@@ -1728,13 +1728,13 @@
             };
 
             try {
-                const url = editingBotId ? `/api/bots/${editingBotId}` : '/api/bots';
-                const method = editingBotId ? 'PUT' : 'POST';
+                const url = editingBridgeId ? `/api/bots/${editingBridgeId}` : '/api/bridges';
+                const method = editingBridgeId ? 'PUT' : 'POST';
                 
                 const response = await authFetch(url, {
                     method,
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(botData)
+                    body: JSON.stringify(bridgeData)
                 });
 
                 if (response.ok) {
@@ -1753,7 +1753,7 @@
 
 
         // Generate new QR - starts WhatsApp session and shows QR modal immediately
-        async function generateNewQR(botId) {
+        async function generateNewQR(bridgeId) {
             // Open modal immediately with loading state
             const modal = document.getElementById('qrModal');
             const qrImage = document.getElementById('qrCodeImage');
@@ -1772,8 +1772,8 @@
             
             try {
                 // Step 1: Start WhatsApp session (or relink if already exists)
-                console.log('Starting/Relinking WhatsApp for bot:', botId);
-                const startResponse = await authFetch(`/api/bots/${botId}/relink`, {
+                console.log('Starting/Relinking WhatsApp for bridge:', bridgeId);
+                const startResponse = await authFetch(`/api/bots/${bridgeId}/relink`, {
                     method: 'POST'
                 });
                 
@@ -1790,7 +1790,7 @@
                 const pollQR = async () => {
                     attempts++;
                     
-                    const qrResponse = await authFetch(`/api/bots/${botId}/qr`);
+                    const qrResponse = await authFetch(`/api/bots/${bridgeId}/qr`);
                     if (!qrResponse.ok) {
                         showQRError('Server Error', 'Failed to fetch QR code. Please try again.');
                         return;
@@ -1852,10 +1852,10 @@
         }
 
         // Start WhatsApp session for a bot
-        async function startWhatsApp(botId) {
+        async function startWhatsApp(bridgeId) {
             try {
-                console.log('Starting WhatsApp for bot:', botId);
-                const response = await authFetch(`/api/bots/${botId}/start`, {
+                console.log('Starting WhatsApp for bridge:', bridgeId);
+                const response = await authFetch(`/api/bots/${bridgeId}/start`, {
                     method: 'POST'
                 });
                 
@@ -1877,15 +1877,15 @@
             }
         }
 
-        // Stop WhatsApp session for a bot (preserves session)
-        async function stopWhatsApp(botId) {
+        // Stop WhatsApp session for a bridge (preserves session)
+        async function stopWhatsApp(bridgeId) {
             if (!confirm('Stop WhatsApp session? You can restart it later without scanning a new QR code.')) {
                 return;
             }
             
             try {
-                console.log('Stopping WhatsApp for bot:', botId);
-                const response = await authFetch(`/api/bots/${botId}/stop`, {
+                console.log('Stopping WhatsApp for bridge:', bridgeId);
+                const response = await authFetch(`/api/bots/${bridgeId}/stop`, {
                     method: 'DELETE'
                 });
                 
@@ -1903,14 +1903,14 @@
         }
 
         // Relink WhatsApp (get fresh QR code)
-        async function relinkWhatsApp(botId) {
+        async function relinkWhatsApp(bridgeId) {
             if (!confirm('Relink WhatsApp? This will generate a new QR code and you\'ll need to scan it again.')) {
                 return;
             }
             
             try {
-                console.log('Relinking WhatsApp for bot:', botId);
-                const response = await authFetch(`/api/bots/${botId}/relink`, {
+                console.log('Relinking WhatsApp for bridge:', bridgeId);
+                const response = await authFetch(`/api/bots/${bridgeId}/relink`, {
                     method: 'POST'
                 });
                 
@@ -1932,28 +1932,28 @@
             }
         }
 
-        async function confirmDeleteBot(botId) {
+        async function confirmDeleteBot(bridgeId) {
             // Convert to number to ensure proper comparison
-            botId = parseInt(botId);
-            const bot = bots.find(b => b.id === botId);
+            bridgeId = parseInt(bridgeId);
+            const bridge = bridges.find(b => b.id === bridgeId);
             if (!bot) {
-                console.error(`Bot ${botId} not found in bots array`);
+                console.error(`Bot ${bridgeId} not found in bots array`);
                 return;
             }
             
-            if (!confirm(`Are you sure you want to delete "${bot.input_platform} → ${bot.output_platform}" bridge? This action cannot be undone.`)) {
+            if (!confirm(`Are you sure you want to delete "${bridge.input_platform} → ${bridge.output_platform}" bridge? This action cannot be undone.`)) {
                 return;
             }
             
             try {
-                const response = await authFetch(`/api/bots/${botId}`, {
+                const response = await authFetch(`/api/bots/${bridgeId}`, {
                     method: 'DELETE'
                 });
                 
                 if (response.ok) {
-                    // Animate bot card deletion with liquid glass effect
-                    const botCard = document.querySelector(`.channel-item[data-bot-id="${botId}"]`);
-                    if (botCard) {
+                    // Animate bridge card deletion with liquid glass effect
+                    const botCard = document.querySelector(`.channel-item[data-bot-id="${bridgeId}"]`);
+                    if (bridgeCard) {
                         // Apply liquid glass delete animation
                         botCard.style.transition = 'all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)';
                         botCard.style.transform = 'scale(0.95)';
@@ -1977,12 +1977,12 @@
                             botCard.remove();
                             
                             // Update bots array and state
-                            bots = bots.filter(b => b.id !== botId);
-                            filteredBots = filteredBots.filter(b => b.id !== botId);
+                            bridges = bridges.filter(b => b.id !== bridgeId);
+                            filteredBridges = filteredBridges.filter(b => b.id !== bridgeId);
                             
-                            // Clear selection and detail view if deleted bot was selected
-                            if (selectedBotId === botId) {
-                                selectedBotId = null;
+                            // Clear selection and detail view if deleted bridge was selected
+                            if (selectedBridgeId === bridgeId) {
+                                selectedBridgeId = null;
                                 const detail = document.getElementById('bridgeDetail');
                                 if (detail) {
                                     detail.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Select a bridge to view messages</p>';
@@ -1996,14 +1996,14 @@
                             showToast('✅ Bridge deleted successfully', 'success');
                             
                             // If no bots left, show empty state
-                            if (bots.length === 0) {
+                            if (bridges.length === 0) {
                                 const sidebar = document.getElementById('bridgeSidebar');
                                 sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No bridges found</p>';
                             }
                         }, 750);
                     } else {
                         // Fallback: reload if card not found
-                        selectedBotId = null;
+                        selectedBridgeId = null;
                         loadBots();
                         showToast('✅ Bridge deleted successfully', 'success');
                     }
@@ -2064,7 +2064,7 @@
             if (bridgeButton) {
                 const badge = bridgeButton.querySelector('.tab-badge');
                 if (badge) {
-                    badge.textContent = bots.length;
+                    badge.textContent = bridges.length;
                 }
             }
         }
@@ -2076,34 +2076,34 @@
             }
         }
 
-        async function toggleMessages(botId) {
-            console.log('Toggle messages for bot:', botId);
+        async function toggleMessages(bridgeId) {
+            console.log('Toggle messages for bridge:', bridgeId);
             
-            const container = document.getElementById(`messages-${botId}`);
-            const button = document.getElementById(`toggle-btn-${botId}`);
+            const container = document.getElementById(`messages-${bridgeId}`);
+            const button = document.getElementById(`toggle-btn-${bridgeId}`);
             
-            if (expandedBots.has(botId)) {
+            if (expandedBots.has(bridgeId)) {
                 // Collapse
-                expandedBots.delete(botId);
+                expandedBots.delete(bridgeId);
                 container.style.display = 'none';
                 button.innerHTML = '▼ Show Messages';
             } else {
                 // Expand
-                expandedBots.add(botId);
+                expandedBots.add(bridgeId);
                 container.style.display = 'block';
                 button.innerHTML = '▲ Hide Messages';
                 
                 // Load messages if not cached
-                if (!messageCache[botId]) {
-                    await loadBotMessages(botId, 1);
+                if (!messageCache[bridgeId]) {
+                    await loadBotMessages(bridgeId, 1);
                 }
             }
         }
         
-        async function loadBotMessages(botId, page = 1) {
+        async function loadBotMessages(bridgeId, page = 1) {
             try {
-                console.log(`Loading messages for bot ${botId}...`);
-                const response = await authFetch(`/api/bots/${botId}/messages?page=${page}&limit=50`);
+                console.log(`Loading messages for bridge ${bridgeId}...`);
+                const response = await authFetch(`/api/bots/${bridgeId}/messages?page=${page}&limit=50`);
                 
                 if (!response.ok) {
                     console.error(`API returned ${response.status}: ${response.statusText}`);
@@ -2114,15 +2114,15 @@
                 console.log(`Received ${data.messages?.length || 0} messages:`, data);
                 
                 // Cache the messages array
-                messageCache[botId] = data.messages;
+                messageCache[bridgeId] = data.messages;
                 
                 // Re-render Discord-style messages
-                const container = document.getElementById(`discord-messages-${botId}`);
+                const container = document.getElementById(`discord-messages-${bridgeId}`);
                 if (container) {
-                    container.innerHTML = renderDiscordMessages(data.messages, botId);
+                    container.innerHTML = renderDiscordMessages(data.messages, bridgeId);
                     console.log(`Rendered ${data.messages?.length || 0} messages to container`);
                     
-                    // Initialize media lazy loading for this bot's messages
+                    // Initialize media lazy loading for this bridge's messages
                     setTimeout(() => {
                         if (window.initMediaLazyLoading) {
                             window.initMediaLazyLoading();
@@ -2131,7 +2131,7 @@
                 }
             } catch (error) {
                 console.error('Error loading messages:', error);
-                const container = document.getElementById(`discord-messages-${botId}`);
+                const container = document.getElementById(`discord-messages-${bridgeId}`);
                 if (container) {
                     container.innerHTML = '<div class="no-messages" style="color: #ef4444;">Error loading messages. Please try refreshing.</div>';
                 }
@@ -2755,7 +2755,7 @@
                 const users = adminsByTenant[tenant];
                 const genesisAdmin = users.find(u => u.role === 'admin' || u.role === 'dev') || users[0];
                 const adminNumber = tenant.replace('tenant_', '').padStart(2, '0');
-                const botCount = genesisAdmin.bot_count || 0;
+                const botCount = genesisAdmin.bridge_count || 0;
                 const messageCount = genesisAdmin.message_count || 0;
                 
                 return `
@@ -3182,7 +3182,7 @@
             
             // Update bridge count in compact indicators only
             const bridgeCountEl = document.getElementById('bridgeCountCompact');
-            if (bridgeCountEl) bridgeCountEl.textContent = bots.length;
+            if (bridgeCountEl) bridgeCountEl.textContent = bridges.length;
             
             // Update active sessions in compact indicators only
             if (window.sessions) {
@@ -3246,7 +3246,7 @@
             `;
             
             const rect = targetEl.getBoundingClientRect();
-            hintEl.style.top = `${rect.bottom + 12}px`;
+            hintEl.style.top = `${rect.bridgetom + 12}px`;
             hintEl.style.left = `${rect.left}px`;
             
             document.body.appendChild(hintEl);
@@ -3264,7 +3264,7 @@
         
         // Show hints after page loads
         setTimeout(() => {
-            if (bots.length === 0) {
+            if (bridges.length === 0) {
                 showOnboardingHint('createBridge');
             }
         }, 2000);

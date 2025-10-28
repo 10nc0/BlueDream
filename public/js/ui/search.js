@@ -9,9 +9,9 @@ let searchFilters = {
     textQuery: ''
 };
 
-function openAdvancedSearch(botId) {
+function openAdvancedSearch(bridgeId) {
     document.getElementById('advancedSearchModal').style.display = 'flex';
-    document.getElementById('advancedSearchBotId').value = botId;
+    document.getElementById('advancedSearchBotId').value = bridgeId;
     
     // Reset filters
     searchFilters = {
@@ -84,12 +84,12 @@ function renderSearchChips() {
 }
 
 async function executeAdvancedSearch() {
-    const botId = document.getElementById('advancedSearchBotId').value;
+    const bridgeId = document.getElementById('advancedSearchBotId').value;
     const textQuery = document.getElementById('advancedSearchQuery').value;
     
     try {
         const queryParams = new URLSearchParams();
-        queryParams.append('botId', botId);
+        queryParams.append('bridgeId', bridgeId);
         
         if (textQuery) queryParams.append('q', textQuery);
         if (searchFilters.dateFrom) queryParams.append('dateFrom', searchFilters.dateFrom);
@@ -105,7 +105,7 @@ async function executeAdvancedSearch() {
         
         if (response.ok) {
             const results = await response.json();
-            displaySearchResults(results, botId);
+            displaySearchResults(results, bridgeId);
             closeAdvancedSearch();
         } else {
             const error = await response.json();
@@ -116,14 +116,14 @@ async function executeAdvancedSearch() {
     }
 }
 
-function displaySearchResults(results, botId) {
+function displaySearchResults(results, bridgeId) {
     // Update message cache with search results
-    messageCache[botId] = results;
+    messageCache[bridgeId] = results;
     
     // Re-render messages
-    const messagesContainer = document.getElementById(`discord-messages-${botId}`);
+    const messagesContainer = document.getElementById(`discord-messages-${bridgeId}`);
     if (messagesContainer) {
-        messagesContainer.innerHTML = renderDiscordMessages(results, botId);
+        messagesContainer.innerHTML = renderDiscordMessages(results, bridgeId);
     }
     
     // Initialize media lazy loading after re-render

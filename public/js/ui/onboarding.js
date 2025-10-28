@@ -2,7 +2,7 @@
 let onboardingState = {
     step: 1,
     platform: null,
-    botId: null,
+    bridgeId: null,
     webhookUrl: null
 };
 
@@ -32,7 +32,7 @@ async function saveOnboardingProgress(completed = false) {
 }
 
 function openOnboardingWizard() {
-    onboardingState = { step: 1, platform: null, botId: null, webhookUrl: null };
+    onboardingState = { step: 1, platform: null, bridgeId: null, webhookUrl: null };
     showOnboardingStep(1);
     document.getElementById('onboardingModal').style.display = 'flex';
 }
@@ -92,9 +92,9 @@ async function onboardingStep1Next() {
     }
     
     if (onboardingState.platform === 'WhatsApp') {
-        // Create bot and show QR code
+        // Create bridge and show QR code
         try {
-            const response = await authFetch('/api/bots', {
+            const response = await authFetch('/api/bridges', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -105,12 +105,12 @@ async function onboardingStep1Next() {
             });
             
             if (response.ok) {
-                const bot = await response.json();
-                onboardingState.botId = bot.id;
+                const bridge = await response.json();
+                onboardingState.bridgeId = bridge.id;
                 showOnboardingStep(2);
                 
                 // Generate QR code
-                const qrResponse = await authFetch(`/api/bots/${bot.id}/qr`);
+                const qrResponse = await authFetch(`/api/bots/${bridge.id}/qr`);
                 if (qrResponse.ok) {
                     const qrData = await qrResponse.json();
                     document.getElementById('onboarding-qr').src = qrData.qr;
@@ -182,10 +182,10 @@ async function onboardingStep3Complete() {
     document.getElementById('onboarding-validation-status').innerHTML = 
         '<span style="color: #22c55e;">✅ Webhook validated!</span>';
     
-    // Update bot with webhook URL
-    if (onboardingState.botId) {
+    // Update bridge with webhook URL
+    if (onboardingState.bridgeId) {
         try {
-            await authFetch(`/api/bots/${onboardingState.botId}`, {
+            await authFetch(`/api/bots/${onboardingState.bridgeId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -203,5 +203,5 @@ async function onboardingStep3Complete() {
     // Show success and close
     alert('🎉 Onboarding complete! Your bridge is ready.');
     closeOnboardingWizard();
-    loadBots(); // Refresh bot list
+    loadBots(); // Refresh bridge list
 }
