@@ -45,44 +45,42 @@ function removeSearchFilter(filterType) {
 
 function renderSearchChips() {
     const container = document.getElementById('searchChips');
-    const chips = [];
+    container.textContent = ''; // Clear existing chips safely
+    
+    const createChip = (label, value, filterType) => {
+        const chip = document.createElement('div');
+        chip.className = 'search-chip';
+        
+        const text = document.createTextNode(`${label}: ${value}`);
+        chip.appendChild(text);
+        
+        const button = document.createElement('button');
+        button.textContent = '×';
+        button.onclick = () => removeSearchFilter(filterType);
+        chip.appendChild(button);
+        
+        return chip;
+    };
     
     if (searchFilters.dateFrom) {
-        chips.push(`<div class="search-chip">
-            From: ${searchFilters.dateFrom}
-            <button onclick="removeSearchFilter('dateFrom')">×</button>
-        </div>`);
+        container.appendChild(createChip('From', searchFilters.dateFrom, 'dateFrom'));
     }
     
     if (searchFilters.dateTo) {
-        chips.push(`<div class="search-chip">
-            To: ${searchFilters.dateTo}
-            <button onclick="removeSearchFilter('dateTo')">×</button>
-        </div>`);
+        container.appendChild(createChip('To', searchFilters.dateTo, 'dateTo'));
     }
     
     if (searchFilters.senderId) {
-        chips.push(`<div class="search-chip">
-            Sender: ${searchFilters.senderId}
-            <button onclick="removeSearchFilter('senderId')">×</button>
-        </div>`);
+        container.appendChild(createChip('Sender', searchFilters.senderId, 'senderId'));
     }
     
     if (searchFilters.messageType && searchFilters.messageType !== 'all') {
-        chips.push(`<div class="search-chip">
-            Type: ${searchFilters.messageType}
-            <button onclick="removeSearchFilter('messageType')">×</button>
-        </div>`);
+        container.appendChild(createChip('Type', searchFilters.messageType, 'messageType'));
     }
     
     if (searchFilters.status && searchFilters.status !== 'all') {
-        chips.push(`<div class="search-chip">
-            Status: ${searchFilters.status}
-            <button onclick="removeSearchFilter('status')">×</button>
-        </div>`);
+        container.appendChild(createChip('Status', searchFilters.status, 'status'));
     }
-    
-    container.innerHTML = chips.join('');
 }
 
 async function executeAdvancedSearch() {
