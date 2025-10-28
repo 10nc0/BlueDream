@@ -33,7 +33,6 @@
             box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
         }
         
-        /* Mobile Responsive */
         @media (max-width: 480px) {
             body {
                 padding: 0.75rem;
@@ -61,7 +60,7 @@
 
         .logo h1 {
             color: #f1f5f9;
-            font-size: 3rem;
+            font-size: 2.5rem;
             font-weight: 700;
             margin-bottom: 0.75rem;
         }
@@ -70,9 +69,6 @@
             color: #94a3b8;
             font-size: 0.9rem;
             line-height: 1.5;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
         .tabs {
@@ -324,7 +320,7 @@
 <body>
     <div class="login-container">
         <div class="logo">
-            <h1>🌉 Nyan Bridge</h1>
+            <h1>🌈 Nyan Bridge</h1>
             <p>WhatsApp to Discord Bridge, SNS to SNS - app to app hopping, nyan~</p>
         </div>
 
@@ -336,7 +332,6 @@
         <div id="error" class="error" style="display: none;"></div>
         <div id="success" class="success" style="display: none;"></div>
 
-        <!-- Email/Password Login -->
         <div id="email-form" class="form-section active">
             <form onsubmit="loginWithEmail(event)">
                 <div class="form-group">
@@ -370,7 +365,6 @@
             </div>
         </div>
 
-        <!-- Phone OTP Login -->
         <div id="phone-form" class="form-section">
             <div id="phone-request">
                 <div class="form-group">
@@ -452,7 +446,6 @@
                 const data = await res.json();
                 
                 if (res.ok) {
-                    // Store JWT tokens in localStorage (for Safari/iPad compatibility)
                     if (data.accessToken) {
                         localStorage.setItem('accessToken', data.accessToken);
                     }
@@ -517,7 +510,6 @@
                 const data = await res.json();
                 
                 if (res.ok) {
-                    // Store JWT tokens in localStorage (for Safari/iPad compatibility)
                     if (data.accessToken) {
                         localStorage.setItem('accessToken', data.accessToken);
                     }
@@ -544,7 +536,6 @@
             hideMessages();
         }
 
-        // Check if already logged in
         fetch('/api/auth/status')
             .then(res => res.json())
             .then(data => {
