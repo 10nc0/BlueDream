@@ -1354,6 +1354,8 @@
 
         // Session Management
         async function loadSessions() {
+            const sessionsList = document.getElementById('sessionsList');
+            
             try {
                 const locationFilter = document.getElementById('sessionLocationFilter')?.value || '';
                 const deviceFilter = document.getElementById('sessionDeviceFilter')?.value || '';
@@ -1368,14 +1370,15 @@
                 params.append('sortBy', sortBy);
                 params.append('sortOrder', sortOrder);
                 
-                const response = await fetch(`/api/sessions?${params}`);
-                if (!response.ok) return;
+                const response = await authFetch(`/api/sessions?${params}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to load sessions: ${response.status}`);
+                }
                 
                 const data = await response.json();
-                const sessionsList = document.getElementById('sessionsList');
                 
-                if (data.sessions.length === 0) {
-                    sessionsList.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No active sessions found</p>';
+                if (!data.sessions || data.sessions.length === 0) {
+                    sessionsList.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 3rem;">No active sessions found. Sessions will appear here when users log in.</p>';
                     return;
                 }
                 
@@ -1389,15 +1392,15 @@
                     return `
                         <div class="user-card" style="opacity: ${session.is_active ? '1' : '0.6'}">
                             <div class="user-info">
-                                <div class="user-email">${session.email || session.phone || 'Unknown User'}</div>
+                                <div class="user-email">${escapeHtml(session.email || session.phone || 'Unknown User')}</div>
                                 <div class="user-role">${statusBadge}</div>
                             </div>
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; font-size: 0.875rem; color: #cbd5e1;">
-                                <div><strong>Device:</strong> ${session.device_type || 'Unknown'}</div>
-                                <div><strong>Browser:</strong> ${session.browser || 'Unknown'}</div>
-                                <div><strong>OS:</strong> ${session.os || 'Unknown'}</div>
-                                <div><strong>IP:</strong> ${session.ip_address || 'Unknown'}</div>
-                                <div><strong>Location:</strong> 🌍 ${session.location || 'Unknown Location'}</div>
+                                <div><strong>Device:</strong> ${escapeHtml(session.device_type || 'Unknown')}</div>
+                                <div><strong>Browser:</strong> ${escapeHtml(session.browser || 'Unknown')}</div>
+                                <div><strong>OS:</strong> ${escapeHtml(session.os || 'Unknown')}</div>
+                                <div><strong>IP:</strong> ${escapeHtml(session.ip_address || 'Unknown')}</div>
+                                <div><strong>Location:</strong> 🌍 ${escapeHtml(session.location || 'Unknown Location')}</div>
                                 <div><strong>Login:</strong> ${loginDate}</div>
                                 <div><strong>Last Activity:</strong> ${lastActivity}</div>
                             </div>
@@ -1409,6 +1412,9 @@
                 }).join('');
             } catch (error) {
                 console.error('Error loading sessions:', error);
+                if (sessionsList) {
+                    sessionsList.innerHTML = '<div style="text-align: center; padding: 3rem; color: #ef4444;">Error loading sessions. Please try refreshing the page.</div>';
+                }
             }
         }
 
