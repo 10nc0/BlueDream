@@ -928,25 +928,30 @@
                 return badges[status] || '';
             };
             
-            // WhatsApp action buttons
+            // WhatsApp action buttons - ALWAYS show 4 buttons: Start/Stop, QR, Relink, Edit
             const getWhatsAppActions = () => {
                 if (!whatsappStatus) return '';
                 const status = whatsappStatus.status;
                 
+                let actionButtons = '';
+                
+                // Button 1: Start/Stop (based on status)
                 if (status === 'inactive' || status === 'disconnected' || status === 'error' || status === 'auth_failed') {
-                    return `<button class="btn-icon" onclick="startWhatsApp('${bot.id}')" title="Start WhatsApp" style="background: rgba(16, 185, 129, 0.2); color: #10b981;">▶️</button>`;
-                } else if (status === 'qr_ready') {
-                    return `
-                        <button class="btn-icon" onclick="showQR('${bot.id}')" title="Show QR Code" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">📱</button>
-                        <button class="btn-icon" onclick="relinkWhatsApp('${bot.id}')" title="Relink (New QR)" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">🔄</button>
-                    `;
+                    actionButtons += `<button class="btn-icon" onclick="startWhatsApp('${bot.id}')" title="Start WhatsApp" style="background: rgba(16, 185, 129, 0.2); color: #10b981;">▶️</button>`;
                 } else if (status === 'ready' || status === 'authenticated') {
-                    return `
-                        <button class="btn-icon" onclick="stopWhatsApp('${bot.id}')" title="Stop WhatsApp" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">⏹️</button>
-                        <button class="btn-icon" onclick="relinkWhatsApp('${bot.id}')" title="Relink (New QR)" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">🔄</button>
-                    `;
+                    actionButtons += `<button class="btn-icon" onclick="stopWhatsApp('${bot.id}')" title="Stop WhatsApp" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">⏹️</button>`;
+                } else {
+                    // Initializing or qr_ready - show start button disabled
+                    actionButtons += `<button class="btn-icon" onclick="startWhatsApp('${bot.id}')" title="Starting..." style="background: rgba(251, 191, 36, 0.2); color: #fbbf24; opacity: 0.6;">⏳</button>`;
                 }
-                return '';
+                
+                // Button 2: QR Code (ALWAYS visible)
+                actionButtons += `<button class="btn-icon" onclick="showQR('${bot.id}')" title="Show QR Code" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">📱</button>`;
+                
+                // Button 3: Relink (ALWAYS visible)
+                actionButtons += `<button class="btn-icon" onclick="relinkWhatsApp('${bot.id}')" title="Relink (New QR)" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">🔄</button>`;
+                
+                return actionButtons;
             };
             
             const detail = document.getElementById('bridgeDetail');
@@ -1738,9 +1743,10 @@
                 } else if (data.connected) {
                     alert('✅ WhatsApp is already connected!');
                 } else if (data.message) {
-                    alert(data.message);
+                    // Show helpful message
+                    alert(`📱 ${data.message}\n\nℹ️ Steps:\n1. Click the ▶️ Start button first\n2. Wait 3-5 seconds\n3. Click 📱 QR again to see the code`);
                 } else {
-                    alert('QR code not available. Please wait a moment and try again.');
+                    alert('📱 QR code not available yet.\n\nℹ️ Please:\n1. Click ▶️ Start to initialize WhatsApp\n2. Wait a few seconds\n3. Try again');
                 }
             } catch (error) {
                 console.error('Error fetching QR code:', error);
