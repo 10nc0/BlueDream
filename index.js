@@ -15,7 +15,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
-const { setTenantContext, getAllTenantSchemas } = require('./tenant-middleware');
+const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./tenant-middleware');
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
@@ -2538,9 +2538,12 @@ app.get('/api/stats', requireAuth, async (req, res) => {
 });
 
 // Bot management endpoints
-// OPTIMIZED: Get all bots with stats in ONE query (eliminates N+1 problem)
+// SECURE: Complete tenant isolation with dedicated client and zero cross-tenant awareness
 app.get('/api/bots', requireAuth, async (req, res) => {
     try {
+        const client = req.dbClient || pool;
+        const userRole = req.tenantContext?.userRole || 'read-only';
+        
         // Dev users with global access need special handling
         if (req.tenantContext && req.tenantContext.globalAccess) {
             // Dev user - show which tenant they want or all tenants
@@ -2548,7 +2551,7 @@ app.get('/api/bots', requireAuth, async (req, res) => {
             
             if (tenantId) {
                 // View specific tenant's bots
-                const tenantInfo = await pool.query(`
+                const tenantInfo = await client.query(`
                     SELECT tenant_schema FROM core.tenant_catalog WHERE id = $1
                 `, [tenantId]);
                 
@@ -2557,29 +2560,31 @@ app.get('/api/bots', requireAuth, async (req, res) => {
                 }
                 
                 const schema = tenantInfo.rows[0].tenant_schema;
-                const result = await pool.query(`
+                const result = await client.query(`
                     SELECT 
                         b.*,
                         COUNT(m.id) as message_count,
                         COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
                         COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
-                        COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count
+                        COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count,
+                        '${tenantId}'::integer as tenant_id,
+                        '${schema}'::text as tenant_schema
                     FROM ${schema}.bots b
                     LEFT JOIN ${schema}.messages m ON b.id = m.bot_id
                     WHERE b.archived = false
                     GROUP BY b.id
                     ORDER BY b.created_at DESC
                 `);
-                return res.json({ bots: result.rows, tenantSchema: schema, tenantId });
+                return res.json(result.rows); // Dev sees everything including tenant_id
             }
             
-            // Show all tenants' bots (dev view)
-            const tenants = await getAllTenantSchemas(pool);
+            // Show all tenants' bots (dev view only)
+            const tenants = await getAllTenantSchemas(client, userRole);
             const allBots = [];
             
             // First, get legacy bots from public schema
             try {
-                const publicBots = await pool.query(`
+                const publicBots = await client.query(`
                     SELECT 
                         b.*,
                         COUNT(m.id) as message_count,
@@ -2602,7 +2607,7 @@ app.get('/api/bots', requireAuth, async (req, res) => {
             // Then get bots from all tenant schemas
             for (const tenant of tenants) {
                 try {
-                    const result = await pool.query(`
+                    const result = await client.query(`
                         SELECT 
                             b.*,
                             COUNT(m.id) as message_count,
@@ -2623,11 +2628,12 @@ app.get('/api/bots', requireAuth, async (req, res) => {
                 }
             }
             
-            return res.json(allBots);
+            return res.json(allBots); // Dev sees everything
         }
         
-        // Regular users - query from their tenant schema (search_path already set)
-        const result = await pool.query(`
+        // Genesis admins - query ONLY from their tenant schema (search_path already set)
+        // CRITICAL: They get ZERO indication that other tenants exist
+        const result = await client.query(`
             SELECT 
                 b.*,
                 COUNT(m.id) as message_count,
@@ -2640,8 +2646,12 @@ app.get('/api/bots', requireAuth, async (req, res) => {
             GROUP BY b.id
             ORDER BY b.created_at DESC
         `);
-        res.json(result.rows);
+        
+        // Sanitize response: Remove tenant_id and tenant_schema for non-dev users
+        const sanitizedBots = sanitizeForRole(result.rows, userRole);
+        res.json(sanitizedBots);
     } catch (error) {
+        console.error('❌ Error in /api/bots:', error);
         res.status(500).json({ error: error.message });
     }
 });
