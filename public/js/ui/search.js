@@ -128,6 +128,13 @@ function displaySearchResults(results, botId) {
         messagesContainer.innerHTML = renderDiscordMessages(results, botId);
     }
     
+    // Initialize media lazy loading after re-render
+    setTimeout(() => {
+        if (window.initMediaLazyLoading) {
+            window.initMediaLazyLoading();
+        }
+    }, 100);
+    
     // Show result count
     const resultText = results.length === 1 ? '1 result' : `${results.length} results`;
     showNotification(`🔍 Search complete: ${resultText}`, 'success');

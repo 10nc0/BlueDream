@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/css/components/tooltips.css">
     <link rel="stylesheet" href="/css/components/analytics.css">
     <link rel="stylesheet" href="/css/components/enhancements.css">
+    <link rel="stylesheet" href="/css/components/media-modal.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -424,6 +425,7 @@
     <script src="/js/ui/onboarding.js"></script>
     <script src="/js/ui/search.js"></script>
     <script src="/js/ui/analytics.js"></script>
+    <script src="/js/ui/media-loader.js"></script>
     <script>
         let bots = [];
         let filteredBots = [];
@@ -841,7 +843,7 @@
                 return '<div class="no-messages">No messages yet. Messages will appear here when they arrive.</div>';
             }
             
-            return messages.map(msg => `
+            const html = messages.map(msg => `
                 <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml((msg.sender_name || '') + ' ' + msg.message_content + ' ' + (msg.sender_contact || '')).toLowerCase()}" data-status="${msg.discord_status}">
                     <div class="discord-avatar">
                         ${msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?'}
@@ -862,6 +864,15 @@
                     </div>
                 </div>
             `).join('');
+            
+            // Initialize lazy loading after DOM updates
+            setTimeout(() => {
+                if (window.initMediaLazyLoading) {
+                    window.initMediaLazyLoading();
+                }
+            }, 100);
+            
+            return html;
         }
 
         // Filter Discord messages
