@@ -6,7 +6,9 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "audit-ui": "node tests/ui-audit/scripts/generate-test-pages.js && npx playwright test",
     "audit-ui:update": "node tests/ui-audit/scripts/generate-test-pages.js && npx playwright test --update-snapshots",
-    "audit-ui:report": "npx playwright show-report tests/ui-audit/screenshots/html-report"
+    "audit-ui:report": "npx playwright show-report tests/ui-audit/screenshots/html-report",
+    "audit:watch": "chokidar \"public/**/*.{html,css,js}\" \"tests/ui-audit/**/*\" -c \"npm run audit-ui\" --initial --debounce 2000",
+    "dev": "concurrently -n \"server,audit\" -c \"blue,green\" \"node index.js\" \"npm run audit:watch\""
   },
   "keywords": [],
   "author": "",
@@ -17,6 +19,8 @@
     "axios": "^1.12.2",
     "bcrypt": "^6.0.0",
     "body-parser": "^2.2.0",
+    "chokidar-cli": "^3.0.0",
+    "concurrently": "^9.2.1",
     "connect-pg-simple": "^10.0.0",
     "express": "^5.1.0",
     "express-session": "^1.18.2",
