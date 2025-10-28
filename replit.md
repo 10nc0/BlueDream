@@ -206,6 +206,16 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 - **Animated Time Color**: Time alternates between black (#1a1a1a) and white (#ffffff) synced with cat jump animation
   - Creates dynamic visual rhythm in header
   
+### 2025-10-28: Smart Tooltip Boundary Detection ✅
+- **Problem**: Tooltips were being cropped by viewport edges (especially on badge hover in header)
+- **Solution**: Intelligent viewport boundary detection
+  - **Dynamic Measurement**: Calculates actual tooltip dimensions before positioning
+  - **Horizontal Clamping**: Ensures tooltip never overflows left/right viewport edges (10px padding)
+  - **Vertical Clamping**: Ensures tooltip never overflows top/bottom viewport edges (10px padding)
+  - **Auto-Adjustment**: Automatically shifts tooltip to stay fully visible while maintaining proximity to target element
+  - **No Transform Conflicts**: Removed transform-based centering in favor of direct pixel positioning
+- **Result**: Tooltips now always appear fully visible regardless of target element position
+
 ### 2025-10-28: Custom Tooltip System + Header Cleanup ✅
 - **Problem**: Tooltips were cropped by table edges using native browser title attribute
 - **Solution**: Custom tooltip system with intelligent positioning

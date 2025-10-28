@@ -59,38 +59,61 @@ function showTooltip(element, text) {
     if (!tooltipElement) return;
     
     tooltipElement.textContent = text;
+    tooltipElement.style.opacity = '0';
+    tooltipElement.style.display = 'block';
     
     const rect = element.getBoundingClientRect();
-    const tooltipHeight = 100; // Approximate height
+    const tooltipRect = tooltipElement.getBoundingClientRect();
+    const tooltipWidth = tooltipRect.width;
+    const tooltipHeight = tooltipRect.height || 100;
+    
     const spaceAbove = rect.top;
     const spaceBelow = window.innerHeight - rect.bottom;
+    const padding = 10; // Padding from viewport edges
     
     // Position tooltip
     let top, left;
     
     // Decide if tooltip should be above or below
-    if (spaceBelow < tooltipHeight && spaceAbove > spaceBelow) {
+    if (spaceBelow < tooltipHeight + 20 && spaceAbove > spaceBelow) {
         // Show above
         tooltipElement.classList.add('arrow-bottom');
         tooltipElement.classList.remove('arrow-top');
-        top = rect.top - 10; // 10px offset
-        tooltipElement.style.transform = 'translateY(-100%)';
+        top = rect.top - tooltipHeight - 15; // 15px offset for arrow
     } else {
         // Show below
         tooltipElement.classList.add('arrow-top');
         tooltipElement.classList.remove('arrow-bottom');
         top = rect.bottom + 10;
-        tooltipElement.style.transform = 'translateY(0)';
     }
     
-    left = rect.left + (rect.width / 2);
+    // Center horizontally on element
+    left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+    
+    // Ensure tooltip stays within viewport horizontally
+    const maxLeft = window.innerWidth - tooltipWidth - padding;
+    const minLeft = padding;
+    
+    if (left < minLeft) {
+        left = minLeft;
+    } else if (left > maxLeft) {
+        left = maxLeft;
+    }
+    
+    // Ensure tooltip stays within viewport vertically
+    if (top < padding) {
+        top = padding;
+    } else if (top + tooltipHeight > window.innerHeight - padding) {
+        top = window.innerHeight - tooltipHeight - padding;
+    }
     
     tooltipElement.style.top = `${top}px`;
     tooltipElement.style.left = `${left}px`;
-    tooltipElement.style.transform += ' translateX(-50%)';
+    tooltipElement.style.transform = 'none';
     
-    // Show tooltip
+    // Show tooltip with fade-in
     setTimeout(() => {
+        tooltipElement.style.opacity = '';
         tooltipElement.classList.add('show');
     }, 50);
 }
