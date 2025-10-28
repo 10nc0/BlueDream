@@ -85,6 +85,12 @@ app.get('/login.html', (req, res) => {
     res.sendFile(__dirname + '/public/login.html');
 });
 
+// Serve signup page without authentication
+app.get('/signup.html', (req, res) => {
+    console.log(`[${getTimestamp()}] 📝 Signup page accessed - IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
+    res.sendFile(__dirname + '/public/signup.html');
+});
+
 // UAT/Test route: LOCALHOST ONLY for testing and screenshots
 app.get('/uat', async (req, res) => {
     // SECURITY: Check socket address (cannot be spoofed) instead of X-Forwarded-For
@@ -681,25 +687,37 @@ if (!chromiumPath) {
 
 console.log(`✅ Using Chromium at: ${chromiumPath}`);
 
-function initializeWhatsAppClient() {
-    if (client) {
-        client.removeAllListeners();
-    }
-
+function cleanupBrowserLocks() {
     const sessionPath = './.wwebjs_auth/session';
+    
+    if (!fs.existsSync(sessionPath)) {
+        return;
+    }
+    
     const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket'];
     
     lockFiles.forEach(lockFile => {
         const lockPath = `${sessionPath}/${lockFile}`;
         try {
-            if (fs.existsSync(lockPath)) {
+            const stats = fs.lstatSync(lockPath);
+            if (stats.isSymbolicLink() || stats.isFile()) {
                 fs.unlinkSync(lockPath);
-                console.log(`🧹 Cleaned up stale lock file: ${lockFile}`);
+                console.log(`🧹 Cleaned up stale lock: ${lockFile}`);
             }
         } catch (error) {
-            console.warn(`⚠️ Could not remove ${lockFile}:`, error.message);
+            if (error.code !== 'ENOENT') {
+                console.warn(`⚠️ Could not remove ${lockFile}:`, error.message);
+            }
         }
     });
+}
+
+function initializeWhatsAppClient() {
+    if (client) {
+        client.removeAllListeners();
+    }
+
+    cleanupBrowserLocks();
 
     client = new Client({
         authStrategy: new LocalAuth(),
