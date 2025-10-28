@@ -273,7 +273,7 @@ function renderMedia(containerEl, messageId, mediaData) {
                 preload="metadata"
                 style="border-radius: 8px;"
             >
-                <source src="${dataUrl}" type="${media_type}">
+                <source src="${dataUrl}" type="${escapeHtml(media_type)}">
                 Your browser does not support video playback.
             </video>
         `;
@@ -285,7 +285,7 @@ function renderMedia(containerEl, messageId, mediaData) {
                 preload="metadata"
                 style="width: 100%;"
             >
-                <source src="${dataUrl}" type="${media_type}">
+                <source src="${dataUrl}" type="${escapeHtml(media_type)}">
                 Your browser does not support audio playback.
             </audio>
         `;
