@@ -2500,7 +2500,7 @@
             }
         }
         
-        // Load admin cards (horizontal display for Users tab)
+        // Load Users tab (different view for dev vs admin)
         async function loadAdminCards() {
             try {
                 const response = await authFetch('/api/users');
@@ -2509,35 +2509,42 @@
                 }
                 const allUsers = await response.json();
                 
-                // Group users by tenant_schema to identify admins
-                const adminsByTenant = {};
-                allUsers.forEach(user => {
-                    const schema = user.tenant_schema || 'public';
-                    if (!adminsByTenant[schema]) {
-                        adminsByTenant[schema] = [];
-                    }
-                    adminsByTenant[schema].push(user);
-                });
-                
-                // Sort tenant schemas
-                const sortedTenants = Object.keys(adminsByTenant).sort((a, b) => {
-                    if (a === 'public') return -1;
-                    if (b === 'public') return 1;
-                    const numA = parseInt(a.replace('tenant_', '')) || 0;
-                    const numB = parseInt(b.replace('tenant_', '')) || 0;
-                    return numA - numB;
-                });
-                
-                renderAdminCards(sortedTenants, adminsByTenant);
+                // Dev: Show horizontal admin cards (all tenants)
+                if (currentUser.role === 'dev') {
+                    // Group users by tenant_schema to identify admins
+                    const adminsByTenant = {};
+                    allUsers.forEach(user => {
+                        const schema = user.tenant_schema || 'public';
+                        if (!adminsByTenant[schema]) {
+                            adminsByTenant[schema] = [];
+                        }
+                        adminsByTenant[schema].push(user);
+                    });
+                    
+                    // Sort tenant schemas
+                    const sortedTenants = Object.keys(adminsByTenant).sort((a, b) => {
+                        if (a === 'public') return -1;
+                        if (b === 'public') return 1;
+                        const numA = parseInt(a.replace('tenant_', '')) || 0;
+                        const numB = parseInt(b.replace('tenant_', '')) || 0;
+                        return numA - numB;
+                    });
+                    
+                    renderAdminCards(sortedTenants, adminsByTenant);
+                } else {
+                    // Admin: Show user management for their own tenant
+                    renderAdminUserManagement(allUsers);
+                }
             } catch (error) {
-                console.error('Error loading admin cards:', error);
+                console.error('Error loading users tab:', error);
                 const container = document.getElementById('adminCards');
                 if (container) {
-                    container.innerHTML = `<div style="padding: 3rem; color: #ef4444;">Error loading admins: ${error.message}</div>`;
+                    container.innerHTML = `<div style="padding: 3rem; color: #ef4444;">Error loading users: ${error.message}</div>`;
                 }
             }
         }
         
+        // Render horizontal admin cards (dev view)
         function renderAdminCards(tenants, adminsByTenant) {
             const container = document.getElementById('adminCards');
             if (!container) return;
@@ -2550,7 +2557,7 @@
             container.innerHTML = tenants.map((tenant, index) => {
                 const users = adminsByTenant[tenant];
                 const genesisAdmin = users.find(u => u.role === 'admin' || u.role === 'dev') || users[0];
-                const adminNumber = tenant === 'public' ? '01' : tenant.replace('tenant_', '').padStart(2, '0');
+                const adminNumber = tenant === 'tenant_1' ? '01' : tenant.replace('tenant_', '').padStart(2, '0');
                 const botCount = genesisAdmin.bot_count || 0;
                 const messageCount = genesisAdmin.message_count || 0;
                 
@@ -2594,6 +2601,53 @@
                     </div>
                 `;
             }).join('');
+        }
+        
+        // Render user management for admins (tenant-specific)
+        function renderAdminUserManagement(allUsers) {
+            const container = document.getElementById('adminCards');
+            if (!container) return;
+            
+            // Filter users in this admin's tenant only
+            const tenantUsers = allUsers.filter(u => u.tenant_id === currentUser.tenant_id);
+            
+            container.innerHTML = `
+                <div style="width: 100%; max-width: 800px;">
+                    <div class="glass-card" style="padding: 1.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                            <h2 style="font-size: 1.25rem; font-weight: 600; color: white;">👥 Tenant Users</h2>
+                            <button class="create-bot-btn" onclick="openCreateUserModal()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">+ Invite User</button>
+                        </div>
+                        
+                        ${tenantUsers.length === 0 ? `
+                            <div style="text-align: center; padding: 3rem; color: #94a3b8;">
+                                <p style="margin-bottom: 1rem;">No additional users in your tenant</p>
+                                <p style="font-size: 0.875rem;">Click "+ Invite User" to add read-only or write-only users</p>
+                            </div>
+                        ` : `
+                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                ${tenantUsers.map(user => `
+                                    <div class="user-item">
+                                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                                            <div style="flex: 1;">
+                                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                    <strong style="color: white;">${escapeHtml(user.email)}</strong>
+                                                    <span class="stat-badge" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6; font-size: 0.75rem; padding: 0.25rem 0.5rem;">${user.role}</span>
+                                                    ${user.is_genesis_admin ? '<span class="stat-badge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24; font-size: 0.75rem; padding: 0.25rem 0.5rem;">Genesis Admin</span>' : ''}
+                                                </div>
+                                                <div style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.25rem;">
+                                                    Created: ${new Date(user.created_at).toLocaleDateString()}
+                                                </div>
+                                            </div>
+                                            ${!user.is_genesis_admin && user.role !== 'admin' ? `<button class="btn-icon btn-danger" onclick="deleteUser('${user.id}')" title="Remove User">🗑️</button>` : ''}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
         }
         
         // Load users for Dev Panel
