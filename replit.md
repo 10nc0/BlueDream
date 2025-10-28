@@ -122,7 +122,7 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 - **audit_logs**: Session creation, authentication events, CRUD operations
 
 ### Default Users
-- **admin@bridge.local** / admin123 (admin role)
+- **phi_dao@pm.me** / admin123 (genesis admin - full system access)
 - **replit@test.local** (read-only role - for testing/screenshots)
 
 ### Key Constraints
@@ -209,9 +209,9 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
   - **localStorage Memory**: Won't show wizard again after skipping
 - **Result**: Reduces friction for newbies, power users get regex search
 
-### 2025-10-28: Admin Panel (Dev Only) ✅
+### 2025-10-28: Admin Panel ✅
 - **Feature**: Admin-only tab for monitoring users, sessions, and audit logs
-- **Access**: Only visible to admin@bridge.local (dev account)
+- **Access**: Only visible to genesis admin (phi_dao@pm.me)
 - **Design**: White tab header to distinguish from regular tabs
 - **Sections**:
   - **Registered Users**: View all users with roles and IDs
@@ -273,9 +273,9 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 - **Auth**: Test accounts injected via localStorage (bypasses login for speed)
 
 ### Manual Testing
-1. Login at `/login.html` with admin@bridge.local / admin123
+1. Login at `/login.html` with phi_dao@pm.me / admin123
 2. Verify dashboard loads without redirect loop
-3. **Check Admin Panel tab**: Should see white "🛡️ Admin Panel" tab (only visible to admin@bridge.local)
+3. **Check Admin Panel tab**: Should see white "🛡️ Admin Panel" tab (only visible to genesis admin phi_dao@pm.me)
 4. **Test Admin Panel**: Click tab to see registered users, active sessions, and audit logs
 5. **Filter audit logs**: Use dropdown to filter by activity type (auth, session, user, bot)
 6. Check Discord-style message feed displays correctly with 3 messages

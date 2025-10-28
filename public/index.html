@@ -175,11 +175,11 @@
             </div>
         </div>
 
-        <!-- Admin Panel Tab (admin@bridge.local only) -->
+        <!-- Admin Panel Tab (Admin Only) -->
         <div id="adminPanelTab-content" class="tab-content" style="display: none;">
             <div class="section-header">
-                <h1 class="section-title">🛡️ Admin Panel (Dev Only)</h1>
-                <div style="font-size: 0.875rem; color: #94a3b8;">Restricted to admin@bridge.local</div>
+                <h1 class="section-title">🛡️ Admin Panel</h1>
+                <div style="font-size: 0.875rem; color: #94a3b8;">Restricted to genesis admin (phi_dao@pm.me)</div>
             </div>
 
             <!-- Admin Panel Grid -->
@@ -659,9 +659,9 @@
                 };
                 userInfo.innerHTML = `<span style="color: ${roleColors[currentUser.role] || '#94a3b8'};">● ${currentUser.email || currentUser.phone} (${currentUser.role})</span>`;
                 
-                // Show Admin Panel tab only for admin@bridge.local
+                // Show Admin Panel tab only for genesis admin
                 const adminTab = document.getElementById('adminPanelTab');
-                if (adminTab && currentUser.email === 'admin@bridge.local') {
+                if (adminTab && currentUser.email === 'phi_dao@pm.me') {
                     adminTab.style.display = 'block';
                 }
                 
@@ -1954,9 +1954,9 @@
             }
         }
 
-        // Load Admin Panel (admin@bridge.local only)
+        // Load Admin Panel (genesis admin only)
         async function loadAdminPanel() {
-            if (!currentUser || currentUser.email !== 'admin@bridge.local') {
+            if (!currentUser || currentUser.email !== 'phi_dao@pm.me') {
                 return;
             }
 
