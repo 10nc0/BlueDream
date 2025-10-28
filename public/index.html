@@ -485,63 +485,117 @@
             }
         }
 
+        let selectedBotId = null;
+
         function renderBots() {
-            const botList = document.getElementById('botList');
+            const sidebar = document.getElementById('bridgeSidebar');
+            const detail = document.getElementById('bridgeDetail');
             
             if (filteredBots.length === 0) {
-                botList.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No bots found. Create your first bot to get started!</p>';
+                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No bots found</p>';
+                detail.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Create your first bot to get started!</p>';
                 return;
             }
             
-            const singleBot = filteredBots.length === 1;
-            
-            if (singleBot && filteredBots.length > 0) {
-                expandedBots.add(filteredBots[0].id);
-                if (!messageCache[filteredBots[0].id]) {
-                    loadBotMessages(filteredBots[0].id, 1);
-                }
+            // Auto-select first bot if none selected
+            if (!selectedBotId || !filteredBots.find(b => b.id === selectedBotId)) {
+                selectedBotId = filteredBots[0].id;
             }
             
-            botList.innerHTML = filteredBots.map(bot => `
-                <div class="bot-card">
-                    <div class="bot-header">
-                        <div class="bot-info">
-                            <h3>${bot.input_platform} → ${bot.output_platform} Bridge</h3>
-                            <div class="bot-platform">${bot.input_platform} → ${bot.output_platform}</div>
-                            <div class="bot-contact">📞 ${bot.contact_info || 'No contact'}</div>
-                        </div>
-                        <div class="bot-stats">
-                            <div class="stat">
-                                <span class="stat-value">${bot.message_count || 0}</span>
-                                <span class="stat-label">TOTAL</span>
+            // Group bots by input platform
+            const groupedBots = {};
+            filteredBots.forEach(bot => {
+                if (!groupedBots[bot.input_platform]) {
+                    groupedBots[bot.input_platform] = [];
+                }
+                groupedBots[bot.input_platform].push(bot);
+            });
+            
+            // Render sidebar
+            sidebar.innerHTML = Object.entries(groupedBots).map(([platform, bots]) => `
+                <div class="bridge-category">
+                    <div class="category-header">${platform}</div>
+                    ${bots.map(bot => `
+                        <button class="channel-item ${bot.id === selectedBotId ? 'active' : ''}" onclick="selectBot('${bot.id}')">
+                            <span class="channel-name">${bot.input_platform} → ${bot.output_platform}</span>
+                            <div class="channel-badges">
+                                ${bot.message_count > 0 ? `<span class="badge">${bot.message_count}</span>` : ''}
                             </div>
-                            <div class="stat">
-                                <span class="stat-value success">${bot.forwarded_count || 0}</span>
-                                <span class="stat-label">FORWARDED</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-value error">${bot.failed_count || 0}</span>
-                                <span class="stat-label">FAILED</span>
-                            </div>
-                        </div>
-                    </div>
-                    ${bot.tags && bot.tags.length > 0 ? `
-                        <div class="bot-tags">
-                            ${bot.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
-                        </div>
-                    ` : ''}
-                    <div class="bot-actions">
-                        ${bot.input_platform === 'WhatsApp' ? `<button class="btn btn-qr" onclick="showQR('${bot.id}')">📱 QR Login</button>` : ''}
-                        <button class="btn btn-edit" onclick="editBot('${bot.id}')">Edit</button>
-                        ${!singleBot ? `<button class="btn" id="toggle-btn-${bot.id}" onclick="toggleMessages('${bot.id}')">
-                            ${expandedBots.has(bot.id) ? '▲ Hide Messages' : '▼ Show Messages'}
-                        </button>` : ''}
-                    </div>
-                    <div id="messages-${bot.id}" class="messages-container" style="display: ${expandedBots.has(bot.id) || singleBot ? 'block' : 'none'};">
-                        ${messageCache[bot.id] ? renderMessages(messageCache[bot.id], bot.id) : '<div style="text-align: center; padding: 1rem; color: #94a3b8;">Loading messages...</div>'}
-                    </div>
+                        </button>
+                    `).join('')}
                 </div>
             `).join('');
+            
+            // Render detail panel
+            renderBotDetail();
+        }
+
+        function selectBot(botId) {
+            selectedBotId = botId;
+            renderBots();
+            if (!messageCache[botId]) {
+                loadBotMessages(botId, 1);
+            }
+        }
+
+        function renderBotDetail() {
+            const bot = filteredBots.find(b => b.id === selectedBotId);
+            if (!bot) return;
+            
+            const detail = document.getElementById('bridgeDetail');
+            detail.innerHTML = `
+                <div class="detail-header">
+                    <h2>${bot.input_platform} → ${bot.output_platform} Bridge</h2>
+                    <div class="detail-meta">
+                        <span class="platform-badge">${bot.input_platform} → ${bot.output_platform}</span>
+                        <span class="contact-info">📞 ${bot.contact_info || 'No contact'}</span>
+                    </div>
+                </div>
+
+                <div class="detail-stats">
+                    <div class="stat-card">
+                        <span class="stat-value">${bot.message_count || 0}</span>
+                        <span class="stat-label">Total</span>
+                    </div>
+                    <div class="stat-card success">
+                        <span class="stat-value">${bot.forwarded_count || 0}</span>
+                        <span class="stat-label">Forwarded</span>
+                    </div>
+                    <div class="stat-card error">
+                        <span class="stat-value">${bot.failed_count || 0}</span>
+                        <span class="stat-label">Failed</span>
+                    </div>
+                </div>
+
+                ${bot.tags && bot.tags.length > 0 ? `
+                    <div class="detail-tags">
+                        ${bot.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
+                    </div>
+                ` : ''}
+
+                <div class="detail-actions">
+                    ${bot.input_platform === 'WhatsApp' ? `<button class="btn btn-qr" onclick="showQR('${bot.id}')">📱 QR Login</button>` : ''}
+                    <button class="btn btn-edit" onclick="editBot('${bot.id}')">✏️ Edit</button>
+                    <button class="btn btn-delete" onclick="confirmDeleteBot('${bot.id}')">🗑️ Delete</button>
+                </div>
+
+                <div class="detail-messages">
+                    <div class="messages-header">
+                        <h3>Messages</h3>
+                        <div class="search-filter" style="margin: 0;">
+                            <input type="text" class="search-box" placeholder="🔍 Filter messages..." style="margin: 0;">
+                            <select class="filter-dropdown" style="margin: 0;">
+                                <option value="">All Status</option>
+                                <option value="SUCCESS">Success</option>
+                                <option value="FAILED">Failed</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="messages-list">
+                        ${messageCache[bot.id] ? renderMessages(messageCache[bot.id], bot.id) : '<div style="text-align: center; padding: 2rem; color: #94a3b8;">Loading messages...</div>'}
+                    </div>
+                </div>
+            `;
         }
 
         // Helper function to format timestamp with timezone
@@ -922,6 +976,33 @@
 
         function closeQRModal() {
             document.getElementById('qrModal').style.display = 'none';
+        }
+
+        async function confirmDeleteBot(botId) {
+            const bot = bots.find(b => b.id === botId);
+            if (!bot) return;
+            
+            if (!confirm(`Are you sure you want to delete "${bot.input_platform} → ${bot.output_platform}" bridge? This action cannot be undone.`)) {
+                return;
+            }
+            
+            try {
+                const response = await authFetch(`/api/bots/${botId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    selectedBotId = null;
+                    loadBots();
+                    alert('✅ Bridge deleted successfully');
+                } else {
+                    const error = await response.json();
+                    alert(`Failed to delete bridge: ${error.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error deleting bot:', error);
+                alert('Error deleting bridge');
+            }
         }
 
         window.onclick = function(event) {

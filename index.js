@@ -2074,6 +2074,33 @@ app.put('/api/bots/:id', requireRole('admin', 'write-only'), async (req, res) =>
     }
 });
 
+// Delete bot (hard delete - removes bot and all messages)
+app.delete('/api/bots/:id', requireRole('admin'), async (req, res) => {
+    try {
+        const { id} = req.params;
+        
+        // Delete all messages first (foreign key constraint)
+        await pool.query('DELETE FROM messages WHERE bot_id = $1', [id]);
+        
+        // Delete the bot
+        const result = await pool.query('DELETE FROM bots WHERE id = $1 RETURNING *', [id]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Bot not found' });
+        }
+        
+        logAudit(req, 'DELETE', 'BOT', id, null, {
+            message: 'Bot and all associated messages deleted'
+        });
+        
+        console.log(`[DELETE] Bot ${id} deleted by user ${req.user?.userId}`);
+        res.json({ success: true, message: 'Bot deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting bot:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Archive bot (soft delete - keeps all message history)
 app.post('/api/bots/:id/archive', requireRole('admin'), async (req, res) => {
     try {
