@@ -1132,15 +1132,29 @@
         async function loadUsers() {
             try {
                 const response = await authFetch('/api/users');
+                if (!response.ok) {
+                    throw new Error(`Failed to load users: ${response.status}`);
+                }
                 users = await response.json();
                 renderUsers();
             } catch (error) {
                 console.error('Error loading users:', error);
+                const userList = document.getElementById('userList');
+                if (userList) {
+                    userList.innerHTML = '<div style="text-align: center; padding: 3rem; color: #ef4444;">Error loading users. Please try refreshing the page.</div>';
+                }
             }
         }
 
         function renderUsers() {
             const userList = document.getElementById('userList');
+            if (!userList) return;
+            
+            if (!users || users.length === 0) {
+                userList.innerHTML = '<div style="text-align: center; padding: 3rem; color: #94a3b8;">No users found. Click "+ Create User" to add one.</div>';
+                return;
+            }
+            
             userList.innerHTML = users.map(user => `
                 <div class="user-item">
                     <div class="user-details">
