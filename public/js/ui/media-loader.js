@@ -130,6 +130,13 @@ async function fetchMediaFromServer(messageId, retryCount = 0, maxRetries = 3) {
         
         if (!response.ok) {
             const errorText = await response.text();
+            
+            // 404 means no media attached - this is OK, not an error
+            if (response.status === 404) {
+                console.log(`ℹ️ No media attached to message ${messageId} - hiding preview`);
+                return null; // Return null to indicate "no media" (not an error)
+            }
+            
             console.error(`❌ Media fetch failed: ${response.status} ${response.statusText}`, errorText);
             throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
         }
@@ -175,6 +182,14 @@ async function loadMedia(messageId) {
             console.log(`📡 Fetching media from server for message ${messageId}`);
             // If not cached, fetch from server
             mediaData = await fetchMediaFromServer(messageId);
+            
+            // If fetchMediaFromServer returns null, it means no media attached (404)
+            if (mediaData === null) {
+                console.log(`ℹ️ Hiding media preview for message ${messageId} (no media)`);
+                previewEl.style.display = 'none'; // Hide the element silently
+                return;
+            }
+            
             // Cache for future use
             await cacheMedia(messageId, mediaData);
             console.log(`✅ Cached media for message ${messageId}`);
@@ -224,9 +239,15 @@ function renderMedia(containerEl, messageId, mediaData) {
     // CRITICAL: Convert Buffer to string if needed (PostgreSQL returns bytea as Buffer)
     let mediaDataString;
     if (typeof media_data === 'object' && media_data.type === 'Buffer' && Array.isArray(media_data.data)) {
-        // Convert Buffer array to string
-        mediaDataString = String.fromCharCode.apply(null, media_data.data);
-        console.log(`🔄 Converted Buffer to string for message ${messageId}`);
+        // Convert Buffer array to string using chunking to avoid call stack overflow
+        // Process in chunks of 10000 characters to prevent "Maximum call stack size exceeded"
+        const chunkSize = 10000;
+        const chunks = [];
+        for (let i = 0; i < media_data.data.length; i += chunkSize) {
+            chunks.push(String.fromCharCode.apply(null, media_data.data.slice(i, i + chunkSize)));
+        }
+        mediaDataString = chunks.join('');
+        console.log(`🔄 Converted Buffer to string for message ${messageId} (${media_data.data.length} bytes in ${chunks.length} chunks)`);
     } else if (typeof media_data === 'string') {
         mediaDataString = media_data;
     } else {
