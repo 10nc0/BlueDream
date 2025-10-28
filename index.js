@@ -1274,7 +1274,7 @@ app.get('/api/auth/status', async (req, res) => {
         const decoded = authService.verifyToken(token);
         
         if (decoded && decoded.type === 'access') {
-            const result = await pool.query('SELECT id, email, phone, role FROM users WHERE id = $1', [decoded.userId]);
+            const result = await pool.query('SELECT id, email, role, google_id FROM users WHERE id = $1', [decoded.userId]);
             if (result.rows.length > 0) {
                 return res.json({ authenticated: true, user: result.rows[0], authMethod: 'jwt' });
             }
@@ -1283,7 +1283,7 @@ app.get('/api/auth/status', async (req, res) => {
     
     // Fall back to session
     if (req.session && req.session.userId) {
-        const result = await pool.query('SELECT id, email, phone, role FROM users WHERE id = $1', [req.session.userId]);
+        const result = await pool.query('SELECT id, email, role, google_id FROM users WHERE id = $1', [req.session.userId]);
         if (result.rows.length > 0) {
             return res.json({ authenticated: true, user: result.rows[0], authMethod: 'cookie' });
         }
