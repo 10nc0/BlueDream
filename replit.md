@@ -191,6 +191,18 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 
 ## Recent Changes
 
+### 2025-10-28: Admin Panel (Dev Only) ✅
+- **Feature**: Admin-only tab for monitoring users, sessions, and audit logs
+- **Access**: Only visible to admin@bridge.local (dev account)
+- **Design**: White tab header to distinguish from regular tabs
+- **Sections**:
+  - **Registered Users**: View all users with roles and IDs
+  - **Active Sessions**: Monitor current sessions with location, device, browser info
+  - **Audit Logs**: Track all system activities (login, logout, user management, bot operations)
+  - **Filtering**: Filter audit logs by activity type (auth, session, user, bot)
+- **Layout**: Responsive grid with scrollable sections
+- **Security**: Enforced access control - only admin@bridge.local can see this tab
+
 ### 2025-10-28: Media Lazy Loading + Caching System ✅
 - **Problem**: Media showed "Loading media..." placeholders but never loaded actual images/videos
 - **Root Cause**: `media-loader.js` loaded in `<head>` before `authFetch()` was defined in `<body>`
@@ -245,12 +257,14 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 ### Manual Testing
 1. Login at `/login.html` with admin@bridge.local / admin123
 2. Verify dashboard loads without redirect loop
-3. Check Discord-style message feed displays correctly with 3 messages
-4. Test search/filtering in message feed
-5. Test delete bot button (confirmation modal + cascade deletion)
-6. Verify Users page shows admin@bridge.local and replit@test.local
-7. Verify Sessions page shows current active session
-8. **IMPORTANT**: Do hard refresh (Cmd+Shift+R / Ctrl+Shift+R) after code changes to clear JavaScript cache
+3. **Check Admin Panel tab**: Should see white "🛡️ Admin Panel" tab (only visible to admin@bridge.local)
+4. **Test Admin Panel**: Click tab to see registered users, active sessions, and audit logs
+5. **Filter audit logs**: Use dropdown to filter by activity type (auth, session, user, bot)
+6. Check Discord-style message feed displays correctly with 3 messages
+7. Test search/filtering in message feed
+8. Test delete bot button (confirmation modal + cascade deletion)
+9. **Test media loading**: Expand bot with images, verify they load and cache
+10. **IMPORTANT**: Do hard refresh (Cmd+Shift+R / Ctrl+Shift+R) after code changes to clear JavaScript cache
 
 ## Known Issues
 

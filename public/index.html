@@ -74,9 +74,8 @@
     <div class="container">
         <div class="tabs">
             <button class="tab active" onclick="switchTab('bots')">🌉 Bridges</button>
-            <button class="tab" onclick="switchTab('users')">👥 Users</button>
-            <button class="tab" onclick="switchTab('sessions')">🔐 Sessions</button>
             <button class="tab" onclick="switchTab('analytics')">📊 Analytics</button>
+            <button class="tab admin-only-tab" id="adminPanelTab" onclick="switchTab('adminPanel')" style="display: none; background: white; color: #1a1a2e;">🛡️ Admin Panel</button>
         </div>
 
         <!-- Bridges Tab -->
@@ -157,6 +156,51 @@
             <div id="analyticsContent" class="analytics-content">
                 <div style="text-align: center; padding: 3rem; color: #94a3b8;">
                     <p>Loading analytics...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Panel Tab (admin@bridge.local only) -->
+        <div id="adminPanelTab-content" class="tab-content" style="display: none;">
+            <div class="section-header">
+                <h1 class="section-title">🛡️ Admin Panel (Dev Only)</h1>
+                <div style="font-size: 0.875rem; color: #94a3b8;">Restricted to admin@bridge.local</div>
+            </div>
+
+            <!-- Admin Panel Grid -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 1.5rem; margin-top: 1.5rem;">
+                
+                <!-- Users Section -->
+                <div class="glass-card" style="padding: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h2 style="font-size: 1.25rem; font-weight: 600; color: white;">👥 Registered Users</h2>
+                        <button class="create-bot-btn" onclick="openCreateUserModal()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">+ Add User</button>
+                    </div>
+                    <div id="adminUserList" style="max-height: 400px; overflow-y: auto;"></div>
+                </div>
+
+                <!-- Active Sessions Section -->
+                <div class="glass-card" style="padding: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h2 style="font-size: 1.25rem; font-weight: 600; color: white;">🔐 Active Sessions</h2>
+                        <button class="create-bot-btn" onclick="revokeAllSessions()" style="padding: 0.5rem 1rem; font-size: 0.875rem; background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);">🚫 Revoke All</button>
+                    </div>
+                    <div id="adminSessionsList" style="max-height: 400px; overflow-y: auto;"></div>
+                </div>
+
+                <!-- Audit Logs Section -->
+                <div class="glass-card" style="padding: 1.5rem; grid-column: 1 / -1;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h2 style="font-size: 1.25rem; font-weight: 600; color: white;">📋 Recent Activity & Audit Logs</h2>
+                        <select id="auditLogFilter" class="filter-dropdown" onchange="loadAdminPanel()" style="width: auto;">
+                            <option value="all">All Activities</option>
+                            <option value="auth">Authentication</option>
+                            <option value="session">Session Management</option>
+                            <option value="user">User Management</option>
+                            <option value="bot">Bridge Management</option>
+                        </select>
+                    </div>
+                    <div id="adminAuditLogs" style="max-height: 500px; overflow-y: auto;"></div>
                 </div>
             </div>
         </div>
@@ -530,6 +574,12 @@
                     'write-only': '#3b82f6'
                 };
                 userInfo.innerHTML = `<span style="color: ${roleColors[currentUser.role] || '#94a3b8'};">● ${currentUser.email || currentUser.phone} (${currentUser.role})</span>`;
+                
+                // Show Admin Panel tab only for admin@bridge.local
+                const adminTab = document.getElementById('adminPanelTab');
+                if (adminTab && currentUser.email === 'admin@bridge.local') {
+                    adminTab.style.display = 'block';
+                }
                 
                 return true;
             } catch (error) {
@@ -1720,6 +1770,154 @@
             }
         }
 
+        // Load Admin Panel (admin@bridge.local only)
+        async function loadAdminPanel() {
+            if (!currentUser || currentUser.email !== 'admin@bridge.local') {
+                return;
+            }
+
+            // Load users
+            try {
+                const usersResponse = await authFetch('/api/users');
+                if (usersResponse.ok) {
+                    const users = await usersResponse.json();
+                    renderAdminUsers(users);
+                }
+            } catch (error) {
+                console.error('Error loading users for admin panel:', error);
+                document.getElementById('adminUserList').innerHTML = '<div style="color: #ef4444; text-align: center; padding: 1rem;">Error loading users</div>';
+            }
+
+            // Load sessions
+            try {
+                const sessionsResponse = await authFetch('/api/sessions');
+                if (sessionsResponse.ok) {
+                    const sessions = await sessionsResponse.json();
+                    renderAdminSessions(sessions);
+                }
+            } catch (error) {
+                console.error('Error loading sessions for admin panel:', error);
+                document.getElementById('adminSessionsList').innerHTML = '<div style="color: #ef4444; text-align: center; padding: 1rem;">Error loading sessions</div>';
+            }
+
+            // Load audit logs
+            try {
+                const filter = document.getElementById('auditLogFilter')?.value || 'all';
+                const params = filter !== 'all' ? `?action_type=${filter}` : '?limit=50';
+                const auditResponse = await authFetch(`/api/audit-logs${params}`);
+                if (auditResponse.ok) {
+                    const auditLogs = await auditResponse.json();
+                    renderAdminAuditLogs(auditLogs);
+                }
+            } catch (error) {
+                console.error('Error loading audit logs for admin panel:', error);
+                document.getElementById('adminAuditLogs').innerHTML = '<div style="color: #ef4444; text-align: center; padding: 1rem;">Error loading audit logs</div>';
+            }
+        }
+
+        function renderAdminUsers(users) {
+            const container = document.getElementById('adminUserList');
+            if (!users || users.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 1rem; color: #94a3b8;">No users found</div>';
+                return;
+            }
+
+            const roleColors = {
+                'admin': '#10b981',
+                'read-only': '#f59e0b',
+                'write-only': '#3b82f6'
+            };
+
+            container.innerHTML = users.map(user => `
+                <div style="padding: 0.75rem; margin-bottom: 0.5rem; background: rgba(255, 255, 255, 0.05); border-radius: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.1);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-weight: 600; color: white;">${escapeHtml(user.email || user.phone)}</div>
+                            <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                                ID: ${user.id} • Role: <span style="color: ${roleColors[user.role]};">${user.role}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderAdminSessions(sessions) {
+            const container = document.getElementById('adminSessionsList');
+            if (!sessions || sessions.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 1rem; color: #94a3b8;">No active sessions</div>';
+                return;
+            }
+
+            container.innerHTML = sessions.map(session => {
+                const loginTime = new Date(session.login_time).toLocaleString();
+                const lastActivity = new Date(session.last_activity).toLocaleString();
+                
+                return `
+                    <div style="padding: 0.75rem; margin-bottom: 0.5rem; background: rgba(255, 255, 255, 0.05); border-radius: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.1);">
+                        <div style="font-weight: 600; color: white;">${escapeHtml(session.user_email || session.user_phone)}</div>
+                        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                            📍 ${escapeHtml(session.location || 'Unknown')}
+                        </div>
+                        <div style="font-size: 0.75rem; color: #94a3b8;">
+                            💻 ${escapeHtml(session.device_type)} • ${escapeHtml(session.browser)}
+                        </div>
+                        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">
+                            Last: ${lastActivity}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderAdminAuditLogs(logs) {
+            const container = document.getElementById('adminAuditLogs');
+            if (!logs || logs.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 1rem; color: #94a3b8;">No audit logs found</div>';
+                return;
+            }
+
+            const actionIcons = {
+                'LOGIN': '🔑',
+                'LOGOUT': '🚪',
+                'SESSION_CREATE': '🔐',
+                'SESSION_REVOKE': '🚫',
+                'USER_CREATE': '👤',
+                'USER_UPDATE': '✏️',
+                'USER_DELETE': '🗑️',
+                'BOT_CREATE': '🌉',
+                'BOT_UPDATE': '⚙️',
+                'BOT_DELETE': '❌',
+                'PASSWORD_RESET': '🔒',
+                'SELF_REGISTER': '📝'
+            };
+
+            container.innerHTML = logs.map(log => {
+                const timestamp = new Date(log.timestamp).toLocaleString();
+                const icon = actionIcons[log.action_type] || '📋';
+                const details = log.details ? JSON.parse(log.details) : {};
+                
+                return `
+                    <div style="padding: 0.75rem; margin-bottom: 0.5rem; background: rgba(255, 255, 255, 0.03); border-radius: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.875rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div style="flex: 1;">
+                                <span style="font-size: 1.25rem;">${icon}</span>
+                                <strong style="color: white; margin-left: 0.5rem;">${log.action_type}</strong>
+                                <div style="color: #94a3b8; margin-top: 0.25rem; margin-left: 2rem;">
+                                    Actor: <span style="color: #60a5fa;">${escapeHtml(log.actor_email || 'System')}</span>
+                                    ${log.target_email ? `→ Target: <span style="color: #f59e0b;">${escapeHtml(log.target_email)}</span>` : ''}
+                                </div>
+                                ${log.ip_address ? `<div style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem; margin-left: 2rem;">IP: ${escapeHtml(log.ip_address)}</div>` : ''}
+                            </div>
+                            <div style="text-align: right; color: #64748b; font-size: 0.75rem; white-space: nowrap;">
+                                ${timestamp}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         // Tab Switching
         function switchTab(tabName) {
             // Update tab buttons
@@ -1728,15 +1926,22 @@
             
             // Update tab content
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            document.getElementById(`${tabName}Tab`).classList.add('active');
             
-            // Load data for the tab
-            if (tabName === 'users') {
-                loadUsers();
-            } else if (tabName === 'sessions') {
-                loadSessions();
-            } else if (tabName === 'analytics') {
-                loadAnalyticsDashboard();
+            // Handle adminPanel tab (special case with different ID)
+            if (tabName === 'adminPanel') {
+                document.getElementById('adminPanelTab-content').classList.add('active');
+                loadAdminPanel();
+            } else {
+                document.getElementById(`${tabName}Tab`).classList.add('active');
+                
+                // Load data for the tab
+                if (tabName === 'users') {
+                    loadUsers();
+                } else if (tabName === 'sessions') {
+                    loadSessions();
+                } else if (tabName === 'analytics') {
+                    loadAnalyticsDashboard();
+                }
             }
         }
 
