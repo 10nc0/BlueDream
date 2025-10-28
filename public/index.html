@@ -13,7 +13,8 @@
 </head>
 <body>
     <div class="header">
-        <div class="header-left">
+        <!-- Left Section: Status Indicators -->
+        <div class="header-section header-left">
             <div class="status-indicators-vertical">
                 <div class="indicator-vertical" id="systemStatusCompact">
                     <span class="status-dot healthy"></span> System: <span id="systemStatusValueCompact">Healthy</span>
@@ -28,26 +29,34 @@
                     Bridges: <span id="bridgeCountCompact">0</span>
                 </div>
             </div>
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
+        </div>
+        
+        <!-- Center Section: Logo, Cat, Clock -->
+        <div class="header-section header-center">
+            <div class="header-cat-clock">
                 <div class="animated-character">
                     <canvas id="hopCanvas" class="character-canvas" width="125" height="125"></canvas>
                 </div>
-                <div style="font-size: 0.75rem; color: #94a3b8; text-align: center;">
+                <div class="header-clock">
                     <span id="currentTime">2025/10/28 - 3:00:00PM</span>
                 </div>
             </div>
-            <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+            <div class="header-branding">
                 <div class="logo">
                     <span>🌈 Nyan Bridge</span>
                 </div>
-                <div style="text-align: left;">
+                <div class="tagline-wrapper">
                     <span class="tagline">WhatsApp to Discord Bridge, SNS to SNS - app to app hopping, nyan~</span>
                 </div>
             </div>
         </div>
-        <div class="header-right">
-            <button class="logout-btn" onclick="logout()">Logout</button>
-            <div id="userInfo" style="font-size: 0.875rem; text-align: center; white-space: nowrap; margin-top: 0.5rem; padding: 0.5rem 1rem; background: rgba(30, 41, 59, 0.5); border-radius: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.1);"></div>
+        
+        <!-- Right Section: User Info & Logout -->
+        <div class="header-section header-right">
+            <div class="header-user-info">
+                <div id="userInfo"></div>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
         </div>
     </div>
 
