@@ -394,10 +394,18 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action_type)
         `);
         
-        // No default admin user - first signup becomes admin (genesis user)
+        // Create dev admin user if no users exist (for development)
+        // In production, first signup becomes admin (genesis user)
         const usersCount = await pool.query('SELECT COUNT(*) FROM users');
         if (parseInt(usersCount.rows[0].count) === 0) {
-            console.log('🌟 No users exist yet. First signup will become admin (genesis user).');
+            const bcrypt = require('bcrypt');
+            const defaultPassword = await bcrypt.hash('admin123', 10);
+            await pool.query(`
+                INSERT INTO users (email, password_hash, role)
+                VALUES ($1, $2, $3)
+            `, ['admin@bridge.local', defaultPassword, 'admin']);
+            console.log('✅ Created dev admin user (email: admin@bridge.local, password: admin123)');
+            console.log('🌟 For production: Delete this user and let first signup become admin (genesis user)');
         }
         
         // Create performance indexes for frequently queried columns
