@@ -191,6 +191,16 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 
 ## Recent Changes
 
+### 2025-10-28: Custom Tooltip System + Header Cleanup ✅
+- **Problem**: Tooltips were cropped by table edges using native browser title attribute
+- **Solution**: Custom tooltip system with intelligent positioning
+  - **Fixed Positioning**: Uses `position: fixed` with z-index 10000 to appear above all containers
+  - **Smart Placement**: Automatically positions above or below element based on available viewport space
+  - **Glassmorphism**: Dark themed with backdrop blur matching design system
+  - **Arrow Indicators**: Visual arrows point to the target element
+  - **Smooth Animations**: Fade-in transitions for polished UX
+- **Header Simplification**: Reduced status indicators from 4 to 2 (System: Healthy + Bridges count)
+
 ### 2025-10-28: Natural Language Search + Auto-Search ✅
 - **Removed**: Search/Regex toggle button (saves UI space, auto-detects regex patterns)
 - **Natural Language Date Parsing**: Supports intuitive queries like:
