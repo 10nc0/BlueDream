@@ -88,8 +88,19 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 ├── public/
 │   ├── index.html        # Dashboard (SPA with Discord-style UI)
 │   ├── login.html        # Login page
-│   └── css/
-│       └── dashboard.css # Discord-style glassmorphism CSS
+│   ├── css/
+│   │   ├── dashboard.css           # Discord-style glassmorphism CSS
+│   │   └── components/
+│   │       ├── tooltips.css        # Tooltip system styles
+│   │       ├── analytics.css       # Analytics dashboard styles
+│   │       ├── enhancements.css    # Global UX enhancements
+│   │       └── media-modal.css     # Media viewer modal styles
+│   └── js/ui/
+│       ├── tooltips.js             # Tooltip glossary system
+│       ├── onboarding.js           # Onboarding hints
+│       ├── analytics.js            # Analytics charts
+│       ├── search.js               # Advanced search
+│       └── media-loader.js         # Media lazy loading + caching
 ├── tests/
 │   └── ui-audit/         # Playwright UI tests
 │       ├── audit.spec.js # Test suite (7 states)
@@ -179,6 +190,19 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 - **UX**: Auto-expanding single bots, responsive sidebar collapse
 
 ## Recent Changes
+
+### 2025-10-28: Media Lazy Loading + Caching System ✅
+- **Problem**: Media showed "Loading media..." placeholders but never loaded actual images/videos
+- **Root Cause**: `media-loader.js` loaded in `<head>` before `authFetch()` was defined in `<body>`
+- **Solution**: Moved script loading to correct order (after authFetch definition)
+- **Features Added**:
+  - **IntersectionObserver** lazy loading (loads media only when visible in viewport)
+  - **Triple-layer caching**: Memory cache → IndexedDB (90-min TTL) → Server API
+  - **Media modal**: Click to expand images in full-screen viewer
+  - **Automatic re-initialization**: After message rendering and search results
+  - **Comprehensive error logging**: Detailed diagnostics for debugging
+- **Performance**: Media persists across scrolling and tab switches without re-downloading
+- **Testing**: Login at `/login.html` (admin@bridge.local/admin123), expand bot, verify images load and cache
 
 ### 2025-10-28: Discord-Style UI + Delete Bot + Bug Fixes ✅
 - **Added Discord-style two-pane layout**: Left sidebar (bot channels) + right detail panel (messages)
