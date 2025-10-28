@@ -2543,23 +2543,27 @@ app.get('/api/stats', requireAuth, async (req, res) => {
 // CRITICAL: Complete horizontal tenant isolation with EXPLICIT SCHEMA INDEXING
 // Uses dynamic schema names via variable placeholders (fractalized architecture)
 app.get('/api/bots', requireAuth, async (req, res) => {
+    console.log(`🔍 /api/bots called by user ${req.userId}`);
+    
     try {
         // Get tenant schema from authenticated user
         const userResult = await pool.query(
-            'SELECT tenant_id FROM users WHERE id = $1',
+            'SELECT id, email, tenant_id FROM users WHERE id = $1',
             [req.userId]
         );
         
         if (!userResult.rows.length) {
+            console.error(`❌ User ${req.userId} not found in database`);
             return res.status(404).json({ error: 'User not found' });
         }
         
-        const tenantId = userResult.rows[0].tenant_id;
+        const user = userResult.rows[0];
+        const tenantId = user.tenant_id;
         const tenantSchema = `tenant_${tenantId}`;
         
-        console.log(`📊 Loading bridges for user ${req.userId} from ${tenantSchema}`);
+        console.log(`📊 Loading bridges for ${user.email} (user_id=${req.userId}) from ${tenantSchema}`);
         
-        // EXPLICIT SCHEMA INDEXING: Use parameterized schema names
+        // EXPLICIT SCHEMA INDEXING: Use parameterized schema names (fractalized architecture)
         const result = await pool.query(`
             SELECT 
                 b.*,
@@ -2574,10 +2578,11 @@ app.get('/api/bots', requireAuth, async (req, res) => {
             ORDER BY b.created_at DESC
         `);
         
-        console.log(`✅ Found ${result.rows.length} bridges in ${tenantSchema}`);
+        console.log(`✅ Found ${result.rows.length} bridges in ${tenantSchema} for ${user.email}`);
         res.json(result.rows);
     } catch (error) {
-        console.error('❌ Error in /api/bots:', error);
+        console.error(`❌ Error in /api/bots for user ${req.userId}:`, error);
+        console.error('Stack trace:', error.stack);
         res.status(500).json({ error: error.message });
     }
 });
