@@ -893,19 +893,15 @@
             if (!skipDetailRender) {
                 renderBotDetail();
                 
-                // Load messages for auto-selected bot
-                if (wasAutoSelected && !messageCache[selectedBotId]) {
-                    loadBotMessages(selectedBotId, 1);
-                }
+                // Always load messages for selected bot to ensure they appear
+                loadBotMessages(selectedBotId, 1);
             }
         }
 
         function selectBot(botId) {
             selectedBotId = botId;
             renderBots();
-            if (!messageCache[botId]) {
-                loadBotMessages(botId, 1);
-            }
+            loadBotMessages(botId, 1);
         }
 
         async function renderBotDetail() {
@@ -1961,8 +1957,16 @@
         
         async function loadBotMessages(botId, page = 1) {
             try {
+                console.log(`Loading messages for bot ${botId}...`);
                 const response = await authFetch(`/api/bots/${botId}/messages?page=${page}&limit=50`);
+                
+                if (!response.ok) {
+                    console.error(`API returned ${response.status}: ${response.statusText}`);
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
                 const data = await response.json();
+                console.log(`Received ${data.messages?.length || 0} messages:`, data);
                 
                 // Cache the messages array
                 messageCache[botId] = data.messages;
@@ -1971,6 +1975,7 @@
                 const container = document.getElementById(`discord-messages-${botId}`);
                 if (container) {
                     container.innerHTML = renderDiscordMessages(data.messages, botId);
+                    console.log(`Rendered ${data.messages?.length || 0} messages to container`);
                     
                     // Initialize media lazy loading for this bot's messages
                     setTimeout(() => {
