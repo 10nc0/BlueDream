@@ -164,18 +164,6 @@
             </div>
         </div>
 
-        <!-- Users Tab (Admin Role) -->
-        <div id="usersTab-content" class="tab-content" style="display: none;">
-            <div class="section-header">
-                <h1 class="section-title">👥 User Management</h1>
-                <button class="create-bot-btn" onclick="openCreateUserModal()">+ Add User</button>
-            </div>
-            <div id="userList" class="user-list">
-                <div style="text-align: center; padding: 3rem; color: #94a3b8;">
-                    <p>Loading users...</p>
-                </div>
-            </div>
-        </div>
 
         <!-- Dev Panel Tab (Dev Role Only) - System Overview -->
         <div id="devPanelTab-content" class="tab-content" style="display: none;">
@@ -1991,60 +1979,8 @@
             }
         }
 
-        // User Management
-        async function loadUsers() {
-            try {
-                const response = await authFetch('/api/users');
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error(`❌ Failed to load users: ${response.status} ${response.statusText}`, errorText);
-                    throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
-                }
-                users = await response.json();
-                renderUsers();
-            } catch (error) {
-                console.error('❌ Error loading users:', {
-                    name: error.name,
-                    message: error.message,
-                    stack: error.stack
-                });
-                const userList = document.getElementById('userList');
-                if (userList) {
-                    userList.innerHTML = `<div style="text-align: center; padding: 3rem; color: #ef4444;">Error loading users: ${error.message}</div>`;
-                }
-            }
-        }
-
-        function renderUsers() {
-            const userList = document.getElementById('userList');
-            if (!userList) return;
-            
-            if (!users || users.length === 0) {
-                userList.innerHTML = '<div style="text-align: center; padding: 3rem; color: #94a3b8;">No users found. Click "+ Create User" to add one.</div>';
-                return;
-            }
-            
-            userList.innerHTML = users.map(user => `
-                <div class="user-item">
-                    <div class="user-details">
-                        <div class="user-email">${user.email || user.phone}</div>
-                        <span class="role-badge role-${user.role}">${user.role}</span>
-                    </div>
-                    <div class="user-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-                        <select class="form-select" onchange="changeUserRole('${user.id}', this.value)" style="width: auto; padding: 0.5rem;">
-                            <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
-                            <option value="read-only" ${user.role === 'read-only' ? 'selected' : ''}>Read Only</option>
-                            <option value="write-only" ${user.role === 'write-only' ? 'selected' : ''}>Write Only</option>
-                        </select>
-                        ${user.email ? `<button class="btn" style="flex: none; padding: 0.5rem 1rem; background: #3b82f6;" onclick="changeUserEmail('${user.id}', '${user.email}')">✉️ Change Email</button>` : ''}
-                        ${user.email ? `<button class="btn" style="flex: none; padding: 0.5rem 1rem; background: #8b5cf6;" onclick="changeUserPassword('${user.id}')">🔒 Change Password</button>` : ''}
-                        ${user.email !== currentUser.email && user.phone !== currentUser.phone ? 
-                            `<button class="btn btn-delete" style="flex: none; padding: 0.5rem 1rem;" onclick="deleteUser('${user.id}')">Delete</button>` : 
-                            '<span style="color: #94a3b8; font-size: 0.875rem;">(You)</span>'}
-                    </div>
-                </div>
-            `).join('');
-        }
+        // OLD User Management functions removed - replaced with loadAdminCards() and renderAdminUserManagement()
+        // These are now defined below in the new architecture section
 
         function openCreateUserModal() {
             document.getElementById('userModal').classList.add('active');
@@ -2072,7 +2008,8 @@
 
                 if (response.ok) {
                     closeUserModal();
-                    loadUsers();
+                    loadAdminCards(); // Updated to use new function
+                    loadDevPanelAdmins(); // Also refresh dev panel if visible
                     document.getElementById('userForm').reset();
                 } else {
                     const error = await response.json();
@@ -2093,7 +2030,8 @@
                 });
 
                 if (response.ok) {
-                    loadUsers();
+                    loadAdminCards(); // Updated to use new function
+                    loadDevPanelAdmins(); // Also refresh dev panel if visible
                 } else {
                     alert('Failed to update user role');
                 }
@@ -2106,9 +2044,10 @@
             if (!confirm('Are you sure you want to delete this user?')) return;
             
             try {
-                const response = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+                const response = await authFetch(`/api/users/${userId}`, { method: 'DELETE' });
                 if (response.ok) {
-                    loadUsers();
+                    loadAdminCards(); // Updated to use new function
+                    loadDevPanelAdmins(); // Also refresh dev panel if visible
                 } else {
                     alert('Failed to delete user');
                 }
