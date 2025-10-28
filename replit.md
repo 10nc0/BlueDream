@@ -191,6 +191,36 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 
 ## Recent Changes
 
+### 2025-10-28: Deployment Configuration + Health Checks ✅
+- **Fixed Autoscale Deployment Issues**:
+  - **Health Check Endpoint**: Added `/health` endpoint that returns 200 without authentication
+  - **HEAD Request Support**: Root `/` endpoint now responds to HEAD requests with 200 for health checks
+  - **Dynamic Port**: Changed from hardcoded 5000 to `process.env.PORT || 5000` for deployment compatibility
+  - **Run Command**: Configured deployment to use `node index.js` instead of `$file` variable
+- **Deployment Type**: Autoscale (for web apps with variable traffic)
+- **Health Check**: Responds at `/health` and `/` (HEAD) with 200 status immediately
+- **Result**: App now passes Replit deployment health checks and can be published
+
+### 2025-10-28: Excel Date Format Support + Date Search Fix ✅
+- **Enhanced Date Parser**: Now supports all common Excel date formats:
+  - **MMM-YY**: `Oct-25`, `Jan-24` → entire month
+  - **DD-MMM-YY**: `28-Oct-24`, `15-Jan-25` → specific date
+  - **YYYY-MM-DD**: `2024-10-28` → ISO format
+  - **MM/DD/YYYY**: `10/28/2024` → US format (auto-detects DD/MM/YYYY if day > 12)
+- **Timezone Fix**: All date formats now use local timezone instead of UTC (prevents date shifting bugs)
+- **Bridge Filtering Fix**: Date searches no longer hide bridges - all bridges show when searching by date
+- **Smart Context**: Date badge shows parsed date range (e.g., "📅 oct 2025" for entire month)
+- **Result**: "oct-25" now correctly shows all bridges and filters messages for October 2025
+
+### 2025-10-28: AI Search Removal (Cost Optimization) ✅
+- **Removed AI Integration**: Eliminated OpenAI-powered search to avoid API costs
+- **Reverted to Pattern-Based Search**: Enhanced natural language date parsing without AI
+- **Kept All Date Features**: Still supports "yesterday", "last week", "october", Excel formats
+- **Updated Placeholder**: Changed from "🤖 AI Search" to "🔍 Search bridges, messages, senders..."
+- **Result**: Zero API costs while maintaining useful date search capabilities
+
+## Recent Changes
+
 ### 2025-10-28: AI-Powered Natural Language Search System ✅
 - **Major Upgrade**: Moved from pattern-matching to full AI-driven search interpretation
 - **Backend AI Layer** (`server/ai-search.js`):
@@ -415,9 +445,13 @@ Changed from old `messages-${botId}` container to new Discord-style `discord-mes
 
 ## Deployment
 
-- **Status**: Ready for Replit deployment
+- **Status**: Ready for Replit Autoscale deployment ✅
 - **Environment**: PostgreSQL database required (automatically configured in Replit)
 - **Secrets**: SESSION_SECRET, DISCORD_WEBHOOK_URL, DATABASE_URL (auto-provided)
+- **Port**: Uses `process.env.PORT` environment variable (defaults to 5000)
+- **Run Command**: `node index.js` (configured for deployment)
+- **Health Check**: `/health` endpoint returns 200 status without authentication
+- **Configuration**: Autoscale deployment with `node index.js` run command
 
 ## Next Steps (Recommended by Architect)
 

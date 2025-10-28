@@ -56,4 +56,5 @@ localPort = 43571
 externalPort = 4200
 
 [deployment]
-deploymentTarget = "cloudrun"
+deploymentTarget = "autoscale"
+run = ["node", "index.js"]

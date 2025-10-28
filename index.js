@@ -124,8 +124,18 @@ app.get('/uat', async (req, res) => {
     }
 });
 
+// Health check endpoint for deployment health checks
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
 // Serve main dashboard - client-side JWT auth will handle access control
 app.get('/', async (req, res) => {
+    // Health check support: return 200 for HEAD requests (used by deployment health checks)
+    if (req.method === 'HEAD') {
+        return res.status(200).end();
+    }
+    
     // Test/UAT mode: LOCALHOST ONLY to prevent unauthorized admin access
     if (req.query.test === '1' || req.query.uat === '1') {
         // SECURITY: Check socket address (cannot be spoofed) instead of X-Forwarded-For
@@ -2638,8 +2648,9 @@ async function updateAnalytics(botId) {
     }
 }
 
-app.listen(5000, '0.0.0.0', async () => {
-    console.log('🌐 Dashboard available at http://localhost:5000');
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, '0.0.0.0', async () => {
+    console.log(`🌐 Dashboard available at http://localhost:${PORT}`);
     await initializeDatabase();
 });
 
