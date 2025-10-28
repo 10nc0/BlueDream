@@ -2563,6 +2563,122 @@ app.get('/api/messages/search', requireAuth, async (req, res) => {
 });
 
 // ===========================
+// AI-POWERED SEARCH API
+// ===========================
+
+const { interpretSearchQuery, validateFilters, fallbackSearch } = require('./server/ai-search');
+
+app.get('/api/messages/ai-search', requireAuth, async (req, res) => {
+    const { botId, query } = req.query;
+    
+    if (!botId) {
+        return res.status(400).json({ error: 'Bot ID is required' });
+    }
+    
+    if (!query || query.trim().length === 0) {
+        return res.status(400).json({ error: 'Search query is required' });
+    }
+    
+    try {
+        let aiResult;
+        let usedFallback = false;
+        
+        // Try AI interpretation with 3-second timeout
+        try {
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('AI timeout')), 3000)
+            );
+            
+            aiResult = await Promise.race([
+                interpretSearchQuery(query),
+                timeoutPromise
+            ]);
+        } catch (aiError) {
+            console.warn('⚠️ AI search failed, using fallback:', aiError.message);
+            aiResult = fallbackSearch(query);
+            usedFallback = true;
+        }
+        
+        // Validate and convert AI filters to database query parameters
+        const validated = validateFilters(aiResult.filters || {});
+        
+        // Build database query using existing search logic
+        let dbQuery = 'SELECT * FROM messages WHERE bot_id = $1';
+        const params = [botId];
+        let paramCount = 1;
+        
+        // Text search in message content
+        if (validated.q) {
+            paramCount++;
+            dbQuery += ` AND (LOWER(message_content) LIKE $${paramCount} OR LOWER(sender_name) LIKE $${paramCount})`;
+            params.push(`%${validated.q.toLowerCase()}%`);
+        }
+        
+        // Sender name filter
+        if (validated.senderName) {
+            paramCount++;
+            dbQuery += ` AND LOWER(sender_name) LIKE $${paramCount}`;
+            params.push(`%${validated.senderName.toLowerCase()}%`);
+        }
+        
+        // Sender ID filter
+        if (validated.senderId) {
+            paramCount++;
+            dbQuery += ` AND sender_contact LIKE $${paramCount}`;
+            params.push(`%${validated.senderId}%`);
+        }
+        
+        // Date range filters
+        if (validated.dateFrom) {
+            paramCount++;
+            dbQuery += ` AND timestamp >= $${paramCount}`;
+            params.push(validated.dateFrom + ' 00:00:00');
+        }
+        
+        if (validated.dateTo) {
+            paramCount++;
+            dbQuery += ` AND timestamp <= $${paramCount}`;
+            params.push(validated.dateTo + ' 23:59:59');
+        }
+        
+        // Message type filter
+        if (validated.messageType) {
+            paramCount++;
+            dbQuery += ` AND media_type = $${paramCount}`;
+            params.push(validated.messageType);
+        }
+        
+        // Status filter
+        if (validated.status) {
+            paramCount++;
+            dbQuery += ` AND discord_status = $${paramCount}`;
+            params.push(validated.status);
+        }
+        
+        dbQuery += ' ORDER BY timestamp DESC LIMIT 500';
+        
+        // Execute the query
+        const result = await pool.query(dbQuery, params);
+        
+        // Return results with AI context
+        res.json({
+            results: result.rows,
+            aiContext: {
+                intent: aiResult.intent,
+                dateContext: aiResult.date_context,
+                appliedFilters: validated,
+                suggestions: aiResult.suggestions || [],
+                usedFallback
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ AI search error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ===========================
 // ANALYTICS API
 // ===========================
 
