@@ -7,9 +7,38 @@
     <link rel="stylesheet" href="/css/dashboard.css">
     <link rel="stylesheet" href="/css/components/tooltips.css">
     <link rel="stylesheet" href="/css/components/analytics.css">
+    <link rel="stylesheet" href="/css/components/enhancements.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
+    <!-- Global System Status Bar -->
+    <div class="system-status-bar">
+        <div style="display: flex; gap: 1rem;">
+            <div class="status-indicator">
+                <span class="status-dot healthy"></span>
+                <span>System: <strong id="systemStatus">Healthy</strong></span>
+            </div>
+            <div class="status-indicator">
+                <span>Uptime: <strong id="systemUptime">--</strong></span>
+            </div>
+            <div class="status-indicator">
+                <span>Active Sessions: <strong id="activeSessions">0</strong></span>
+            </div>
+            <div class="status-indicator">
+                <span>Bridges: <strong id="bridgeCount">0</strong></span>
+            </div>
+        </div>
+        <div style="font-size: 0.75rem; color: rgba(255, 255, 255, 0.6);">
+            <span id="currentTime"></span>
+        </div>
+    </div>
+
+    <!-- Compact Mode Toggle -->
+    <button class="compact-mode-toggle" onclick="toggleCompactMode()" title="Toggle compact mode for power users">
+        <span id="compactModeIcon">📐</span> <span id="compactModeText">Compact</span>
+    </button>
+
+
     <div class="header">
         <div class="header-left">
             <div style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
@@ -715,9 +744,9 @@
                     <div class="discord-channel-info">
                         <span class="discord-channel-name"># ${bot.input_platform}-${bot.output_platform}</span>
                         <span class="discord-stats">
-                            <span class="stat-badge" data-tooltip="message_count" title="${glossary?.tooltips?.message_count || ''}">📊 ${bot.message_count || 0}</span>
-                            <span class="stat-badge ${successClass}" data-tooltip="forwarded_count" title="${glossary?.tooltips?.forwarded_count || ''}">✓ ${bot.forwarded_count || 0}</span>
-                            <span class="stat-badge error ${failedClass}" data-tooltip="failed_count" title="${glossary?.tooltips?.failed_count || ''}">✗ ${bot.failed_count || 0}</span>
+                            <span class="stat-badge" data-tooltip="${glossary?.tooltips?.message_count || 'Total messages received'}">📊 ${bot.message_count || 0}</span>
+                            <span class="stat-badge ${successClass}" data-tooltip="${glossary?.tooltips?.forwarded_count || 'Successfully forwarded messages'}">✓ ${bot.forwarded_count || 0}</span>
+                            <span class="stat-badge error ${failedClass}" data-tooltip="${glossary?.tooltips?.failed_count || 'Failed to forward'}">✗ ${bot.failed_count || 0}</span>
                         </span>
                     </div>
                     <div class="discord-actions">
@@ -1820,6 +1849,108 @@
                 initHopAnimation();
             }
         });
+        // ===== SYSTEM STATUS BAR =====
+        let startTime = Date.now();
+        
+        function updateSystemStatus() {
+            // Update uptime
+            const uptime = Date.now() - startTime;
+            const hours = Math.floor(uptime / 3600000);
+            const minutes = Math.floor((uptime % 3600000) / 60000);
+            document.getElementById('systemUptime').textContent = `${hours}h ${minutes}m`;
+            
+            // Update current time
+            document.getElementById('currentTime').textContent = new Date().toLocaleTimeString();
+            
+            // Update bridge count
+            document.getElementById('bridgeCount').textContent = bots.length;
+            
+            // Update active sessions (will be populated when sessions load)
+            if (window.sessions) {
+                document.getElementById('activeSessions').textContent = sessions.filter(s => s.is_active).length;
+            }
+        }
+        
+        // Update status every second
+        setInterval(updateSystemStatus, 1000);
+        updateSystemStatus();
+        
+        // ===== COMPACT MODE TOGGLE =====
+        function toggleCompactMode() {
+            document.body.classList.toggle('compact-mode');
+            const isCompact = document.body.classList.contains('compact-mode');
+            document.getElementById('compactModeText').textContent = isCompact ? 'Normal' : 'Compact';
+            document.getElementById('compactModeIcon').textContent = isCompact ? '📏' : '📐';
+            localStorage.setItem('compactMode', isCompact);
+        }
+        
+        // Restore compact mode from localStorage
+        if (localStorage.getItem('compactMode') === 'true') {
+            document.body.classList.add('compact-mode');
+            document.getElementById('compactModeText').textContent = 'Normal';
+            document.getElementById('compactModeIcon').textContent = '📏';
+        }
+        
+        // ===== ONBOARDING HINTS =====
+        const hints = {
+            'createBridge': {
+                element: '.create-bot-btn',
+                text: 'Click here to connect two platforms (e.g., WhatsApp → Discord)',
+                shown: false
+            },
+            'searchMessages': {
+                element: '.discord-search-input',
+                text: 'Search through all messages in this bridge',
+                shown: false
+            },
+            'analytics': {
+                element: 'button.tab:last-child',
+                text: 'View message analytics and success rates',
+                shown: false
+            }
+        };
+        
+        function showOnboardingHint(hintKey) {
+            const hint = hints[hintKey];
+            if (!hint || hint.shown || localStorage.getItem(`hint_${hintKey}`)) return;
+            
+            const targetEl = document.querySelector(hint.element);
+            if (!targetEl) return;
+            
+            const hintEl = document.createElement('div');
+            hintEl.className = 'onboarding-hint';
+            hintEl.innerHTML = `
+                ${hint.text}
+                <button class="close-hint" onclick="dismissHint('${hintKey}', this)">×</button>
+            `;
+            
+            const rect = targetEl.getBoundingClientRect();
+            hintEl.style.top = `${rect.bottom + 12}px`;
+            hintEl.style.left = `${rect.left}px`;
+            
+            document.body.appendChild(hintEl);
+            hint.shown = true;
+            
+            setTimeout(() => {
+                if (hintEl.parentNode) hintEl.remove();
+            }, 8000);
+        }
+        
+        function dismissHint(hintKey, button) {
+            localStorage.setItem(`hint_${hintKey}`, 'dismissed');
+            button.parentElement.remove();
+        }
+        
+        // Show hints after page loads
+        setTimeout(() => {
+            if (bots.length === 0) {
+                showOnboardingHint('createBridge');
+            }
+        }, 2000);
+        
+        setTimeout(() => {
+            showOnboardingHint('analytics');
+        }, 5000);
     </script>
 </body>
 </html>
