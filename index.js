@@ -1700,7 +1700,7 @@ app.post('/api/auth/forgot-password/reset', async (req, res) => {
 });
 
 // Get all users (admin only)
-app.get('/api/users', requireRole('admin'), async (req, res) => {
+app.get('/api/users', requireAuth, requireRole('admin'), async (req, res) => {
     try {
         const result = await pool.query('SELECT id, email, phone, role, created_at FROM users ORDER BY created_at DESC');
         res.json(result.rows);
@@ -1710,7 +1710,7 @@ app.get('/api/users', requireRole('admin'), async (req, res) => {
 });
 
 // Update user role (admin only)
-app.put('/api/users/:id/role', requireRole('admin'), async (req, res) => {
+app.put('/api/users/:id/role', requireAuth, requireRole('admin'), async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
     
@@ -1741,7 +1741,7 @@ app.put('/api/users/:id/role', requireRole('admin'), async (req, res) => {
 });
 
 // Delete user (admin only)
-app.delete('/api/users/:id', requireRole('admin'), async (req, res) => {
+app.delete('/api/users/:id', requireAuth, requireRole('admin'), async (req, res) => {
     const { id } = req.params;
     
     try {
