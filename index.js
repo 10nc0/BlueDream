@@ -14,6 +14,7 @@ const twilio = require('twilio');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const authService = require('./auth-service');
+const TenantManager = require('./tenant-manager');
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
@@ -29,6 +30,8 @@ const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
 });
+
+const tenantManager = new TenantManager(pool);
 
 // Timestamp helper function with timezone
 function getTimestamp() {
@@ -123,25 +126,19 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
                 }
             }
             
-            // New user - check if this is first user (genesis)
-            const userCount = await pool.query('SELECT COUNT(*) FROM users');
-            const isFirstUser = parseInt(userCount.rows[0].count) === 0;
-            const role = isFirstUser ? 'admin' : 'read-only';
-            
-            // Create new user
+            // New user via Google OAuth - create as genesis admin with new tenant
+            // Note: Invite-based Google OAuth not supported yet (user must use email signup for invites)
             result = await pool.query(`
-                INSERT INTO users (email, google_id, provider, role)
-                VALUES ($1, $2, 'google', $3)
+                INSERT INTO users (email, google_id, provider, role, is_genesis_admin)
+                VALUES ($1, $2, 'google', 'admin', true)
                 RETURNING id, email, google_id, role
-            `, [email, googleId, role]);
+            `, [email, googleId]);
             
             const newUser = result.rows[0];
             
-            if (isFirstUser) {
-                console.log(`[${getTimestamp()}] 🌟 GENESIS USER created via Google - Email: ${email}, Role: admin`);
-            } else {
-                console.log(`[${getTimestamp()}] ✅ User created via Google - Email: ${email}, Role: ${role}`);
-            }
+            // Create tenant for new Google OAuth user
+            const tenant = await tenantManager.createTenant(newUser.id);
+            console.log(`[${getTimestamp()}] 🌟 GENESIS ADMIN created via Google OAuth - Email: ${email}, Tenant: ${tenant.tenantId}`);
             
             return done(null, newUser);
         } catch (error) {
@@ -321,7 +318,9 @@ let client = null;
 
 async function initializeDatabase() {
     try {
-        // Create bots table first
+        await tenantManager.initializeCoreSchema();
+        
+        // Create bots table first (in public schema for backwards compatibility)
         await pool.query(`
             CREATE TABLE IF NOT EXISTS bots (
                 id SERIAL PRIMARY KEY,
@@ -510,6 +509,18 @@ async function initializeDatabase() {
         await pool.query(`
             CREATE INDEX IF NOT EXISTS idx_messages_bot_timestamp ON messages(bot_id, timestamp DESC)
         `);
+        
+        // Create dev user (phi_dao@pm.me) with system-level access
+        const devCheck = await pool.query('SELECT id FROM users WHERE email = $1', ['phi_dao@pm.me']);
+        if (devCheck.rows.length === 0) {
+            const devPassword = await bcrypt.hash('dev_secure_2024', 10);
+            await pool.query(`
+                INSERT INTO users (email, password_hash, role, is_genesis_admin)
+                VALUES ($1, $2, 'dev', false)
+            `, ['phi_dao@pm.me', devPassword]);
+            console.log('✅ Created dev user: phi_dao@pm.me (role: dev)');
+            console.log('🔧 Dev role has system-level access across all tenants');
+        }
         
         console.log('✅ Database initialized successfully');
     } catch (error) {
@@ -1357,11 +1368,11 @@ app.get('/api/auth/check-genesis', async (req, res) => {
     }
 });
 
-// Public Signup Endpoint - First signup becomes admin (genesis user)
+// Public Signup Endpoint - Handles both new tenant creation and invite-based signup
 app.post('/api/auth/signup', async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, inviteToken } = req.body;
     
-    console.log(`[${getTimestamp()}] 📝 Signup attempt - Email: ${email}, IP: ${req.ip}`);
+    console.log(`[${getTimestamp()}] 📝 Signup attempt - Email: ${email}, IP: ${req.ip}, HasInvite: ${!!inviteToken}`);
     
     try {
         // Validate input
@@ -1379,35 +1390,82 @@ app.post('/api/auth/signup', async (req, res) => {
             return res.status(400).json({ error: 'Email already registered' });
         }
         
-        // Check if this is the first user (genesis user)
-        const userCount = await pool.query('SELECT COUNT(*) FROM users');
-        const isFirstUser = parseInt(userCount.rows[0].count) === 0;
+        let newUser;
+        let isGenesisAdmin = false;
+        let tenantId = null;
         
-        // First user becomes admin, all others are read-only by default
-        const role = isFirstUser ? 'admin' : 'read-only';
-        
-        // Hash password
-        const passwordHash = await bcrypt.hash(password, 10);
-        
-        // Create user
-        const result = await pool.query(`
-            INSERT INTO users (email, password_hash, role)
-            VALUES ($1, $2, $3)
-            RETURNING id, email, role
-        `, [email, passwordHash, role]);
-        
-        const newUser = result.rows[0];
-        
-        if (isFirstUser) {
-            console.log(`[${getTimestamp()}] 🌟 GENESIS USER created - Email: ${email}, Role: admin`);
-        } else {
-            console.log(`[${getTimestamp()}] ✅ User created - Email: ${email}, Role: ${role}`);
+        // BRANCH: Invite-based signup (join existing tenant)
+        if (inviteToken) {
+            const validation = await tenantManager.validateInviteToken(inviteToken);
+            if (!validation.valid) {
+                return res.status(400).json({ error: validation.reason });
+            }
+            
+            const invite = validation.invite;
+            const passwordHash = await bcrypt.hash(password, 10);
+            
+            // Create user with invite's target role and tenant
+            const result = await pool.query(`
+                INSERT INTO users (email, password_hash, role, tenant_id, is_genesis_admin)
+                VALUES ($1, $2, $3, $4, false)
+                RETURNING id, email, role, tenant_id, is_genesis_admin
+            `, [email, passwordHash, invite.target_role, invite.tenant_id]);
+            
+            newUser = result.rows[0];
+            tenantId = invite.tenant_id;
+            
+            // Consume the invite token
+            await tenantManager.consumeInviteToken(inviteToken);
+            
+            console.log(`[${getTimestamp()}] ✅ User joined tenant ${tenantId} via invite - Email: ${email}, Role: ${invite.target_role}`);
+        }
+        // BRANCH: New tenant creation (no invite = genesis admin)
+        else {
+            // Check Sybil attack prevention
+            const sybilCheck = await tenantManager.checkSybilRisk(email, req.ip);
+            if (!sybilCheck.allowed) {
+                console.log(`[${getTimestamp()}] 🚫 Sybil protection blocked - Email: ${email}, Reason: ${sybilCheck.reason}`);
+                return res.status(429).json({ error: sybilCheck.reason });
+            }
+            
+            // Check rate limits
+            const rateLimitEmail = await tenantManager.checkRateLimit('tenant_creation', 'email', email);
+            if (!rateLimitEmail.allowed) {
+                return res.status(429).json({ error: rateLimitEmail.reason });
+            }
+            
+            const rateLimitIP = await tenantManager.checkRateLimit('tenant_creation', 'ip', req.ip);
+            if (!rateLimitIP.allowed) {
+                return res.status(429).json({ error: rateLimitIP.reason });
+            }
+            
+            const passwordHash = await bcrypt.hash(password, 10);
+            
+            // Create user as genesis admin (no tenant yet)
+            const result = await pool.query(`
+                INSERT INTO users (email, password_hash, role, is_genesis_admin)
+                VALUES ($1, $2, 'admin', true)
+                RETURNING id, email, role, is_genesis_admin
+            `, [email, passwordHash]);
+            
+            newUser = result.rows[0];
+            
+            // Create new tenant and schema
+            const tenant = await tenantManager.createTenant(newUser.id);
+            tenantId = tenant.tenantId;
+            
+            // Record tenant creation for Sybil tracking
+            await tenantManager.recordTenantCreation(email, req.ip);
+            
+            isGenesisAdmin = true;
+            console.log(`[${getTimestamp()}] 🌟 GENESIS ADMIN created new tenant ${tenantId} - Email: ${email}`);
         }
         
         // Auto-login after signup
         req.session.userId = newUser.id;
         req.session.userEmail = newUser.email;
         req.session.userRole = newUser.role;
+        req.session.tenantId = tenantId;
         
         // Generate JWT tokens
         const accessToken = authService.signAccessToken(newUser.id, newUser.email, newUser.role);
@@ -1430,7 +1488,9 @@ app.post('/api/auth/signup', async (req, res) => {
             // Log signup
             logAudit(req, 'SIGNUP', 'USER', newUser.id.toString(), newUser.email, {
                 role: newUser.role,
-                is_genesis_user: isFirstUser
+                is_genesis_admin: isGenesisAdmin,
+                tenant_id: tenantId,
+                via_invite: !!inviteToken
             });
             
             res.json({
@@ -1438,17 +1498,20 @@ app.post('/api/auth/signup', async (req, res) => {
                 user: {
                     id: newUser.id,
                     email: newUser.email,
-                    role: newUser.role
+                    role: newUser.role,
+                    tenantId: tenantId,
+                    isGenesisAdmin
                 },
                 accessToken,
                 refreshToken,
-                isGenesisUser: isFirstUser,
-                message: isFirstUser ? '🌟 Welcome! You are the first user and have been granted admin privileges.' : 'Account created successfully.'
+                message: isGenesisAdmin 
+                    ? '🌟 Welcome! You are a Genesis Admin with your own isolated database.' 
+                    : 'Account created successfully. Welcome to the team!'
             });
         });
     } catch (error) {
         console.error('Signup error:', error);
-        res.status(500).json({ error: 'Signup failed' });
+        res.status(500).json({ error: 'Signup failed: ' + error.message });
     }
 });
 
@@ -1492,6 +1555,140 @@ app.get('/api/auth/google/callback',
         }
     }
 );
+
+// ===========================
+// INVITE MANAGEMENT API
+// ===========================
+
+// Create invite token (admin only)
+app.post('/api/invites', requireAuth, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'dev') {
+            return res.status(403).json({ error: 'Only admins can create invites' });
+        }
+        
+        const { targetRole = 'read-only', expiresInDays = 7, maxUses = 1 } = req.body;
+        
+        // Validate target role
+        if (!['admin', 'read-only', 'write-only'].includes(targetRole)) {
+            return res.status(400).json({ error: 'Invalid target role' });
+        }
+        
+        const tenantContext = await tenantManager.getTenantContext(req.user.id);
+        if (!tenantContext || !tenantContext.tenant_id) {
+            return res.status(400).json({ error: 'User not associated with a tenant' });
+        }
+        
+        const token = await tenantManager.generateInviteToken(
+            tenantContext.tenant_id,
+            req.user.id,
+            targetRole,
+            expiresInDays,
+            maxUses
+        );
+        
+        logAudit(req, 'CREATE_INVITE', 'INVITE', token, req.user.email, {
+            tenant_id: tenantContext.tenant_id,
+            target_role: targetRole,
+            expires_in_days: expiresInDays,
+            max_uses: maxUses
+        });
+        
+        // Generate full invite URL
+        const baseUrl = `https://${req.get('host')}`;
+        const inviteUrl = `${baseUrl}/signup.html?invite=${token}`;
+        
+        res.json({ 
+            success: true, 
+            token,
+            inviteUrl,
+            expiresInDays,
+            maxUses,
+            targetRole
+        });
+    } catch (error) {
+        console.error('Create invite error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Validate invite token (public)
+app.get('/api/invites/validate/:token', async (req, res) => {
+    try {
+        const { token } = req.params;
+        const validation = await tenantManager.validateInviteToken(token);
+        
+        if (validation.valid) {
+            res.json({
+                valid: true,
+                targetRole: validation.invite.target_role,
+                remainingUses: validation.invite.max_uses - validation.invite.current_uses,
+                expiresAt: validation.invite.expires_at
+            });
+        } else {
+            res.json({
+                valid: false,
+                reason: validation.reason
+            });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// List invites for current tenant (admin only)
+app.get('/api/invites', requireAuth, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'dev') {
+            return res.status(403).json({ error: 'Only admins can list invites' });
+        }
+        
+        const tenantContext = await tenantManager.getTenantContext(req.user.id);
+        if (!tenantContext || !tenantContext.tenant_id) {
+            return res.status(400).json({ error: 'User not associated with a tenant' });
+        }
+        
+        const result = await pool.query(`
+            SELECT id, token, created_by_user_id, expires_at, max_uses, current_uses, 
+                   target_role, status, created_at
+            FROM core.invites
+            WHERE tenant_id = $1
+            ORDER BY created_at DESC
+        `, [tenantContext.tenant_id]);
+        
+        res.json({ invites: result.rows });
+    } catch (error) {
+        console.error('List invites error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Revoke invite (admin only)
+app.delete('/api/invites/:id', requireAuth, async (req, res) => {
+    try {
+        if (req.user.role !== 'admin' && req.user.role !== 'dev') {
+            return res.status(403).json({ error: 'Only admins can revoke invites' });
+        }
+        
+        const { id } = req.params;
+        const tenantContext = await tenantManager.getTenantContext(req.user.id);
+        
+        await pool.query(`
+            UPDATE core.invites
+            SET status = 'revoked'
+            WHERE id = $1 AND tenant_id = $2
+        `, [id, tenantContext.tenant_id]);
+        
+        logAudit(req, 'REVOKE_INVITE', 'INVITE', id, req.user.email, {
+            tenant_id: tenantContext.tenant_id
+        });
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Revoke invite error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 // Phone OTP: Request OTP
 app.post('/api/auth/otp/request', async (req, res) => {
