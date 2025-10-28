@@ -2143,9 +2143,11 @@ app.post('/api/auth/forgot-password/reset', async (req, res) => {
     }
 });
 
-// Get all users (admin only)
-app.get('/api/users', requireAuth, requireRole('admin'), async (req, res) => {
+// Get all users (admin and dev roles)
+app.get('/api/users', requireAuth, requireRole('admin', 'dev'), async (req, res) => {
     try {
+        // Dev users get global view across all tenants
+        // Admin users only see their own tenant (handled by setTenantContext middleware)
         const result = await pool.query('SELECT id, email, role, tenant_id, is_genesis_admin, created_at FROM users ORDER BY created_at DESC');
         res.json(result.rows);
     } catch (error) {
