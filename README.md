@@ -1,8 +1,20 @@
 # 🌈 Nyan Bridge - WhatsApp to Discord Bridge
 
+[![Run on Replit](https://replit.com/badge/github/YOUR_USERNAME/nyan-bridge)](https://replit.com/new/github/YOUR_USERNAME/nyan-bridge)
+
 A professional multi-platform messaging bridge that connects WhatsApp to Discord, with a beautiful glassmorphism UI, multi-user authentication, and permanent message storage.
 
 **Live SaaS Application** - Users sign up and use YOUR deployed instance.
+
+---
+
+## 🚀 One-Click Deploy
+
+**Deploy to Replit in seconds:**
+1. Click the "Run on Replit" badge above
+2. Wait for setup to complete (~30 seconds)
+3. Add your `DISCORD_WEBHOOK_URL` in Secrets
+4. Click "Run" to start!
 
 ---
 
@@ -50,7 +62,20 @@ Click **"Run"** - The app starts on port 5000
 
 ## 🌐 Deployment (Make It Public)
 
-### Deploy to Replit Autoscale
+### Option 1: Deploy from GitHub (Recommended)
+
+1. **Push to GitHub:**
+   ```bash
+   git remote add origin https://github.com/YOUR_USERNAME/nyan-bridge.git
+   git branch -M main
+   git push -u origin main
+   ```
+
+2. **Deploy via Replit Button:**
+   - Update the badge URL in README.md with your GitHub username
+   - Share your repo - users click "Run on Replit" to deploy their own instance
+
+### Option 2: Deploy to Replit Autoscale
 
 1. **Click "Deploy"** in the top-right
 2. **Select "Autoscale"** deployment
