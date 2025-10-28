@@ -32,13 +32,23 @@ async function loadAnalyticsDashboard() {
 }
 
 function renderAnalyticsCharts() {
+    const container = document.getElementById('analyticsContent');
+    container.textContent = ''; // Clear existing content safely
+    
     if (!analyticsData.daily || analyticsData.daily.length === 0) {
-        document.getElementById('analyticsContent').innerHTML = `
-            <div style="text-align: center; padding: 3rem; color: #94a3b8;">
-                <p>No analytics data available yet</p>
-                <p style="font-size: 0.9rem; margin-top: 0.5rem;">Data will appear after messages are processed</p>
-            </div>
-        `;
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'text-align: center; padding: 3rem; color: #94a3b8;';
+        
+        const mainMessage = document.createElement('p');
+        mainMessage.textContent = 'No analytics data available yet';
+        
+        const subMessage = document.createElement('p');
+        subMessage.style.cssText = 'font-size: 0.9rem; margin-top: 0.5rem;';
+        subMessage.textContent = 'Data will appear after messages are processed';
+        
+        wrapper.appendChild(mainMessage);
+        wrapper.appendChild(subMessage);
+        container.appendChild(wrapper);
         return;
     }
     
@@ -49,36 +59,53 @@ function renderAnalyticsCharts() {
         ? ((totalMessages - failedMessages) / totalMessages * 100).toFixed(1) 
         : 0;
     
-    const summaryHTML = `
-        <div class="analytics-summary">
-            <div class="analytics-card">
-                <div class="analytics-card-title">Total Messages</div>
-                <div class="analytics-card-value">${totalMessages.toLocaleString()}</div>
-            </div>
-            <div class="analytics-card">
-                <div class="analytics-card-title">Failed Messages</div>
-                <div class="analytics-card-value" style="color: #f87171;">${failedMessages.toLocaleString()}</div>
-            </div>
-            <div class="analytics-card">
-                <div class="analytics-card-title">Success Rate</div>
-                <div class="analytics-card-value" style="color: #86efac;">${successRate}%</div>
-            </div>
-            <div class="analytics-card">
-                <div class="analytics-card-title">Rate Limit Events</div>
-                <div class="analytics-card-value" style="color: #fbbf24;">${analyticsData.summary.rate_limit_events || 0}</div>
-            </div>
-        </div>
-    `;
+    // Create summary section using safe DOM methods
+    const summaryDiv = document.createElement('div');
+    summaryDiv.className = 'analytics-summary';
     
-    // Chart Canvas
-    const chartHTML = `
-        <div class="analytics-chart-container">
-            <h3 style="color: #e2e8f0; margin-bottom: 1rem;">Message Volume (Last 30 Days)</h3>
-            <canvas id="analyticsChart" width="800" height="300"></canvas>
-        </div>
-    `;
+    // Helper function to create analytics cards
+    function createCard(title, value, color = null) {
+        const card = document.createElement('div');
+        card.className = 'analytics-card';
+        
+        const cardTitle = document.createElement('div');
+        cardTitle.className = 'analytics-card-title';
+        cardTitle.textContent = title;
+        
+        const cardValue = document.createElement('div');
+        cardValue.className = 'analytics-card-value';
+        cardValue.textContent = value;
+        if (color) cardValue.style.color = color;
+        
+        card.appendChild(cardTitle);
+        card.appendChild(cardValue);
+        return card;
+    }
     
-    document.getElementById('analyticsContent').innerHTML = summaryHTML + chartHTML;
+    summaryDiv.appendChild(createCard('Total Messages', totalMessages.toLocaleString()));
+    summaryDiv.appendChild(createCard('Failed Messages', failedMessages.toLocaleString(), '#f87171'));
+    summaryDiv.appendChild(createCard('Success Rate', `${successRate}%`, '#86efac'));
+    summaryDiv.appendChild(createCard('Rate Limit Events', String(analyticsData.summary.rate_limit_events || 0), '#fbbf24'));
+    
+    // Create chart container using safe DOM methods
+    const chartContainer = document.createElement('div');
+    chartContainer.className = 'analytics-chart-container';
+    
+    const chartTitle = document.createElement('h3');
+    chartTitle.style.cssText = 'color: #e2e8f0; margin-bottom: 1rem;';
+    chartTitle.textContent = 'Message Volume (Last 30 Days)';
+    
+    const canvas = document.createElement('canvas');
+    canvas.id = 'analyticsChart';
+    canvas.width = 800;
+    canvas.height = 300;
+    
+    chartContainer.appendChild(chartTitle);
+    chartContainer.appendChild(canvas);
+    
+    // Append to container
+    container.appendChild(summaryDiv);
+    container.appendChild(chartContainer);
     
     // Render Chart with Chart.js
     renderVolumeChart();
