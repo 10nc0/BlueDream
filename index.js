@@ -1515,46 +1515,60 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 });
 
-// Google OAuth Routes
-app.get('/api/auth/google', passport.authenticate('google', { 
-    scope: ['profile', 'email'] 
-}));
+// Google OAuth Routes (only if configured)
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    app.get('/api/auth/google', passport.authenticate('google', { 
+        scope: ['profile', 'email'] 
+    }));
 
-app.get('/api/auth/google/callback', 
-    passport.authenticate('google', { failureRedirect: '/login.html' }),
-    async (req, res) => {
-        try {
-            const user = req.user;
-            
-            // Generate JWT tokens
-            const accessToken = authService.signAccessToken(user.id, user.email, user.role);
-            const { token: refreshToken, tokenId } = authService.signRefreshToken(user.id, user.email, user.role);
-            
-            // Store refresh token
-            const deviceInfo = req.get('user-agent') || 'unknown';
-            await authService.storeRefreshToken(pool, user.id, tokenId, deviceInfo, req.ip);
-            
-            // Create session tracking record
-            await createSessionRecord(user.id, req.sessionID, req);
-            
-            // Log Google OAuth login
-            logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.email, {
-                method: 'google_oauth',
-                role: user.role,
-                authType: 'jwt+cookie'
-            });
-            
-            console.log(`[${getTimestamp()}] ✅ Google OAuth login - User: ${user.email}, Role: ${user.role}`);
-            
-            // Redirect to dashboard with tokens in URL (will be saved to localStorage by client)
-            const redirectUrl = `/?accessToken=${encodeURIComponent(accessToken)}&refreshToken=${encodeURIComponent(refreshToken)}`;
-            res.redirect(redirectUrl);
-        } catch (error) {
-            console.error('Google OAuth callback error:', error);
-            res.redirect('/login.html?error=oauth_failed');
+    app.get('/api/auth/google/callback', 
+        passport.authenticate('google', { failureRedirect: '/login.html' }),
+        async (req, res) => {
+            try {
+                const user = req.user;
+                
+                // Generate JWT tokens
+                const accessToken = authService.signAccessToken(user.id, user.email, user.role);
+                const { token: refreshToken, tokenId } = authService.signRefreshToken(user.id, user.email, user.role);
+                
+                // Store refresh token
+                const deviceInfo = req.get('user-agent') || 'unknown';
+                await authService.storeRefreshToken(pool, user.id, tokenId, deviceInfo, req.ip);
+                
+                // Create session tracking record
+                await createSessionRecord(user.id, req.sessionID, req);
+                
+                // Log Google OAuth login
+                logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.email, {
+                    method: 'google_oauth',
+                    role: user.role,
+                    authType: 'jwt+cookie'
+                });
+                
+                console.log(`[${getTimestamp()}] ✅ Google OAuth login - User: ${user.email}, Role: ${user.role}`);
+                
+                // Redirect to dashboard with tokens in URL (will be saved to localStorage by client)
+                const redirectUrl = `/?accessToken=${encodeURIComponent(accessToken)}&refreshToken=${encodeURIComponent(refreshToken)}`;
+                res.redirect(redirectUrl);
+            } catch (error) {
+                console.error('Google OAuth callback error:', error);
+                res.redirect('/login.html?error=oauth_failed');
+            }
         }
-    }
-);
+    );
+} else {
+    // Google OAuth not configured - return error
+    app.get('/api/auth/google', (req, res) => {
+        res.status(503).json({ 
+            error: 'Google OAuth is not configured on this server',
+            message: 'Please contact the administrator or use email/password signup'
+        });
+    });
+    
+    app.get('/api/auth/google/callback', (req, res) => {
+        res.redirect('/login.html?error=oauth_not_configured');
+    });
+}
 
 // ===========================
 // INVITE MANAGEMENT API
