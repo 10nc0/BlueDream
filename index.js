@@ -2792,13 +2792,19 @@ app.get('/api/bots/:id/qr', requireAuth, async (req, res) => {
 
 // Relink WhatsApp session for a bot (destroy and create new QR)
 app.post('/api/bots/:id/relink', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
+    const { id } = req.params;
+    const botId = parseInt(id);
+    
     try {
-        const { id } = req.params;
-        const botId = parseInt(id);
+        console.log(`🔄 Starting relink for bot ${botId}...`);
         
         // CRITICAL: Get the correct tenant schema for this bot
         const tenantSchema = await getBotTenantSchema(botId);
-        console.log(`🔍 Bot ${id} belongs to ${tenantSchema} (relink)`);
+        console.log(`🔍 Bot ${botId} belongs to ${tenantSchema} (relink)`);
+        
+        if (!tenantSchema) {
+            throw new Error('Unable to determine tenant schema for bot');
+        }
         
         const clientState = await whatsappManager.relinkClient(
             botId, 
@@ -2806,15 +2812,25 @@ app.post('/api/bots/:id/relink', requireAuth, setTenantContext, requireRole('adm
             createTenantAwareMessageHandler
         );
         
+        console.log(`✅ Relink initiated for bot ${botId}, status: ${clientState.status}`);
+        
         res.json({ 
             success: true, 
             message: 'WhatsApp session relinking... New QR code will be available shortly.',
             status: clientState.status,
-            botId: id
+            botId: botId
         });
     } catch (error) {
-        console.error(`❌ Error relinking WhatsApp for bot ${req.params.id}:`, error);
-        res.status(500).json({ error: error.message });
+        console.error(`❌ Error relinking WhatsApp for bot ${botId}:`, error);
+        console.error('Stack trace:', error.stack);
+        
+        // Ensure JSON response even on error
+        if (!res.headersSent) {
+            res.status(500).json({ 
+                error: error.message || 'Unknown error occurred during relink',
+                botId: botId
+            });
+        }
     }
 });
 
