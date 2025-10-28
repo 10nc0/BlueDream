@@ -191,6 +191,19 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 
 ## Recent Changes
 
+### 2025-10-28: Universal Search System + UI Polish ✅
+- **Problem**: Search implementations were "forked" (different code for bridge search, Discord message search, table search) - regex toggle didn't work consistently
+- **Solution**: Created unified `window.searchState` parent repository
+  - **Single Source of Truth**: `searchState.regexMode` controls all search boxes
+  - **Universal Algorithm**: `searchState.performSearch(query, text, caseSensitive)` used everywhere
+  - **Safe Regex**: Try/catch wrapper falls back to literal search on invalid patterns
+  - **Consistent Behavior**: Bridge library, Discord messages, and table view all use same logic
+- **UI Improvements**:
+  - Fixed button text: "Search" (default) / "Regex" (when active) instead of ".* Regex"
+  - Blue highlighting when regex mode is active
+  - All search boxes respect the same regex toggle state
+- **Technical**: Consolidated 3 separate search implementations into 1 reusable function
+
 ### 2025-10-28: Enhanced Search + Quick-Start Wizard ✅
 - **Problem**: Search was too vague ("Search bridges by name, platform..."), newbies confused by +Create Bridge button
 - **Search Improvements**:
