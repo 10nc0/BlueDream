@@ -511,7 +511,7 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
         // Update message status based on results
         if (messageDbId) {
             if (successCount > 0) {
-                await updateMessageStatus(messageDbId, 'success', null, mediaData);
+                await updateMessageStatus(messageDbId, 'success', null, mediaData, options.mimetype);
             } else if (failures.length > 0) {
                 await updateMessageStatus(messageDbId, 'failed', failures.join('; '));
             }
@@ -554,13 +554,17 @@ async function saveMessage(message, botId = 1) {
     }
 }
 
-async function updateMessageStatus(messageId, status, errorMessage = null, mediaData = null) {
+async function updateMessageStatus(messageId, status, errorMessage = null, mediaData = null, mediaType = null) {
     try {
         await pool.query(
             `UPDATE messages 
-             SET discord_status = $1, discord_error = $2, media_data = COALESCE($3, media_data)
+             SET discord_status = $1, 
+                 discord_error = $2, 
+                 media_data = COALESCE($3, media_data),
+                 media_type = COALESCE($5, media_type),
+                 has_media = CASE WHEN $3 IS NOT NULL THEN true ELSE has_media END
              WHERE id = $4`,
-            [status, errorMessage, mediaData, messageId]
+            [status, errorMessage, mediaData, messageId, mediaType]
         );
     } catch (error) {
         console.error('Error updating message status:', error.message);

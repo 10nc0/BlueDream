@@ -173,11 +173,24 @@ async function loadMedia(messageId) {
 // Render media element based on type
 function renderMedia(containerEl, messageId, mediaData) {
     const { media_data, media_type, sender_name } = mediaData;
-    const dataUrl = `data:${media_type};base64,${media_data}`;
+    
+    // Handle both full MIME types (image/jpeg) and legacy simple types (image)
+    const normalizedType = (media_type || '').toLowerCase();
+    const isImage = normalizedType.startsWith('image/') || normalizedType === 'image';
+    const isVideo = normalizedType.startsWith('video/') || normalizedType === 'video';
+    const isAudio = normalizedType.startsWith('audio/') || normalizedType === 'audio';
+    
+    // Use proper MIME type for data URL if available, otherwise guess
+    let mimeType = media_type;
+    if (normalizedType === 'image') mimeType = 'image/jpeg';
+    if (normalizedType === 'video') mimeType = 'video/mp4';
+    if (normalizedType === 'audio') mimeType = 'audio/mpeg';
+    
+    const dataUrl = `data:${mimeType};base64,${media_data}`;
     
     let mediaHTML = '';
     
-    if (media_type.startsWith('image/')) {
+    if (isImage) {
         mediaHTML = `
             <img 
                 class="discord-media-image" 
@@ -188,25 +201,25 @@ function renderMedia(containerEl, messageId, mediaData) {
             />
             <div class="media-expand-hint">🔍 Click to expand</div>
         `;
-    } else if (media_type.startsWith('video/')) {
+    } else if (isVideo) {
         mediaHTML = `
             <video 
                 class="discord-media-video" 
                 controls 
                 preload="metadata"
             >
-                <source src="${dataUrl}" type="${media_type}">
+                <source src="${dataUrl}" type="${mimeType}">
                 Your browser does not support video playback.
             </video>
         `;
-    } else if (media_type.startsWith('audio/')) {
+    } else if (isAudio) {
         mediaHTML = `
             <audio 
                 class="discord-media-audio" 
                 controls 
                 preload="metadata"
             >
-                <source src="${dataUrl}" type="${media_type}">
+                <source src="${dataUrl}" type="${mimeType}">
                 Your browser does not support audio playback.
             </audio>
         `;

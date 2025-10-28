@@ -1552,12 +1552,12 @@
                 if (container) {
                     container.innerHTML = renderDiscordMessages(data.messages, botId);
                     
-                    // Load media previews for messages with attachments
-                    data.messages.forEach(msg => {
-                        if (msg.has_media) {
-                            loadMediaPreview(msg.id);
+                    // Initialize media lazy loading for this bot's messages
+                    setTimeout(() => {
+                        if (window.initMediaLazyLoading) {
+                            window.initMediaLazyLoading();
                         }
-                    });
+                    }, 100);
                 }
             } catch (error) {
                 console.error('Error loading messages:', error);
