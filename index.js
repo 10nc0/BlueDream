@@ -911,6 +911,15 @@ async function createTenantAwareMessageHandler(message, botId, tenantSchema) {
                         const buffer = Buffer.from(media.data, 'base64');
                         const filename = `whatsapp_image_${Date.now()}.${media.mimetype.split('/')[1]}`;
                         
+                        // CRITICAL: Save media to database so it can be viewed in the dashboard
+                        await tenantClient.query(`
+                            UPDATE messages 
+                            SET media_data = $1, media_type = $2 
+                            WHERE id = $3
+                        `, [mediaData, media.mimetype, messageDbId]);
+                        
+                        console.log(`💾 Saved media to database for message ${messageDbId}`);
+                        
                         embed.fields.push({
                             name: '📎 Attachment',
                             value: `Image (${media.mimetype})`,
@@ -2907,46 +2916,82 @@ app.get('/api/bots/:id/stats', requireAuth, async (req, res) => {
 // REMOVED: Duplicate QR endpoint - using the multi-instance version above (line ~2741)
 
 // Get media for a specific message
+// CRITICAL: Uses explicit schema indexing for fractalized architecture
 app.get('/api/messages/:id/media', requireAuth, async (req, res) => {
+    const { id } = req.params;
+    console.log(`🖼️ Media request for message ${id} by user ${req.userId}`);
+    
     try {
-        const { id } = req.params;
+        // Get user's tenant schema
+        const userResult = await pool.query(
+            'SELECT tenant_id, email FROM users WHERE id = $1',
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            console.error(`❌ User ${req.userId} not found`);
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const tenantId = userResult.rows[0].tenant_id;
+        const tenantSchema = `tenant_${tenantId}`;
+        const userEmail = userResult.rows[0].email;
+        
+        console.log(`🔍 Looking for message ${id} in ${tenantSchema} for ${userEmail}`);
+        
+        // EXPLICIT SCHEMA INDEXING: Query tenant-specific messages table
         const result = await pool.query(
-            'SELECT media_data, media_type, sender_name FROM messages WHERE id = $1',
+            `SELECT media_data, media_type, sender_name FROM ${tenantSchema}.messages WHERE id = $1`,
             [id]
         );
         
         if (result.rows.length === 0) {
+            console.error(`❌ Message ${id} not found in ${tenantSchema}`);
             return res.status(404).json({ error: 'Message not found' });
         }
         
         const message = result.rows[0];
         if (!message.media_data) {
+            console.error(`❌ Message ${id} has no media attached`);
             return res.status(404).json({ error: 'No media attached to this message' });
         }
         
+        console.log(`✅ Media found for message ${id} in ${tenantSchema} (type: ${message.media_type})`);
         res.json({
             media_data: message.media_data,
             media_type: message.media_type,
             sender_name: message.sender_name
         });
     } catch (error) {
+        console.error(`❌ Error loading media for message ${id}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
 
 // OPTIMIZED: Added pagination to prevent loading 1000 messages at once
-// CRITICAL: Uses tenant-aware database client for fractalized architecture
+// CRITICAL: Uses explicit schema indexing for fractalized architecture
 app.get('/api/bots/:id/messages', requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
         const { search, status, page = 1, limit = 50 } = req.query;
         
-        // Use tenant-aware database client (setTenantContext middleware)
-        const client = req.dbClient || pool;
+        // Get user's tenant schema
+        const userResult = await pool.query(
+            'SELECT tenant_id FROM users WHERE id = $1',
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const tenantId = userResult.rows[0].tenant_id;
+        const tenantSchema = `tenant_${tenantId}`;
         
         const offset = (parseInt(page) - 1) * parseInt(limit);
         
-        let query = 'SELECT * FROM messages WHERE bot_id = $1';
+        // EXPLICIT SCHEMA INDEXING: Build query with tenant-specific schema
+        let query = `SELECT * FROM ${tenantSchema}.messages WHERE bot_id = $1`;
         const params = [id];
         let paramCount = 2;
         
@@ -2965,10 +3010,10 @@ app.get('/api/bots/:id/messages', requireAuth, async (req, res) => {
         query += ` ORDER BY timestamp DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
         params.push(parseInt(limit), offset);
         
-        const result = await client.query(query, params);
+        const result = await pool.query(query, params);
         
-        // Get total count for pagination
-        let countQuery = 'SELECT COUNT(*) FROM messages WHERE bot_id = $1';
+        // Get total count for pagination with explicit schema indexing
+        let countQuery = `SELECT COUNT(*) FROM ${tenantSchema}.messages WHERE bot_id = $1`;
         const countParams = [id];
         if (search) {
             countQuery += ` AND (LOWER(sender_name) LIKE $2 OR sender_contact LIKE $2 OR LOWER(message_content) LIKE $2)`;
@@ -2978,7 +3023,7 @@ app.get('/api/bots/:id/messages', requireAuth, async (req, res) => {
             countQuery += ` AND discord_status = $${countParams.length + 1}`;
             countParams.push(status);
         }
-        const countResult = await client.query(countQuery, countParams);
+        const countResult = await pool.query(countQuery, countParams);
         
         res.json({
             messages: result.rows,

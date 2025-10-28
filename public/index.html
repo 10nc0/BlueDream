@@ -1093,13 +1093,6 @@
                 </div>
             `).join('');
             
-            // Initialize lazy loading after DOM updates
-            setTimeout(() => {
-                if (window.initMediaLazyLoading) {
-                    window.initMediaLazyLoading();
-                }
-            }, 100);
-            
             return html;
         }
 
