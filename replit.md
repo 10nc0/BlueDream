@@ -191,6 +191,18 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 
 ## Recent Changes
 
+### 2025-10-28: Natural Language Search + Auto-Search ✅
+- **Removed**: Search/Regex toggle button (saves UI space, auto-detects regex patterns)
+- **Natural Language Date Parsing**: Supports intuitive queries like:
+  - "today", "yesterday" - searches messages from that day
+  - "this week", "last week" - searches current/previous week
+  - "this month", "last month" - searches current/previous month
+  - "last 7 days", "last 30 days" - searches rolling time windows
+- **Auto-Search**: Debounced search (300ms delay) triggers automatically as you type
+- **Visual Feedback**: Blue badge shows active search context (e.g., "📅 yesterday")
+- **Intelligent Regex Detection**: Auto-enables regex mode when pattern starts with "/" or contains special chars
+- **UX**: No manual buttons to click - just type and search happens automatically
+
 ### 2025-10-28: Universal Search System + UI Polish ✅
 - **Problem**: Search implementations were "forked" (different code for bridge search, Discord message search, table search) - regex toggle didn't work consistently
 - **Solution**: Created unified `window.searchState` parent repository
