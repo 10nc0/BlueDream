@@ -98,7 +98,7 @@ body {
   background: rgba(30, 41, 59, 0.8);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--color-border);
-  padding: 0.375rem 0.625rem;
+  padding: 0.075rem 0.625rem 0.375rem 0.625rem; /* Reduced top padding by 80% */
   display: flex;
   justify-content: space-between;
   align-items: center;
