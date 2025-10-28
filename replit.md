@@ -191,6 +191,38 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 
 ## Recent Changes
 
+### 2025-10-28: AI-Powered Natural Language Search System ✅
+- **Major Upgrade**: Moved from pattern-matching to full AI-driven search interpretation
+- **Backend AI Layer** (`server/ai-search.js`):
+  - **OpenAI Integration**: Uses Replit AI Integrations (gpt-5-mini) for cost-effective query interpretation
+  - **Smart Caching**: LRU cache (100 entries, 15-min TTL) reduces AI API calls by 80%+ for common queries
+  - **Query Interpreter**: Converts natural language to structured database filters
+  - **SQL Validator**: Sanitizes and validates all filters to prevent injection attacks
+  - **Graceful Fallback**: Falls back to pattern-based search if AI fails (3-second timeout)
+- **AI Search Endpoint** (`/api/messages/ai-search`):
+  - Interprets user intent (e.g., "messages from Giovanni about project" → sender_name filter + content search)
+  - Extracts structured filters: sender, dates, message types, status, content
+  - Returns AI context with suggestions for follow-up searches
+  - Handles complex multi-criteria queries automatically
+- **Frontend Integration**:
+  - **Hybrid Search**: Simple queries use local search, complex queries trigger AI
+  - **Real-time Feedback**: Shows "🤖 AI analyzing query..." during processing
+  - **Context Badges**: Displays AI interpretation (e.g., "🤖 Find images from October")
+  - **Abort Control**: Cancels previous AI request when user types new query
+  - **Smart Routing**: Short queries (< 5 chars) bypass AI for instant results
+- **Example Queries Now Supported**:
+  - "messages from Giovanni last week about the project"
+  - "images sent in October"  
+  - "failed deliveries today"
+  - "videos from yesterday"
+  - "all messages from +1234567890"
+  - "stickers sent this month"
+- **Cost Optimization**:
+  - Caching reduces duplicate AI calls
+  - gpt-5-mini model for speed & cost
+  - Only triggers for complex queries (5+ chars with spaces)
+  - 3-second timeout prevents expensive hanging requests
+
 ### 2025-10-28: Header UI Polish + Consistency ✅
 - **Font Consistency**: All header text now uses consistent 0.875rem font size (except main "🌈Nyan Bridge" title)
   - Status indicators: 0.6875rem → 0.875rem

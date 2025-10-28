@@ -7,7 +7,7 @@ const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
 });
 
-// Simple in-memory cache for AI queries (cost optimization)
+// True LRU cache for AI queries (cost optimization)
 class SearchCache {
   constructor(maxSize = 100, ttlMinutes = 15) {
     this.cache = new Map();
@@ -31,13 +31,22 @@ class SearchCache {
       return null;
     }
     
+    // LRU: Move to end (most recently used)
+    this.cache.delete(key);
+    this.cache.set(key, cached);
+    
     return cached.value;
   }
 
   set(query, value) {
     const key = this.normalizeQuery(query);
     
-    // LRU: Remove oldest if at capacity
+    // Remove if already exists (to re-add at end)
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    }
+    
+    // LRU: Remove least recently used if at capacity
     if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value;
       this.cache.delete(firstKey);
@@ -113,7 +122,7 @@ Respond in JSON format with:
 }`;
 
 /**
- * Interpret natural language search query using AI
+ * Interpret natural language search query using AI with 3-second timeout
  */
 async function interpretSearchQuery(query) {
   try {
@@ -126,26 +135,45 @@ async function interpretSearchQuery(query) {
 
     console.log('🤖 AI interpreting search query:', query);
     
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-5-mini', // Fast and cost-effective for this use case
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: query }
-      ],
-      response_format: { type: 'json_object' },
-      max_completion_tokens: 500
-    });
+    // Create abort controller for timeout
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 3000); // 3-second timeout
+    
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-5-mini', // Fast and cost-effective for this use case
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: query }
+        ],
+        response_format: { type: 'json_object' },
+        max_completion_tokens: 500
+      }, {
+        signal: abortController.signal
+      });
 
-    const result = JSON.parse(completion.choices[0].message.content);
-    
-    // Cache the result
-    searchCache.set(query, result);
-    
-    console.log('✅ AI interpretation:', result);
-    return result;
+      clearTimeout(timeoutId);
+
+      const result = JSON.parse(completion.choices[0].message.content);
+      
+      // Cache the result
+      searchCache.set(query, result);
+      
+      console.log('✅ AI interpretation:', result);
+      return result;
+      
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      // If aborted due to timeout, throw specific error
+      if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+        throw new Error('AI timeout');
+      }
+      throw error;
+    }
     
   } catch (error) {
-    console.error('❌ AI search interpretation failed:', error);
+    console.error('❌ AI search interpretation failed:', error.message);
     throw error;
   }
 }
