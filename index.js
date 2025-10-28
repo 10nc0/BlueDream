@@ -2556,7 +2556,7 @@ app.post('/api/bots', requireAuth, setTenantContext, requireRole('admin', 'write
     }
 });
 
-app.put('/api/bots/:id', requireRole('admin', 'write-only'), async (req, res) => {
+app.put('/api/bots/:id', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const client = req.dbClient || pool;
         const userRole = req.tenantContext?.userRole || 'read-only';
@@ -2580,7 +2580,7 @@ app.put('/api/bots/:id', requireRole('admin', 'write-only'), async (req, res) =>
 });
 
 // Delete bot (hard delete - removes bot and all messages)
-app.delete('/api/bots/:id', requireRole('admin'), async (req, res) => {
+app.delete('/api/bots/:id', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
     try {
         const client = req.dbClient || pool;
         const { id} = req.params;
@@ -2608,7 +2608,7 @@ app.delete('/api/bots/:id', requireRole('admin'), async (req, res) => {
 });
 
 // Archive bot (soft delete - keeps all message history)
-app.post('/api/bots/:id/archive', requireRole('admin'), async (req, res) => {
+app.post('/api/bots/:id/archive', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
     try {
         const { id } = req.params;
         
@@ -2632,7 +2632,7 @@ app.post('/api/bots/:id/archive', requireRole('admin'), async (req, res) => {
 });
 
 // Unarchive bot (restore archived bot)
-app.post('/api/bots/:id/unarchive', requireRole('admin'), async (req, res) => {
+app.post('/api/bots/:id/unarchive', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
     try {
         const { id } = req.params;
         await pool.query('UPDATE bots SET archived = false, status = $1 WHERE id = $2', ['inactive', id]);
@@ -2651,7 +2651,7 @@ app.post('/api/bots/:id/unarchive', requireRole('admin'), async (req, res) => {
 // Multi-tenant WhatsApp: Each bot gets its own WhatsApp session
 
 // Start WhatsApp session for a bot
-app.post('/api/bots/:id/start', requireRole('admin', 'write-only'), async (req, res) => {
+app.post('/api/bots/:id/start', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const client = req.dbClient || pool;
         const tenantSchema = req.tenantContext?.tenant_schema || 'public';
@@ -2696,7 +2696,7 @@ app.post('/api/bots/:id/start', requireRole('admin', 'write-only'), async (req, 
 });
 
 // Stop WhatsApp session for a bot (preserves session)
-app.delete('/api/bots/:id/stop', requireRole('admin', 'write-only'), async (req, res) => {
+app.delete('/api/bots/:id/stop', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const tenantSchema = req.tenantContext?.tenant_schema || 'public';
         const { id } = req.params;
@@ -2734,7 +2734,7 @@ app.get('/api/bots/:id/qr', requireAuth, async (req, res) => {
 });
 
 // Relink WhatsApp session for a bot (destroy and create new QR)
-app.post('/api/bots/:id/relink', requireRole('admin', 'write-only'), async (req, res) => {
+app.post('/api/bots/:id/relink', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const tenantSchema = req.tenantContext?.tenant_schema || 'public';
         const { id } = req.params;
