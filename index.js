@@ -85,13 +85,126 @@ app.get('/login.html', (req, res) => {
     res.sendFile(__dirname + '/public/login.html');
 });
 
+// UAT/Test route: LOCALHOST ONLY for testing and screenshots
+app.get('/uat', async (req, res) => {
+    // SECURITY: Check socket address (cannot be spoofed) instead of X-Forwarded-For
+    const socketIP = req.socket.remoteAddress;
+    const isLocalhost = socketIP === '127.0.0.1' || 
+                       socketIP === '::1' || 
+                       socketIP === '::ffff:127.0.0.1' ||
+                       (socketIP && socketIP.startsWith('127.'));
+    
+    if (!isLocalhost) {
+        console.warn(`[${getTimestamp()}] ⚠️  UAT access denied - Socket IP: ${socketIP}`);
+        return res.status(403).send('UAT mode is only available from localhost');
+    }
+    
+    try {
+        const userResult = await pool.query('SELECT id, email, role FROM users WHERE email = $1', ['admin@bridge.local']);
+        const user = userResult.rows.length > 0 ? userResult.rows[0] : { id: 1, email: 'admin@bridge.local', role: 'admin' };
+        
+        const accessToken = authService.signAccessToken(user.id, user.email, user.role);
+        const { token: refreshToken } = authService.signRefreshToken(user.id, user.email, user.role);
+        
+        console.log(`[${getTimestamp()}] 🧪 UAT mode accessed - Socket IP: ${socketIP}`);
+        
+        const html = fs.readFileSync(__dirname + '/public/index.html', 'utf8');
+        const injectedHtml = html.replace(
+            '</head>',
+            `<script>
+                // UAT mode: inject real auth tokens for testing (LOCALHOST ONLY)
+                localStorage.setItem('accessToken', '${accessToken}');
+                localStorage.setItem('refreshToken', '${refreshToken}');
+            </script></head>`
+        );
+        res.send(injectedHtml);
+    } catch (error) {
+        console.error('UAT mode error:', error);
+        res.status(500).send('UAT mode initialization failed');
+    }
+});
+
 // Serve main dashboard - client-side JWT auth will handle access control
-app.get('/', (req, res) => {
+app.get('/', async (req, res) => {
+    // Test/UAT mode: LOCALHOST ONLY to prevent unauthorized admin access
+    if (req.query.test === '1' || req.query.uat === '1') {
+        // SECURITY: Check socket address (cannot be spoofed) instead of X-Forwarded-For
+        const socketIP = req.socket.remoteAddress;
+        const isLocalhost = socketIP === '127.0.0.1' || 
+                           socketIP === '::1' || 
+                           socketIP === '::ffff:127.0.0.1' ||
+                           (socketIP && socketIP.startsWith('127.'));
+        
+        if (!isLocalhost) {
+            console.warn(`[${getTimestamp()}] ⚠️  Test mode denied - Socket IP: ${socketIP}`);
+            return res.sendFile(__dirname + '/public/index.html');
+        }
+        
+        try {
+            const userResult = await pool.query('SELECT id, email, role FROM users WHERE email = $1', ['admin@bridge.local']);
+            const user = userResult.rows.length > 0 ? userResult.rows[0] : { id: 1, email: 'admin@bridge.local', role: 'admin' };
+            
+            const accessToken = authService.signAccessToken(user.id, user.email, user.role);
+            const { token: refreshToken } = authService.signRefreshToken(user.id, user.email, user.role);
+            
+            console.log(`[${getTimestamp()}] 🧪 Test mode accessed - Socket IP: ${socketIP}`);
+            
+            const html = fs.readFileSync(__dirname + '/public/index.html', 'utf8');
+            const injectedHtml = html.replace(
+                '</head>',
+                `<script>
+                    // Test/UAT mode: inject real auth tokens (LOCALHOST ONLY)
+                    localStorage.setItem('accessToken', '${accessToken}');
+                    localStorage.setItem('refreshToken', '${refreshToken}');
+                </script></head>`
+            );
+            return res.send(injectedHtml);
+        } catch (error) {
+            console.error('Test mode error:', error);
+        }
+    }
     res.sendFile(__dirname + '/public/index.html');
 });
 
 // Serve index.html - client-side JWT auth will handle access control
-app.get('/index.html', (req, res) => {
+app.get('/index.html', async (req, res) => {
+    // Test/UAT mode: LOCALHOST ONLY to prevent unauthorized admin access
+    if (req.query.test === '1' || req.query.uat === '1') {
+        // SECURITY: Check socket address (cannot be spoofed) instead of X-Forwarded-For
+        const socketIP = req.socket.remoteAddress;
+        const isLocalhost = socketIP === '127.0.0.1' || 
+                           socketIP === '::1' || 
+                           socketIP === '::ffff:127.0.0.1' ||
+                           (socketIP && socketIP.startsWith('127.'));
+        
+        if (!isLocalhost) {
+            console.warn(`[${getTimestamp()}] ⚠️  Test mode denied - Socket IP: ${socketIP}`);
+            return res.sendFile(__dirname + '/public/index.html');
+        }
+        
+        try {
+            const userResult = await pool.query('SELECT id, email, role FROM users WHERE email = $1', ['admin@bridge.local']);
+            const user = userResult.rows.length > 0 ? userResult.rows[0] : { id: 1, email: 'admin@bridge.local', role: 'admin' };
+            
+            const accessToken = authService.signAccessToken(user.id, user.email, user.role);
+            const { token: refreshToken } = authService.signRefreshToken(user.id, user.email, user.role);
+            
+            console.log(`[${getTimestamp()}] 🧪 Test mode accessed - Socket IP: ${socketIP}`);
+            
+            const html = fs.readFileSync(__dirname + '/public/index.html', 'utf8');
+            const injectedHtml = html.replace(
+                '</head>',
+                `<script>
+                    // Test/UAT mode: inject real auth tokens (LOCALHOST ONLY)
+                    localStorage.setItem('accessToken', '${accessToken}');
+                    localStorage.setItem('refreshToken', '${refreshToken}');
+                </script></head>`
+            );
+            return res.send(injectedHtml);
+        } catch (error) {
+            console.error('Test mode error:', error);
+        }
+    }
     res.sendFile(__dirname + '/public/index.html');
 });
 
