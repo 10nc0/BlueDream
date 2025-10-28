@@ -186,19 +186,43 @@ async function loadMedia(messageId) {
 function renderMedia(containerEl, messageId, mediaData) {
     const { media_data, media_type, sender_name } = mediaData;
     
+    // Debug logging
+    console.log(`🎨 Render details for message ${messageId}:`, {
+        hasMediaData: !!media_data,
+        mediaDataLength: media_data ? media_data.length : 0,
+        mediaType: media_type,
+        senderName: sender_name
+    });
+    
+    // Validate media_data exists
+    if (!media_data) {
+        console.error(`❌ No media_data for message ${messageId}`);
+        containerEl.innerHTML = '<div class="media-error">No media data available</div>';
+        return;
+    }
+    
     // Handle both full MIME types (image/jpeg) and legacy simple types (image)
     const normalizedType = (media_type || '').toLowerCase();
     const isImage = normalizedType.startsWith('image/') || normalizedType === 'image';
     const isVideo = normalizedType.startsWith('video/') || normalizedType === 'video';
     const isAudio = normalizedType.startsWith('audio/') || normalizedType === 'audio';
     
-    // Use proper MIME type for data URL if available, otherwise guess
-    let mimeType = media_type;
-    if (normalizedType === 'image') mimeType = 'image/jpeg';
-    if (normalizedType === 'video') mimeType = 'video/mp4';
-    if (normalizedType === 'audio') mimeType = 'audio/mpeg';
-    
-    const dataUrl = `data:${mimeType};base64,${media_data}`;
+    // Check if media_data already has the data: prefix
+    let dataUrl;
+    if (media_data.startsWith('data:')) {
+        // Already has data URL prefix, use as-is
+        dataUrl = media_data;
+        console.log(`📊 Using existing dataUrl for message ${messageId}: ${dataUrl.substring(0, 100)}... (length: ${dataUrl.length})`);
+    } else {
+        // Need to add data URL prefix
+        let mimeType = media_type;
+        if (normalizedType === 'image') mimeType = 'image/jpeg';
+        if (normalizedType === 'video') mimeType = 'video/mp4';
+        if (normalizedType === 'audio') mimeType = 'audio/mpeg';
+        
+        dataUrl = `data:${mimeType};base64,${media_data}`;
+        console.log(`📊 Generated dataUrl for message ${messageId}: ${dataUrl.substring(0, 100)}... (length: ${dataUrl.length})`);
+    }
     
     let mediaHTML = '';
     
@@ -210,6 +234,7 @@ function renderMedia(containerEl, messageId, mediaData) {
                 alt="Image from ${escapeHtml(sender_name)}"
                 loading="lazy"
                 onclick="expandMedia('${messageId}', '${dataUrl}')"
+                onerror="console.error('❌ Image failed to load for message ${messageId}'); this.parentElement.innerHTML = '<div class=\\'media-error\\'>Image failed to load</div>';"
             />
             <div class="media-expand-hint">🔍 Click to expand</div>
         `;
@@ -242,6 +267,7 @@ function renderMedia(containerEl, messageId, mediaData) {
     }
     
     containerEl.innerHTML = mediaHTML;
+    console.log(`✅ HTML inserted for message ${messageId}`);
 }
 
 // Intersection Observer for lazy loading

@@ -804,15 +804,28 @@
         }
 
         // Auto-refresh bot counts every 10 seconds to keep message counts updated
+        // Use skipDetailRender=true to avoid destroying loaded media
         setInterval(() => {
             if (document.getElementById('botsTab')?.classList.contains('active')) {
-                loadBots();
+                loadBotsQuietly();
             }
         }, 10000);
+        
+        // Quiet refresh that updates bot counts without re-rendering detail panel
+        async function loadBotsQuietly() {
+            try {
+                const response = await authFetch('/api/bots');
+                bots = await response.json();
+                filteredBots = bots;
+                renderBots(true); // Skip detail render to preserve loaded media
+            } catch (error) {
+                console.error('Error loading bots:', error);
+            }
+        }
 
         let selectedBotId = null;
 
-        function renderBots() {
+        function renderBots(skipDetailRender = false) {
             const sidebar = document.getElementById('bridgeSidebar');
             const detail = document.getElementById('bridgeDetail');
             
@@ -863,12 +876,14 @@
                 </div>
             `).join('') + roadmapCard;
             
-            // Render detail panel
-            renderBotDetail();
-            
-            // Load messages for auto-selected bot
-            if (wasAutoSelected && !messageCache[selectedBotId]) {
-                loadBotMessages(selectedBotId, 1);
+            // Only render detail panel if not skipping (avoids destroying loaded media during auto-refresh)
+            if (!skipDetailRender) {
+                renderBotDetail();
+                
+                // Load messages for auto-selected bot
+                if (wasAutoSelected && !messageCache[selectedBotId]) {
+                    loadBotMessages(selectedBotId, 1);
+                }
             }
         }
 
@@ -1657,15 +1672,21 @@
             try {
                 const response = await authFetch('/api/users');
                 if (!response.ok) {
-                    throw new Error(`Failed to load users: ${response.status}`);
+                    const errorText = await response.text();
+                    console.error(`❌ Failed to load users: ${response.status} ${response.statusText}`, errorText);
+                    throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
                 }
                 users = await response.json();
                 renderUsers();
             } catch (error) {
-                console.error('Error loading users:', error);
+                console.error('❌ Error loading users:', {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack
+                });
                 const userList = document.getElementById('userList');
                 if (userList) {
-                    userList.innerHTML = '<div style="text-align: center; padding: 3rem; color: #ef4444;">Error loading users. Please try refreshing the page.</div>';
+                    userList.innerHTML = `<div style="text-align: center; padding: 3rem; color: #ef4444;">Error loading users: ${error.message}</div>`;
                 }
             }
         }

@@ -1100,7 +1100,7 @@ function requireAuth(req, res, next) {
     return res.redirect('/login.html');
 }
 
-// Middleware to check roles
+// Middleware to check roles with hierarchy: dev > admin > user
 function requireRole(...allowedRoles) {
     return async (req, res, next) => {
         if (!req.userId) {
@@ -1113,6 +1113,21 @@ function requireRole(...allowedRoles) {
         }
         
         const userRole = result.rows[0].role;
+        
+        // Role hierarchy: dev > admin > user
+        // Dev has access to everything
+        if (userRole === 'dev') {
+            req.userRole = userRole;
+            return next();
+        }
+        
+        // Admin has access to admin and user endpoints
+        if (userRole === 'admin' && (allowedRoles.includes('admin') || allowedRoles.includes('user'))) {
+            req.userRole = userRole;
+            return next();
+        }
+        
+        // Otherwise check exact match
         if (!allowedRoles.includes(userRole)) {
             return res.status(403).json({ error: 'Insufficient permissions' });
         }
