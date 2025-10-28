@@ -1708,7 +1708,7 @@
                 const url = editingBotId ? `/api/bots/${editingBotId}` : '/api/bots';
                 const method = editingBotId ? 'PUT' : 'POST';
                 
-                const response = await fetch(url, {
+                const response = await authFetch(url, {
                     method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(botData)
@@ -1717,12 +1717,14 @@
                 if (response.ok) {
                     closeBotModal();
                     loadBots();
+                    alert('✅ Bot created successfully! Click the ▶️ button to start WhatsApp.');
                 } else {
-                    alert('Failed to save bot');
+                    const errorData = await response.json().catch(() => ({}));
+                    alert(`Failed to save bot: ${errorData.error || response.statusText}`);
                 }
             } catch (error) {
                 console.error('Error saving bot:', error);
-                alert('Error saving bot');
+                alert(`Error saving bot: ${error.message}`);
             }
         }
 
