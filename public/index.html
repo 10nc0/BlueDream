@@ -67,8 +67,8 @@
         <div class="tabs">
             <button class="tab active" onclick="switchTab('bots')">🌉 Bridges</button>
             <button class="tab" onclick="switchTab('analytics')">📊 Analytics</button>
-            <button class="tab" id="usersTab" onclick="switchTab('users')" style="display: none;">👥 Users</button>
-            <button class="tab" id="devPanelTab" onclick="switchTab('devPanel')" style="display: none; background: white; color: #1a1a2e;">🔧 Dev Panel</button>
+            <button class="tab" id="usersTabBtn" onclick="switchTab('users')" style="display: none;">👥 Users</button>
+            <button class="tab" id="devPanelBtn" onclick="switchTab('devPanel')" style="display: none; background: white; color: #1a1a2e;">🔧 Dev Panel</button>
         </div>
 
         <!-- Bridges Tab -->
@@ -664,16 +664,16 @@
                 
                 // Role hierarchy: dev > admin > user
                 // Show tabs based on role
-                const devTab = document.getElementById('devPanelTab');
-                const usersTab = document.getElementById('usersTab');
+                const devTab = document.getElementById('devPanelBtn');
+                const usersTabBtn = document.getElementById('usersTabBtn');
                 
                 if (currentUser.role === 'dev') {
                     // Devs see everything including dev panel
                     if (devTab) devTab.style.display = 'block';
-                    if (usersTab) usersTab.style.display = 'block';
+                    if (usersTabBtn) usersTabBtn.style.display = 'block';
                 } else if (currentUser.role === 'admin') {
                     // Admins see users tab but not dev panel
-                    if (usersTab) usersTab.style.display = 'block';
+                    if (usersTabBtn) usersTabBtn.style.display = 'block';
                 }
                 
                 return true;
