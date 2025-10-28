@@ -2913,10 +2913,14 @@ app.get('/api/messages/:id/media', requireAuth, async (req, res) => {
 });
 
 // OPTIMIZED: Added pagination to prevent loading 1000 messages at once
+// CRITICAL: Uses tenant-aware database client for fractalized architecture
 app.get('/api/bots/:id/messages', requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
         const { search, status, page = 1, limit = 50 } = req.query;
+        
+        // Use tenant-aware database client (setTenantContext middleware)
+        const client = req.dbClient || pool;
         
         const offset = (parseInt(page) - 1) * parseInt(limit);
         
@@ -2939,7 +2943,7 @@ app.get('/api/bots/:id/messages', requireAuth, async (req, res) => {
         query += ` ORDER BY timestamp DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
         params.push(parseInt(limit), offset);
         
-        const result = await pool.query(query, params);
+        const result = await client.query(query, params);
         
         // Get total count for pagination
         let countQuery = 'SELECT COUNT(*) FROM messages WHERE bot_id = $1';
@@ -2952,7 +2956,7 @@ app.get('/api/bots/:id/messages', requireAuth, async (req, res) => {
             countQuery += ` AND discord_status = $${countParams.length + 1}`;
             countParams.push(status);
         }
-        const countResult = await pool.query(countQuery, countParams);
+        const countResult = await client.query(countQuery, countParams);
         
         res.json({
             messages: result.rows,
