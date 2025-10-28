@@ -98,29 +98,30 @@ body {
   background: rgba(30, 41, 59, 0.8);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--color-border);
-  padding: 0.375rem 0.625rem;
+  padding: 0.25rem 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
   position: sticky;
   top: 0;
   z-index: var(--z-sticky);
-  gap: 0.375rem;
-  flex-wrap: wrap;
+  gap: 1rem;
+  flex-wrap: nowrap;
+  min-height: 50px;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
+  gap: 0.75rem;
   flex: 1;
   min-width: 0; /* Prevents flex item overflow */
 }
 
 .animated-character {
   position: relative;
-  width: clamp(75px, 18vw, 125px);
-  height: clamp(75px, 18vw, 125px);
+  width: 40px;
+  height: 40px;
   z-index: var(--z-elevated);
   flex-shrink: 0;
 }
@@ -133,57 +134,56 @@ body {
 }
 
 .logo {
-  font-size: clamp(2rem, 5vw, 3rem);
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--color-text-bright);
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: 0.5rem;
   white-space: nowrap;
   line-height: 1;
 }
 
 .tagline {
-  font-size: 0.75rem;
+  font-size: 0.625rem;
   color: var(--color-text-secondary);
   font-weight: 400;
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 400px;
+  max-width: 300px;
 }
 
 .header-right {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: var(--space-md);
+  gap: 0.75rem;
   flex-shrink: 0;
 }
 
-/* Vertical Status Indicators - Scaled to match cat height (125px total) */
+/* Horizontal Status Indicators - Compact belt layout */
 .status-indicators-vertical {
   display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  margin-right: 1rem;
-  height: 125px;
-  justify-content: space-between;
+  flex-direction: row;
+  gap: 0.5rem;
+  height: auto;
+  justify-content: flex-start;
 }
 
 .indicator-vertical {
-  padding: 0.375rem 0.625rem;
+  padding: 0.25rem 0.5rem;
   background: rgba(15, 23, 42, 0.6);
-  border-radius: 0.375rem;
+  border-radius: 0.25rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 0.6875rem;
+  font-size: 0.625rem;
   color: #94a3b8;
   white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  flex: 1;
+  flex: none;
 }
 
 .indicator-vertical strong,
@@ -193,24 +193,24 @@ body {
 }
 
 #userInfo {
-  font-size: var(--text-sm);
+  font-size: 0.75rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
+  max-width: 150px;
 }
 
 .logout-btn {
   background: linear-gradient(135deg, var(--color-red-500) 0%, var(--color-red-600) 100%);
   color: white;
   border: none;
-  padding: 0.375rem 0.75rem;
+  padding: 0.25rem 0.625rem;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 600;
   transition: all var(--transition-base);
   white-space: nowrap;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
 .logout-btn:hover {
