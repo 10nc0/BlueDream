@@ -977,6 +977,47 @@ body {
   .modal-content {
     padding: var(--space-xl);
   }
+  
+  /* iPhone-optimized table layout */
+  .message-table {
+    min-width: 500px; /* Reduced from 600px for better mobile fit */
+    font-size: 0.75rem; /* Smaller text for mobile */
+  }
+  
+  .message-table th,
+  .message-table td {
+    padding: var(--space-sm); /* Tighter padding on mobile */
+  }
+  
+  /* Optimize column widths for iPhone */
+  .message-table .contact-col {
+    max-width: 100px; /* Limit contact column width */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.7rem;
+  }
+  
+  .message-table .timestamp-col {
+    width: 70px; /* Fixed narrow width for timestamps */
+    font-size: 0.65rem;
+  }
+  
+  .message-table .message-col {
+    max-width: 180px; /* Optimize message column for visibility */
+  }
+  
+  .message-table .status-col {
+    width: 60px; /* Narrow status column */
+    font-size: 0.7rem;
+  }
+  
+  .message-table .attachment-col {
+    width: 50px; /* Narrower attachment column */
+  }
+  
+  .attachment-icon {
+    font-size: 1rem; /* Smaller icon on mobile */
+  }
 }
 
 /* Tablets (480px - 767px) */
