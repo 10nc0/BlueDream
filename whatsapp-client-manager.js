@@ -151,15 +151,14 @@ class WhatsAppClientManager {
                 await client.query('BEGIN');
                 await client.query(`SET LOCAL search_path TO ${tenantSchema}`);
                 
+                // Only update columns that exist in tenant schema (qr_code and session_error were removed)
                 await client.query(`
                     UPDATE bots 
                     SET status = $1, 
-                        qr_code = $2, 
-                        contact_info = COALESCE($3, contact_info),
-                        session_error = $4,
+                        contact_info = COALESCE($2, contact_info),
                         updated_at = NOW()
-                    WHERE id = $5
-                `, [status, qrCode, contactInfo, errorMessage, botId]);
+                    WHERE id = $3
+                `, [status, contactInfo, botId]);
                 
                 await client.query('COMMIT');
             } catch (err) {
