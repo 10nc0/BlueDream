@@ -783,6 +783,41 @@ console.log(`✅ Using Chromium at: ${chromiumPath}`);
 whatsappManager = new WhatsAppClientManager(pool, chromiumPath);
 
 /**
+ * Get the tenant schema that owns a specific bot
+ * This ensures bot activities are tracked in the correct tenant's database
+ */
+async function getBotTenantSchema(botId) {
+    try {
+        // Query all tenant schemas to find which one owns this bot
+        const schemasResult = await pool.query(`
+            SELECT schema_name 
+            FROM information_schema.schemata 
+            WHERE schema_name LIKE 'tenant_%'
+            ORDER BY schema_name
+        `);
+        
+        for (const row of schemasResult.rows) {
+            const schema = row.schema_name;
+            const botCheck = await pool.query(`
+                SELECT id FROM ${schema}.bots WHERE id = $1
+            `, [botId]);
+            
+            if (botCheck.rows.length > 0) {
+                console.log(`✅ Bot ${botId} belongs to ${schema}`);
+                return schema;
+            }
+        }
+        
+        // Fallback to public if not found (shouldn't happen)
+        console.warn(`⚠️ Bot ${botId} not found in any tenant schema, defaulting to public`);
+        return 'public';
+    } catch (error) {
+        console.error(`❌ Error finding tenant for bot ${botId}:`, error);
+        return 'public';
+    }
+}
+
+/**
  * Tenant-aware WhatsApp message handler
  * Routes messages to the correct tenant's schema based on botId
  */
@@ -2676,20 +2711,16 @@ app.post('/api/bots/:id/unarchive', requireAuth, setTenantContext, requireRole('
 // Start WhatsApp session for a bot
 app.post('/api/bots/:id/start', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
-        const client = req.dbClient || pool;
-        const tenantSchema = req.tenantContext?.tenant_schema || 'public';
         const { id } = req.params;
+        const botId = parseInt(id);
         
-        // Get bot details
-        const botResult = await client.query('SELECT * FROM bots WHERE id = $1', [id]);
-        if (botResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Bot not found' });
-        }
-        
-        const bot = botResult.rows[0];
+        // CRITICAL: Get the correct tenant schema for this bot
+        // This ensures messages are stored in the right tenant's database
+        const tenantSchema = await getBotTenantSchema(botId);
+        console.log(`🔍 Bot ${id} belongs to ${tenantSchema}`);
         
         // Check if already running
-        const existingClient = whatsappManager.getClient(id);
+        const existingClient = whatsappManager.getClient(botId);
         if (existingClient && (existingClient.status === 'ready' || existingClient.status === 'qr_ready')) {
             return res.json({ 
                 success: true, 
@@ -2701,7 +2732,7 @@ app.post('/api/bots/:id/start', requireAuth, setTenantContext, requireRole('admi
         
         // Initialize WhatsApp client for this bot
         const clientState = await whatsappManager.initializeClient(
-            parseInt(id), 
+            botId, 
             tenantSchema, 
             createTenantAwareMessageHandler
         );
@@ -2759,11 +2790,15 @@ app.get('/api/bots/:id/qr', requireAuth, async (req, res) => {
 // Relink WhatsApp session for a bot (destroy and create new QR)
 app.post('/api/bots/:id/relink', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
-        const tenantSchema = req.tenantContext?.tenant_schema || 'public';
         const { id } = req.params;
+        const botId = parseInt(id);
+        
+        // CRITICAL: Get the correct tenant schema for this bot
+        const tenantSchema = await getBotTenantSchema(botId);
+        console.log(`🔍 Bot ${id} belongs to ${tenantSchema} (relink)`);
         
         const clientState = await whatsappManager.relinkClient(
-            parseInt(id), 
+            botId, 
             tenantSchema, 
             createTenantAwareMessageHandler
         );
