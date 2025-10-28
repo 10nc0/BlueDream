@@ -170,8 +170,12 @@ async function onboardingStep3Complete() {
     const validation = await validateDiscordWebhook(webhookUrl);
     
     if (!validation.valid) {
-        document.getElementById('onboarding-validation-status').innerHTML = 
-            `<span style="color: #ef4444;">❌ ${validation.error}</span>`;
+        const statusEl = document.getElementById('onboarding-validation-status');
+        statusEl.textContent = '';
+        const span = document.createElement('span');
+        span.style.color = '#ef4444';
+        span.textContent = `❌ ${validation.error}`;
+        statusEl.appendChild(span);
         return;
     }
     
