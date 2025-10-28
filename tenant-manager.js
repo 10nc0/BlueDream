@@ -170,14 +170,18 @@ class TenantManager {
                     bot_id INTEGER REFERENCES ${schemaName}.bots(id) ON DELETE CASCADE,
                     sender_name TEXT NOT NULL,
                     sender_number TEXT,
+                    sender_contact TEXT,
                     message_text TEXT,
+                    message_content TEXT,
                     timestamp TIMESTAMPTZ DEFAULT NOW(),
                     discord_status TEXT DEFAULT 'pending',
+                    discord_error TEXT,
                     media_data BYTEA,
                     media_type TEXT,
                     media_filename TEXT,
                     has_media BOOLEAN DEFAULT false,
-                    error_message TEXT
+                    error_message TEXT,
+                    sender_photo_url TEXT
                 )
             `);
 
