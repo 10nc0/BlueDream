@@ -1114,16 +1114,16 @@
                 // Cache the messages array
                 messageCache[botId] = data.messages;
                 
-                // Re-render messages
-                const container = document.getElementById(`messages-${botId}`);
+                // Re-render Discord-style messages
+                const container = document.getElementById(`discord-messages-${botId}`);
                 if (container) {
-                    container.innerHTML = renderMessages(data.messages, botId);
+                    container.innerHTML = renderDiscordMessages(data.messages, botId);
                 }
             } catch (error) {
                 console.error('Error loading messages:', error);
-                const container = document.getElementById(`messages-${botId}`);
+                const container = document.getElementById(`discord-messages-${botId}`);
                 if (container) {
-                    container.innerHTML = '<div style="text-align: center; padding: 1rem; color: #ef4444;">Error loading messages</div>';
+                    container.innerHTML = '<div class="no-messages" style="color: #ef4444;">Error loading messages. Please try refreshing.</div>';
                 }
             }
         }
