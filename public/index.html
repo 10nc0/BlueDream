@@ -906,9 +906,9 @@
                     <div class="discord-channel-info">
                         <span class="discord-channel-name"># ${bot.input_platform}-${bot.output_platform}</span>
                         <span class="discord-stats">
-                            <span class="stat-badge" data-tooltip="${glossary?.tooltips?.message_count || 'Total messages received'}">📊 ${bot.message_count || 0}</span>
-                            <span class="stat-badge ${successClass}" data-tooltip="${glossary?.tooltips?.forwarded_count || 'Successfully forwarded messages'}">✓ ${bot.forwarded_count || 0}</span>
-                            <span class="stat-badge error ${failedClass}" data-tooltip="${glossary?.tooltips?.failed_count || 'Failed to forward'}">✗ ${bot.failed_count || 0}</span>
+                            <span class="stat-badge" data-tooltip="${glossary?.tooltips?.message_count || 'Total messages received'}">${bot.message_count || 0} 📊</span>
+                            <span class="stat-badge ${successClass}" data-tooltip="${glossary?.tooltips?.forwarded_count || 'Successfully forwarded messages'}">${bot.forwarded_count || 0} ✓</span>
+                            <span class="stat-badge error ${failedClass}" data-tooltip="${glossary?.tooltips?.failed_count || 'Failed to forward'}">${bot.failed_count || 0} ✗</span>
                         </span>
                     </div>
                     <div class="discord-actions">
