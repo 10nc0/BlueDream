@@ -119,8 +119,8 @@ body {
 
 .animated-character {
   position: relative;
-  width: clamp(60px, 15vw, 100px);
-  height: clamp(60px, 15vw, 100px);
+  width: clamp(75px, 18vw, 125px);
+  height: clamp(75px, 18vw, 125px);
   z-index: var(--z-elevated);
   flex-shrink: 0;
 }
@@ -133,20 +133,25 @@ body {
 }
 
 .logo {
-  font-size: 1rem;
+  font-size: clamp(2rem, 5vw, 3rem);
   font-weight: 700;
   color: var(--color-text-bright);
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   white-space: nowrap;
+  line-height: 1;
 }
 
 .tagline {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--color-text-secondary);
   font-weight: 400;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 400px;
 }
 
 .header-right {
