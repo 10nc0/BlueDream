@@ -180,6 +180,19 @@
                 <!-- Admin cards will render here -->
             </div>
 
+            <!-- System-Wide Bridges Section -->
+            <div class="section-header" style="margin-top: 2rem;">
+                <h2 class="section-title" style="font-size: 1.25rem;">🌉 All Bridges (System-Wide)</h2>
+                <div style="font-size: 0.875rem; color: #94a3b8;">Bridges across all tenants with horizontal isolation</div>
+            </div>
+            
+            <div id="devPanelBridgesContainer" style="margin-top: 1rem;">
+                <!-- Bridges grouped by tenant will render here -->
+                <div style="text-align: center; padding: 3rem; color: #94a3b8;">
+                    <p>Loading system-wide bridges...</p>
+                </div>
+            </div>
+
             <!-- Admin Panel Grid -->
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 1.5rem; margin-top: 2rem;">
                 
@@ -2564,6 +2577,9 @@
                 const allUsers = await response.json();
                 console.log('✅ Received users:', allUsers.length, allUsers);
                 
+                // Also load system-wide bridges
+                loadDevPanelBridges();
+                
                 // Group users by tenant_schema to identify admins
                 const adminsByTenant = {};
                 allUsers.forEach(user => {
@@ -2715,6 +2731,121 @@
                     userList.innerHTML = `<div style="text-align: center; padding: 3rem; color: #ef4444;">Error loading users: ${error.message}</div>`;
                 }
             }
+        }
+        
+        // Load system-wide bridges for Dev Panel
+        async function loadDevPanelBridges() {
+            try {
+                console.log('🌉 Loading system-wide bridges for Dev Panel...');
+                const response = await authFetch('/api/dev/bridges');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const bridges = await response.json();
+                console.log(`✅ Received ${bridges.length} bridges:`, bridges);
+                renderDevPanelBridges(bridges);
+            } catch (error) {
+                console.error('Error loading Dev Panel bridges:', error);
+                const container = document.getElementById('devPanelBridgesContainer');
+                if (container) {
+                    container.innerHTML = `<div style="padding: 3rem; color: #ef4444; text-align: center;">Error loading bridges: ${error.message}</div>`;
+                }
+            }
+        }
+        
+        // Render system-wide bridges grouped by tenant
+        function renderDevPanelBridges(bridges) {
+            const container = document.getElementById('devPanelBridgesContainer');
+            if (!container) return;
+            
+            if (bridges.length === 0) {
+                container.innerHTML = '<div style="padding: 3rem; color: #94a3b8; text-align: center;">No bridges found across all tenants</div>';
+                return;
+            }
+            
+            // Group bridges by tenant
+            const bridgesByTenant = {};
+            bridges.forEach(bridge => {
+                const key = `tenant_${bridge.tenant_id}`;
+                if (!bridgesByTenant[key]) {
+                    bridgesByTenant[key] = {
+                        tenantId: bridge.tenant_id,
+                        ownerEmail: bridge.tenant_owner_email,
+                        bridges: []
+                    };
+                }
+                bridgesByTenant[key].bridges.push(bridge);
+            });
+            
+            // Render grouped bridges
+            const tenantKeys = Object.keys(bridgesByTenant).sort((a, b) => {
+                const numA = parseInt(a.replace('tenant_', ''));
+                const numB = parseInt(b.replace('tenant_', ''));
+                return numA - numB;
+            });
+            
+            container.innerHTML = tenantKeys.map(key => {
+                const tenantData = bridgesByTenant[key];
+                const adminNumber = String(tenantData.tenantId).padStart(2, '0');
+                const isDevAdmin = tenantData.tenantId === 1;
+                
+                return `
+                    <div class="glass-card" style="margin-bottom: 1.5rem; padding: 1.5rem;">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                            <div style="width: 50px; height: 50px; border-radius: 50%; background: ${isDevAdmin ? 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'}; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.25rem; font-weight: 700; flex-shrink: 0;">
+                                ${adminNumber}
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="color: white; font-weight: 600; font-size: 1.125rem;">
+                                    Admin #${adminNumber} ${isDevAdmin ? '(Dev)' : '(Genesis Admin)'}
+                                </div>
+                                <div style="color: #94a3b8; font-size: 0.875rem;">
+                                    ${escapeHtml(tenantData.ownerEmail)} • ${key}
+                                </div>
+                            </div>
+                            <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 0.5rem; padding: 0.5rem 1rem;">
+                                <div style="color: #3b82f6; font-weight: 700; font-size: 1.25rem;">${tenantData.bridges.length}</div>
+                                <div style="color: #94a3b8; font-size: 0.75rem;">Bridge${tenantData.bridges.length === 1 ? '' : 's'}</div>
+                            </div>
+                        </div>
+                        
+                        <div style="display: grid; gap: 1rem;">
+                            ${tenantData.bridges.map(bridge => `
+                                <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0.5rem; padding: 1rem;">
+                                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem;">
+                                        <div style="flex: 1;">
+                                            <div style="color: white; font-weight: 600; font-size: 1rem; margin-bottom: 0.25rem;">
+                                                ${escapeHtml(bridge.name)}
+                                            </div>
+                                            <div style="color: #94a3b8; font-size: 0.875rem;">
+                                                ${bridge.input_platform} → ${bridge.output_platform} • Bot ID: ${bridge.id}
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                            ${getStatusBadge(bridge.status)}
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+                                            <span style="color: #94a3b8;">📊</span>
+                                            <span style="color: white;">${bridge.message_count || 0}</span>
+                                            <span style="color: #94a3b8;">messages</span>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+                                            <span style="color: #10b981;">✓</span>
+                                            <span style="color: #10b981;">${bridge.forwarded_count || 0}</span>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem;">
+                                            <span style="color: #ef4444;">✗</span>
+                                            <span style="color: #ef4444;">${bridge.failed_count || 0}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
         
         function renderDevPanelUsers() {
