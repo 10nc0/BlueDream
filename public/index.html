@@ -675,9 +675,8 @@
                         <div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>
                         <div class="discord-text">${escapeHtml(msg.message_content)}</div>
                         ${msg.has_media ? `
-                            <div class="discord-attachment" onclick="showMediaPreview(${msg.id})" style="cursor: pointer;" title="Click to preview">
-                                <span class="attachment-icon">📎</span>
-                                <span class="attachment-type">${escapeHtml(msg.media_type || 'Attachment')}</span>
+                            <div class="discord-media-preview" id="media-preview-${msg.id}" data-message-id="${msg.id}" data-media-type="${escapeHtml(msg.media_type || '')}">
+                                <div class="media-loading">Loading media...</div>
                             </div>
                         ` : ''}
                     </div>
@@ -1127,6 +1126,13 @@
                 const container = document.getElementById(`discord-messages-${botId}`);
                 if (container) {
                     container.innerHTML = renderDiscordMessages(data.messages, botId);
+                    
+                    // Load media previews for messages with attachments
+                    data.messages.forEach(msg => {
+                        if (msg.has_media) {
+                            loadMediaPreview(msg.id);
+                        }
+                    });
                 }
             } catch (error) {
                 console.error('Error loading messages:', error);
@@ -1134,6 +1140,62 @@
                 if (container) {
                     container.innerHTML = '<div class="no-messages" style="color: #ef4444;">Error loading messages. Please try refreshing.</div>';
                 }
+            }
+        }
+
+        // Load and display inline media preview
+        async function loadMediaPreview(messageId) {
+            const previewContainer = document.getElementById(`media-preview-${messageId}`);
+            if (!previewContainer) return;
+            
+            try {
+                const response = await authFetch(`/api/messages/${messageId}/media`);
+                if (!response.ok) {
+                    previewContainer.innerHTML = '<div class="media-error">Media unavailable</div>';
+                    return;
+                }
+                
+                const data = await response.json();
+                const mediaType = (data.media_type || '').toLowerCase();
+                
+                if (mediaType.includes('image')) {
+                    // Image preview - click to enlarge
+                    previewContainer.innerHTML = `
+                        <img src="${data.media_data}" 
+                             alt="Image attachment" 
+                             class="discord-media-image"
+                             onclick="showMediaPreview(${messageId})"
+                             loading="lazy">
+                    `;
+                } else if (mediaType.includes('video')) {
+                    // Inline video player
+                    previewContainer.innerHTML = `
+                        <video controls class="discord-media-video" onclick="event.stopPropagation()">
+                            <source src="${data.media_data}" type="${data.media_type}">
+                            Your browser doesn't support video playback.
+                        </video>
+                        <div class="media-expand-hint" onclick="showMediaPreview(${messageId})">Click to view fullscreen</div>
+                    `;
+                } else if (mediaType.includes('audio')) {
+                    // Inline audio player
+                    previewContainer.innerHTML = `
+                        <audio controls class="discord-media-audio">
+                            <source src="${data.media_data}" type="${data.media_type}">
+                            Your browser doesn't support audio playback.
+                        </audio>
+                    `;
+                } else {
+                    // Fallback for other types
+                    previewContainer.innerHTML = `
+                        <div class="discord-attachment" onclick="showMediaPreview(${messageId})" style="cursor: pointer;">
+                            <span class="attachment-icon">📎</span>
+                            <span class="attachment-type">${escapeHtml(data.media_type || 'Attachment')}</span>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading media preview:', error);
+                previewContainer.innerHTML = '<div class="media-error">Failed to load media</div>';
             }
         }
 

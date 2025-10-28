@@ -782,6 +782,69 @@ body {
   font-size: 0.875rem;
 }
 
+/* Discord-style inline media previews */
+.discord-media-preview {
+  margin-top: 0.5rem;
+  max-width: 100%;
+}
+
+.discord-media-image {
+  max-width: 400px;
+  max-height: 300px;
+  width: auto;
+  height: auto;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid var(--color-border);
+  display: block;
+}
+
+.discord-media-image:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-color: var(--color-border-hover);
+}
+
+.discord-media-video {
+  max-width: 500px;
+  width: 100%;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.discord-media-audio {
+  width: 100%;
+  max-width: 400px;
+  border-radius: var(--radius-md);
+}
+
+.media-loading, .media-error {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  padding: 0.5rem;
+  font-style: italic;
+}
+
+.media-error {
+  color: var(--color-red-500);
+}
+
+.media-expand-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.media-expand-hint:hover {
+  opacity: 1;
+  color: var(--color-text-secondary);
+}
+
 /* ===================================================================
    BOT CARD - RESPONSIVE
    =================================================================== */
