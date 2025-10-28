@@ -2536,7 +2536,7 @@ app.get('/api/bots', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/bots', requireRole('admin', 'write-only'), async (req, res) => {
+app.post('/api/bots', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const client = req.dbClient || pool;
         const userRole = req.tenantContext?.userRole || 'read-only';
