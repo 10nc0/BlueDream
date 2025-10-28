@@ -2653,25 +2653,38 @@
         function switchTab(tabName) {
             // Update tab buttons
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-            event.target.classList.add('active');
+            if (event && event.target) {
+                event.target.classList.add('active');
+            }
             
-            // Update tab content
+            // Update tab content - hide all first
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             
             // Handle devPanel tab (special case with different ID)
             if (tabName === 'devPanel') {
-                document.getElementById('devPanelTab-content').classList.add('active');
-                loadDevPanelAdmins();
+                const devPanel = document.getElementById('devPanelTab-content');
+                if (devPanel) {
+                    devPanel.classList.add('active');
+                    loadDevPanelAdmins();
+                }
             } else {
-                document.getElementById(`${tabName}Tab`).classList.add('active');
-                
-                // Load data for the tab
-                if (tabName === 'users') {
-                    loadAdminCards();
-                } else if (tabName === 'sessions') {
-                    loadSessions();
-                } else if (tabName === 'analytics') {
-                    loadAnalyticsDashboard();
+                // Find and show the correct tab content
+                const tabContent = document.getElementById(`${tabName}Tab`);
+                if (tabContent) {
+                    tabContent.classList.add('active');
+                    
+                    // Load data for the tab
+                    if (tabName === 'bridges') {
+                        loadBridges();
+                    } else if (tabName === 'users') {
+                        loadAdminCards();
+                    } else if (tabName === 'sessions') {
+                        loadSessions();
+                    } else if (tabName === 'analytics') {
+                        loadAnalyticsDashboard();
+                    }
+                } else {
+                    console.error(`Tab content not found for: ${tabName}Tab`);
                 }
             }
         }
