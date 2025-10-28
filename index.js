@@ -2844,25 +2844,7 @@ app.get('/api/bots/:id/stats', requireAuth, async (req, res) => {
     }
 });
 
-// QR code for specific bot (currently returns global QR since we have one WhatsApp client)
-app.get('/api/bots/:id/qr', requireAuth, (req, res) => {
-    try {
-        // For now, return the global QR code regardless of bot ID
-        // In the future, this could support multiple WhatsApp clients per bot
-        console.log('[QR API] Request received, currentQR exists:', !!currentQR, 'whatsappReady:', whatsappReady);
-        
-        if (currentQR) {
-            res.json({ qr: currentQR });
-        } else if (whatsappReady) {
-            res.json({ message: 'WhatsApp is already connected', connected: true });
-        } else {
-            res.json({ message: 'QR code not available yet. Please wait...', connected: false });
-        }
-    } catch (error) {
-        console.error('[QR API] Error:', error);
-        res.status(500).json({ error: 'Failed to generate QR code', details: error.message });
-    }
-});
+// REMOVED: Duplicate QR endpoint - using the multi-instance version above (line ~2741)
 
 // Get media for a specific message
 app.get('/api/messages/:id/media', requireAuth, async (req, res) => {

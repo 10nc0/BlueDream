@@ -366,22 +366,40 @@
         </div>
     </div>
 
-    <!-- QR Code Modal -->
+    <!-- QR Code Modal - Improved UX -->
     <div id="qrModal" class="modal">
-        <div class="modal-content" style="max-width: 450px; text-align: center;">
+        <div class="modal-content" style="max-width: 550px; text-align: center;">
             <div class="modal-header">
-                <h2 class="modal-title">📱 Scan QR Code</h2>
+                <h2 class="modal-title" id="qrModalTitle">📱 WhatsApp QR Code</h2>
                 <button class="close-btn" onclick="closeQRModal()">×</button>
             </div>
-            <div style="padding: 1.5rem;">
-                <div id="qrCodeContainer" style="display: flex; justify-content: center; align-items: center; margin: 1.5rem 0;">
-                    <img id="qrCodeImage" src="" alt="QR Code" style="width: 300px; height: 300px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);">
+            <div style="padding: 2rem;">
+                <!-- QR Code Container -->
+                <div id="qrCodeContainer" style="display: flex; justify-content: center; align-items: center; margin: 1.5rem 0; min-height: 350px;">
+                    <img id="qrCodeImage" src="" alt="QR Code" style="width: 350px; height: 350px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); display: none;">
+                    <div id="qrLoadingMessage" style="display: none; text-align: center;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">⏳</div>
+                        <p style="color: rgba(255, 255, 255, 0.9); font-size: 1.1rem;">Loading QR Code...</p>
+                    </div>
+                    <div id="qrErrorMessage" style="display: none; text-align: left; max-width: 400px;">
+                        <!-- Dynamic error/instruction content -->
+                    </div>
                 </div>
-                <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; padding: 1rem; margin-top: 1rem;">
-                    <p style="margin: 0; color: rgba(255, 255, 255, 0.9); font-size: 0.9rem; line-height: 1.6;">
-                        <strong>📲 Open WhatsApp</strong><br>
-                        Settings → Linked Devices → Link a Device
+                
+                <!-- Instructions Box -->
+                <div id="qrInstructions" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 12px; padding: 1.5rem; margin-top: 1.5rem; display: none;">
+                    <p style="margin: 0 0 1rem 0; color: rgba(255, 255, 255, 0.9); font-size: 1rem; line-height: 1.8; text-align: left;">
+                        <strong style="font-size: 1.1rem;">📲 How to Scan:</strong><br>
+                        1. Open <strong>WhatsApp</strong> on your phone<br>
+                        2. Go to <strong>Settings → Linked Devices</strong><br>
+                        3. Tap <strong>"Link a Device"</strong><br>
+                        4. Point your phone at this QR code
                     </p>
+                    <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 1rem; margin-top: 1rem;">
+                        <p style="margin: 0; color: #10b981; font-size: 0.9rem;">
+                            ✅ After scanning, your bot will connect automatically!
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1722,6 +1740,22 @@
 
 
         async function showQR(botId) {
+            // Open modal immediately with loading state
+            const modal = document.getElementById('qrModal');
+            const qrImage = document.getElementById('qrCodeImage');
+            const loadingMsg = document.getElementById('qrLoadingMessage');
+            const errorMsg = document.getElementById('qrErrorMessage');
+            const instructions = document.getElementById('qrInstructions');
+            const modalTitle = document.getElementById('qrModalTitle');
+            
+            // Reset modal state
+            qrImage.style.display = 'none';
+            loadingMsg.style.display = 'flex';
+            errorMsg.style.display = 'none';
+            instructions.style.display = 'none';
+            modalTitle.textContent = '📱 WhatsApp QR Code';
+            modal.style.display = 'flex';
+            
             try {
                 console.log('Fetching QR code for bot:', botId);
                 const response = await authFetch(`/api/bots/${botId}/qr`);
@@ -1730,7 +1764,7 @@
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error('QR API error:', errorText);
-                    alert(`Failed to get QR code: ${response.status}`);
+                    showQRError('Server Error', `Failed to fetch QR code (${response.status}). Please try restarting the bot.`);
                     return;
                 }
                 
@@ -1738,21 +1772,62 @@
                 console.log('QR Data received:', data);
                 
                 if (data.qr) {
-                    // QR code is ready - show it in modal
-                    document.getElementById('qrCodeImage').src = data.qr;
-                    document.getElementById('qrModal').style.display = 'flex';
+                    // QR code is ready - show it!
+                    loadingMsg.style.display = 'none';
+                    qrImage.src = data.qr;
+                    qrImage.style.display = 'block';
+                    instructions.style.display = 'block';
+                    modalTitle.textContent = '📱 Scan This QR Code';
                 } else if (data.connected) {
-                    alert('✅ WhatsApp is already connected!\n\nYour bot is actively forwarding messages.');
+                    // Already connected
+                    showQRError('✅ Already Connected!', 'Your WhatsApp is already connected and actively forwarding messages.', true);
                 } else if (data.message) {
-                    // QR not ready yet - guide user through correct flow
-                    alert(`📱 QR Code Not Generated Yet\n\n✅ Correct Flow:\n1. Click ▶️ START button (generates QR automatically)\n2. Wait 5-10 seconds for initialization\n3. Click 📱 QR button (displays the QR)\n4. Scan QR with WhatsApp on your phone\n5. ✅ Bot becomes Connected!`);
+                    // QR not ready yet - show helpful guide
+                    showQRError('📱 QR Code Not Ready', `
+                        <div style="background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem;">
+                            <p style="margin: 0 0 1rem 0; color: rgba(255, 255, 255, 0.9); font-size: 1rem;">
+                                <strong>QR Code Generation Steps:</strong>
+                            </p>
+                            <ol style="margin: 0; padding-left: 1.5rem; color: rgba(255, 255, 255, 0.8); line-height: 1.8; text-align: left;">
+                                <li>Click the <strong>▶️ START</strong> button</li>
+                                <li>Wait <strong>5-10 seconds</strong> for initialization</li>
+                                <li>Click this <strong>📱 QR</strong> button again</li>
+                                <li>Scan the QR code with your phone</li>
+                                <li>✅ Done!</li>
+                            </ol>
+                        </div>
+                        <button onclick="closeQRModal()" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); padding: 0.75rem 2rem; border-radius: 8px; cursor: pointer; font-size: 1rem; width: 100%;">
+                            Got it!
+                        </button>
+                    `);
                 } else {
-                    alert('📱 QR code not available.\n\nPlease click ▶️ START first to generate the QR code.');
+                    showQRError('⚠️ QR Not Available', 'Please click the ▶️ START button first to generate the QR code.');
                 }
             } catch (error) {
                 console.error('Error fetching QR code:', error);
-                alert(`Error: ${error.message || 'Unknown error'}`);
+                showQRError('❌ Connection Error', error.message || 'Unknown error occurred. Please check your connection and try again.');
             }
+        }
+        
+        function showQRError(title, message, isSuccess = false) {
+            const loadingMsg = document.getElementById('qrLoadingMessage');
+            const errorMsg = document.getElementById('qrErrorMessage');
+            const modalTitle = document.getElementById('qrModalTitle');
+            
+            loadingMsg.style.display = 'none';
+            errorMsg.style.display = 'block';
+            modalTitle.textContent = title;
+            
+            const bgColor = isSuccess ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            const borderColor = isSuccess ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+            
+            errorMsg.innerHTML = `
+                <div style="background: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 12px; padding: 1.5rem;">
+                    <p style="margin: 0; color: rgba(255, 255, 255, 0.9); font-size: 1rem; line-height: 1.6;">
+                        ${message}
+                    </p>
+                </div>
+            `;
         }
 
         function closeQRModal() {
