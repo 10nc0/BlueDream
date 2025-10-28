@@ -1578,16 +1578,16 @@
         
         async function loadBotMessages(botId, page = 1) {
             try {
-                const response = await fetch(`/api/bots/${botId}/messages?page=${page}&limit=50`);
+                const response = await authFetch(`/api/bots/${botId}/messages?page=${page}&limit=50`);
                 const data = await response.json();
                 
-                // Cache the data
-                messageCache[botId] = data;
+                // Cache the messages array
+                messageCache[botId] = data.messages;
                 
                 // Re-render messages
                 const container = document.getElementById(`messages-${botId}`);
                 if (container) {
-                    container.innerHTML = renderMessages(data, botId);
+                    container.innerHTML = renderMessages(data.messages, botId);
                 }
             } catch (error) {
                 console.error('Error loading messages:', error);
