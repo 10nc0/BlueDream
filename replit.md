@@ -199,9 +199,10 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 - **User Email Fix**: Added max-width (250px) and text-overflow ellipsis to prevent email overflow
   - Now properly readable and scales with Logout button
   - "phi_dao@pm.me (dev)" displays correctly
-- **Enlarged Cat**: Increased animated character size from 125px → 160px
-  - Canvas size: 125x125 → 160x160
-  - Responsive clamp: 100-160px (was 75-125px)
+- **Enlarged Cat**: Increased animated character size from 125px → 200px
+  - Canvas size: 125x125 → 200x200
+  - Responsive clamp: 120-200px (was 75-125px)
+  - Significantly more visible and prominent in header
 - **Animated Time Color**: Time alternates between black (#1a1a1a) and white (#ffffff) synced with cat jump animation
   - Creates dynamic visual rhythm in header
   
