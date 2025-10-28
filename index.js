@@ -2540,28 +2540,41 @@ app.get('/api/stats', requireAuth, async (req, res) => {
 });
 
 // Bot management endpoints
-// CRITICAL: Complete horizontal tenant isolation - ALL users (including dev) see ONLY their own tenant's bots
-// Dev users access system-wide bridges via /api/dev/bridges endpoint
-app.get('/api/bots', requireAuth, setTenantContext, async (req, res) => {
+// CRITICAL: Complete horizontal tenant isolation with EXPLICIT SCHEMA INDEXING
+// Uses dynamic schema names via variable placeholders (fractalized architecture)
+app.get('/api/bots', requireAuth, async (req, res) => {
     try {
-        const client = req.dbClient || pool;
+        // Get tenant schema from authenticated user
+        const userResult = await pool.query(
+            'SELECT tenant_id FROM users WHERE id = $1',
+            [req.userId]
+        );
         
-        // Query current tenant's bots ONLY (search_path already set by setTenantContext)
-        // Even dev users see only their own tenant here
-        const result = await client.query(`
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const tenantId = userResult.rows[0].tenant_id;
+        const tenantSchema = `tenant_${tenantId}`;
+        
+        console.log(`📊 Loading bridges for user ${req.userId} from ${tenantSchema}`);
+        
+        // EXPLICIT SCHEMA INDEXING: Use parameterized schema names
+        const result = await pool.query(`
             SELECT 
                 b.*,
                 COUNT(m.id) as message_count,
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count
-            FROM bots b
-            LEFT JOIN messages m ON b.id = m.bot_id
+            FROM ${tenantSchema}.bots b
+            LEFT JOIN ${tenantSchema}.messages m ON b.id = m.bot_id
             WHERE b.archived = false
             GROUP BY b.id
             ORDER BY b.created_at DESC
         `);
         
+        console.log(`✅ Found ${result.rows.length} bridges in ${tenantSchema}`);
         res.json(result.rows);
     } catch (error) {
         console.error('❌ Error in /api/bots:', error);
