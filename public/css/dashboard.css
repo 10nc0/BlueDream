@@ -156,9 +156,37 @@ body {
 
 .header-right {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   flex-shrink: 0;
+}
+
+/* Vertical Status Indicators */
+.status-indicators-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-right: 1rem;
+}
+
+.indicator-vertical {
+  padding: 0.5rem 0.75rem;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.75rem;
+  color: #94a3b8;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.indicator-vertical strong,
+.indicator-vertical span:not(.status-dot) {
+  color: #e2e8f0;
+  font-weight: 600;
 }
 
 #userInfo {

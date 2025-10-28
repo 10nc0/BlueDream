@@ -42,11 +42,24 @@
 
     <div class="header">
         <div class="header-left">
+            <div class="status-indicators-vertical">
+                <div class="indicator-vertical" id="systemStatusCompact">
+                    <span class="status-dot healthy"></span> System: <span id="systemStatusValueCompact">Healthy</span>
+                </div>
+                <div class="indicator-vertical">
+                    Uptime: <span id="systemUptimeCompact">--</span>
+                </div>
+                <div class="indicator-vertical">
+                    Active Sessions: <span id="activeSessionsCompact">0</span>
+                </div>
+                <div class="indicator-vertical">
+                    Bridges: <span id="bridgeCountCompact">0</span>
+                </div>
+            </div>
             <div style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
                 <div class="animated-character">
                     <canvas id="hopCanvas" class="character-canvas" width="125" height="125"></canvas>
                 </div>
-                <div id="userInfo" style="font-size: 0.75rem; text-align: center; white-space: nowrap;"></div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 0.25rem;">
                 <div class="logo">
@@ -59,6 +72,7 @@
         </div>
         <div class="header-right">
             <button class="logout-btn" onclick="logout()">Logout</button>
+            <div id="userInfo" style="font-size: 0.875rem; text-align: center; white-space: nowrap; margin-top: 0.5rem; padding: 0.5rem 1rem; background: rgba(30, 41, 59, 0.5); border-radius: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.1);"></div>
         </div>
     </div>
 
@@ -2287,6 +2301,7 @@
             const hours = Math.floor(uptime / 3600000);
             const minutes = Math.floor((uptime % 3600000) / 60000);
             document.getElementById('systemUptime').textContent = `${hours}h ${minutes}m`;
+            document.getElementById('systemUptimeCompact').textContent = `${hours}h ${minutes}m`;
             
             // Update current time
             const now = new Date();
@@ -2302,10 +2317,13 @@
             
             // Update bridge count
             document.getElementById('bridgeCount').textContent = bots.length;
+            document.getElementById('bridgeCountCompact').textContent = bots.length;
             
             // Update active sessions (will be populated when sessions load)
             if (window.sessions) {
-                document.getElementById('activeSessions').textContent = sessions.filter(s => s.is_active).length;
+                const activeCount = sessions.filter(s => s.is_active).length;
+                document.getElementById('activeSessions').textContent = activeCount;
+                document.getElementById('activeSessionsCompact').textContent = activeCount;
             }
         }
         
