@@ -16,6 +16,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
 const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./tenant-middleware');
+const WhatsAppClientManager = require('./whatsapp-client-manager');
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
@@ -323,10 +324,9 @@ app.use('/api/sessions', setTenantContext);
 app.use('/api/audit', setTenantContext);
 app.use('/api/analytics', setTenantContext);
 
-let currentQR = null;
-let botNumber = null;
-let whatsappReady = false;
-let client = null;
+// Multi-tenant WhatsApp Client Manager
+// Each bot gets its own WhatsApp session (one per tenant)
+let whatsappManager = null;
 
 async function initializeDatabase() {
     try {
@@ -779,151 +779,31 @@ if (!chromiumPath) {
 
 console.log(`✅ Using Chromium at: ${chromiumPath}`);
 
-function cleanupBrowserLocks() {
-    const sessionPath = './.wwebjs_auth/session';
+// Initialize multi-tenant WhatsApp Client Manager
+whatsappManager = new WhatsAppClientManager(pool, chromiumPath);
+
+/**
+ * Tenant-aware WhatsApp message handler
+ * Routes messages to the correct tenant's schema based on botId
+ */
+async function createTenantAwareMessageHandler(message, botId, tenantSchema) {
+    let messageDbId = null;
     
-    if (!fs.existsSync(sessionPath)) {
-        return;
-    }
-    
-    const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket'];
-    
-    lockFiles.forEach(lockFile => {
-        const lockPath = `${sessionPath}/${lockFile}`;
+    try {
+        // Get tenant-scoped database client
+        const tenantClient = await pool.connect();
         try {
-            const stats = fs.lstatSync(lockPath);
-            if (stats.isSymbolicLink() || stats.isFile()) {
-                fs.unlinkSync(lockPath);
-                console.log(`🧹 Cleaned up stale lock: ${lockFile}`);
-            }
-        } catch (error) {
-            if (error.code !== 'ENOENT') {
-                console.warn(`⚠️ Could not remove ${lockFile}:`, error.message);
-            }
-        }
-    });
-}
-
-function initializeWhatsAppClient() {
-    if (client) {
-        client.removeAllListeners();
-    }
-
-    cleanupBrowserLocks();
-
-    client = new Client({
-        authStrategy: new LocalAuth(),
-        puppeteer: {
-            executablePath: chromiumPath,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--disable-gpu',
-                '--disable-software-rasterizer',
-                '--disable-extensions'
-            ],
-            headless: true,
-            timeout: 60000
-        }
-    });
-
-    client.on('qr', async (qr) => {
-        console.log('QR Code received! Scan this with WhatsApp:');
-        qrcode.generate(qr, { small: true });
-        console.log('\nOr scan the QR code above with your WhatsApp mobile app.');
-        
-        try {
-            currentQR = await QRCode.toDataURL(qr);
-        } catch (err) {
-            console.error('Error generating QR code:', err);
-        }
-    });
-
-    client.on('ready', async () => {
-        whatsappReady = true;
-        currentQR = null;
-        console.log('✅ WhatsApp client is ready!');
-        console.log('🔗 Connected to Discord webhook');
-        
-        try {
-            const info = await client.info;
-            botNumber = info.wid.user;
-            const formattedNumber = `+${botNumber}`;
-            console.log(`📱 Bot WhatsApp Number: ${formattedNumber}`);
+            await tenantClient.query('BEGIN');
+            await tenantClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
             
-            // Auto-populate contact_info for the active bot (bot id=1)
-            await pool.query(`
-                UPDATE bots 
-                SET contact_info = $1, status = 'active'
-                WHERE id = 1
-            `, [formattedNumber]);
-            console.log(`✅ Auto-updated bot #1 contact info: ${formattedNumber}`);
-        } catch (error) {
-            console.error('Could not retrieve bot number:', error.message);
-        }
-        
-        if (ALLOWED_GROUPS.length > 0) {
-            console.log(`🔍 Monitoring specific groups: ${ALLOWED_GROUPS.join(', ')}`);
-        }
-        if (ALLOWED_NUMBERS.length > 0) {
-            console.log(`🔍 Monitoring specific numbers: ${ALLOWED_NUMBERS.join(', ')}`);
-        }
-        if (ALLOWED_GROUPS.length === 0 && ALLOWED_NUMBERS.length === 0) {
-            console.log('📬 Only forwarding messages sent TO this bot number');
-        }
-        
-        console.log('📱 Listening for WhatsApp messages...\n');
-    });
-
-    client.on('authenticated', () => {
-        console.log('✅ WhatsApp authenticated successfully!');
-    });
-
-    client.on('auth_failure', (msg) => {
-        whatsappReady = false;
-        console.error('❌ Authentication failed:', msg);
-    });
-
-    client.on('disconnected', (reason) => {
-        whatsappReady = false;
-        console.log('❌ WhatsApp client disconnected:', reason);
-    });
-
-    function shouldForwardMessage(message, chat, contact) {
-        if (ALLOWED_GROUPS.length > 0 && chat.isGroup) {
-            const groupName = chat.name || '';
-            if (ALLOWED_GROUPS.some(g => groupName.toLowerCase().includes(g.toLowerCase()))) {
-                return true;
-            }
-        }
-        
-        if (ALLOWED_NUMBERS.length > 0) {
-            const contactNumber = contact.number || contact.id.user;
-            if (ALLOWED_NUMBERS.some(n => contactNumber.includes(n))) {
-                return true;
-            }
-        }
-        
-        if (ALLOWED_GROUPS.length === 0 && ALLOWED_NUMBERS.length === 0) {
-            if (!chat.isGroup && message.fromMe === false) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-
-    client.on('message', async (message) => {
-        let messageDbId = null;
-        
-        try {
             const chat = await message.getChat();
             const contact = await message.getContact();
             
-            if (!shouldForwardMessage(message, chat, contact)) {
+            // Check if we should forward this message (basic filtering)
+            const shouldForward = !chat.isGroup && message.fromMe === false;
+            if (!shouldForward) {
+                await tenantClient.query('COMMIT');
+                tenantClient.release();
                 return;
             }
             
@@ -937,11 +817,8 @@ function initializeWhatsAppClient() {
             let senderPhotoUrl = null;
             try {
                 senderPhotoUrl = await contact.getProfilePicUrl();
-                if (senderPhotoUrl) {
-                    console.log(`📸 Got profile picture for ${senderName}`);
-                }
             } catch (error) {
-                console.log(`⚠️ Could not fetch profile picture for ${senderName}:`, error.message);
+                // Silently fail if no profile picture
             }
             
             const messageRecord = {
@@ -958,48 +835,14 @@ function initializeWhatsAppClient() {
                 discordStatus: 'pending'
             };
             
-            messageDbId = await saveMessage(pool, messageRecord);
+            // Save message to tenant's schema
+            messageDbId = await saveMessage(tenantClient, messageRecord, botId);
             
-            // Check if this is an annotation for a recent media message
-            let isAnnotation = false;
-            if (!message.hasMedia && messageContent && (messageContent.includes('#') || messageContent.toLowerCase().includes('note:'))) {
-                // Check if user sent media in the last 5 minutes
-                const recentMediaCheck = await pool.query(`
-                    SELECT id FROM messages 
-                    WHERE sender_contact = $1 
-                    AND has_media = true 
-                    AND timestamp > NOW() - INTERVAL '5 minutes'
-                    ORDER BY timestamp DESC LIMIT 1
-                `, [senderContact]);
-                
-                if (recentMediaCheck.rows.length > 0) {
-                    isAnnotation = true;
-                    // Update the media message with the annotation
-                    await pool.query(`
-                        UPDATE messages 
-                        SET message_content = CASE 
-                            WHEN message_content = '' THEN $1
-                            ELSE message_content || E'\n\n📝 Annotation: ' || $1
-                        END
-                        WHERE id = $2
-                    `, [messageContent, recentMediaCheck.rows[0].id]);
-                    console.log(`📝 Annotation added to media message for ${senderName}`);
-                }
-            }
-            
-            let embedDescription = messageContent || '_(No text content)_';
-            let embedColor = 0x25D366;
-            
-            // Add annotation indicator to embed if this is an annotation
-            if (isAnnotation) {
-                embedDescription = `📝 **Media Annotation**\n\n${embedDescription}`;
-                embedColor = 0x5865F2; // Discord blue for annotations
-            }
-            
+            // Create Discord embed
             const embed = {
                 title: `📱 WhatsApp Message from ${senderName}`,
-                description: embedDescription,
-                color: embedColor,
+                description: messageContent || '_(No text content)_',
+                color: 0x25D366,
                 fields: [
                     {
                         name: '💬 Chat',
@@ -1013,7 +856,7 @@ function initializeWhatsAppClient() {
                     }
                 ],
                 footer: {
-                    text: 'WhatsApp Bridge'
+                    text: `WhatsApp Bridge - Bot ${botId}`
                 }
             };
 
@@ -1023,12 +866,12 @@ function initializeWhatsAppClient() {
                 embeds: [embed]
             };
 
+            // Handle media messages
             if (message.hasMedia) {
                 try {
                     const media = await message.downloadMedia();
                     if (media && media.mimetype.startsWith('image/')) {
                         const mediaData = `data:${media.mimetype};base64,${media.data}`;
-                        
                         const buffer = Buffer.from(media.data, 'base64');
                         const filename = `whatsapp_image_${Date.now()}.${media.mimetype.split('/')[1]}`;
                         
@@ -1038,53 +881,79 @@ function initializeWhatsAppClient() {
                             inline: false
                         });
                         
-                        // Send to all configured webhooks (1-to-many) with media
+                        // Send to Discord with media
                         await sendToAllWebhooks(discordPayload, {
                             isMedia: true,
                             mediaBuffer: buffer,
                             filename: filename,
                             mimetype: media.mimetype
                         }, messageDbId, mediaData);
-                        console.log(`✅ Forwarded message with image from ${senderName} (${chatName}) to all Discord webhooks`);
                         
-                        // Prompt for annotation if media was sent without text
-                        if (!messageContent || messageContent.trim().length < 3) {
-                            const annotationPrompt = `📝 Media received! To help with organization and future searching, please reply with:\n\n• Hashtags (e.g., #meeting #sales)\n• Brief description\n• Any relevant notes\n\nThis will help index this media for easy discovery later in Discord.`;
-                            await message.reply(annotationPrompt);
-                            console.log(`📝 Prompted ${senderName} for media annotation`);
-                        }
-                        
+                        await tenantClient.query('COMMIT');
+                        tenantClient.release();
+                        console.log(`✅ [Bot ${botId}] Forwarded media message from ${senderName}`);
                         return;
                     }
                 } catch (mediaError) {
-                    console.error('Error downloading media:', mediaError.message);
+                    console.error(`❌ [Bot ${botId}] Error downloading media:`, mediaError.message);
                     if (messageDbId) {
-                        await updateMessageStatus(pool, messageDbId, 'failed', mediaError.message);
+                        await updateMessageStatus(tenantClient, messageDbId, 'failed', mediaError.message);
                     }
+                    await tenantClient.query('COMMIT');
+                    tenantClient.release();
                     return;
                 }
             }
 
-            // Send to all configured webhooks (1-to-many)
+            // Send text-only message to Discord
             await sendToAllWebhooks(discordPayload, {}, messageDbId);
-            console.log(`✅ Forwarded message from ${senderName} (${chatName}) to all Discord webhooks`);
+            console.log(`✅ [Bot ${botId}] Forwarded message from ${senderName}`);
             
+            await tenantClient.query('COMMIT');
+            tenantClient.release();
         } catch (error) {
-            console.error('❌ Error forwarding message to Discord:', error.message);
-            if (messageDbId) {
-                await updateMessageStatus(pool, messageDbId, 'failed', error.message);
+            await tenantClient.query('ROLLBACK');
+            tenantClient.release();
+            throw error;
+        }
+    } catch (error) {
+        console.error(`❌ [Bot ${botId}] Error handling message:`, error.message);
+        if (messageDbId) {
+            const client = await pool.connect();
+            try {
+                await client.query('BEGIN');
+                await client.query(`SET LOCAL search_path TO ${tenantSchema}`);
+                await updateMessageStatus(client, messageDbId, 'failed', error.message);
+                await client.query('COMMIT');
+            } catch (err) {
+                await client.query('ROLLBACK');
+            } finally {
+                client.release();
             }
         }
-    });
-
-    console.log('🚀 Starting WhatsApp to Discord Bridge...');
-    console.log('📡 Discord webhook configured');
-    console.log('⏳ Initializing WhatsApp client...\n');
-
-    client.initialize().catch(err => {
-        console.error('Failed to initialize WhatsApp client:', err);
-    });
+    }
 }
+
+// ============ MULTI-TENANT WHATSAPP - LEGACY FUNCTION REMOVED ============
+// The old global initializeWhatsAppClient() has been replaced with bot-level management.
+// Each bot now gets its own WhatsApp session via the WhatsAppClientManager.
+// See createTenantAwareMessageHandler() above and API endpoints below.
+
+// Legacy compatibility: Remove old session directory if it exists
+function cleanupLegacySession() {
+    const legacyPath = './.wwebjs_auth/session';
+    if (fs.existsSync(legacyPath)) {
+        console.log('🧹 Cleaning up legacy WhatsApp session...');
+        fs.rmSync(legacyPath, { recursive: true, force: true });
+        console.log('✅ Legacy session cleaned');
+    }
+}
+
+cleanupLegacySession();
+
+// OLD initializeWhatsAppClient() function removed - replaced with per-bot management
+// See bot-level API endpoints below: POST /api/bots/:id/start, DELETE /api/bots/:id/stop, etc.
+// Each bot now has its own independent WhatsApp session managed by WhatsAppClientManager
 
 // ============ SESSION TRACKING SYSTEM ============
 
@@ -2487,11 +2356,18 @@ app.get('/api/status', requireAuth, async (req, res) => {
     try {
         const client = req.dbClient || pool;
         const stats = await getMessageStats(client);
+        const allClients = whatsappManager.getAllClients();
+        
+        // Aggregate status across all active bots
+        const activeCount = allClients.filter(c => c.status === 'ready').length;
+        const qrPendingCount = allClients.filter(c => c.status === 'qr_ready').length;
+        
         res.json({
-            whatsappReady,
-            botNumber: botNumber ? `+${botNumber}` : null,
-            hasQR: currentQR !== null,
-            messagesCount: stats.total
+            messagesCount: stats.total,
+            activeBots: activeCount,
+            qrPending: qrPendingCount,
+            totalClients: allClients.length,
+            multiTenantMode: true
         });
     } catch (error) {
         console.error('❌ Error in /api/status:', error);
@@ -2499,37 +2375,20 @@ app.get('/api/status', requireAuth, async (req, res) => {
     }
 });
 
+// DEPRECATED: Use /api/bots/:id/qr instead (kept for backward compatibility)
 app.get('/api/qr', requireAuth, (req, res) => {
-    if (currentQR) {
-        res.json({ qr: currentQR });
-    } else if (whatsappReady) {
-        res.json({ message: 'WhatsApp is already connected', connected: true });
-    } else {
-        res.json({ message: 'QR code not available yet', connected: false });
-    }
+    res.status(410).json({ 
+        error: 'This endpoint is deprecated. Use /api/bots/:id/qr for bot-specific QR codes.',
+        migration: 'Each bot now has its own WhatsApp session. Start a bot with POST /api/bots/:id/start and get its QR with GET /api/bots/:id/qr'
+    });
 });
 
+// DEPRECATED: Use /api/bots/:id/relink instead (kept for backward compatibility)
 app.post('/api/relink', requireRole('admin', 'write-only'), async (req, res) => {
-    try {
-        whatsappReady = false;
-        currentQR = null;
-        
-        if (client) {
-            await client.destroy();
-        }
-        
-        if (fs.existsSync('.wwebjs_auth')) {
-            fs.rmSync('.wwebjs_auth', { recursive: true, force: true });
-        }
-        
-        setTimeout(() => {
-            initializeWhatsAppClient();
-        }, 1000);
-        
-        res.json({ success: true, message: 'Relinking WhatsApp... QR code will be available shortly.' });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+    res.status(410).json({ 
+        error: 'This endpoint is deprecated. Use /api/bots/:id/relink for bot-specific relinking.',
+        migration: 'Each bot now has its own WhatsApp session. Relink a specific bot with POST /api/bots/:id/relink'
+    });
 });
 
 app.get('/api/messages', requireAuth, async (req, res) => {
@@ -2779,11 +2638,146 @@ app.post('/api/bots/:id/unarchive', requireRole('admin'), async (req, res) => {
         await pool.query('UPDATE bots SET archived = false, status = $1 WHERE id = $2', ['inactive', id]);
         
         logAudit(pool, req, 'UNARCHIVE', 'BOT', id, null, {
-            message: 'Bot unarchived and restored'
+            message: 'Bot unarchive and restored'
         });
         
         res.json({ success: true, message: 'Bot restored successfully.' });
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============ BOT-LEVEL WHATSAPP MANAGEMENT ENDPOINTS ============
+// Multi-tenant WhatsApp: Each bot gets its own WhatsApp session
+
+// Start WhatsApp session for a bot
+app.post('/api/bots/:id/start', requireRole('admin', 'write-only'), async (req, res) => {
+    try {
+        const client = req.dbClient || pool;
+        const tenantSchema = req.tenantContext?.tenant_schema || 'public';
+        const { id } = req.params;
+        
+        // Get bot details
+        const botResult = await client.query('SELECT * FROM bots WHERE id = $1', [id]);
+        if (botResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Bot not found' });
+        }
+        
+        const bot = botResult.rows[0];
+        
+        // Check if already running
+        const existingClient = whatsappManager.getClient(id);
+        if (existingClient && (existingClient.status === 'ready' || existingClient.status === 'qr_ready')) {
+            return res.json({ 
+                success: true, 
+                message: 'WhatsApp session already active',
+                status: existingClient.status,
+                qrCode: existingClient.qrCode
+            });
+        }
+        
+        // Initialize WhatsApp client for this bot
+        const clientState = await whatsappManager.initializeClient(
+            parseInt(id), 
+            tenantSchema, 
+            createTenantAwareMessageHandler
+        );
+        
+        res.json({ 
+            success: true, 
+            message: 'WhatsApp session starting...',
+            status: clientState.status,
+            botId: id
+        });
+    } catch (error) {
+        console.error(`❌ Error starting WhatsApp for bot ${req.params.id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Stop WhatsApp session for a bot
+app.delete('/api/bots/:id/stop', requireRole('admin', 'write-only'), async (req, res) => {
+    try {
+        const tenantSchema = req.tenantContext?.tenant_schema || 'public';
+        const { id } = req.params;
+        
+        await whatsappManager.destroyClient(parseInt(id), tenantSchema);
+        
+        res.json({ 
+            success: true, 
+            message: 'WhatsApp session stopped',
+            botId: id
+        });
+    } catch (error) {
+        console.error(`❌ Error stopping WhatsApp for bot ${req.params.id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get QR code for a bot
+app.get('/api/bots/:id/qr', requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const qrCode = whatsappManager.getQRCode(parseInt(id));
+        
+        if (!qrCode) {
+            return res.json({ qr: null, message: 'No QR code available. Start the bot first.' });
+        }
+        
+        // Convert to data URL if needed
+        const qrDataUrl = await QRCode.toDataURL(qrCode);
+        res.json({ qr: qrDataUrl });
+    } catch (error) {
+        console.error(`❌ Error getting QR for bot ${req.params.id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Relink WhatsApp session for a bot (destroy and create new QR)
+app.post('/api/bots/:id/relink', requireRole('admin', 'write-only'), async (req, res) => {
+    try {
+        const tenantSchema = req.tenantContext?.tenant_schema || 'public';
+        const { id } = req.params;
+        
+        const clientState = await whatsappManager.relinkClient(
+            parseInt(id), 
+            tenantSchema, 
+            createTenantAwareMessageHandler
+        );
+        
+        res.json({ 
+            success: true, 
+            message: 'WhatsApp session relinking... New QR code will be available shortly.',
+            status: clientState.status,
+            botId: id
+        });
+    } catch (error) {
+        console.error(`❌ Error relinking WhatsApp for bot ${req.params.id}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get WhatsApp session status for a bot
+app.get('/api/bots/:id/status', requireAuth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const clientState = whatsappManager.getClient(parseInt(id));
+        
+        if (!clientState) {
+            return res.json({ 
+                status: 'inactive', 
+                message: 'No WhatsApp session for this bot'
+            });
+        }
+        
+        res.json({ 
+            status: clientState.status,
+            phoneNumber: clientState.phoneNumber,
+            hasQR: clientState.qrCode !== null,
+            botId: id
+        });
+    } catch (error) {
+        console.error(`❌ Error getting status for bot ${req.params.id}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -3148,14 +3142,13 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🌐 Dashboard available at http://localhost:${PORT}`);
     await initializeDatabase();
+    console.log('✅ Multi-tenant WhatsApp Bridge ready');
+    console.log('📱 Use POST /api/bots/:id/start to initialize WhatsApp for individual bots');
 });
 
-initializeWhatsAppClient();
-
+// Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('\n🛑 Shutting down gracefully...');
-    if (client) {
-        await client.destroy();
-    }
+    await whatsappManager.cleanup();
     process.exit(0);
 });
