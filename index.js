@@ -2577,6 +2577,29 @@ app.get('/api/bots', requireAuth, async (req, res) => {
             const tenants = await getAllTenantSchemas(pool);
             const allBots = [];
             
+            // First, get legacy bots from public schema
+            try {
+                const publicBots = await pool.query(`
+                    SELECT 
+                        b.*,
+                        COUNT(m.id) as message_count,
+                        COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
+                        COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
+                        COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count,
+                        NULL as tenant_id,
+                        'public'::text as tenant_schema
+                    FROM public.bots b
+                    LEFT JOIN public.messages m ON b.id = m.bot_id
+                    WHERE b.archived = false
+                    GROUP BY b.id
+                    ORDER BY b.created_at DESC
+                `);
+                allBots.push(...publicBots.rows);
+            } catch (err) {
+                console.warn('Could not fetch bots from public schema:', err.message);
+            }
+            
+            // Then get bots from all tenant schemas
             for (const tenant of tenants) {
                 try {
                     const result = await pool.query(`
@@ -2600,7 +2623,7 @@ app.get('/api/bots', requireAuth, async (req, res) => {
                 }
             }
             
-            return res.json({ bots: allBots, globalView: true });
+            return res.json(allBots);
         }
         
         // Regular users - query from their tenant schema (search_path already set)
