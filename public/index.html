@@ -1221,11 +1221,15 @@
         }
 
         function renderMessages(data, botId) {
-            if (!data || !data.messages || data.messages.length === 0) {
+            // Handle both array format and object format
+            const messages = Array.isArray(data) ? data : data?.messages;
+            const page = data?.page || 1;
+            const totalPages = data?.totalPages || 1;
+            const total = data?.total || (messages ? messages.length : 0);
+            
+            if (!messages || messages.length === 0) {
                 return '<div style="text-align: center; padding: 1rem; color: #94a3b8;">No messages yet</div>';
             }
-            
-            const { messages, page, totalPages, total } = data;
             
             return `
                 <div class="message-table-container">
@@ -1432,8 +1436,13 @@
         }
 
         function editBot(id) {
-            const bot = bots.find(b => b.id === id);
-            if (!bot) return;
+            // Convert string id to number for comparison
+            const botId = typeof id === 'string' ? parseInt(id) : id;
+            const bot = bots.find(b => b.id === botId);
+            if (!bot) {
+                console.error('Bot not found:', id, 'Available bots:', bots.map(b => b.id));
+                return;
+            }
             
             editingBotId = id;
             document.getElementById('modalTitle').textContent = 'Edit Bridge';
