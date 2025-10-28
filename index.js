@@ -15,6 +15,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
+const { setTenantContext, getAllTenantSchemas } = require('./tenant-middleware');
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
@@ -50,6 +51,9 @@ function getTimestamp() {
 }
 
 const app = express();
+
+// Make pool available to middleware
+app.locals.pool = pool;
 
 // Trust proxy - required for HTTPS cookie support in Replit environment
 app.set('trust proxy', 1);
@@ -310,6 +314,14 @@ app.use(express.static('public', {
     index: false,
     ignore: ['*.html'] // Don't serve HTML files through static middleware
 }));
+
+// Apply tenant context middleware to all API routes (except auth routes)
+app.use('/api/bots', setTenantContext);
+app.use('/api/messages', setTenantContext);
+app.use('/api/users', setTenantContext);
+app.use('/api/sessions', setTenantContext);
+app.use('/api/audit', setTenantContext);
+app.use('/api/analytics', setTenantContext);
 
 let currentQR = null;
 let botNumber = null;
@@ -2529,6 +2541,69 @@ app.get('/api/stats', requireAuth, async (req, res) => {
 // OPTIMIZED: Get all bots with stats in ONE query (eliminates N+1 problem)
 app.get('/api/bots', requireAuth, async (req, res) => {
     try {
+        // Dev users with global access need special handling
+        if (req.tenantContext && req.tenantContext.globalAccess) {
+            // Dev user - show which tenant they want or all tenants
+            const { tenantId } = req.query;
+            
+            if (tenantId) {
+                // View specific tenant's bots
+                const tenantInfo = await pool.query(`
+                    SELECT tenant_schema FROM core.tenant_catalog WHERE id = $1
+                `, [tenantId]);
+                
+                if (tenantInfo.rows.length === 0) {
+                    return res.status(404).json({ error: 'Tenant not found' });
+                }
+                
+                const schema = tenantInfo.rows[0].tenant_schema;
+                const result = await pool.query(`
+                    SELECT 
+                        b.*,
+                        COUNT(m.id) as message_count,
+                        COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
+                        COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
+                        COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count
+                    FROM ${schema}.bots b
+                    LEFT JOIN ${schema}.messages m ON b.id = m.bot_id
+                    WHERE b.archived = false
+                    GROUP BY b.id
+                    ORDER BY b.created_at DESC
+                `);
+                return res.json({ bots: result.rows, tenantSchema: schema, tenantId });
+            }
+            
+            // Show all tenants' bots (dev view)
+            const tenants = await getAllTenantSchemas(pool);
+            const allBots = [];
+            
+            for (const tenant of tenants) {
+                try {
+                    const result = await pool.query(`
+                        SELECT 
+                            b.*,
+                            COUNT(m.id) as message_count,
+                            COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
+                            COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
+                            COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count,
+                            '${tenant.id}'::integer as tenant_id,
+                            '${tenant.tenant_schema}'::text as tenant_schema
+                        FROM ${tenant.tenant_schema}.bots b
+                        LEFT JOIN ${tenant.tenant_schema}.messages m ON b.id = m.bot_id
+                        WHERE b.archived = false
+                        GROUP BY b.id
+                        ORDER BY b.created_at DESC
+                    `);
+                    allBots.push(...result.rows);
+                } catch (err) {
+                    console.warn(`Could not fetch bots from ${tenant.tenant_schema}:`, err.message);
+                }
+            }
+            
+            return res.json({ bots: allBots, globalView: true });
+        }
+        
+        // Regular users - query from their tenant schema (search_path already set)
         const result = await pool.query(`
             SELECT 
                 b.*,
