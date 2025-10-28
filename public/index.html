@@ -295,6 +295,9 @@
                 };
             }
             
+            // CRITICAL: Include credentials to send session cookies
+            options.credentials = 'include';
+            
             let response = await fetch(url, options);
             
             // If token expired (401), try to refresh
