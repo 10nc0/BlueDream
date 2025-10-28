@@ -221,6 +221,20 @@ function renderMedia(containerEl, messageId, mediaData) {
         return;
     }
     
+    // CRITICAL: Convert Buffer to string if needed (PostgreSQL returns bytea as Buffer)
+    let mediaDataString;
+    if (typeof media_data === 'object' && media_data.type === 'Buffer' && Array.isArray(media_data.data)) {
+        // Convert Buffer array to string
+        mediaDataString = String.fromCharCode.apply(null, media_data.data);
+        console.log(`🔄 Converted Buffer to string for message ${messageId}`);
+    } else if (typeof media_data === 'string') {
+        mediaDataString = media_data;
+    } else {
+        console.error(`❌ Unknown media_data type for message ${messageId}:`, typeof media_data);
+        containerEl.innerHTML = '<div class="media-error">Invalid media data format</div>';
+        return;
+    }
+    
     // Handle both full MIME types (image/jpeg) and legacy simple types (image)
     const normalizedType = (media_type || '').toLowerCase();
     const isImage = normalizedType.startsWith('image/') || normalizedType === 'image';
@@ -229,9 +243,9 @@ function renderMedia(containerEl, messageId, mediaData) {
     
     // Check if media_data already has the data: prefix
     let dataUrl;
-    if (media_data.startsWith('data:')) {
+    if (mediaDataString.startsWith('data:')) {
         // Already has data URL prefix, use as-is
-        dataUrl = media_data;
+        dataUrl = mediaDataString;
         console.log(`📊 Using existing dataUrl for message ${messageId}: ${dataUrl.substring(0, 100)}... (length: ${dataUrl.length})`);
     } else {
         // Need to add data URL prefix
@@ -240,7 +254,7 @@ function renderMedia(containerEl, messageId, mediaData) {
         if (normalizedType === 'video') mimeType = 'video/mp4';
         if (normalizedType === 'audio') mimeType = 'audio/mpeg';
         
-        dataUrl = `data:${mimeType};base64,${media_data}`;
+        dataUrl = `data:${mimeType};base64,${mediaDataString}`;
         console.log(`📊 Generated dataUrl for message ${messageId}: ${dataUrl.substring(0, 100)}... (length: ${dataUrl.length})`);
     }
     
