@@ -2260,7 +2260,16 @@
             document.getElementById('systemUptime').textContent = `${hours}h ${minutes}m`;
             
             // Update current time
-            document.getElementById('currentTime').textContent = new Date().toLocaleTimeString();
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = now.getHours();
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const displayHours = hours % 12 || 12;
+            document.getElementById('currentTime').textContent = `${year}/${month}/${day} - ${displayHours}:${minutes}:${seconds}${ampm}`;
             
             // Update bridge count
             document.getElementById('bridgeCount').textContent = bots.length;
