@@ -406,14 +406,29 @@ async function prefetchAdjacentMedia(currentMessageId) {
 function expandMedia(messageId, dataUrl) {
     const modal = document.createElement('div');
     modal.className = 'media-modal';
-    modal.innerHTML = `
-        <div class="media-modal-backdrop" onclick="this.parentElement.remove()">
-            <div class="media-modal-content" onclick="event.stopPropagation()">
-                <button class="media-modal-close" onclick="this.closest('.media-modal').remove()">×</button>
-                <img src="${dataUrl}" alt="Expanded media" style="max-width: 90vw; max-height: 90vh; border-radius: 12px;">
-            </div>
-        </div>
-    `;
+    
+    const backdrop = document.createElement('div');
+    backdrop.className = 'media-modal-backdrop';
+    backdrop.onclick = () => modal.remove();
+    
+    const content = document.createElement('div');
+    content.className = 'media-modal-content';
+    content.onclick = (e) => e.stopPropagation();
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'media-modal-close';
+    closeBtn.textContent = '×';
+    closeBtn.onclick = () => modal.remove();
+    
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    img.alt = 'Expanded media';
+    img.style.cssText = 'max-width: 90vw; max-height: 90vh; border-radius: 12px;';
+    
+    content.appendChild(closeBtn);
+    content.appendChild(img);
+    backdrop.appendChild(content);
+    modal.appendChild(backdrop);
     document.body.appendChild(modal);
 }
 
