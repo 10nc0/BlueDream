@@ -1006,8 +1006,8 @@
                     </div>
                     <div class="discord-actions">
                         ${bot.input_platform === 'WhatsApp' ? getWhatsAppActions() : ''}
-                        <button class="btn-icon" onclick="editBot('${bot.id}')" title="Edit Bridge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">✏️</button>
-                        <button class="btn-icon btn-danger" onclick="confirmDeleteBot('${bot.id}')" title="Delete Bridge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🗑️</button>
+                        <button class="btn-icon" onclick="editBot(${bot.id})" title="Edit Bridge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">✏️</button>
+                        <button class="btn-icon btn-danger" onclick="confirmDeleteBot(${bot.id})" title="Delete Bridge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🗑️</button>
                     </div>
                 </div>
 
@@ -1933,8 +1933,13 @@
         }
 
         async function confirmDeleteBot(botId) {
+            // Convert to number to ensure proper comparison
+            botId = parseInt(botId);
             const bot = bots.find(b => b.id === botId);
-            if (!bot) return;
+            if (!bot) {
+                console.error(`Bot ${botId} not found in bots array`);
+                return;
+            }
             
             if (!confirm(`Are you sure you want to delete "${bot.input_platform} → ${bot.output_platform}" bridge? This action cannot be undone.`)) {
                 return;
