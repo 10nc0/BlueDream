@@ -686,6 +686,21 @@ function initializeWhatsAppClient() {
         client.removeAllListeners();
     }
 
+    const sessionPath = './.wwebjs_auth/session';
+    const lockFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket'];
+    
+    lockFiles.forEach(lockFile => {
+        const lockPath = `${sessionPath}/${lockFile}`;
+        try {
+            if (fs.existsSync(lockPath)) {
+                fs.unlinkSync(lockPath);
+                console.log(`🧹 Cleaned up stale lock file: ${lockFile}`);
+            }
+        } catch (error) {
+            console.warn(`⚠️ Could not remove ${lockFile}:`, error.message);
+        }
+    });
+
     client = new Client({
         authStrategy: new LocalAuth(),
         puppeteer: {
