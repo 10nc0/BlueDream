@@ -895,7 +895,7 @@
             }
         }
 
-        function renderBotDetail() {
+        async function renderBotDetail() {
             const bot = filteredBots.find(b => b.id === selectedBotId);
             if (!bot) return;
             
@@ -903,19 +903,71 @@
             const failedClass = getStatusColor(bot.failed_count || 0);
             const successClass = getSuccessBadgeClass(bot.forwarded_count || 0);
             
+            // Fetch WhatsApp status if this is a WhatsApp bot
+            let whatsappStatus = null;
+            if (bot.input_platform === 'WhatsApp') {
+                try {
+                    const statusResponse = await authFetch(`/api/bots/${bot.id}/status`);
+                    if (statusResponse.ok) {
+                        whatsappStatus = await statusResponse.json();
+                    }
+                } catch (error) {
+                    console.error('Error fetching WhatsApp status:', error);
+                }
+            }
+            
+            // WhatsApp status badge
+            const getWhatsAppStatusBadge = () => {
+                if (!whatsappStatus) return '';
+                const status = whatsappStatus.status;
+                const badges = {
+                    'ready': '<span class="stat-badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981;">✅ Connected</span>',
+                    'qr_ready': '<span class="stat-badge" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">📱 Scan QR</span>',
+                    'initializing': '<span class="stat-badge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">⏳ Starting...</span>',
+                    'authenticated': '<span class="stat-badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981;">🔐 Authenticated</span>',
+                    'inactive': '<span class="stat-badge" style="background: rgba(148, 163, 184, 0.2); color: #94a3b8;">⏸️ Inactive</span>',
+                    'disconnected': '<span class="stat-badge error" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🔌 Disconnected</span>',
+                    'auth_failed': '<span class="stat-badge error" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">❌ Auth Failed</span>',
+                    'error': '<span class="stat-badge error" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">⚠️ Error</span>'
+                };
+                return badges[status] || '';
+            };
+            
+            // WhatsApp action buttons
+            const getWhatsAppActions = () => {
+                if (!whatsappStatus) return '';
+                const status = whatsappStatus.status;
+                
+                if (status === 'inactive' || status === 'disconnected' || status === 'error' || status === 'auth_failed') {
+                    return `<button class="btn-icon" onclick="startWhatsApp('${bot.id}')" title="Start WhatsApp" style="background: rgba(16, 185, 129, 0.2); color: #10b981;">▶️</button>`;
+                } else if (status === 'qr_ready') {
+                    return `
+                        <button class="btn-icon" onclick="showQR('${bot.id}')" title="Show QR Code" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">📱</button>
+                        <button class="btn-icon" onclick="relinkWhatsApp('${bot.id}')" title="Relink (New QR)" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">🔄</button>
+                    `;
+                } else if (status === 'ready' || status === 'authenticated') {
+                    return `
+                        <button class="btn-icon" onclick="stopWhatsApp('${bot.id}')" title="Stop WhatsApp" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">⏹️</button>
+                        <button class="btn-icon" onclick="relinkWhatsApp('${bot.id}')" title="Relink (New QR)" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">🔄</button>
+                    `;
+                }
+                return '';
+            };
+            
             const detail = document.getElementById('bridgeDetail');
             detail.innerHTML = `
                 <div class="discord-header">
                     <div class="discord-channel-info">
                         <span class="discord-channel-name"># ${bot.input_platform}-${bot.output_platform}</span>
                         <span class="discord-stats">
+                            ${bot.input_platform === 'WhatsApp' ? getWhatsAppStatusBadge() : ''}
                             <span class="stat-badge" data-tooltip="${glossary?.tooltips?.message_count || 'Total messages received'}">${bot.message_count || 0} 📊</span>
                             <span class="stat-badge ${successClass}" data-tooltip="${glossary?.tooltips?.forwarded_count || 'Successfully forwarded messages'}">${bot.forwarded_count || 0} ✓</span>
                             <span class="stat-badge error ${failedClass}" data-tooltip="${glossary?.tooltips?.failed_count || 'Failed to forward'}">${bot.failed_count || 0} ✗</span>
                         </span>
                     </div>
                     <div class="discord-actions">
-                        ${bot.input_platform === 'WhatsApp' ? `<button class="btn-icon" onclick="showQR('${bot.id}')" title="QR Login">📱</button>` : ''}
+                        ${bot.input_platform === 'WhatsApp' ? getWhatsAppActions() : ''}
                         <button class="btn-icon" onclick="editBot('${bot.id}')" title="Edit Bridge">✏️</button>
                         <button class="btn-icon btn-danger" onclick="confirmDeleteBot('${bot.id}')" title="Delete Bridge">🗑️</button>
                     </div>
@@ -1701,6 +1753,87 @@
 
         function closeQRModal() {
             document.getElementById('qrModal').style.display = 'none';
+        }
+
+        // Start WhatsApp session for a bot
+        async function startWhatsApp(botId) {
+            try {
+                console.log('Starting WhatsApp for bot:', botId);
+                const response = await authFetch(`/api/bots/${botId}/start`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    alert('✅ WhatsApp session starting! Refresh the page in a moment to see the QR code.');
+                    
+                    // Auto-refresh after 2 seconds
+                    setTimeout(() => {
+                        renderBots();
+                    }, 2000);
+                } else {
+                    const error = await response.json();
+                    alert(`Failed to start WhatsApp: ${error.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error starting WhatsApp:', error);
+                alert(`Error starting WhatsApp: ${error.message}`);
+            }
+        }
+
+        // Stop WhatsApp session for a bot (preserves session)
+        async function stopWhatsApp(botId) {
+            if (!confirm('Stop WhatsApp session? You can restart it later without scanning a new QR code.')) {
+                return;
+            }
+            
+            try {
+                console.log('Stopping WhatsApp for bot:', botId);
+                const response = await authFetch(`/api/bots/${botId}/stop`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    alert('✅ WhatsApp session stopped (session preserved)');
+                    renderBots();
+                } else {
+                    const error = await response.json();
+                    alert(`Failed to stop WhatsApp: ${error.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error stopping WhatsApp:', error);
+                alert(`Error stopping WhatsApp: ${error.message}`);
+            }
+        }
+
+        // Relink WhatsApp (get fresh QR code)
+        async function relinkWhatsApp(botId) {
+            if (!confirm('Relink WhatsApp? This will generate a new QR code and you\'ll need to scan it again.')) {
+                return;
+            }
+            
+            try {
+                console.log('Relinking WhatsApp for bot:', botId);
+                const response = await authFetch(`/api/bots/${botId}/relink`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    alert('✅ Relink initiated! Refresh the page in a moment to see the new QR code.');
+                    
+                    // Auto-refresh after 2 seconds
+                    setTimeout(() => {
+                        renderBots();
+                    }, 2000);
+                } else {
+                    const error = await response.json();
+                    alert(`Failed to relink WhatsApp: ${error.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error relinking WhatsApp:', error);
+                alert(`Error relinking WhatsApp: ${error.message}`);
+            }
         }
 
         async function confirmDeleteBot(botId) {
