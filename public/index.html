@@ -72,7 +72,7 @@
         </div>
 
         <!-- Bridges Tab -->
-        <div id="botsTab" class="tab-content active">
+        <div id="bridgesTab" class="tab-content active">
             <div class="section-header">
                 <h1 class="section-title">Bridge Library</h1>
                 <button class="create-bot-btn" onclick="openCreateBotModal()">+ Create Bridge</button>
@@ -816,42 +816,42 @@
             `).join('');
         }
 
-        // Bot CRUD Functions
-        async function loadBots() {
+        // Bridge CRUD Functions
+        async function loadBridges() {
             try {
                 const response = await authFetch('/api/bridges');
                 bridges = await response.json();
-                filteredBridges = bots;
-                renderBots();
+                filteredBridges = bridges;
+                renderBridges();
                 updatePlatformFilter();
             } catch (error) {
-                console.error('Error loading bots:', error);
+                console.error('Error loading bridges:', error);
             }
         }
 
         // Auto-refresh bridge counts every 10 seconds to keep message counts updated
         // Use skipDetailRender=true to avoid destroying loaded media
         setInterval(() => {
-            if (document.getElementById('botsTab')?.classList.contains('active')) {
-                loadBotsQuietly();
+            if (document.getElementById('bridgesTab')?.classList.contains('active')) {
+                loadBridgesQuietly();
             }
         }, 10000);
         
         // Quiet refresh that updates bridge counts without re-rendering detail panel
-        async function loadBotsQuietly() {
+        async function loadBridgesQuietly() {
             try {
                 const response = await authFetch('/api/bridges');
                 bridges = await response.json();
-                filteredBridges = bots;
-                renderBots(true); // Skip detail render to preserve loaded media
+                filteredBridges = bridges;
+                renderBridges(true); // Skip detail render to preserve loaded media
             } catch (error) {
-                console.error('Error loading bots:', error);
+                console.error('Error loading bridges:', error);
             }
         }
 
         let selectedBridgeId = null;
 
-        function renderBots(skipDetailRender = false) {
+        function renderBridges(skipDetailRender = false) {
             const sidebar = document.getElementById('bridgeSidebar');
             const detail = document.getElementById('bridgeDetail');
             
@@ -892,7 +892,7 @@
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
                     ${bridges.map(bridge => `
-                        <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bot-id="${bridge.id}" onclick="selectBot(${bridge.id})">
+                        <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bot-id="${bridge.id}" onclick="selectBridge(${bridge.id})">
                             <span class="channel-name">${bridge.input_platform} → ${bridge.output_platform}</span>
                             <div class="channel-badges">
                                 ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
@@ -904,14 +904,14 @@
             
             // Only render detail panel if not skipping (avoids destroying loaded media during auto-refresh)
             if (!skipDetailRender) {
-                renderBotDetail();
+                renderBridgeDetail();
                 
                 // Always load messages for selected bridge to ensure they appear
                 loadBotMessages(selectedBridgeId, 1);
             }
         }
 
-        async function selectBot(bridgeId) {
+        async function selectBridge(bridgeId) {
             // Convert string to number to match bridge IDs in database
             selectedBridgeId = parseInt(bridgeId);
             
@@ -929,7 +929,7 @@
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
                     ${bridges.map(bridge => `
-                        <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bot-id="${bridge.id}" onclick="selectBot(${bridge.id})">
+                        <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bot-id="${bridge.id}" onclick="selectBridge(${bridge.id})">
                             <span class="channel-name">${bridge.input_platform} → ${bridge.output_platform}</span>
                             <div class="channel-badges">
                                 ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
@@ -940,13 +940,13 @@
             `).join('');
             
             // Render detail panel for selected bot
-            await renderBotDetail();
+            await renderBridgeDetail();
             
             // Always load messages for newly selected bot
             await loadBotMessages(selectedBridgeId, 1);
         }
 
-        async function renderBotDetail() {
+        async function renderBridgeDetail() {
             const bridge = filteredBridges.find(b => b.id === selectedBridgeId);
             if (!bot) return;
             
@@ -958,7 +958,7 @@
             let whatsappStatus = null;
             if (bridge.input_platform === 'WhatsApp') {
                 try {
-                    const statusResponse = await authFetch(`/api/bots/${bridge.id}/status`);
+                    const statusResponse = await authFetch(`/api/bridges/${bridge.id}/status`);
                     if (statusResponse.ok) {
                         whatsappStatus = await statusResponse.json();
                     }
@@ -1006,7 +1006,7 @@
                     </div>
                     <div class="discord-actions">
                         ${bridge.input_platform === 'WhatsApp' ? getWhatsAppActions() : ''}
-                        <button class="btn-icon" onclick="editBot(${bridge.id})" title="Edit Bridge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">✏️</button>
+                        <button class="btn-icon" onclick="editBridge(${bridge.id})" title="Edit Bridge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">✏️</button>
                         <button class="btn-icon btn-danger" onclick="confirmDeleteBot(${bridge.id})" title="Delete Bridge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🗑️</button>
                     </div>
                 </div>
@@ -1574,7 +1574,7 @@
                 return matchesSearch && matchesPlatform;
             });
             
-            renderBots();
+            renderBridges();
         }
 
         function updatePlatformFilter() {
@@ -1601,7 +1601,7 @@
             document.getElementById('botModal').classList.add('active');
         }
 
-        function editBot(id) {
+        function editBridge(id) {
             // Convert string id to number for comparison
             const bridgeId = typeof id === 'string' ? parseInt(id) : id;
             const bridge = bridges.find(b => b.id === bridgeId);
@@ -1728,7 +1728,7 @@
             };
 
             try {
-                const url = editingBridgeId ? `/api/bots/${editingBridgeId}` : '/api/bridges';
+                const url = editingBridgeId ? `/api/bridges/${editingBridgeId}` : '/api/bridges';
                 const method = editingBridgeId ? 'PUT' : 'POST';
                 
                 const response = await authFetch(url, {
@@ -1739,7 +1739,7 @@
 
                 if (response.ok) {
                     closeBotModal();
-                    loadBots();
+                    loadBridges();
                     alert('✅ Bot created successfully! Click the ▶️ button to start WhatsApp.');
                 } else {
                     const errorData = await response.json().catch(() => ({}));
@@ -1773,7 +1773,7 @@
             try {
                 // Step 1: Start WhatsApp session (or relink if already exists)
                 console.log('Starting/Relinking WhatsApp for bridge:', bridgeId);
-                const startResponse = await authFetch(`/api/bots/${bridgeId}/relink`, {
+                const startResponse = await authFetch(`/api/bridges/${bridgeId}/relink`, {
                     method: 'POST'
                 });
                 
@@ -1790,7 +1790,7 @@
                 const pollQR = async () => {
                     attempts++;
                     
-                    const qrResponse = await authFetch(`/api/bots/${bridgeId}/qr`);
+                    const qrResponse = await authFetch(`/api/bridges/${bridgeId}/qr`);
                     if (!qrResponse.ok) {
                         showQRError('Server Error', 'Failed to fetch QR code. Please try again.');
                         return;
@@ -1855,7 +1855,7 @@
         async function startWhatsApp(bridgeId) {
             try {
                 console.log('Starting WhatsApp for bridge:', bridgeId);
-                const response = await authFetch(`/api/bots/${bridgeId}/start`, {
+                const response = await authFetch(`/api/bridges/${bridgeId}/start`, {
                     method: 'POST'
                 });
                 
@@ -1865,7 +1865,7 @@
                     
                     // Auto-refresh after 3 seconds to update status
                     setTimeout(() => {
-                        renderBots();
+                        renderBridges();
                     }, 3000);
                 } else {
                     const error = await response.json();
@@ -1885,13 +1885,13 @@
             
             try {
                 console.log('Stopping WhatsApp for bridge:', bridgeId);
-                const response = await authFetch(`/api/bots/${bridgeId}/stop`, {
+                const response = await authFetch(`/api/bridges/${bridgeId}/stop`, {
                     method: 'DELETE'
                 });
                 
                 if (response.ok) {
                     alert('✅ WhatsApp session stopped (session preserved)');
-                    renderBots();
+                    renderBridges();
                 } else {
                     const error = await response.json();
                     alert(`Failed to stop WhatsApp: ${error.error || 'Unknown error'}`);
@@ -1910,7 +1910,7 @@
             
             try {
                 console.log('Relinking WhatsApp for bridge:', bridgeId);
-                const response = await authFetch(`/api/bots/${bridgeId}/relink`, {
+                const response = await authFetch(`/api/bridges/${bridgeId}/relink`, {
                     method: 'POST'
                 });
                 
@@ -1920,7 +1920,7 @@
                     
                     // Auto-refresh after 2 seconds
                     setTimeout(() => {
-                        renderBots();
+                        renderBridges();
                     }, 2000);
                 } else {
                     const error = await response.json();
@@ -1946,7 +1946,7 @@
             }
             
             try {
-                const response = await authFetch(`/api/bots/${bridgeId}`, {
+                const response = await authFetch(`/api/bridges/${bridgeId}`, {
                     method: 'DELETE'
                 });
                 
@@ -2004,7 +2004,7 @@
                     } else {
                         // Fallback: reload if card not found
                         selectedBridgeId = null;
-                        loadBots();
+                        loadBridges();
                         showToast('✅ Bridge deleted successfully', 'success');
                     }
                 } else {
@@ -2103,7 +2103,7 @@
         async function loadBotMessages(bridgeId, page = 1) {
             try {
                 console.log(`Loading messages for bridge ${bridgeId}...`);
-                const response = await authFetch(`/api/bots/${bridgeId}/messages?page=${page}&limit=50`);
+                const response = await authFetch(`/api/bridges/${bridgeId}/messages?page=${page}&limit=50`);
                 
                 if (!response.ok) {
                     console.error(`API returned ${response.status}: ${response.statusText}`);
@@ -3150,7 +3150,7 @@
         handleOAuthCallback();
         checkAuth().then(authenticated => {
             if (authenticated) {
-                loadBots();
+                loadBridges();
                 initHopAnimation();
             }
         });

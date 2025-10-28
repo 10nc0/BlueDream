@@ -110,7 +110,7 @@ async function onboardingStep1Next() {
                 showOnboardingStep(2);
                 
                 // Generate QR code
-                const qrResponse = await authFetch(`/api/bots/${bridge.id}/qr`);
+                const qrResponse = await authFetch(`/api/bridges/${bridge.id}/qr`);
                 if (qrResponse.ok) {
                     const qrData = await qrResponse.json();
                     document.getElementById('onboarding-qr').src = qrData.qr;
@@ -185,7 +185,7 @@ async function onboardingStep3Complete() {
     // Update bridge with webhook URL
     if (onboardingState.bridgeId) {
         try {
-            await authFetch(`/api/bots/${onboardingState.bridgeId}`, {
+            await authFetch(`/api/bridges/${onboardingState.bridgeId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

@@ -406,7 +406,7 @@ async function initializeDatabase() {
         const contactCheck = await pool.query(`
             SELECT column_name 
             FROM information_schema.columns 
-            WHERE table_name='bots' AND column_name='contact_info'
+            WHERE table_name='bridges' AND column_name='contact_info'
         `);
         
         if (contactCheck.rows.length === 0) {
@@ -544,31 +544,31 @@ async function initializeDatabase() {
 }
 
 // Helper function to send message to all configured webhooks (1-to-many support)
-// CRITICAL: Uses tenant-aware lookup to get the correct bot's webhooks
+// CRITICAL: Uses tenant-aware lookup to get the correct bridge's webhooks
 async function sendToAllWebhooks(payload, options = {}, messageDbId = null, mediaData = null, bridgeId = null, tenantSchema = null) {
     try {
-        if (!botId || !tenantSchema) {
-            console.error('❌ sendToAllWebhooks called without botId or tenantSchema');
+        if (!bridgeId || !tenantSchema) {
+            console.error('❌ sendToAllWebhooks called without bridgeId or tenantSchema');
             return;
         }
         
         // Get webhooks from bridge configuration (tenant-aware)
-        const botResult = await pool.query(`
+        const bridgeResult = await pool.query(`
             SELECT output_credentials FROM ${tenantSchema}.bridges WHERE id = $1 LIMIT 1
-        `, [botId]);
+        `, [bridgeId]);
         
         if (bridgeResult.rows.length === 0) {
-            console.error(`❌ No bridge configuration found for bridge ${botId} in ${tenantSchema}`);
+            console.error(`❌ No bridge configuration found for bridge ${bridgeId} in ${tenantSchema}`);
             return;
         }
         
-        const webhooks = botResult.rows[0].output_credentials?.webhooks || [];
+        const webhooks = bridgeResult.rows[0].output_credentials?.webhooks || [];
         
         // Fallback to legacy webhook_url if webhooks array is empty
-        if (webhooks.length === 0 && botResult.rows[0].output_credentials?.webhook_url) {
+        if (webhooks.length === 0 && bridgeResult.rows[0].output_credentials?.webhook_url) {
             webhooks.push({
                 name: 'Main Channel',
-                url: botResult.rows[0].output_credentials.webhook_url
+                url: bridgeResult.rows[0].output_credentials.webhook_url
             });
         }
         
@@ -793,10 +793,10 @@ console.log(`✅ Using Chromium at: ${chromiumPath}`);
 whatsappManager = new WhatsAppClientManager(pool, chromiumPath);
 
 /**
- * Get the tenant schema that owns a specific bot
+ * Get the tenant schema that owns a specific bridge
  * This ensures bridge activities are tracked in the correct tenant's database
  */
-async function getBotTenantSchema(bridgeId) {
+async function getBridgeTenantSchema(bridgeId) {
     try {
         // Query all tenant schemas to find which one owns this bot
         const schemasResult = await pool.query(`
@@ -808,28 +808,28 @@ async function getBotTenantSchema(bridgeId) {
         
         for (const row of schemasResult.rows) {
             const schema = row.schema_name;
-            const botCheck = await pool.query(`
+            const bridgeCheck = await pool.query(`
                 SELECT id FROM ${schema}.bridges WHERE id = $1
-            `, [botId]);
+            `, [bridgeId]);
             
             if (bridgeCheck.rows.length > 0) {
-                console.log(`✅ Bot ${botId} belongs to ${schema}`);
+                console.log(`✅ Bridge ${bridgeId} belongs to ${schema}`);
                 return schema;
             }
         }
         
         // Fallback to public if not found (shouldn't happen)
-        console.warn(`⚠️ Bot ${botId} not found in any tenant schema, defaulting to public`);
+        console.warn(`⚠️ Bridge ${bridgeId} not found in any tenant schema, defaulting to public`);
         return 'public';
     } catch (error) {
-        console.error(`❌ Error finding tenant for bridge ${botId}:`, error);
+        console.error(`❌ Error finding tenant for bridge ${bridgeId}:`, error);
         return 'public';
     }
 }
 
 /**
  * Tenant-aware WhatsApp message handler
- * Routes messages to the correct tenant's schema based on botId
+ * Routes messages to the correct tenant's schema based on bridgeId
  */
 async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) {
     let messageDbId = null;
@@ -901,7 +901,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                     }
                 ],
                 footer: {
-                    text: `WhatsApp Bridge - Bot ${botId}`
+                    text: `WhatsApp Bridge - Bridge ${bridgeId}`
                 }
             };
 
@@ -945,11 +945,11 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                         
                         await tenantClient.query('COMMIT');
                         tenantClient.release();
-                        console.log(`✅ [Bot ${botId}] Forwarded media message from ${senderName}`);
+                        console.log(`✅ [Bridge ${bridgeId}] Forwarded media message from ${senderName}`);
                         return;
                     }
                 } catch (mediaError) {
-                    console.error(`❌ [Bot ${botId}] Error downloading media:`, mediaError.message);
+                    console.error(`❌ [Bridge ${bridgeId}] Error downloading media:`, mediaError.message);
                     if (messageDbId) {
                         await updateMessageStatus(tenantClient, messageDbId, 'failed', mediaError.message);
                     }
@@ -961,7 +961,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
 
             // Send text-only message to Discord
             await sendToAllWebhooks(discordPayload, {}, messageDbId, null, bridgeId, tenantSchema);
-            console.log(`✅ [Bot ${botId}] Forwarded message from ${senderName}`);
+            console.log(`✅ [Bridge ${bridgeId}] Forwarded message from ${senderName}`);
             
             await tenantClient.query('COMMIT');
             tenantClient.release();
@@ -971,7 +971,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
             throw error;
         }
     } catch (error) {
-        console.error(`❌ [Bot ${botId}] Error handling message:`, error.message);
+        console.error(`❌ [Bridge ${bridgeId}] Error handling message:`, error.message);
         if (messageDbId) {
             const client = await pool.connect();
             try {
@@ -1005,7 +1005,7 @@ function cleanupLegacySession() {
 
 cleanupLegacySession();
 
-// OLD initializeWhatsAppClient() function removed - replaced with per-bot management
+// OLD initializeWhatsAppClient() function removed - replaced with per-bridge management
 // See bot-level API endpoints below: POST /api/bots/:id/start, DELETE /api/bots/:id/stop, etc.
 // Each bridge now has its own independent WhatsApp session managed by WhatsAppClientManager
 
@@ -2689,8 +2689,8 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
         const client = req.dbClient || pool;
         
         // CRITICAL: Get the bot's tenant schema before archiving
-        const tenantSchema = await getBotTenantSchema(bridgeId);
-        console.log(`🗄️  Archiving bridge ${botId} from ${tenantSchema} (soft delete)...`);
+        const tenantSchema = await getBridgeTenantSchema(bridgeId);
+        console.log(`🗄️  Archiving bridge ${bridgeId} from ${tenantSchema} (soft delete)...`);
         
         // Stop WhatsApp client if active (but keep session files for potential restoration)
         try {
@@ -2698,10 +2698,10 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
             if (whatsappClient) {
                 await whatsappClient.destroy();
                 whatsappManager.removeClient(bridgeId);
-                console.log(`✅ WhatsApp client stopped for bridge ${botId} (session files preserved)`);
+                console.log(`✅ WhatsApp client stopped for bridge ${bridgeId} (session files preserved)`);
             }
         } catch (error) {
-            console.warn(`⚠️  Could not stop WhatsApp client for bridge ${botId}:`, error.message);
+            console.warn(`⚠️  Could not stop WhatsApp client for bridge ${bridgeId}:`, error.message);
         }
         
         // SOFT DELETE: Set archived=true and archived_at=NOW() (preserves all data)
@@ -2710,7 +2710,7 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
             SET archived = true, archived_at = NOW(), status = 'archived' 
             WHERE id = $1 
             RETURNING *
-        `, [botId]);
+        `, [bridgeId]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Bridge not found' });
@@ -2722,14 +2722,14 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
             archived_at: new Date().toISOString()
         });
         
-        console.log(`✅ Bot ${botId} archived successfully by user ${req.userId}`);
+        console.log(`✅ Bridge ${bridgeId} archived successfully by user ${req.userId}`);
         res.json({ 
             success: true, 
             message: 'Bridge archived successfully',
             note: 'All messages and session data preserved'
         });
     } catch (error) {
-        console.error(`❌ Error archiving bridge ${botId}:`, error);
+        console.error(`❌ Error archiving bridge ${bridgeId}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -2785,8 +2785,8 @@ app.post('/api/bridges/:id/start', requireAuth, setTenantContext, requireRole('a
         
         // CRITICAL: Get the correct tenant schema for this bot
         // This ensures messages are stored in the right tenant's database
-        const tenantSchema = await getBotTenantSchema(bridgeId);
-        console.log(`🔍 Bot ${id} belongs to ${tenantSchema}`);
+        const tenantSchema = await getBridgeTenantSchema(bridgeId);
+        console.log(`🔍 Bridge ${id} belongs to ${tenantSchema}`);
         
         // Check if already running
         const existingClient = whatsappManager.getClient(bridgeId);
@@ -2862,11 +2862,11 @@ app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('
     const bridgeId = parseInt(id);
     
     try {
-        console.log(`🔄 Starting relink for bridge ${botId}...`);
+        console.log(`🔄 Starting relink for bridge ${bridgeId}...`);
         
         // CRITICAL: Get the correct tenant schema for this bot
-        const tenantSchema = await getBotTenantSchema(bridgeId);
-        console.log(`🔍 Bot ${botId} belongs to ${tenantSchema} (relink)`);
+        const tenantSchema = await getBridgeTenantSchema(bridgeId);
+        console.log(`🔍 Bridge ${bridgeId} belongs to ${tenantSchema} (relink)`);
         
         if (!tenantSchema) {
             throw new Error('Unable to determine tenant schema for bot');
@@ -2878,23 +2878,23 @@ app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('
             createTenantAwareMessageHandler
         );
         
-        console.log(`✅ Relink initiated for bridge ${botId}, status: ${clientState.status}`);
+        console.log(`✅ Relink initiated for bridge ${bridgeId}, status: ${clientState.status}`);
         
         res.json({ 
             success: true, 
             message: 'WhatsApp session relinking... New QR code will be available shortly.',
             status: clientState.status,
-            bridgeId: botId
+            bridgeId: bridgeId
         });
     } catch (error) {
-        console.error(`❌ Error relinking WhatsApp for bridge ${botId}:`, error);
+        console.error(`❌ Error relinking WhatsApp for bridge ${bridgeId}:`, error);
         console.error('Stack trace:', error.stack);
         
         // Ensure JSON response even on error
         if (!res.headersSent) {
             res.status(500).json({ 
                 error: error.message || 'Unknown error occurred during relink',
-                bridgeId: botId
+                bridgeId: bridgeId
             });
         }
     }
@@ -3181,7 +3181,7 @@ app.get('/api/messages/search', requireAuth, async (req, res) => {
         regex
     } = req.query;
     
-    if (!botId) {
+    if (!bridgeId) {
         return res.status(400).json({ error: 'Bridge ID is required' });
     }
     
@@ -3201,7 +3201,7 @@ app.get('/api/messages/search', requireAuth, async (req, res) => {
         
         // TENANT-AWARE: Query from tenant schema
         let query = `SELECT * FROM ${tenantSchema}.messages WHERE bridge_id = $1`;
-        const params = [botId];
+        const params = [bridgeId];
         let paramCount = 1;
         
         // Text search
@@ -3395,25 +3395,25 @@ async function autoRestoreWhatsAppSessions() {
                 
                 for (const bridge of bridges.rows) {
                     // Check if this bridge has a saved WhatsApp session
-                    const sessionPath = path.join('.wwebjs_auth', `session-bot_${bot.id}`);
+                    const sessionPath = path.join('.wwebjs_auth', `session-bridge_${bridge.id}`);
                     if (fs.existsSync(sessionPath)) {
-                        console.log(`🔗 Auto-restoring bridge ${bot.id} (${bot.name}) from ${schema_name}...`);
+                        console.log(`🔗 Auto-restoring bridge ${bridge.id} (${bridge.name}) from ${schema_name}...`);
                         
                         try {
                             // Initialize WhatsApp client with saved session
                             await whatsappManager.initializeClient(
-                                bot.id,
+                                bridge.id,
                                 schema_name,
                                 createTenantAwareMessageHandler
                             );
                             restoredCount++;
-                            console.log(`✅ Bot ${bot.id} restored successfully`);
+                            console.log(`✅ Bridge ${bridge.id} restored successfully`);
                         } catch (error) {
-                            console.error(`⚠️  Failed to restore bridge ${bot.id}:`, error.message);
+                            console.error(`⚠️  Failed to restore bridge ${bridge.id}:`, error.message);
                             skippedCount++;
                         }
                     } else {
-                        console.log(`⏭️  Skipping bridge ${bot.id} (${bot.name}) - no saved session`);
+                        console.log(`⏭️  Skipping bridge ${bridge.id} (${bridge.name}) - no saved session`);
                         skippedCount++;
                     }
                 }
