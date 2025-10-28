@@ -531,8 +531,8 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
 async function saveMessage(message, botId = 1) {
     try {
         const result = await pool.query(
-            `INSERT INTO messages (bot_id, timestamp, sender_name, sender_contact, message_content, discord_status, discord_error, has_media, media_type, media_data)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `INSERT INTO messages (bot_id, timestamp, sender_name, sender_contact, message_content, discord_status, discord_error, has_media, media_type, media_data, sender_photo_url)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING id`,
             [
                 botId,
@@ -544,7 +544,8 @@ async function saveMessage(message, botId = 1) {
                 message.discordError || null,
                 message.hasMedia || false,
                 message.mediaType || null,
-                message.mediaData || null
+                message.mediaData || null,
+                message.senderPhotoUrl || null
             ]
         );
         return result.rows[0].id;
@@ -612,7 +613,8 @@ async function getMessages(searchFilter = null, statusFilter = null) {
             discord_error: row.discord_error,
             has_media: row.has_media,
             media_type: row.media_type,
-            media_data: row.media_data
+            media_data: row.media_data,
+            sender_photo_url: row.sender_photo_url
         }));
     } catch (error) {
         console.error('Error retrieving messages from database:', error.message);
@@ -796,6 +798,17 @@ function initializeWhatsAppClient() {
             const timestamp = new Date(message.timestamp * 1000);
             const messageContent = message.body || '';
             
+            // Get sender's profile picture URL
+            let senderPhotoUrl = null;
+            try {
+                senderPhotoUrl = await contact.getProfilePicUrl();
+                if (senderPhotoUrl) {
+                    console.log(`📸 Got profile picture for ${senderName}`);
+                }
+            } catch (error) {
+                console.log(`⚠️ Could not fetch profile picture for ${senderName}:`, error.message);
+            }
+            
             const messageRecord = {
                 id: message.id._serialized,
                 senderName,
@@ -805,6 +818,7 @@ function initializeWhatsAppClient() {
                 hasMedia: message.hasMedia,
                 mediaType: message.hasMedia ? 'image' : null,
                 mediaData: null,
+                senderPhotoUrl,
                 timestamp: timestamp.toISOString(),
                 discordStatus: 'pending'
             };

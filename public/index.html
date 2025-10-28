@@ -1005,7 +1005,11 @@
             const html = messages.map(msg => `
                 <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml((msg.sender_name || '') + ' ' + msg.message_content + ' ' + (msg.sender_contact || '')).toLowerCase()}" data-status="${msg.discord_status}">
                     <div class="discord-avatar">
-                        ${msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?'}
+                        ${msg.sender_photo_url ? 
+                            `<img src="${escapeHtml(msg.sender_photo_url)}" alt="${escapeHtml(msg.sender_name || 'User')}" class="avatar-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+                             <div class="avatar-fallback" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center;">${msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?'}</div>` :
+                            `${msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?'}`
+                        }
                     </div>
                     <div class="discord-content">
                         <div class="discord-header-row">
