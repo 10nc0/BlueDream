@@ -892,7 +892,7 @@
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
                     ${bots.map(bot => `
-                        <button class="channel-item ${bot.id === selectedBotId ? 'active' : ''}" onclick="selectBot('${bot.id}')">
+                        <button class="channel-item ${bot.id === selectedBotId ? 'active' : ''}" onclick="selectBot(${bot.id})">
                             <span class="channel-name">${bot.input_platform} → ${bot.output_platform}</span>
                             <div class="channel-badges">
                                 ${bot.message_count > 0 ? `<span class="badge">${bot.message_count}</span>` : ''}
@@ -912,9 +912,10 @@
         }
 
         function selectBot(botId) {
-            selectedBotId = botId;
+            // Convert string to number to match bot IDs in database
+            selectedBotId = parseInt(botId);
             renderBots();
-            loadBotMessages(botId, 1);
+            // Don't call loadBotMessages here - renderBots() already does it
         }
 
         async function renderBotDetail() {
