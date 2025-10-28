@@ -75,7 +75,8 @@
         <div class="tabs">
             <button class="tab active" onclick="switchTab('bots')">🌉 Bridges</button>
             <button class="tab" onclick="switchTab('analytics')">📊 Analytics</button>
-            <button class="tab admin-only-tab" id="adminPanelTab" onclick="switchTab('adminPanel')" style="display: none; background: white; color: #1a1a2e;">🛡️ Admin Panel</button>
+            <button class="tab" id="usersTab" onclick="switchTab('users')" style="display: none;">👥 Users</button>
+            <button class="tab" id="devPanelTab" onclick="switchTab('devPanel')" style="display: none; background: white; color: #1a1a2e;">🔧 Dev Panel</button>
         </div>
 
         <!-- Bridges Tab -->
@@ -175,11 +176,24 @@
             </div>
         </div>
 
-        <!-- Admin Panel Tab (Admin Only) -->
-        <div id="adminPanelTab-content" class="tab-content" style="display: none;">
+        <!-- Users Tab (Admin Role) -->
+        <div id="usersTab-content" class="tab-content" style="display: none;">
             <div class="section-header">
-                <h1 class="section-title">🛡️ Admin Panel</h1>
-                <div style="font-size: 0.875rem; color: #94a3b8;">Restricted to genesis admin (phi_dao@pm.me)</div>
+                <h1 class="section-title">👥 User Management</h1>
+                <button class="create-bot-btn" onclick="openCreateUserModal()">+ Add User</button>
+            </div>
+            <div id="userList" class="user-list">
+                <div style="text-align: center; padding: 3rem; color: #94a3b8;">
+                    <p>Loading users...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dev Panel Tab (Dev Role Only) -->
+        <div id="devPanelTab-content" class="tab-content" style="display: none;">
+            <div class="section-header">
+                <h1 class="section-title">🔧 Dev Panel</h1>
+                <div style="font-size: 0.875rem; color: #94a3b8;">Restricted to dev role (phi_dao@pm.me)</div>
             </div>
 
             <!-- Admin Panel Grid -->
@@ -360,9 +374,10 @@
                 <div class="form-group">
                     <label class="form-label">Role</label>
                     <select class="form-select" id="userRole" required>
+                        <option value="dev">Dev (Full Access)</option>
                         <option value="admin">Admin</option>
+                        <option value="user">User</option>
                         <option value="read-only">Read Only</option>
-                        <option value="write-only">Write Only</option>
                     </select>
                 </div>
                 <button type="submit" class="submit-btn">Create User</button>
@@ -653,16 +668,26 @@
                 currentUser = data.user;
                 const userInfo = document.getElementById('userInfo');
                 const roleColors = {
+                    'dev': '#ffffff',
                     'admin': '#10b981',
+                    'user': '#60a5fa',
                     'read-only': '#f59e0b',
                     'write-only': '#3b82f6'
                 };
                 userInfo.innerHTML = `<span style="color: ${roleColors[currentUser.role] || '#94a3b8'};">● ${currentUser.email || currentUser.phone} (${currentUser.role})</span>`;
                 
-                // Show Admin Panel tab only for genesis admin
-                const adminTab = document.getElementById('adminPanelTab');
-                if (adminTab && currentUser.email === 'phi_dao@pm.me') {
-                    adminTab.style.display = 'block';
+                // Role hierarchy: dev > admin > user
+                // Show tabs based on role
+                const devTab = document.getElementById('devPanelTab');
+                const usersTab = document.getElementById('usersTab');
+                
+                if (currentUser.role === 'dev') {
+                    // Devs see everything including dev panel
+                    if (devTab) devTab.style.display = 'block';
+                    if (usersTab) usersTab.style.display = 'block';
+                } else if (currentUser.role === 'admin') {
+                    // Admins see users tab but not dev panel
+                    if (usersTab) usersTab.style.display = 'block';
                 }
                 
                 return true;
@@ -1954,9 +1979,9 @@
             }
         }
 
-        // Load Admin Panel (genesis admin only)
+        // Load Dev Panel (dev role only)
         async function loadAdminPanel() {
-            if (!currentUser || currentUser.email !== 'phi_dao@pm.me') {
+            if (!currentUser || currentUser.role !== 'dev') {
                 return;
             }
 
@@ -2111,9 +2136,9 @@
             // Update tab content
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             
-            // Handle adminPanel tab (special case with different ID)
-            if (tabName === 'adminPanel') {
-                document.getElementById('adminPanelTab-content').classList.add('active');
+            // Handle devPanel tab (special case with different ID)
+            if (tabName === 'devPanel') {
+                document.getElementById('devPanelTab-content').classList.add('active');
                 loadAdminPanel();
             } else {
                 document.getElementById(`${tabName}Tab`).classList.add('active');
