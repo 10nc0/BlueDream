@@ -12,12 +12,22 @@ async function loadAnalyticsDashboard() {
         }
     } catch (error) {
         console.error('Failed to load analytics:', error);
-        document.getElementById('analyticsContent').innerHTML = `
-            <div style="text-align: center; padding: 3rem; color: #94a3b8;">
-                <p>Failed to load analytics data</p>
-                <p style="font-size: 0.9rem; margin-top: 0.5rem;">${error.message}</p>
-            </div>
-        `;
+        const container = document.getElementById('analyticsContent');
+        container.innerHTML = '';
+        
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'text-align: center; padding: 3rem; color: #94a3b8;';
+        
+        const mainMessage = document.createElement('p');
+        mainMessage.textContent = 'Failed to load analytics data';
+        
+        const errorMessage = document.createElement('p');
+        errorMessage.style.cssText = 'font-size: 0.9rem; margin-top: 0.5rem;';
+        errorMessage.textContent = error.message;
+        
+        wrapper.appendChild(mainMessage);
+        wrapper.appendChild(errorMessage);
+        container.appendChild(wrapper);
     }
 }
 
