@@ -3,6 +3,7 @@ const qrcode = require('qrcode-terminal');
 const axios = require('axios');
 const { execSync } = require('child_process');
 const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const bodyParser = require('body-parser');
 const QRCode = require('qrcode');
@@ -3180,12 +3181,75 @@ async function updateAnalytics(botId) {
     }
 }
 
+// Auto-restore all bots with saved WhatsApp sessions on server startup
+async function autoRestoreWhatsAppSessions() {
+    try {
+        console.log('🔄 Auto-restoring WhatsApp sessions from saved data...');
+        
+        // Get all tenant schemas
+        const schemas = await pool.query(`
+            SELECT schema_name 
+            FROM information_schema.schemata 
+            WHERE schema_name LIKE 'tenant_%'
+            ORDER BY schema_name
+        `);
+        
+        let restoredCount = 0;
+        let skippedCount = 0;
+        
+        // For each tenant schema, find all bots with saved sessions
+        for (const { schema_name } of schemas.rows) {
+            try {
+                const bots = await pool.query(`
+                    SELECT id, name, status 
+                    FROM ${schema_name}.bots 
+                    WHERE status != 'deleted'
+                `);
+                
+                for (const bot of bots.rows) {
+                    // Check if this bot has a saved WhatsApp session
+                    const sessionPath = path.join('.wwebjs_auth', `session-bot_${bot.id}`);
+                    if (fs.existsSync(sessionPath)) {
+                        console.log(`🔗 Auto-restoring bot ${bot.id} (${bot.name}) from ${schema_name}...`);
+                        
+                        try {
+                            // Initialize WhatsApp client with saved session
+                            await whatsappManager.initializeClient(
+                                bot.id,
+                                schema_name,
+                                createTenantAwareMessageHandler
+                            );
+                            restoredCount++;
+                            console.log(`✅ Bot ${bot.id} restored successfully`);
+                        } catch (error) {
+                            console.error(`⚠️  Failed to restore bot ${bot.id}:`, error.message);
+                            skippedCount++;
+                        }
+                    } else {
+                        console.log(`⏭️  Skipping bot ${bot.id} (${bot.name}) - no saved session`);
+                        skippedCount++;
+                    }
+                }
+            } catch (error) {
+                console.error(`⚠️  Error processing ${schema_name}:`, error.message);
+            }
+        }
+        
+        console.log(`✅ Auto-restore complete: ${restoredCount} bots restored, ${skippedCount} skipped`);
+    } catch (error) {
+        console.error('❌ Auto-restore failed:', error.message);
+    }
+}
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🌐 Dashboard available at http://localhost:${PORT}`);
     await initializeDatabase();
     console.log('✅ Multi-tenant WhatsApp Bridge ready');
-    console.log('📱 Use POST /api/bots/:id/start to initialize WhatsApp for individual bots');
+    
+    // Auto-restore WhatsApp sessions for 24/7 uptime
+    await autoRestoreWhatsAppSessions();
+    console.log('📱 All bots with saved sessions are now active');
 });
 
 // Graceful shutdown
