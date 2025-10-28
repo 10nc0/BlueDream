@@ -2479,101 +2479,14 @@ app.get('/api/stats', requireAuth, async (req, res) => {
 });
 
 // Bot management endpoints
-// SECURE: Complete tenant isolation with dedicated client and zero cross-tenant awareness
-app.get('/api/bots', requireAuth, async (req, res) => {
+// CRITICAL: Complete horizontal tenant isolation - ALL users (including dev) see ONLY their own tenant's bots
+// Dev users access system-wide bridges via /api/dev/bridges endpoint
+app.get('/api/bots', requireAuth, setTenantContext, async (req, res) => {
     try {
         const client = req.dbClient || pool;
-        const userRole = req.tenantContext?.userRole || 'read-only';
         
-        // Dev users with global access need special handling
-        if (req.tenantContext && req.tenantContext.globalAccess) {
-            // Dev user - show which tenant they want or all tenants
-            const { tenantId } = req.query;
-            
-            if (tenantId) {
-                // View specific tenant's bots
-                const tenantInfo = await client.query(`
-                    SELECT tenant_schema FROM core.tenant_catalog WHERE id = $1
-                `, [tenantId]);
-                
-                if (tenantInfo.rows.length === 0) {
-                    return res.status(404).json({ error: 'Tenant not found' });
-                }
-                
-                const schema = tenantInfo.rows[0].tenant_schema;
-                const result = await client.query(`
-                    SELECT 
-                        b.*,
-                        COUNT(m.id) as message_count,
-                        COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
-                        COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
-                        COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count,
-                        '${tenantId}'::integer as tenant_id,
-                        '${schema}'::text as tenant_schema
-                    FROM ${schema}.bots b
-                    LEFT JOIN ${schema}.messages m ON b.id = m.bot_id
-                    WHERE b.archived = false
-                    GROUP BY b.id
-                    ORDER BY b.created_at DESC
-                `);
-                return res.json(result.rows); // Dev sees everything including tenant_id
-            }
-            
-            // Show all tenants' bots (dev view only)
-            const tenants = await getAllTenantSchemas(client, userRole);
-            const allBots = [];
-            
-            // First, get legacy bots from public schema
-            try {
-                const publicBots = await client.query(`
-                    SELECT 
-                        b.*,
-                        COUNT(m.id) as message_count,
-                        COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
-                        COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
-                        COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count,
-                        NULL as tenant_id,
-                        'public'::text as tenant_schema
-                    FROM public.bots b
-                    LEFT JOIN public.messages m ON b.id = m.bot_id
-                    WHERE b.archived = false
-                    GROUP BY b.id
-                    ORDER BY b.created_at DESC
-                `);
-                allBots.push(...publicBots.rows);
-            } catch (err) {
-                console.warn('Could not fetch bots from public schema:', err.message);
-            }
-            
-            // Then get bots from all tenant schemas
-            for (const tenant of tenants) {
-                try {
-                    const result = await client.query(`
-                        SELECT 
-                            b.*,
-                            COUNT(m.id) as message_count,
-                            COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
-                            COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
-                            COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count,
-                            '${tenant.id}'::integer as tenant_id,
-                            '${tenant.tenant_schema}'::text as tenant_schema
-                        FROM ${tenant.tenant_schema}.bots b
-                        LEFT JOIN ${tenant.tenant_schema}.messages m ON b.id = m.bot_id
-                        WHERE b.archived = false
-                        GROUP BY b.id
-                        ORDER BY b.created_at DESC
-                    `);
-                    allBots.push(...result.rows);
-                } catch (err) {
-                    console.warn(`Could not fetch bots from ${tenant.tenant_schema}:`, err.message);
-                }
-            }
-            
-            return res.json(allBots); // Dev sees everything
-        }
-        
-        // Genesis admins - query ONLY from their tenant schema (search_path already set)
-        // CRITICAL: They get ZERO indication that other tenants exist
+        // Query current tenant's bots ONLY (search_path already set by setTenantContext)
+        // Even dev users see only their own tenant here
         const result = await client.query(`
             SELECT 
                 b.*,
@@ -2588,9 +2501,7 @@ app.get('/api/bots', requireAuth, async (req, res) => {
             ORDER BY b.created_at DESC
         `);
         
-        // Sanitize response: Remove tenant_id and tenant_schema for non-dev users
-        const sanitizedBots = sanitizeForRole(result.rows, userRole);
-        res.json(sanitizedBots);
+        res.json(result.rows);
     } catch (error) {
         console.error('❌ Error in /api/bots:', error);
         res.status(500).json({ error: error.message });
