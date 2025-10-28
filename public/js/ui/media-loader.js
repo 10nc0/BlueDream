@@ -187,8 +187,12 @@ async function loadMedia(messageId) {
         
     } catch (error) {
         console.error(`❌ Error loading media for message ${messageId}:`, error);
-        // Show error message
-        previewEl.innerHTML = `<div class="media-error">Failed to load media: ${error.message}</div>`;
+        // Show error message (safe DOM manipulation to prevent XSS)
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'media-error';
+        errorDiv.textContent = `Failed to load media: ${error.message}`;
+        previewEl.innerHTML = ''; // Clear existing content
+        previewEl.appendChild(errorDiv);
     }
 }
 
@@ -257,7 +261,8 @@ function renderMedia(containerEl, messageId, mediaData) {
                     src="${dataUrl}" 
                     alt="Image from ${escapeHtml(sender_name)}"
                     loading="lazy"
-                    onclick="expandMedia('${messageId}', '${dataUrl}')"
+                    data-message-id="${messageId}"
+                    data-media-url="${dataUrl}"
                     onload="this.previousElementSibling.style.opacity = '0'; this.style.opacity = '1';"
                     onerror="handleMediaError('${messageId}', this)"
                     style="position: relative; opacity: 0; transition: opacity 0.3s ease-in; cursor: pointer;"
@@ -431,6 +436,17 @@ function expandMedia(messageId, dataUrl) {
     modal.appendChild(backdrop);
     document.body.appendChild(modal);
 }
+
+// Attach click handlers using event delegation
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('discord-media-image')) {
+        const messageId = e.target.dataset.messageId;
+        const dataUrl = e.target.dataset.mediaUrl;
+        if (messageId && dataUrl) {
+            expandMedia(messageId, dataUrl);
+        }
+    }
+});
 
 // Helper function (if not already defined globally)
 function escapeHtml(text) {
