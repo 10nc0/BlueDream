@@ -157,6 +157,19 @@
             <div class="section-header">
                 <h1 class="section-title">Analytics Dashboard</h1>
             </div>
+            
+            <!-- Analytics Filters -->
+            <div class="filter-controls" style="margin-bottom: 1.5rem;">
+                <select class="filter-dropdown" id="analyticsBridgeFilter" onchange="loadAnalyticsDashboard()">
+                    <option value="">All Bridges</option>
+                </select>
+                <select class="filter-dropdown" id="analyticsTimeRange" onchange="loadAnalyticsDashboard()">
+                    <option value="7">Last 7 Days</option>
+                    <option value="30" selected>Last 30 Days</option>
+                    <option value="90">Last 90 Days</option>
+                </select>
+            </div>
+            
             <div id="analyticsContent" class="analytics-content">
                 <div style="text-align: center; padding: 3rem; color: #94a3b8;">
                     <p>Loading analytics...</p>

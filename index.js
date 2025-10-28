@@ -3277,7 +3277,7 @@ app.get('/api/messages/search', requireAuth, async (req, res) => {
 // ===========================
 
 app.get('/api/analytics/daily', requireAuth, async (req, res) => {
-    const { days = 30 } = req.query;
+    const { days = 30, bridge_id } = req.query;
     
     try {
         // Get tenant schema from authenticated user
@@ -3294,7 +3294,10 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
         const tenantId = user.tenant_id;
         const tenantSchema = `tenant_${tenantId}`;
         
-        console.log(`📊 Analytics request from ${user.email} (tenant: ${tenantSchema})`);
+        console.log(`📊 Analytics request from ${user.email} (tenant: ${tenantSchema}, bridge: ${bridge_id || 'all'})`);
+        
+        // Build WHERE clause for bridge filter
+        const bridgeFilter = bridge_id ? `AND bridge_id = ${parseInt(bridge_id)}` : '';
         
         // TENANT-AWARE: Get daily aggregates from tenant schema
         const result = await pool.query(`
@@ -3305,7 +3308,7 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
                 SUM(rate_limit_events) as rate_limit_events,
                 AVG(avg_response_time_ms) as avg_response_time_ms
             FROM ${tenantSchema}.message_analytics
-            WHERE date >= CURRENT_DATE - $1::integer
+            WHERE date >= CURRENT_DATE - $1::integer ${bridgeFilter}
             GROUP BY date
             ORDER BY date ASC
         `, [days]);
@@ -3316,15 +3319,26 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
                 COUNT(*) as total_messages,
                 COUNT(*) FILTER (WHERE discord_status = 'failed') as failed_messages
             FROM ${tenantSchema}.messages
-            WHERE timestamp >= CURRENT_DATE - $1::integer
+            WHERE timestamp >= CURRENT_DATE - $1::integer ${bridgeFilter}
         `, [days]);
         
         // TENANT-AWARE: Get rate limit events from tenant schema
         const rateLimitResult = await pool.query(`
             SELECT SUM(rate_limit_events) as rate_limit_events
             FROM ${tenantSchema}.message_analytics
-            WHERE date >= CURRENT_DATE - $1::integer
+            WHERE date >= CURRENT_DATE - $1::integer ${bridgeFilter}
         `, [days]);
+        
+        // Get bridge info if filtering by specific bridge
+        let bridgeInfo = null;
+        if (bridge_id) {
+            const bridgeResult = await pool.query(`
+                SELECT id, name, input_platform, output_platform
+                FROM ${tenantSchema}.bridges
+                WHERE id = $1
+            `, [bridge_id]);
+            bridgeInfo = bridgeResult.rows[0] || null;
+        }
         
         console.log(`✅ Analytics data loaded: ${summaryResult.rows[0]?.total_messages || 0} total messages`);
         
@@ -3334,7 +3348,8 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
                 total_messages: parseInt(summaryResult.rows[0]?.total_messages || 0),
                 failed_messages: parseInt(summaryResult.rows[0]?.failed_messages || 0),
                 rate_limit_events: parseInt(rateLimitResult.rows[0]?.rate_limit_events || 0)
-            }
+            },
+            bridge: bridgeInfo
         });
     } catch (error) {
         console.error(`❌ Analytics error for user ${req.userId}:`, error);
