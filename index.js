@@ -346,6 +346,7 @@ async function initializeDatabase() {
                 contact_info TEXT,
                 tags TEXT[],
                 archived BOOLEAN DEFAULT false NOT NULL,
+                archived_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )
@@ -2578,7 +2579,11 @@ app.get('/api/bots', requireAuth, async (req, res) => {
         
         console.log(`📊 Loading bridges for ${user.email} (user_id=${req.userId}) from ${tenantSchema}`);
         
+        // Check if user is dev (Admin #01 with global oversight)
+        const isDev = user.email === 'phi_dao@pm.me';
+        
         // EXPLICIT SCHEMA INDEXING: Use parameterized schema names (fractalized architecture)
+        // Dev users see ALL bridges (including archived), regular users only see non-archived
         const result = await pool.query(`
             SELECT 
                 b.*,
@@ -2588,12 +2593,12 @@ app.get('/api/bots', requireAuth, async (req, res) => {
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count
             FROM ${tenantSchema}.bots b
             LEFT JOIN ${tenantSchema}.messages m ON b.id = m.bot_id
-            WHERE b.archived = false
+            ${isDev ? '' : 'WHERE b.archived = false'}
             GROUP BY b.id
             ORDER BY b.created_at DESC
         `);
         
-        console.log(`✅ Found ${result.rows.length} bridges in ${tenantSchema} for ${user.email}`);
+        console.log(`✅ Found ${result.rows.length} bridges in ${tenantSchema} for ${user.email}${isDev ? ' (Dev view: includes archived)' : ''}`);
         res.json(result.rows);
     } catch (error) {
         console.error(`❌ Error in /api/bots for user ${req.userId}:`, error);
@@ -2653,38 +2658,48 @@ app.delete('/api/bots/:id', requireAuth, setTenantContext, requireRole('admin', 
     try {
         const client = req.dbClient || pool;
         
-        // CRITICAL: Get the bot's tenant schema before deletion
+        // CRITICAL: Get the bot's tenant schema before archiving
         const tenantSchema = await getBotTenantSchema(botId);
-        console.log(`🗑️  Deleting bot ${botId} from ${tenantSchema}...`);
+        console.log(`🗄️  Archiving bot ${botId} from ${tenantSchema} (soft delete)...`);
         
-        // Stop and destroy WhatsApp client if active
+        // Stop WhatsApp client if active (but keep session files for potential restoration)
         try {
-            await whatsappManager.destroyClient(botId, tenantSchema);
-            console.log(`✅ WhatsApp client destroyed for bot ${botId}`);
+            const whatsappClient = whatsappManager.getClient(botId);
+            if (whatsappClient) {
+                await whatsappClient.destroy();
+                whatsappManager.removeClient(botId);
+                console.log(`✅ WhatsApp client stopped for bot ${botId} (session files preserved)`);
+            }
         } catch (error) {
-            console.warn(`⚠️  Could not destroy WhatsApp client for bot ${botId}:`, error.message);
+            console.warn(`⚠️  Could not stop WhatsApp client for bot ${botId}:`, error.message);
         }
         
-        // Delete all messages first (foreign key constraint)
-        await client.query('DELETE FROM messages WHERE bot_id = $1', [botId]);
-        console.log(`✅ Deleted messages for bot ${botId}`);
-        
-        // Delete the bot
-        const result = await client.query('DELETE FROM bots WHERE id = $1 RETURNING *', [botId]);
+        // SOFT DELETE: Set archived=true and archived_at=NOW() (preserves all data)
+        const result = await client.query(`
+            UPDATE ${tenantSchema}.bots 
+            SET archived = true, archived_at = NOW(), status = 'archived' 
+            WHERE id = $1 
+            RETURNING *
+        `, [botId]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Bot not found' });
         }
         
-        logAudit(client, req, 'DELETE', 'BOT', botId, null, {
-            message: 'Bot and all associated messages deleted',
-            tenant_schema: tenantSchema
+        logAudit(client, req, 'ARCHIVE', 'BOT', botId, null, {
+            message: 'Bot archived (soft delete) - all messages and session preserved',
+            tenant_schema: tenantSchema,
+            archived_at: new Date().toISOString()
         });
         
-        console.log(`✅ Bot ${botId} deleted successfully by user ${req.userId}`);
-        res.json({ success: true, message: 'Bot deleted successfully' });
+        console.log(`✅ Bot ${botId} archived successfully by user ${req.userId}`);
+        res.json({ 
+            success: true, 
+            message: 'Bridge archived successfully',
+            note: 'All messages and session data preserved'
+        });
     } catch (error) {
-        console.error(`❌ Error deleting bot ${botId}:`, error);
+        console.error(`❌ Error archiving bot ${botId}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
