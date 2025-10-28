@@ -486,14 +486,14 @@ async function getMessages(searchFilter = null, statusFilter = null) {
         return result.rows.map(row => ({
             id: row.id,
             timestamp: row.timestamp,
-            senderName: row.sender_name,
-            senderContact: row.sender_contact,
-            messageContent: row.message_content,
-            discordStatus: row.discord_status,
-            discordError: row.discord_error,
-            hasMedia: row.has_media,
-            mediaType: row.media_type,
-            mediaData: row.media_data
+            sender_name: row.sender_name,
+            sender_contact: row.sender_contact,
+            message_content: row.message_content,
+            discord_status: row.discord_status,
+            discord_error: row.discord_error,
+            has_media: row.has_media,
+            media_type: row.media_type,
+            media_data: row.media_data
         }));
     } catch (error) {
         console.error('Error retrieving messages from database:', error.message);
