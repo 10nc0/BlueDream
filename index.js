@@ -2207,7 +2207,7 @@ app.post('/api/auth/forgot-password/reset', async (req, res) => {
 // Get all users (admin only)
 app.get('/api/users', requireAuth, requireRole('admin'), async (req, res) => {
     try {
-        const result = await pool.query('SELECT id, email, phone, role, created_at FROM users ORDER BY created_at DESC');
+        const result = await pool.query('SELECT id, email, role, tenant_id, is_genesis_admin, created_at FROM users ORDER BY created_at DESC');
         res.json(result.rows);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -2221,20 +2221,20 @@ app.put('/api/users/:id/role', requireAuth, requireRole('admin'), async (req, re
     
     try {
         // Get old role before update
-        const oldData = await pool.query('SELECT role, email, phone FROM users WHERE id = $1', [id]);
+        const oldData = await pool.query('SELECT role, email FROM users WHERE id = $1', [id]);
         const oldRole = oldData.rows[0]?.role;
         
         const result = await pool.query(`
             UPDATE users 
             SET role = $1, updated_at = NOW()
             WHERE id = $2
-            RETURNING id, email, phone, role
+            RETURNING id, email, role, tenant_id, is_genesis_admin
         `, [role, id]);
         
         const updatedUser = result.rows[0];
         
         // Log role change
-        await logAudit(req, 'UPDATE_ROLE', 'USER', id, updatedUser.email || updatedUser.phone, {
+        await logAudit(req, 'UPDATE_ROLE', 'USER', id, updatedUser.email, {
             old_role: oldRole,
             new_role: role
         });
@@ -2256,7 +2256,7 @@ app.delete('/api/users/:id', requireAuth, requireRole('admin'), async (req, res)
         }
         
         // Get user info before deletion for audit log
-        const userData = await pool.query('SELECT email, phone, role FROM users WHERE id = $1', [id]);
+        const userData = await pool.query('SELECT email, role FROM users WHERE id = $1', [id]);
         if (userData.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -2266,7 +2266,7 @@ app.delete('/api/users/:id', requireAuth, requireRole('admin'), async (req, res)
         const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
         
         // Log user deletion
-        await logAudit(req, 'DELETE_USER', 'USER', id, deletedUser.email || deletedUser.phone, {
+        await logAudit(req, 'DELETE_USER', 'USER', id, deletedUser.email, {
             role: deletedUser.role
         });
         
