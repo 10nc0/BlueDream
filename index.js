@@ -2613,29 +2613,45 @@ app.put('/api/bots/:id', requireAuth, setTenantContext, requireRole('admin', 'wr
 });
 
 // Delete bot (hard delete - removes bot and all messages)
-app.delete('/api/bots/:id', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
+app.delete('/api/bots/:id', requireAuth, setTenantContext, requireRole('admin', 'dev'), async (req, res) => {
+    const { id } = req.params;
+    const botId = parseInt(id);
+    
     try {
         const client = req.dbClient || pool;
-        const { id} = req.params;
+        
+        // CRITICAL: Get the bot's tenant schema before deletion
+        const tenantSchema = await getBotTenantSchema(botId);
+        console.log(`🗑️  Deleting bot ${botId} from ${tenantSchema}...`);
+        
+        // Stop and destroy WhatsApp client if active
+        try {
+            await whatsappManager.destroyClient(botId, tenantSchema);
+            console.log(`✅ WhatsApp client destroyed for bot ${botId}`);
+        } catch (error) {
+            console.warn(`⚠️  Could not destroy WhatsApp client for bot ${botId}:`, error.message);
+        }
         
         // Delete all messages first (foreign key constraint)
-        await client.query('DELETE FROM messages WHERE bot_id = $1', [id]);
+        await client.query('DELETE FROM messages WHERE bot_id = $1', [botId]);
+        console.log(`✅ Deleted messages for bot ${botId}`);
         
         // Delete the bot
-        const result = await client.query('DELETE FROM bots WHERE id = $1 RETURNING *', [id]);
+        const result = await client.query('DELETE FROM bots WHERE id = $1 RETURNING *', [botId]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Bot not found' });
         }
         
-        logAudit(client, req, 'DELETE', 'BOT', id, null, {
-            message: 'Bot and all associated messages deleted'
+        logAudit(client, req, 'DELETE', 'BOT', botId, null, {
+            message: 'Bot and all associated messages deleted',
+            tenant_schema: tenantSchema
         });
         
-        console.log(`[DELETE] Bot ${id} deleted by user ${req.user?.userId}`);
+        console.log(`✅ Bot ${botId} deleted successfully by user ${req.userId}`);
         res.json({ success: true, message: 'Bot deleted successfully' });
     } catch (error) {
-        console.error('Error deleting bot:', error);
+        console.error(`❌ Error deleting bot ${botId}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
