@@ -79,7 +79,7 @@
             </div>
 
             <div class="search-filter" style="flex-wrap: wrap;">
-                <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search: bridges, messages, senders... or try 'yesterday', 'last week', 'today'..." oninput="debouncedFilterBots()" style="flex: 1; min-width: 300px;">
+                <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search: bridges, messages, senders... or try 'yesterday', 'october', 'last week'..." oninput="debouncedFilterBots()" style="flex: 1; min-width: 300px;">
                 <select class="filter-dropdown" id="platformFilter" onchange="filterBots()">
                     <option value="">All Platforms</option>
                 </select>
@@ -1274,6 +1274,43 @@
             };
             
             const lowerQuery = query.toLowerCase().trim();
+            
+            // Check for month names (e.g., "october", "in october", "october 2025")
+            const months = {
+                'january': 0, 'jan': 0,
+                'february': 1, 'feb': 1,
+                'march': 2, 'mar': 2,
+                'april': 3, 'apr': 3,
+                'may': 4,
+                'june': 5, 'jun': 5,
+                'july': 6, 'jul': 6,
+                'august': 7, 'aug': 7,
+                'september': 8, 'sep': 8, 'sept': 8,
+                'october': 9, 'oct': 9,
+                'november': 10, 'nov': 10,
+                'december': 11, 'dec': 11
+            };
+            
+            // Try to match month patterns
+            for (const [monthName, monthIndex] of Object.entries(months)) {
+                const monthRegex = new RegExp(`\\b${monthName}\\b`, 'i');
+                if (monthRegex.test(lowerQuery)) {
+                    // Extract year if present (e.g., "october 2024", "2024 october")
+                    const yearMatch = lowerQuery.match(/\b(20\d{2})\b/);
+                    const year = yearMatch ? parseInt(yearMatch[1]) : today.getFullYear();
+                    
+                    const startDate = new Date(year, monthIndex, 1);
+                    const endDate = new Date(year, monthIndex + 1, 0); // Last day of month
+                    
+                    return {
+                        dateFrom: startDate.toISOString().split('T')[0],
+                        dateTo: endDate.toISOString().split('T')[0],
+                        context: yearMatch ? `${monthName} ${year}` : monthName
+                    };
+                }
+            }
+            
+            // Check for standard patterns
             for (const [pattern, dates] of Object.entries(patterns)) {
                 if (lowerQuery.includes(pattern)) {
                     return {

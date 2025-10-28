@@ -228,6 +228,17 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
   - **Smooth Animations**: Fade-in transitions for polished UX
 - **Header Simplification**: Reduced status indicators from 4 to 2 (System: Healthy + Bridges count)
 
+### 2025-10-28: Month Name Search Support ✅
+- **Enhanced Date Parser**: Now supports month names in search queries
+  - **Standalone months**: "october", "september", "january", etc.
+  - **With year**: "october 2025", "2024 september"
+  - **Flexible phrasing**: Works with "in october", "during october", etc.
+  - **Abbreviations**: "oct", "sep", "jan", etc. all work
+  - **Smart defaults**: Auto-detects year (defaults to current year if not specified)
+- **Full Month Ranges**: Automatically calculates complete month span (Oct 1 - Oct 31)
+- **Context Badge**: Shows parsed month context (e.g., "📅 october" or "📅 october 2024")
+- **Placeholder Updated**: Now suggests "october" as an example date query
+
 ### 2025-10-28: Natural Language Search + Auto-Search ✅
 - **Removed**: Search/Regex toggle button (saves UI space, auto-detects regex patterns)
 - **Natural Language Date Parsing**: Supports intuitive queries like:
