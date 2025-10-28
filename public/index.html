@@ -508,7 +508,8 @@
             }
             
             // Auto-select first bot if none selected
-            if (!selectedBotId || !filteredBots.find(b => b.id === selectedBotId)) {
+            const wasAutoSelected = !selectedBotId || !filteredBots.find(b => b.id === selectedBotId);
+            if (wasAutoSelected) {
                 selectedBotId = filteredBots[0].id;
             }
             
@@ -538,6 +539,11 @@
             
             // Render detail panel
             renderBotDetail();
+            
+            // Load messages for auto-selected bot
+            if (wasAutoSelected && !messageCache[selectedBotId]) {
+                loadBotMessages(selectedBotId, 1);
+            }
         }
 
         function selectBot(botId) {
