@@ -29,7 +29,7 @@
         <div class="header-section header-center">
             <div class="header-cat-clock">
                 <div class="animated-character">
-                    <canvas id="hopCanvas" class="character-canvas" width="125" height="125"></canvas>
+                    <canvas id="hopCanvas" class="character-canvas" width="160" height="160"></canvas>
                 </div>
                 <div class="header-clock">
                     <span id="currentTime">2025/10/28 - 3:00:00PM</span>
@@ -2260,7 +2260,7 @@
             });
             
             function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, fleeing = false) {
-                ctx.clearRect(0, 0, 100, 100);
+                ctx.clearRect(0, 0, 160, 160);
                 
                 const scale = 2.5;
                 const isJump = Math.floor(frameNum / 15) % 2 === 0;
@@ -2344,6 +2344,13 @@
                     const fleeStrength = 15 * (1 - distance / 200); // Stronger flee when closer
                     offsetX = -(dx / distance) * fleeStrength;
                     offsetY = -(dy / distance) * fleeStrength;
+                }
+                
+                // Alternate time color with cat animation (black vs white)
+                const timeEl = document.getElementById('currentTime');
+                if (timeEl) {
+                    const isJump = Math.floor(frame / 15) % 2 === 0;
+                    timeEl.style.color = isJump ? '#1a1a1a' : '#ffffff';
                 }
                 
                 drawPixelCat(frame, offsetX, offsetY, fleeing);

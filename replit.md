@@ -191,6 +191,20 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 
 ## Recent Changes
 
+### 2025-10-28: Header UI Polish + Consistency ✅
+- **Font Consistency**: All header text now uses consistent 0.875rem font size (except main "🌈Nyan Bridge" title)
+  - Status indicators: 0.6875rem → 0.875rem
+  - Tagline: 0.75rem → 0.875rem
+  - Clock: 0.75rem → 0.875rem
+- **User Email Fix**: Added max-width (250px) and text-overflow ellipsis to prevent email overflow
+  - Now properly readable and scales with Logout button
+  - "phi_dao@pm.me (dev)" displays correctly
+- **Enlarged Cat**: Increased animated character size from 125px → 160px
+  - Canvas size: 125x125 → 160x160
+  - Responsive clamp: 100-160px (was 75-125px)
+- **Animated Time Color**: Time alternates between black (#1a1a1a) and white (#ffffff) synced with cat jump animation
+  - Creates dynamic visual rhythm in header
+  
 ### 2025-10-28: Custom Tooltip System + Header Cleanup ✅
 - **Problem**: Tooltips were cropped by table edges using native browser title attribute
 - **Solution**: Custom tooltip system with intelligent positioning
