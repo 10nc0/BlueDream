@@ -394,16 +394,10 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action_type)
         `);
         
-        // Create default admin user if none exists
+        // No default admin user - first signup becomes admin (genesis user)
         const usersCount = await pool.query('SELECT COUNT(*) FROM users');
         if (parseInt(usersCount.rows[0].count) === 0) {
-            const bcrypt = require('bcrypt');
-            const defaultPassword = await bcrypt.hash('admin123', 10);
-            await pool.query(`
-                INSERT INTO users (email, password_hash, role)
-                VALUES ($1, $2, $3)
-            `, ['admin@bridge.local', defaultPassword, 'admin']);
-            console.log('✅ Created default admin user (email: admin@bridge.local, password: admin123)');
+            console.log('🌟 No users exist yet. First signup will become admin (genesis user).');
         }
         
         // Create performance indexes for frequently queried columns
@@ -1196,6 +1190,112 @@ app.post('/api/auth/login', async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// Check if next signup would be the genesis user (first user)
+app.get('/api/auth/check-genesis', async (req, res) => {
+    try {
+        const userCount = await pool.query('SELECT COUNT(*) FROM users');
+        const isFirstUser = parseInt(userCount.rows[0].count) === 0;
+        res.json({ isFirstUser });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to check status' });
+    }
+});
+
+// Public Signup Endpoint - First signup becomes admin (genesis user)
+app.post('/api/auth/signup', async (req, res) => {
+    const { email, password } = req.body;
+    
+    console.log(`[${getTimestamp()}] 📝 Signup attempt - Email: ${email}, IP: ${req.ip}`);
+    
+    try {
+        // Validate input
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+        
+        if (password.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        }
+        
+        // Check if email already exists
+        const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+        if (existingUser.rows.length > 0) {
+            return res.status(400).json({ error: 'Email already registered' });
+        }
+        
+        // Check if this is the first user (genesis user)
+        const userCount = await pool.query('SELECT COUNT(*) FROM users');
+        const isFirstUser = parseInt(userCount.rows[0].count) === 0;
+        
+        // First user becomes admin, all others are read-only by default
+        const role = isFirstUser ? 'admin' : 'read-only';
+        
+        // Hash password
+        const passwordHash = await bcrypt.hash(password, 10);
+        
+        // Create user
+        const result = await pool.query(`
+            INSERT INTO users (email, password_hash, role)
+            VALUES ($1, $2, $3)
+            RETURNING id, email, role
+        `, [email, passwordHash, role]);
+        
+        const newUser = result.rows[0];
+        
+        if (isFirstUser) {
+            console.log(`[${getTimestamp()}] 🌟 GENESIS USER created - Email: ${email}, Role: admin`);
+        } else {
+            console.log(`[${getTimestamp()}] ✅ User created - Email: ${email}, Role: ${role}`);
+        }
+        
+        // Auto-login after signup
+        req.session.userId = newUser.id;
+        req.session.userEmail = newUser.email;
+        req.session.userRole = newUser.role;
+        
+        // Generate JWT tokens
+        const accessToken = authService.signAccessToken(newUser.id, newUser.email, newUser.role);
+        const { token: refreshToken, tokenId } = authService.signRefreshToken(newUser.id, newUser.email, newUser.role);
+        
+        // Store refresh token
+        const deviceInfo = req.get('user-agent') || 'unknown';
+        await authService.storeRefreshToken(pool, newUser.id, tokenId, deviceInfo, req.ip);
+        
+        // Save session
+        req.session.save(async (err) => {
+            if (err) {
+                console.error('Session save error:', err);
+                return res.status(500).json({ error: 'Session save failed' });
+            }
+            
+            // Create session tracking record
+            await createSessionRecord(newUser.id, req.sessionID, req);
+            
+            // Log signup
+            logAudit(req, 'SIGNUP', 'USER', newUser.id.toString(), newUser.email, {
+                role: newUser.role,
+                is_genesis_user: isFirstUser
+            });
+            
+            res.json({
+                success: true,
+                user: {
+                    id: newUser.id,
+                    email: newUser.email,
+                    role: newUser.role
+                },
+                accessToken,
+                refreshToken,
+                isGenesisUser: isFirstUser,
+                message: isFirstUser ? '🌟 Welcome! You are the first user and have been granted admin privileges.' : 'Account created successfully.'
+            });
+        });
+    } catch (error) {
+        console.error('Signup error:', error);
+        res.status(500).json({ error: 'Signup failed' });
     }
 });
 
