@@ -2553,12 +2553,16 @@
         
         // Load Dev Panel (horizontal admin cards for system overview)
         async function loadDevPanelAdmins() {
+            console.log('🔧 Loading Dev Panel...', {currentUser, role: currentUser?.role});
             try {
+                console.log('📡 Fetching /api/users for Dev Panel...');
                 const response = await authFetch('/api/users');
+                console.log('📥 API Response:', response.status, response.statusText);
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
                 const allUsers = await response.json();
+                console.log('✅ Received users:', allUsers.length, allUsers);
                 
                 // Group users by tenant_schema to identify admins
                 const adminsByTenant = {};
