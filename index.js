@@ -2609,11 +2609,8 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
         
         console.log(`📊 Loading bridges for ${user.email} (user_id=${req.userId}) from ${tenantSchema}`);
         
-        // Check if user is dev (Admin #01 with global oversight)
-        const isDev = user.email === 'phi_dao@pm.me';
-        
         // EXPLICIT SCHEMA INDEXING: Use parameterized schema names (fractalized architecture)
-        // Dev users see ALL bridges (including archived), regular users only see non-archived
+        // ALL users (including dev) only see non-archived bridges in main UI
         const result = await pool.query(`
             SELECT 
                 b.*,
@@ -2623,12 +2620,12 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count
             FROM ${tenantSchema}.bridges b
             LEFT JOIN ${tenantSchema}.messages m ON b.id = m.bridge_id
-            ${isDev ? '' : 'WHERE b.archived = false'}
+            WHERE b.archived = false
             GROUP BY b.id
             ORDER BY b.created_at DESC
         `);
         
-        console.log(`✅ Found ${result.rows.length} bridges in ${tenantSchema} for ${user.email}${isDev ? ' (Dev view: includes archived)' : ''}`);
+        console.log(`✅ Found ${result.rows.length} active bridges in ${tenantSchema} for ${user.email}`);
         res.json(result.rows);
     } catch (error) {
         console.error(`❌ Error in /api/bots for user ${req.userId}:`, error);
