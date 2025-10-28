@@ -189,10 +189,35 @@ class WhatsAppClientManager {
     }
 
     /**
-     * Stop and destroy a WhatsApp client for a bot
+     * Stop a WhatsApp client (preserves session for auto-reconnect)
+     */
+    async stopClient(botId, tenantSchema) {
+        console.log(`⏸️  Stopping WhatsApp client for bot ${botId} (preserving session)`);
+        
+        const clientState = this.clients.get(botId);
+        if (!clientState) {
+            console.log(`⚠️  No client found for bot ${botId}`);
+            return;
+        }
+
+        try {
+            await clientState.client.destroy();
+            this.clients.delete(botId);
+
+            // Update database (keep session intact)
+            await this.updateBotStatus(botId, tenantSchema, 'inactive', null, null, null);
+            
+            console.log(`✅ WhatsApp client stopped for bot ${botId} (session preserved)`);
+        } catch (error) {
+            console.error(`❌ Error stopping client for bot ${botId}:`, error);
+        }
+    }
+
+    /**
+     * Destroy a WhatsApp client and delete its session (for relink only)
      */
     async destroyClient(botId, tenantSchema) {
-        console.log(`🛑 Destroying WhatsApp client for bot ${botId}`);
+        console.log(`🗑️  Destroying WhatsApp client for bot ${botId} (deleting session)`);
         
         const clientState = this.clients.get(botId);
         if (!clientState) {
@@ -204,10 +229,11 @@ class WhatsAppClientManager {
             await clientState.client.destroy();
             this.clients.delete(botId);
             
-            // Clean up session directory
+            // Delete session directory (for relink/reset only)
             const sessionPath = path.join('.wwebjs_auth', `bot_${botId}`);
             if (fs.existsSync(sessionPath)) {
                 fs.rmSync(sessionPath, { recursive: true, force: true });
+                console.log(`🗑️  Deleted session directory: ${sessionPath}`);
             }
 
             // Update database
@@ -220,11 +246,11 @@ class WhatsAppClientManager {
     }
 
     /**
-     * Relink a bot (destroy and reinitialize)
+     * Relink a bot (destroy session and reinitialize for fresh QR code)
      */
     async relinkClient(botId, tenantSchema, onMessage) {
         console.log(`🔄 Relinking WhatsApp client for bot ${botId}`);
-        await this.destroyClient(botId, tenantSchema);
+        await this.destroyClient(botId, tenantSchema); // Full destroy with session deletion
         return await this.initializeClient(botId, tenantSchema, onMessage);
     }
 
@@ -242,16 +268,16 @@ class WhatsAppClientManager {
     }
 
     /**
-     * Cleanup all clients (for graceful shutdown)
+     * Cleanup all clients (for graceful shutdown - preserves sessions)
      */
     async cleanup() {
-        console.log('🧹 Cleaning up all WhatsApp clients...');
-        const destroyPromises = Array.from(this.clients.keys()).map(botId => {
+        console.log('🧹 Gracefully stopping all WhatsApp clients (preserving sessions)...');
+        const stopPromises = Array.from(this.clients.keys()).map(botId => {
             const state = this.clients.get(botId);
-            return this.destroyClient(botId, state.tenantSchema);
+            return this.stopClient(botId, state.tenantSchema); // Use stopClient, not destroyClient
         });
-        await Promise.all(destroyPromises);
-        console.log('✅ All WhatsApp clients cleaned up');
+        await Promise.all(stopPromises);
+        console.log('✅ All WhatsApp clients stopped (sessions preserved for auto-reconnect)');
     }
 }
 

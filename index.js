@@ -2695,17 +2695,17 @@ app.post('/api/bots/:id/start', requireRole('admin', 'write-only'), async (req, 
     }
 });
 
-// Stop WhatsApp session for a bot
+// Stop WhatsApp session for a bot (preserves session)
 app.delete('/api/bots/:id/stop', requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const tenantSchema = req.tenantContext?.tenant_schema || 'public';
         const { id } = req.params;
         
-        await whatsappManager.destroyClient(parseInt(id), tenantSchema);
+        await whatsappManager.stopClient(parseInt(id), tenantSchema);
         
         res.json({ 
             success: true, 
-            message: 'WhatsApp session stopped',
+            message: 'WhatsApp session stopped (will auto-reconnect on restart)',
             botId: id
         });
     } catch (error) {
