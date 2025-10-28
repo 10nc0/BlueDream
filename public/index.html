@@ -2477,7 +2477,26 @@
             animate();
         }
 
+        // Handle OAuth callback tokens from URL
+        function handleOAuthCallback() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const accessToken = urlParams.get('accessToken');
+            const refreshToken = urlParams.get('refreshToken');
+            
+            if (accessToken && refreshToken) {
+                // Save tokens to localStorage
+                localStorage.setItem('accessToken', accessToken);
+                localStorage.setItem('refreshToken', refreshToken);
+                
+                // Clean URL by removing query parameters
+                window.history.replaceState({}, document.title, window.location.pathname);
+                
+                console.log('✅ OAuth login successful - tokens saved');
+            }
+        }
+
         // Initialize
+        handleOAuthCallback();
         checkAuth().then(authenticated => {
             if (authenticated) {
                 loadBots();
