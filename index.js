@@ -2282,6 +2282,221 @@ app.get('/api/bots/:id/messages', requireAuth, async (req, res) => {
     }
 });
 
+// ===========================
+// ONBOARDING API
+// ===========================
+
+// Get onboarding status
+app.get('/api/onboarding/status', requireAuth, async (req, res) => {
+    try {
+        const result = await pool.query(
+            'SELECT onboarding_completed, settings FROM user_settings WHERE user_id = $1',
+            [req.userId]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.json({ completed: false, state: {} });
+        }
+        
+        res.json({
+            completed: result.rows[0].onboarding_completed,
+            state: result.rows[0].settings || {}
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Save onboarding progress
+app.post('/api/onboarding/status', requireAuth, async (req, res) => {
+    const { completed, state } = req.body;
+    
+    try {
+        await pool.query(`
+            INSERT INTO user_settings (user_id, onboarding_completed, settings)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id)
+            DO UPDATE SET 
+                onboarding_completed = $2,
+                settings = $3,
+                updated_at = NOW()
+        `, [req.userId, completed || false, JSON.stringify(state || {})]);
+        
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ===========================
+// ENHANCED SEARCH API
+// ===========================
+
+app.get('/api/messages/search', requireAuth, async (req, res) => {
+    const {
+        botId,
+        q,
+        dateFrom,
+        dateTo,
+        senderId,
+        messageType,
+        status,
+        regex
+    } = req.query;
+    
+    if (!botId) {
+        return res.status(400).json({ error: 'Bot ID is required' });
+    }
+    
+    try {
+        let query = 'SELECT * FROM messages WHERE bot_id = $1';
+        const params = [botId];
+        let paramCount = 1;
+        
+        // Text search
+        if (q) {
+            paramCount++;
+            if (regex === 'true' && req.userRole === 'admin') {
+                // Admin-only regex search with timeout
+                query += ` AND (message_content ~* $${paramCount} OR sender_name ~* $${paramCount} OR sender_contact ~* $${paramCount})`;
+                params.push(q);
+                
+                // Set statement timeout for regex queries (prevent expensive queries)
+                await pool.query('SET statement_timeout = 5000'); // 5 second timeout
+            } else {
+                // Standard LIKE search
+                query += ` AND (LOWER(message_content) LIKE $${paramCount} OR LOWER(sender_name) LIKE $${paramCount} OR sender_contact LIKE $${paramCount})`;
+                params.push(`%${q.toLowerCase()}%`);
+            }
+        }
+        
+        // Date range filter
+        if (dateFrom) {
+            paramCount++;
+            query += ` AND timestamp >= $${paramCount}`;
+            params.push(dateFrom);
+        }
+        
+        if (dateTo) {
+            paramCount++;
+            query += ` AND timestamp <= $${paramCount}`;
+            params.push(dateTo);
+        }
+        
+        // Sender filter
+        if (senderId) {
+            paramCount++;
+            query += ` AND sender_contact LIKE $${paramCount}`;
+            params.push(`%${senderId}%`);
+        }
+        
+        // Message type filter
+        if (messageType && messageType !== 'all') {
+            paramCount++;
+            query += ` AND media_type = $${paramCount}`;
+            params.push(messageType);
+        }
+        
+        // Status filter
+        if (status && status !== 'all') {
+            paramCount++;
+            query += ` AND discord_status = $${paramCount}`;
+            params.push(status);
+        }
+        
+        query += ' ORDER BY timestamp DESC LIMIT 500';
+        
+        const result = await pool.query(query, params);
+        
+        // Reset timeout
+        if (regex === 'true') {
+            await pool.query('SET statement_timeout = 0');
+        }
+        
+        res.json(result.rows);
+    } catch (error) {
+        // Reset timeout on error
+        await pool.query('SET statement_timeout = 0').catch(() => {});
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ===========================
+// ANALYTICS API
+// ===========================
+
+app.get('/api/analytics/daily', requireAuth, async (req, res) => {
+    const { days = 30 } = req.query;
+    
+    try {
+        // Get daily aggregates
+        const result = await pool.query(`
+            SELECT 
+                date,
+                SUM(total_messages) as total_messages,
+                SUM(failed_messages) as failed_messages,
+                SUM(rate_limit_events) as rate_limit_events,
+                AVG(avg_response_time_ms) as avg_response_time_ms
+            FROM message_analytics
+            WHERE date >= CURRENT_DATE - $1::integer
+            GROUP BY date
+            ORDER BY date ASC
+        `, [days]);
+        
+        // Get summary totals
+        const summaryResult = await pool.query(`
+            SELECT 
+                COUNT(*) as total_messages,
+                COUNT(*) FILTER (WHERE discord_status = 'failed') as failed_messages
+            FROM messages
+            WHERE timestamp >= CURRENT_DATE - $1::integer
+        `, [days]);
+        
+        const rateLimitResult = await pool.query(`
+            SELECT SUM(rate_limit_events) as rate_limit_events
+            FROM message_analytics
+            WHERE date >= CURRENT_DATE - $1::integer
+        `, [days]);
+        
+        res.json({
+            daily: result.rows,
+            summary: {
+                total_messages: parseInt(summaryResult.rows[0]?.total_messages || 0),
+                failed_messages: parseInt(summaryResult.rows[0]?.failed_messages || 0),
+                rate_limit_events: parseInt(rateLimitResult.rows[0]?.rate_limit_events || 0)
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update analytics (called periodically or on message insert)
+async function updateAnalytics(botId) {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        
+        const stats = await pool.query(`
+            SELECT 
+                COUNT(*) as total,
+                COUNT(*) FILTER (WHERE discord_status = 'failed') as failed
+            FROM messages
+            WHERE bot_id = $1 AND DATE(timestamp) = $2
+        `, [botId, today]);
+        
+        await pool.query(`
+            INSERT INTO message_analytics (date, bot_id, total_messages, failed_messages)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (date, bot_id)
+            DO UPDATE SET
+                total_messages = $3,
+                failed_messages = $4
+        `, [today, botId, stats.rows[0].total, stats.rows[0].failed]);
+    } catch (error) {
+        console.error('Failed to update analytics:', error);
+    }
+}
+
 app.listen(5000, '0.0.0.0', async () => {
     console.log('🌐 Dashboard available at http://localhost:5000');
     await initializeDatabase();
