@@ -892,7 +892,7 @@
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
                     ${bridges.map(bridge => `
-                        <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bot-id="${bridge.id}" onclick="selectBridge(${bridge.id})">
+                        <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bridge-id="${bridge.id}" onclick="selectBridge(${bridge.id})">
                             <span class="channel-name">${bridge.input_platform} → ${bridge.output_platform}</span>
                             <div class="channel-badges">
                                 ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
@@ -929,7 +929,7 @@
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
                     ${bridges.map(bridge => `
-                        <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bot-id="${bridge.id}" onclick="selectBridge(${bridge.id})">
+                        <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bridge-id="${bridge.id}" onclick="selectBridge(${bridge.id})">
                             <span class="channel-name">${bridge.input_platform} → ${bridge.output_platform}</span>
                             <div class="channel-badges">
                                 ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
@@ -1007,7 +1007,7 @@
                     <div class="discord-actions">
                         ${bridge.input_platform === 'WhatsApp' ? getWhatsAppActions() : ''}
                         <button class="btn-icon" onclick="editBridge(${bridge.id})" title="Edit Bridge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">✏️</button>
-                        <button class="btn-icon btn-danger" onclick="confirmDeleteBot(${bridge.id})" title="Delete Bridge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🗑️</button>
+                        <button class="btn-icon btn-danger" onclick="confirmDeleteBridge(${bridge.id})" title="Delete Bridge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🗑️</button>
                     </div>
                 </div>
 
@@ -1932,16 +1932,16 @@
             }
         }
 
-        async function confirmDeleteBot(bridgeId) {
+        async function confirmDeleteBridge(bridgeId) {
             // Convert to number to ensure proper comparison
             bridgeId = parseInt(bridgeId);
             const bridge = bridges.find(b => b.id === bridgeId);
-            if (!bot) {
-                console.error(`Bot ${bridgeId} not found in bots array`);
+            if (!bridge) {
+                console.error(`Bridge ${bridgeId} not found in bridges array`);
                 return;
             }
             
-            if (!confirm(`Are you sure you want to delete "${bridge.input_platform} → ${bridge.output_platform}" bridge? This action cannot be undone.`)) {
+            if (!confirm(`Are you sure you want to archive "${bridge.input_platform} → ${bridge.output_platform}" bridge?\n\nThis will hide it from your dashboard (all messages preserved).`)) {
                 return;
             }
             
@@ -1952,31 +1952,31 @@
                 
                 if (response.ok) {
                     // Animate bridge card deletion with liquid glass effect
-                    const botCard = document.querySelector(`.channel-item[data-bot-id="${bridgeId}"]`);
+                    const bridgeCard = document.querySelector(`.channel-item[data-bridge-id="${bridgeId}"]`);
                     if (bridgeCard) {
                         // Apply liquid glass delete animation
-                        botCard.style.transition = 'all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)';
-                        botCard.style.transform = 'scale(0.95)';
-                        botCard.style.opacity = '0.7';
-                        botCard.style.filter = 'blur(4px)';
+                        bridgeCard.style.transition = 'all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)';
+                        bridgeCard.style.transform = 'scale(0.95)';
+                        bridgeCard.style.opacity = '0.7';
+                        bridgeCard.style.filter = 'blur(4px)';
                         
                         // Second phase: shrink and fade out with glass effect
                         setTimeout(() => {
-                            botCard.style.transform = 'scale(0.85) translateX(-30px)';
-                            botCard.style.opacity = '0';
-                            botCard.style.filter = 'blur(15px)';
-                            botCard.style.maxHeight = '0';
-                            botCard.style.marginBottom = '0';
-                            botCard.style.paddingTop = '0';
-                            botCard.style.paddingBottom = '0';
-                            botCard.style.overflow = 'hidden';
+                            bridgeCard.style.transform = 'scale(0.85) translateX(-30px)';
+                            bridgeCard.style.opacity = '0';
+                            bridgeCard.style.filter = 'blur(15px)';
+                            bridgeCard.style.maxHeight = '0';
+                            bridgeCard.style.marginBottom = '0';
+                            bridgeCard.style.paddingTop = '0';
+                            bridgeCard.style.paddingBottom = '0';
+                            bridgeCard.style.overflow = 'hidden';
                         }, 150);
                         
                         // Remove from DOM and update state after animation
                         setTimeout(() => {
-                            botCard.remove();
+                            bridgeCard.remove();
                             
-                            // Update bots array and state
+                            // CRITICAL: Immediately remove from arrays to prevent loop-back
                             bridges = bridges.filter(b => b.id !== bridgeId);
                             filteredBridges = filteredBridges.filter(b => b.id !== bridgeId);
                             
@@ -1993,9 +1993,9 @@
                             updateBridgeCount();
                             
                             // Show success toast
-                            showToast('✅ Bridge deleted successfully', 'success');
+                            showToast('✅ Bridge archived successfully', 'success');
                             
-                            // If no bots left, show empty state
+                            // If no bridges left, show empty state
                             if (bridges.length === 0) {
                                 const sidebar = document.getElementById('bridgeSidebar');
                                 sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No bridges found</p>';
