@@ -148,23 +148,35 @@ async function fetchMediaFromServer(messageId) {
 // Load and render media for a message
 async function loadMedia(messageId) {
     const previewEl = document.getElementById(`media-preview-${messageId}`);
-    if (!previewEl) return;
+    if (!previewEl) {
+        console.error(`❌ Media preview element not found for message ${messageId}`);
+        return;
+    }
+    
+    console.log(`📥 Starting media load for message ${messageId}`);
     
     try {
         // Check cache first
         let mediaData = await getCachedMedia(messageId);
         
-        // If not cached, fetch from server
-        if (!mediaData) {
+        if (mediaData) {
+            console.log(`✅ Using cached media for message ${messageId}`);
+        } else {
+            console.log(`📡 Fetching media from server for message ${messageId}`);
+            // If not cached, fetch from server
             mediaData = await fetchMediaFromServer(messageId);
             // Cache for future use
             await cacheMedia(messageId, mediaData);
+            console.log(`✅ Cached media for message ${messageId}`);
         }
         
         // Render the media
+        console.log(`🎨 Rendering media for message ${messageId}`);
         renderMedia(previewEl, messageId, mediaData);
+        console.log(`✅ Media rendered successfully for message ${messageId}`);
         
     } catch (error) {
+        console.error(`❌ Error loading media for message ${messageId}:`, error);
         // Show error message
         previewEl.innerHTML = `<div class="media-error">Failed to load media: ${error.message}</div>`;
     }
@@ -246,6 +258,7 @@ function initMediaLazyLoading() {
             if (entry.isIntersecting) {
                 const messageId = entry.target.dataset.messageId;
                 if (messageId) {
+                    console.log(`📸 Loading media for message ${messageId}`);
                     loadMedia(messageId);
                     // Stop observing once loaded
                     mediaObserver.unobserve(entry.target);
@@ -259,13 +272,22 @@ function initMediaLazyLoading() {
     });
     
     // Observe all media preview elements
-    document.querySelectorAll('.discord-media-preview').forEach(el => {
+    const mediaElements = document.querySelectorAll('.discord-media-preview');
+    console.log(`📸 Found ${mediaElements.length} media elements to observe`);
+    
+    mediaElements.forEach(el => {
         const messageId = el.dataset.messageId;
         const loadingDiv = el.querySelector('.media-loading');
         
-        // If already loaded (has img/video/audio), skip
-        if (!loadingDiv) return;
+        console.log(`📸 Processing media element: messageId=${messageId}, hasLoadingDiv=${!!loadingDiv}`);
         
+        // If already loaded (has img/video/audio), skip
+        if (!loadingDiv) {
+            console.log(`📸 Skipping message ${messageId} - already loaded`);
+            return;
+        }
+        
+        console.log(`📸 Observing media element for message ${messageId}`);
         mediaObserver.observe(el);
     });
 }

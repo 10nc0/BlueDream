@@ -12,34 +12,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-    <!-- Global System Status Bar -->
-    <div class="system-status-bar">
-        <div style="display: flex; gap: 1rem;">
-            <div class="status-indicator">
-                <span class="status-dot healthy"></span>
-                <span>System: <strong id="systemStatus">Healthy</strong></span>
-            </div>
-            <div class="status-indicator">
-                <span>Uptime: <strong id="systemUptime">--</strong></span>
-            </div>
-            <div class="status-indicator">
-                <span>Active Sessions: <strong id="activeSessions">0</strong></span>
-            </div>
-            <div class="status-indicator">
-                <span>Bridges: <strong id="bridgeCount">0</strong></span>
-            </div>
-        </div>
-        <div style="font-size: 0.75rem; color: rgba(255, 255, 255, 0.6);">
-            <span id="currentTime"></span>
-        </div>
-    </div>
-
-    <!-- Compact Mode Toggle -->
-    <button class="compact-mode-toggle" onclick="toggleCompactMode()" title="Toggle compact mode for power users">
-        <span id="compactModeIcon">📐</span> <span id="compactModeText">Compact</span>
-    </button>
-
-
     <div class="header">
         <div class="header-left">
             <div class="status-indicators-vertical">
@@ -56,9 +28,12 @@
                     Bridges: <span id="bridgeCountCompact">0</span>
                 </div>
             </div>
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
                 <div class="animated-character">
                     <canvas id="hopCanvas" class="character-canvas" width="125" height="125"></canvas>
+                </div>
+                <div style="font-size: 0.75rem; color: #94a3b8; text-align: center;">
+                    <span id="currentTime">2025/10/28 - 3:00:00PM</span>
                 </div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 0.25rem;">
@@ -2300,8 +2275,10 @@
             const uptime = Date.now() - startTime;
             const hours = Math.floor(uptime / 3600000);
             const minutes = Math.floor((uptime % 3600000) / 60000);
-            document.getElementById('systemUptime').textContent = `${hours}h ${minutes}m`;
-            document.getElementById('systemUptimeCompact').textContent = `${hours}h ${minutes}m`;
+            
+            // Update uptime in compact indicators only
+            const uptimeEl = document.getElementById('systemUptimeCompact');
+            if (uptimeEl) uptimeEl.textContent = `${hours}h ${minutes}m`;
             
             // Update current time
             const now = new Date();
@@ -2313,17 +2290,18 @@
             const timeSeconds = String(now.getSeconds()).padStart(2, '0');
             const ampm = timeHours >= 12 ? 'PM' : 'AM';
             const displayHours = timeHours % 12 || 12;
-            document.getElementById('currentTime').textContent = `${year}/${month}/${day} - ${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
+            const currentTimeEl = document.getElementById('currentTime');
+            if (currentTimeEl) currentTimeEl.textContent = `${year}/${month}/${day} - ${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
             
-            // Update bridge count
-            document.getElementById('bridgeCount').textContent = bots.length;
-            document.getElementById('bridgeCountCompact').textContent = bots.length;
+            // Update bridge count in compact indicators only
+            const bridgeCountEl = document.getElementById('bridgeCountCompact');
+            if (bridgeCountEl) bridgeCountEl.textContent = bots.length;
             
-            // Update active sessions (will be populated when sessions load)
+            // Update active sessions in compact indicators only
             if (window.sessions) {
                 const activeCount = sessions.filter(s => s.is_active).length;
-                document.getElementById('activeSessions').textContent = activeCount;
-                document.getElementById('activeSessionsCompact').textContent = activeCount;
+                const activeSessionsEl = document.getElementById('activeSessionsCompact');
+                if (activeSessionsEl) activeSessionsEl.textContent = activeCount;
             }
         }
         
