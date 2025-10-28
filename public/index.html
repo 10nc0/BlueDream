@@ -907,7 +907,7 @@
                 renderBridgeDetail();
                 
                 // Always load messages for selected bridge to ensure they appear
-                loadBotMessages(selectedBridgeId, 1);
+                loadBridgeMessages(selectedBridgeId, 1);
             }
         }
 
@@ -925,10 +925,10 @@
                 groupedBots[bridge.input_platform].push(bridge);
             });
             
-            sidebar.innerHTML = Object.entries(groupedBots).map(([platform, bots]) => `
+            sidebar.innerHTML = Object.entries(groupedBots).map(([platform, platformBridges]) => `
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
-                    ${bridges.map(bridge => `
+                    ${platformBridges.map(bridge => `
                         <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bridge-id="${bridge.id}" onclick="selectBridge(${bridge.id})">
                             <span class="channel-name">${bridge.input_platform} → ${bridge.output_platform}</span>
                             <div class="channel-badges">
@@ -939,16 +939,16 @@
                 </div>
             `).join('');
             
-            // Render detail panel for selected bot
+            // Render detail panel for selected bridge
             await renderBridgeDetail();
             
-            // Always load messages for newly selected bot
-            await loadBotMessages(selectedBridgeId, 1);
+            // Always load messages for newly selected bridge
+            await loadBridgeMessages(selectedBridgeId, 1);
         }
 
         async function renderBridgeDetail() {
             const bridge = filteredBridges.find(b => b.id === selectedBridgeId);
-            if (!bot) return;
+            if (!bridge) return;
             
             // Get status colors based on thresholds
             const failedClass = getStatusColor(bridge.failed_count || 0);
@@ -1212,9 +1212,9 @@
 
                     ${totalPages > 1 ? `
                         <div style="margin-top: 1rem; display: flex; justify-content: center; gap: 0.5rem; align-items: center;">
-                            <button class="btn" ${page <= 1 ? 'disabled' : ''} onclick="loadBotMessages('${bridgeId}', ${page - 1})" style="padding: 0.375rem 0.75rem;">← Prev</button>
+                            <button class="btn" ${page <= 1 ? 'disabled' : ''} onclick="loadBridgeMessages('${bridgeId}', ${page - 1})" style="padding: 0.375rem 0.75rem;">← Prev</button>
                             <span style="color: #94a3b8; font-size: 0.875rem;">Page ${page} / ${totalPages}</span>
-                            <button class="btn" ${page >= totalPages ? 'disabled' : ''} onclick="loadBotMessages('${bridgeId}', ${page + 1})" style="padding: 0.375rem 0.75rem;">Next →</button>
+                            <button class="btn" ${page >= totalPages ? 'disabled' : ''} onclick="loadBridgeMessages('${bridgeId}', ${page + 1})" style="padding: 0.375rem 0.75rem;">Next →</button>
                         </div>
                     ` : ''}
                 </div>
@@ -2095,12 +2095,12 @@
                 
                 // Load messages if not cached
                 if (!messageCache[bridgeId]) {
-                    await loadBotMessages(bridgeId, 1);
+                    await loadBridgeMessages(bridgeId, 1);
                 }
             }
         }
         
-        async function loadBotMessages(bridgeId, page = 1) {
+        async function loadBridgeMessages(bridgeId, page = 1) {
             try {
                 console.log(`Loading messages for bridge ${bridgeId}...`);
                 const response = await authFetch(`/api/bridges/${bridgeId}/messages?page=${page}&limit=50`);
