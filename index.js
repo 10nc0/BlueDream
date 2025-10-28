@@ -2204,9 +2204,8 @@ app.get('/api/dev/bridges', requireAuth, requireRole('dev'), async (req, res) =>
                         $3::text as tenant_owner_email
                     FROM ${tenantSchema}.bridges b
                     LEFT JOIN ${tenantSchema}.messages m ON b.id = m.bridge_id
-                    WHERE b.archived = false
                     GROUP BY b.id
-                    ORDER BY b.created_at DESC
+                    ORDER BY b.archived ASC, b.created_at DESC
                 `, [tenant.tenant_id, tenantSchema, tenant.email]);
                 
                 allBridges.push(...bridgesResult.rows);

@@ -2961,22 +2961,34 @@
                                     ${escapeHtml(tenantData.ownerEmail)} • ${key}
                                 </div>
                             </div>
-                            <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 0.5rem; padding: 0.5rem 1rem;">
-                                <div style="color: #3b82f6; font-weight: 700; font-size: 1.25rem;">${tenantData.bridges.length}</div>
-                                <div style="color: #94a3b8; font-size: 0.75rem;">Bridge${tenantData.bridges.length === 1 ? '' : 's'}</div>
+                            <div style="display: flex; gap: 0.75rem;">
+                                <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 0.5rem; padding: 0.5rem 1rem;">
+                                    <div style="color: #3b82f6; font-weight: 700; font-size: 1.25rem;">${tenantData.bridges.filter(b => !b.archived).length}</div>
+                                    <div style="color: #94a3b8; font-size: 0.75rem;">Active</div>
+                                </div>
+                                ${tenantData.bridges.filter(b => b.archived).length > 0 ? `
+                                <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 0.5rem; padding: 0.5rem 1rem;">
+                                    <div style="color: #ef4444; font-weight: 700; font-size: 1.25rem;">${tenantData.bridges.filter(b => b.archived).length}</div>
+                                    <div style="color: #94a3b8; font-size: 0.75rem;">Archived</div>
+                                </div>
+                                ` : ''}
                             </div>
                         </div>
                         
                         <div style="display: grid; gap: 1rem;">
                             ${tenantData.bridges.map(bridge => `
-                                <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 0.5rem; padding: 1rem;">
+                                <div style="background: ${bridge.archived ? 'rgba(71, 85, 105, 0.15)' : 'rgba(255, 255, 255, 0.05)'}; border: 1px solid ${bridge.archived ? 'rgba(71, 85, 105, 0.3)' : 'rgba(255, 255, 255, 0.1)'}; border-radius: 0.5rem; padding: 1rem; opacity: ${bridge.archived ? '0.6' : '1'}; ${bridge.archived ? 'filter: grayscale(0.7);' : ''}">
                                     <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem;">
                                         <div style="flex: 1;">
-                                            <div style="color: white; font-weight: 600; font-size: 1rem; margin-bottom: 0.25rem;">
-                                                ${escapeHtml(bridge.name)}
+                                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                                                <div style="color: ${bridge.archived ? '#94a3b8' : 'white'}; font-weight: 600; font-size: 1rem; ${bridge.archived ? 'text-decoration: line-through;' : ''}">
+                                                    ${escapeHtml(bridge.name)}
+                                                </div>
+                                                ${bridge.archived ? '<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600; border: 1px solid rgba(239, 68, 68, 0.3);">ARCHIVED</span>' : ''}
                                             </div>
                                             <div style="color: #94a3b8; font-size: 0.875rem;">
                                                 ${bridge.input_platform} → ${bridge.output_platform} • Bot ID: ${bridge.id}
+                                                ${bridge.archived && bridge.archived_at ? ` • Archived: ${new Date(bridge.archived_at).toLocaleDateString()}` : ''}
                                             </div>
                                         </div>
                                         <div style="display: flex; align-items: center; gap: 0.5rem;">
