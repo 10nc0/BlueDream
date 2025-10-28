@@ -619,9 +619,9 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
         // Update message status based on results
         if (messageDbId) {
             if (successCount > 0) {
-                await updateMessageStatus(messageDbId, 'success', null, mediaData, options.mimetype);
+                await updateMessageStatus(pool, messageDbId, 'success', null, mediaData, options.mimetype);
             } else if (failures.length > 0) {
-                await updateMessageStatus(messageDbId, 'failed', failures.join('; '));
+                await updateMessageStatus(pool, messageDbId, 'failed', failures.join('; '));
             }
         }
         
@@ -630,15 +630,15 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
     } catch (error) {
         console.error('❌ Error sending to webhooks:', error.message);
         if (messageDbId) {
-            await updateMessageStatus(messageDbId, 'failed', error.message);
+            await updateMessageStatus(pool, messageDbId, 'failed', error.message);
         }
         throw error;
     }
 }
 
-async function saveMessage(message, botId = 1) {
+async function saveMessage(client, message, botId = 1) {
     try {
-        const result = await pool.query(
+        const result = await client.query(
             `INSERT INTO messages (bot_id, timestamp, sender_name, sender_contact, message_content, discord_status, discord_error, has_media, media_type, media_data, sender_photo_url)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING id`,
@@ -663,9 +663,9 @@ async function saveMessage(message, botId = 1) {
     }
 }
 
-async function updateMessageStatus(messageId, status, errorMessage = null, mediaData = null, mediaType = null) {
+async function updateMessageStatus(client, messageId, status, errorMessage = null, mediaData = null, mediaType = null) {
     try {
-        await pool.query(
+        await client.query(
             `UPDATE messages 
              SET discord_status = $1, 
                  discord_error = $2, 
@@ -680,7 +680,7 @@ async function updateMessageStatus(messageId, status, errorMessage = null, media
     }
 }
 
-async function getMessages(searchFilter = null, statusFilter = null) {
+async function getMessages(client, searchFilter = null, statusFilter = null) {
     try {
         let query = 'SELECT * FROM messages';
         const conditions = [];
@@ -709,7 +709,7 @@ async function getMessages(searchFilter = null, statusFilter = null) {
         
         query += ' ORDER BY timestamp DESC LIMIT 1000';
         
-        const result = await pool.query(query, params);
+        const result = await client.query(query, params);
         
         return result.rows.map(row => ({
             id: row.id,
@@ -730,9 +730,9 @@ async function getMessages(searchFilter = null, statusFilter = null) {
     }
 }
 
-async function getMessageStats() {
+async function getMessageStats(client) {
     try {
-        const result = await pool.query(`
+        const result = await client.query(`
             SELECT 
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE discord_status = 'success') as success,
@@ -958,7 +958,7 @@ function initializeWhatsAppClient() {
                 discordStatus: 'pending'
             };
             
-            messageDbId = await saveMessage(messageRecord);
+            messageDbId = await saveMessage(pool, messageRecord);
             
             // Check if this is an annotation for a recent media message
             let isAnnotation = false;
@@ -1059,7 +1059,7 @@ function initializeWhatsAppClient() {
                 } catch (mediaError) {
                     console.error('Error downloading media:', mediaError.message);
                     if (messageDbId) {
-                        await updateMessageStatus(messageDbId, 'failed', mediaError.message);
+                        await updateMessageStatus(pool, messageDbId, 'failed', mediaError.message);
                     }
                     return;
                 }
@@ -1072,7 +1072,7 @@ function initializeWhatsAppClient() {
         } catch (error) {
             console.error('❌ Error forwarding message to Discord:', error.message);
             if (messageDbId) {
-                await updateMessageStatus(messageDbId, 'failed', error.message);
+                await updateMessageStatus(pool, messageDbId, 'failed', error.message);
             }
         }
     });
@@ -1166,17 +1166,17 @@ async function createSessionRecord(userId, sessionId, req) {
 // ============ AUDIT LOGGING SYSTEM ============
 
 // Helper function to log audit events
-async function logAudit(req, actionType, targetType, targetId, targetEmail, details = {}) {
+async function logAudit(client, req, actionType, targetType, targetId, targetEmail, details = {}) {
     try {
         const actorUserId = req.session?.userId || null;
         let actorEmail = null;
         
         if (actorUserId) {
-            const userResult = await pool.query('SELECT email FROM users WHERE id = $1', [actorUserId]);
+            const userResult = await client.query('SELECT email FROM users WHERE id = $1', [actorUserId]);
             actorEmail = userResult.rows[0]?.email || null;
         }
         
-        await pool.query(`
+        await client.query(`
             INSERT INTO audit_logs (
                 actor_user_id, actor_email, action_type, target_type, 
                 target_id, target_email, details, ip_address, user_agent
@@ -1343,7 +1343,7 @@ app.post('/api/auth/login', async (req, res) => {
             await createSessionRecord(user.id, req.sessionID, req);
             
             // Log successful login
-            logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.email, {
+            logAudit(pool, req, 'LOGIN', 'USER', user.id.toString(), user.email, {
                 method: 'email_password',
                 role: user.role,
                 authType: 'jwt+cookie'
@@ -1498,7 +1498,7 @@ app.post('/api/auth/signup', async (req, res) => {
             await createSessionRecord(newUser.id, req.sessionID, req);
             
             // Log signup
-            logAudit(req, 'SIGNUP', 'USER', newUser.id.toString(), newUser.email, {
+            logAudit(pool, req, 'SIGNUP', 'USER', newUser.id.toString(), newUser.email, {
                 role: newUser.role,
                 is_genesis_admin: isGenesisAdmin,
                 tenant_id: tenantId,
@@ -1551,7 +1551,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
                 await createSessionRecord(user.id, req.sessionID, req);
                 
                 // Log Google OAuth login
-                logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.email, {
+                logAudit(pool, req, 'LOGIN', 'USER', user.id.toString(), user.email, {
                     method: 'google_oauth',
                     role: user.role,
                     authType: 'jwt+cookie'
@@ -1613,7 +1613,7 @@ app.post('/api/invites', requireAuth, async (req, res) => {
             maxUses
         );
         
-        logAudit(req, 'CREATE_INVITE', 'INVITE', token, req.user.email, {
+        logAudit(pool, req, 'CREATE_INVITE', 'INVITE', token, req.user.email, {
             tenant_id: tenantContext.tenant_id,
             target_role: targetRole,
             expires_in_days: expiresInDays,
@@ -1705,7 +1705,7 @@ app.delete('/api/invites/:id', requireAuth, async (req, res) => {
             WHERE id = $1 AND tenant_id = $2
         `, [id, tenantContext.tenant_id]);
         
-        logAudit(req, 'REVOKE_INVITE', 'INVITE', id, req.user.email, {
+        logAudit(pool, req, 'REVOKE_INVITE', 'INVITE', id, req.user.email, {
             tenant_id: tenantContext.tenant_id
         });
         
@@ -1842,7 +1842,7 @@ app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
         const newUser = result.rows[0];
         
         // Log user creation
-        await logAudit(req, 'CREATE_USER', 'USER', newUser.id.toString(), newUser.email || newUser.phone, {
+        await logAudit(pool, req, 'CREATE_USER', 'USER', newUser.id.toString(), newUser.email || newUser.phone, {
             role: newUser.role,
             created_with: email ? 'email' : 'phone'
         });
@@ -1912,7 +1912,7 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
         }
         
         // Log logout before destroying session
-        await logAudit(req, 'LOGOUT', 'USER', userId?.toString() || 'unknown', null, {});
+        await logAudit(pool, req, 'LOGOUT', 'USER', userId?.toString() || 'unknown', null, {});
         
         // Destroy session if it exists
         if (req.session) {
@@ -2020,7 +2020,7 @@ app.delete('/api/sessions/:id', requireRole('admin'), async (req, res) => {
         `, [session.session_id]);
         
         // Log session revocation
-        await logAudit(req, 'REVOKE_SESSION', 'SESSION', id.toString(), null, {
+        await logAudit(pool, req, 'REVOKE_SESSION', 'SESSION', id.toString(), null, {
             target_user_id: session.user_id,
             session_id: session.session_id
         });
@@ -2074,7 +2074,7 @@ app.post('/api/sessions/revoke-all', requireRole('admin'), async (req, res) => {
         }
         
         // Log mass revocation
-        await logAudit(req, 'REVOKE_ALL_SESSIONS', 'SESSION', userId || 'all', null, {
+        await logAudit(pool, req, 'REVOKE_ALL_SESSIONS', 'SESSION', userId || 'all', null, {
             count: sessionIds.length,
             target_user_id: userId || 'all'
         });
@@ -2246,7 +2246,7 @@ app.put('/api/users/:id/role', requireAuth, requireRole('admin'), async (req, re
         const updatedUser = result.rows[0];
         
         // Log role change
-        await logAudit(req, 'UPDATE_ROLE', 'USER', id, updatedUser.email, {
+        await logAudit(pool, req, 'UPDATE_ROLE', 'USER', id, updatedUser.email, {
             old_role: oldRole,
             new_role: role
         });
@@ -2278,7 +2278,7 @@ app.delete('/api/users/:id', requireAuth, requireRole('admin'), async (req, res)
         const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
         
         // Log user deletion
-        await logAudit(req, 'DELETE_USER', 'USER', id, deletedUser.email, {
+        await logAudit(pool, req, 'DELETE_USER', 'USER', id, deletedUser.email, {
             role: deletedUser.role
         });
         
@@ -2328,7 +2328,7 @@ app.put('/api/users/:id/email', requireRole('admin'), async (req, res) => {
         const updatedUser = result.rows[0];
         
         // Log email change
-        await logAudit(req, 'UPDATE_EMAIL', 'USER', id, updatedUser.email, {
+        await logAudit(pool, req, 'UPDATE_EMAIL', 'USER', id, updatedUser.email, {
             old_email: oldEmail,
             new_email: email
         });
@@ -2370,7 +2370,7 @@ app.put('/api/users/:id/password', requireRole('admin'), async (req, res) => {
         `, [hashedPassword, id]);
         
         // Log password change
-        await logAudit(req, 'UPDATE_PASSWORD', 'USER', id, user.email || user.phone, {
+        await logAudit(pool, req, 'UPDATE_PASSWORD', 'USER', id, user.email || user.phone, {
             updated_by_admin: true
         });
         
@@ -2470,7 +2470,7 @@ app.delete('/api/sessions/:sid', requireRole('admin'), async (req, res) => {
         const sessionInfo = sessionData.rows[0];
         
         // Log session revocation
-        await logAudit(req, 'REVOKE_SESSION', 'SESSION', sid, sessionInfo?.email || sessionInfo?.phone, {
+        await logAudit(pool, req, 'REVOKE_SESSION', 'SESSION', sid, sessionInfo?.email || sessionInfo?.phone, {
             target_user_id: sessionInfo?.user_id
         });
         
@@ -2484,13 +2484,19 @@ app.delete('/api/sessions/:sid', requireRole('admin'), async (req, res) => {
 // All routes below require authentication, with role-based access where specified
 
 app.get('/api/status', requireAuth, async (req, res) => {
-    const stats = await getMessageStats();
-    res.json({
-        whatsappReady,
-        botNumber: botNumber ? `+${botNumber}` : null,
-        hasQR: currentQR !== null,
-        messagesCount: stats.total
-    });
+    try {
+        const client = req.dbClient || pool;
+        const stats = await getMessageStats(client);
+        res.json({
+            whatsappReady,
+            botNumber: botNumber ? `+${botNumber}` : null,
+            hasQR: currentQR !== null,
+            messagesCount: stats.total
+        });
+    } catch (error) {
+        console.error('❌ Error in /api/status:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 app.get('/api/qr', requireAuth, (req, res) => {
@@ -2527,14 +2533,29 @@ app.post('/api/relink', requireRole('admin', 'write-only'), async (req, res) => 
 });
 
 app.get('/api/messages', requireAuth, async (req, res) => {
-    const { search, status } = req.query;
-    const filtered = await getMessages(search, status);
-    res.json(filtered);
+    try {
+        const client = req.dbClient || pool;
+        const userRole = req.tenantContext?.userRole || 'read-only';
+        const { search, status } = req.query;
+        
+        const filtered = await getMessages(client, search, status);
+        const sanitized = sanitizeForRole(filtered, userRole);
+        res.json(sanitized);
+    } catch (error) {
+        console.error('❌ Error in /api/messages:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 app.get('/api/stats', requireAuth, async (req, res) => {
-    const stats = await getMessageStats();
-    res.json(stats);
+    try {
+        const client = req.dbClient || pool;
+        const stats = await getMessageStats(client);
+        res.json(stats);
+    } catch (error) {
+        console.error('❌ Error in /api/stats:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // Bot management endpoints
@@ -2658,31 +2679,43 @@ app.get('/api/bots', requireAuth, async (req, res) => {
 
 app.post('/api/bots', requireRole('admin', 'write-only'), async (req, res) => {
     try {
+        const client = req.dbClient || pool;
+        const userRole = req.tenantContext?.userRole || 'read-only';
         const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags } = req.body;
-        const result = await pool.query(
+        
+        const result = await client.query(
             `INSERT INTO bots (name, input_platform, output_platform, input_credentials, output_credentials, contact_info, tags, status)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
             [name, inputPlatform, outputPlatform, inputCredentials || {}, outputCredentials || {}, contactInfo || null, tags || [], 'inactive']
         );
-        res.json(result.rows[0]);
+        
+        const sanitized = sanitizeForRole(result.rows[0], userRole);
+        res.json(sanitized);
     } catch (error) {
+        console.error('❌ Error in POST /api/bots:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
 app.put('/api/bots/:id', requireRole('admin', 'write-only'), async (req, res) => {
     try {
+        const client = req.dbClient || pool;
+        const userRole = req.tenantContext?.userRole || 'read-only';
         const { id } = req.params;
         const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status } = req.body;
-        const result = await pool.query(
+        
+        const result = await client.query(
             `UPDATE bots 
              SET name = $1, input_platform = $2, output_platform = $3, 
                  input_credentials = $4, output_credentials = $5, contact_info = $6, tags = $7, status = $8, updated_at = NOW()
              WHERE id = $9 RETURNING *`,
             [name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo || null, tags || [], status, id]
         );
-        res.json(result.rows[0]);
+        
+        const sanitized = sanitizeForRole(result.rows[0], userRole);
+        res.json(sanitized);
     } catch (error) {
+        console.error('❌ Error in PUT /api/bots/:id:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -2690,19 +2723,20 @@ app.put('/api/bots/:id', requireRole('admin', 'write-only'), async (req, res) =>
 // Delete bot (hard delete - removes bot and all messages)
 app.delete('/api/bots/:id', requireRole('admin'), async (req, res) => {
     try {
+        const client = req.dbClient || pool;
         const { id} = req.params;
         
         // Delete all messages first (foreign key constraint)
-        await pool.query('DELETE FROM messages WHERE bot_id = $1', [id]);
+        await client.query('DELETE FROM messages WHERE bot_id = $1', [id]);
         
         // Delete the bot
-        const result = await pool.query('DELETE FROM bots WHERE id = $1 RETURNING *', [id]);
+        const result = await client.query('DELETE FROM bots WHERE id = $1 RETURNING *', [id]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Bot not found' });
         }
         
-        logAudit(req, 'DELETE', 'BOT', id, null, {
+        logAudit(client, req, 'DELETE', 'BOT', id, null, {
             message: 'Bot and all associated messages deleted'
         });
         
@@ -2728,7 +2762,7 @@ app.post('/api/bots/:id/archive', requireRole('admin'), async (req, res) => {
         
         await pool.query('UPDATE bots SET archived = true, status = $1 WHERE id = $2', ['archived', id]);
         
-        logAudit(req, 'ARCHIVE', 'BOT', id, null, {
+        logAudit(pool, req, 'ARCHIVE', 'BOT', id, null, {
             message: 'Bot archived - message history preserved'
         });
         
@@ -2744,7 +2778,7 @@ app.post('/api/bots/:id/unarchive', requireRole('admin'), async (req, res) => {
         const { id } = req.params;
         await pool.query('UPDATE bots SET archived = false, status = $1 WHERE id = $2', ['inactive', id]);
         
-        logAudit(req, 'UNARCHIVE', 'BOT', id, null, {
+        logAudit(pool, req, 'UNARCHIVE', 'BOT', id, null, {
             message: 'Bot unarchived and restored'
         });
         
