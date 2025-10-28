@@ -543,15 +543,21 @@ async function initializeDatabase() {
 }
 
 // Helper function to send message to all configured webhooks (1-to-many support)
-async function sendToAllWebhooks(payload, options = {}, messageDbId = null, mediaData = null) {
+// CRITICAL: Uses tenant-aware lookup to get the correct bot's webhooks
+async function sendToAllWebhooks(payload, options = {}, messageDbId = null, mediaData = null, botId = null, tenantSchema = null) {
     try {
-        // Get webhooks from bot configuration
+        if (!botId || !tenantSchema) {
+            console.error('❌ sendToAllWebhooks called without botId or tenantSchema');
+            return;
+        }
+        
+        // Get webhooks from bot configuration (tenant-aware)
         const botResult = await pool.query(`
-            SELECT output_credentials FROM bots WHERE id = 1 LIMIT 1
-        `);
+            SELECT output_credentials FROM ${tenantSchema}.bots WHERE id = $1 LIMIT 1
+        `, [botId]);
         
         if (botResult.rows.length === 0) {
-            console.error('❌ No bot configuration found');
+            console.error(`❌ No bot configuration found for bot ${botId} in ${tenantSchema}`);
             return;
         }
         
@@ -932,7 +938,7 @@ async function createTenantAwareMessageHandler(message, botId, tenantSchema) {
                             mediaBuffer: buffer,
                             filename: filename,
                             mimetype: media.mimetype
-                        }, messageDbId, mediaData);
+                        }, messageDbId, mediaData, botId, tenantSchema);
                         
                         await tenantClient.query('COMMIT');
                         tenantClient.release();
@@ -951,7 +957,7 @@ async function createTenantAwareMessageHandler(message, botId, tenantSchema) {
             }
 
             // Send text-only message to Discord
-            await sendToAllWebhooks(discordPayload, {}, messageDbId);
+            await sendToAllWebhooks(discordPayload, {}, messageDbId, null, botId, tenantSchema);
             console.log(`✅ [Bot ${botId}] Forwarded message from ${senderName}`);
             
             await tenantClient.query('COMMIT');
