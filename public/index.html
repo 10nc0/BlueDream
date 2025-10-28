@@ -675,7 +675,7 @@
                         <div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>
                         <div class="discord-text">${escapeHtml(msg.message_content)}</div>
                         ${msg.has_media ? `
-                            <div class="discord-attachment">
+                            <div class="discord-attachment" onclick="showMediaPreview(${msg.id})" style="cursor: pointer;" title="Click to preview">
                                 <span class="attachment-icon">📎</span>
                                 <span class="attachment-type">${escapeHtml(msg.media_type || 'Attachment')}</span>
                             </div>
