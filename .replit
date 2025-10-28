@@ -36,7 +36,7 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 34241
+localPort = 33125
 externalPort = 3002
 
 [[ports]]
@@ -48,8 +48,8 @@ localPort = 37635
 externalPort = 3000
 
 [[ports]]
-localPort = 45621
-externalPort = 3003
+localPort = 43571
+externalPort = 4200
 
 [deployment]
 deploymentTarget = "cloudrun"

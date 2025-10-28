@@ -1239,7 +1239,7 @@
         }
 
         // Universal search state - shared across all search boxes
-        // Natural Language Date Parser
+        // Natural Language Date Parser with Excel format support
         function parseNaturalLanguageDate(query) {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -1278,7 +1278,6 @@
             
             const lowerQuery = query.toLowerCase().trim();
             
-            // Check for month names (e.g., "october", "in october", "october 2025")
             const months = {
                 'january': 0, 'jan': 0,
                 'february': 1, 'feb': 1,
@@ -1294,7 +1293,88 @@
                 'december': 11, 'dec': 11
             };
             
-            // Try to match month patterns
+            // Excel Format 1: MMM-YY (e.g., "Oct-24", "Jan-25")
+            const mmmYYMatch = lowerQuery.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*[\s-]?(\d{2})\b/i);
+            if (mmmYYMatch) {
+                const monthName = mmmYYMatch[1].toLowerCase();
+                const yearShort = parseInt(mmmYYMatch[2]);
+                const year = yearShort >= 0 && yearShort <= 50 ? 2000 + yearShort : 1900 + yearShort;
+                const monthIndex = months[monthName];
+                
+                if (monthIndex !== undefined) {
+                    const startDate = new Date(year, monthIndex, 1);
+                    const endDate = new Date(year, monthIndex + 1, 0);
+                    
+                    return {
+                        dateFrom: startDate.toISOString().split('T')[0],
+                        dateTo: endDate.toISOString().split('T')[0],
+                        context: `${monthName} ${year}`
+                    };
+                }
+            }
+            
+            // Excel Format 2: DD-MMM-YY (e.g., "28-Oct-24", "15-Jan-25")
+            const ddMmmYYMatch = lowerQuery.match(/\b(\d{1,2})[\s-](jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*[\s-](\d{2,4})\b/i);
+            if (ddMmmYYMatch) {
+                const day = parseInt(ddMmmYYMatch[1]);
+                const monthName = ddMmmYYMatch[2].toLowerCase();
+                let year = parseInt(ddMmmYYMatch[3]);
+                if (year < 100) {
+                    year = year >= 0 && year <= 50 ? 2000 + year : 1900 + year;
+                }
+                const monthIndex = months[monthName];
+                
+                if (monthIndex !== undefined) {
+                    const targetDate = new Date(year, monthIndex, day);
+                    
+                    return {
+                        dateFrom: targetDate.toISOString().split('T')[0],
+                        dateTo: targetDate.toISOString().split('T')[0],
+                        context: `${day} ${monthName} ${year}`
+                    };
+                }
+            }
+            
+            // Excel Format 3: YYYY-MM-DD (ISO format, e.g., "2024-10-28")
+            const isoMatch = lowerQuery.match(/\b(20\d{2})[/-](\d{1,2})[/-](\d{1,2})\b/);
+            if (isoMatch) {
+                const year = parseInt(isoMatch[1]);
+                const month = parseInt(isoMatch[2]) - 1;
+                const day = parseInt(isoMatch[3]);
+                const targetDate = new Date(year, month, day);
+                
+                return {
+                    dateFrom: targetDate.toISOString().split('T')[0],
+                    dateTo: targetDate.toISOString().split('T')[0],
+                    context: targetDate.toISOString().split('T')[0]
+                };
+            }
+            
+            // Excel Format 4: MM/DD/YYYY or DD/MM/YYYY (e.g., "10/28/2024")
+            const slashMatch = lowerQuery.match(/\b(\d{1,2})[\/](\d{1,2})[\/](20\d{2})\b/);
+            if (slashMatch) {
+                const first = parseInt(slashMatch[1]);
+                const second = parseInt(slashMatch[2]);
+                const year = parseInt(slashMatch[3]);
+                
+                // Try MM/DD/YYYY first (US format)
+                let targetDate = new Date(year, first - 1, second);
+                let format = 'MM/DD/YYYY';
+                
+                // If month is > 12, it must be DD/MM/YYYY
+                if (first > 12) {
+                    targetDate = new Date(year, second - 1, first);
+                    format = 'DD/MM/YYYY';
+                }
+                
+                return {
+                    dateFrom: targetDate.toISOString().split('T')[0],
+                    dateTo: targetDate.toISOString().split('T')[0],
+                    context: targetDate.toISOString().split('T')[0]
+                };
+            }
+            
+            // Try to match month patterns (e.g., "october", "in october", "october 2025")
             for (const [monthName, monthIndex] of Object.entries(months)) {
                 const monthRegex = new RegExp(`\\b${monthName}\\b`, 'i');
                 if (monthRegex.test(lowerQuery)) {
