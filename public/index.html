@@ -1375,11 +1375,13 @@
                 
                 modalCaption.textContent = `${data.sender_name || 'Unknown'} - ${data.media_type || 'Media'}`;
                 
-                if (data.media_type?.startsWith('image/')) {
+                // Handle both simple types ("image") and MIME types ("image/jpeg")
+                const mediaType = (data.media_type || '').toLowerCase();
+                if (mediaType.includes('image')) {
                     modalContent.innerHTML = `<img src="${data.media_data}" alt="Media Preview">`;
-                } else if (data.media_type?.startsWith('video/')) {
+                } else if (mediaType.includes('video')) {
                     modalContent.innerHTML = `<video controls autoplay><source src="${data.media_data}" type="${data.media_type}"></video>`;
-                } else if (data.media_type?.startsWith('audio/')) {
+                } else if (mediaType.includes('audio')) {
                     modalContent.innerHTML = `<audio controls autoplay><source src="${data.media_data}" type="${data.media_type}"></audio>`;
                 } else {
                     modalContent.innerHTML = `<div style="color: white; padding: 2rem;">Preview not available for ${data.media_type}</div>`;
