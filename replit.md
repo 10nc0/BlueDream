@@ -3,27 +3,34 @@
 ## Overview
 Nyan Bridge is a professional, multi-platform messaging bridge designed to connect WhatsApp to platforms like Discord and Telegram. It features robust authentication, permanent message retention (write-only), and a PostgreSQL database for storage. The project is deployed as a **SaaS application** where all users access the same instance via a public URL. Its core capabilities include multi-user authentication, 1-to-many output forwarding, media support, and comprehensive audit logging, ensuring messages and bot activities are permanently recorded and accessible.
 
-## 🌐 Deployment Model: SaaS Application
+## 🌐 Deployment Model: Multi-Tenant SaaS Application
 
-**This is a deployed web app, NOT a template for forking.**
+**This is a deployed web app with fractalized database architecture, NOT a template for forking.**
 
 ### How It Works
 - **One Deployment**: Single instance hosted on Replit Autoscale
-- **One Database**: All users share the same PostgreSQL database
+- **Fractalized Database**: Each user signup creates an **isolated PostgreSQL schema** (tenant_1, tenant_2, etc.)
 - **Public URL**: Users visit your deployed site (e.g., `nyan-bridge.replit.app`)
-- **Multi-User**: Users sign up and create accounts on YOUR instance
-- **Genesis Admin**: First user to sign up becomes admin (you)
+- **100% Tenant Isolation**: Each Genesis admin has their own isolated database schema with dedicated DB clients
+- **Genesis Admin Per Tenant**: Each signup creates a new tenant where that user becomes the Genesis admin
+
+### Database Architecture (Fractalized Multi-Tenancy)
+- **Global Schema (`public`)**: Core authentication tables (`users`, `sessions`, `audit_logs`)
+- **Tenant Schemas (`tenant_X`)**: Isolated per-tenant tables (`bots`, `messages`, `users`)
+- **Complete Isolation**: Tenants CANNOT see each other's data - enforced by transaction-scoped `SET LOCAL search_path`
+- **Dedicated DB Clients**: Each tenant has its own database client pool for true horizontal isolation
 
 ### User Flow
-1. **You (Developer)**: Deploy the app → Become Genesis admin
-2. **End Users**: Visit your URL → Sign up → Use the bridge
-3. **You (Admin)**: Manage users, assign roles, monitor activity
+1. **New User Signs Up** → System creates isolated `tenant_X` schema → User becomes Genesis admin of their tenant
+2. **Genesis Admin** → Creates bots, starts WhatsApp sessions, manages their tenant → **Starts with 0 bots**
+3. **Additional Users** → Genesis admin can invite users to their tenant with role-based permissions (admin, read-only, write-only)
 
 ### No Forking Required
 Users do NOT fork the code. They simply:
 - Visit your deployed website
 - Create an account (email or Google OAuth)
-- Start using the messaging bridge
+- Become Genesis admin of their own **isolated tenant**
+- Create and manage their own bots independently
 
 ## User Preferences
 - **Design**: Apple glassmorphism aesthetic with Discord-style message layout
@@ -41,8 +48,17 @@ The dashboard is a Single Page Application (SPA) featuring an Apple glassmorphis
 - **Backend**: Node.js with Express.
 - **Frontend**: SPA with client-side authentication handling.
 - **Authentication**: Dual-authentication system using JWT tokens stored in `localStorage` (for Safari/iPad compatibility) and session cookies. It supports multi-user authentication with role-based access control (admin, read-only, write-only) and includes an in-progress Google OAuth integration.
-- **Database**: PostgreSQL (Neon-backed Replit database) for permanent retention of all data, including messages, users, sessions, bots, and audit logs.
-- **WhatsApp Integration**: Utilizes `whatsapp-web.js` to interact with the WhatsApp Web protocol.
+- **Database**: PostgreSQL (Neon-backed Replit database) with **fractalized multi-tenancy**:
+  - **Global Schema**: `public` schema contains `users`, `sessions`, `audit_logs`
+  - **Tenant Schemas**: Each user signup creates isolated `tenant_X` schema with `bots`, `messages`, `users`
+  - **Horizontal Isolation**: Dedicated database clients per tenant with transaction-scoped `SET LOCAL search_path`
+  - **Dev Access**: Special dev user (`phi_dao@pm.me`) has global cross-tenant access for debugging
+- **WhatsApp Integration**: Multi-instance architecture using `whatsapp-web.js`:
+  - **WhatsAppClientManager**: Manages multiple independent WhatsApp sessions (one per bot)
+  - **Per-Bot Sessions**: Each bot has its own session stored in `.wwebjs_auth/bot_{botId}/`
+  - **Session Persistence**: Sessions survive server restarts (no QR re-scan needed)
+  - **Tenant-Aware Routing**: Messages automatically route to correct tenant schema based on bot ownership
+  - **Bot-Level API**: Start, stop, relink WhatsApp sessions independently per bot
 - **Discord Integration**: Uses Discord webhooks for forwarding messages.
 - **Session Management**: `express-session` with a PostgreSQL store.
 - **Media Handling**: Supports forwarding of images, videos, and documents. Media is lazy-loaded with an `IntersectionObserver` and cached using a triple-layer system (memory, IndexedDB, server API).
@@ -50,17 +66,31 @@ The dashboard is a Single Page Application (SPA) featuring an Apple glassmorphis
 - **Data Retention**: Messages are write-only; no DELETE operations are permitted except for bot deletion, which cascades to associated messages.
 
 ### Feature Specifications
-- **Multi-Platform Bridge**: WhatsApp to Discord, extensible to Telegram.
-- **1-to-Many Output**: A single bot can forward messages to multiple destinations.
-- **Web Dashboard**: Professional UI with real-time updates and Discord-style message feed.
-- **Audit Logging**: Comprehensive tracking of session activities, authentication events, and CRUD operations.
-- **Admin Panel**: An admin-only interface for monitoring users, sessions, and audit logs.
-- **Quick-Start Wizard**: Guides first-time users through the initial setup process.
+- **Multi-Tenant SaaS**: Complete horizontal tenant isolation with fractalized database architecture
+- **Multi-Platform Bridge**: WhatsApp to Discord, extensible to Telegram
+- **Per-Bot WhatsApp Sessions**: Each bot has independent WhatsApp session with persistent credentials
+- **1-to-Many Output**: A single bot can forward messages to multiple destinations
+- **Web Dashboard**: Professional UI with real-time updates, Discord-style message feed, and per-bot WhatsApp controls
+- **WhatsApp Session Management**: Start/Stop/Relink buttons, status badges (Connected, Scan QR, Inactive, etc.)
+- **Audit Logging**: Comprehensive tracking of session activities, authentication events, and CRUD operations
+- **Admin Panel**: An admin-only interface for monitoring users, sessions, and audit logs (per-tenant)
+- **Quick-Start Wizard**: Guides first-time users through the initial setup process
 
 ### System Design Choices
-- **Safari/iPad Compatibility**: Achieved by relying on JWT in `localStorage` for primary authentication, addressing ITP cookie blocking.
-- **Permanent Data Retention**: Ensures no message data is ever lost by disallowing deletion (except for bot cascade).
-- **Scalability**: Designed for potential Autoscale deployment on Replit, with health checks and dynamic port configuration.
+- **Multi-Tenant Isolation**: Fractalized database architecture ensures Genesis admins cannot see other tenants' data
+- **Per-Bot WhatsApp Sessions**: Each bot creates its own WhatsApp session (no shared global bot)
+- **Session Persistence**: WhatsApp sessions survive server restarts via LocalAuth storage in `.wwebjs_auth/bot_{botId}/`
+- **All Admins Start with 0 Bots**: No pre-created bots - each admin creates their own from scratch
+- **Safari/iPad Compatibility**: Achieved by relying on JWT in `localStorage` for primary authentication, addressing ITP cookie blocking
+- **Permanent Data Retention**: Ensures no message data is ever lost by disallowing deletion (except for bot cascade)
+- **Scalability**: Designed for potential Autoscale deployment on Replit, with health checks and dynamic port configuration
+
+### Key Files
+- **`whatsapp-client-manager.js`**: Multi-instance WhatsApp client manager (one per bot)
+- **`tenant-middleware.js`**: Tenant context middleware for request isolation
+- **`tenant-manager.js`**: Database client pool manager with per-tenant isolation
+- **`index.js`**: Main Express server with bot-level WhatsApp API endpoints
+- **`public/index.html`**: SPA dashboard with per-bot WhatsApp controls (Start, Stop, Relink, QR)
 
 ## External Dependencies
 - **Database**: PostgreSQL (specifically Neon-backed Replit database)
