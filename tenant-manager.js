@@ -382,21 +382,24 @@ class TenantManager {
         try {
             await client.query('BEGIN');
 
+            // Use 'tenant_0' as placeholder (matches CHECK constraint pattern)
             const tenantResult = await client.query(`
                 INSERT INTO core.tenant_catalog (genesis_user_id, tenant_schema)
-                VALUES ($1, 'temp')
+                VALUES ($1, 'tenant_0')
                 RETURNING id
             `, [genesisUserId]);
 
             const tenantId = tenantResult.rows[0].id;
             const schemaName = this.sanitizeSchemaName(tenantId);
 
+            // Update with correct schema name
             await client.query(`
                 UPDATE core.tenant_catalog 
                 SET tenant_schema = $1, updated_at = NOW()
                 WHERE id = $2
             `, [schemaName, tenantId]);
 
+            // Link user to tenant
             await client.query(`
                 UPDATE users 
                 SET tenant_id = $1, is_genesis_admin = true, updated_at = NOW()
@@ -405,6 +408,7 @@ class TenantManager {
 
             await client.query('COMMIT');
 
+            // Create the actual tenant schema
             await this.createTenantSchema(tenantId);
 
             console.log(`✅ Created tenant ${tenantId} with genesis user ${genesisUserId}`);
