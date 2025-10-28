@@ -85,13 +85,13 @@ app.get('/login.html', (req, res) => {
     res.sendFile(__dirname + '/public/login.html');
 });
 
-// Protect main dashboard - require authentication
-app.get('/', requireAuth, (req, res) => {
+// Serve main dashboard - client-side JWT auth will handle access control
+app.get('/', (req, res) => {
     res.sendFile(__dirname + '/public/index.html');
 });
 
-// Block direct access to index.html - require authentication
-app.get('/index.html', requireAuth, (req, res) => {
+// Serve index.html - client-side JWT auth will handle access control
+app.get('/index.html', (req, res) => {
     res.sendFile(__dirname + '/public/index.html');
 });
 
