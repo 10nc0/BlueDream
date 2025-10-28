@@ -1278,6 +1278,14 @@
             
             const lowerQuery = query.toLowerCase().trim();
             
+            // Helper to format dates in local timezone
+            const formatDate = (d) => {
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            };
+            
             const months = {
                 'january': 0, 'jan': 0,
                 'february': 1, 'feb': 1,
@@ -1306,8 +1314,8 @@
                     const endDate = new Date(year, monthIndex + 1, 0);
                     
                     return {
-                        dateFrom: startDate.toISOString().split('T')[0],
-                        dateTo: endDate.toISOString().split('T')[0],
+                        dateFrom: formatDate(startDate),
+                        dateTo: formatDate(endDate),
                         context: `${monthName} ${year}`
                     };
                 }
@@ -1328,8 +1336,8 @@
                     const targetDate = new Date(year, monthIndex, day);
                     
                     return {
-                        dateFrom: targetDate.toISOString().split('T')[0],
-                        dateTo: targetDate.toISOString().split('T')[0],
+                        dateFrom: formatDate(targetDate),
+                        dateTo: formatDate(targetDate),
                         context: `${day} ${monthName} ${year}`
                     };
                 }
@@ -1344,9 +1352,9 @@
                 const targetDate = new Date(year, month, day);
                 
                 return {
-                    dateFrom: targetDate.toISOString().split('T')[0],
-                    dateTo: targetDate.toISOString().split('T')[0],
-                    context: targetDate.toISOString().split('T')[0]
+                    dateFrom: formatDate(targetDate),
+                    dateTo: formatDate(targetDate),
+                    context: formatDate(targetDate)
                 };
             }
             
@@ -1359,18 +1367,16 @@
                 
                 // Try MM/DD/YYYY first (US format)
                 let targetDate = new Date(year, first - 1, second);
-                let format = 'MM/DD/YYYY';
                 
                 // If month is > 12, it must be DD/MM/YYYY
                 if (first > 12) {
                     targetDate = new Date(year, second - 1, first);
-                    format = 'DD/MM/YYYY';
                 }
                 
                 return {
-                    dateFrom: targetDate.toISOString().split('T')[0],
-                    dateTo: targetDate.toISOString().split('T')[0],
-                    context: targetDate.toISOString().split('T')[0]
+                    dateFrom: formatDate(targetDate),
+                    dateTo: formatDate(targetDate),
+                    context: formatDate(targetDate)
                 };
             }
             
@@ -1383,11 +1389,11 @@
                     const year = yearMatch ? parseInt(yearMatch[1]) : today.getFullYear();
                     
                     const startDate = new Date(year, monthIndex, 1);
-                    const endDate = new Date(year, monthIndex + 1, 0); // Last day of month
+                    const endDate = new Date(year, monthIndex + 1, 0);
                     
                     return {
-                        dateFrom: startDate.toISOString().split('T')[0],
-                        dateTo: endDate.toISOString().split('T')[0],
+                        dateFrom: formatDate(startDate),
+                        dateTo: formatDate(endDate),
                         context: yearMatch ? `${monthName} ${year}` : monthName
                     };
                 }
@@ -1397,8 +1403,8 @@
             for (const [pattern, dates] of Object.entries(patterns)) {
                 if (lowerQuery.includes(pattern)) {
                     return {
-                        dateFrom: dates.start.toISOString().split('T')[0],
-                        dateTo: dates.end.toISOString().split('T')[0],
+                        dateFrom: formatDate(dates.start),
+                        dateTo: formatDate(dates.end),
                         context: pattern
                     };
                 }
@@ -1469,22 +1475,15 @@
             filteredBots = bots.filter(bot => {
                 // Search match using universal search function
                 let matchesSearch = true;
-                if (searchTerm) {
-                    // Remove date keywords from search for text matching
-                    let cleanSearchTerm = searchTerm;
-                    if (naturalDateRange) {
-                        cleanSearchTerm = searchTerm.replace(new RegExp(naturalDateRange.context, 'gi'), '').trim();
-                    }
-                    
-                    if (cleanSearchTerm) {
-                        const searchableText = [
-                            bot.input_platform,
-                            bot.output_platform,
-                            bot.contact_info || '',
-                            ...(bot.tags || [])
-                        ].join(' ');
-                        matchesSearch = window.searchState.performSearch(cleanSearchTerm, searchableText);
-                    }
+                if (searchTerm && !naturalDateRange) {
+                    // Only filter by text if NOT a pure date search
+                    const searchableText = [
+                        bot.input_platform,
+                        bot.output_platform,
+                        bot.contact_info || '',
+                        ...(bot.tags || [])
+                    ].join(' ');
+                    matchesSearch = window.searchState.performSearch(searchTerm, searchableText);
                 }
                 
                 const matchesPlatform = !platformFilter || bot.input_platform === platformFilter;
