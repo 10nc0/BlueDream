@@ -119,8 +119,8 @@ body {
 
 .animated-character {
   position: relative;
-  width: clamp(36px, 8vw, 48px);
-  height: clamp(36px, 8vw, 48px);
+  width: clamp(60px, 15vw, 100px);
+  height: clamp(60px, 15vw, 100px);
   z-index: var(--z-elevated);
   flex-shrink: 0;
 }
