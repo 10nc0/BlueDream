@@ -11,31 +11,31 @@ class WhatsAppClientManager {
     constructor(pool, chromiumPath) {
         this.pool = pool;
         this.chromiumPath = chromiumPath;
-        this.clients = new Map(); // botId -> { client, status, qrCode, phoneNumber }
-        this.messageHandlers = new Map(); // botId -> message handler function
+        this.clients = new Map(); // bridgeId -> { client, status, qrCode, phoneNumber }
+        this.messageHandlers = new Map(); // bridgeId -> message handler function
     }
 
     /**
      * Initialize a WhatsApp client for a specific bot
-     * @param {number} botId - The bot ID
+     * @param {number} bridgeId - The bridge ID
      * @param {string} tenantSchema - The tenant schema (e.g., 'tenant_3', 'public')
      * @param {Function} onMessage - Message handler callback
      */
-    async initializeClient(botId, tenantSchema, onMessage) {
-        console.log(`🔧 Initializing WhatsApp client for bot ${botId} (${tenantSchema})`);
+    async initializeClient(bridgeId, tenantSchema, onMessage) {
+        console.log(`🔧 Initializing WhatsApp client for bridge ${bridgeId} (${tenantSchema})`);
 
         // Check if client already exists
-        if (this.clients.has(botId)) {
-            const existing = this.clients.get(botId);
+        if (this.clients.has(bridgeId)) {
+            const existing = this.clients.get(bridgeId);
             if (existing.status === 'ready') {
-                console.log(`✅ WhatsApp client for bot ${botId} already active`);
+                console.log(`✅ WhatsApp client for bridge ${bridgeId} already active`);
                 return existing;
             }
         }
 
         try {
             // Create session directory for this bot
-            const sessionPath = path.join('.wwebjs_auth', `bot_${botId}`);
+            const sessionPath = path.join('.wwebjs_auth', `bridge_${bridgeId}`);
             if (!fs.existsSync(sessionPath)) {
                 fs.mkdirSync(sessionPath, { recursive: true });
             }
@@ -43,7 +43,7 @@ class WhatsAppClientManager {
             // Create WhatsApp client with LocalAuth for this bot
             const client = new Client({
                 authStrategy: new LocalAuth({
-                    clientId: `bot_${botId}`,
+                    clientId: `bridge_${bridgeId}`,
                     dataPath: './.wwebjs_auth'
                 }),
                 puppeteer: {
@@ -68,23 +68,23 @@ class WhatsAppClientManager {
                 qrCode: null,
                 phoneNumber: null,
                 tenantSchema,
-                botId
+                bridgeId
             };
-            this.clients.set(botId, clientState);
+            this.clients.set(bridgeId, clientState);
 
             // QR Code event
             client.on('qr', async (qr) => {
-                console.log(`📱 QR Code generated for bot ${botId}`);
+                console.log(`📱 QR Code generated for bridge ${bridgeId}`);
                 clientState.qrCode = qr;
                 clientState.status = 'qr_ready';
 
-                // Update bot status in database
-                await this.updateBotStatus(botId, tenantSchema, 'qr_ready', qr, null);
+                // Update bridge status in database
+                await this.updateBotStatus(bridgeId, tenantSchema, 'qr_ready', qr, null);
             });
 
             // Ready event
             client.on('ready', async () => {
-                console.log(`✅ WhatsApp client ready for bot ${botId}`);
+                console.log(`✅ WhatsApp client ready for bridge ${bridgeId}`);
                 const info = client.info;
                 const phoneNumber = info.wid.user;
                 
@@ -92,41 +92,41 @@ class WhatsAppClientManager {
                 clientState.phoneNumber = `+${phoneNumber}`;
                 clientState.qrCode = null;
 
-                // Update bot in database
-                await this.updateBotStatus(botId, tenantSchema, 'ready', null, `+${phoneNumber}`);
+                // Update bridge in database
+                await this.updateBotStatus(bridgeId, tenantSchema, 'ready', null, `+${phoneNumber}`);
                 
-                console.log(`📱 Bot ${botId} WhatsApp Number: +${phoneNumber}`);
+                console.log(`📱 Bridge ${bridgeId} WhatsApp Number: +${phoneNumber}`);
             });
 
             // Authenticated event
             client.on('authenticated', async () => {
-                console.log(`🔐 Bot ${botId} authenticated successfully`);
+                console.log(`🔐 Bridge ${bridgeId} authenticated successfully`);
                 clientState.status = 'authenticated';
-                await this.updateBotStatus(botId, tenantSchema, 'authenticated', null, null);
+                await this.updateBotStatus(bridgeId, tenantSchema, 'authenticated', null, null);
             });
 
             // Auth failure event
             client.on('auth_failure', async (error) => {
-                console.error(`❌ Authentication failed for bot ${botId}:`, error);
+                console.error(`❌ Authentication failed for bridge ${bridgeId}:`, error);
                 clientState.status = 'auth_failed';
-                await this.updateBotStatus(botId, tenantSchema, 'auth_failed', null, null, error.message);
+                await this.updateBotStatus(bridgeId, tenantSchema, 'auth_failed', null, null, error.message);
             });
 
             // Disconnected event
             client.on('disconnected', async (reason) => {
-                console.log(`🔌 Bot ${botId} disconnected:`, reason);
+                console.log(`🔌 Bridge ${bridgeId} disconnected:`, reason);
                 clientState.status = 'disconnected';
-                await this.updateBotStatus(botId, tenantSchema, 'disconnected', null, null, reason);
+                await this.updateBotStatus(bridgeId, tenantSchema, 'disconnected', null, null, reason);
             });
 
             // Message event - route to tenant-specific handler
             client.on('message', async (message) => {
                 try {
                     if (onMessage) {
-                        await onMessage(message, botId, tenantSchema);
+                        await onMessage(message, bridgeId, tenantSchema);
                     }
                 } catch (error) {
-                    console.error(`❌ Error handling message for bot ${botId}:`, error);
+                    console.error(`❌ Error handling message for bridge ${bridgeId}:`, error);
                 }
             });
 
@@ -135,16 +135,16 @@ class WhatsAppClientManager {
             
             return clientState;
         } catch (error) {
-            console.error(`❌ Failed to initialize WhatsApp client for bot ${botId}:`, error);
-            await this.updateBotStatus(botId, tenantSchema, 'error', null, null, error.message);
+            console.error(`❌ Failed to initialize WhatsApp client for bridge ${bridgeId}:`, error);
+            await this.updateBotStatus(bridgeId, tenantSchema, 'error', null, null, error.message);
             throw error;
         }
     }
 
     /**
-     * Update bot status in database (tenant-aware)
+     * Update bridge status in database (tenant-aware)
      */
-    async updateBotStatus(botId, tenantSchema, status, qrCode, contactInfo, errorMessage) {
+    async updateBotStatus(bridgeId, tenantSchema, status, qrCode, contactInfo, errorMessage) {
         try {
             const client = await this.pool.connect();
             try {
@@ -158,7 +158,7 @@ class WhatsAppClientManager {
                         contact_info = COALESCE($2, contact_info),
                         updated_at = NOW()
                     WHERE id = $3
-                `, [status, contactInfo, botId]);
+                `, [status, contactInfo, bridgeId]);
                 
                 await client.query('COMMIT');
             } catch (err) {
@@ -168,97 +168,97 @@ class WhatsAppClientManager {
                 client.release();
             }
         } catch (error) {
-            console.error(`Error updating bot ${botId} status:`, error);
+            console.error(`Error updating bridge ${bridgeId} status:`, error);
         }
     }
 
     /**
      * Get client state for a bot
      */
-    getClient(botId) {
-        return this.clients.get(botId);
+    getClient(bridgeId) {
+        return this.clients.get(bridgeId);
     }
 
     /**
      * Get QR code for a bot
      */
-    getQRCode(botId) {
-        const clientState = this.clients.get(botId);
+    getQRCode(bridgeId) {
+        const clientState = this.clients.get(bridgeId);
         return clientState?.qrCode || null;
     }
 
     /**
      * Stop a WhatsApp client (preserves session for auto-reconnect)
      */
-    async stopClient(botId, tenantSchema) {
-        console.log(`⏸️  Stopping WhatsApp client for bot ${botId} (preserving session)`);
+    async stopClient(bridgeId, tenantSchema) {
+        console.log(`⏸️  Stopping WhatsApp client for bridge ${bridgeId} (preserving session)`);
         
-        const clientState = this.clients.get(botId);
+        const clientState = this.clients.get(bridgeId);
         if (!clientState) {
-            console.log(`⚠️  No client found for bot ${botId}`);
+            console.log(`⚠️  No client found for bridge ${bridgeId}`);
             return;
         }
 
         try {
             await clientState.client.destroy();
-            this.clients.delete(botId);
+            this.clients.delete(bridgeId);
 
             // Update database (keep session intact)
-            await this.updateBotStatus(botId, tenantSchema, 'inactive', null, null, null);
+            await this.updateBotStatus(bridgeId, tenantSchema, 'inactive', null, null, null);
             
-            console.log(`✅ WhatsApp client stopped for bot ${botId} (session preserved)`);
+            console.log(`✅ WhatsApp client stopped for bridge ${bridgeId} (session preserved)`);
         } catch (error) {
-            console.error(`❌ Error stopping client for bot ${botId}:`, error);
+            console.error(`❌ Error stopping client for bridge ${bridgeId}:`, error);
         }
     }
 
     /**
      * Destroy a WhatsApp client and delete its session (for relink only)
      */
-    async destroyClient(botId, tenantSchema) {
-        console.log(`🗑️  Destroying WhatsApp client for bot ${botId} (deleting session)`);
+    async destroyClient(bridgeId, tenantSchema) {
+        console.log(`🗑️  Destroying WhatsApp client for bridge ${bridgeId} (deleting session)`);
         
-        const clientState = this.clients.get(botId);
+        const clientState = this.clients.get(bridgeId);
         if (!clientState) {
-            console.log(`⚠️  No client found for bot ${botId}`);
+            console.log(`⚠️  No client found for bridge ${bridgeId}`);
             return;
         }
 
         try {
             await clientState.client.destroy();
-            this.clients.delete(botId);
+            this.clients.delete(bridgeId);
             
             // Delete session directory (for relink/reset only)
-            const sessionPath = path.join('.wwebjs_auth', `bot_${botId}`);
+            const sessionPath = path.join('.wwebjs_auth', `bridge_${bridgeId}`);
             if (fs.existsSync(sessionPath)) {
                 fs.rmSync(sessionPath, { recursive: true, force: true });
                 console.log(`🗑️  Deleted session directory: ${sessionPath}`);
             }
 
             // Update database
-            await this.updateBotStatus(botId, tenantSchema, 'inactive', null, null, null);
+            await this.updateBotStatus(bridgeId, tenantSchema, 'inactive', null, null, null);
             
-            console.log(`✅ WhatsApp client destroyed for bot ${botId}`);
+            console.log(`✅ WhatsApp client destroyed for bridge ${bridgeId}`);
         } catch (error) {
-            console.error(`❌ Error destroying client for bot ${botId}:`, error);
+            console.error(`❌ Error destroying client for bridge ${bridgeId}:`, error);
         }
     }
 
     /**
-     * Relink a bot (destroy session and reinitialize for fresh QR code)
+     * Relink a bridge (destroy session and reinitialize for fresh QR code)
      */
-    async relinkClient(botId, tenantSchema, onMessage) {
-        console.log(`🔄 Relinking WhatsApp client for bot ${botId}`);
-        await this.destroyClient(botId, tenantSchema); // Full destroy with session deletion
-        return await this.initializeClient(botId, tenantSchema, onMessage);
+    async relinkClient(bridgeId, tenantSchema, onMessage) {
+        console.log(`🔄 Relinking WhatsApp client for bridge ${bridgeId}`);
+        await this.destroyClient(bridgeId, tenantSchema); // Full destroy with session deletion
+        return await this.initializeClient(bridgeId, tenantSchema, onMessage);
     }
 
     /**
      * Get all active clients
      */
     getAllClients() {
-        return Array.from(this.clients.entries()).map(([botId, state]) => ({
-            botId,
+        return Array.from(this.clients.entries()).map(([bridgeId, state]) => ({
+            bridgeId,
             status: state.status,
             phoneNumber: state.phoneNumber,
             tenantSchema: state.tenantSchema,
@@ -271,9 +271,9 @@ class WhatsAppClientManager {
      */
     async cleanup() {
         console.log('🧹 Gracefully stopping all WhatsApp clients (preserving sessions)...');
-        const stopPromises = Array.from(this.clients.keys()).map(botId => {
-            const state = this.clients.get(botId);
-            return this.stopClient(botId, state.tenantSchema); // Use stopClient, not destroyClient
+        const stopPromises = Array.from(this.clients.keys()).map(bridgeId => {
+            const state = this.clients.get(bridgeId);
+            return this.stopClient(bridgeId, state.tenantSchema); // Use stopClient, not destroyClient
         });
         await Promise.all(stopPromises);
         console.log('✅ All WhatsApp clients stopped (sessions preserved for auto-reconnect)');
