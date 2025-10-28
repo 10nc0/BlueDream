@@ -29,7 +29,7 @@
         <div class="header-section header-center">
             <div class="header-cat-clock">
                 <div class="animated-character">
-                    <canvas id="hopCanvas" class="character-canvas" width="1800" height="1800"></canvas>
+                    <canvas id="hopCanvas" class="character-canvas" width="160" height="160"></canvas>
                 </div>
                 <div class="header-clock">
                     <span id="currentTime">2025/10/28 - 3:00:00PM</span>
@@ -2381,9 +2381,9 @@
             });
             
             function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, fleeing = false) {
-                ctx.clearRect(0, 0, 1800, 1800);
+                ctx.clearRect(0, 0, 160, 160);
                 
-                const scale = 67.5;
+                const scale = 10;
                 const isJump = Math.floor(frameNum / 15) % 2 === 0;
                 const yOffset = isJump ? -3 * scale : 0;
                 
