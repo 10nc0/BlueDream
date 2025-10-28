@@ -1,39 +1,29 @@
 # Nyan Bridge 🌈
 
 ## Overview
-Nyan Bridge is a professional, multi-platform messaging bridge designed to connect WhatsApp to platforms like Discord and Telegram. It features robust authentication, permanent message retention (write-only), and a PostgreSQL database for storage. The project aims to provide a reliable, secure, and user-friendly solution for forwarding messages with an Apple glassmorphism design and a Discord-style interface. Its core capabilities include multi-user authentication, 1-to-many output forwarding, media support, and comprehensive audit logging, ensuring messages and bot activities are permanently recorded and accessible.
+Nyan Bridge is a professional, multi-platform messaging bridge designed to connect WhatsApp to platforms like Discord and Telegram. It features robust authentication, permanent message retention (write-only), and a PostgreSQL database for storage. The project is deployed as a **SaaS application** where all users access the same instance via a public URL. Its core capabilities include multi-user authentication, 1-to-many output forwarding, media support, and comprehensive audit logging, ensuring messages and bot activities are permanently recorded and accessible.
 
-## 🔒 Database Isolation & Ownership
+## 🌐 Deployment Model: SaaS Application
 
-**CRITICAL FOR FORKED REPLS:** Each forked Repl MUST create its own isolated PostgreSQL database!
+**This is a deployed web app, NOT a template for forking.**
 
-### Why Database Isolation Matters
-- **Privacy**: Without isolation, you'll see the developer's data and they'll see yours
-- **Security**: Shared databases expose sensitive user information
-- **Genesis User**: First user in YOUR database becomes admin (not developer's)
-- **Data Integrity**: Your messages and users stay private
+### How It Works
+- **One Deployment**: Single instance hosted on Replit Autoscale
+- **One Database**: All users share the same PostgreSQL database
+- **Public URL**: Users visit your deployed site (e.g., `nyan-bridge.replit.app`)
+- **Multi-User**: Users sign up and create accounts on YOUR instance
+- **Genesis Admin**: First user to sign up becomes admin (you)
 
-### Database Ownership Check
-The app automatically checks database ownership on startup:
-- ✅ Creates `db_metadata` table to track ownership
-- ✅ Records Repl owner (`REPL_OWNER/REPL_SLUG`) on first run
-- ✅ Warns if database owner doesn't match current Repl
-- ✅ Provides clear instructions to fix the issue
+### User Flow
+1. **You (Developer)**: Deploy the app → Become Genesis admin
+2. **End Users**: Visit your URL → Sign up → Use the bridge
+3. **You (Admin)**: Manage users, assign roles, monitor activity
 
-### Setup Instructions for Forked Repls
-1. **Fork the Repl** from the original
-2. **Create Database**: Tools → PostgreSQL (wait 30 seconds)
-3. **Verify**: Look for "✅ Database ownership verified" in console
-4. **Sign Up**: Visit `/signup.html` - you'll be Genesis User (admin)
-
-### Warning Signs You're Using Wrong Database
-```
-⚠️  WARNING: You may be using someone else's database!
-⚠️  Database owner: original-dev/their-repl
-⚠️  Current Repl:   your-username/your-repl
-```
-
-**Fix:** Create your own database (see setup instructions above)
+### No Forking Required
+Users do NOT fork the code. They simply:
+- Visit your deployed website
+- Create an account (email or Google OAuth)
+- Start using the messaging bridge
 
 ## User Preferences
 - **Design**: Apple glassmorphism aesthetic with Discord-style message layout
