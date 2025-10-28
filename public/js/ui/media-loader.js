@@ -115,15 +115,17 @@ async function cacheMedia(messageId, mediaData) {
     });
 }
 
-// Fetch media from server using authFetch utility
-async function fetchMediaFromServer(messageId) {
+// Fetch media from server with retry logic and exponential backoff
+async function fetchMediaFromServer(messageId, retryCount = 0, maxRetries = 3) {
+    const baseDelay = 1000; // 1 second
+    
     try {
         // Use the global authFetch function
         if (!window.authFetch) {
             throw new Error('authFetch not available - script loading order issue');
         }
         
-        console.log(`📥 Fetching media for message ${messageId}...`);
+        console.log(`📥 Fetching media for message ${messageId} (attempt ${retryCount + 1}/${maxRetries + 1})...`);
         const response = await window.authFetch(`/api/messages/${messageId}/media`);
         
         if (!response.ok) {
@@ -136,7 +138,15 @@ async function fetchMediaFromServer(messageId) {
         console.log(`✅ Media fetched for message ${messageId}:`, data.media_type);
         return data;
     } catch (error) {
-        console.error(`❌ Failed to fetch media for message ${messageId}:`, {
+        // Retry with exponential backoff for network errors
+        if (retryCount < maxRetries && (error.message.includes('HTTP 5') || error.name === 'TypeError')) {
+            const delay = baseDelay * Math.pow(2, retryCount);
+            console.warn(`⚠️ Retrying media fetch for message ${messageId} in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return fetchMediaFromServer(messageId, retryCount + 1, maxRetries);
+        }
+        
+        console.error(`❌ Failed to fetch media for message ${messageId} after ${retryCount + 1} attempts:`, {
             name: error.name,
             message: error.message,
             stack: error.stack
@@ -182,7 +192,13 @@ async function loadMedia(messageId) {
     }
 }
 
-// Render media element based on type
+// Generate blur placeholder for progressive loading
+function generateBlurPlaceholder() {
+    // Simple SVG blur placeholder
+    return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300'%3E%3Cfilter id='b' x='0' y='0'%3E%3CfeGaussianBlur stdDeviation='20'/%3E%3C/filter%3E%3Crect width='400' height='300' fill='%2330415f' filter='url(%23b)'/%3E%3C/svg%3E`;
+}
+
+// Render media element based on type with progressive loading
 function renderMedia(containerEl, messageId, mediaData) {
     const { media_data, media_type, sender_name } = mediaData;
     
@@ -227,16 +243,27 @@ function renderMedia(containerEl, messageId, mediaData) {
     let mediaHTML = '';
     
     if (isImage) {
+        const blurPlaceholder = generateBlurPlaceholder();
         mediaHTML = `
-            <img 
-                class="discord-media-image" 
-                src="${dataUrl}" 
-                alt="Image from ${escapeHtml(sender_name)}"
-                loading="lazy"
-                onclick="expandMedia('${messageId}', '${dataUrl}')"
-                onerror="console.error('❌ Image failed to load for message ${messageId}'); this.parentElement.innerHTML = '<div class=\\'media-error\\'>Image failed to load</div>';"
-            />
-            <div class="media-expand-hint">🔍 Click to expand</div>
+            <div class="media-progressive-container" style="position: relative; overflow: hidden; border-radius: 8px;">
+                <img 
+                    class="media-blur-placeholder"
+                    src="${blurPlaceholder}"
+                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; filter: blur(20px); transform: scale(1.1); transition: opacity 0.3s ease-out;"
+                    alt=""
+                />
+                <img 
+                    class="discord-media-image" 
+                    src="${dataUrl}" 
+                    alt="Image from ${escapeHtml(sender_name)}"
+                    loading="lazy"
+                    onclick="expandMedia('${messageId}', '${dataUrl}')"
+                    onload="this.previousElementSibling.style.opacity = '0'; this.style.opacity = '1';"
+                    onerror="handleMediaError('${messageId}', this)"
+                    style="position: relative; opacity: 0; transition: opacity 0.3s ease-in; cursor: pointer;"
+                />
+            </div>
+            <div class="media-expand-hint" style="margin-top: 0.5rem; color: #94a3b8; font-size: 0.75rem;">🔍 Click to expand</div>
         `;
     } else if (isVideo) {
         mediaHTML = `
@@ -244,8 +271,9 @@ function renderMedia(containerEl, messageId, mediaData) {
                 class="discord-media-video" 
                 controls 
                 preload="metadata"
+                style="border-radius: 8px;"
             >
-                <source src="${dataUrl}" type="${mimeType}">
+                <source src="${dataUrl}" type="${media_type}">
                 Your browser does not support video playback.
             </video>
         `;
@@ -255,8 +283,9 @@ function renderMedia(containerEl, messageId, mediaData) {
                 class="discord-media-audio" 
                 controls 
                 preload="metadata"
+                style="width: 100%;"
             >
-                <source src="${dataUrl}" type="${mimeType}">
+                <source src="${dataUrl}" type="${media_type}">
                 Your browser does not support audio playback.
             </audio>
         `;
@@ -270,7 +299,24 @@ function renderMedia(containerEl, messageId, mediaData) {
     console.log(`✅ HTML inserted for message ${messageId}`);
 }
 
-// Intersection Observer for lazy loading
+// Handle media loading errors with retry
+function handleMediaError(messageId, imgElement) {
+    console.error(`❌ Image failed to load for message ${messageId}`);
+    const retryCount = parseInt(imgElement.dataset.retryCount || '0');
+    
+    if (retryCount < 2) {
+        console.log(`🔄 Retrying image load for message ${messageId} (attempt ${retryCount + 1}/2)...`);
+        imgElement.dataset.retryCount = retryCount + 1;
+        // Retry by reloading from cache/server
+        setTimeout(() => {
+            loadMedia(messageId);
+        }, 1000 * (retryCount + 1));
+    } else {
+        imgElement.parentElement.innerHTML = '<div class="media-error" style="padding: 1rem; text-align: center; color: #ef4444; background: rgba(239, 68, 68, 0.1); border-radius: 8px;">Failed to load media after multiple attempts</div>';
+    }
+}
+
+// Intersection Observer for lazy loading with prefetching
 let mediaObserver = null;
 
 function initMediaLazyLoading() {
@@ -286,6 +332,10 @@ function initMediaLazyLoading() {
                 if (messageId) {
                     console.log(`📸 Loading media for message ${messageId}`);
                     loadMedia(messageId);
+                    
+                    // Prefetch adjacent messages for smooth scrolling
+                    prefetchAdjacentMedia(messageId);
+                    
                     // Stop observing once loaded
                     mediaObserver.unobserve(entry.target);
                 }
@@ -293,7 +343,7 @@ function initMediaLazyLoading() {
         });
     }, {
         root: null,
-        rootMargin: '100px', // Load 100px before entering viewport
+        rootMargin: '200px', // Load 200px before entering viewport (increased for prefetch)
         threshold: 0.01
     });
     
@@ -316,6 +366,40 @@ function initMediaLazyLoading() {
         console.log(`📸 Observing media element for message ${messageId}`);
         mediaObserver.observe(el);
     });
+}
+
+// Prefetch media for adjacent messages (next/previous)
+async function prefetchAdjacentMedia(currentMessageId) {
+    const allMediaElements = Array.from(document.querySelectorAll('.discord-media-preview'));
+    const currentIndex = allMediaElements.findIndex(el => el.dataset.messageId === currentMessageId);
+    
+    if (currentIndex === -1) return;
+    
+    // Prefetch next and previous messages
+    const adjacentIndices = [
+        currentIndex + 1, // Next
+        currentIndex - 1, // Previous
+        currentIndex + 2  // Next next (for smoother scroll)
+    ].filter(i => i >= 0 && i < allMediaElements.length);
+    
+    for (const index of adjacentIndices) {
+        const adjacentEl = allMediaElements[index];
+        const adjacentId = adjacentEl.dataset.messageId;
+        
+        // Only prefetch if not already loaded/loading
+        if (adjacentId && adjacentEl.querySelector('.media-loading')) {
+            console.log(`🔮 Prefetching media for message ${adjacentId}`);
+            
+            // Check if already in cache
+            const cached = await getCachedMedia(adjacentId);
+            if (!cached) {
+                // Prefetch in background (don't await)
+                fetchMediaFromServer(adjacentId)
+                    .then(data => cacheMedia(adjacentId, data))
+                    .catch(err => console.warn(`⚠️ Prefetch failed for message ${adjacentId}:`, err));
+            }
+        }
+    }
 }
 
 // Expand media in modal
@@ -345,6 +429,7 @@ window.initMediaLazyLoading = initMediaLazyLoading;
 window.loadMedia = loadMedia;
 window.expandMedia = expandMedia;
 window.getCachedMedia = getCachedMedia;
+window.handleMediaError = handleMediaError;
 
 // Auto-initialize when messages are rendered
 document.addEventListener('DOMContentLoaded', () => {
