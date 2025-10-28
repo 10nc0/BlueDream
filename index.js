@@ -2144,6 +2144,67 @@ app.post('/api/auth/forgot-password/reset', async (req, res) => {
     }
 });
 
+// ===========================
+// DEV PANEL API (Dev Role Only)
+// ===========================
+
+// Get all bridges across all tenants (dev role only)
+app.get('/api/dev/bridges', requireAuth, requireRole('dev'), async (req, res) => {
+    try {
+        console.log('🔧 Dev Panel: Fetching all bridges across all tenants...');
+        
+        // Get all tenant schemas
+        const tenantsResult = await pool.query(`
+            SELECT 
+                u.id as user_id,
+                u.email,
+                u.tenant_id,
+                COUNT(DISTINCT CASE WHEN u2.tenant_id = u.tenant_id THEN u2.id END) as user_count
+            FROM users u
+            LEFT JOIN users u2 ON u2.tenant_id = u.tenant_id
+            WHERE u.is_genesis_admin = true
+            GROUP BY u.id, u.email, u.tenant_id
+            ORDER BY u.tenant_id ASC
+        `);
+        
+        const allBridges = [];
+        
+        // Query each tenant's bridges
+        for (const tenant of tenantsResult.rows) {
+            const tenantSchema = `tenant_${tenant.tenant_id}`;
+            
+            try {
+                const bridgesResult = await pool.query(`
+                    SELECT 
+                        b.*,
+                        COUNT(m.id) as message_count,
+                        COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
+                        COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
+                        COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count,
+                        $1::integer as tenant_id,
+                        $2::text as tenant_schema,
+                        $3::text as tenant_owner_email
+                    FROM ${tenantSchema}.bots b
+                    LEFT JOIN ${tenantSchema}.messages m ON b.id = m.bot_id
+                    WHERE b.archived = false
+                    GROUP BY b.id
+                    ORDER BY b.created_at DESC
+                `, [tenant.tenant_id, tenantSchema, tenant.email]);
+                
+                allBridges.push(...bridgesResult.rows);
+            } catch (error) {
+                console.warn(`⚠️  Could not fetch bridges from ${tenantSchema}:`, error.message);
+            }
+        }
+        
+        console.log(`✅ Dev Panel: Found ${allBridges.length} bridges across ${tenantsResult.rows.length} tenants`);
+        res.json(allBridges);
+    } catch (error) {
+        console.error('❌ Error in /api/dev/bridges:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Get all users (admin and dev roles)
 app.get('/api/users', requireAuth, requireRole('admin', 'dev'), async (req, res) => {
     try {
