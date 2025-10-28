@@ -688,9 +688,10 @@ async function updateMessageStatus(client, messageId, status, errorMessage = nul
     }
 }
 
-async function getMessages(client, searchFilter = null, statusFilter = null) {
+async function getMessages(client, tenantSchema, searchFilter = null, statusFilter = null) {
     try {
-        let query = 'SELECT * FROM messages';
+        // TENANT-AWARE: Use explicit schema indexing
+        let query = `SELECT * FROM ${tenantSchema}.messages`;
         const conditions = [];
         const params = [];
         let paramCount = 1;
@@ -738,15 +739,16 @@ async function getMessages(client, searchFilter = null, statusFilter = null) {
     }
 }
 
-async function getMessageStats(client) {
+async function getMessageStats(client, tenantSchema) {
     try {
+        // TENANT-AWARE: Use explicit schema indexing
         const result = await client.query(`
             SELECT 
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE discord_status = 'success') as success,
                 COUNT(*) FILTER (WHERE discord_status = 'failed') as failed,
                 COUNT(*) FILTER (WHERE discord_status = 'pending') as pending
-            FROM messages
+            FROM ${tenantSchema}.messages
         `);
         
         return {
@@ -2531,11 +2533,25 @@ app.post('/api/relink', requireRole('admin', 'write-only'), async (req, res) => 
 
 app.get('/api/messages', requireAuth, async (req, res) => {
     try {
+        // Get tenant schema from authenticated user
+        const userResult = await pool.query(
+            'SELECT id, email, tenant_id FROM users WHERE id = $1',
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const tenantId = userResult.rows[0].tenant_id;
+        const tenantSchema = `tenant_${tenantId}`;
+        
         const client = req.dbClient || pool;
         const userRole = req.tenantContext?.userRole || 'read-only';
         const { search, status } = req.query;
         
-        const filtered = await getMessages(client, search, status);
+        // TENANT-AWARE: Pass tenant schema to helper function
+        const filtered = await getMessages(client, tenantSchema, search, status);
         const sanitized = sanitizeForRole(filtered, userRole);
         res.json(sanitized);
     } catch (error) {
@@ -2546,8 +2562,22 @@ app.get('/api/messages', requireAuth, async (req, res) => {
 
 app.get('/api/stats', requireAuth, async (req, res) => {
     try {
+        // Get tenant schema from authenticated user
+        const userResult = await pool.query(
+            'SELECT id, email, tenant_id FROM users WHERE id = $1',
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const tenantId = userResult.rows[0].tenant_id;
+        const tenantSchema = `tenant_${tenantId}`;
+        
         const client = req.dbClient || pool;
-        const stats = await getMessageStats(client);
+        // TENANT-AWARE: Pass tenant schema to helper function
+        const stats = await getMessageStats(client, tenantSchema);
         res.json(stats);
     } catch (error) {
         console.error('❌ Error in /api/stats:', error);
@@ -2898,6 +2928,20 @@ app.get('/api/bots/:id/status', requireAuth, async (req, res) => {
 // Get archived bots (with message history)
 app.get('/api/bots/archived', requireAuth, async (req, res) => {
     try {
+        // Get tenant schema from authenticated user
+        const userResult = await pool.query(
+            'SELECT id, email, tenant_id FROM users WHERE id = $1',
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const tenantId = userResult.rows[0].tenant_id;
+        const tenantSchema = `tenant_${tenantId}`;
+        
+        // TENANT-AWARE: Query from tenant schema
         const result = await pool.query(`
             SELECT 
                 b.*,
@@ -2905,14 +2949,15 @@ app.get('/api/bots/archived', requireAuth, async (req, res) => {
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count
-            FROM bots b
-            LEFT JOIN messages m ON b.id = m.bot_id
+            FROM ${tenantSchema}.bots b
+            LEFT JOIN ${tenantSchema}.messages m ON b.id = m.bot_id
             WHERE b.archived = true
             GROUP BY b.id
             ORDER BY b.created_at DESC
         `);
         res.json(result.rows);
     } catch (error) {
+        console.error('❌ Error in /api/bots/archived:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -2920,16 +2965,32 @@ app.get('/api/bots/archived', requireAuth, async (req, res) => {
 app.get('/api/bots/:id/stats', requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
+        
+        // Get tenant schema from authenticated user
+        const userResult = await pool.query(
+            'SELECT id, email, tenant_id FROM users WHERE id = $1',
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const tenantId = userResult.rows[0].tenant_id;
+        const tenantSchema = `tenant_${tenantId}`;
+        
+        // TENANT-AWARE: Query from tenant schema
         const result = await pool.query(`
             SELECT 
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE discord_status = 'success') as success,
                 COUNT(*) FILTER (WHERE discord_status = 'failed') as failed,
                 COUNT(*) FILTER (WHERE discord_status = 'pending') as pending
-            FROM messages WHERE bot_id = $1
+            FROM ${tenantSchema}.messages WHERE bot_id = $1
         `, [id]);
         res.json(result.rows[0]);
     } catch (error) {
+        console.error('❌ Error in /api/bots/:id/stats:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -3205,7 +3266,23 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
     const { days = 30 } = req.query;
     
     try {
-        // Get daily aggregates
+        // Get tenant schema from authenticated user
+        const userResult = await pool.query(
+            'SELECT id, email, tenant_id FROM users WHERE id = $1',
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const user = userResult.rows[0];
+        const tenantId = user.tenant_id;
+        const tenantSchema = `tenant_${tenantId}`;
+        
+        console.log(`📊 Analytics request from ${user.email} (tenant: ${tenantSchema})`);
+        
+        // TENANT-AWARE: Get daily aggregates from tenant schema
         const result = await pool.query(`
             SELECT 
                 date,
@@ -3213,26 +3290,29 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
                 SUM(failed_messages) as failed_messages,
                 SUM(rate_limit_events) as rate_limit_events,
                 AVG(avg_response_time_ms) as avg_response_time_ms
-            FROM message_analytics
+            FROM ${tenantSchema}.message_analytics
             WHERE date >= CURRENT_DATE - $1::integer
             GROUP BY date
             ORDER BY date ASC
         `, [days]);
         
-        // Get summary totals
+        // TENANT-AWARE: Get summary totals from tenant schema
         const summaryResult = await pool.query(`
             SELECT 
                 COUNT(*) as total_messages,
                 COUNT(*) FILTER (WHERE discord_status = 'failed') as failed_messages
-            FROM messages
+            FROM ${tenantSchema}.messages
             WHERE timestamp >= CURRENT_DATE - $1::integer
         `, [days]);
         
+        // TENANT-AWARE: Get rate limit events from tenant schema
         const rateLimitResult = await pool.query(`
             SELECT SUM(rate_limit_events) as rate_limit_events
-            FROM message_analytics
+            FROM ${tenantSchema}.message_analytics
             WHERE date >= CURRENT_DATE - $1::integer
         `, [days]);
+        
+        console.log(`✅ Analytics data loaded: ${summaryResult.rows[0]?.total_messages || 0} total messages`);
         
         res.json({
             daily: result.rows,
@@ -3243,6 +3323,7 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
             }
         });
     } catch (error) {
+        console.error(`❌ Analytics error for user ${req.userId}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
