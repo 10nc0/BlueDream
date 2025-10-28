@@ -3186,7 +3186,21 @@ app.get('/api/messages/search', requireAuth, async (req, res) => {
     }
     
     try {
-        let query = 'SELECT * FROM messages WHERE bot_id = $1';
+        // Get tenant schema from authenticated user
+        const userResult = await pool.query(
+            'SELECT id, email, tenant_id FROM users WHERE id = $1',
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const tenantId = userResult.rows[0].tenant_id;
+        const tenantSchema = `tenant_${tenantId}`;
+        
+        // TENANT-AWARE: Query from tenant schema
+        let query = `SELECT * FROM ${tenantSchema}.messages WHERE bot_id = $1`;
         const params = [botId];
         let paramCount = 1;
         
