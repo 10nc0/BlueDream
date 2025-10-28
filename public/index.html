@@ -79,7 +79,7 @@
             </div>
 
             <div class="search-filter" style="flex-wrap: wrap;">
-                <input type="text" class="search-box" id="searchBox" placeholder="🤖 AI Search: 'messages from Giovanni about project', 'images sent in october', 'failed deliveries today'..." oninput="debouncedFilterBots()" style="flex: 1; min-width: 300px;">
+                <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search bridges, messages, senders... or try 'yesterday', 'october', 'last week'..." oninput="debouncedFilterBots()" style="flex: 1; min-width: 300px;">
                 <select class="filter-dropdown" id="platformFilter" onchange="filterBots()">
                     <option value="">All Platforms</option>
                 </select>
@@ -1358,8 +1358,6 @@
 
         // Debounce function for search
         let searchDebounceTimer = null;
-        let aiSearchAbortController = null;
-        
         function debouncedFilterBots() {
             clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => {
@@ -1367,137 +1365,52 @@
             }, 300); // 300ms debounce
         }
 
-        async function filterBots() {
+        function filterBots() {
             const searchTerm = document.getElementById('searchBox').value;
             const platformFilter = document.getElementById('platformFilter').value;
             const messageTypeFilter = document.getElementById('messageTypeFilter')?.value || '';
+            
+            // Parse natural language dates from search query
+            const naturalDateRange = parseNaturalLanguageDate(searchTerm);
             const contextBadge = document.getElementById('searchContextBadge');
             
-            // If search term is empty, use simple filtering
-            if (!searchTerm || searchTerm.trim().length === 0) {
+            if (naturalDateRange) {
+                // Show context badge
+                contextBadge.textContent = `📅 ${naturalDateRange.context}`;
+                contextBadge.style.display = 'block';
+                window.searchState.dateContext = naturalDateRange;
+                console.log('🔍 Natural language date detected:', naturalDateRange);
+            } else {
+                // Hide context badge
                 contextBadge.style.display = 'none';
                 window.searchState.dateContext = null;
-                window.searchState.aiSuggestions = null;
-                
-                filteredBots = bots.filter(bot => {
-                    return !platformFilter || bot.input_platform === platformFilter;
-                });
-                
-                renderBots();
-                return;
             }
             
-            // If searching for bot names/platforms, use simple local filter
-            const simpleLocalSearch = searchTerm.length < 5 && !searchTerm.includes(' ');
-            
-            if (simpleLocalSearch) {
-                // Simple local search for short queries
-                filteredBots = bots.filter(bot => {
-                    const searchableText = [
-                        bot.input_platform,
-                        bot.output_platform,
-                        bot.contact_info || '',
-                        ...(bot.tags || [])
-                    ].join(' ');
-                    const matchesSearch = window.searchState.performSearch(searchTerm, searchableText);
-                    const matchesPlatform = !platformFilter || bot.input_platform === platformFilter;
-                    return matchesSearch && matchesPlatform;
-                });
-                
-                contextBadge.style.display = 'none';
-                renderBots();
-                return;
-            }
-            
-            // Use AI search for complex natural language queries
-            try {
-                // Abort previous AI search if still running
-                if (aiSearchAbortController) {
-                    aiSearchAbortController.abort();
-                }
-                aiSearchAbortController = new AbortController();
-                
-                // Show loading state
-                contextBadge.textContent = '🤖 AI analyzing query...';
-                contextBadge.style.display = 'block';
-                contextBadge.style.background = 'rgba(59, 130, 246, 0.1)';
-                contextBadge.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                
-                // If we have bots, search through first bot's messages as a proxy for all messages
-                if (bots.length > 0) {
-                    const firstBotId = bots[0].id;
-                    
-                    const response = await authFetch(
-                        `/api/messages/ai-search?botId=${firstBotId}&query=${encodeURIComponent(searchTerm)}`,
-                        { signal: aiSearchAbortController.signal }
-                    );
-                    
-                    if (!response.ok) {
-                        throw new Error('AI search failed');
+            filteredBots = bots.filter(bot => {
+                // Search match using universal search function
+                let matchesSearch = true;
+                if (searchTerm) {
+                    // Remove date keywords from search for text matching
+                    let cleanSearchTerm = searchTerm;
+                    if (naturalDateRange) {
+                        cleanSearchTerm = searchTerm.replace(new RegExp(naturalDateRange.context, 'gi'), '').trim();
                     }
                     
-                    const data = await response.json();
-                    
-                    // Display AI context
-                    if (data.aiContext) {
-                        const ctx = data.aiContext;
-                        let badgeText = '';
-                        
-                        if (ctx.usedFallback) {
-                            badgeText = '🔍 Pattern search';
-                            contextBadge.style.background = 'rgba(251, 191, 36, 0.1)';
-                            contextBadge.style.borderColor = 'rgba(251, 191, 36, 0.3)';
-                        } else if (ctx.dateContext) {
-                            badgeText = `🤖 ${ctx.intent} (${ctx.dateContext})`;
-                        } else {
-                            badgeText = `🤖 ${ctx.intent}`;
-                        }
-                        
-                        contextBadge.textContent = badgeText;
-                        contextBadge.style.display = 'block';
-                        
-                        // Store AI context for potential use
-                        window.searchState.dateContext = ctx.dateContext ? { context: ctx.dateContext } : null;
-                        window.searchState.aiSuggestions = ctx.suggestions || [];
-                        
-                        console.log('🤖 AI Search Context:', ctx);
+                    if (cleanSearchTerm) {
+                        const searchableText = [
+                            bot.input_platform,
+                            bot.output_platform,
+                            bot.contact_info || '',
+                            ...(bot.tags || [])
+                        ].join(' ');
+                        matchesSearch = window.searchState.performSearch(cleanSearchTerm, searchableText);
                     }
-                    
-                    // For now, still filter bots locally (message filtering would be per-bot)
-                    // In future, we could use the AI filters to filter displayed messages
-                    filteredBots = bots.filter(bot => {
-                        return !platformFilter || bot.input_platform === platformFilter;
-                    });
-                } else {
-                    contextBadge.textContent = '📝 No bridges to search';
-                    filteredBots = [];
                 }
                 
-            } catch (error) {
-                if (error.name === 'AbortError') {
-                    // Search was cancelled, ignore
-                    return;
-                }
+                const matchesPlatform = !platformFilter || bot.input_platform === platformFilter;
                 
-                console.warn('⚠️ AI search failed, using local search:', error.message);
-                
-                // Fallback to local search
-                filteredBots = bots.filter(bot => {
-                    const searchableText = [
-                        bot.input_platform,
-                        bot.output_platform,
-                        bot.contact_info || '',
-                        ...(bot.tags || [])
-                    ].join(' ');
-                    const matchesSearch = window.searchState.performSearch(searchTerm, searchableText);
-                    const matchesPlatform = !platformFilter || bot.input_platform === platformFilter;
-                    return matchesSearch && matchesPlatform;
-                });
-                
-                contextBadge.textContent = '⚠️ Using local search';
-                contextBadge.style.background = 'rgba(251, 191, 36, 0.1)';
-                contextBadge.style.borderColor = 'rgba(251, 191, 36, 0.3)';
-            }
+                return matchesSearch && matchesPlatform;
+            });
             
             renderBots();
         }
