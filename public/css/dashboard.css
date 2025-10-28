@@ -761,7 +761,7 @@ body {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--text-sm);
-  min-width: 600px; /* Enables horizontal scroll on mobile */
+  table-layout: fixed; /* Force columns to respect width settings */
 }
 
 .message-table th {
@@ -773,7 +773,8 @@ body {
   border-bottom: 2px solid rgba(148, 163, 184, 0.2);
   cursor: pointer;
   user-select: none;
-  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .message-table th:hover {
@@ -793,33 +794,41 @@ body {
   padding: var(--space-md);
   border-bottom: 1px solid var(--color-border);
   color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .message-table tr:hover {
   background: rgba(30, 41, 59, 0.4);
 }
 
+/* Optimized column widths - All columns visible without scrolling */
 .message-table .timestamp-col {
-  white-space: nowrap;
+  width: 14%; /* Compact timestamp */
   color: var(--color-text-secondary);
   font-size: var(--text-xs);
+  white-space: nowrap;
 }
 
 .message-table .contact-col {
-  white-space: nowrap;
+  width: 18%; /* Contact name + phone */
   color: var(--color-text-bright);
   font-weight: 500;
 }
 
 .message-table .message-col {
-  max-width: 400px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  width: 50%; /* Most space for message content */
+  word-wrap: break-word;
+}
+
+.message-table .status-col {
+  width: 10%; /* Compact status badge */
+  text-align: center;
 }
 
 .message-table .attachment-col {
+  width: 8%; /* Icon column */
   text-align: center;
-  width: 80px;
 }
 
 .attachment-icon {
@@ -979,8 +988,12 @@ body {
   }
   
   /* iPhone-optimized table layout */
+  .message-table-container {
+    overflow-x: auto; /* Enable horizontal scroll only on very small screens */
+  }
+  
   .message-table {
-    min-width: 500px; /* Reduced from 600px for better mobile fit */
+    min-width: 480px; /* Minimum width for mobile */
     font-size: 0.75rem; /* Smaller text for mobile */
   }
   
@@ -989,30 +1002,28 @@ body {
     padding: var(--space-sm); /* Tighter padding on mobile */
   }
   
-  /* Optimize column widths for iPhone */
-  .message-table .contact-col {
-    max-width: 100px; /* Limit contact column width */
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 0.7rem;
-  }
-  
+  /* Adjust column widths for mobile */
   .message-table .timestamp-col {
-    width: 70px; /* Fixed narrow width for timestamps */
+    width: 16%;
     font-size: 0.65rem;
   }
   
+  .message-table .contact-col {
+    width: 22%;
+    font-size: 0.7rem;
+  }
+  
   .message-table .message-col {
-    max-width: 180px; /* Optimize message column for visibility */
+    width: 42%; /* Less space for message on mobile */
   }
   
   .message-table .status-col {
-    width: 60px; /* Narrow status column */
+    width: 12%;
     font-size: 0.7rem;
   }
   
   .message-table .attachment-col {
-    width: 50px; /* Narrower attachment column */
+    width: 8%;
   }
   
   .attachment-icon {
