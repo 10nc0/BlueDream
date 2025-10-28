@@ -191,6 +191,24 @@ A professional multi-platform messaging bridge (WhatsApp to Discord/Telegram) wi
 
 ## Recent Changes
 
+### 2025-10-28: Enhanced Search + Quick-Start Wizard ✅
+- **Problem**: Search was too vague ("Search bridges by name, platform..."), newbies confused by +Create Bridge button
+- **Search Improvements**:
+  - **Advanced Filters**: Date range pickers (from/to), message type filter (text/image/video/audio/document)
+  - **Regex Mode**: Toggle for power users with pattern matching (e.g., `Giovanni.*today`)
+  - **Better Placeholder**: "Search bridges, messages, senders..." (more specific)
+  - **Visual Feedback**: Blue highlighting when regex mode is active
+- **Quick-Start Wizard**:
+  - **Auto-shows**: For first-time users or when no bridges exist
+  - **3-Step Guide**: ⏱️ Takes 2 minutes
+    1. 📱 Scan QR Code with WhatsApp (Linked Devices)
+    2. 🔗 Add Discord Webhook URL (Server Settings → Integrations)
+    3. ✅ Done - Test by sending a message
+  - **Skip Option**: "Skip (I know what to do)" for experienced users
+  - **Setup Banner**: Green banner appears in form with step reminders
+  - **localStorage Memory**: Won't show wizard again after skipping
+- **Result**: Reduces friction for newbies, power users get regex search
+
 ### 2025-10-28: Admin Panel (Dev Only) ✅
 - **Feature**: Admin-only tab for monitoring users, sessions, and audit logs
 - **Access**: Only visible to admin@bridge.local (dev account)
