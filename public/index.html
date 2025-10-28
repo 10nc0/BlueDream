@@ -911,11 +911,39 @@
             }
         }
 
-        function selectBot(botId) {
+        async function selectBot(botId) {
             // Convert string to number to match bot IDs in database
             selectedBotId = parseInt(botId);
-            renderBots();
-            // Don't call loadBotMessages here - renderBots() already does it
+            
+            // Re-render sidebar to update active state
+            const sidebar = document.getElementById('bridgeSidebar');
+            const groupedBots = {};
+            filteredBots.forEach(bot => {
+                if (!groupedBots[bot.input_platform]) {
+                    groupedBots[bot.input_platform] = [];
+                }
+                groupedBots[bot.input_platform].push(bot);
+            });
+            
+            sidebar.innerHTML = Object.entries(groupedBots).map(([platform, bots]) => `
+                <div class="bridge-category">
+                    <div class="category-header">${platform}</div>
+                    ${bots.map(bot => `
+                        <button class="channel-item ${bot.id === selectedBotId ? 'active' : ''}" onclick="selectBot(${bot.id})">
+                            <span class="channel-name">${bot.input_platform} → ${bot.output_platform}</span>
+                            <div class="channel-badges">
+                                ${bot.message_count > 0 ? `<span class="badge">${bot.message_count}</span>` : ''}
+                            </div>
+                        </button>
+                    `).join('')}
+                </div>
+            `).join('');
+            
+            // Render detail panel for selected bot
+            await renderBotDetail();
+            
+            // Always load messages for newly selected bot
+            await loadBotMessages(selectedBotId, 1);
         }
 
         async function renderBotDetail() {
