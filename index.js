@@ -1700,6 +1700,28 @@ app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
     const { email, phone, password, role } = req.body;
     
     try {
+        // SECURITY: Role hierarchy validation - prevent privilege escalation
+        // Get the creator's role
+        const creatorResult = await pool.query('SELECT role FROM users WHERE id = $1', [req.userId]);
+        const creatorRole = creatorResult.rows[0]?.role;
+        
+        // Role creation rules:
+        // - dev can create: dev, admin, read-only, write-only
+        // - admin can create: read-only, write-only (NOT dev, NOT admin)
+        // - read-only/write-only: blocked by requireRole middleware
+        if (creatorRole === 'admin' && (role === 'dev' || role === 'admin')) {
+            return res.status(403).json({ 
+                error: 'Admins can only create read-only or write-only users. Contact a dev user to create admin accounts.',
+                allowed_roles: ['read-only', 'write-only']
+            });
+        }
+        
+        // Validate role is one of the allowed values
+        const validRoles = ['dev', 'admin', 'read-only', 'write-only'];
+        if (!validRoles.includes(role)) {
+            return res.status(400).json({ error: 'Invalid role specified' });
+        }
+        
         const passwordHash = password ? await bcrypt.hash(password, 10) : null;
         
         const result = await pool.query(`
@@ -1713,7 +1735,8 @@ app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
         // Log user creation
         await logAudit(pool, req, 'CREATE_USER', 'USER', newUser.id.toString(), newUser.email || newUser.phone, {
             role: newUser.role,
-            created_with: email ? 'email' : 'phone'
+            created_with: email ? 'email' : 'phone',
+            created_by_role: creatorRole
         });
         
         res.json({ success: true, user: newUser });

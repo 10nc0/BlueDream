@@ -358,10 +358,7 @@
                 <div class="form-group">
                     <label class="form-label">Role</label>
                     <select class="form-select" id="userRole" required>
-                        <option value="dev">Dev (Full Access)</option>
-                        <option value="admin">Admin</option>
-                        <option value="user">User</option>
-                        <option value="read-only">Read Only</option>
+                        <!-- Options populated dynamically based on creator's role -->
                     </select>
                 </div>
                 <button type="submit" class="submit-btn">Create User</button>
@@ -1983,6 +1980,26 @@
         // These are now defined below in the new architecture section
 
         function openCreateUserModal() {
+            // Populate role dropdown based on creator's role (security: prevent privilege escalation)
+            const roleSelect = document.getElementById('userRole');
+            roleSelect.innerHTML = ''; // Clear existing options
+            
+            if (currentUser.role === 'dev') {
+                // Dev can create any role
+                roleSelect.innerHTML = `
+                    <option value="dev">Dev (Full Access)</option>
+                    <option value="admin">Admin (Tenant Manager)</option>
+                    <option value="read-only" selected>Read-Only (View Only)</option>
+                    <option value="write-only">Write-Only (Create/Edit)</option>
+                `;
+            } else if (currentUser.role === 'admin') {
+                // Admin can only create read-only or write-only (NOT dev, NOT admin)
+                roleSelect.innerHTML = `
+                    <option value="read-only" selected>Read-Only (View Only)</option>
+                    <option value="write-only">Write-Only (Create/Edit)</option>
+                `;
+            }
+            
             document.getElementById('userModal').classList.add('active');
         }
 
