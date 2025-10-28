@@ -493,20 +493,6 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action_type)
         `);
         
-        // Create genesis dev user if no users exist
-        // phi_dao@pm.me is the only dev with full system access
-        const usersCount = await pool.query('SELECT COUNT(*) FROM users');
-        if (parseInt(usersCount.rows[0].count) === 0) {
-            const bcrypt = require('bcrypt');
-            const defaultPassword = await bcrypt.hash('admin123', 10);
-            await pool.query(`
-                INSERT INTO users (email, password_hash, role)
-                VALUES ($1, $2, $3)
-            `, ['phi_dao@pm.me', defaultPassword, 'dev']);
-            console.log('✅ Created genesis dev user (email: phi_dao@pm.me, password: admin123)');
-            console.log('🔧 This is the only dev account with full system access (dev > admin > user)');
-        }
-        
         // Create performance indexes for frequently queried columns
         await pool.query(`
             CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp DESC)
