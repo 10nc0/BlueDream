@@ -44,6 +44,12 @@ Users do NOT fork the code. They simply:
 ### UI/UX Decisions
 The dashboard is a Single Page Application (SPA) featuring an Apple glassmorphism design. It adopts a Discord-style two-pane layout with a left sidebar for bot management and a right pane for message feeds. The UI includes real-time updates, circular avatars, status badges, and responsive design for mobile compatibility. Accessibility is enhanced with custom tooltips that dynamically adjust positioning to prevent viewport cropping.
 
+**Dev Panel (Admin #01 Only):**
+- System-wide bridge visibility across all tenants
+- Horizontal tenant cards showing Admin #01 (Dev - gold badge) and Admin #02+ (Genesis Admins - blue badges)
+- Bridge statistics per tenant: message count, success/failure rates
+- Complete isolation: regular users see only their tenant's bridges
+
 ### Technical Implementations
 - **Backend**: Node.js with Express.
 - **Frontend**: SPA with client-side authentication handling.
