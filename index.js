@@ -3394,6 +3394,7 @@ async function cleanupChromiumLockFiles() {
         const sessionDir = '.wwebjs_auth';
         
         if (!fs.existsSync(sessionDir)) {
+            console.log('🧹 No session directory found - skipping lock file cleanup');
             return;
         }
         
@@ -3401,16 +3402,21 @@ async function cleanupChromiumLockFiles() {
             .filter(name => name.startsWith('session-'))
             .map(name => path.join(sessionDir, name));
         
+        console.log(`🔍 Scanning ${sessionFolders.length} session folders for stale lock files...`);
+        
         let cleanedCount = 0;
         const lockFileNames = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'];
         
         for (const folder of sessionFolders) {
+            if (!fs.existsSync(folder)) continue;
+            
             for (const lockFile of lockFileNames) {
                 const lockPath = path.join(folder, lockFile);
                 if (fs.existsSync(lockPath)) {
                     try {
                         fs.unlinkSync(lockPath);
                         cleanedCount++;
+                        console.log(`🗑️  Removed: ${lockPath}`);
                     } catch (err) {
                         console.error(`⚠️  Failed to remove ${lockPath}:`, err.message);
                     }
@@ -3419,7 +3425,11 @@ async function cleanupChromiumLockFiles() {
         }
         
         if (cleanedCount > 0) {
-            console.log(`🧹 Cleaned up ${cleanedCount} stale Chromium lock files`);
+            console.log(`✅ Cleaned up ${cleanedCount} stale Chromium lock files`);
+            // Small delay to ensure filesystem sync
+            await new Promise(resolve => setTimeout(resolve, 500));
+        } else {
+            console.log('✅ No stale lock files found');
         }
     } catch (error) {
         console.error('⚠️  Lock file cleanup failed:', error.message);
