@@ -553,9 +553,8 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
         }
         
         // Get webhooks from bridge configuration (tenant-aware)
-        console.log(`🔍 [DEBUG] Looking up webhooks for bridge ${bridgeId} in ${tenantSchema}`);
         const bridgeResult = await pool.query(`
-            SELECT id, name, output_credentials FROM ${tenantSchema}.bridges WHERE id = $1 LIMIT 1
+            SELECT output_credentials FROM ${tenantSchema}.bridges WHERE id = $1 LIMIT 1
         `, [bridgeId]);
         
         if (bridgeResult.rows.length === 0) {
@@ -563,9 +562,7 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
             return;
         }
         
-        console.log(`🔍 [DEBUG] Found bridge: ${bridgeResult.rows[0].name} (ID: ${bridgeResult.rows[0].id})`);
         const webhooks = bridgeResult.rows[0].output_credentials?.webhooks || [];
-        console.log(`🔍 [DEBUG] Extracted ${webhooks.length} webhooks:`, webhooks.map(w => `${w.name}: ${w.url?.substring(0, 50)}...`));
         
         // Fallback to legacy webhook_url if webhooks array is empty
         if (webhooks.length === 0 && bridgeResult.rows[0].output_credentials?.webhook_url) {
@@ -963,7 +960,6 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
             }
 
             // Send text-only message to Discord
-            console.log(`📤 [DEBUG] Calling sendToAllWebhooks with bridgeId=${bridgeId}, tenantSchema=${tenantSchema}`);
             await sendToAllWebhooks(discordPayload, {}, messageDbId, null, bridgeId, tenantSchema);
             console.log(`✅ [Bridge ${bridgeId}] Forwarded message from ${senderName}`);
             
