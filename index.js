@@ -3412,29 +3412,49 @@ async function autoRestoreWhatsAppSessions() {
                 `);
                 
                 for (const bridge of bridges.rows) {
-                    // Check if this bridge has a saved WhatsApp session (new path: bridge_{id})
-                    const sessionPath = path.join('.wwebjs_auth', `session-bridge_${bridge.id}`);
-                    const sessionPathNew = path.join('.wwebjs_auth', `bridge_${bridge.id}`);
+                    // Check if this bridge has a saved WhatsApp session
+                    // LocalAuth automatically prefixes with "session-", so we check for that
+                    const sessionClientId = `${schema_name}_bridge_${bridge.id}`;
+                    const sessionPath = path.join('.wwebjs_auth', `session-${sessionClientId}`);
                     
-                    if (fs.existsSync(sessionPathNew) || fs.existsSync(sessionPath)) {
-                        console.log(`🔗 Auto-restoring bridge ${bridge.id} (${bridge.name}) from ${schema_name}...`);
+                    // Legacy paths for backward compatibility (pre-fractalization)
+                    const sessionPathLegacy1 = path.join('.wwebjs_auth', `session-bridge_${bridge.id}`);
+                    const sessionPathLegacy2 = path.join('.wwebjs_auth', `bridge_${bridge.id}`);
+                    
+                    // Check if any session exists
+                    const hasNewSession = fs.existsSync(sessionPath);
+                    const hasLegacy1 = fs.existsSync(sessionPathLegacy1);
+                    const hasLegacy2 = fs.existsSync(sessionPathLegacy2);
+                    
+                    if (hasNewSession || hasLegacy1 || hasLegacy2) {
+                        console.log(`🔗 Auto-restoring ${schema_name}:${bridge.id} (${bridge.name})...`);
                         
                         try {
+                            // MIGRATION: If legacy session exists but new one doesn't, migrate it
+                            if (!hasNewSession && (hasLegacy1 || hasLegacy2)) {
+                                const legacyPath = hasLegacy1 ? sessionPathLegacy1 : sessionPathLegacy2;
+                                console.log(`📦 Migrating legacy session from ${legacyPath} to ${sessionPath}`);
+                                
+                                // Rename legacy session to new tenant-scoped path
+                                fs.renameSync(legacyPath, sessionPath);
+                                console.log(`✅ Migration complete for ${schema_name}:${bridge.id}`);
+                            }
+                            
                             // Initialize WhatsApp client with saved session
-                            // Use composite tenant:bridge key for tracking
+                            // Uses composite tenant:bridge key for tracking
                             await whatsappManager.initializeClient(
                                 bridge.id,
                                 schema_name,
                                 createTenantAwareMessageHandler
                             );
                             restoredCount++;
-                            console.log(`✅ Bridge ${bridge.id} (${schema_name}) restored successfully`);
+                            console.log(`✅ ${schema_name}:${bridge.id} restored successfully`);
                         } catch (error) {
-                            console.error(`⚠️  Failed to restore bridge ${bridge.id} (${schema_name}):`, error.message);
+                            console.error(`⚠️  Failed to restore ${schema_name}:${bridge.id}:`, error.message);
                             skippedCount++;
                         }
                     } else {
-                        console.log(`⏭️  Skipping bridge ${bridge.id} (${bridge.name}) - no saved session`);
+                        console.log(`⏭️  Skipping ${schema_name}:${bridge.id} (${bridge.name}) - no saved session`);
                         skippedCount++;
                     }
                 }

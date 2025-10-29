@@ -45,16 +45,14 @@ class WhatsAppClientManager {
         }
 
         try {
-            // Create session directory for this bot
-            const sessionPath = path.join('.wwebjs_auth', `bridge_${bridgeId}`);
-            if (!fs.existsSync(sessionPath)) {
-                fs.mkdirSync(sessionPath, { recursive: true });
-            }
+            // Create tenant-scoped session directory (prevents cross-tenant collisions)
+            // LocalAuth will automatically prefix with "session-", creating: .wwebjs_auth/session-tenant_X_bridge_Y
+            const sessionClientId = `${tenantSchema}_bridge_${bridgeId}`;
 
-            // Create WhatsApp client with LocalAuth for this bot
+            // Create WhatsApp client with tenant-scoped LocalAuth
             const client = new Client({
                 authStrategy: new LocalAuth({
-                    clientId: `bridge_${bridgeId}`,
+                    clientId: sessionClientId,
                     dataPath: './.wwebjs_auth'
                 }),
                 puppeteer: {
@@ -244,11 +242,26 @@ class WhatsAppClientManager {
             await clientState.client.destroy();
             this.clients.delete(compositeKey);
             
-            // Delete session directory (for relink/reset only)
-            const sessionPath = path.join('.wwebjs_auth', `bridge_${bridgeId}`);
+            // Delete tenant-scoped session directory (for relink/reset only)
+            // LocalAuth stores sessions with "session-" prefix
+            const sessionClientId = `${tenantSchema}_bridge_${bridgeId}`;
+            const sessionPath = path.join('.wwebjs_auth', `session-${sessionClientId}`);
+            
+            // Also check legacy paths for cleanup
+            const legacyPath1 = path.join('.wwebjs_auth', `session-bridge_${bridgeId}`);
+            const legacyPath2 = path.join('.wwebjs_auth', `bridge_${bridgeId}`);
+            
             if (fs.existsSync(sessionPath)) {
                 fs.rmSync(sessionPath, { recursive: true, force: true });
                 console.log(`🗑️  Deleted session directory: ${sessionPath}`);
+            }
+            if (fs.existsSync(legacyPath1)) {
+                fs.rmSync(legacyPath1, { recursive: true, force: true });
+                console.log(`🗑️  Deleted legacy session: ${legacyPath1}`);
+            }
+            if (fs.existsSync(legacyPath2)) {
+                fs.rmSync(legacyPath2, { recursive: true, force: true });
+                console.log(`🗑️  Deleted legacy session: ${legacyPath2}`);
             }
 
             // Update database
