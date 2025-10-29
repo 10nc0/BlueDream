@@ -163,7 +163,7 @@ class WhatsAppClientManager {
                 
                 // Only update columns that exist in tenant schema (qr_code and session_error were removed)
                 await client.query(`
-                    UPDATE bots 
+                    UPDATE bridges 
                     SET status = $1, 
                         contact_info = COALESCE($2, contact_info),
                         updated_at = NOW()
