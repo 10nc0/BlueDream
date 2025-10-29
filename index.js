@@ -2676,8 +2676,8 @@ app.put('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin', 
     }
 });
 
-// Delete bridge (hard delete - removes bridge and all messages)
-app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin', 'dev'), async (req, res) => {
+// Delete bridge (soft delete - archives bridge preserving all data)
+app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
     const { id } = req.params;
     const bridgeId = parseInt(id);
     
