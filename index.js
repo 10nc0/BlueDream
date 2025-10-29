@@ -3388,9 +3388,50 @@ async function updateAnalytics(bridgeId) {
     }
 }
 
+// Clean up stale Chromium lock files to prevent launch failures
+async function cleanupChromiumLockFiles() {
+    try {
+        const sessionDir = '.wwebjs_auth';
+        
+        if (!fs.existsSync(sessionDir)) {
+            return;
+        }
+        
+        const sessionFolders = fs.readdirSync(sessionDir)
+            .filter(name => name.startsWith('session-'))
+            .map(name => path.join(sessionDir, name));
+        
+        let cleanedCount = 0;
+        const lockFileNames = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'];
+        
+        for (const folder of sessionFolders) {
+            for (const lockFile of lockFileNames) {
+                const lockPath = path.join(folder, lockFile);
+                if (fs.existsSync(lockPath)) {
+                    try {
+                        fs.unlinkSync(lockPath);
+                        cleanedCount++;
+                    } catch (err) {
+                        console.error(`⚠️  Failed to remove ${lockPath}:`, err.message);
+                    }
+                }
+            }
+        }
+        
+        if (cleanedCount > 0) {
+            console.log(`🧹 Cleaned up ${cleanedCount} stale Chromium lock files`);
+        }
+    } catch (error) {
+        console.error('⚠️  Lock file cleanup failed:', error.message);
+    }
+}
+
 // Auto-restore all bridges with saved WhatsApp sessions on server startup
 async function autoRestoreWhatsAppSessions() {
     try {
+        // Clean up stale Chromium lock files first to prevent launch failures
+        await cleanupChromiumLockFiles();
+        
         console.log('🔄 Auto-restoring WhatsApp sessions from saved data...');
         
         // Get all tenant schemas
