@@ -2714,8 +2714,7 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
         console.log(`✅ Bridge ${bridgeId} archived successfully by user ${req.userId}`);
         res.json({ 
             success: true, 
-            message: 'Bridge archived successfully',
-            note: 'All messages and session data preserved'
+            message: 'Bridge deleted successfully'
         });
         
         // Log audit AFTER response (don't block transaction commit)
