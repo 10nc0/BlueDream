@@ -90,6 +90,7 @@ The dashboard is a Single Page Application (SPA) featuring an Apple glassmorphis
 - **Session Persistence**: WhatsApp sessions survive server restarts via tenant-scoped LocalAuth storage in `.wwebjs_auth/session-{tenantSchema}_bridge_{bridgeId}/`
 - **Composite Tracking**: All WhatsApp clients tracked with `tenantSchema:bridgeId` keys (e.g., `tenant_6:7`) preventing cross-tenant collisions
 - **24/7 Bridge Uptime**: Auto-restore on startup ensures all connected bridges reconnect automatically after server restarts
+- **Automatic Lock File Cleanup**: Cleans stale Chromium lock files (SingletonLock, SingletonSocket, SingletonCookie) before bridge initialization to prevent launch failures on restart
 - **All Admins Start with 0 Bots**: No pre-created bridges - each admin creates their own from scratch
 - **Safari/iPad Compatibility**: Achieved by relying on JWT in `localStorage` for primary authentication, addressing ITP cookie blocking
 - **Permanent Data Retention**: Ensures no message data is ever lost by disallowing deletion (except for bridge cascade)
