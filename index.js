@@ -2711,17 +2711,20 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
             return res.status(404).json({ error: 'Bridge not found' });
         }
         
-        logAudit(client, req, 'ARCHIVE', 'BOT', bridgeId, null, {
-            message: 'Bridge archived (soft delete) - all messages and session preserved',
-            tenant_schema: tenantSchema,
-            archived_at: new Date().toISOString()
-        });
-        
         console.log(`✅ Bridge ${bridgeId} archived successfully by user ${req.userId}`);
         res.json({ 
             success: true, 
             message: 'Bridge archived successfully',
             note: 'All messages and session data preserved'
+        });
+        
+        // Log audit AFTER response (don't block transaction commit)
+        setImmediate(() => {
+            logAudit(pool, req, 'ARCHIVE', 'BOT', bridgeId, null, {
+                message: 'Bridge archived (soft delete) - all messages and session preserved',
+                tenant_schema: tenantSchema,
+                archived_at: new Date().toISOString()
+            }).catch(err => console.error('Audit log failed:', err.message));
         });
     } catch (error) {
         console.error(`❌ Error archiving bridge ${bridgeId}:`, error);
