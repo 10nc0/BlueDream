@@ -2690,10 +2690,9 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
         
         // Stop WhatsApp client if active (but keep session files for potential restoration)
         try {
-            const whatsappClient = whatsappManager.getClient(bridgeId);
+            const whatsappClient = whatsappManager.getClient(bridgeId, tenantSchema);
             if (whatsappClient) {
-                await whatsappClient.destroy();
-                whatsappManager.removeClient(bridgeId);
+                await whatsappManager.stopClient(bridgeId, tenantSchema);
                 console.log(`✅ WhatsApp client stopped for bridge ${bridgeId} (session files preserved)`);
             }
         } catch (error) {
@@ -2784,8 +2783,8 @@ app.post('/api/bridges/:id/start', requireAuth, setTenantContext, requireRole('a
         const tenantSchema = await getBridgeTenantSchema(bridgeId);
         console.log(`🔍 Bridge ${id} belongs to ${tenantSchema}`);
         
-        // Check if already running
-        const existingClient = whatsappManager.getClient(bridgeId);
+        // Check if already running (use composite key)
+        const existingClient = whatsappManager.getClient(bridgeId, tenantSchema);
         if (existingClient && (existingClient.status === 'ready' || existingClient.status === 'qr_ready')) {
             return res.json({ 
                 success: true, 
@@ -2837,7 +2836,11 @@ app.delete('/api/bridges/:id/stop', requireAuth, setTenantContext, requireRole('
 app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        const qrCode = whatsappManager.getQRCode(parseInt(id));
+        const bridgeId = parseInt(id);
+        
+        // Get tenant schema for this bridge
+        const tenantSchema = await getBridgeTenantSchema(bridgeId);
+        const qrCode = whatsappManager.getQRCode(bridgeId, tenantSchema);
         
         if (!qrCode) {
             return res.json({ qr: null, message: 'No QR code available. Start the bridge first.' });
@@ -2900,7 +2903,11 @@ app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('
 app.get('/api/bridges/:id/status', requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
-        const clientState = whatsappManager.getClient(parseInt(id));
+        const bridgeId = parseInt(id);
+        
+        // Get tenant schema for this bridge
+        const tenantSchema = await getBridgeTenantSchema(bridgeId);
+        const clientState = whatsappManager.getClient(bridgeId, tenantSchema);
         
         if (!clientState) {
             return res.json({ 
@@ -3405,22 +3412,25 @@ async function autoRestoreWhatsAppSessions() {
                 `);
                 
                 for (const bridge of bridges.rows) {
-                    // Check if this bridge has a saved WhatsApp session
+                    // Check if this bridge has a saved WhatsApp session (new path: bridge_{id})
                     const sessionPath = path.join('.wwebjs_auth', `session-bridge_${bridge.id}`);
-                    if (fs.existsSync(sessionPath)) {
+                    const sessionPathNew = path.join('.wwebjs_auth', `bridge_${bridge.id}`);
+                    
+                    if (fs.existsSync(sessionPathNew) || fs.existsSync(sessionPath)) {
                         console.log(`🔗 Auto-restoring bridge ${bridge.id} (${bridge.name}) from ${schema_name}...`);
                         
                         try {
                             // Initialize WhatsApp client with saved session
+                            // Use composite tenant:bridge key for tracking
                             await whatsappManager.initializeClient(
                                 bridge.id,
                                 schema_name,
                                 createTenantAwareMessageHandler
                             );
                             restoredCount++;
-                            console.log(`✅ Bridge ${bridge.id} restored successfully`);
+                            console.log(`✅ Bridge ${bridge.id} (${schema_name}) restored successfully`);
                         } catch (error) {
-                            console.error(`⚠️  Failed to restore bridge ${bridge.id}:`, error.message);
+                            console.error(`⚠️  Failed to restore bridge ${bridge.id} (${schema_name}):`, error.message);
                             skippedCount++;
                         }
                     } else {

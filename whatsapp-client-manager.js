@@ -11,8 +11,18 @@ class WhatsAppClientManager {
     constructor(pool, chromiumPath) {
         this.pool = pool;
         this.chromiumPath = chromiumPath;
-        this.clients = new Map(); // bridgeId -> { client, status, qrCode, phoneNumber }
-        this.messageHandlers = new Map(); // bridgeId -> message handler function
+        this.clients = new Map(); // compositeKey (tenant:bridge) -> { client, status, qrCode, phoneNumber }
+        this.messageHandlers = new Map(); // compositeKey -> message handler function
+    }
+
+    /**
+     * Generate composite key for tenant-aware bridge tracking
+     * @param {string} tenantSchema - The tenant schema (e.g., 'tenant_3')
+     * @param {number} bridgeId - The bridge ID
+     * @returns {string} Composite key like "tenant_3:7"
+     */
+    getCompositeKey(tenantSchema, bridgeId) {
+        return `${tenantSchema}:${bridgeId}`;
     }
 
     /**
@@ -22,13 +32,14 @@ class WhatsAppClientManager {
      * @param {Function} onMessage - Message handler callback
      */
     async initializeClient(bridgeId, tenantSchema, onMessage) {
-        console.log(`🔧 Initializing WhatsApp client for bridge ${bridgeId} (${tenantSchema})`);
+        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+        console.log(`🔧 Initializing WhatsApp client for ${compositeKey}`);
 
-        // Check if client already exists
-        if (this.clients.has(bridgeId)) {
-            const existing = this.clients.get(bridgeId);
+        // Check if client already exists using composite key
+        if (this.clients.has(compositeKey)) {
+            const existing = this.clients.get(compositeKey);
             if (existing.status === 'ready') {
-                console.log(`✅ WhatsApp client for bridge ${bridgeId} already active`);
+                console.log(`✅ WhatsApp client for ${compositeKey} already active`);
                 return existing;
             }
         }
@@ -61,20 +72,21 @@ class WhatsAppClientManager {
                 }
             });
 
-            // Store client state
+            // Store client state with composite key
             const clientState = {
                 client,
                 status: 'initializing',
                 qrCode: null,
                 phoneNumber: null,
                 tenantSchema,
-                bridgeId
+                bridgeId,
+                compositeKey
             };
-            this.clients.set(bridgeId, clientState);
+            this.clients.set(compositeKey, clientState);
 
             // QR Code event
             client.on('qr', async (qr) => {
-                console.log(`📱 QR Code generated for bridge ${bridgeId}`);
+                console.log(`📱 QR Code generated for ${compositeKey}`);
                 clientState.qrCode = qr;
                 clientState.status = 'qr_ready';
 
@@ -84,7 +96,7 @@ class WhatsAppClientManager {
 
             // Ready event
             client.on('ready', async () => {
-                console.log(`✅ WhatsApp client ready for bridge ${bridgeId}`);
+                console.log(`✅ WhatsApp client ready for ${compositeKey}`);
                 const info = client.info;
                 const phoneNumber = info.wid.user;
                 
@@ -95,26 +107,26 @@ class WhatsAppClientManager {
                 // Update bridge in database
                 await this.updateBotStatus(bridgeId, tenantSchema, 'ready', null, `+${phoneNumber}`);
                 
-                console.log(`📱 Bridge ${bridgeId} WhatsApp Number: +${phoneNumber}`);
+                console.log(`📱 ${compositeKey} WhatsApp Number: +${phoneNumber}`);
             });
 
             // Authenticated event
             client.on('authenticated', async () => {
-                console.log(`🔐 Bridge ${bridgeId} authenticated successfully`);
+                console.log(`🔐 ${compositeKey} authenticated successfully`);
                 clientState.status = 'authenticated';
                 await this.updateBotStatus(bridgeId, tenantSchema, 'authenticated', null, null);
             });
 
             // Auth failure event
             client.on('auth_failure', async (error) => {
-                console.error(`❌ Authentication failed for bridge ${bridgeId}:`, error);
+                console.error(`❌ Authentication failed for ${compositeKey}:`, error);
                 clientState.status = 'auth_failed';
                 await this.updateBotStatus(bridgeId, tenantSchema, 'auth_failed', null, null, error.message);
             });
 
             // Disconnected event
             client.on('disconnected', async (reason) => {
-                console.log(`🔌 Bridge ${bridgeId} disconnected:`, reason);
+                console.log(`🔌 ${compositeKey} disconnected:`, reason);
                 clientState.status = 'disconnected';
                 await this.updateBotStatus(bridgeId, tenantSchema, 'disconnected', null, null, reason);
             });
@@ -126,7 +138,7 @@ class WhatsAppClientManager {
                         await onMessage(message, bridgeId, tenantSchema);
                     }
                 } catch (error) {
-                    console.error(`❌ Error handling message for bridge ${bridgeId}:`, error);
+                    console.error(`❌ Error handling message for ${compositeKey}:`, error);
                 }
             });
 
@@ -173,17 +185,19 @@ class WhatsAppClientManager {
     }
 
     /**
-     * Get client state for a bot
+     * Get client state for a bot (tenant-aware)
      */
-    getClient(bridgeId) {
-        return this.clients.get(bridgeId);
+    getClient(bridgeId, tenantSchema) {
+        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+        return this.clients.get(compositeKey);
     }
 
     /**
-     * Get QR code for a bot
+     * Get QR code for a bot (tenant-aware)
      */
-    getQRCode(bridgeId) {
-        const clientState = this.clients.get(bridgeId);
+    getQRCode(bridgeId, tenantSchema) {
+        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+        const clientState = this.clients.get(compositeKey);
         return clientState?.qrCode || null;
     }
 
@@ -191,24 +205,25 @@ class WhatsAppClientManager {
      * Stop a WhatsApp client (preserves session for auto-reconnect)
      */
     async stopClient(bridgeId, tenantSchema) {
-        console.log(`⏸️  Stopping WhatsApp client for bridge ${bridgeId} (preserving session)`);
+        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+        console.log(`⏸️  Stopping WhatsApp client for ${compositeKey} (preserving session)`);
         
-        const clientState = this.clients.get(bridgeId);
+        const clientState = this.clients.get(compositeKey);
         if (!clientState) {
-            console.log(`⚠️  No client found for bridge ${bridgeId}`);
+            console.log(`⚠️  No client found for ${compositeKey}`);
             return;
         }
 
         try {
             await clientState.client.destroy();
-            this.clients.delete(bridgeId);
+            this.clients.delete(compositeKey);
 
             // Update database (keep session intact)
             await this.updateBotStatus(bridgeId, tenantSchema, 'inactive', null, null, null);
             
-            console.log(`✅ WhatsApp client stopped for bridge ${bridgeId} (session preserved)`);
+            console.log(`✅ WhatsApp client stopped for ${compositeKey} (session preserved)`);
         } catch (error) {
-            console.error(`❌ Error stopping client for bridge ${bridgeId}:`, error);
+            console.error(`❌ Error stopping client for ${compositeKey}:`, error);
         }
     }
 
@@ -216,17 +231,18 @@ class WhatsAppClientManager {
      * Destroy a WhatsApp client and delete its session (for relink only)
      */
     async destroyClient(bridgeId, tenantSchema) {
-        console.log(`🗑️  Destroying WhatsApp client for bridge ${bridgeId} (deleting session)`);
+        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+        console.log(`🗑️  Destroying WhatsApp client for ${compositeKey} (deleting session)`);
         
-        const clientState = this.clients.get(bridgeId);
+        const clientState = this.clients.get(compositeKey);
         if (!clientState) {
-            console.log(`⚠️  No client found for bridge ${bridgeId}`);
+            console.log(`⚠️  No client found for ${compositeKey}`);
             return;
         }
 
         try {
             await clientState.client.destroy();
-            this.clients.delete(bridgeId);
+            this.clients.delete(compositeKey);
             
             // Delete session directory (for relink/reset only)
             const sessionPath = path.join('.wwebjs_auth', `bridge_${bridgeId}`);
@@ -238,9 +254,9 @@ class WhatsAppClientManager {
             // Update database
             await this.updateBotStatus(bridgeId, tenantSchema, 'inactive', null, null, null);
             
-            console.log(`✅ WhatsApp client destroyed for bridge ${bridgeId}`);
+            console.log(`✅ WhatsApp client destroyed for ${compositeKey}`);
         } catch (error) {
-            console.error(`❌ Error destroying client for bridge ${bridgeId}:`, error);
+            console.error(`❌ Error destroying client for ${compositeKey}:`, error);
         }
     }
 
@@ -248,17 +264,19 @@ class WhatsAppClientManager {
      * Relink a bridge (destroy session and reinitialize for fresh QR code)
      */
     async relinkClient(bridgeId, tenantSchema, onMessage) {
-        console.log(`🔄 Relinking WhatsApp client for bridge ${bridgeId}`);
+        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+        console.log(`🔄 Relinking WhatsApp client for ${compositeKey}`);
         await this.destroyClient(bridgeId, tenantSchema); // Full destroy with session deletion
         return await this.initializeClient(bridgeId, tenantSchema, onMessage);
     }
 
     /**
-     * Get all active clients
+     * Get all active clients (returns composite keys)
      */
     getAllClients() {
-        return Array.from(this.clients.entries()).map(([bridgeId, state]) => ({
-            bridgeId,
+        return Array.from(this.clients.entries()).map(([compositeKey, state]) => ({
+            compositeKey,
+            bridgeId: state.bridgeId,
             status: state.status,
             phoneNumber: state.phoneNumber,
             tenantSchema: state.tenantSchema,
@@ -271,9 +289,8 @@ class WhatsAppClientManager {
      */
     async cleanup() {
         console.log('🧹 Gracefully stopping all WhatsApp clients (preserving sessions)...');
-        const stopPromises = Array.from(this.clients.keys()).map(bridgeId => {
-            const state = this.clients.get(bridgeId);
-            return this.stopClient(bridgeId, state.tenantSchema); // Use stopClient, not destroyClient
+        const stopPromises = Array.from(this.clients.entries()).map(([compositeKey, state]) => {
+            return this.stopClient(state.bridgeId, state.tenantSchema); // Use stopClient, not destroyClient
         });
         await Promise.all(stopPromises);
         console.log('✅ All WhatsApp clients stopped (sessions preserved for auto-reconnect)');
