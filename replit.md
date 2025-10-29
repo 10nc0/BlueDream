@@ -60,9 +60,11 @@ The dashboard is a Single Page Application (SPA) featuring an Apple glassmorphis
   - **Horizontal Isolation**: Dedicated database clients per tenant with transaction-scoped `SET LOCAL search_path`
   - **Dev Access**: Special dev user (`phi_dao@pm.me`) has global cross-tenant access for debugging
 - **WhatsApp Integration**: Multi-instance architecture using `whatsapp-web.js`:
-  - **WhatsAppClientManager**: Manages multiple independent WhatsApp sessions (one per bridge)
-  - **Per-Bridge Sessions**: Each bridge has its own session stored in `.wwebjs_auth/bridge_{bridgeId}/`
-  - **Session Persistence**: Sessions survive server restarts (no QR re-scan needed)
+  - **WhatsAppClientManager**: Manages multiple independent WhatsApp sessions using composite `tenantSchema:bridgeId` keys
+  - **Tenant-Scoped Sessions**: Each bridge has its own session stored in `.wwebjs_auth/session-{tenantSchema}_bridge_{bridgeId}/`
+  - **Cross-Tenant Isolation**: Composite keys and tenant-scoped paths prevent bridge ID collisions between tenants
+  - **Session Persistence**: Sessions survive server restarts with automatic restoration (no QR re-scan needed)
+  - **Legacy Migration**: Auto-migrates pre-fractalization sessions to tenant-scoped paths on first startup
   - **Tenant-Aware Routing**: Messages automatically route to correct tenant schema based on bridge ownership
   - **Bridge-Level API**: Start, stop, relink WhatsApp sessions independently per bot
 - **Discord Integration**: Uses Discord webhooks for forwarding messages.
@@ -85,7 +87,9 @@ The dashboard is a Single Page Application (SPA) featuring an Apple glassmorphis
 ### System Design Choices
 - **Multi-Tenant Isolation**: Fractalized database architecture ensures Genesis admins cannot see other tenants' data
 - **Per-Bridge WhatsApp Sessions**: Each bridge creates its own WhatsApp session (no shared global bot)
-- **Session Persistence**: WhatsApp sessions survive server restarts via LocalAuth storage in `.wwebjs_auth/bridge_{bridgeId}/`
+- **Session Persistence**: WhatsApp sessions survive server restarts via tenant-scoped LocalAuth storage in `.wwebjs_auth/session-{tenantSchema}_bridge_{bridgeId}/`
+- **Composite Tracking**: All WhatsApp clients tracked with `tenantSchema:bridgeId` keys (e.g., `tenant_6:7`) preventing cross-tenant collisions
+- **24/7 Bridge Uptime**: Auto-restore on startup ensures all connected bridges reconnect automatically after server restarts
 - **All Admins Start with 0 Bots**: No pre-created bridges - each admin creates their own from scratch
 - **Safari/iPad Compatibility**: Achieved by relying on JWT in `localStorage` for primary authentication, addressing ITP cookie blocking
 - **Permanent Data Retention**: Ensures no message data is ever lost by disallowing deletion (except for bridge cascade)
