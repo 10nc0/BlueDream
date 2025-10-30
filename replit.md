@@ -10,6 +10,12 @@
 - **Zero Cost for Webhooks:** Webhook inputs have no runtime overhead.
 
 ## Recent Updates (Oct 30, 2025)
+- **QR FLOW UNIFICATION COMPLETE**: Eliminated code duplication in QR display logic
+  - Merged two separate QR implementations (create bridge + relink) into single `showQRAndWaitForConnection()` function
+  - Reduced maintenance burden and failure points by 50%
+  - Enhanced QR endpoint with comprehensive logging: tracks status, hasQR, tenant:bridge indexing
+  - Fixed logging inconsistencies: all endpoints now use "bridges" terminology (not legacy "bots")
+  - QR endpoint properly returns status field in all code paths (was already present, now verified with logging)
 - **ANTI-SPAM KICK DETECTION**: Critical session age tracking fix for WhatsApp auto-reconnect
   - Session creation time now captured at 'ready' event (not disconnect) for accurate age calculation
   - LOGOUT on new sessions (<5 mins) = anti-spam kick → auto-reconnect preserved

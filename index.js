@@ -2659,7 +2659,7 @@ app.get('/api/stats', requireAuth, async (req, res) => {
 // CRITICAL: Complete horizontal tenant isolation with EXPLICIT SCHEMA INDEXING
 // Uses dynamic schema names via variable placeholders (fractalized architecture)
 app.get('/api/bridges', requireAuth, async (req, res) => {
-    console.log(`🔍 /api/bots called by user ${req.userId}`);
+    console.log(`🔍 /api/bridges called by user ${req.userId}`);
     
     try {
         // Get tenant schema from authenticated user
@@ -2706,7 +2706,7 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
         const sanitized = sanitizeForRole(bridgesWithFractalIds, user.role);
         res.json(sanitized);
     } catch (error) {
-        console.error(`❌ Error in /api/bots for user ${req.userId}:`, error);
+        console.error(`❌ Error in /api/bridges for user ${req.userId}:`, error);
         console.error('Stack trace:', error.stack);
         res.status(500).json({ error: error.message });
     }
@@ -3143,6 +3143,7 @@ app.delete('/api/bridges/:id/stop', requireAuth, setTenantContext, requireRole('
 app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
     try {
         const { id } = req.params; // fractal_id
+        console.log(`📱 /api/bridges/:id/qr called for ${id} by user ${req.userId}`);
         
         // SECURITY: Get user's tenant first
         const userResult = await pool.query(
@@ -3151,6 +3152,7 @@ app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
         );
         
         if (!userResult.rows.length) {
+            console.error(`❌ User ${req.userId} not found for QR request`);
             return res.status(404).json({ error: 'User not found' });
         }
         
@@ -3159,7 +3161,7 @@ app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
         
         // SECURITY: Verify bridge belongs to user's tenant using fractal_id
         const bridgeResult = await pool.query(
-            `SELECT id, fractal_id FROM ${userTenantSchema}.bridges WHERE fractal_id = $1`,
+            `SELECT id, fractal_id, name FROM ${userTenantSchema}.bridges WHERE fractal_id = $1`,
             [id]
         );
         
@@ -3169,28 +3171,33 @@ app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
         }
         
         const internalId = bridgeResult.rows[0].id;
+        const bridgeName = bridgeResult.rows[0].name;
         
-        // Get WhatsApp client state
+        // Get WhatsApp client state using dynamic indexing (tenant:bridge)
         const clientState = whatsappManager.getClient(internalId, userTenantSchema);
         const qrCode = whatsappManager.getQRCode(internalId, userTenantSchema);
         
         if (!qrCode && !clientState) {
-            return res.json({ 
+            console.log(`  ℹ️  No QR/client for ${userTenantSchema}:${internalId} (${bridgeName})`);
+            const response = { 
                 qr: null, 
                 status: 'inactive',
                 message: 'No QR code available. Start the bridge first.' 
-            });
+            };
+            console.log(`  ↳ Returning status: ${response.status}`);
+            return res.json(response);
         }
         
-        // Return status and QR code
+        // Return status and QR code with dynamic indexing reference
         const response = {
             qr: qrCode ? await QRCode.toDataURL(qrCode) : null,
             status: clientState?.status || 'inactive',
             phoneNumber: clientState?.phoneNumber || null,
             hasQR: !!qrCode,
-            bridgeId: id
+            bridgeId: id // Fractal ID (webhook-centric reference)
         };
         
+        console.log(`  ✅ QR response for ${userTenantSchema}:${internalId} - status: ${response.status}, hasQR: ${response.hasQR}`);
         res.json(response);
     } catch (error) {
         console.error(`❌ Error getting QR for bridge ${req.params.id}:`, error);
@@ -3327,7 +3334,7 @@ app.get('/api/bridges/archived', requireAuth, async (req, res) => {
         `);
         res.json(result.rows);
     } catch (error) {
-        console.error('❌ Error in /api/bots/archived:', error);
+        console.error('❌ Error in /api/bridges/archived:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -3360,7 +3367,7 @@ app.get('/api/bridges/:id/stats', requireAuth, async (req, res) => {
         `, [id]);
         res.json(result.rows[0]);
     } catch (error) {
-        console.error('❌ Error in /api/bots/:id/stats:', error);
+        console.error('❌ Error in /api/bridges/:id/stats:', error);
         res.status(500).json({ error: error.message });
     }
 });
