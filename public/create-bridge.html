@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Bridge - Your Nyanbook~</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            padding: 2rem;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .card {
+            background: rgba(30, 41, 59, 0.9);
+            backdrop-filter: blur(20px);
+            padding: 2rem;
+            border-radius: 16px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        
+        h2 {
+            color: #f1f5f9;
+            margin-bottom: 0.5rem;
+            font-size: 1.75rem;
+        }
+        
+        .subtitle {
+            color: #94a3b8;
+            font-size: 0.875rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        label {
+            display: block;
+            color: #cbd5e1;
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 0.75rem;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            background: rgba(15, 23, 42, 0.8);
+        }
+        
+        button {
+            width: 100%;
+            padding: 0.875rem;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 0.5rem;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .qr-section {
+            text-align: center;
+            display: none;
+        }
+        
+        .qr-section h3 {
+            color: #22c55e;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+        
+        .qr-section img {
+            max-width: 300px;
+            width: 100%;
+            border-radius: 12px;
+            background: white;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .qr-section p {
+            color: #94a3b8;
+            font-size: 0.875rem;
+            margin: 1rem 0;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            color: #60a5fa;
+            font-size: 0.875rem;
+            margin: 1rem 0;
+        }
+        
+        .close-btn {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            margin-top: 1rem;
+        }
+        
+        .close-btn:hover {
+            box-shadow: 0 10px 25px rgba(239, 68, 68, 0.4);
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div id="form-section">
+            <h2>🌈 Create New Bridge</h2>
+            <p class="subtitle">QR appears instantly - no waiting for library</p>
+            
+            <form id="create-form">
+                <div class="form-group">
+                    <label for="bridge-name">Bridge Name</label>
+                    <input type="text" id="bridge-name" placeholder="e.g., Webhook HW" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="platform">Input Platform</label>
+                    <select id="platform" required>
+                        <option value="whatsapp">WhatsApp</option>
+                        <option value="telegram" disabled>Telegram (Coming Soon)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="user-output">Your Discord Webhook (Output #0n)</label>
+                    <input type="url" id="user-output" placeholder="https://discord.com/api/webhooks/...">
+                    <small style="color: #64748b; font-size: 0.75rem;">Optional - you can add this later</small>
+                </div>
+                
+                <button type="submit">✨ Generate QR & Activate</button>
+            </form>
+        </div>
+
+        <div id="qr-section" class="qr-section">
+            <h3>✅ Bridge Created!</h3>
+            <p>Scan this QR code with WhatsApp to activate your bridge</p>
+            <img id="qr-img" alt="WhatsApp QR Code" />
+            <div class="status">
+                <span class="loading"></span> Waiting for scan...
+            </div>
+            <p id="bridge-name-display" style="color: #60a5fa; font-weight: 600;"></p>
+            <button class="close-btn" onclick="window.close()">Close Window</button>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('create-form');
+        const formSection = document.getElementById('form-section');
+        const qrSection = document.getElementById('qr-section');
+        const qrImg = document.getElementById('qr-img');
+        const bridgeNameDisplay = document.getElementById('bridge-name-display');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const bridgeName = document.getElementById('bridge-name').value;
+            const platform = document.getElementById('platform').value;
+            const userOutput = document.getElementById('user-output').value;
+            
+            const submitBtn = form.querySelector('button');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading"></span> Creating bridge...';
+            
+            try {
+                const token = localStorage.getItem('accessToken');
+                if (!token) {
+                    throw new Error('Not authenticated. Please login first.');
+                }
+                
+                // 1. CREATE BRIDGE
+                console.log('📝 Creating bridge:', bridgeName);
+                const createRes = await fetch('/api/bridges', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        name: bridgeName,
+                        inputPlatform: platform,
+                        userOutputUrl: userOutput || null
+                    })
+                });
+                
+                if (!createRes.ok) {
+                    const error = await createRes.json();
+                    throw new Error(error.error || 'Failed to create bridge');
+                }
+                
+                const bridge = await createRes.json();
+                console.log('✅ Bridge created:', bridge);
+                
+                if (!bridge.fractal_id) {
+                    throw new Error('No fractal_id returned from server');
+                }
+                
+                // 2. START WHATSAPP SESSION + GET QR
+                console.log('🚀 Starting WhatsApp session...');
+                const startRes = await fetch(`/api/bridges/${bridge.fractal_id}/start`, {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (!startRes.ok) {
+                    const error = await startRes.json();
+                    throw new Error(error.error || 'Failed to start WhatsApp session');
+                }
+                
+                const startData = await startRes.json();
+                console.log('📱 WhatsApp session started:', startData);
+                
+                // 3. SHOW QR CODE
+                if (startData.qrCode) {
+                    qrImg.src = startData.qrCode;
+                } else {
+                    // Fallback: fetch QR from separate endpoint
+                    qrImg.src = `/api/bridges/${bridge.fractal_id}/qr`;
+                }
+                
+                bridgeNameDisplay.textContent = bridgeName;
+                formSection.style.display = 'none';
+                qrSection.style.display = 'block';
+                
+                // 4. POLL STATUS → AUTO-CLOSE ON SUCCESS
+                console.log('🔄 Polling for connection status...');
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const statusRes = await fetch(`/api/bridges/${bridge.fractal_id}/status`, {
+                            headers: { 
+                                'Authorization': `Bearer ${token}`
+                            }
+                        });
+                        
+                        if (statusRes.ok) {
+                            const status = await statusRes.json();
+                            console.log('📊 Status:', status);
+                            
+                            if (status.status === 'ready' || status.status === 'active') {
+                                clearInterval(pollInterval);
+                                document.querySelector('.status').innerHTML = '✅ Connected! Closing window...';
+                                document.querySelector('.status').style.background = 'rgba(34, 197, 94, 0.2)';
+                                document.querySelector('.status').style.borderColor = 'rgba(34, 197, 94, 0.3)';
+                                document.querySelector('.status').style.color = '#22c55e';
+                                setTimeout(() => {
+                                    window.opener?.postMessage({ type: 'bridge_created', bridge }, '*');
+                                    window.close();
+                                }, 1500);
+                            }
+                        }
+                    } catch (pollError) {
+                        console.error('Poll error:', pollError);
+                    }
+                }, 2000);
+                
+            } catch (err) {
+                console.error('❌ Error:', err);
+                alert('Error: ' + err.message);
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -10,6 +10,12 @@
 - **Zero Cost for Webhooks:** Webhook inputs have no runtime overhead.
 
 ## Recent Updates (Oct 30, 2025)
+- **QR-FIRST ARCHITECTURE COMPLETE**: Bypass library indexing for instant QR display
+  - Bridge creation now opens popup window with instant QR code
+  - Window auto-closes when WhatsApp connects successfully
+  - No dependency on library indexing - QR = proof of life
+  - POST /api/bridges/:id/start now returns QR code in response
+  - Created `public/create-bridge.html` as standalone popup page
 - **WEBHOOK-CENTRIC ARCHITECTURE COMPLETE**: Migrated from bridge-centric to webhook-centric model
   - Database: Added `output_01_url` and `output_0n_url` columns to all `tenant_*.bridges` tables
   - Code: Renamed `sendToNyanbook()` → `sendToLedger()`, `sendToUserWebhook()` → `sendToUserOutput()`

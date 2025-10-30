@@ -3040,10 +3040,17 @@ app.post('/api/bridges/:id/start', requireAuth, setTenantContext, requireRole('a
             createTenantAwareMessageHandler
         );
         
+        // QR-FIRST ARCHITECTURE: Return QR code immediately for popup display
+        let qrCodeDataUrl = null;
+        if (clientState.qrCode) {
+            qrCodeDataUrl = await QRCode.toDataURL(clientState.qrCode);
+        }
+        
         res.json({ 
             success: true, 
             message: 'WhatsApp session starting...',
             status: clientState.status,
+            qrCode: qrCodeDataUrl, // Include QR code for instant display
             bridgeId: id // Return fractal_id to frontend
         });
     } catch (error) {

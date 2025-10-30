@@ -75,7 +75,7 @@
         <div id="bridgesTab" class="tab-content active">
             <div class="section-header">
                 <h1 class="section-title">Bridge Library</h1>
-                <button class="create-bot-btn" onclick="openCreateBotModal()">+ Create Bridge</button>
+                <button class="create-bot-btn" onclick="openCreatePopup()">+ Create Bridge</button>
             </div>
 
             <div class="search-filter" style="flex-wrap: wrap;">
@@ -1677,6 +1677,25 @@
                 platforms.map(p => `<option value="${p}">${p}</option>`).join('');
         }
 
+        // QR-FIRST ARCHITECTURE: Open popup window for instant QR code
+        function openCreatePopup() {
+            const popup = window.open('/create-bridge.html', 'createBridge', 'width=550,height=750,resizable=yes,scrollbars=yes');
+            if (popup) {
+                popup.focus();
+                // Listen for bridge creation success
+                window.addEventListener('message', (event) => {
+                    if (event.data?.type === 'bridge_created') {
+                        console.log('✅ Bridge created successfully:', event.data.bridge);
+                        // Reload bridge list to show new bridge
+                        loadBridges();
+                    }
+                });
+            } else {
+                alert('Please allow popups for this site to create bridges');
+            }
+        }
+        
+        // LEGACY: Keep for backward compatibility
         function openCreateBotModal() {
             // Show quick-start wizard for new users
             if (bridges.length === 0 || !localStorage.getItem('skipQuickStart')) {
