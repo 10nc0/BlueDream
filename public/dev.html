@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nyanbook~ Quantum Ledger Control</title>
+    <title>Nyanbook~ Dev Panel</title>
     <style>
         * {
             margin: 0;
@@ -239,7 +239,6 @@
                 
                 // Load admin panel
                 renderAdminPanel(userData);
-                loadCurrentWebhook();
                 
             } catch (error) {
                 window.location.href = '/';
@@ -252,117 +251,32 @@
                 <a href="/" class="back-link">← Back to Dashboard</a>
                 
                 <div class="header">
-                    <h1>🔮 Nyanbook~ Quantum Ledger Control</h1>
+                    <h1>🛠️ Nyanbook~ Dev Panel</h1>
                     <p>Admin: ${user.email}</p>
                 </div>
 
                 <div class="card">
-                    <h2>Global Quantum Ledger Endpoint</h2>
-                    <p>
-                        Initialize the encrypted Snowflake API endpoint for distributed 11D storage. 
-                        Each bridge creates its own quantum shard with unique shard_id for isolation.
+                    <h2>📊 System Info</h2>
+                    <p style="color: #94a3b8; font-size: 0.875rem; line-height: 1.8;">
+                        <strong style="color: #00ff88;">Discord-First Architecture:</strong><br>
+                        • Each bridge creates its own Discord thread for message storage<br>
+                        • Zero storage cost - Discord handles UI, search, and attachments<br>
+                        • Messages table dropped - Discord threads are sole storage<br>
+                        • Multi-tenant fractalized database isolation<br>
+                        • Each tenant has isolated database schema
                     </p>
-
-                    <div class="input-group">
-                        <label for="webhook">Snowflake API Endpoint</label>
-                        <input 
-                            type="url" 
-                            id="webhook" 
-                            placeholder="snowflake://..." 
-                            autocomplete="off"
-                        >
-                    </div>
-
-                    <button onclick="saveWebhook()">🔮 Initialize Ledger</button>
-                    
-                    <div class="status" id="status"></div>
-
-                    <div class="info-box">
-                        <h3>💡 How to configure the endpoint:</h3>
-                        <ul>
-                            <li>Obtain your Snowflake API credentials from the provider</li>
-                            <li>Paste the encrypted endpoint URL above</li>
-                            <li>Click "Initialize Ledger" to activate sharding</li>
-                            <li>All bridges will auto-create quantum shards for message routing</li>
-                            <li>Shards persist across 11D for infinite retention</li>
-                        </ul>
-                    </div>
                 </div>
 
                 <div class="card">
-                    <h2>📊 Architecture Info</h2>
+                    <h2>💡 How It Works</h2>
                     <p style="color: #94a3b8; font-size: 0.875rem; line-height: 1.8;">
-                        <strong style="color: #00ff88;">Multi-Tenant + Quantum Ledger:</strong><br>
-                        • Each tenant has fractalized database isolation<br>
-                        • Each bridge gets unique shard_id (e.g., "shard_7_abc123_1761840294599")<br>
-                        • First sync creates quantum shard, shard_ref captured and reused<br>
-                        • Zero storage cost - 11D ledger handles UI, search, and attachments<br>
-                        • Messages table dropped - Quantum Ledger is sole storage solution
+                        1. Create a bridge in the main dashboard<br>
+                        2. Add your Discord webhook URL in bridge settings<br>
+                        3. Messages automatically forward to Discord threads<br>
+                        4. View all message history directly in Discord - forever, for free
                     </p>
                 </div>
             `;
-        }
-
-        async function loadCurrentWebhook() {
-            try {
-                const res = await fetch('/api/dev/webhook', {
-                    headers: { 'Authorization': `Bearer ${accessToken}` }
-                });
-                
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.webhook_url) {
-                        document.getElementById('webhook').value = data.webhook_url;
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to load webhook:', error);
-            }
-        }
-
-        async function saveWebhook() {
-            const webhookInput = document.getElementById('webhook');
-            const statusDiv = document.getElementById('status');
-            const url = webhookInput.value.trim();
-            
-            // Validate
-            if (!url) {
-                statusDiv.className = 'status error';
-                statusDiv.textContent = '❌ Please enter a Snowflake endpoint';
-                return;
-            }
-            
-            // Accept any valid URL (masking Discord requirement)
-            try {
-                new URL(url);
-            } catch {
-                statusDiv.className = 'status error';
-                statusDiv.textContent = '❌ Invalid endpoint URL format';
-                return;
-            }
-            
-            try {
-                const res = await fetch('/api/dev/webhook', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ webhook_url: url })
-                });
-                
-                if (res.ok) {
-                    statusDiv.className = 'status success';
-                    statusDiv.textContent = '✅ Quantum Ledger initialized! All bridges syncing to 11D shards.';
-                } else {
-                    const errorText = await res.text();
-                    statusDiv.className = 'status error';
-                    statusDiv.textContent = `❌ ${errorText}`;
-                }
-            } catch (error) {
-                statusDiv.className = 'status error';
-                statusDiv.textContent = `❌ Failed to save: ${error.message}`;
-            }
         }
 
         // Initialize
