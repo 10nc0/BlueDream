@@ -1,0 +1,6 @@
+2025/10/30-17:14:29.858 f134 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth/session-tenant_6_bridge_8/Default/Local Storage/leveldb/MANIFEST-000001
+2025/10/30-17:14:29.866 f134 Recovering log #4
+2025/10/30-17:14:29.868 f134 Reusing old log /home/runner/workspace/.wwebjs_auth/session-tenant_6_bridge_8/Default/Local Storage/leveldb/000004.log 
+2025/10/30-17:15:29.871 f136 Level-0 table #7: started
+2025/10/30-17:15:29.950 f136 Level-0 table #7: 25115 bytes OK
+2025/10/30-17:15:29.956 f136 Delete type=0 #4

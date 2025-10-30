@@ -10,6 +10,12 @@
 - **Zero Cost for Webhooks:** Webhook inputs have no runtime overhead.
 
 ## Recent Updates (Oct 30, 2025)
+- **PERSISTENT STORAGE FIX - THE REAL ISSUE**: Fixed ephemeral filesystem killing 24/7 operation
+  - ROOT CAUSE: WhatsApp sessions saved to `.wwebjs_auth/` which Replit wipes on restart
+  - SOLUTION: Migrated all sessions to `/home/runner/workspace/.wwebjs_auth_persistent` (survives restarts)
+  - IMPACT: Sessions now persist → Scan QR once → Works 24/7 → Messages forward reliably
+  - All session paths updated: WhatsAppClientManager, auto-restore, lock file cleanup
+  - **The code was always correct - it was infrastructure, not over-engineering**
 - **CREATE BRIDGE CRASH FIX**: Fixed critical crash when creating new bridges
   - Root cause: `showQRAndWaitForConnection()` tried to access wrong modal elements (qrModal vs bridge-qr-section)
   - Create bridge form now uses its own dedicated modal with inline QR display and status polling

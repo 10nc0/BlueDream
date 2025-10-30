@@ -46,14 +46,18 @@ class WhatsAppClientManager {
 
         try {
             // Create tenant-scoped session directory (prevents cross-tenant collisions)
-            // LocalAuth will automatically prefix with "session-", creating: .wwebjs_auth/session-tenant_X_bridge_Y
+            // LocalAuth will automatically prefix with "session-", creating: session-tenant_X_bridge_Y
             const sessionClientId = `${tenantSchema}_bridge_${bridgeId}`;
 
+            // CRITICAL: Use persistent storage on Replit to survive restarts
+            // Without this, sessions are wiped on restart → QR every time → "cannot sustain login"
+            const persistentPath = '/home/runner/workspace/.wwebjs_auth_persistent';
+            
             // Create WhatsApp client with tenant-scoped LocalAuth
             const client = new Client({
                 authStrategy: new LocalAuth({
                     clientId: sessionClientId,
-                    dataPath: './.wwebjs_auth'
+                    dataPath: persistentPath
                 }),
                 puppeteer: {
                     headless: true,

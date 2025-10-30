@@ -3672,7 +3672,8 @@ async function updateAnalytics(bridgeId) {
 // Clean up stale Chromium lock files and orphaned processes to prevent launch failures
 async function cleanupChromiumLockFiles() {
     try {
-        const sessionDir = '.wwebjs_auth';
+        // CRITICAL: Use persistent storage path
+        const sessionDir = '/home/runner/workspace/.wwebjs_auth_persistent';
         
         if (!fs.existsSync(sessionDir)) {
             console.log('🧹 No session directory found - skipping lock file cleanup');
@@ -3808,7 +3809,9 @@ async function autoRestoreWhatsAppSessions() {
                     // Check if this bridge has a saved WhatsApp session
                     // LocalAuth automatically prefixes with "session-", so we check for that
                     const sessionClientId = `${schema_name}_bridge_${bridge.id}`;
-                    const sessionPath = path.join('.wwebjs_auth', `session-${sessionClientId}`);
+                    // CRITICAL: Use persistent storage path
+                    const persistentPath = '/home/runner/workspace/.wwebjs_auth_persistent';
+                    const sessionPath = path.join(persistentPath, `session-${sessionClientId}`);
                     
                     // Legacy paths for backward compatibility (pre-fractalization)
                     const sessionPathLegacy1 = path.join('.wwebjs_auth', `session-bridge_${bridge.id}`);
