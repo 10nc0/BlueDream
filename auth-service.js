@@ -1,34 +1,51 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
-const JWT_SECRET = process.env.SESSION_SECRET || 'your-secret-key-change-in-production';
+// SECURITY: Require SESSION_SECRET to be set in production
+const JWT_SECRET = process.env.SESSION_SECRET;
+
+if (!JWT_SECRET) {
+    console.warn('⚠️  WARNING: SESSION_SECRET not set! Using weak default.');
+    console.warn('   Set SESSION_SECRET environment variable for production security.');
+    console.warn('   Generate a strong secret: openssl rand -hex 64');
+}
+
+// Fallback for development only - NEVER use this in production
+const SECRET = JWT_SECRET || 'dev-only-weak-jwt-secret-DO-NOT-USE-IN-PRODUCTION';
+
 const ACCESS_TOKEN_EXPIRY = '15m';  // 15 minutes
 const REFRESH_TOKEN_EXPIRY = '7d';  // 7 days
 
-function signAccessToken(userId, email, role) {
+function signAccessToken(userId, email, role, tenantId = null, adminId = null, isGenesisAdmin = false) {
     return jwt.sign(
         {
             userId,
             email,
             role,
+            tenantId,        // Required for multi-tenant isolation
+            adminId,         // '01' for dev admin, null otherwise
+            isGenesisAdmin,  // Boolean flag for genesis admin status
             type: 'access'
         },
-        JWT_SECRET,
+        SECRET,
         { expiresIn: ACCESS_TOKEN_EXPIRY }
     );
 }
 
-function signRefreshToken(userId, email, role) {
+function signRefreshToken(userId, email, role, tenantId = null, adminId = null, isGenesisAdmin = false) {
     const tokenId = crypto.randomBytes(32).toString('hex');
     const token = jwt.sign(
         {
             userId,
             email,
             role,
+            tenantId,        // Include tenant context in refresh token
+            adminId,         // Include admin_id for dev admin tracking
+            isGenesisAdmin,  // Include genesis admin status
             tokenId,
             type: 'refresh'
         },
-        JWT_SECRET,
+        SECRET,
         { expiresIn: REFRESH_TOKEN_EXPIRY }
     );
     
@@ -37,7 +54,7 @@ function signRefreshToken(userId, email, role) {
 
 function verifyToken(token) {
     try {
-        return jwt.verify(token, JWT_SECRET);
+        return jwt.verify(token, SECRET);
     } catch (error) {
         return null;
     }
