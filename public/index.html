@@ -1040,7 +1040,7 @@
             
             // Fetch WhatsApp status if this is a WhatsApp bot
             let whatsappStatus = null;
-            if (bridge.input_platform === 'WhatsApp') {
+            if (bridge.input_platform?.toLowerCase() === 'whatsapp') {
                 try {
                     const statusResponse = await authFetch(`/api/bridges/${bridge.fractal_id}/status`);
                     if (statusResponse.ok) {
@@ -1082,14 +1082,14 @@
                     <div class="discord-channel-info">
                         <span class="discord-channel-name"># ${bridge.input_platform}-${bridge.output_platform}</span>
                         <span class="discord-stats">
-                            ${bridge.input_platform === 'WhatsApp' ? getWhatsAppStatusBadge() : ''}
+                            ${bridge.input_platform?.toLowerCase() === 'whatsapp' ? getWhatsAppStatusBadge() : ''}
                             <span class="stat-badge" data-tooltip="${glossary?.tooltips?.message_count || 'Total messages received'}">${bridge.message_count || 0} 📊</span>
                             <span class="stat-badge ${successClass}" data-tooltip="${glossary?.tooltips?.forwarded_count || 'Successfully forwarded messages'}">${bridge.forwarded_count || 0} ✓</span>
                             <span class="stat-badge error ${failedClass}" data-tooltip="${glossary?.tooltips?.failed_count || 'Failed to forward'}">${bridge.failed_count || 0} ✗</span>
                         </span>
                     </div>
                     <div class="discord-actions">
-                        ${bridge.input_platform === 'WhatsApp' ? getWhatsAppActions() : ''}
+                        ${bridge.input_platform?.toLowerCase() === 'whatsapp' ? getWhatsAppActions() : ''}
                         <button class="btn-icon" onclick="editBridge('${bridge.fractal_id}')" title="Edit Bridge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">✏️</button>
                         <button class="btn-icon btn-danger" onclick="confirmDeleteBridge('${bridge.fractal_id}')" title="Delete Bridge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🗑️</button>
                     </div>
