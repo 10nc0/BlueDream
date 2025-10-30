@@ -1,6 +1,16 @@
 const crypto = require('crypto');
 
-const FRACTAL_SALT = process.env.FRACTAL_SALT || 'nyan-bridge-default-salt-2025-change-in-production';
+// SECURITY: Require FRACTAL_SALT to be set in production
+const FRACTAL_SALT = process.env.FRACTAL_SALT;
+
+if (!FRACTAL_SALT) {
+    console.warn('⚠️  WARNING: FRACTAL_SALT not set! Using weak default salt.');
+    console.warn('   Set FRACTAL_SALT environment variable for production security.');
+    console.warn('   Generate a strong salt: openssl rand -hex 32');
+}
+
+// Fallback for development only - NEVER use this in production
+const SALT = FRACTAL_SALT || 'dev-only-weak-salt-DO-NOT-USE-IN-PRODUCTION';
 
 /**
  * Generate a fractalized ID for a resource
@@ -15,7 +25,7 @@ const FRACTAL_SALT = process.env.FRACTAL_SALT || 'nyan-bridge-default-salt-2025-
 function generate(type, tenantId, dbId) {
     const prefix = `${type}_t${tenantId}_`;
     const hash = crypto.createHash('sha256')
-        .update(`${tenantId}:${type}:${dbId}:${FRACTAL_SALT}`)
+        .update(`${tenantId}:${type}:${dbId}:${SALT}`)
         .digest('hex')
         .slice(0, 12); // 12 hex chars = 48 bits of entropy
     return `${prefix}${hash}`;

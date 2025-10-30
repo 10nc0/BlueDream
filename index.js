@@ -2680,17 +2680,18 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
         
         console.log(`✅ Found ${result.rows.length} active bridges in ${tenantSchema} for ${user.email}`);
         
-        // SECURITY: Sanitize response - remove raw IDs, only expose fractalized IDs
-        const sanitizedBridges = result.rows.map(bridge => {
+        // PHASE 2 TRANSITION: Include both id and fractal_id during migration period
+        // TODO: Remove raw id once ALL endpoints and frontend are migrated to fractal_id
+        const bridgesWithFractalIds = result.rows.map(bridge => {
             // Generate fractal_id if missing (for backward compatibility)
             if (!bridge.fractal_id) {
                 bridge.fractal_id = fractalId.generate('bridge', tenantId, bridge.id);
             }
-            delete bridge.id; // NEVER expose raw database IDs
+            // Keep id for backward compatibility during transition
             return bridge;
         });
         
-        res.json(sanitizedBridges);
+        res.json(bridgesWithFractalIds);
     } catch (error) {
         console.error(`❌ Error in /api/bots for user ${req.userId}:`, error);
         console.error('Stack trace:', error.stack);
@@ -2728,9 +2729,9 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
         
         bridge.fractal_id = generatedFractalId;
         
-        // Sanitize response: remove raw ID, keep fractal_id
+        // PHASE 2 TRANSITION: Include both id and fractal_id during migration
+        // TODO: Remove raw id once ALL endpoints and frontend are migrated to fractal_id
         const sanitized = sanitizeForRole(bridge, userRole);
-        delete sanitized.id; // SECURITY: Never expose raw database IDs
         
         console.log(`✅ Created bridge with fractal_id: ${generatedFractalId} for tenant ${tenantId}`);
         res.json(sanitized);
