@@ -3170,16 +3170,28 @@ app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
         
         const internalId = bridgeResult.rows[0].id;
         
-        // Get QR code only if bridge belongs to user's tenant
+        // Get WhatsApp client state
+        const clientState = whatsappManager.getClient(internalId, userTenantSchema);
         const qrCode = whatsappManager.getQRCode(internalId, userTenantSchema);
         
-        if (!qrCode) {
-            return res.json({ qr: null, message: 'No QR code available. Start the bridge first.' });
+        if (!qrCode && !clientState) {
+            return res.json({ 
+                qr: null, 
+                status: 'inactive',
+                message: 'No QR code available. Start the bridge first.' 
+            });
         }
         
-        // Convert to data URL if needed
-        const qrDataUrl = await QRCode.toDataURL(qrCode);
-        res.json({ qr: qrDataUrl });
+        // Return status and QR code
+        const response = {
+            qr: qrCode ? await QRCode.toDataURL(qrCode) : null,
+            status: clientState?.status || 'inactive',
+            phoneNumber: clientState?.phoneNumber || null,
+            hasQR: !!qrCode,
+            bridgeId: id
+        };
+        
+        res.json(response);
     } catch (error) {
         console.error(`❌ Error getting QR for bridge ${req.params.id}:`, error);
         res.status(500).json({ error: error.message });
