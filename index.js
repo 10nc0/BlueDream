@@ -1250,10 +1250,10 @@ app.post('/api/auth/signup', async (req, res) => {
             
             const passwordHash = await bcrypt.hash(password, 10);
             
-            // Create user as genesis admin (no tenant yet)
+            // Create user as genesis admin (dev role for system-level access)
             const result = await pool.query(`
                 INSERT INTO users (email, password_hash, role, is_genesis_admin)
-                VALUES ($1, $2, 'admin', true)
+                VALUES ($1, $2, 'dev', true)
                 RETURNING id, email, role, is_genesis_admin
             `, [email, passwordHash]);
             
