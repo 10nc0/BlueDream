@@ -1,3 +1,3 @@
-2025/10/30-22:35:12.649 ab2 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_12_bridge_1/Default/Session Storage/MANIFEST-000001
-2025/10/30-22:35:12.651 ab2 Recovering log #3
-2025/10/30-22:35:12.660 ab2 Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_12_bridge_1/Default/Session Storage/000003.log 
+2025/10/30-22:42:48.401 1382 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_12_bridge_1/Default/Session Storage/MANIFEST-000001
+2025/10/30-22:42:48.409 1382 Recovering log #3
+2025/10/30-22:42:48.411 1382 Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_12_bridge_1/Default/Session Storage/000003.log 

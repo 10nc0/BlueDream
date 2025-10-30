@@ -1,4 +1,3 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const axios = require('axios');
 const { execSync } = require('child_process');
@@ -15,15 +14,15 @@ const twilio = require('twilio');
 const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
 const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./tenant-middleware');
-const WhatsAppClientManager = require('./whatsapp-client-manager');
+const BaileysClientManager = require('./baileys-client-manager');
 const DiscordBotManager = require('./discord-bot-manager');
 const fractalId = require('./utils/fractal-id');
 
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
 const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBERS.split(',').map(n => n.trim()) : [];
 
-// PERSISTENT STORAGE: Use env var for portability (Docker, Render, Fly.io, Replit, etc.)
-const WWEBJS_DATA_PATH = process.env.WWEBJS_DATA_PATH || '/home/runner/workspace/.wwebjs_auth_persistent';
+// PERSISTENT STORAGE: Baileys uses JSON files for auth (no browser needed)
+const BAILEYS_DATA_PATH = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -145,7 +144,7 @@ app.get('/uat', async (req, res) => {
     }
 });
 
-// Health check endpoint with WhatsApp client status monitoring
+// Health check endpoint with Baileys WhatsApp client status monitoring
 app.get('/health', (req, res) => {
     // Count clients by status
     const clientStats = {
@@ -158,7 +157,7 @@ app.get('/health', (req, res) => {
         other: 0
     };
     
-    // Get all client statuses from WhatsAppClientManager
+    // Get all client statuses from BaileysClientManager
     for (const [key, clientData] of whatsappManager.clients.entries()) {
         clientStats.total++;
         const status = clientData.status || 'unknown';
@@ -173,9 +172,10 @@ app.get('/health', (req, res) => {
         status: 'healthy', 
         timestamp: new Date().toISOString(),
         whatsapp: clientStats,
+        library: 'baileys', // Using Baileys (no Chromium needed)
         storage: {
-            path: WWEBJS_DATA_PATH,
-            customized: !!process.env.WWEBJS_DATA_PATH
+            path: BAILEYS_DATA_PATH,
+            customized: !!process.env.BAILEYS_DATA_PATH
         }
     });
 });
@@ -758,34 +758,9 @@ async function getMessageStats(client, tenantSchema) {
     }
 }
 
-function getChromiumPath() {
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-        return process.env.PUPPETEER_EXECUTABLE_PATH;
-    }
-    
-    try {
-        const path = execSync('which chromium-browser || which chromium', { encoding: 'utf8' }).trim();
-        if (path && fs.existsSync(path)) {
-            return path;
-        }
-    } catch (error) {
-        console.warn('Warning: Could not auto-detect Chromium path');
-    }
-    
-    return undefined;
-}
-
-const chromiumPath = getChromiumPath();
-if (!chromiumPath) {
-    console.error('❌ ERROR: Could not find Chromium executable!');
-    console.error('Please set PUPPETEER_EXECUTABLE_PATH environment variable.');
-    process.exit(1);
-}
-
-console.log(`✅ Using Chromium at: ${chromiumPath}`);
-
-// Initialize multi-tenant WhatsApp Client Manager
-whatsappManager = new WhatsAppClientManager(pool, chromiumPath);
+// Initialize multi-tenant Baileys WhatsApp Client Manager (no browser needed!)
+whatsappManager = new BaileysClientManager(pool);
+console.log('✅ Baileys WhatsApp Client Manager initialized (no Chromium required)');
 
 // Initialize Discord Bot Manager for automatic thread creation
 discordBotManager = new DiscordBotManager();
@@ -3865,10 +3840,7 @@ async function cleanupChromiumLockFiles() {
 // Auto-restore all bridges with saved WhatsApp sessions on server startup
 async function autoRestoreWhatsAppSessions() {
     try {
-        // Clean up stale Chromium lock files first to prevent launch failures
-        await cleanupChromiumLockFiles();
-        
-        console.log('🔄 Auto-restoring WhatsApp sessions from saved data...');
+        console.log('🔄 Auto-restoring Baileys WhatsApp sessions from saved data...');
         
         // Get all tenant schemas
         const schemas = await pool.query(`
@@ -3891,36 +3863,21 @@ async function autoRestoreWhatsAppSessions() {
                 `);
                 
                 for (const bridge of bridges.rows) {
-                    // Check if this bridge has a saved WhatsApp session
-                    // LocalAuth automatically prefixes with "session-", so we check for that
+                    // Check if this bridge has a saved Baileys session
+                    // Baileys stores auth in a directory with JSON files (creds.json, etc.)
                     const sessionClientId = `${schema_name}_bridge_${bridge.id}`;
-                    // CRITICAL: Use persistent storage path
-                    const sessionPath = path.join(WWEBJS_DATA_PATH, `session-${sessionClientId}`);
+                    // CRITICAL: Use persistent Baileys storage path
+                    const sessionPath = path.join(BAILEYS_DATA_PATH, sessionClientId);
                     
-                    // Legacy paths for backward compatibility (pre-fractalization)
-                    const sessionPathLegacy1 = path.join('.wwebjs_auth', `session-bridge_${bridge.id}`);
-                    const sessionPathLegacy2 = path.join('.wwebjs_auth', `bridge_${bridge.id}`);
+                    // Check if Baileys session exists (directory with creds.json)
+                    const hasSession = fs.existsSync(sessionPath) && 
+                                      fs.existsSync(path.join(sessionPath, 'creds.json'));
                     
-                    // Check if any session exists
-                    const hasNewSession = fs.existsSync(sessionPath);
-                    const hasLegacy1 = fs.existsSync(sessionPathLegacy1);
-                    const hasLegacy2 = fs.existsSync(sessionPathLegacy2);
-                    
-                    if (hasNewSession || hasLegacy1 || hasLegacy2) {
+                    if (hasSession) {
                         console.log(`🔗 Auto-restoring ${schema_name}:${bridge.id} (${bridge.name})...`);
                         
                         try {
-                            // MIGRATION: If legacy session exists but new one doesn't, migrate it
-                            if (!hasNewSession && (hasLegacy1 || hasLegacy2)) {
-                                const legacyPath = hasLegacy1 ? sessionPathLegacy1 : sessionPathLegacy2;
-                                console.log(`📦 Migrating legacy session from ${legacyPath} to ${sessionPath}`);
-                                
-                                // Rename legacy session to new tenant-scoped path
-                                fs.renameSync(legacyPath, sessionPath);
-                                console.log(`✅ Migration complete for ${schema_name}:${bridge.id}`);
-                            }
-                            
-                            // Initialize WhatsApp client with saved session
+                            // Initialize Baileys client with saved session
                             // Uses composite tenant:bridge key for tracking
                             await whatsappManager.initializeClient(
                                 bridge.id,
@@ -3949,18 +3906,17 @@ async function autoRestoreWhatsAppSessions() {
     }
 }
 
-// Global error handlers to prevent Puppeteer crashes from killing the app
+// Global error handlers to prevent WhatsApp disconnection from killing the app
 process.on('unhandledRejection', (reason, promise) => {
-    // Check if it's a Puppeteer/WhatsApp error
+    // Check if it's a Baileys/WhatsApp error
     if (reason && typeof reason === 'object') {
         const errorMsg = reason.message || String(reason);
         
-        // Ignore Puppeteer context/protocol errors (these happen during disconnect)
-        if (errorMsg.includes('Target closed') || 
-            errorMsg.includes('Protocol error') ||
-            errorMsg.includes('Session closed') ||
-            errorMsg.includes('Connection closed')) {
-            console.log('⚠️  Ignoring Puppeteer disconnect error (expected during logout)');
+        // Ignore connection errors (these happen during disconnect)
+        if (errorMsg.includes('Connection closed') ||
+            errorMsg.includes('Connection terminated') ||
+            errorMsg.includes('Session closed')) {
+            console.log('⚠️  Ignoring WhatsApp disconnect error (expected during logout)');
             return;
         }
     }
@@ -3970,14 +3926,13 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 process.on('uncaughtException', (error) => {
-    // Check if it's a Puppeteer error
+    // Check if it's a Baileys connection error
     const errorMsg = error.message || String(error);
     
-    if (errorMsg.includes('Target closed') || 
-        errorMsg.includes('Protocol error') ||
-        errorMsg.includes('Session closed') ||
-        errorMsg.includes('Connection closed')) {
-        console.log('⚠️  Ignoring Puppeteer exception (expected during logout)');
+    if (errorMsg.includes('Connection closed') ||
+        errorMsg.includes('Connection terminated') ||
+        errorMsg.includes('Session closed')) {
+        console.log('⚠️  Ignoring WhatsApp exception (expected during logout)');
         return;
     }
     
