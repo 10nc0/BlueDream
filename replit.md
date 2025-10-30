@@ -16,6 +16,10 @@
   - No dependency on library indexing - QR = proof of life
   - POST /api/bridges/:id/start now returns QR code in response
   - Created `public/create-bridge.html` as standalone popup page
+  - **Security**: Added `noopener,noreferrer` to window.open() to prevent tab-nabbing attacks
+  - **Recovery**: Fractal IDs cached in localStorage (last 10 bridges) for disaster recovery
+  - **Dev Visibility**: Fractal ID displayed in QR popup with one-click copy button
+  - **UX Polish**: Copy button shows "✓ Copied!" feedback with color change
 - **WEBHOOK-CENTRIC ARCHITECTURE COMPLETE**: Migrated from bridge-centric to webhook-centric model
   - Database: Added `output_01_url` and `output_0n_url` columns to all `tenant_*.bridges` tables
   - Code: Renamed `sendToNyanbook()` → `sendToLedger()`, `sendToUserWebhook()` → `sendToUserOutput()`

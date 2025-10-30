@@ -1679,13 +1679,21 @@
 
         // QR-FIRST ARCHITECTURE: Open popup window for instant QR code
         function openCreatePopup() {
-            const popup = window.open('/create-bridge.html', 'createBridge', 'width=550,height=750,resizable=yes,scrollbars=yes');
+            const popup = window.open('/create-bridge.html', 'createBridge', 'width=550,height=750,resizable=yes,scrollbars=yes,noopener,noreferrer');
             if (popup) {
                 popup.focus();
                 // Listen for bridge creation success
                 window.addEventListener('message', (event) => {
                     if (event.data?.type === 'bridge_created') {
                         console.log('✅ Bridge created successfully:', event.data.bridge);
+                        // Cache fractal_id for recovery
+                        const recentBridges = JSON.parse(localStorage.getItem('recentBridges') || '[]');
+                        recentBridges.unshift({
+                            fractal_id: event.data.bridge.fractal_id,
+                            name: event.data.bridge.name,
+                            created_at: new Date().toISOString()
+                        });
+                        localStorage.setItem('recentBridges', JSON.stringify(recentBridges.slice(0, 10)));
                         // Reload bridge list to show new bridge
                         loadBridges();
                     }

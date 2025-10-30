@@ -196,6 +196,10 @@
                 <span class="loading"></span> Waiting for scan...
             </div>
             <p id="bridge-name-display" style="color: #60a5fa; font-weight: 600;"></p>
+            <p style="font-family: 'SF Mono', 'Courier New', monospace; color: #a78bfa; font-size: 0.8rem; margin-top: 0.5rem;">
+                Fractal ID: <span id="fractal-id" style="user-select: all;"></span>
+                <button onclick="copyFractalId()" style="font-size: 0.7rem; padding: 0.25rem 0.5rem; margin-left: 0.5rem; background: rgba(167, 139, 250, 0.2); border: 1px solid rgba(167, 139, 250, 0.3); color: #a78bfa; cursor: pointer; border-radius: 4px;">Copy</button>
+            </p>
             <button class="close-btn" onclick="window.close()">Close Window</button>
         </div>
     </div>
@@ -206,6 +210,28 @@
         const qrSection = document.getElementById('qr-section');
         const qrImg = document.getElementById('qr-img');
         const bridgeNameDisplay = document.getElementById('bridge-name-display');
+        let currentFractalId = null;
+        
+        function copyFractalId() {
+            if (currentFractalId) {
+                navigator.clipboard.writeText(currentFractalId).then(() => {
+                    const btn = event.target;
+                    const originalText = btn.textContent;
+                    btn.textContent = '✓ Copied!';
+                    btn.style.background = 'rgba(34, 197, 94, 0.2)';
+                    btn.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+                    btn.style.color = '#22c55e';
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.background = 'rgba(167, 139, 250, 0.2)';
+                        btn.style.borderColor = 'rgba(167, 139, 250, 0.3)';
+                        btn.style.color = '#a78bfa';
+                    }, 1500);
+                }).catch(err => {
+                    alert('Failed to copy: ' + err.message);
+                });
+            }
+        }
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -252,6 +278,16 @@
                     throw new Error('No fractal_id returned from server');
                 }
                 
+                // Store fractal_id globally and in localStorage for recovery
+                currentFractalId = bridge.fractal_id;
+                const recentBridges = JSON.parse(localStorage.getItem('recentBridges') || '[]');
+                recentBridges.unshift({
+                    fractal_id: bridge.fractal_id,
+                    name: bridgeName,
+                    created_at: new Date().toISOString()
+                });
+                localStorage.setItem('recentBridges', JSON.stringify(recentBridges.slice(0, 10)));
+                
                 // 2. START WHATSAPP SESSION + GET QR
                 console.log('🚀 Starting WhatsApp session...');
                 const startRes = await fetch(`/api/bridges/${bridge.fractal_id}/start`, {
@@ -278,6 +314,7 @@
                 }
                 
                 bridgeNameDisplay.textContent = bridgeName;
+                document.getElementById('fractal-id').textContent = bridge.fractal_id;
                 formSection.style.display = 'none';
                 qrSection.style.display = 'block';
                 
