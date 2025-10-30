@@ -1,36 +1,13 @@
-# Nyan Bridge 🌈
+# Your Nyanbook~ 🌈
 
 ## Overview
-Nyan Bridge is a professional, multi-platform messaging bridge designed to connect WhatsApp to platforms like Discord and Telegram. It features robust authentication, permanent message retention (write-only), and a PostgreSQL database for storage. The project is deployed as a **SaaS application** where all users access the same instance via a public URL. Its core capabilities include multi-user authentication, 1-to-many output forwarding, media support, and comprehensive audit logging, ensuring messages and bridge activities are permanently recorded and accessible.
+"Your Nyanbook" is a multi-input messaging bridge designed to forward messages from any platform (WhatsApp, Telegram, Twitter/X, SMS, Email) to Discord. It features robust authentication, permanent message retention, and a PostgreSQL database. The project is deployed as a multi-tenant SaaS application where all users access the same instance via a public URL, with each user having an isolated PostgreSQL schema.
 
-## 🌐 Deployment Model: Multi-Tenant SaaS Application
-
-**This is a deployed web app with fractalized database architecture, NOT a template for forking.**
-
-### How It Works
-- **One Deployment**: Single instance hosted on Replit Autoscale
-- **Fractalized Database**: Each user signup creates an **isolated PostgreSQL schema** (tenant_1, tenant_2, etc.)
-- **Public URL**: Users visit your deployed site (e.g., `nyan-bridge.replit.app`)
-- **100% Tenant Isolation**: Each Genesis admin has their own isolated database schema with dedicated DB clients
-- **Genesis Admin Per Tenant**: Each signup creates a new tenant where that user becomes the Genesis admin
-
-### Database Architecture (Fractalized Multi-Tenancy)
-- **Global Schema (`public`)**: Core authentication tables (`users`, `sessions`, `audit_logs`)
-- **Tenant Schemas (`tenant_X`)**: Isolated per-tenant tables (`bridges`, `messages`, `users`)
-- **Complete Isolation**: Tenants CANNOT see each other's data - enforced by transaction-scoped `SET LOCAL search_path`
-- **Dedicated DB Clients**: Each tenant has its own database client pool for true horizontal isolation
-
-### User Flow
-1. **New User Signs Up** → System creates isolated `tenant_X` schema → User becomes Genesis admin of their tenant
-2. **Genesis Admin** → Creates bridges, starts WhatsApp sessions, manages their tenant → **Starts with 0 bridges**
-3. **Additional Users** → Genesis admin can invite users to their tenant with role-based permissions (admin, read-only, write-only)
-
-### No Forking Required
-Users do NOT fork the code. They simply:
-- Visit your deployed website
-- Create an account (email or Google OAuth)
-- Become Genesis admin of their own **isolated tenant**
-- Create and manage their own bridges independently
+**Key Capabilities:**
+- **Hybrid Input Model:** Supports WhatsApp (with QR login and session management) and Generic Webhooks for various platforms.
+- **Unified Output:** All inputs forward to Discord webhooks (1-to-many support).
+- **Multi-Tenant SaaS:** Single deployment with fractalized database architecture ensuring 100% tenant isolation.
+- **Zero Cost for Webhooks:** Webhook inputs have no runtime overhead.
 
 ## User Preferences
 - **Design**: Apple glassmorphism aesthetic with Discord-style message layout
@@ -42,163 +19,46 @@ Users do NOT fork the code. They simply:
 
 ## System Architecture
 ### UI/UX Decisions
-The dashboard is a Single Page Application (SPA) featuring an Apple glassmorphism design. It adopts a Discord-style two-pane layout with a left sidebar for bridge management and a right pane for message feeds. The UI includes real-time updates, circular avatars, status badges, and responsive design for mobile compatibility. Accessibility is enhanced with custom tooltips that dynamically adjust positioning to prevent viewport cropping.
-
-**Dev Panel (Admin #01 Only):**
-- System-wide bridge visibility across all tenants
-- Horizontal tenant cards showing Admin #01 (Dev - gold badge) and Admin #02+ (Genesis Admins - blue badges)
-- Bridge statistics per tenant: message count, success/failure rates
-- Complete isolation: regular users see only their tenant's bridges
+The dashboard is a Single Page Application (SPA) with an Apple glassmorphism design, featuring a Discord-style two-pane layout. It includes real-time updates, circular avatars, status badges, responsive design for mobile, and custom tooltips for accessibility. A Dev Panel provides system-wide bridge visibility for Admin #01, showing tenant and bridge statistics while maintaining strict isolation for regular users.
 
 ### Technical Implementations
 - **Backend**: Node.js with Express.
-- **Frontend**: SPA with client-side authentication handling.
-- **Authentication**: Dual-authentication system using JWT tokens stored in `localStorage` (for Safari/iPad compatibility) and session cookies. It supports multi-user authentication with role-based access control (admin, read-only, write-only) and includes an in-progress Google OAuth integration.
-- **Database**: PostgreSQL (Neon-backed Replit database) with **fractalized multi-tenancy**:
-  - **Global Schema**: `public` schema contains `users`, `sessions`, `audit_logs`
-  - **Tenant Schemas**: Each user signup creates isolated `tenant_X` schema with `bridges`, `messages`, `users`
-  - **Horizontal Isolation**: Dedicated database clients per tenant with transaction-scoped `SET LOCAL search_path`
-  - **Dev Access**: Special dev user (`phi_dao@pm.me`) has global cross-tenant access for debugging
-- **WhatsApp Integration**: Multi-instance architecture using `whatsapp-web.js`:
-  - **WhatsAppClientManager**: Manages multiple independent WhatsApp sessions using composite `tenantSchema:bridgeId` keys
-  - **Tenant-Scoped Sessions**: Each bridge has its own session stored in `.wwebjs_auth/session-{tenantSchema}_bridge_{bridgeId}/`
-  - **Cross-Tenant Isolation**: Composite keys and tenant-scoped paths prevent bridge ID collisions between tenants
-  - **Session Persistence**: Sessions survive server restarts with automatic restoration (no QR re-scan needed)
-  - **Legacy Migration**: Auto-migrates pre-fractalization sessions to tenant-scoped paths on first startup
-  - **Tenant-Aware Routing**: Messages automatically route to correct tenant schema based on bridge ownership
-  - **Bridge-Level API**: Start, stop, relink WhatsApp sessions independently per bot
-- **Discord Integration**: Uses Discord webhooks for forwarding messages.
-- **Session Management**: `express-session` with a PostgreSQL store.
-- **Media Handling**: Supports forwarding of images, videos, and documents. Media is lazy-loaded with an `IntersectionObserver` and cached using a triple-layer system (memory, IndexedDB, server API).
-- **Search**: Features natural language date parsing (e.g., "today", "last week", "October 2025") and intelligent regex detection for advanced queries.
-- **Data Retention**: Messages are write-only; no DELETE operations are permitted except for bridge deletion, which cascades to associated messages.
+- **Frontend**: SPA with client-side authentication.
+- **Authentication**: Email/password authentication using JWT tokens in `localStorage`. Multi-user authentication with role-based access control (admin, read-only, write-only).
+- **Database**: PostgreSQL (Neon-backed) with fractalized multi-tenancy:
+    - **Global Schema**: `public` for core authentication (`users`, `sessions`, `audit_logs`).
+    - **Tenant Schemas**: Isolated `tenant_X` for per-tenant data (`bridges`, `messages`, `users`).
+    - **Horizontal Isolation**: Dedicated database clients and `SET LOCAL search_path` for complete data separation.
+- **WhatsApp Integration**: Multi-instance `whatsapp-web.js` with `WhatsAppClientManager` to manage independent, tenant-scoped sessions. Sessions are persistent across restarts.
+- **Discord Integration**: Uses Discord webhooks for message forwarding.
+- **Media Handling**: Supports forwarding of images, videos, and documents with lazy-loading and a triple-layer caching system.
+- **Search**: Natural language date parsing and intelligent regex detection.
+- **Data Retention**: Messages are write-only, with deletion only cascading from bridge removal.
 
 ### Feature Specifications
-- **Multi-Tenant SaaS**: Complete horizontal tenant isolation with fractalized database architecture
-- **Multi-Platform Bridge**: WhatsApp to Discord, extensible to Telegram
-- **Per-Bridge WhatsApp Sessions**: Each bridge has independent WhatsApp session with persistent credentials
-- **1-to-Many Output**: A single bridge can forward messages to multiple destinations
-- **Web Dashboard**: Professional UI with real-time updates, Discord-style message feed, and per-bridge WhatsApp controls
-- **WhatsApp Session Management**: Start/Stop/Relink buttons, status badges (Connected, Scan QR, Inactive, etc.)
-- **Audit Logging**: Comprehensive tracking of session activities, authentication events, and CRUD operations
-- **Admin Panel**: An admin-only interface for monitoring users, sessions, and audit logs (per-tenant)
-- **Quick-Start Wizard**: Guides first-time users through the initial setup process
+- **Multi-Tenant SaaS**: Complete horizontal tenant isolation.
+- **Multi-Platform Bridge**: WhatsApp to Discord, extensible to other platforms.
+- **Per-Bridge WhatsApp Sessions**: Independent, persistent WhatsApp sessions for each bridge.
+- **1-to-Many Output**: Single bridge can forward to multiple destinations.
+- **Web Dashboard**: Professional UI with real-time updates and per-bridge WhatsApp controls.
+- **WhatsApp Session Management**: Start/Stop/Relink buttons, status badges.
+- **Audit Logging**: Comprehensive tracking of activities and events.
+- **Admin Panel**: Per-tenant monitoring for admins.
+- **Quick-Start Wizard**: Guides initial user setup.
 
 ### System Design Choices
-- **Multi-Tenant Isolation**: Fractalized database architecture ensures Genesis admins cannot see other tenants' data
-- **Per-Bridge WhatsApp Sessions**: Each bridge creates its own WhatsApp session (no shared global bot)
-- **Session Persistence**: WhatsApp sessions survive server restarts via tenant-scoped LocalAuth storage in `.wwebjs_auth/session-{tenantSchema}_bridge_{bridgeId}/`
-- **Composite Tracking**: All WhatsApp clients tracked with `tenantSchema:bridgeId` keys (e.g., `tenant_6:7`) preventing cross-tenant collisions
-- **24/7 Bridge Uptime**: Auto-restore on startup ensures all connected bridges reconnect automatically after server restarts
-- **Automatic Lock File Cleanup**: Cleans stale Chromium lock files (SingletonLock, SingletonSocket, SingletonCookie) before bridge initialization to prevent launch failures on restart
-- **All Admins Start with 0 Bots**: No pre-created bridges - each admin creates their own from scratch
-- **Safari/iPad Compatibility**: Achieved by relying on JWT in `localStorage` for primary authentication, addressing ITP cookie blocking
-- **Permanent Data Retention**: Ensures no message data is ever lost by disallowing deletion (except for bridge cascade)
-- **Scalability**: Designed for potential Autoscale deployment on Replit, with health checks and dynamic port configuration
-
-### Key Files
-- **`whatsapp-client-manager.js`**: Multi-instance WhatsApp client manager (one per bridge)
-- **`tenant-middleware.js`**: Tenant context middleware for request isolation
-- **`tenant-manager.js`**: Database client pool manager with per-tenant isolation + schema creation with fractalized ID columns
-- **`utils/fractal-id.js`**: SHA-256 hash-based ID generator for non-enumerable bridge/message IDs
-- **`migrate-fractal-ids.js`**: One-time migration script to add fractalized IDs to existing bridges
-- **`index.js`**: Main Express server with bridge-level WhatsApp API endpoints
-- **`public/index.html`**: SPA dashboard with per-bridge WhatsApp controls (Start, Stop, Relink, QR)
+- **Multi-Tenant Isolation**: Fractalized database architecture prevents cross-tenant data access.
+- **Per-Bridge WhatsApp Sessions**: Ensures independent operation and no shared global bot.
+- **Session Persistence**: WhatsApp sessions survive server restarts via tenant-scoped `LocalAuth` storage.
+- **Composite Tracking**: `tenantSchema:bridgeId` keys prevent cross-tenant collisions.
+- **24/7 Bridge Uptime**: Auto-restore ensures connected bridges reconnect after server restarts.
+- **Automatic Lock File Cleanup**: Prevents launch failures.
+- **Safari/iPad Compatibility**: Achieved via JWT in `localStorage` to avoid ITP cookie blocking.
+- **Permanent Data Retention**: Disallows message deletion (except via bridge cascade).
+- **Scalability**: Designed for Replit Autoscale deployment with health checks.
+- **Fractalized Bridge IDs**: SHA-256 hash-based, non-enumerable, tenant-scoped IDs to prevent enumeration attacks.
 
 ## External Dependencies
-- **Database**: PostgreSQL (specifically Neon-backed Replit database)
+- **Database**: PostgreSQL (Neon-backed Replit database)
 - **WhatsApp**: `whatsapp-web.js` library
 - **Discord**: Discord webhooks
-- **Authentication (In Progress)**: Google OAuth via `passport` and `passport-google-oauth20`
-- **AI (Dismissed)**: OpenAI (gpt-5-mini) for AI-powered search was removed for cost optimization.
-
-## 🔒 Security Architecture & Known Limitations
-
-### Phase 1 (Current): Backend-Enforced Tenant Isolation ✅
-**Status**: Production-hardened with strict tenant validation
-
-#### Implementation Details:
-1. **Tenant Middleware**: All write operations (POST/PUT/DELETE) use `setTenantContext` middleware with transaction-scoped `SET LOCAL search_path`
-2. **Ownership Validation**: All bridge read operations verify bridge ownership before returning data:
-   - GET `/api/bridges/:id/qr` - validates bridge belongs to user's tenant
-   - GET `/api/bridges/:id/status` - validates bridge belongs to user's tenant
-   - GET `/api/bridges/:id/messages` - validates bridge belongs to user's tenant before querying messages
-3. **Dev Panel Triple Security**: Dev Panel requires three conditions:
-   - User role = `dev`
-   - User `is_genesis_admin` = `true`
-   - User `tenant_id` = `1` (tenant_01 only)
-4. **Recursive Data Sanitization**: `sanitizeForRole()` recursively strips `tenant_id` and `tenant_schema` from all API responses
-
-#### Current Security Posture:
-✅ Backend enforces tenant isolation on ALL endpoints
-✅ Cross-tenant access attempts blocked with 404 responses
-✅ Security warnings logged for unauthorized access attempts
-✅ Zero connection leaks with production-hardened cleanup handlers
-✅ JWT errors handled gracefully with fallback to session auth
-
-### Phase 2 (In Progress): Fractalized Bridge IDs 🔄
-**Status**: Backend infrastructure complete - Frontend migration pending
-
-#### Problem Solved:
-- **Sequential Bridge IDs**: Raw database IDs (1, 2, 3...) are predictable and enable enumeration attacks
-- **Attack Vector**: Malicious users could iterate `bridgeId=1` to `bridgeId=1000` to probe system
-- **Solution**: Non-enumerable, tenant-scoped fractalized IDs
-
-#### Implemented Solution (October 2025):
-
-**Backend Implementation** (✅ Complete):
-```javascript
-// utils/fractal-id.js - SHA-256 hash-based generator
-const fractal_id = `bridge_t${tenantId}_${sha256Hash}`;
-// Example: bridge_t6_9221cbd9d173
-```
-
-**Database Schema** (✅ Complete):
-```sql
-ALTER TABLE bridges ADD COLUMN fractal_id TEXT UNIQUE;
-CREATE INDEX idx_bridges_fractal_id ON bridges(fractal_id);
-```
-
-**Migration Status** (✅ Complete):
-- Added `fractal_id` column to all tenant schemas (tenant_1, tenant_6)
-- Generated fractalized IDs for all existing bridges
-- Migration script: `migrate-fractal-ids.js`
-
-**API Responses** (✅ Backward Compatible):
-```javascript
-// GET/POST /api/bridges returns BOTH ids during transition:
-{
-  "id": 8,                          // Legacy - will be removed after frontend migration
-  "fractal_id": "bridge_t6_9221cbd9d173",  // New opaque identifier
-  "name": "WhatsApp → Discord Bridge"
-}
-```
-
-**Security Features** (✅ Complete):
-- ✅ **Non-enumerable**: SHA-256 hash prevents sequential guessing
-- ✅ **Tenant-scoped**: Prefix encodes tenant ownership (`bridge_t{tenantId}_`)
-- ✅ **Opaque**: No information leakage about system usage
-- ✅ **FRACTAL_SALT Warning**: Startup warning if using weak default salt
-- ✅ **Backward Compatible**: Internal `id` remains for FK relationships
-
-#### Remaining Work:
-1. ⏳ **Update Remaining Endpoints**: Make PUT/DELETE /api/bridges/:id and GET /api/bridges/:id/* accept `fractal_id` routing
-2. ⏳ **Add Resolver Utility**: Create helper to resolve `fractal_id` → internal `id` for database queries
-3. ⏳ **Frontend Migration**: Update all bridge operations to use `fractal_id` instead of raw `id`
-4. ⏳ **Remove Raw IDs**: Strip `id` from API responses once frontend migration complete
-5. ⏳ **Production Secret**: Make FRACTAL_SALT required (fail fast) before deployment
-
-#### Security Posture:
-- ✅ Infrastructure in place with backward compatibility
-- ⚠️ FRACTAL_SALT uses weak default (warning logged) - MUST set production secret
-- ⚠️ Raw IDs still exposed during transition - full security achieved after frontend migration
-- ✅ Backend validation still enforces tenant isolation on all endpoints
-
-### Recent Security Improvements (October 2025)
-- **Fixed**: Browser crash from `process.env` access in client-side code
-- **Fixed**: Database connection leaks via cleanup guards and `res.once()` handlers
-- **Fixed**: Puppeteer crashes isolated with global error handlers
-- **Fixed**: JWT verification wrapped in try/catch for graceful fallback
-- **Hardened**: Tenant validation on all bridge read endpoints
-- **Hardened**: Dev Panel locked down with triple security check
-- **Hardened**: Recursive data sanitization prevents nested data leaks

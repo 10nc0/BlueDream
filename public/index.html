@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🐱🌈 Nyan Bridge - apps to apps hopping, nyan</title>
+    <title>X to Discord Note | Your Nyanbook~</title>
     <link rel="stylesheet" href="/css/dashboard.css">
     <link rel="stylesheet" href="/css/components/tooltips.css">
     <link rel="stylesheet" href="/css/components/analytics.css">
@@ -37,10 +37,10 @@
             </div>
             <div class="header-branding">
                 <div class="logo">
-                    <span>🐱🌈 Nyan Bridge</span>
+                    <span>🌈 Your Nyanbook~</span>
                 </div>
                 <div class="tagline-wrapper">
-                    <span class="tagline">WhatsApp to Discord Bridge, SNS to SNS - app to app hopping, nyan~</span>
+                    <span class="tagline">X to Discord Note - app to app hopping, nyan~</span>
                 </div>
             </div>
         </div>
@@ -603,8 +603,8 @@
         let users = [];
         let sessions = [];
         
-        // Platform glossary for roadmap features
-        const glossary = {
+        // Platform roadmap for future features
+        const roadmapGlossary = {
             platforms: {
                 coming_soon: ['Telegram', 'Line', 'Signal', 'WeChat']
             }
@@ -895,11 +895,11 @@
             });
             
             // Render sidebar with roadmap teaser
-            const roadmapCard = glossary?.platforms?.coming_soon ? `
+            const roadmapCard = roadmapGlossary?.platforms?.coming_soon ? `
                 <div class="roadmap-card" style="margin-top: 1rem;">
                     <div class="roadmap-title">🚀 Coming Soon</div>
                     <div class="roadmap-platforms">
-                        ${glossary.platforms.coming_soon.map(p => `
+                        ${roadmapGlossary.platforms.coming_soon.map(p => `
                             <span class="roadmap-platform">${p}</span>
                         `).join('')}
                     </div>

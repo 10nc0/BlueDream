@@ -12,8 +12,6 @@ const session = require('express-session');
 const connectPg = require('connect-pg-simple');
 const bcrypt = require('bcrypt');
 const twilio = require('twilio');
-const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
 const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./tenant-middleware');
@@ -83,80 +81,7 @@ app.use(session({
     name: 'bridge.sid' // Custom session cookie name
 }));
 
-// Initialize Passport
-app.use(passport.initialize());
-app.use(passport.session());
-
-// Passport serialization
-passport.serializeUser((user, done) => {
-    done(null, user.id);
-});
-
-passport.deserializeUser(async (id, done) => {
-    try {
-        const result = await pool.query('SELECT id, email, role, google_id FROM users WHERE id = $1', [id]);
-        done(null, result.rows[0]);
-    } catch (error) {
-        done(error, null);
-    }
-});
-
-// Google OAuth Strategy (only if credentials are provided)
-if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'https://whats-app-discord-bridge.replit.app/api/auth/google/callback';
-    
-    passport.use(new GoogleStrategy({
-        clientID: process.env.GOOGLE_CLIENT_ID,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        callbackURL: GOOGLE_CALLBACK_URL
-    }, async (accessToken, refreshToken, profile, done) => {
-        try {
-            const googleId = profile.id;
-            const email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
-            
-            // Check if user exists by Google ID
-            let result = await pool.query('SELECT * FROM users WHERE google_id = $1', [googleId]);
-            
-            if (result.rows.length > 0) {
-                // Existing user - log in
-                return done(null, result.rows[0]);
-            }
-            
-            // Check if user exists by email
-            if (email) {
-                result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-                if (result.rows.length > 0) {
-                    // Link Google ID to existing email account
-                    await pool.query('UPDATE users SET google_id = $1, provider = $2 WHERE id = $3', 
-                        [googleId, 'google', result.rows[0].id]);
-                    return done(null, result.rows[0]);
-                }
-            }
-            
-            // New user via Google OAuth - create as genesis admin with new tenant
-            // Note: Invite-based Google OAuth not supported yet (user must use email signup for invites)
-            result = await pool.query(`
-                INSERT INTO users (email, google_id, provider, role, is_genesis_admin)
-                VALUES ($1, $2, 'google', 'admin', true)
-                RETURNING id, email, google_id, role
-            `, [email, googleId]);
-            
-            const newUser = result.rows[0];
-            
-            // Create tenant for new Google OAuth user
-            const tenant = await tenantManager.createTenant(newUser.id);
-            console.log(`[${getTimestamp()}] 🌟 GENESIS ADMIN created via Google OAuth - Email: ${email}, Tenant: ${tenant.tenantId}`);
-            
-            return done(null, newUser);
-        } catch (error) {
-            return done(error, null);
-        }
-    }));
-    
-    console.log('✅ Google OAuth configured');
-} else {
-    console.log('ℹ️  Google OAuth not configured (missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET)');
-}
+// Google OAuth removed - email/password authentication only
 
 // Middleware to block HTML files from static serving
 app.use((req, res, next) => {
@@ -1382,60 +1307,7 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 });
 
-// Google OAuth Routes (only if configured)
-if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    app.get('/api/auth/google', passport.authenticate('google', { 
-        scope: ['profile', 'email'] 
-    }));
-
-    app.get('/api/auth/google/callback', 
-        passport.authenticate('google', { failureRedirect: '/login.html' }),
-        async (req, res) => {
-            try {
-                const user = req.user;
-                
-                // Generate JWT tokens
-                const accessToken = authService.signAccessToken(user.id, user.email, user.role);
-                const { token: refreshToken, tokenId } = authService.signRefreshToken(user.id, user.email, user.role);
-                
-                // Store refresh token
-                const deviceInfo = req.get('user-agent') || 'unknown';
-                await authService.storeRefreshToken(pool, user.id, tokenId, deviceInfo, req.ip);
-                
-                // Create session tracking record
-                await createSessionRecord(user.id, req.sessionID, req);
-                
-                // Log Google OAuth login
-                logAudit(pool, req, 'LOGIN', 'USER', user.id.toString(), user.email, {
-                    method: 'google_oauth',
-                    role: user.role,
-                    authType: 'jwt+cookie'
-                });
-                
-                console.log(`[${getTimestamp()}] ✅ Google OAuth login - User: ${user.email}, Role: ${user.role}`);
-                
-                // Redirect to dashboard with tokens in URL (will be saved to localStorage by client)
-                const redirectUrl = `/?accessToken=${encodeURIComponent(accessToken)}&refreshToken=${encodeURIComponent(refreshToken)}`;
-                res.redirect(redirectUrl);
-            } catch (error) {
-                console.error('Google OAuth callback error:', error);
-                res.redirect('/login.html?error=oauth_failed');
-            }
-        }
-    );
-} else {
-    // Google OAuth not configured - return error
-    app.get('/api/auth/google', (req, res) => {
-        res.status(503).json({ 
-            error: 'Google OAuth is not configured on this server',
-            message: 'Please contact the administrator or use email/password signup'
-        });
-    });
-    
-    app.get('/api/auth/google/callback', (req, res) => {
-        res.redirect('/login.html?error=oauth_not_configured');
-    });
-}
+// Google OAuth removed - email/password authentication only
 
 // ===========================
 // INVITE MANAGEMENT API
@@ -2807,6 +2679,98 @@ app.post('/api/bridges/:id/unarchive', requireAuth, setTenantContext, requireRol
     }
 });
 
+// ============ WEBHOOK INPUT ENDPOINT (HYBRID MODEL) ============
+// Support ANY input: Telegram bot, Twitter/X, SMS, Email → Discord
+// Example: POST /api/webhook/bridge_t6_abc123 with { text, username, avatar_url, media_url }
+app.post('/api/webhook/:fractalId', async (req, res) => {
+    try {
+        const fractalIdParam = req.params.fractalId;
+        const { text, username = 'External', avatar_url, media_url, phone, email } = req.body;
+        
+        // Parse fractal_id to get tenant
+        const parsed = fractalId.parse(fractalIdParam);
+        if (!parsed || !parsed.tenantId) {
+            return res.status(400).json({ error: 'Invalid bridge ID format' });
+        }
+        
+        const tenantSchema = `tenant_${parsed.tenantId}`;
+        
+        // Get tenant-scoped database client
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            await client.query(`SET LOCAL search_path TO ${tenantSchema}`);
+            
+            // Find bridge by fractal_id
+            const bridgeResult = await client.query(
+                'SELECT id, fractal_id, output_credentials FROM bridges WHERE fractal_id = $1',
+                [fractalIdParam]
+            );
+            
+            if (bridgeResult.rows.length === 0) {
+                await client.query('ROLLBACK');
+                client.release();
+                return res.status(404).json({ error: 'Bridge not found' });
+            }
+            
+            const bridge = bridgeResult.rows[0];
+            const internalId = bridge.id;
+            
+            // Store message in database
+            const senderName = username || phone || email || 'External';
+            const messageResult = await client.query(`
+                INSERT INTO messages (
+                    bridge_id, sender_name, sender_contact, message_content, 
+                    timestamp, discord_status, media_type
+                ) VALUES ($1, $2, $3, $4, NOW(), 'pending', $5)
+                RETURNING id
+            `, [internalId, senderName, phone || email || 'webhook', text || '', media_url ? 'image' : null]);
+            
+            const messageDbId = messageResult.rows[0].id;
+            
+            // Prepare Discord payload
+            const discordPayload = {
+                username: senderName,
+                avatar_url: avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png',
+                content: text || '',
+                embeds: []
+            };
+            
+            // Add media embed if provided
+            if (media_url) {
+                discordPayload.embeds.push({
+                    image: { url: media_url }
+                });
+            }
+            
+            // Send to Discord webhooks
+            await sendToAllWebhooks(
+                discordPayload,
+                { isMedia: !!media_url },
+                messageDbId,
+                null,
+                internalId,
+                tenantSchema,
+                client
+            );
+            
+            await client.query('COMMIT');
+            client.release();
+            
+            console.log(`✅ [Webhook] Forwarded message from ${senderName} to bridge ${fractalIdParam}`);
+            res.json({ success: true, message: 'Message forwarded to Discord' });
+            
+        } catch (error) {
+            await client.query('ROLLBACK');
+            client.release();
+            throw error;
+        }
+    } catch (error) {
+        console.error(`❌ [Webhook] Error processing webhook:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ============ BOT-LEVEL WHATSAPP MANAGEMENT ENDPOINTS ============
 // Multi-tenant WhatsApp: Each bridge gets its own WhatsApp session
 
@@ -3228,7 +3192,7 @@ app.get('/api/bridges/:id/messages', requireAuth, async (req, res) => {
         
         // Get total count for pagination with explicit schema indexing
         let countQuery = `SELECT COUNT(*) FROM ${tenantSchema}.messages WHERE bridge_id = $1`;
-        const countParams = [id];
+        const countParams = [internalId];
         if (search) {
             countQuery += ` AND (LOWER(sender_name) LIKE $2 OR sender_contact LIKE $2 OR LOWER(message_content) LIKE $2)`;
             countParams.push(`%${search.toLowerCase()}%`);
