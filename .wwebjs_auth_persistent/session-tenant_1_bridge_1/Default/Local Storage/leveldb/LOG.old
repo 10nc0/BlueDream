@@ -1,3 +1,4 @@
-2025/10/30-21:01:48.173 19a39 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_9_bridge_1/Default/Local Storage/leveldb/MANIFEST-000001
-2025/10/30-21:01:48.187 19a39 Recovering log #3
-2025/10/30-21:01:48.187 19a39 Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_9_bridge_1/Default/Local Storage/leveldb/000003.log 
+2025/10/30-21:14:46.539 1a7da Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Local Storage/leveldb/MANIFEST-000001
+2025/10/30-21:14:46.559 1a7da Recovering log #3
+2025/10/30-21:14:46.570 1a7da Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Local Storage/leveldb/000003.log 
+2025/10/30-21:15:42.350 1a965 Level-0 table #5: started
