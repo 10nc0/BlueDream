@@ -142,23 +142,29 @@ class WhatsAppClientManager {
                 try {
                     console.log(`🔌 ${compositeKey} disconnected: ${reason}`);
                     
-                    // Only update status if not already in a terminal state
-                    if (clientState.status !== 'auth_failed' && clientState.status !== 'error') {
-                        clientState.status = 'disconnected';
-                        await this.updateBotStatus(bridgeId, tenantSchema, 'disconnected', null, null, reason);
-                    }
+                    // Update status immediately (disconnected is a valid state)
+                    clientState.status = 'disconnected';
                     
-                    // Gracefully clean up client to prevent Puppeteer context errors
-                    if (clientState.client) {
-                        try {
-                            await clientState.client.destroy();
-                        } catch (destroyError) {
-                            // Ignore destroy errors (client may already be destroyed)
-                            console.log(`⚠️  Client already destroyed for ${compositeKey}`);
-                        }
-                    }
-                    
+                    // Clean up client tracking BEFORE destroying to prevent race conditions
                     this.clients.delete(compositeKey);
+                    
+                    // Update database
+                    try {
+                        await this.updateBotStatus(bridgeId, tenantSchema, 'disconnected', null, null, reason);
+                    } catch (dbError) {
+                        console.error(`⚠️  DB update failed for ${compositeKey}:`, dbError.message);
+                    }
+                    
+                    // Destroy client AFTER cleanup to prevent Puppeteer context errors
+                    setImmediate(async () => {
+                        try {
+                            if (clientState.client) {
+                                await clientState.client.destroy();
+                            }
+                        } catch (destroyError) {
+                            // Silently ignore - Puppeteer might have already closed
+                        }
+                    });
                 } catch (error) {
                     console.error(`⚠️  Error handling disconnect for ${compositeKey}:`, error.message);
                 }

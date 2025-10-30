@@ -1820,8 +1820,8 @@
                         instructions.style.display = 'block';
                         modalTitle.textContent = '📱 Scan This QR Code';
                         
-                        // Start polling for connection success (auto-close when connected)
-                        startConnectionPolling(bridgeId);
+                        // Start watching for QR disappearance (means user scanned successfully)
+                        startQRWatcher(bridgeId);
                     } else if (data.connected) {
                         showQRError('✅ Already Connected!', 'Your WhatsApp is already connected. Click "Generate QR" again to create a new session.', true);
                     } else if (attempts < maxAttempts) {
@@ -1863,89 +1863,105 @@
             `;
         }
 
-        // Global polling interval tracker
-        let connectionPollingInterval = null;
+        // Global QR watcher interval tracker
+        let qrWatcherInterval = null;
         
-        // Start polling for connection success (auto-close QR modal when connected)
-        function startConnectionPolling(bridgeId) {
-            // Clear any existing polling
-            if (connectionPollingInterval) {
-                clearInterval(connectionPollingInterval);
+        // Watch for QR code disappearance (means user successfully scanned)
+        function startQRWatcher(bridgeId) {
+            // Clear any existing watcher
+            if (qrWatcherInterval) {
+                clearInterval(qrWatcherInterval);
             }
             
             let attempts = 0;
-            const maxAttempts = 120; // Poll for up to 2 minutes (120 * 1000ms)
+            const maxAttempts = 120; // Watch for up to 2 minutes
             
-            connectionPollingInterval = setInterval(async () => {
+            qrWatcherInterval = setInterval(async () => {
                 attempts++;
                 
                 try {
-                    // Fetch bridge status
-                    const response = await authFetch(`/api/bridges/${bridgeId}`);
-                    if (!response.ok) {
-                        console.log('Failed to fetch bridge status during polling');
+                    // Check if QR still exists
+                    const qrResponse = await authFetch(`/api/bridges/${bridgeId}/qr`);
+                    if (!qrResponse.ok) {
+                        console.log('Failed to fetch QR during watch');
                         return;
                     }
                     
-                    const bridge = await response.json();
-                    console.log(`Connection poll attempt ${attempts}: status = ${bridge.status}`);
+                    const data = await qrResponse.json();
+                    console.log(`QR watch attempt ${attempts}:`, data.qr ? 'QR exists' : 'No QR (scanned!)', `status: ${data.status}`);
                     
-                    // Check if connected
-                    if (bridge.status === 'connected') {
-                        // Success! Auto-close modal
-                        console.log('✅ WhatsApp connected! Auto-closing QR modal...');
-                        clearInterval(connectionPollingInterval);
-                        connectionPollingInterval = null;
+                    // QR disappeared = user scanned successfully!
+                    if (!data.qr && data.status === 'authenticated') {
+                        console.log('🎉 QR scanned! User authenticated successfully');
+                        clearInterval(qrWatcherInterval);
+                        qrWatcherInterval = null;
                         
-                        // Show success message briefly before closing
+                        // Show success message
                         const modalTitle = document.getElementById('qrModalTitle');
                         const qrImage = document.getElementById('qrCodeImage');
                         const instructions = document.getElementById('qrInstructions');
+                        const loadingMsg = document.getElementById('qrLoadingMessage');
                         
-                        modalTitle.textContent = '✅ Connected Successfully!';
+                        modalTitle.textContent = '✅ Scan Successful!';
                         qrImage.style.display = 'none';
                         instructions.style.display = 'none';
+                        loadingMsg.style.display = 'none';
                         
                         const qrContainer = document.getElementById('qrCodeContainer');
                         qrContainer.innerHTML = `
                             <div style="text-align: center;">
                                 <div style="font-size: 5rem; margin-bottom: 1rem;">✅</div>
                                 <p style="color: rgba(16, 185, 129, 1); font-size: 1.5rem; font-weight: bold; margin: 0;">
-                                    WhatsApp Connected!
+                                    WhatsApp Linking...
                                 </p>
                                 <p style="color: rgba(255, 255, 255, 0.8); font-size: 1rem; margin-top: 0.5rem;">
-                                    Closing in 2 seconds...
+                                    Closing in 3 seconds...
                                 </p>
                             </div>
                         `;
                         
-                        // Close after 2 seconds and refresh bridges
+                        // Close after 3 seconds and refresh
                         setTimeout(() => {
                             closeQRModal();
-                            renderBridges(); // Refresh to show connected status
+                            renderBridges();
+                        }, 3000);
+                    } else if (!data.qr && data.status === 'connected') {
+                        // Already fully connected!
+                        console.log('✅ WhatsApp fully connected!');
+                        clearInterval(qrWatcherInterval);
+                        qrWatcherInterval = null;
+                        
+                        const qrContainer = document.getElementById('qrCodeContainer');
+                        qrContainer.innerHTML = `
+                            <div style="text-align: center;">
+                                <div style="font-size: 5rem; margin-bottom: 1rem;">🎉</div>
+                                <p style="color: rgba(16, 185, 129, 1); font-size: 1.5rem; font-weight: bold; margin: 0;">
+                                    Connected Successfully!
+                                </p>
+                            </div>
+                        `;
+                        
+                        setTimeout(() => {
+                            closeQRModal();
+                            renderBridges();
                         }, 2000);
-                    } else if (bridge.status === 'auth_failed' || bridge.status === 'error') {
-                        // Failed - stop polling and show error
-                        clearInterval(connectionPollingInterval);
-                        connectionPollingInterval = null;
-                        showQRError('❌ Authentication Failed', 'WhatsApp authentication failed. Please try generating a new QR code.');
                     } else if (attempts >= maxAttempts) {
-                        // Timeout - stop polling
-                        clearInterval(connectionPollingInterval);
-                        connectionPollingInterval = null;
-                        console.log('Connection polling timeout - stopped after 2 minutes');
+                        // Timeout
+                        clearInterval(qrWatcherInterval);
+                        qrWatcherInterval = null;
+                        console.log('QR watcher timeout - stopped after 2 minutes');
                     }
                 } catch (error) {
-                    console.error('Error during connection polling:', error);
+                    console.error('Error during QR watch:', error);
                 }
-            }, 1000); // Poll every 1 second
+            }, 1000); // Check every 1 second
         }
         
         function closeQRModal() {
-            // Stop polling when modal closes
-            if (connectionPollingInterval) {
-                clearInterval(connectionPollingInterval);
-                connectionPollingInterval = null;
+            // Stop watcher when modal closes
+            if (qrWatcherInterval) {
+                clearInterval(qrWatcherInterval);
+                qrWatcherInterval = null;
             }
             document.getElementById('qrModal').style.display = 'none';
         }

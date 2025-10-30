@@ -100,11 +100,14 @@ async function setTenantContext(req, res, next) {
         // Store the dedicated client in the request object
         req.dbClient = client;
         
-        // Ensure client is released after response completes
-        const originalSend = res.send;
-        const originalJson = res.json;
+        // Guard against double-cleanup
+        let cleanupCalled = false;
         
+        // Ensure client is released after response completes
         const cleanup = async () => {
+            if (cleanupCalled) return; // Prevent double-cleanup
+            cleanupCalled = true;
+            
             try {
                 if (req.dbClient) {
                     await req.dbClient.query('COMMIT');
@@ -113,25 +116,21 @@ async function setTenantContext(req, res, next) {
                 }
             } catch (err) {
                 console.error('❌ Error during client cleanup:', err);
-                if (req.dbClient) {
-                    await req.dbClient.query('ROLLBACK');
-                    req.dbClient.release();
-                    req.dbClient = null;
+                try {
+                    if (req.dbClient) {
+                        await req.dbClient.query('ROLLBACK');
+                        req.dbClient.release();
+                        req.dbClient = null;
+                    }
+                } catch (rollbackErr) {
+                    // Ignore rollback errors - connection might be dead
                 }
             }
         };
         
-        res.send = function(...args) {
-            cleanup().finally(() => originalSend.apply(res, args));
-        };
-        
-        res.json = function(...args) {
-            cleanup().finally(() => originalJson.apply(res, args));
-        };
-        
-        // Handle errors/disconnects
-        res.on('close', cleanup);
+        // Handle response completion
         res.on('finish', cleanup);
+        res.on('close', cleanup);
         
         next();
     } catch (error) {
