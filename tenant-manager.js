@@ -155,6 +155,8 @@ class TenantManager {
                     output_platform TEXT NOT NULL,
                     input_credentials JSONB,
                     output_credentials JSONB,
+                    output_01_url TEXT,
+                    output_0n_url TEXT,
                     status TEXT DEFAULT 'inactive',
                     contact_info TEXT,
                     tags TEXT[],
