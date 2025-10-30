@@ -463,16 +463,16 @@ async function initializeDatabase() {
 
 // Helper function to send message to all configured webhooks (1-to-many support)
 // CRITICAL: Uses tenant-aware lookup to get the correct bridge's webhooks
-async function sendToAllWebhooks(payload, options = {}, messageDbId = null, mediaData = null, bridgeId = null, tenantSchema = null) {
+async function sendToAllWebhooks(payload, options = {}, messageDbId = null, mediaData = null, bridgeId = null, tenantSchema = null, tenantClient = null) {
     try {
-        if (!bridgeId || !tenantSchema) {
-            console.error('❌ sendToAllWebhooks called without bridgeId or tenantSchema');
+        if (!bridgeId || !tenantSchema || !tenantClient) {
+            console.error('❌ sendToAllWebhooks called without required parameters (bridgeId, tenantSchema, tenantClient)');
             return;
         }
         
-        // Get webhooks from bridge configuration (tenant-aware)
-        const bridgeResult = await pool.query(`
-            SELECT output_credentials FROM ${tenantSchema}.bridges WHERE id = $1 LIMIT 1
+        // CRITICAL FIX: Use tenantClient instead of pool for tenant-scoped queries
+        const bridgeResult = await tenantClient.query(`
+            SELECT output_credentials FROM bridges WHERE id = $1 LIMIT 1
         `, [bridgeId]);
         
         if (bridgeResult.rows.length === 0) {
@@ -873,7 +873,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                             mediaBuffer: buffer,
                             filename: filename,
                             mimetype: media.mimetype
-                        }, messageDbId, mediaData, bridgeId, tenantSchema);
+                        }, messageDbId, mediaData, bridgeId, tenantSchema, tenantClient);
                         
                         await tenantClient.query('COMMIT');
                         tenantClient.release();
@@ -892,7 +892,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
             }
 
             // Send text-only message to Discord
-            await sendToAllWebhooks(discordPayload, {}, messageDbId, null, bridgeId, tenantSchema);
+            await sendToAllWebhooks(discordPayload, {}, messageDbId, null, bridgeId, tenantSchema, tenantClient);
             console.log(`✅ [Bridge ${bridgeId}] Forwarded message from ${senderName}`);
             
             await tenantClient.query('COMMIT');
