@@ -1228,8 +1228,12 @@ app.post('/api/auth/signup', async (req, res) => {
             
             console.log(`[${getTimestamp()}] ✅ User joined tenant ${tenantId} via invite - Email: ${email}, Role: ${invite.target_role}`);
         }
-        // BRANCH: New tenant creation (no invite = genesis admin)
+        // BRANCH: Fractalized multi-tenant signup (no invite needed)
         else {
+            // Check if this is the FIRST user ever (Genesis Admin #01)
+            const userCountResult = await pool.query('SELECT COUNT(*) as count FROM users');
+            const isFirstUser = userCountResult.rows[0].count === '0';
+            
             // Check Sybil attack prevention
             const sybilCheck = await tenantManager.checkSybilRisk(email, req.ip);
             if (!sybilCheck.allowed) {
@@ -1250,24 +1254,33 @@ app.post('/api/auth/signup', async (req, res) => {
             
             const passwordHash = await bcrypt.hash(password, 10);
             
-            // Create user as genesis admin (dev role for system-level access)
+            // FIRST USER EVER: Dev #01 (Genesis Admin with God view to dbA)
+            // SUBSEQUENT USERS: Admin #0n (fractalized tenant with their own dbB)
+            const userRole = isFirstUser ? 'dev' : 'admin';
+            const isGenesis = isFirstUser;
+            
             const result = await pool.query(`
                 INSERT INTO users (email, password_hash, role, is_genesis_admin)
-                VALUES ($1, $2, 'dev', true)
+                VALUES ($1, $2, $3, $4)
                 RETURNING id, email, role, is_genesis_admin
-            `, [email, passwordHash]);
+            `, [email, passwordHash, userRole, isGenesis]);
             
             newUser = result.rows[0];
             
-            // Create new tenant and schema
+            // Create new fractalized tenant schema for this user
             const tenant = await tenantManager.createTenant(newUser.id);
             tenantId = tenant.tenantId;
             
             // Record tenant creation for Sybil tracking
             await tenantManager.recordTenantCreation(email, req.ip);
             
-            isGenesisAdmin = true;
-            console.log(`[${getTimestamp()}] 🌟 GENESIS ADMIN created new tenant ${tenantId} - Email: ${email}`);
+            isGenesisAdmin = isGenesis;
+            
+            if (isGenesis) {
+                console.log(`[${getTimestamp()}] 🌟 GENESIS ADMIN #01 created - Email: ${email}, Tenant: ${tenantId} (Dev with God view)`);
+            } else {
+                console.log(`[${getTimestamp()}] ✅ Admin #0${tenantId} created - Email: ${email}, Tenant: ${tenantId} (Fractalized)`);
+            }
         }
         
         // Auto-login after signup
