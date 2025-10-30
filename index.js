@@ -21,6 +21,9 @@ const fractalId = require('./utils/fractal-id');
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
 const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBERS.split(',').map(n => n.trim()) : [];
 
+// PERSISTENT STORAGE: Use env var for portability (Docker, Render, Fly.io, Replit, etc.)
+const WWEBJS_DATA_PATH = process.env.WWEBJS_DATA_PATH || '/home/runner/workspace/.wwebjs_auth_persistent';
+
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
@@ -141,9 +144,39 @@ app.get('/uat', async (req, res) => {
     }
 });
 
-// Health check endpoint for deployment health checks
+// Health check endpoint with WhatsApp client status monitoring
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+    // Count clients by status
+    const clientStats = {
+        total: 0,
+        connected: 0,
+        qr_ready: 0,
+        authenticated: 0,
+        initializing: 0,
+        disconnected: 0,
+        other: 0
+    };
+    
+    // Get all client statuses from WhatsAppClientManager
+    for (const [key, clientData] of whatsappManager.clients.entries()) {
+        clientStats.total++;
+        const status = clientData.status || 'unknown';
+        if (clientStats[status] !== undefined) {
+            clientStats[status]++;
+        } else {
+            clientStats.other++;
+        }
+    }
+    
+    res.status(200).json({ 
+        status: 'healthy', 
+        timestamp: new Date().toISOString(),
+        whatsapp: clientStats,
+        storage: {
+            path: WWEBJS_DATA_PATH,
+            customized: !!process.env.WWEBJS_DATA_PATH
+        }
+    });
 });
 
 // Serve main dashboard - client-side JWT auth will handle access control
@@ -853,7 +886,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
             // Check if we should forward this message (basic filtering)
             const shouldForward = !chat.isGroup && message.fromMe === false;
             if (!shouldForward) {
-                await tenantClient.query('COMMIT');
+                await tenantClient.query('ROLLBACK');
                 tenantClient.release();
                 return;
             }
@@ -889,6 +922,11 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
             // Save message to tenant's schema
             messageDbId = await saveMessage(tenantClient, messageRecord, bridgeId);
             
+            // CRITICAL FIX: Commit immediately to prevent idle-in-transaction timeout
+            // Media downloads and webhook sends can take 10+ seconds
+            await tenantClient.query('COMMIT');
+            tenantClient.release();
+            
             // Create Discord embed
             const embed = {
                 title: `📱 WhatsApp Message from ${senderName}`,
@@ -917,7 +955,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                 embeds: [embed]
             };
 
-            // Handle media messages
+            // Handle media messages (transaction already committed above)
             if (message.hasMedia) {
                 try {
                     const media = await message.downloadMedia();
@@ -927,13 +965,24 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                         const filename = `whatsapp_image_${Date.now()}.${media.mimetype.split('/')[1]}`;
                         
                         // CRITICAL: Save media to database so it can be viewed in the dashboard
-                        await tenantClient.query(`
-                            UPDATE messages 
-                            SET media_data = $1, media_type = $2 
-                            WHERE id = $3
-                        `, [mediaData, media.mimetype, messageDbId]);
-                        
-                        console.log(`💾 Saved media to database for message ${messageDbId}`);
+                        // Need new transaction since we already committed above
+                        const mediaClient = await pool.connect();
+                        try {
+                            await mediaClient.query('BEGIN');
+                            await mediaClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
+                            await mediaClient.query(`
+                                UPDATE messages 
+                                SET media_data = $1, media_type = $2 
+                                WHERE id = $3
+                            `, [mediaData, media.mimetype, messageDbId]);
+                            await mediaClient.query('COMMIT');
+                            console.log(`💾 Saved media to database for message ${messageDbId}`);
+                        } catch (err) {
+                            await mediaClient.query('ROLLBACK');
+                            console.error(`❌ Failed to save media:`, err.message);
+                        } finally {
+                            mediaClient.release();
+                        }
                         
                         embed.fields.push({
                             name: '📎 Attachment',
@@ -946,6 +995,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                         const threadName = bridge.output_credentials?.thread_name;
                         const threadId = bridge.output_credentials?.thread_id;
                         
+                        // No tenantClient passed - already released above
                         await sendToLedger(discordPayload, {
                             isMedia: true,
                             mediaBuffer: buffer,
@@ -953,7 +1003,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                             mimetype: media.mimetype,
                             threadName,
                             threadId
-                        }, bridgeId, tenantSchema, tenantClient);
+                        }, bridgeId, tenantSchema, null);
                         
                         // Path 2: User Webhook (notdbA = mutable, bridge owner only)
                         await sendToUserOutput(discordPayload, {
@@ -961,20 +1011,26 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                             mediaBuffer: buffer,
                             filename: filename,
                             mimetype: media.mimetype
-                        }, bridgeId, tenantSchema, tenantClient);
+                        }, bridgeId, tenantSchema, null);
                         
-                        await tenantClient.query('COMMIT');
-                        tenantClient.release();
                         console.log(`✅ [Bridge ${bridgeId}] Forwarded media message from ${senderName}`);
                         return;
                     }
                 } catch (mediaError) {
                     console.error(`❌ [Bridge ${bridgeId}] Error downloading media:`, mediaError.message);
                     if (messageDbId) {
-                        await updateMessageStatus(tenantClient, messageDbId, 'failed', mediaError.message);
+                        const errClient = await pool.connect();
+                        try {
+                            await errClient.query('BEGIN');
+                            await errClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
+                            await updateMessageStatus(errClient, messageDbId, 'failed', mediaError.message);
+                            await errClient.query('COMMIT');
+                        } catch (err) {
+                            await errClient.query('ROLLBACK');
+                        } finally {
+                            errClient.release();
+                        }
                     }
-                    await tenantClient.query('COMMIT');
-                    tenantClient.release();
                     return;
                 }
             }
@@ -984,21 +1040,18 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
             const threadName = bridge.output_credentials?.thread_name;
             const threadId = bridge.output_credentials?.thread_id;
             
+            // No tenantClient passed - already released above
             await sendToLedger(discordPayload, {
                 threadName,
                 threadId
-            }, bridgeId, tenantSchema, tenantClient);
+            }, bridgeId, tenantSchema, null);
             
             // Path 2: User Webhook (notdbA = mutable, bridge owner only)
-            await sendToUserOutput(discordPayload, {}, bridgeId, tenantSchema, tenantClient);
+            await sendToUserOutput(discordPayload, {}, bridgeId, tenantSchema, null);
             
             console.log(`✅ [Bridge ${bridgeId}] Forwarded message from ${senderName}`);
-            
-            await tenantClient.query('COMMIT');
-            tenantClient.release();
         } catch (error) {
-            await tenantClient.query('ROLLBACK');
-            tenantClient.release();
+            // Transaction already committed/released above, so no ROLLBACK needed
             throw error;
         }
     } catch (error) {
@@ -2853,8 +2906,9 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
         const tenantSchema = req.tenantContext.tenantSchema;
         
         // SECURITY: Verify bridge belongs to user's tenant using fractal_id
+        // CRITICAL: Get webhook URLs BEFORE archiving so we can delete them
         const bridgeResult = await client.query(
-            `SELECT id, fractal_id FROM bridges WHERE fractal_id = $1`,
+            `SELECT id, fractal_id, output_01_url, output_0n_url FROM bridges WHERE fractal_id = $1`,
             [id]
         );
         
@@ -2863,8 +2917,29 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
             return res.status(404).json({ error: 'Bridge not found' });
         }
         
-        const internalId = bridgeResult.rows[0].id;
+        const bridge = bridgeResult.rows[0];
+        const internalId = bridge.id;
         console.log(`🗄️  Archiving bridge ${id} (internal ${internalId}) from ${tenantSchema} (soft delete)...`);
+        
+        // SECURITY: Delete Discord webhooks to prevent ghost messages (NYAN TRUTH)
+        // ONE BRIDGE = ONE WEBHOOK URL. On delete: DESTROY + DELETE WEBHOOK.
+        const webhooksToDelete = [];
+        if (bridge.output_0n_url) webhooksToDelete.push({ url: bridge.output_0n_url, name: 'User Discord' });
+        
+        for (const webhook of webhooksToDelete) {
+            try {
+                await axios.delete(webhook.url);
+                console.log(`🗑️  Discord webhook deleted for bridge ${id} (${webhook.name})`);
+            } catch (err) {
+                // Webhook might already be deleted or invalid - log but don't fail
+                console.warn(`⚠️  Failed to delete ${webhook.name} webhook (maybe already gone):`, err.message);
+            }
+        }
+        
+        // NOTE: output_01_url (Nyanbook Ledger) is ETERNAL and shared - never delete it
+        if (bridge.output_01_url) {
+            console.log(`ℹ️  Preserving output_01_url (Nyanbook Ledger) - eternal webhook, not bridge-specific`);
+        }
         
         // Stop WhatsApp client if active (but keep session files for potential restoration)
         try {
@@ -3673,7 +3748,7 @@ async function updateAnalytics(bridgeId) {
 async function cleanupChromiumLockFiles() {
     try {
         // CRITICAL: Use persistent storage path
-        const sessionDir = '/home/runner/workspace/.wwebjs_auth_persistent';
+        const sessionDir = WWEBJS_DATA_PATH;
         
         if (!fs.existsSync(sessionDir)) {
             console.log('🧹 No session directory found - skipping lock file cleanup');
@@ -3810,8 +3885,7 @@ async function autoRestoreWhatsAppSessions() {
                     // LocalAuth automatically prefixes with "session-", so we check for that
                     const sessionClientId = `${schema_name}_bridge_${bridge.id}`;
                     // CRITICAL: Use persistent storage path
-                    const persistentPath = '/home/runner/workspace/.wwebjs_auth_persistent';
-                    const sessionPath = path.join(persistentPath, `session-${sessionClientId}`);
+                    const sessionPath = path.join(WWEBJS_DATA_PATH, `session-${sessionClientId}`);
                     
                     // Legacy paths for backward compatibility (pre-fractalization)
                     const sessionPathLegacy1 = path.join('.wwebjs_auth', `session-bridge_${bridge.id}`);

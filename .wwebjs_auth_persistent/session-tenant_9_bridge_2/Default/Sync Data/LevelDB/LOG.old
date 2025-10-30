@@ -1,3 +1,3 @@
-2025/10/30-20:39:30.793 17f1c Reusing MANIFEST /home/runner/workspace/.wwebjs_auth/session-tenant_9_bridge_2/Default/Sync Data/LevelDB/MANIFEST-000001
-2025/10/30-20:39:30.794 17f1c Recovering log #3
-2025/10/30-20:39:30.794 17f1c Reusing old log /home/runner/workspace/.wwebjs_auth/session-tenant_9_bridge_2/Default/Sync Data/LevelDB/000003.log 
+2025/10/30-20:59:53.370 19612 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_9_bridge_2/Default/Sync Data/LevelDB/MANIFEST-000001
+2025/10/30-20:59:53.371 19612 Recovering log #3
+2025/10/30-20:59:53.371 19612 Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_9_bridge_2/Default/Sync Data/LevelDB/000003.log 

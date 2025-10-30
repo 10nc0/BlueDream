@@ -49,9 +49,16 @@ class WhatsAppClientManager {
             // LocalAuth will automatically prefix with "session-", creating: session-tenant_X_bridge_Y
             const sessionClientId = `${tenantSchema}_bridge_${bridgeId}`;
 
-            // CRITICAL: Use persistent storage on Replit to survive restarts
+            // CRITICAL: Use persistent storage to survive restarts
             // Without this, sessions are wiped on restart → QR every time → "cannot sustain login"
-            const persistentPath = '/home/runner/workspace/.wwebjs_auth_persistent';
+            // Use env var for portability (Docker, Render, Fly.io, etc.)
+            const persistentPath = process.env.WWEBJS_DATA_PATH || '/home/runner/workspace/.wwebjs_auth_persistent';
+            
+            // Ensure directory exists
+            if (!fs.existsSync(persistentPath)) {
+                fs.mkdirSync(persistentPath, { recursive: true });
+                console.log(`📁 Created persistent storage directory: ${persistentPath}`);
+            }
             
             // Create WhatsApp client with tenant-scoped LocalAuth
             const client = new Client({
@@ -352,23 +359,34 @@ class WhatsAppClientManager {
             // Delete tenant-scoped session directory (for relink/reset only)
             // LocalAuth stores sessions with "session-" prefix
             const sessionClientId = `${tenantSchema}_bridge_${bridgeId}`;
-            const sessionPath = path.join('.wwebjs_auth', `session-${sessionClientId}`);
+            const persistentPath = process.env.WWEBJS_DATA_PATH || '/home/runner/workspace/.wwebjs_auth_persistent';
+            const sessionPath = path.join(persistentPath, `session-${sessionClientId}`);
             
-            // Also check legacy paths for cleanup
-            const legacyPath1 = path.join('.wwebjs_auth', `session-bridge_${bridgeId}`);
-            const legacyPath2 = path.join('.wwebjs_auth', `bridge_${bridgeId}`);
+            // Also check legacy paths for cleanup (ephemeral storage, pre-migration)
+            const legacyPath1 = path.join('.wwebjs_auth', `session-${sessionClientId}`);
+            const legacyPath2 = path.join('.wwebjs_auth', `session-bridge_${bridgeId}`);
+            const legacyPath3 = path.join('.wwebjs_auth', `bridge_${bridgeId}`);
             
+            // CRITICAL: Delete from persistent storage first (current location)
             if (fs.existsSync(sessionPath)) {
                 fs.rmSync(sessionPath, { recursive: true, force: true });
-                console.log(`🗑️  Deleted session directory: ${sessionPath}`);
+                console.log(`🗑️  Session deleted from persistent storage: ${compositeKey}`);
             }
+            
+            // Clean up legacy paths (ephemeral storage, backward compatibility)
             if (fs.existsSync(legacyPath1)) {
                 fs.rmSync(legacyPath1, { recursive: true, force: true });
-                console.log(`🗑️  Deleted legacy session: ${legacyPath1}`);
+                console.log(`🗑️  Legacy session deleted (ephemeral storage) for ${compositeKey}`);
             }
+            
             if (fs.existsSync(legacyPath2)) {
                 fs.rmSync(legacyPath2, { recursive: true, force: true });
-                console.log(`🗑️  Deleted legacy session: ${legacyPath2}`);
+                console.log(`🗑️  Legacy session deleted (path1) for bridge ${bridgeId}`);
+            }
+            
+            if (fs.existsSync(legacyPath3)) {
+                fs.rmSync(legacyPath3, { recursive: true, force: true });
+                console.log(`🗑️  Legacy session deleted (path2) for bridge ${bridgeId}`);
             }
 
             // Update database

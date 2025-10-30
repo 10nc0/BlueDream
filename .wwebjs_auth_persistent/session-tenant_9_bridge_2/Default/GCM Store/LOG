@@ -1,3 +1,3 @@
-2025/10/30-20:48:22.381 1872f Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_9_bridge_2/Default/GCM Store/MANIFEST-000001
-2025/10/30-20:48:22.382 1872f Recovering log #3
-2025/10/30-20:48:22.383 1872f Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_9_bridge_2/Default/GCM Store/000003.log 
+2025/10/30-21:01:43.898 199a7 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_9_bridge_2/Default/GCM Store/MANIFEST-000001
+2025/10/30-21:01:43.899 199a7 Recovering log #3
+2025/10/30-21:01:43.899 199a7 Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_9_bridge_2/Default/GCM Store/000003.log 
