@@ -1885,7 +1885,8 @@
                                     const status = await statusRes.json();
                                     console.log('📊 Status:', status);
                                     
-                                    if (status.status === 'ready' || status.status === 'active') {
+                                    // Close modal when WhatsApp connects (ready, connected, or active)
+                                    if (status.status === 'ready' || status.status === 'connected' || status.status === 'active') {
                                         clearInterval(bridgeStatusPollInterval);
                                         bridgeStatusPollInterval = null;
                                         document.querySelector('.bridge-qr-status').innerHTML = '✅ Connected! Closing...';
