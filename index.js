@@ -360,18 +360,6 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_messages_bot_timestamp ON messages(bridge_id, timestamp DESC)
         `);
         
-        // Create dev user (phi_dao@pm.me) with system-level access
-        const devCheck = await pool.query('SELECT id FROM users WHERE email = $1', ['phi_dao@pm.me']);
-        if (devCheck.rows.length === 0) {
-            const devPassword = await bcrypt.hash('dev_secure_2024', 10);
-            await pool.query(`
-                INSERT INTO users (email, password_hash, role, is_genesis_admin)
-                VALUES ($1, $2, 'dev', false)
-            `, ['phi_dao@pm.me', devPassword]);
-            console.log('✅ Created dev user: phi_dao@pm.me (role: dev)');
-            console.log('🔧 Dev role has system-level access across all tenants');
-        }
-        
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Database initialization error:', error.message);
