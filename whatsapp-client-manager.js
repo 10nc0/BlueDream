@@ -83,51 +83,85 @@ class WhatsAppClientManager {
             };
             this.clients.set(compositeKey, clientState);
 
-            // QR Code event
+            // QR Code event (can fire multiple times as QR refreshes)
             client.on('qr', async (qr) => {
-                console.log(`📱 QR Code generated for ${compositeKey}`);
-                clientState.qrCode = qr;
-                clientState.status = 'qr_ready';
-
-                // Update bridge status in database
-                await this.updateBotStatus(bridgeId, tenantSchema, 'qr_ready', qr, null);
+                try {
+                    console.log(`📱 QR Code generated for ${compositeKey}`);
+                    clientState.qrCode = qr;
+                    clientState.status = 'qr_ready';
+                    await this.updateBotStatus(bridgeId, tenantSchema, 'qr_ready', qr, null);
+                } catch (error) {
+                    console.error(`⚠️  Error handling QR for ${compositeKey}:`, error.message);
+                }
             });
 
-            // Ready event
-            client.on('ready', async () => {
-                console.log(`✅ WhatsApp client ready for ${compositeKey}`);
-                const info = client.info;
-                const phoneNumber = info.wid.user;
-                
-                clientState.status = 'ready';
-                clientState.phoneNumber = `+${phoneNumber}`;
-                clientState.qrCode = null;
-
-                // Update bridge in database
-                await this.updateBotStatus(bridgeId, tenantSchema, 'ready', null, `+${phoneNumber}`);
-                
-                console.log(`📱 ${compositeKey} WhatsApp Number: +${phoneNumber}`);
+            // Authenticated event (fires once when QR is scanned)
+            client.once('authenticated', async () => {
+                try {
+                    console.log(`🔐 ${compositeKey} authenticated successfully`);
+                    clientState.status = 'authenticated';
+                    await this.updateBotStatus(bridgeId, tenantSchema, 'authenticated', null, null);
+                } catch (error) {
+                    console.error(`⚠️  Error handling authenticated for ${compositeKey}:`, error.message);
+                }
             });
 
-            // Authenticated event
-            client.on('authenticated', async () => {
-                console.log(`🔐 ${compositeKey} authenticated successfully`);
-                clientState.status = 'authenticated';
-                await this.updateBotStatus(bridgeId, tenantSchema, 'authenticated', null, null);
+            // Ready event (fires once when client is fully ready)
+            client.once('ready', async () => {
+                try {
+                    console.log(`✅ WhatsApp client ready for ${compositeKey}`);
+                    const info = client.info;
+                    const phoneNumber = info.wid.user;
+                    
+                    clientState.status = 'connected';
+                    clientState.phoneNumber = `+${phoneNumber}`;
+                    clientState.qrCode = null;
+
+                    // Update bridge with connected status and admin number
+                    await this.updateBotStatus(bridgeId, tenantSchema, 'connected', null, `+${phoneNumber}`);
+                    
+                    console.log(`📱 ${compositeKey} connected with number: +${phoneNumber}`);
+                } catch (error) {
+                    console.error(`⚠️  Error handling ready for ${compositeKey}:`, error.message);
+                }
             });
 
-            // Auth failure event
-            client.on('auth_failure', async (error) => {
-                console.error(`❌ Authentication failed for ${compositeKey}:`, error);
-                clientState.status = 'auth_failed';
-                await this.updateBotStatus(bridgeId, tenantSchema, 'auth_failed', null, null, error.message);
+            // Auth failure event (fires once on failure)
+            client.once('auth_failure', async (error) => {
+                try {
+                    console.error(`❌ Authentication failed for ${compositeKey}:`, error);
+                    clientState.status = 'auth_failed';
+                    await this.updateBotStatus(bridgeId, tenantSchema, 'auth_failed', null, null, error.message);
+                } catch (err) {
+                    console.error(`⚠️  Error handling auth_failure for ${compositeKey}:`, err.message);
+                }
             });
 
-            // Disconnected event
+            // Disconnected event (can fire multiple times)
             client.on('disconnected', async (reason) => {
-                console.log(`🔌 ${compositeKey} disconnected:`, reason);
-                clientState.status = 'disconnected';
-                await this.updateBotStatus(bridgeId, tenantSchema, 'disconnected', null, null, reason);
+                try {
+                    console.log(`🔌 ${compositeKey} disconnected: ${reason}`);
+                    
+                    // Only update status if not already in a terminal state
+                    if (clientState.status !== 'auth_failed' && clientState.status !== 'error') {
+                        clientState.status = 'disconnected';
+                        await this.updateBotStatus(bridgeId, tenantSchema, 'disconnected', null, null, reason);
+                    }
+                    
+                    // Gracefully clean up client to prevent Puppeteer context errors
+                    if (clientState.client) {
+                        try {
+                            await clientState.client.destroy();
+                        } catch (destroyError) {
+                            // Ignore destroy errors (client may already be destroyed)
+                            console.log(`⚠️  Client already destroyed for ${compositeKey}`);
+                        }
+                    }
+                    
+                    this.clients.delete(compositeKey);
+                } catch (error) {
+                    console.error(`⚠️  Error handling disconnect for ${compositeKey}:`, error.message);
+                }
             });
 
             // Message event - route to tenant-specific handler
