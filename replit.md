@@ -109,3 +109,92 @@ The dashboard is a Single Page Application (SPA) featuring an Apple glassmorphis
 - **Discord**: Discord webhooks
 - **Authentication (In Progress)**: Google OAuth via `passport` and `passport-google-oauth20`
 - **AI (Dismissed)**: OpenAI (gpt-5-mini) for AI-powered search was removed for cost optimization.
+
+## 🔒 Security Architecture & Known Limitations
+
+### Phase 1 (Current): Backend-Enforced Tenant Isolation ✅
+**Status**: Production-hardened with strict tenant validation
+
+#### Implementation Details:
+1. **Tenant Middleware**: All write operations (POST/PUT/DELETE) use `setTenantContext` middleware with transaction-scoped `SET LOCAL search_path`
+2. **Ownership Validation**: All bridge read operations verify bridge ownership before returning data:
+   - GET `/api/bridges/:id/qr` - validates bridge belongs to user's tenant
+   - GET `/api/bridges/:id/status` - validates bridge belongs to user's tenant
+   - GET `/api/bridges/:id/messages` - validates bridge belongs to user's tenant before querying messages
+3. **Dev Panel Triple Security**: Dev Panel requires three conditions:
+   - User role = `dev`
+   - User `is_genesis_admin` = `true`
+   - User `tenant_id` = `1` (tenant_01 only)
+4. **Recursive Data Sanitization**: `sanitizeForRole()` recursively strips `tenant_id` and `tenant_schema` from all API responses
+
+#### Current Security Posture:
+✅ Backend enforces tenant isolation on ALL endpoints
+✅ Cross-tenant access attempts blocked with 404 responses
+✅ Security warnings logged for unauthorized access attempts
+✅ Zero connection leaks with production-hardened cleanup handlers
+✅ JWT errors handled gracefully with fallback to session auth
+
+### Phase 2 (Planned): Fractalized Bridge IDs 🚧
+**Status**: CRITICAL SECURITY GAP - Required for production deployment
+
+#### Current Vulnerability:
+- **Sequential Bridge IDs**: Frontend uses raw database IDs (1, 2, 3...) which are:
+  - Predictable and enumerable
+  - Enable brute-force enumeration attacks
+  - Leak information about system usage (total bridge count)
+- **Attack Vector**: Malicious user can iterate `bridgeId=1` to `bridgeId=1000` to probe system
+- **Current Mitigation**: Backend validation blocks cross-tenant access attempts, but pattern is still vulnerable to enumeration
+
+#### Planned Solution: Fractalized IDs
+Replace sequential IDs with opaque, tenant-prefixed identifiers:
+
+**Backend Implementation**:
+```javascript
+// Generate fractalized ID with tenant prefix + ULID
+const fractal_id = `brg_t${tenantId}_${ulid().slice(-12)}`;
+// Example: brg_t3_01HXYZ123ABC
+```
+
+**Database Schema**:
+```sql
+ALTER TABLE bridges ADD COLUMN fractal_id VARCHAR(32) UNIQUE;
+CREATE INDEX idx_bridges_fractal_id ON bridges(fractal_id);
+```
+
+**Frontend Changes**:
+```javascript
+// Use fractal_id instead of raw id
+onclick="selectBridge('brg_t3_01HXYZ123ABC')"
+```
+
+**Backend Validation**:
+```javascript
+// Extract and validate tenant prefix
+const match = fractalId.match(/^brg_t(\d+)_(.+)$/);
+if (!match || parseInt(match[1]) !== req.tenantContext.tenantId) {
+    return res.status(404).json({ error: 'Bridge not found' });
+}
+```
+
+#### Migration Plan:
+1. Add `fractal_id` column to `bridges` table (nullable initially)
+2. Generate fractalized IDs for all existing bridges
+3. Update frontend to use `fractal_id` instead of `id`
+4. Update all API routes to accept and validate fractalized IDs
+5. Make `fractal_id` non-nullable and add UNIQUE constraint
+6. Keep internal `id` for foreign key relationships
+
+#### Benefits:
+- ✅ **Non-enumerable**: Random ULID prevents sequential guessing
+- ✅ **Tenant-scoped**: Prefix encodes tenant ownership
+- ✅ **Opaque**: No information leakage about system usage
+- ✅ **Backward Compatible**: Internal `id` remains for DB relations
+
+### Recent Security Improvements (October 2025)
+- **Fixed**: Browser crash from `process.env` access in client-side code
+- **Fixed**: Database connection leaks via cleanup guards and `res.once()` handlers
+- **Fixed**: Puppeteer crashes isolated with global error handlers
+- **Fixed**: JWT verification wrapped in try/catch for graceful fallback
+- **Hardened**: Tenant validation on all bridge read endpoints
+- **Hardened**: Dev Panel locked down with triple security check
+- **Hardened**: Recursive data sanitization prevents nested data leaks
