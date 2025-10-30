@@ -373,21 +373,42 @@ async function initializeDatabase() {
     }
 }
 
-// PRIVACY ARCHITECTURE: Two-path message delivery (NO cross-admin leaks)
-// Path 1: Nyanbook Ledger (webhook01) - eternal, masked, Dev #01 only
-// Path 2: User Webhook (webhook0n) - optional, mutable, Admin #0n only
-const NYANBOOK_WEBHOOK_NAME = 'Nyanbook Ledger';
+// WEBHOOK-CENTRIC ARCHITECTURE: Dual-output delivery (Bridge #01 + Bridge #0n)
+// Output #01: Nyanbook Ledger (eternal, masked, Dev #01 only) via output_01_url
+// Output #0n: User Discord (mutable, visible, Admin #0n only) via output_0n_url
+// UI MASKING: "webhook" → "bridge" terminology everywhere except create form
 
-// Send to Nyanbook Monolith (dbA = eternal ledger, masked from Admin #0n)
-async function sendToNyanbook(payload, options = {}, bridgeId = null, tenantSchema = null, tenantClient = null) {
-    const nyanUrl = process.env.NYANBOOK_WEBHOOK_URL;
-    if (!nyanUrl) {
-        console.log('  ℹ️  No NYANBOOK_WEBHOOK_URL configured - skipping Nyanbook sync');
+// Send to Ledger (Output #01 = eternal monolith, immutable thread_id storage)
+async function sendToLedger(payload, options = {}, bridgeId = null, tenantSchema = null, tenantClient = null) {
+    // WEBHOOK-CENTRIC: Read ledger URL from database (per-bridge configured)
+    let ledgerUrl = null;
+    
+    if (bridgeId && tenantClient) {
+        try {
+            const bridgeResult = await tenantClient.query(`
+                SELECT output_01_url FROM bridges WHERE id = $1 LIMIT 1
+            `, [bridgeId]);
+            
+            if (bridgeResult.rows.length > 0) {
+                ledgerUrl = bridgeResult.rows[0].output_01_url;
+            }
+        } catch (error) {
+            console.error(`  ⚠️  Failed to fetch output_01_url: ${error.message}`);
+        }
+    }
+    
+    // Fallback to environment variable if database value is missing
+    if (!ledgerUrl || !ledgerUrl.trim()) {
+        ledgerUrl = process.env.NYANBOOK_WEBHOOK_URL;
+    }
+    
+    if (!ledgerUrl) {
+        console.log('  ℹ️  No ledger configured - skipping Output #01');
         return null;
     }
 
     try {
-        const url = new URL(nyanUrl);
+        const url = new URL(ledgerUrl);
         url.searchParams.set('wait', 'true');
         
         // Add thread_name or thread_id if available
@@ -410,55 +431,55 @@ async function sendToNyanbook(payload, options = {}, bridgeId = null, tenantSche
             response = await axios.post(url.toString(), payload);
         }
 
-        // IMMUTABILITY LOCK: Only Nyanbook webhook can set thread_id (eternal monolith)
-        if (!options.threadId && response.data?.channel_id && options.threadName && tenantClient) {
+        // IMMUTABILITY LOCK: Only ledger (Output #01) can set thread_id (eternal storage)
+        if (!options.threadId && response.data?.channel_id && options.threadName && tenantClient && bridgeId) {
             const threadId = response.data.channel_id;
-            console.log(`  🔒 NYANBOOK THREAD LOCKED: ${threadId} (bridge ${bridgeId})`);
+            console.log(`  🔒 LEDGER THREAD LOCKED: ${threadId} (bridge ${bridgeId})`);
             
+            // Store thread_id in output_credentials for backward compatibility
             await tenantClient.query(`
                 UPDATE bridges 
-                SET output_credentials = jsonb_set(output_credentials, '{thread_id}', to_jsonb($1::text))
+                SET output_credentials = COALESCE(output_credentials, '{}'::jsonb) || jsonb_build_object('thread_id', $1::text)
                 WHERE id = $2
             `, [threadId, bridgeId]);
             
             return threadId;
         }
 
-        console.log(`  ✅ Sent to Nyanbook Ledger (dbA)`);
+        console.log(`  ✅ Sent to Output #01 (Ledger)`);
         return response.data?.channel_id || null;
     } catch (error) {
-        console.error(`  ❌ Nyanbook sync failed: ${error.message}`);
+        console.error(`  ❌ Output #01 failed: ${error.message}`);
         return null;
     }
 }
 
-// Send to User's personal webhook (notdbA = mutable, visible to bridge owner)
-async function sendToUserWebhook(payload, options = {}, bridgeId = null, tenantSchema = null, tenantClient = null) {
+// Send to User Output (Output #0n = user's personal Discord, mutable)
+async function sendToUserOutput(payload, options = {}, bridgeId = null, tenantSchema = null, tenantClient = null) {
     if (!bridgeId || !tenantClient) {
-        console.log('  ℹ️  No bridge context - skipping user webhook');
+        console.log('  ℹ️  No bridge context - skipping Output #0n');
         return false;
     }
 
     try {
         const bridgeResult = await tenantClient.query(`
-            SELECT output_credentials FROM bridges WHERE id = $1 LIMIT 1
+            SELECT output_0n_url FROM bridges WHERE id = $1 LIMIT 1
         `, [bridgeId]);
         
         if (bridgeResult.rows.length === 0) {
-            console.error(`  ❌ No bridge found for bridge ${bridgeId}`);
+            console.error(`  ❌ No bridge found for ID ${bridgeId}`);
             return false;
         }
 
-        const webhooks = bridgeResult.rows[0].output_credentials?.webhooks || [];
-        const userWebhook = webhooks.find(w => w.name !== NYANBOOK_WEBHOOK_NAME);
+        const userOutputUrl = bridgeResult.rows[0].output_0n_url;
         
-        if (!userWebhook || !userWebhook.url) {
-            console.log(`  ℹ️  No user webhook configured - skipping notdbA`);
+        if (!userOutputUrl || !userOutputUrl.trim()) {
+            console.log(`  ℹ️  No Output #0n configured - skipping user Discord`);
             return false;
         }
 
-        const url = new URL(userWebhook.url);
-        // Don't add thread params to user webhook - let them manage their own Discord
+        const url = new URL(userOutputUrl);
+        // Don't add thread params to user output - let them manage their own Discord
         
         if (options.isMedia && options.mediaBuffer) {
             const FormData = require('form-data');
@@ -473,10 +494,10 @@ async function sendToUserWebhook(payload, options = {}, bridgeId = null, tenantS
             await axios.post(url.toString(), payload);
         }
 
-        console.log(`  ✅ Sent to User Webhook (notdbA): ${userWebhook.name}`);
+        console.log(`  ✅ Sent to Output #0n (User Discord)`);
         return true;
     } catch (error) {
-        console.error(`  ❌ User webhook failed: ${error.message}`);
+        console.error(`  ❌ Output #0n failed: ${error.message}`);
         return false;
     }
 }
@@ -925,7 +946,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                         const threadName = bridge.output_credentials?.thread_name;
                         const threadId = bridge.output_credentials?.thread_id;
                         
-                        await sendToNyanbook(discordPayload, {
+                        await sendToLedger(discordPayload, {
                             isMedia: true,
                             mediaBuffer: buffer,
                             filename: filename,
@@ -935,7 +956,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                         }, bridgeId, tenantSchema, tenantClient);
                         
                         // Path 2: User Webhook (notdbA = mutable, bridge owner only)
-                        await sendToUserWebhook(discordPayload, {
+                        await sendToUserOutput(discordPayload, {
                             isMedia: true,
                             mediaBuffer: buffer,
                             filename: filename,
@@ -963,13 +984,13 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
             const threadName = bridge.output_credentials?.thread_name;
             const threadId = bridge.output_credentials?.thread_id;
             
-            await sendToNyanbook(discordPayload, {
+            await sendToLedger(discordPayload, {
                 threadName,
                 threadId
             }, bridgeId, tenantSchema, tenantClient);
             
             // Path 2: User Webhook (notdbA = mutable, bridge owner only)
-            await sendToUserWebhook(discordPayload, {}, bridgeId, tenantSchema, tenantClient);
+            await sendToUserOutput(discordPayload, {}, bridgeId, tenantSchema, tenantClient);
             
             console.log(`✅ [Bridge ${bridgeId}] Forwarded message from ${senderName}`);
             
@@ -2697,28 +2718,34 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
         const userRole = req.tenantContext?.userRole || 'read-only';
         const tenantId = req.tenantContext?.tenantId;
         const isGenesisAdmin = req.tenantContext?.isGenesisAdmin || false;
-        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags } = req.body;
+        const { name, inputPlatform, userOutputUrl, contactInfo, tags } = req.body;
         
         if (!tenantId) {
             return res.status(400).json({ error: 'Tenant context required' });
         }
         
+        // WEBHOOK-CENTRIC: Dual-output architecture
+        // Output #01: Nyanbook Ledger (eternal, automatic, masked from Admin #0n)
+        const output01Url = process.env.NYANBOOK_WEBHOOK_URL || null;
+        
+        // Output #0n: User's Discord (mutable, optional, visible to owner)
+        const output0nUrl = userOutputUrl || null;
+        
         // Tag dev-created bridges with admin_id='01' for fractalized ID generation
         const createdByAdminId = (userRole === 'dev' && isGenesisAdmin) ? '01' : null;
         
-        // Generate unique Discord thread name for this bridge (DISCORD UI EMBEDDING)
-        const threadName = `nyanbook-t${tenantId}-${Date.now()}`;
+        // Generate unique Discord thread name for ledger tracking
+        const threadName = `bridge-t${tenantId}-${Date.now()}`;
         
-        // Merge thread_name into output_credentials for Discord thread embedding
-        const mergedOutputCredentials = {
-            ...(outputCredentials || {}),
+        // Store thread metadata in output_credentials
+        const outputCredentials = {
             thread_name: threadName
         };
         
         const result = await client.query(
-            `INSERT INTO bridges (name, input_platform, output_platform, input_credentials, output_credentials, contact_info, tags, status, archived, created_by_admin_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-            [name, inputPlatform, outputPlatform, inputCredentials || {}, mergedOutputCredentials, contactInfo || null, tags || [], 'inactive', false, createdByAdminId]
+            `INSERT INTO bridges (name, input_platform, output_platform, input_credentials, output_credentials, output_01_url, output_0n_url, contact_info, tags, status, archived, created_by_admin_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+            [name, inputPlatform, 'discord', {}, outputCredentials, output01Url, output0nUrl, contactInfo || null, tags || [], 'inactive', false, createdByAdminId]
         );
         
         const bridge = result.rows[0];
@@ -2735,14 +2762,13 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
         
         bridge.fractal_id = generatedFractalId;
         
-        // PHASE 2 TRANSITION: Include both id and fractal_id during migration
-        // TODO: Remove raw id once ALL endpoints and frontend are migrated to fractal_id
+        // Return sanitized bridge data
         const sanitized = sanitizeForRole(bridge, userRole);
         
-        console.log(`✅ Created bridge with fractal_id: ${generatedFractalId} for tenant ${tenantId}`);
+        console.log(`✅ Created bridge ${generatedFractalId} (Output #01: ${output01Url ? 'Ledger' : 'None'}, Output #0n: ${output0nUrl ? 'User' : 'None'})`);
         res.json(sanitized);
     } catch (error) {
-        console.error('❌ Error in POST /api/bots:', error);
+        console.error('❌ Error in POST /api/bridges:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -2944,14 +2970,14 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
             const threadName = bridge.output_credentials?.thread_name;
             const threadId = bridge.output_credentials?.thread_id;
             
-            await sendToNyanbook(discordPayload, {
+            await sendToLedger(discordPayload, {
                 isMedia: !!media_url,
                 threadName,
                 threadId
             }, internalId, tenantSchema, client);
             
             // Path 2: User Webhook (notdbA = mutable, bridge owner only)
-            await sendToUserWebhook(discordPayload, {
+            await sendToUserOutput(discordPayload, {
                 isMedia: !!media_url
             }, internalId, tenantSchema, client);
             

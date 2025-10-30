@@ -10,10 +10,17 @@
 - **Zero Cost for Webhooks:** Webhook inputs have no runtime overhead.
 
 ## Recent Updates (Oct 30, 2025)
+- **WEBHOOK-CENTRIC ARCHITECTURE COMPLETE**: Migrated from bridge-centric to webhook-centric model
+  - Database: Added `output_01_url` and `output_0n_url` columns to all `tenant_*.bridges` tables
+  - Code: Renamed `sendToNyanbook()` → `sendToLedger()`, `sendToUserWebhook()` → `sendToUserOutput()`
+  - Each "bridge" = dual-output pair: Output #01 (Ledger) + Output #0n (User Discord)
+  - Output #01 automatically set to NYANBOOK_WEBHOOK_URL (eternal, masked from Admin #0n)
+  - Output #0n user-configurable via `userOutputUrl` in create form (mutable, visible)
+  - Bridge creation fixed: `archived=false` explicitly set (was NULL, causing invisibility bug)
+  - **UI Masking**: "webhook" → "bridge" in all user-facing text (except create form keeps "Webhook Outputs" for clarity)
 - **Genesis Admin Fixed**: First user EVER = Dev #01 (role='dev', god view to dbA), all subsequent users = Admin #0n (role='admin', isolated tenant with own dbB)
 - **Dev Panel UI**: `/dev` endpoint now mirrors bridges tab with dbA/notdbA view switch
 - **Fractalized Multi-Tenant**: No invites needed - each signup creates isolated tenant (Admin #02, #03, etc.)
-- **Webhook Architecture**: dbA (Webhook #01 = Nyanbook Monolith) vs dbB (Webhook #0n = User's personal webhook)
 
 ## User Preferences
 - **Design**: Apple glassmorphism aesthetic with Discord-style message layout
