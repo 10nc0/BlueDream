@@ -2716,9 +2716,9 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
         };
         
         const result = await client.query(
-            `INSERT INTO bridges (name, input_platform, output_platform, input_credentials, output_credentials, contact_info, tags, status, created_by_admin_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [name, inputPlatform, outputPlatform, inputCredentials || {}, mergedOutputCredentials, contactInfo || null, tags || [], 'inactive', createdByAdminId]
+            `INSERT INTO bridges (name, input_platform, output_platform, input_credentials, output_credentials, contact_info, tags, status, archived, created_by_admin_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+            [name, inputPlatform, outputPlatform, inputCredentials || {}, mergedOutputCredentials, contactInfo || null, tags || [], 'inactive', false, createdByAdminId]
         );
         
         const bridge = result.rows[0];
