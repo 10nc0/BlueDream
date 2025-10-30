@@ -134,61 +134,63 @@ The dashboard is a Single Page Application (SPA) featuring an Apple glassmorphis
 ✅ Zero connection leaks with production-hardened cleanup handlers
 ✅ JWT errors handled gracefully with fallback to session auth
 
-### Phase 2 (Planned): Fractalized Bridge IDs 🚧
-**Status**: CRITICAL SECURITY GAP - Required for production deployment
+### Phase 2 (In Progress): Fractalized Bridge IDs 🔄
+**Status**: Backend infrastructure complete - Frontend migration pending
 
-#### Current Vulnerability:
-- **Sequential Bridge IDs**: Frontend uses raw database IDs (1, 2, 3...) which are:
-  - Predictable and enumerable
-  - Enable brute-force enumeration attacks
-  - Leak information about system usage (total bridge count)
-- **Attack Vector**: Malicious user can iterate `bridgeId=1` to `bridgeId=1000` to probe system
-- **Current Mitigation**: Backend validation blocks cross-tenant access attempts, but pattern is still vulnerable to enumeration
+#### Problem Solved:
+- **Sequential Bridge IDs**: Raw database IDs (1, 2, 3...) are predictable and enable enumeration attacks
+- **Attack Vector**: Malicious users could iterate `bridgeId=1` to `bridgeId=1000` to probe system
+- **Solution**: Non-enumerable, tenant-scoped fractalized IDs
 
-#### Planned Solution: Fractalized IDs
-Replace sequential IDs with opaque, tenant-prefixed identifiers:
+#### Implemented Solution (October 2025):
 
-**Backend Implementation**:
+**Backend Implementation** (✅ Complete):
 ```javascript
-// Generate fractalized ID with tenant prefix + ULID
-const fractal_id = `brg_t${tenantId}_${ulid().slice(-12)}`;
-// Example: brg_t3_01HXYZ123ABC
+// utils/fractal-id.js - SHA-256 hash-based generator
+const fractal_id = `bridge_t${tenantId}_${sha256Hash}`;
+// Example: bridge_t6_9221cbd9d173
 ```
 
-**Database Schema**:
+**Database Schema** (✅ Complete):
 ```sql
-ALTER TABLE bridges ADD COLUMN fractal_id VARCHAR(32) UNIQUE;
+ALTER TABLE bridges ADD COLUMN fractal_id TEXT UNIQUE;
 CREATE INDEX idx_bridges_fractal_id ON bridges(fractal_id);
 ```
 
-**Frontend Changes**:
-```javascript
-// Use fractal_id instead of raw id
-onclick="selectBridge('brg_t3_01HXYZ123ABC')"
-```
+**Migration Status** (✅ Complete):
+- Added `fractal_id` column to all tenant schemas (tenant_1, tenant_6)
+- Generated fractalized IDs for all existing bridges
+- Migration script: `migrate-fractal-ids.js`
 
-**Backend Validation**:
+**API Responses** (✅ Backward Compatible):
 ```javascript
-// Extract and validate tenant prefix
-const match = fractalId.match(/^brg_t(\d+)_(.+)$/);
-if (!match || parseInt(match[1]) !== req.tenantContext.tenantId) {
-    return res.status(404).json({ error: 'Bridge not found' });
+// GET/POST /api/bridges returns BOTH ids during transition:
+{
+  "id": 8,                          // Legacy - will be removed after frontend migration
+  "fractal_id": "bridge_t6_9221cbd9d173",  // New opaque identifier
+  "name": "WhatsApp → Discord Bridge"
 }
 ```
 
-#### Migration Plan:
-1. Add `fractal_id` column to `bridges` table (nullable initially)
-2. Generate fractalized IDs for all existing bridges
-3. Update frontend to use `fractal_id` instead of `id`
-4. Update all API routes to accept and validate fractalized IDs
-5. Make `fractal_id` non-nullable and add UNIQUE constraint
-6. Keep internal `id` for foreign key relationships
-
-#### Benefits:
-- ✅ **Non-enumerable**: Random ULID prevents sequential guessing
-- ✅ **Tenant-scoped**: Prefix encodes tenant ownership
+**Security Features** (✅ Complete):
+- ✅ **Non-enumerable**: SHA-256 hash prevents sequential guessing
+- ✅ **Tenant-scoped**: Prefix encodes tenant ownership (`bridge_t{tenantId}_`)
 - ✅ **Opaque**: No information leakage about system usage
-- ✅ **Backward Compatible**: Internal `id` remains for DB relations
+- ✅ **FRACTAL_SALT Warning**: Startup warning if using weak default salt
+- ✅ **Backward Compatible**: Internal `id` remains for FK relationships
+
+#### Remaining Work:
+1. ⏳ **Update Remaining Endpoints**: Make PUT/DELETE /api/bridges/:id and GET /api/bridges/:id/* accept `fractal_id` routing
+2. ⏳ **Add Resolver Utility**: Create helper to resolve `fractal_id` → internal `id` for database queries
+3. ⏳ **Frontend Migration**: Update all bridge operations to use `fractal_id` instead of raw `id`
+4. ⏳ **Remove Raw IDs**: Strip `id` from API responses once frontend migration complete
+5. ⏳ **Production Secret**: Make FRACTAL_SALT required (fail fast) before deployment
+
+#### Security Posture:
+- ✅ Infrastructure in place with backward compatibility
+- ⚠️ FRACTAL_SALT uses weak default (warning logged) - MUST set production secret
+- ⚠️ Raw IDs still exposed during transition - full security achieved after frontend migration
+- ✅ Backend validation still enforces tenant isolation on all endpoints
 
 ### Recent Security Improvements (October 2025)
 - **Fixed**: Browser crash from `process.env` access in client-side code
