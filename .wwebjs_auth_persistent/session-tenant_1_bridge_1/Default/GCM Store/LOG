@@ -1,3 +1,2 @@
-2025/10/30-21:59:04.932 1d4c4 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/GCM Store/MANIFEST-000001
-2025/10/30-21:59:04.933 1d4c4 Recovering log #3
-2025/10/30-21:59:04.933 1d4c4 Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/GCM Store/000003.log 
+2025/10/30-22:01:00.575 1d8a5 Creating DB /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/GCM Store since it was missing.
+2025/10/30-22:01:00.598 1d8a5 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/GCM Store/MANIFEST-000001
