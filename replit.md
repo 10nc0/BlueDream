@@ -99,7 +99,9 @@ The dashboard is a Single Page Application (SPA) featuring an Apple glassmorphis
 ### Key Files
 - **`whatsapp-client-manager.js`**: Multi-instance WhatsApp client manager (one per bridge)
 - **`tenant-middleware.js`**: Tenant context middleware for request isolation
-- **`tenant-manager.js`**: Database client pool manager with per-tenant isolation
+- **`tenant-manager.js`**: Database client pool manager with per-tenant isolation + schema creation with fractalized ID columns
+- **`utils/fractal-id.js`**: SHA-256 hash-based ID generator for non-enumerable bridge/message IDs
+- **`migrate-fractal-ids.js`**: One-time migration script to add fractalized IDs to existing bridges
 - **`index.js`**: Main Express server with bridge-level WhatsApp API endpoints
 - **`public/index.html`**: SPA dashboard with per-bridge WhatsApp controls (Start, Stop, Relink, QR)
 

@@ -148,7 +148,7 @@ class TenantManager {
             await client.query(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
 
             await client.query(`
-                CREATE TABLE IF NOT EXISTS ${schemaName}.bots (
+                CREATE TABLE IF NOT EXISTS ${schemaName}.bridges (
                     id SERIAL PRIMARY KEY,
                     name TEXT NOT NULL,
                     input_platform TEXT NOT NULL,
@@ -159,6 +159,8 @@ class TenantManager {
                     contact_info TEXT,
                     tags TEXT[],
                     archived BOOLEAN DEFAULT false NOT NULL,
+                    fractal_id TEXT UNIQUE,
+                    created_by_admin_id TEXT,
                     created_at TIMESTAMPTZ DEFAULT NOW(),
                     updated_at TIMESTAMPTZ DEFAULT NOW()
                 )
@@ -167,7 +169,7 @@ class TenantManager {
             await client.query(`
                 CREATE TABLE IF NOT EXISTS ${schemaName}.messages (
                     id SERIAL PRIMARY KEY,
-                    bot_id INTEGER REFERENCES ${schemaName}.bots(id) ON DELETE CASCADE,
+                    bridge_id INTEGER REFERENCES ${schemaName}.bridges(id) ON DELETE CASCADE,
                     sender_name TEXT NOT NULL,
                     sender_number TEXT,
                     sender_contact TEXT,
@@ -181,7 +183,8 @@ class TenantManager {
                     media_filename TEXT,
                     has_media BOOLEAN DEFAULT false,
                     error_message TEXT,
-                    sender_photo_url TEXT
+                    sender_photo_url TEXT,
+                    fractal_id TEXT UNIQUE
                 )
             `);
 
@@ -191,8 +194,18 @@ class TenantManager {
             `);
 
             await client.query(`
-                CREATE INDEX IF NOT EXISTS idx_messages_bot 
-                ON ${schemaName}.messages(bot_id)
+                CREATE INDEX IF NOT EXISTS idx_messages_bridge 
+                ON ${schemaName}.messages(bridge_id)
+            `);
+
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_bridges_fractal_id 
+                ON ${schemaName}.bridges(fractal_id)
+            `);
+
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_messages_fractal_id 
+                ON ${schemaName}.messages(fractal_id)
             `);
 
             await client.query(`
@@ -234,12 +247,12 @@ class TenantManager {
                 CREATE TABLE IF NOT EXISTS ${schemaName}.message_analytics (
                     id SERIAL PRIMARY KEY,
                     date DATE NOT NULL,
-                    bot_id INTEGER REFERENCES ${schemaName}.bots(id) ON DELETE CASCADE,
+                    bridge_id INTEGER REFERENCES ${schemaName}.bridges(id) ON DELETE CASCADE,
                     total_messages INTEGER DEFAULT 0,
                     failed_messages INTEGER DEFAULT 0,
                     rate_limit_events INTEGER DEFAULT 0,
                     avg_response_time_ms NUMERIC(10,2),
-                    UNIQUE(date, bot_id)
+                    UNIQUE(date, bridge_id)
                 )
             `);
 
