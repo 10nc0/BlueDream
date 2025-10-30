@@ -920,13 +920,27 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                             inline: false
                         });
                         
-                        // Send to Discord with media
-                        await sendToAllWebhooks(discordPayload, {
+                        // PRIVACY ARCHITECTURE: Two-path delivery (NO cross-admin leaks)
+                        // Path 1: Nyanbook Ledger (dbA = eternal, masked from Admin #0n)
+                        const threadName = bridge.output_credentials?.thread_name;
+                        const threadId = bridge.output_credentials?.thread_id;
+                        
+                        await sendToNyanbook(discordPayload, {
+                            isMedia: true,
+                            mediaBuffer: buffer,
+                            filename: filename,
+                            mimetype: media.mimetype,
+                            threadName,
+                            threadId
+                        }, bridgeId, tenantSchema, tenantClient);
+                        
+                        // Path 2: User Webhook (notdbA = mutable, bridge owner only)
+                        await sendToUserWebhook(discordPayload, {
                             isMedia: true,
                             mediaBuffer: buffer,
                             filename: filename,
                             mimetype: media.mimetype
-                        }, messageDbId, mediaData, bridgeId, tenantSchema, tenantClient);
+                        }, bridgeId, tenantSchema, tenantClient);
                         
                         await tenantClient.query('COMMIT');
                         tenantClient.release();
@@ -944,8 +958,19 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                 }
             }
 
-            // Send text-only message to Discord
-            await sendToAllWebhooks(discordPayload, {}, messageDbId, null, bridgeId, tenantSchema, tenantClient);
+            // PRIVACY ARCHITECTURE: Two-path delivery (NO cross-admin leaks)
+            // Path 1: Nyanbook Ledger (dbA = eternal, masked from Admin #0n)
+            const threadName = bridge.output_credentials?.thread_name;
+            const threadId = bridge.output_credentials?.thread_id;
+            
+            await sendToNyanbook(discordPayload, {
+                threadName,
+                threadId
+            }, bridgeId, tenantSchema, tenantClient);
+            
+            // Path 2: User Webhook (notdbA = mutable, bridge owner only)
+            await sendToUserWebhook(discordPayload, {}, bridgeId, tenantSchema, tenantClient);
+            
             console.log(`✅ [Bridge ${bridgeId}] Forwarded message from ${senderName}`);
             
             await tenantClient.query('COMMIT');
@@ -2914,16 +2939,21 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
                 });
             }
             
-            // Send to Discord webhooks
-            await sendToAllWebhooks(
-                discordPayload,
-                { isMedia: !!media_url },
-                messageDbId,
-                null,
-                internalId,
-                tenantSchema,
-                client
-            );
+            // PRIVACY ARCHITECTURE: Two-path delivery (NO cross-admin leaks)
+            // Path 1: Nyanbook Ledger (dbA = eternal, masked from Admin #0n)
+            const threadName = bridge.output_credentials?.thread_name;
+            const threadId = bridge.output_credentials?.thread_id;
+            
+            await sendToNyanbook(discordPayload, {
+                isMedia: !!media_url,
+                threadName,
+                threadId
+            }, internalId, tenantSchema, client);
+            
+            // Path 2: User Webhook (notdbA = mutable, bridge owner only)
+            await sendToUserWebhook(discordPayload, {
+                isMedia: !!media_url
+            }, internalId, tenantSchema, client);
             
             await client.query('COMMIT');
             client.release();
