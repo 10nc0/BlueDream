@@ -79,6 +79,12 @@ class WhatsAppClientManager {
                         '--disable-gpu',
                         '--disable-features=ProcessSingleton'
                     ]
+                },
+                // CRITICAL: Force loading current WhatsApp Web build instead of stale bundled snapshot
+                // Without this, Meta version updates break authentication events (authenticated/ready never fire)
+                webVersionCache: {
+                    type: 'remote',
+                    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/'
                 }
             });
 
@@ -105,6 +111,16 @@ class WhatsAppClientManager {
                 } catch (error) {
                     console.error(`⚠️  Error handling QR for ${compositeKey}:`, error.message);
                 }
+            });
+
+            // Debug: Track all state changes during authentication
+            client.on('change_state', (state) => {
+                console.log(`🔄 [DEBUG] ${compositeKey} state changed to: ${state}`);
+            });
+
+            // Debug: Confirm session is saved remotely
+            client.on('remote_session_saved', () => {
+                console.log(`💾 [DEBUG] ${compositeKey} remote session saved successfully`);
             });
 
             // Authenticated event (fires once when QR is scanned)
