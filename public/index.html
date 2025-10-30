@@ -1922,37 +1922,29 @@
             document.getElementById('botModal').classList.add('active');
         }
 
-        function editBridge(id) {
-            // Convert string id to number for comparison
-            const bridgeId = typeof id === 'string' ? parseInt(id) : id;
-            const bridge = bridges.find(b => b.id === bridgeId);
+        function editBridge(fractalId) {
+            // Find bridge by fractal_id (hash string like "dev_bridge_t9_54ab7617ffeb")
+            const bridge = bridges.find(b => b.fractal_id === fractalId);
             if (!bridge) {
-                console.error('Bridge not found:', id, 'Available bridges:', bridges.map(b => b.id));
+                console.error('Bridge not found:', fractalId, 'Available bridges:', bridges.map(b => b.fractal_id));
                 return;
             }
             
-            editingBridgeId = id;
+            editingBridgeId = fractalId;
             document.getElementById('modalTitle').textContent = 'Edit Bridge';
             document.getElementById('botPlatform').value = bridge.input_platform;
             document.getElementById('botDestinationPlatform').value = bridge.output_platform;
             document.getElementById('botContact').value = bridge.contact_info || '';
             botTags = bridge.tags || [];
             
-            // Load webhooks from output_credentials
-            const webhooks = bridge.output_credentials?.webhooks || [];
-            botWebhooks = webhooks.map((w, idx) => ({
-                id: Date.now() + idx,
-                name: w.name || '',
-                url: w.url || w.webhook_url || ''
-            }));
-            
-            // If no webhooks but has legacy webhook_url, migrate it
-            if (bridgeWebhooks.length === 0 && bridge.output_credentials?.webhook_url) {
-                botWebhooks = [{
+            // Load webhooks from output_01_url and output_0n_url
+            botWebhooks = [];
+            if (bridge.output_0n_url) {
+                botWebhooks.push({
                     id: Date.now(),
-                    name: 'Main Channel',
-                    url: bridge.output_credentials.webhook_url
-                }];
+                    name: 'User Discord',
+                    url: bridge.output_0n_url
+                });
             }
             
             renderTags();
@@ -2355,27 +2347,26 @@
             }
         }
 
-        async function confirmDeleteBridge(bridgeId) {
-            // Convert to number to ensure proper comparison
-            bridgeId = parseInt(bridgeId);
-            const bridge = bridges.find(b => b.id === bridgeId);
+        async function confirmDeleteBridge(fractalId) {
+            // Find bridge by fractal_id (hash string)
+            const bridge = bridges.find(b => b.fractal_id === fractalId);
             if (!bridge) {
-                console.error(`Bridge ${bridgeId} not found in bridges array`);
+                console.error(`Bridge ${fractalId} not found in bridges array`);
                 return;
             }
             
-            if (!confirm(`Are you sure you want to delete "${bridge.input_platform} → ${bridge.output_platform}" bridge?\n\nAll messages will be preserved.`)) {
+            if (!confirm(`Are you sure you want to delete "${bridge.name || bridge.input_platform + ' → ' + bridge.output_platform}" bridge?\n\nAll messages will be preserved in Discord.`)) {
                 return;
             }
             
             try {
-                const response = await authFetch(`/api/bridges/${bridgeId}`, {
+                const response = await authFetch(`/api/bridges/${fractalId}`, {
                     method: 'DELETE'
                 });
                 
                 if (response.ok) {
                     // Animate bridge card deletion with liquid glass effect
-                    const bridgeCard = document.querySelector(`.channel-item[data-bridge-id="${bridgeId}"]`);
+                    const bridgeCard = document.querySelector(`.channel-item[data-bridge-id="${fractalId}"]`);
                     if (bridgeCard) {
                         // Apply liquid glass delete animation
                         bridgeCard.style.transition = 'all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)';
@@ -2400,11 +2391,11 @@
                             bridgeCard.remove();
                             
                             // CRITICAL: Immediately remove from arrays to prevent loop-back
-                            bridges = bridges.filter(b => b.id !== bridgeId);
-                            filteredBridges = filteredBridges.filter(b => b.id !== bridgeId);
+                            bridges = bridges.filter(b => b.fractal_id !== fractalId);
+                            filteredBridges = filteredBridges.filter(b => b.fractal_id !== fractalId);
                             
                             // Clear selection and detail view if deleted bridge was selected
-                            if (selectedBridgeId === bridgeId) {
+                            if (selectedBridgeId === fractalId) {
                                 selectedBridgeId = null;
                                 const detail = document.getElementById('bridgeDetail');
                                 if (detail) {

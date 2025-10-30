@@ -2777,21 +2777,69 @@ app.put('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin', 
     try {
         const client = req.dbClient || pool;
         const userRole = req.tenantContext?.userRole || 'read-only';
-        const { id } = req.params;
-        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status } = req.body;
+        const { id } = req.params; // fractal_id
+        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status, userOutputUrl } = req.body;
+        
+        // Build update query dynamically based on what's provided
+        const updates = [];
+        const values = [];
+        let paramCount = 1;
+        
+        if (name !== undefined) {
+            updates.push(`name = $${paramCount++}`);
+            values.push(name);
+        }
+        if (inputPlatform !== undefined) {
+            updates.push(`input_platform = $${paramCount++}`);
+            values.push(inputPlatform);
+        }
+        if (outputPlatform !== undefined) {
+            updates.push(`output_platform = $${paramCount++}`);
+            values.push(outputPlatform);
+        }
+        if (inputCredentials !== undefined) {
+            updates.push(`input_credentials = $${paramCount++}`);
+            values.push(inputCredentials);
+        }
+        if (outputCredentials !== undefined) {
+            updates.push(`output_credentials = $${paramCount++}`);
+            values.push(outputCredentials);
+        }
+        if (contactInfo !== undefined) {
+            updates.push(`contact_info = $${paramCount++}`);
+            values.push(contactInfo || null);
+        }
+        if (tags !== undefined) {
+            updates.push(`tags = $${paramCount++}`);
+            values.push(tags || []);
+        }
+        if (status !== undefined) {
+            updates.push(`status = $${paramCount++}`);
+            values.push(status);
+        }
+        if (userOutputUrl !== undefined) {
+            updates.push(`output_0n_url = $${paramCount++}`);
+            values.push(userOutputUrl);
+        }
+        
+        updates.push(`updated_at = NOW()`);
+        values.push(id); // fractal_id at end
         
         const result = await client.query(
             `UPDATE bridges 
-             SET name = $1, input_platform = $2, output_platform = $3, 
-                 input_credentials = $4, output_credentials = $5, contact_info = $6, tags = $7, status = $8, updated_at = NOW()
-             WHERE id = $9 RETURNING *`,
-            [name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo || null, tags || [], status, id]
+             SET ${updates.join(', ')}
+             WHERE fractal_id = $${paramCount} RETURNING *`,
+            values
         );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Bridge not found' });
+        }
         
         const sanitized = sanitizeForRole(result.rows[0], userRole);
         res.json(sanitized);
     } catch (error) {
-        console.error('❌ Error in PUT /api/bots/:id:', error);
+        console.error('❌ Error in PUT /api/bridges/:id:', error);
         res.status(500).json({ error: error.message });
     }
 });
