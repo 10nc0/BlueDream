@@ -274,6 +274,51 @@ class WhatsAppClientManager {
             // Initialize the client
             await client.initialize();
             
+            // PUPPETEER INSTRUMENTATION: Capture browser activity for debugging
+            // Access the Puppeteer page after initialization
+            if (client.pupPage) {
+                const page = client.pupPage;
+                
+                // 1. BROWSER CONSOLE LOGS: Capture JavaScript errors from WhatsApp Web
+                page.on('console', (msg) => {
+                    const type = msg.type();
+                    const text = msg.text();
+                    if (type === 'error' || type === 'warning') {
+                        console.log(`🌐 [BROWSER ${type.toUpperCase()}] ${compositeKey}: ${text}`);
+                    } else if (text.includes('auth') || text.includes('qr') || text.includes('connect')) {
+                        console.log(`🌐 [BROWSER LOG] ${compositeKey}: ${text}`);
+                    }
+                });
+                
+                // 2. PAGE ERRORS: JavaScript exceptions in WhatsApp Web
+                page.on('pageerror', (error) => {
+                    console.error(`🌐 [PAGE ERROR] ${compositeKey}:`, error.message);
+                });
+                
+                // 3. PAGE LOAD EVENTS: Track if WhatsApp Web loads successfully
+                page.on('load', () => {
+                    console.log(`🌐 [PAGE LOADED] ${compositeKey}: WhatsApp Web page loaded`);
+                });
+                
+                // 4. PAGE CRASH: Detect Chromium crashes
+                page.on('error', (error) => {
+                    console.error(`🌐 [PAGE CRASH] ${compositeKey}:`, error.message);
+                });
+                
+                // 5. NETWORK MONITORING: Track failed requests to WhatsApp servers
+                page.on('requestfailed', (request) => {
+                    const url = request.url();
+                    const failure = request.failure();
+                    if (url.includes('whatsapp') || url.includes('web.whatsapp')) {
+                        console.error(`🌐 [NETWORK FAIL] ${compositeKey}: ${url} - ${failure ? failure.errorText : 'unknown error'}`);
+                    }
+                });
+                
+                console.log(`🔍 [PUPPETEER] ${compositeKey}: Browser instrumentation enabled`);
+            } else {
+                console.warn(`⚠️  [PUPPETEER] ${compositeKey}: pupPage not available, cannot instrument browser`);
+            }
+            
             return clientState;
         } catch (error) {
             console.error(`❌ Failed to initialize WhatsApp client for bridge ${bridgeId}:`, error);
