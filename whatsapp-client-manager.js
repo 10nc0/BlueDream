@@ -90,7 +90,8 @@ class WhatsAppClientManager {
                 phoneNumber: null,
                 tenantSchema,
                 bridgeId,
-                compositeKey
+                compositeKey,
+                createdAt: Date.now() // FIX: Set immediately to prevent race condition with disconnected event
             };
             this.clients.set(compositeKey, clientState);
 
