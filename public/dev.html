@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nyanbook~ Dev Control</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #1e1e2e 0%, #0a0a0f 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #00ff88, #00ccff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            color: #94a3b8;
+            font-size: 1rem;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .card h2 {
+            color: #fff;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+        }
+
+        .card p {
+            color: #94a3b8;
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .input-group {
+            margin-bottom: 1rem;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #94a3b8;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        input[type="text"], input[type="url"] {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.875rem;
+            font-family: 'Monaco', 'Courier New', monospace;
+            transition: all 0.2s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #00ff88;
+            background: rgba(0, 0, 0, 0.4);
+        }
+
+        button {
+            background: linear-gradient(135deg, #00ff88, #00ccff);
+            color: #000;
+            padding: 0.875rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(0, 255, 136, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .status {
+            margin-top: 1rem;
+            padding: 0.875rem 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-align: center;
+            display: none;
+        }
+
+        .status.success {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            display: block;
+        }
+
+        .status.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            display: block;
+        }
+
+        .info-box {
+            background: rgba(88, 101, 242, 0.1);
+            border: 1px solid rgba(88, 101, 242, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .info-box h3 {
+            color: #5865f2;
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .info-box ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .info-box li {
+            color: #94a3b8;
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .info-box li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #5865f2;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #94a3b8;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 2rem;
+            color: #00ff88;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .back-link:hover {
+            color: #00ccff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="app">
+        <div class="loading">🔐 Verifying admin access...</div>
+    </div>
+
+    <script>
+        // Check authentication
+        const accessToken = localStorage.getItem('accessToken');
+        if (!accessToken) {
+            window.location.href = '/';
+        }
+
+        async function init() {
+            const app = document.getElementById('app');
+            
+            // Verify admin access
+            try {
+                const userRes = await fetch('/api/user', {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                
+                if (!userRes.ok) {
+                    throw new Error('Not authenticated');
+                }
+                
+                const userData = await userRes.json();
+                
+                if (userData.role !== 'admin') {
+                    app.innerHTML = `
+                        <div class="card" style="text-align: center;">
+                            <h2>🚫 Access Denied</h2>
+                            <p>This page is only accessible to administrators.</p>
+                            <a href="/" class="back-link">← Back to Dashboard</a>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Load admin panel
+                renderAdminPanel(userData);
+                loadCurrentWebhook();
+                
+            } catch (error) {
+                window.location.href = '/';
+            }
+        }
+
+        function renderAdminPanel(user) {
+            const app = document.getElementById('app');
+            app.innerHTML = `
+                <a href="/" class="back-link">← Back to Dashboard</a>
+                
+                <div class="header">
+                    <h1>🛠️ Nyanbook~ Dev Control</h1>
+                    <p>Admin: ${user.email}</p>
+                </div>
+
+                <div class="card">
+                    <h2>Global Discord Webhook</h2>
+                    <p>
+                        Set the single Discord webhook endpoint where all bridges will send messages. 
+                        Each bridge creates its own thread using a unique thread_name for isolation.
+                    </p>
+
+                    <div class="input-group">
+                        <label for="webhook">Discord Webhook URL</label>
+                        <input 
+                            type="url" 
+                            id="webhook" 
+                            placeholder="https://discord.com/api/webhooks/..." 
+                            autocomplete="off"
+                        >
+                    </div>
+
+                    <button onclick="saveWebhook()">💾 Save Global Webhook</button>
+                    
+                    <div class="status" id="status"></div>
+
+                    <div class="info-box">
+                        <h3>💡 How to get your webhook URL:</h3>
+                        <ul>
+                            <li>Open Discord and go to your server</li>
+                            <li>Right-click the channel → Edit Channel → Integrations</li>
+                            <li>Click "Create Webhook" or edit existing webhook</li>
+                            <li>Copy the webhook URL and paste above</li>
+                            <li>All bridges will auto-create threads in this channel</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>📊 Architecture Info</h2>
+                    <p style="color: #94a3b8; font-size: 0.875rem; line-height: 1.8;">
+                        <strong style="color: #00ff88;">Multi-Tenant + Discord-First:</strong><br>
+                        • Each tenant has fractalized database isolation<br>
+                        • Each bridge gets unique thread_name (e.g., "tenant_7_bridge_1_1761840294599")<br>
+                        • First message creates Discord thread, thread_id captured and reused<br>
+                        • Zero storage cost - Discord handles UI, search, and attachments<br>
+                        • Messages table dropped - Discord is sole storage solution
+                    </p>
+                </div>
+            `;
+        }
+
+        async function loadCurrentWebhook() {
+            try {
+                const res = await fetch('/api/dev/webhook', {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.webhook_url) {
+                        document.getElementById('webhook').value = data.webhook_url;
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load webhook:', error);
+            }
+        }
+
+        async function saveWebhook() {
+            const webhookInput = document.getElementById('webhook');
+            const statusDiv = document.getElementById('status');
+            const url = webhookInput.value.trim();
+            
+            // Validate
+            if (!url) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ Please enter a webhook URL';
+                return;
+            }
+            
+            if (!url.includes('discord.com/api/webhooks')) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '❌ Invalid Discord webhook URL';
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/dev/webhook', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ webhook_url: url })
+                });
+                
+                if (res.ok) {
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = '✅ Global webhook saved! All bridges will use this endpoint.';
+                } else {
+                    const errorText = await res.text();
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = `❌ ${errorText}`;
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = `❌ Failed to save: ${error.message}`;
+            }
+        }
+
+        // Initialize
+        init();
+    </script>
+</body>
+</html>
