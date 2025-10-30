@@ -166,6 +166,9 @@ class TenantManager {
                 )
             `);
 
+            // DISCORD-FIRST ARCHITECTURE: Messages table dropped - Discord threads are sole storage
+            // All message history, search, and UI handled by Discord at $0 cost
+            /*
             await client.query(`
                 CREATE TABLE IF NOT EXISTS ${schemaName}.messages (
                     id SERIAL PRIMARY KEY,
@@ -199,13 +202,14 @@ class TenantManager {
             `);
 
             await client.query(`
-                CREATE INDEX IF NOT EXISTS idx_bridges_fractal_id 
-                ON ${schemaName}.bridges(fractal_id)
-            `);
-
-            await client.query(`
                 CREATE INDEX IF NOT EXISTS idx_messages_fractal_id 
                 ON ${schemaName}.messages(fractal_id)
+            `);
+            */
+
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_bridges_fractal_id 
+                ON ${schemaName}.bridges(fractal_id)
             `);
 
             await client.query(`

@@ -27,17 +27,20 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **Authentication**: Email/password authentication using JWT tokens in `localStorage`. Multi-user authentication with role-based access control (admin, read-only, write-only).
 - **Database**: PostgreSQL (Neon-backed) with fractalized multi-tenancy:
     - **Global Schema**: `public` for core authentication (`users`, `sessions`, `audit_logs`).
-    - **Tenant Schemas**: Isolated `tenant_X` for per-tenant data (`bridges`, `messages`, `users`).
+    - **Tenant Schemas**: Isolated `tenant_X` for per-tenant data (`bridges` only - messages stored in Discord).
     - **Horizontal Isolation**: Dedicated database clients and `SET LOCAL search_path` for complete data separation.
+    - **Zero Storage Cost**: PostgreSQL only stores bridge metadata; Discord threads handle all message storage at $0 cost.
 - **WhatsApp Integration**: Multi-instance `whatsapp-web.js` with `WhatsAppClientManager` to manage independent, tenant-scoped sessions. Sessions are persistent across restarts.
-- **Discord Integration**: 
-    - **Webhooks**: Uses Discord webhooks for message forwarding with 1-to-many support.
-    - **Thread Embedding**: Each bridge generates a unique `thread_name` (e.g., `nyanbook-t7-1761839223643`) stored in `output_credentials`.
-    - **Discord UI Embedding**: Dashboard offers toggle between custom message view and native Discord iframe embed.
-    - **Zero Storage Cost**: Discord threads provide full UI, search, attachments, and permanent storage at $0 cost.
-- **Media Handling**: Supports forwarding of images, videos, and documents with lazy-loading and a triple-layer caching system.
-- **Search**: Natural language date parsing and intelligent regex detection (custom view) + Discord's native search (embedded view).
-- **Data Retention**: Messages are write-only, with deletion only cascading from bridge removal. Discord threads provide redundant permanent storage.
+- **Discord Integration (SOLE STORAGE SOLUTION)**: 
+    - **Global Webhook**: Admin-configurable webhook via `/dev` panel (file-based, Replit-proof persistence).
+    - **Per-Bridge Threads**: Each bridge auto-generates unique `thread_name` (e.g., `nyanbook-t7-1761839223643`).
+    - **Smart Thread Reuse**: First message creates Discord thread and captures `thread_id`, subsequent messages reuse it.
+    - **Discord as Database**: All messages stored exclusively in Discord - no PostgreSQL message storage.
+    - **Native UI**: Dashboard shows Discord thread info with "Open Discord" button for full native experience.
+    - **Zero Cost**: Discord provides UI, search, attachments, and permanent storage at $0 - scales to 1000+ users for free.
+- **Media Handling**: Forwards images, videos, and documents directly to Discord threads.
+- **Search**: Discord's native search (full-text, date filters, attachments, etc.) - no custom implementation needed.
+- **Data Retention**: Permanent storage in Discord threads - deletion only via bridge removal.
 
 ### Feature Specifications
 - **Multi-Tenant SaaS**: Complete horizontal tenant isolation.
@@ -61,8 +64,8 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **Permanent Data Retention**: Disallows message deletion (except via bridge cascade).
 - **Scalability**: Designed for Replit Autoscale deployment with health checks.
 - **Fractalized Bridge IDs**: SHA-256 hash-based, non-enumerable, tenant-scoped IDs to prevent enumeration attacks.
-- **Discord as Full UI**: Leverages Discord threads for zero-cost UI, storage, search, and attachments. Users can toggle between custom view and native Discord embed.
-- **Dual View Architecture**: Custom message view for search/filtering + Discord iframe for full-featured native experience.
+- **Discord-First Architecture**: Uses Discord threads as the complete UI/storage solution, eliminating custom message UI and PostgreSQL storage costs. Each bridge gets a persistent Discord thread where all messages are sent, with Discord handling UI, search, and attachments at zero cost.
+- **Admin Dev Panel**: `/dev` endpoint for admins to configure global Discord webhook via file-based storage (Replit-proof persistence).
 
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)

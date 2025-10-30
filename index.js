@@ -446,16 +446,20 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
             });
         }
         
-        // Fallback to DISCORD_WEBHOOK_URL if still no webhooks
-        if (webhooks.length === 0 && DISCORD_WEBHOOK_URL) {
-            webhooks.push({
-                name: 'Default Channel',
-                url: DISCORD_WEBHOOK_URL
-            });
+        // Fallback to global webhook (Discord-first architecture)
+        if (webhooks.length === 0) {
+            const globalWebhook = getGlobalWebhook();
+            if (globalWebhook) {
+                webhooks.push({
+                    name: 'Global Discord',
+                    url: globalWebhook
+                });
+                console.log(`  🌐 Using global Discord webhook for bridge ${bridgeId}`);
+            }
         }
         
         if (webhooks.length === 0) {
-            throw new Error('No webhooks configured');
+            throw new Error('No webhooks configured. Set global webhook in /dev panel or configure per-bridge webhooks.');
         }
         
         // Prepare payload for Discord thread embedding

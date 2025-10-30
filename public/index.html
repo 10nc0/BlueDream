@@ -1044,40 +1044,8 @@
                     </div>
                 </div>
 
-                <div class="discord-search">
-                    <input 
-                        type="text" 
-                        id="msg-search-${bridge.fractal_id}" 
-                        class="discord-search-input" 
-                        placeholder="🔍 Search messages..." 
-                        oninput="filterDiscordMessages('${bridge.fractal_id}')"
-                    >
-                    <select 
-                        id="status-filter-${bridge.fractal_id}" 
-                        class="discord-filter-select" 
-                        onchange="filterDiscordMessages('${bridge.fractal_id}')"
-                    >
-                        <option value="all">All Status</option>
-                        <option value="success">✓ Success</option>
-                        <option value="failed">✗ Failed</option>
-                        <option value="pending">⏳ Pending</option>
-                    </select>
-                    <button 
-                        class="btn-icon" 
-                        onclick="toggleDiscordEmbed('${bridge.fractal_id}')" 
-                        id="discord-toggle-${bridge.fractal_id}"
-                        title="View in Discord (native UI with full features)"
-                        style="margin-left: auto; background: rgba(88, 101, 242, 0.2); color: #5865f2; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.875rem; font-weight: 600;"
-                    >
-                        🎭 Discord UI
-                    </button>
-                </div>
-
-                <div class="discord-messages" id="discord-messages-${bridge.fractal_id}">
-                    ${messageCache[bridge.fractal_id] ? renderDiscordMessages(messageCache[bridge.fractal_id], bridge.fractal_id) : '<div class="loading-msg">Loading messages...</div>'}
-                </div>
-                
-                <div class="discord-embed-container" id="discord-embed-${bridge.fractal_id}" style="display: none; padding: 2rem; border-radius: 12px; background: rgba(88, 101, 242, 0.05); border: 2px dashed rgba(88, 101, 242, 0.3);">
+                <!-- DISCORD-FIRST ARCHITECTURE: All messages stored in Discord threads at $0 cost -->
+                <div class="discord-embed-container" id="discord-embed-${bridge.fractal_id}" style="padding: 2rem; border-radius: 12px; background: rgba(88, 101, 242, 0.05); border: 2px dashed rgba(88, 101, 242, 0.3);">
                     <div style="text-align: center; margin-bottom: 1.5rem;">
                         <div style="font-size: 3rem; margin-bottom: 1rem;">🎭</div>
                         <h3 style="color: #fff; margin-bottom: 0.5rem;">Discord Native UI</h3>
