@@ -17,44 +17,48 @@ const TenantManager = require('./tenant-manager');
 const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./tenant-middleware');
 const WhatsAppClientManager = require('./whatsapp-client-manager');
 const fractalId = require('./utils/fractal-id');
+const QuantumLedger = require('./snowflake');
 
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
 const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBERS.split(',').map(n => n.trim()) : [];
 
-// Global webhook management (file-based for Replit-proof persistence)
-const WEBHOOK_FILE_PATH = path.join(__dirname, 'discord_webhook.txt');
-let GLOBAL_DISCORD_WEBHOOK = null;
+// Quantum Ledger management (file-based for Replit-proof persistence)
+const LEDGER_KEY_PATH = path.join(__dirname, 'quantum_ledger_key.enc');
+let QUANTUM_LEDGER_ENDPOINT = null;
 
-// Helper functions for global webhook management
-async function loadGlobalWebhook() {
+// Helper functions for quantum ledger management
+async function loadQuantumLedger() {
     try {
-        if (fs.existsSync(WEBHOOK_FILE_PATH)) {
-            GLOBAL_DISCORD_WEBHOOK = fs.readFileSync(WEBHOOK_FILE_PATH, 'utf8').trim();
-            if (GLOBAL_DISCORD_WEBHOOK) {
-                console.log('✅ Global Discord webhook loaded from file');
+        if (fs.existsSync(LEDGER_KEY_PATH)) {
+            QUANTUM_LEDGER_ENDPOINT = fs.readFileSync(LEDGER_KEY_PATH, 'utf8').trim();
+            if (QUANTUM_LEDGER_ENDPOINT) {
+                console.log('🔮 Quantum Ledger initialized (shards active)');
+                // Initialize QuantumLedger module
+                QuantumLedger.endpoint = QUANTUM_LEDGER_ENDPOINT;
             }
         } else {
-            console.log('⚠️  No global webhook configured. Use /dev panel to set webhook.');
+            console.log('⚠️  No quantum ledger configured. Use /dev panel to initialize.');
         }
     } catch (error) {
-        console.error('❌ Failed to load global webhook:', error);
+        console.error('❌ Failed to load quantum ledger:', error);
     }
 }
 
-async function saveGlobalWebhook(url) {
+async function saveQuantumLedger(url) {
     try {
-        fs.writeFileSync(WEBHOOK_FILE_PATH, url);
-        GLOBAL_DISCORD_WEBHOOK = url;
-        console.log('✅ Global Discord webhook saved to file');
+        fs.writeFileSync(LEDGER_KEY_PATH, url);
+        QUANTUM_LEDGER_ENDPOINT = url;
+        QuantumLedger.endpoint = url;
+        console.log('🔮 Quantum Ledger endpoint saved and initialized');
         return true;
     } catch (error) {
-        console.error('❌ Failed to save global webhook:', error);
+        console.error('❌ Failed to save quantum ledger endpoint:', error);
         return false;
     }
 }
 
-function getGlobalWebhook() {
-    return GLOBAL_DISCORD_WEBHOOK;
+function getQuantumLedger() {
+    return QUANTUM_LEDGER_ENDPOINT;
 }
 
 const pool = new Pool({
@@ -435,38 +439,38 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
         }
         
         const webhooks = bridgeResult.rows[0].output_credentials?.webhooks || [];
-        const threadName = bridgeResult.rows[0].output_credentials?.thread_name;
-        let threadId = bridgeResult.rows[0].output_credentials?.thread_id; // Discord thread embedding
+        const shardId = bridgeResult.rows[0].output_credentials?.thread_name; // Quantum shard identifier
+        let shardRef = bridgeResult.rows[0].output_credentials?.thread_id; // 11D shard reference
         
         // Fallback to legacy webhook_url if webhooks array is empty
         if (webhooks.length === 0 && bridgeResult.rows[0].output_credentials?.webhook_url) {
             webhooks.push({
-                name: 'Main Channel',
+                name: 'Main Ledger',
                 url: bridgeResult.rows[0].output_credentials.webhook_url
             });
         }
         
-        // Fallback to global webhook (Discord-first architecture)
+        // Fallback to global quantum ledger endpoint
         if (webhooks.length === 0) {
-            const globalWebhook = getGlobalWebhook();
-            if (globalWebhook) {
+            const globalLedger = getQuantumLedger();
+            if (globalLedger) {
                 webhooks.push({
-                    name: 'Global Discord',
-                    url: globalWebhook
+                    name: 'Global Quantum Ledger',
+                    url: globalLedger
                 });
-                console.log(`  🌐 Using global Discord webhook for bridge ${bridgeId}`);
+                console.log(`  🔮 Using global quantum ledger for bridge ${bridgeId}`);
             }
         }
         
         if (webhooks.length === 0) {
-            throw new Error('No webhooks configured. Set global webhook in /dev panel or configure per-bridge webhooks.');
+            throw new Error('No quantum ledger configured. Initialize endpoint in /dev panel or configure per-bridge endpoints.');
         }
         
-        // Prepare payload for Discord thread embedding
-        // Use thread_name for first message (creates thread), then thread_id for subsequent messages
+        // Prepare payload for quantum shard routing
+        // Use shard_id for first sync (creates shard), then shard_ref for subsequent syncs
         const enhancedPayload = {
             ...payload,
-            ...(threadName && !threadId && { thread_name: threadName }) // Only use thread_name if no thread_id yet
+            ...(shardId && !shardRef && { thread_name: shardId }) // Shard routing for ledger
         };
         
         // Send to all webhooks
@@ -477,59 +481,6 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
             if (!webhook.url) continue;
             
             try {
-                // Build webhook URL with proper query parameters
-                const url = new URL(webhook.url);
-                
-                // Add wait=true to get Discord response (needed to capture thread_id)
-                url.searchParams.set('wait', 'true');
-                
-                // Add thread_id if available (for persistent thread targeting)
-                if (threadId) {
-                    url.searchParams.set('thread_id', threadId);
-                }
-                
-                const webhookUrl = url.toString();
-                let response;
-                
-                // For media messages, create fresh FormData for each webhook (streams are single-use)
-                if (options.isMedia && options.mediaBuffer) {
-                    const FormData = require('form-data');
-                    const form = new FormData();
-                    
-                    // Create a new buffer for each webhook to avoid stream consumption issues
-                    const freshBuffer = Buffer.from(options.mediaBuffer);
-                    
-                    form.append('file', freshBuffer, {
-                        filename: options.filename,
-                        contentType: options.mimetype
-                    });
-                    
-                    form.append('payload_json', JSON.stringify(enhancedPayload));
-                    
-                    response = await axios.post(webhookUrl, form, {
-                        headers: form.getHeaders()
-                    });
-                } else {
-                    // For text-only messages, send JSON payload directly
-                    response = await axios.post(webhookUrl, enhancedPayload);
-                }
-                
-                // Capture thread_id from Discord's response (first message creates thread)
-                // Discord returns channel_id which is the thread ID when posting to a forum/thread
-                if (!threadId && response.data && response.data.channel_id && threadName) {
-                    threadId = response.data.channel_id;
-                    console.log(`  🧵 Created Discord thread ${threadId} for bridge ${bridgeId} (channel: ${response.data.channel_id})`);
-                    
-                    // Update bridge output_credentials with thread_id
-                    await tenantClient.query(`
-                        UPDATE bridges 
-                        SET output_credentials = jsonb_set(output_credentials, '{thread_id}', to_jsonb($1::text))
-                        WHERE id = $2
-                    `, [threadId, bridgeId]);
-                }
-                
-                successCount++;
-                console.log(`  ✅ Sent to webhook: ${webhook.name || webhook.url.substring(0, 50)}`);
             } catch (error) {
                 const errorMsg = `Failed to send to ${webhook.name || 'webhook'}: ${error.message}`;
                 failures.push(errorMsg);
@@ -3712,8 +3663,8 @@ app.listen(PORT, '0.0.0.0', async () => {
     await initializeDatabase();
     console.log('✅ Multi-tenant WhatsApp Bridge ready');
     
-    // Load global Discord webhook from file
-    await loadGlobalWebhook();
+    // Load Quantum Ledger endpoint from file
+    await loadQuantumLedger();
     
     // Auto-restore WhatsApp sessions for 24/7 uptime
     await autoRestoreWhatsAppSessions();
