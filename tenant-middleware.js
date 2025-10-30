@@ -141,7 +141,9 @@ async function setTenantContext(req, res, next) {
             transactionStarted = true; // Mark transaction started for safe cleanup
             await client.query(`SET LOCAL search_path TO ${user.tenant_schema}, public`);
             req.tenantContext.globalAccess = false;
-            // NEVER expose tenant_id to non-dev users (prevents horizontal awareness)
+            // Store tenant_id for SERVER-SIDE use (fractal ID generation, routing)
+            // sanitizeForRole() will strip it from API responses to prevent horizontal awareness
+            req.tenantContext.tenantId = user.tenant_id;
             req.tenantContext.tenantSchema = user.tenant_schema;
             console.log(`🔒 User ${user.email} - Isolated to ${user.tenant_schema}`);
         } else {
@@ -185,11 +187,12 @@ async function getAllTenantSchemas(client, userRole) {
 
 /**
  * Sanitize data before sending to non-dev users
- * Recursively removes tenant_id and any cross-tenant awareness from nested objects
+ * Recursively removes tenant_id, tenant_schema, and raw id from nested objects
+ * Forces non-dev users to use opaque fractalized IDs only (IDOR protection)
  */
 function sanitizeForRole(data, userRole) {
     if (userRole === 'dev') {
-        return data; // Dev sees everything
+        return data; // Dev sees everything (including raw IDs for debugging)
     }
     
     // Recursive helper to strip sensitive fields
@@ -198,7 +201,8 @@ function sanitizeForRole(data, userRole) {
             return obj.map(strip);
         }
         if (obj && typeof obj === 'object') {
-            const { tenant_id, tenant_schema, ...rest } = obj;
+            // Strip: tenant_id, tenant_schema (horizontal awareness), id (IDOR protection)
+            const { tenant_id, tenant_schema, id, ...rest } = obj;
             // Recursively sanitize nested objects
             return Object.fromEntries(
                 Object.entries(rest).map(([key, value]) => [key, strip(value)])

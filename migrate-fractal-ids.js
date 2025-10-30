@@ -38,7 +38,7 @@ async function migrateFractalIds() {
             
             // Find bridges without fractal_id
             const bridgesResult = await pool.query(`
-                SELECT id 
+                SELECT id, created_by_admin_id 
                 FROM ${tenantSchema}.bridges 
                 WHERE fractal_id IS NULL
             `);
@@ -50,9 +50,9 @@ async function migrateFractalIds() {
             
             console.log(`   Found ${bridgesResult.rows.length} bridges without fractal_id`);
             
-            // Generate and update fractal IDs
+            // Generate and update fractal IDs (with dev prefix if admin_id='01')
             for (const bridge of bridgesResult.rows) {
-                const generatedId = fractalId.generate('bridge', tenantId, bridge.id);
+                const generatedId = fractalId.generate('bridge', tenantId, bridge.id, bridge.created_by_admin_id);
                 
                 await pool.query(
                     `UPDATE ${tenantSchema}.bridges 
@@ -61,7 +61,8 @@ async function migrateFractalIds() {
                     [generatedId, bridge.id]
                 );
                 
-                console.log(`   ✅ Bridge ${bridge.id} → ${generatedId}`);
+                const prefix = bridge.created_by_admin_id === '01' ? '[DEV] ' : '';
+                console.log(`   ✅ ${prefix}Bridge ${bridge.id} → ${generatedId}`);
                 totalMigrated++;
             }
             

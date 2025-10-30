@@ -334,91 +334,8 @@ async function initializeDatabase() {
     try {
         await tenantManager.initializeCoreSchema();
         
-        // Create bridges table first (in public schema for backwards compatibility)
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS bridges (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                input_platform TEXT NOT NULL,
-                output_platform TEXT NOT NULL,
-                input_credentials JSONB,
-                output_credentials JSONB,
-                status TEXT DEFAULT 'inactive',
-                contact_info TEXT,
-                tags TEXT[],
-                archived BOOLEAN DEFAULT false NOT NULL,
-                archived_at TIMESTAMPTZ,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        `);
-        
-        // Create default bridge if none exists (needed before messages migration)
-        const bridgesCount = await pool.query('SELECT COUNT(*) FROM bridges');
-        if (parseInt(bridgesCount.rows[0].count) === 0) {
-            await pool.query(`
-                INSERT INTO bridges (name, input_platform, output_platform, input_credentials, output_credentials, status)
-                VALUES ($1, $2, $3, $4, $5, $6)
-            `, [
-                'WhatsApp → Discord Bridge',
-                'WhatsApp',
-                'Discord',
-                JSON.stringify({}),
-                JSON.stringify({ webhook_url: process.env.DISCORD_WEBHOOK_URL || '' }),
-                'active'
-            ]);
-            console.log('✅ Created default bot');
-        }
-        
-        // Create messages table if it doesn't exist
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS messages (
-                id SERIAL PRIMARY KEY,
-                timestamp TIMESTAMPTZ DEFAULT NOW(),
-                sender_name TEXT NOT NULL,
-                sender_contact TEXT NOT NULL,
-                message_content TEXT NOT NULL,
-                discord_status TEXT NOT NULL,
-                discord_error TEXT,
-                has_media BOOLEAN DEFAULT FALSE,
-                media_type TEXT,
-                media_data TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        `);
-        
-        // Add bridge_id column if it doesn't exist (migration for existing tables)
-        const columnCheck = await pool.query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name='messages' AND column_name='bridge_id'
-        `);
-        
-        if (columnCheck.rows.length === 0) {
-            console.log('📝 Adding bridge_id column to messages table...');
-            await pool.query(`
-                ALTER TABLE messages 
-                ADD COLUMN bridge_id INTEGER DEFAULT 1 REFERENCES bridges(id) ON DELETE CASCADE
-            `);
-            console.log('✅ Added bridge_id column');
-        }
-        
-        // Add contact_info column if it doesn't exist
-        const contactCheck = await pool.query(`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name='bridges' AND column_name='contact_info'
-        `);
-        
-        if (contactCheck.rows.length === 0) {
-            console.log('📝 Adding contact_info and tags columns to bridges table...');
-            await pool.query(`
-                ALTER TABLE bridges 
-                ADD COLUMN contact_info TEXT,
-                ADD COLUMN tags TEXT[]
-            `);
-            console.log('✅ Added contact_info and tags columns');
-        }
+        // ✅ REMOVED: Legacy public schema bridges/messages tables
+        // All bridge and message data now lives in tenant_X schemas (fractalized multi-tenancy)
         
         // Create users table for authentication
         await pool.query(`
@@ -2685,13 +2602,15 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
         const bridgesWithFractalIds = result.rows.map(bridge => {
             // Generate fractal_id if missing (for backward compatibility)
             if (!bridge.fractal_id) {
-                bridge.fractal_id = fractalId.generate('bridge', tenantId, bridge.id);
+                bridge.fractal_id = fractalId.generate('bridge', tenantId, bridge.id, bridge.created_by_admin_id);
             }
             // Keep id for backward compatibility during transition
             return bridge;
         });
         
-        res.json(bridgesWithFractalIds);
+        // SECURITY: Strip raw IDs for non-dev users (IDOR protection)
+        const sanitized = sanitizeForRole(bridgesWithFractalIds, user.role);
+        res.json(sanitized);
     } catch (error) {
         console.error(`❌ Error in /api/bots for user ${req.userId}:`, error);
         console.error('Stack trace:', error.stack);
@@ -2704,22 +2623,27 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
         const client = req.dbClient || pool;
         const userRole = req.tenantContext?.userRole || 'read-only';
         const tenantId = req.tenantContext?.tenantId;
+        const isGenesisAdmin = req.tenantContext?.isGenesisAdmin || false;
         const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags } = req.body;
         
         if (!tenantId) {
             return res.status(400).json({ error: 'Tenant context required' });
         }
         
+        // Tag dev-created bridges with admin_id='01' for fractalized ID generation
+        const createdByAdminId = (userRole === 'dev' && isGenesisAdmin) ? '01' : null;
+        
         const result = await client.query(
-            `INSERT INTO bridges (name, input_platform, output_platform, input_credentials, output_credentials, contact_info, tags, status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-            [name, inputPlatform, outputPlatform, inputCredentials || {}, outputCredentials || {}, contactInfo || null, tags || [], 'inactive']
+            `INSERT INTO bridges (name, input_platform, output_platform, input_credentials, output_credentials, contact_info, tags, status, created_by_admin_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+            [name, inputPlatform, outputPlatform, inputCredentials || {}, outputCredentials || {}, contactInfo || null, tags || [], 'inactive', createdByAdminId]
         );
         
         const bridge = result.rows[0];
         
         // Generate fractalized ID (opaque, tenant-scoped, non-enumerable)
-        const generatedFractalId = fractalId.generate('bridge', tenantId, bridge.id);
+        // Dev admin (admin_id='01') gets special prefix: dev_bridge_t1_...
+        const generatedFractalId = fractalId.generate('bridge', tenantId, bridge.id, bridge.created_by_admin_id);
         
         // Update bridge with fractalized ID
         await client.query(
