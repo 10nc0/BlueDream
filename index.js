@@ -2840,9 +2840,32 @@ app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
         const { id } = req.params;
         const bridgeId = parseInt(id);
         
-        // Get tenant schema for this bridge
-        const tenantSchema = await getBridgeTenantSchema(bridgeId);
-        const qrCode = whatsappManager.getQRCode(bridgeId, tenantSchema);
+        // SECURITY: Get user's tenant first
+        const userResult = await pool.query(
+            'SELECT tenant_id FROM users WHERE id = $1',
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const userTenantId = userResult.rows[0].tenant_id;
+        const userTenantSchema = `tenant_${userTenantId}`;
+        
+        // SECURITY: Verify bridge belongs to user's tenant
+        const bridgeResult = await pool.query(
+            `SELECT id FROM ${userTenantSchema}.bridges WHERE id = $1`,
+            [bridgeId]
+        );
+        
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to access bridge ${bridgeId} outside their tenant`);
+            return res.status(404).json({ error: 'Bridge not found' });
+        }
+        
+        // Get QR code only if bridge belongs to user's tenant
+        const qrCode = whatsappManager.getQRCode(bridgeId, userTenantSchema);
         
         if (!qrCode) {
             return res.json({ qr: null, message: 'No QR code available. Start the bridge first.' });
@@ -2907,9 +2930,32 @@ app.get('/api/bridges/:id/status', requireAuth, async (req, res) => {
         const { id } = req.params;
         const bridgeId = parseInt(id);
         
-        // Get tenant schema for this bridge
-        const tenantSchema = await getBridgeTenantSchema(bridgeId);
-        const clientState = whatsappManager.getClient(bridgeId, tenantSchema);
+        // SECURITY: Get user's tenant first
+        const userResult = await pool.query(
+            'SELECT tenant_id FROM users WHERE id = $1',
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const userTenantId = userResult.rows[0].tenant_id;
+        const userTenantSchema = `tenant_${userTenantId}`;
+        
+        // SECURITY: Verify bridge belongs to user's tenant
+        const bridgeResult = await pool.query(
+            `SELECT id FROM ${userTenantSchema}.bridges WHERE id = $1`,
+            [bridgeId]
+        );
+        
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to access bridge ${bridgeId} outside their tenant`);
+            return res.status(404).json({ error: 'Bridge not found' });
+        }
+        
+        // Get status only if bridge belongs to user's tenant
+        const clientState = whatsappManager.getClient(bridgeId, userTenantSchema);
         
         if (!clientState) {
             return res.json({ 
@@ -3060,6 +3106,7 @@ app.get('/api/messages/:id/media', requireAuth, async (req, res) => {
 app.get('/api/bridges/:id/messages', requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
+        const bridgeId = parseInt(id);
         const { search, status, page = 1, limit = 50 } = req.query;
         
         // Get user's tenant schema
@@ -3075,11 +3122,22 @@ app.get('/api/bridges/:id/messages', requireAuth, async (req, res) => {
         const tenantId = userResult.rows[0].tenant_id;
         const tenantSchema = `tenant_${tenantId}`;
         
+        // SECURITY: Verify bridge belongs to user's tenant before returning messages
+        const bridgeResult = await pool.query(
+            `SELECT id FROM ${tenantSchema}.bridges WHERE id = $1`,
+            [bridgeId]
+        );
+        
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to access messages for bridge ${bridgeId} outside their tenant`);
+            return res.status(404).json({ error: 'Bridge not found' });
+        }
+        
         const offset = (parseInt(page) - 1) * parseInt(limit);
         
         // EXPLICIT SCHEMA INDEXING: Build query with tenant-specific schema
         let query = `SELECT * FROM ${tenantSchema}.messages WHERE bridge_id = $1`;
-        const params = [id];
+        const params = [bridgeId];
         let paramCount = 2;
         
         if (search) {
