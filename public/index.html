@@ -2393,7 +2393,7 @@
 
         async function changeUserRole(userId, newRole) {
             try {
-                const response = await fetch(`/api/users/${userId}`, {
+                const response = await authFetch(`/api/users/${userId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ role: newRole })
@@ -2456,7 +2456,7 @@
             }
 
             try {
-                const response = await fetch(`/api/users/${userId}/email`, {
+                const response = await authFetch(`/api/users/${userId}/email`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: newEmail })
@@ -2511,7 +2511,7 @@
             }
 
             try {
-                const response = await fetch(`/api/users/${userId}/password`, {
+                const response = await authFetch(`/api/users/${userId}/password`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ password: newPassword })
@@ -2600,7 +2600,7 @@
             if (!confirm('Are you sure you want to revoke this session? The user will be logged out immediately.')) return;
             
             try {
-                const response = await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+                const response = await authFetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
                 if (response.ok) {
                     loadSessions();
                     alert('Session revoked successfully');
