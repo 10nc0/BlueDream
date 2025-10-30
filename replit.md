@@ -11,15 +11,15 @@
 
 ## Recent Updates (Oct 30, 2025)
 - **QR-FIRST ARCHITECTURE COMPLETE**: Bypass library indexing for instant QR display
-  - Bridge creation now opens popup window with instant QR code
-  - Window auto-closes when WhatsApp connects successfully
+  - Bridge creation now opens in-page modal (no popup window friction!)
+  - Modal auto-closes when WhatsApp connects successfully (1.5s delay)
   - No dependency on library indexing - QR = proof of life
   - POST /api/bridges/:id/start now returns QR code in response
-  - Created `public/create-bridge.html` as standalone popup page
-  - **Security**: Added `noopener,noreferrer` to window.open() to prevent tab-nabbing attacks
+  - Users stay hypnotized by cat animation 🐱 while creating bridges
   - **Recovery**: Fractal IDs cached in localStorage (last 10 bridges) for disaster recovery
-  - **Dev Visibility**: Fractal ID displayed in QR popup with one-click copy button
+  - **Dev Visibility**: Fractal ID displayed in modal with one-click copy button
   - **UX Polish**: Copy button shows "✓ Copied!" feedback with color change
+  - **Zero Friction**: All in same page context - no localStorage token passing needed
 - **WEBHOOK-CENTRIC ARCHITECTURE COMPLETE**: Migrated from bridge-centric to webhook-centric model
   - Database: Added `output_01_url` and `output_0n_url` columns to all `tenant_*.bridges` tables
   - Code: Renamed `sendToNyanbook()` → `sendToLedger()`, `sendToUserWebhook()` → `sendToUserOutput()`
