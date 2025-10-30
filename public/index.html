@@ -865,7 +865,7 @@
             }
         }
 
-        let selectedBridgeId = null;
+        let selectedBridgeFractalId = null;
 
         function renderBridges(skipDetailRender = false) {
             const sidebar = document.getElementById('bridgeSidebar');
@@ -877,10 +877,10 @@
                 return;
             }
             
-            // Auto-select first bridge if none selected
-            const wasAutoSelected = !selectedBridgeId || !filteredBridges.find(b => b.id === selectedBridgeId);
+            // Auto-select first bridge if none selected (use fractalized ID)
+            const wasAutoSelected = !selectedBridgeFractalId || !filteredBridges.find(b => b.fractal_id === selectedBridgeFractalId);
             if (wasAutoSelected) {
-                selectedBridgeId = filteredBridges[0].id;
+                selectedBridgeFractalId = filteredBridges[0].fractal_id;
             }
             
             // Group bots by input platform
@@ -908,7 +908,7 @@
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
                     ${bridges.map(bridge => `
-                        <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bridge-id="${bridge.id}" onclick="selectBridge(${bridge.id})">
+                        <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" onclick="selectBridge('${bridge.fractal_id}')">
                             <span class="channel-name">${bridge.input_platform} → ${bridge.output_platform}</span>
                             <div class="channel-badges">
                                 ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
@@ -923,13 +923,13 @@
                 renderBridgeDetail();
                 
                 // Always load messages for selected bridge to ensure they appear
-                loadBridgeMessages(selectedBridgeId, 1);
+                loadBridgeMessages(selectedBridgeFractalId, 1);
             }
         }
 
-        async function selectBridge(bridgeId) {
-            // Convert string to number to match bridge IDs in database
-            selectedBridgeId = parseInt(bridgeId);
+        async function selectBridge(fractalId) {
+            // Store fractalized ID (opaque, non-enumerable)
+            selectedBridgeFractalId = fractalId;
             
             // Re-render sidebar to update active state
             const sidebar = document.getElementById('bridgeSidebar');
@@ -945,7 +945,7 @@
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
                     ${platformBridges.map(bridge => `
-                        <button class="channel-item ${bridge.id === selectedBridgeId ? 'active' : ''}" data-bridge-id="${bridge.id}" onclick="selectBridge(${bridge.id})">
+                        <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" onclick="selectBridge('${bridge.fractal_id}')">
                             <span class="channel-name">${bridge.input_platform} → ${bridge.output_platform}</span>
                             <div class="channel-badges">
                                 ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
@@ -959,11 +959,26 @@
             await renderBridgeDetail();
             
             // Always load messages for newly selected bridge
-            await loadBridgeMessages(selectedBridgeId, 1);
+            await loadBridgeMessages(selectedBridgeFractalId, 1);
+        }
+
+        // Helper functions for badge styling
+        function getStatusColor(count) {
+            if (count === 0) return '';
+            if (count > 10) return 'error-high';
+            if (count > 5) return 'error-medium';
+            return 'error-low';
+        }
+
+        function getSuccessBadgeClass(count) {
+            if (count === 0) return '';
+            if (count > 100) return 'success-high';
+            if (count > 50) return 'success-medium';
+            return 'success-low';
         }
 
         async function renderBridgeDetail() {
-            const bridge = filteredBridges.find(b => b.id === selectedBridgeId);
+            const bridge = filteredBridges.find(b => b.fractal_id === selectedBridgeFractalId);
             if (!bridge) return;
             
             // Get status colors based on thresholds
@@ -974,7 +989,7 @@
             let whatsappStatus = null;
             if (bridge.input_platform === 'WhatsApp') {
                 try {
-                    const statusResponse = await authFetch(`/api/bridges/${bridge.id}/status`);
+                    const statusResponse = await authFetch(`/api/bridges/${bridge.fractal_id}/status`);
                     if (statusResponse.ok) {
                         whatsappStatus = await statusResponse.json();
                     }
@@ -1005,7 +1020,7 @@
                 if (!whatsappStatus) return '';
                 
                 // Button 1: Generate new QR (starts WhatsApp + shows QR modal)
-                return `<button class="btn-icon" onclick="generateNewQR('${bridge.id}')" title="Generate New QR Code" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">🔗</button>`;
+                return `<button class="btn-icon" onclick="generateNewQR('${bridge.fractal_id}')" title="Generate New QR Code" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">🔗</button>`;
             };
             
             const detail = document.getElementById('bridgeDetail');
@@ -1022,23 +1037,23 @@
                     </div>
                     <div class="discord-actions">
                         ${bridge.input_platform === 'WhatsApp' ? getWhatsAppActions() : ''}
-                        <button class="btn-icon" onclick="editBridge(${bridge.id})" title="Edit Bridge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">✏️</button>
-                        <button class="btn-icon btn-danger" onclick="confirmDeleteBridge(${bridge.id})" title="Delete Bridge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🗑️</button>
+                        <button class="btn-icon" onclick="editBridge('${bridge.fractal_id}')" title="Edit Bridge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">✏️</button>
+                        <button class="btn-icon btn-danger" onclick="confirmDeleteBridge('${bridge.fractal_id}')" title="Delete Bridge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🗑️</button>
                     </div>
                 </div>
 
                 <div class="discord-search">
                     <input 
                         type="text" 
-                        id="msg-search-${bridge.id}" 
+                        id="msg-search-${bridge.fractal_id}" 
                         class="discord-search-input" 
                         placeholder="🔍 Search messages..." 
-                        oninput="filterDiscordMessages('${bridge.id}')"
+                        oninput="filterDiscordMessages('${bridge.fractal_id}')"
                     >
                     <select 
-                        id="status-filter-${bridge.id}" 
+                        id="status-filter-${bridge.fractal_id}" 
                         class="discord-filter-select" 
-                        onchange="filterDiscordMessages('${bridge.id}')"
+                        onchange="filterDiscordMessages('${bridge.fractal_id}')"
                     >
                         <option value="all">All Status</option>
                         <option value="success">✓ Success</option>
@@ -1047,8 +1062,8 @@
                     </select>
                 </div>
 
-                <div class="discord-messages" id="discord-messages-${bridge.id}">
-                    ${messageCache[bridge.id] ? renderDiscordMessages(messageCache[bridge.id], bridge.id) : '<div class="loading-msg">Loading messages...</div>'}
+                <div class="discord-messages" id="discord-messages-${bridge.fractal_id}">
+                    ${messageCache[bridge.fractal_id] ? renderDiscordMessages(messageCache[bridge.fractal_id], bridge.fractal_id) : '<div class="loading-msg">Loading messages...</div>'}
                 </div>
             `;
         }
@@ -3092,7 +3107,7 @@
                                                 ${bridge.archived ? '<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 0.125rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600; border: 1px solid rgba(239, 68, 68, 0.3);">ARCHIVED</span>' : ''}
                                             </div>
                                             <div style="color: #94a3b8; font-size: 0.875rem;">
-                                                ${bridge.input_platform} → ${bridge.output_platform} • Bot ID: ${bridge.id}
+                                                ${bridge.input_platform} → ${bridge.output_platform} • ID: ${bridge.fractal_id || 'N/A'}
                                                 ${bridge.archived && bridge.archived_at ? ` • Archived: ${new Date(bridge.archived_at).toLocaleDateString()}` : ''}
                                             </div>
                                         </div>

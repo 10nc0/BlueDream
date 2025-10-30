@@ -713,34 +713,48 @@ whatsappManager = new WhatsAppClientManager(pool, chromiumPath);
 /**
  * Get the tenant schema that owns a specific bridge
  * This ensures bridge activities are tracked in the correct tenant's database
+ * 
+ * FRACTALIZED ID VERSION: Parses fractal_id to extract tenant (no database query needed!)
  */
-async function getBridgeTenantSchema(bridgeId) {
+async function getBridgeTenantSchema(fractalIdOrLegacyId) {
     try {
-        // Query all tenant schemas to find which one owns this bot
-        const schemasResult = await pool.query(`
-            SELECT schema_name 
-            FROM information_schema.schemata 
-            WHERE schema_name LIKE 'tenant_%'
-            ORDER BY schema_name
-        `);
+        // Try parsing as fractalized ID first (e.g., bridge_t6_abc123 or dev_bridge_t1_abc123)
+        const parsed = fractalId.parse(fractalIdOrLegacyId);
+        if (parsed && parsed.tenantId) {
+            const tenantSchema = `tenant_${parsed.tenantId}`;
+            console.log(`✅ Parsed fractal_id: Bridge belongs to ${tenantSchema}`);
+            return tenantSchema;
+        }
         
-        for (const row of schemasResult.rows) {
-            const schema = row.schema_name;
-            const bridgeCheck = await pool.query(`
-                SELECT id FROM ${schema}.bridges WHERE id = $1
-            `, [bridgeId]);
+        // Fallback: Legacy numeric ID - query database (slow path for backward compatibility)
+        const legacyId = parseInt(fractalIdOrLegacyId);
+        if (!isNaN(legacyId)) {
+            console.warn(`⚠️ Using legacy bridge ID ${legacyId} - querying database (slow)`);
+            const schemasResult = await pool.query(`
+                SELECT schema_name 
+                FROM information_schema.schemata 
+                WHERE schema_name LIKE 'tenant_%'
+                ORDER BY schema_name
+            `);
             
-            if (bridgeCheck.rows.length > 0) {
-                console.log(`✅ Bridge ${bridgeId} belongs to ${schema}`);
-                return schema;
+            for (const row of schemasResult.rows) {
+                const schema = row.schema_name;
+                const bridgeCheck = await pool.query(`
+                    SELECT id FROM ${schema}.bridges WHERE id = $1
+                `, [legacyId]);
+                
+                if (bridgeCheck.rows.length > 0) {
+                    console.log(`✅ Legacy bridge ${legacyId} belongs to ${schema}`);
+                    return schema;
+                }
             }
         }
         
         // Fallback to public if not found (shouldn't happen)
-        console.warn(`⚠️ Bridge ${bridgeId} not found in any tenant schema, defaulting to public`);
+        console.warn(`⚠️ Bridge ${fractalIdOrLegacyId} not found, defaulting to public`);
         return 'public';
     } catch (error) {
-        console.error(`❌ Error finding tenant for bridge ${bridgeId}:`, error);
+        console.error(`❌ Error finding tenant for bridge ${fractalIdOrLegacyId}:`, error);
         return 'public';
     }
 }
@@ -2690,40 +2704,50 @@ app.put('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin', 
 
 // Delete bridge (soft delete - archives bridge preserving all data)
 app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
-    const { id } = req.params;
-    const bridgeId = parseInt(id);
+    const { id } = req.params; // fractal_id
     
     try {
         const client = req.dbClient || pool;
+        const tenantSchema = req.tenantContext.tenantSchema;
         
-        // CRITICAL: Get the bot's tenant schema before archiving
-        const tenantSchema = await getBridgeTenantSchema(bridgeId);
-        console.log(`🗄️  Archiving bridge ${bridgeId} from ${tenantSchema} (soft delete)...`);
+        // SECURITY: Verify bridge belongs to user's tenant using fractal_id
+        const bridgeResult = await client.query(
+            `SELECT id, fractal_id FROM bridges WHERE fractal_id = $1`,
+            [id]
+        );
+        
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to delete bridge ${id} outside their tenant`);
+            return res.status(404).json({ error: 'Bridge not found' });
+        }
+        
+        const internalId = bridgeResult.rows[0].id;
+        console.log(`🗄️  Archiving bridge ${id} (internal ${internalId}) from ${tenantSchema} (soft delete)...`);
         
         // Stop WhatsApp client if active (but keep session files for potential restoration)
         try {
-            const whatsappClient = whatsappManager.getClient(bridgeId, tenantSchema);
+            const whatsappClient = whatsappManager.getClient(internalId, tenantSchema);
             if (whatsappClient) {
-                await whatsappManager.stopClient(bridgeId, tenantSchema);
-                console.log(`✅ WhatsApp client stopped for bridge ${bridgeId} (session files preserved)`);
+                await whatsappManager.stopClient(internalId, tenantSchema);
+                console.log(`✅ WhatsApp client stopped for bridge ${id} (session files preserved)`);
             }
         } catch (error) {
-            console.warn(`⚠️  Could not stop WhatsApp client for bridge ${bridgeId}:`, error.message);
+            console.warn(`⚠️  Could not stop WhatsApp client for bridge ${id}:`, error.message);
         }
         
         // SOFT DELETE: Set archived=true and archived_at=NOW() (preserves all data)
         const result = await client.query(`
-            UPDATE ${tenantSchema}.bridges 
+            UPDATE bridges 
             SET archived = true, archived_at = NOW(), status = 'archived' 
-            WHERE id = $1 
+            WHERE fractal_id = $1 
             RETURNING *
-        `, [bridgeId]);
+        `, [id]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Bridge not found' });
         }
         
-        console.log(`✅ Bridge ${bridgeId} archived successfully by user ${req.userId}`);
+        console.log(`✅ Bridge ${id} archived successfully by user ${req.userId}`);
         res.json({ 
             success: true, 
             message: 'Bridge deleted successfully'
@@ -2731,14 +2755,14 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
         
         // Log audit AFTER response (don't block transaction commit)
         setImmediate(() => {
-            logAudit(pool, req, 'ARCHIVE', 'BOT', bridgeId, null, {
+            logAudit(pool, req, 'ARCHIVE', 'BOT', id, null, {
                 message: 'Bridge archived (soft delete) - all messages and session preserved',
                 tenant_schema: tenantSchema,
                 archived_at: new Date().toISOString()
             }).catch(err => console.error('Audit log failed:', err.message));
         });
     } catch (error) {
-        console.error(`❌ Error archiving bridge ${bridgeId}:`, error);
+        console.error(`❌ Error archiving bridge ${id}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -2789,16 +2813,26 @@ app.post('/api/bridges/:id/unarchive', requireAuth, setTenantContext, requireRol
 // Start WhatsApp session for a bot
 app.post('/api/bridges/:id/start', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
-        const { id } = req.params;
-        const bridgeId = parseInt(id);
+        const { id } = req.params; // fractal_id
+        const client = req.dbClient || pool;
+        const tenantSchema = req.tenantContext.tenantSchema;
         
-        // CRITICAL: Get the correct tenant schema for this bot
-        // This ensures messages are stored in the right tenant's database
-        const tenantSchema = await getBridgeTenantSchema(bridgeId);
-        console.log(`🔍 Bridge ${id} belongs to ${tenantSchema}`);
+        // SECURITY: Verify bridge belongs to user's tenant using fractal_id
+        const bridgeResult = await client.query(
+            `SELECT id, fractal_id FROM bridges WHERE fractal_id = $1`,
+            [id]
+        );
+        
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to start bridge ${id} outside their tenant`);
+            return res.status(404).json({ error: 'Bridge not found' });
+        }
+        
+        const internalId = bridgeResult.rows[0].id;
+        console.log(`🔍 Bridge ${id} (internal ${internalId}) belongs to ${tenantSchema}`);
         
         // Check if already running (use composite key)
-        const existingClient = whatsappManager.getClient(bridgeId, tenantSchema);
+        const existingClient = whatsappManager.getClient(internalId, tenantSchema);
         if (existingClient && (existingClient.status === 'ready' || existingClient.status === 'qr_ready')) {
             return res.json({ 
                 success: true, 
@@ -2810,7 +2844,7 @@ app.post('/api/bridges/:id/start', requireAuth, setTenantContext, requireRole('a
         
         // Initialize WhatsApp client for this bot
         const clientState = await whatsappManager.initializeClient(
-            bridgeId, 
+            internalId, 
             tenantSchema, 
             createTenantAwareMessageHandler
         );
@@ -2819,7 +2853,7 @@ app.post('/api/bridges/:id/start', requireAuth, setTenantContext, requireRole('a
             success: true, 
             message: 'WhatsApp session starting...',
             status: clientState.status,
-            bridgeId: id
+            bridgeId: id // Return fractal_id to frontend
         });
     } catch (error) {
         console.error(`❌ Error starting WhatsApp for bridge ${req.params.id}:`, error);
@@ -2830,10 +2864,23 @@ app.post('/api/bridges/:id/start', requireAuth, setTenantContext, requireRole('a
 // Stop WhatsApp session for a bridge (preserves session)
 app.delete('/api/bridges/:id/stop', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
-        const tenantSchema = req.tenantContext?.tenant_schema || 'public';
-        const { id } = req.params;
+        const { id } = req.params; // fractal_id
+        const client = req.dbClient || pool;
+        const tenantSchema = req.tenantContext.tenantSchema;
         
-        await whatsappManager.stopClient(parseInt(id), tenantSchema);
+        // SECURITY: Verify bridge belongs to user's tenant using fractal_id
+        const bridgeResult = await client.query(
+            `SELECT id, fractal_id FROM bridges WHERE fractal_id = $1`,
+            [id]
+        );
+        
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to stop bridge ${id} outside their tenant`);
+            return res.status(404).json({ error: 'Bridge not found' });
+        }
+        
+        const internalId = bridgeResult.rows[0].id;
+        await whatsappManager.stopClient(internalId, tenantSchema);
         
         res.json({ 
             success: true, 
@@ -2849,8 +2896,7 @@ app.delete('/api/bridges/:id/stop', requireAuth, setTenantContext, requireRole('
 // Get QR code for a bot
 app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
     try {
-        const { id } = req.params;
-        const bridgeId = parseInt(id);
+        const { id } = req.params; // fractal_id
         
         // SECURITY: Get user's tenant first
         const userResult = await pool.query(
@@ -2865,19 +2911,21 @@ app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
         const userTenantId = userResult.rows[0].tenant_id;
         const userTenantSchema = `tenant_${userTenantId}`;
         
-        // SECURITY: Verify bridge belongs to user's tenant
+        // SECURITY: Verify bridge belongs to user's tenant using fractal_id
         const bridgeResult = await pool.query(
-            `SELECT id FROM ${userTenantSchema}.bridges WHERE id = $1`,
-            [bridgeId]
+            `SELECT id, fractal_id FROM ${userTenantSchema}.bridges WHERE fractal_id = $1`,
+            [id]
         );
         
         if (!bridgeResult.rows.length) {
-            console.warn(`⚠️  User ${req.userId} attempted to access bridge ${bridgeId} outside their tenant`);
+            console.warn(`⚠️  User ${req.userId} attempted to access bridge ${id} outside their tenant`);
             return res.status(404).json({ error: 'Bridge not found' });
         }
         
+        const internalId = bridgeResult.rows[0].id;
+        
         // Get QR code only if bridge belongs to user's tenant
-        const qrCode = whatsappManager.getQRCode(bridgeId, userTenantSchema);
+        const qrCode = whatsappManager.getQRCode(internalId, userTenantSchema);
         
         if (!qrCode) {
             return res.json({ qr: null, message: 'No QR code available. Start the bridge first.' });
@@ -2894,27 +2942,35 @@ app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
 
 // Relink WhatsApp session for a bridge (destroy and create new QR)
 app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
-    const { id } = req.params;
-    const bridgeId = parseInt(id);
+    const { id } = req.params; // fractal_id
     
     try {
-        console.log(`🔄 Starting relink for bridge ${bridgeId}...`);
+        console.log(`🔄 Starting relink for bridge ${id}...`);
         
-        // CRITICAL: Get the correct tenant schema for this bot
-        const tenantSchema = await getBridgeTenantSchema(bridgeId);
-        console.log(`🔍 Bridge ${bridgeId} belongs to ${tenantSchema} (relink)`);
+        const client = req.dbClient || pool;
+        const tenantSchema = req.tenantContext.tenantSchema;
         
-        if (!tenantSchema) {
-            throw new Error('Unable to determine tenant schema for bot');
+        // SECURITY: Verify bridge belongs to user's tenant using fractal_id
+        const bridgeResult = await client.query(
+            `SELECT id, fractal_id FROM bridges WHERE fractal_id = $1`,
+            [id]
+        );
+        
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to relink bridge ${id} outside their tenant`);
+            return res.status(404).json({ error: 'Bridge not found' });
         }
         
+        const internalId = bridgeResult.rows[0].id;
+        console.log(`🔍 Bridge ${id} (internal ${internalId}) belongs to ${tenantSchema} (relink)`);
+        
         const clientState = await whatsappManager.relinkClient(
-            bridgeId, 
+            internalId, 
             tenantSchema, 
             createTenantAwareMessageHandler
         );
         
-        console.log(`✅ Relink initiated for bridge ${bridgeId}, status: ${clientState.status}`);
+        console.log(`✅ Relink initiated for bridge ${id}, status: ${clientState.status}`);
         
         res.json({ 
             success: true, 
@@ -2939,8 +2995,7 @@ app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('
 // Get WhatsApp session status for a bot
 app.get('/api/bridges/:id/status', requireAuth, async (req, res) => {
     try {
-        const { id } = req.params;
-        const bridgeId = parseInt(id);
+        const { id } = req.params; // This is now fractal_id
         
         // SECURITY: Get user's tenant first
         const userResult = await pool.query(
@@ -2955,19 +3010,21 @@ app.get('/api/bridges/:id/status', requireAuth, async (req, res) => {
         const userTenantId = userResult.rows[0].tenant_id;
         const userTenantSchema = `tenant_${userTenantId}`;
         
-        // SECURITY: Verify bridge belongs to user's tenant
+        // SECURITY: Verify bridge belongs to user's tenant using fractal_id
         const bridgeResult = await pool.query(
-            `SELECT id FROM ${userTenantSchema}.bridges WHERE id = $1`,
-            [bridgeId]
+            `SELECT id, fractal_id FROM ${userTenantSchema}.bridges WHERE fractal_id = $1`,
+            [id]
         );
         
         if (!bridgeResult.rows.length) {
-            console.warn(`⚠️  User ${req.userId} attempted to access bridge ${bridgeId} outside their tenant`);
+            console.warn(`⚠️  User ${req.userId} attempted to access bridge ${id} outside their tenant`);
             return res.status(404).json({ error: 'Bridge not found' });
         }
         
-        // Get status only if bridge belongs to user's tenant
-        const clientState = whatsappManager.getClient(bridgeId, userTenantSchema);
+        const internalId = bridgeResult.rows[0].id;
+        
+        // Get status only if bridge belongs to user's tenant (use composite key)
+        const clientState = whatsappManager.getClient(internalId, userTenantSchema);
         
         if (!clientState) {
             return res.json({ 
@@ -2980,7 +3037,7 @@ app.get('/api/bridges/:id/status', requireAuth, async (req, res) => {
             status: clientState.status,
             phoneNumber: clientState.phoneNumber,
             hasQR: clientState.qrCode !== null,
-            bridgeId: id
+            bridgeId: id // Return fractal_id to frontend
         });
     } catch (error) {
         console.error(`❌ Error getting status for bridge ${req.params.id}:`, error);
@@ -3117,8 +3174,7 @@ app.get('/api/messages/:id/media', requireAuth, async (req, res) => {
 // CRITICAL: Uses explicit schema indexing for fractalized architecture
 app.get('/api/bridges/:id/messages', requireAuth, async (req, res) => {
     try {
-        const { id } = req.params;
-        const bridgeId = parseInt(id);
+        const { id } = req.params; // fractal_id
         const { search, status, page = 1, limit = 50 } = req.query;
         
         // Get user's tenant schema
@@ -3134,22 +3190,23 @@ app.get('/api/bridges/:id/messages', requireAuth, async (req, res) => {
         const tenantId = userResult.rows[0].tenant_id;
         const tenantSchema = `tenant_${tenantId}`;
         
-        // SECURITY: Verify bridge belongs to user's tenant before returning messages
+        // SECURITY: Verify bridge belongs to user's tenant before returning messages using fractal_id
         const bridgeResult = await pool.query(
-            `SELECT id FROM ${tenantSchema}.bridges WHERE id = $1`,
-            [bridgeId]
+            `SELECT id, fractal_id FROM ${tenantSchema}.bridges WHERE fractal_id = $1`,
+            [id]
         );
         
         if (!bridgeResult.rows.length) {
-            console.warn(`⚠️  User ${req.userId} attempted to access messages for bridge ${bridgeId} outside their tenant`);
+            console.warn(`⚠️  User ${req.userId} attempted to access messages for bridge ${id} outside their tenant`);
             return res.status(404).json({ error: 'Bridge not found' });
         }
         
+        const internalId = bridgeResult.rows[0].id;
         const offset = (parseInt(page) - 1) * parseInt(limit);
         
-        // EXPLICIT SCHEMA INDEXING: Build query with tenant-specific schema
+        // EXPLICIT SCHEMA INDEXING: Build query with tenant-specific schema (use internal ID for FK)
         let query = `SELECT * FROM ${tenantSchema}.messages WHERE bridge_id = $1`;
-        const params = [bridgeId];
+        const params = [internalId];
         let paramCount = 2;
         
         if (search) {
