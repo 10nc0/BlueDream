@@ -369,6 +369,8 @@ async function initializeDatabase() {
 
 // Helper function to send message to all configured webhooks (1-to-many support)
 // CRITICAL: Uses tenant-aware lookup to get the correct bridge's webhooks
+// IMMUTABILITY PRINCIPLE: Only capture thread_id from Nyanbook Ledger webhook (dbA)
+// User webhooks (dbB) are mutable and ignored - preserves eternal thread lock
 async function sendToAllWebhooks(payload, options = {}, messageDbId = null, mediaData = null, bridgeId = null, tenantSchema = null, tenantClient = null) {
     try {
         if (!bridgeId || !tenantSchema || !tenantClient) {
@@ -389,6 +391,9 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
         const webhooks = bridgeResult.rows[0].output_credentials?.webhooks || [];
         const threadName = bridgeResult.rows[0].output_credentials?.thread_name;
         let threadId = bridgeResult.rows[0].output_credentials?.thread_id;
+        
+        // IMMUTABILITY LOCK: Identify Nyanbook Ledger webhook (dbA = eternal monolith)
+        const NYANBOOK_WEBHOOK_NAME = 'Nyanbook Ledger';
         
         // Fallback to legacy webhook_url if webhooks array is empty
         if (webhooks.length === 0 && bridgeResult.rows[0].output_credentials?.webhook_url) {
@@ -414,6 +419,9 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
         
         for (const webhook of webhooks) {
             if (!webhook.url) continue;
+            
+            // IMMUTABILITY CHECK: Is this the Nyanbook Ledger webhook (dbA)?
+            const isNyanbookLedger = webhook.name === NYANBOOK_WEBHOOK_NAME;
             
             try {
                 // Build Discord webhook URL with proper query parameters
@@ -453,12 +461,13 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
                     response = await axios.post(webhookUrl, enhancedPayload);
                 }
                 
-                // Capture thread_id from Discord's response (first message creates thread)
-                if (!threadId && response.data && response.data.channel_id && threadName) {
+                // IMMUTABILITY LOCK: ONLY capture thread_id from Nyanbook Ledger webhook (dbA)
+                // User webhooks (dbB) are mutable and ignored - this preserves eternal monolith
+                if (isNyanbookLedger && !threadId && response.data && response.data.channel_id && threadName) {
                     threadId = response.data.channel_id;
-                    console.log(`  🧵 Created Discord thread ${threadId} for bridge ${bridgeId}`);
+                    console.log(`  🔒 NYANBOOK THREAD LOCKED: ${threadId} (bridge ${bridgeId})`);
                     
-                    // Update bridge output_credentials with thread_id
+                    // Update bridge output_credentials with thread_id from Nyanbook Ledger only
                     await tenantClient.query(`
                         UPDATE bridges 
                         SET output_credentials = jsonb_set(output_credentials, '{thread_id}', to_jsonb($1::text))
