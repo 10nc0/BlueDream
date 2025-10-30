@@ -10,6 +10,15 @@
 - **Zero Cost for Webhooks:** Webhook inputs have no runtime overhead.
 
 ## Recent Updates (Oct 30, 2025)
+- **DISCORD BOT INTEGRATION (NEW!)**: Automatic thread creation for each bridge
+  - **Bot-Based Thread Management**: Discord bot client auto-creates dedicated threads per bridge
+  - **Naming Convention**: Threads named `BridgeName (tX-bY)` for clear tenant/bridge identification
+  - **Retry Logic**: Exponential backoff with 3 retries for transient errors (rate limits, 5xx, timeouts)
+  - **Error Classification**: Distinguishes transient errors (retry) from permanent errors (fallback to webhook-only)
+  - **Retry Queue**: Failed thread creations queued for deferred retry (60s delay)
+  - **Proper Channel Fetching**: Uses `webhook.fetchChannel()` instead of cache to prevent cold-start failures
+  - **ONE BRIDGE = ONE THREAD**: Every message from a bridge goes to its dedicated Discord thread (no messy single channel)
+  - **Zero User Friction**: Thread creation happens automatically on bridge creation, no manual setup needed
 - **PRODUCTION-GRADE HARDENING COMPLETE**: Four critical fixes for 24/7 reliability and security
   1. **Database Transaction Timeout Fix**: Message handler now commits immediately after saveMessage(), preventing idle-in-transaction crashes. Media downloads and webhook sends happen outside transaction scope (no more 25P03 crashes).
   2. **Webhook Security (NYAN TRUTH)**: Bridge deletion now deletes Discord webhooks to prevent ghost messages. ONE BRIDGE = ONE WEBHOOK URL. On destroy: WhatsApp client + Discord webhook both deleted (output_0n_url only, preserving eternal output_01_url).
@@ -95,8 +104,9 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **WhatsApp Integration**: Multi-instance `whatsapp-web.js` with `WhatsAppClientManager` to manage independent, tenant-scoped sessions. Sessions are persistent across restarts.
 - **Discord Integration (SOLE STORAGE SOLUTION)**: 
     - **Global Webhook**: Admin-configurable webhook via `/dev` panel (file-based, Replit-proof persistence).
-    - **Per-Bridge Threads**: Each bridge auto-generates unique `thread_name` (e.g., `nyanbook-t7-1761839223643`).
-    - **Smart Thread Reuse**: First message creates Discord thread and captures `thread_id`, subsequent messages reuse it.
+    - **Bot-Managed Threads**: Discord bot client creates dedicated thread for each bridge on creation (naming: `BridgeName (tX-bY)`).
+    - **Automatic Thread Creation**: Happens at bridge creation time via `DiscordBotManager` with retry logic for transient failures.
+    - **Smart Thread Reuse**: Thread ID stored in `output_credentials.thread_id`, all messages route to same thread.
     - **Discord as Database**: All messages stored exclusively in Discord - no PostgreSQL message storage.
     - **Native UI**: Dashboard shows Discord thread info with "Open Discord" button for full native experience.
     - **Zero Cost**: Discord provides UI, search, attachments, and permanent storage at $0 - scales to 1000+ users for free.

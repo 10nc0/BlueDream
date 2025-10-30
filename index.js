@@ -16,6 +16,7 @@ const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
 const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./tenant-middleware');
 const WhatsAppClientManager = require('./whatsapp-client-manager');
+const DiscordBotManager = require('./discord-bot-manager');
 const fractalId = require('./utils/fractal-id');
 
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
@@ -286,6 +287,9 @@ app.use('/api/analytics', setTenantContext);
 // Multi-tenant WhatsApp Client Manager
 // Each bridge gets its own WhatsApp session (one per tenant)
 let whatsappManager = null;
+
+// Discord Bot Manager for automatic thread creation per bridge
+let discordBotManager = null;
 
 async function initializeDatabase() {
     try {
@@ -816,6 +820,16 @@ console.log(`✅ Using Chromium at: ${chromiumPath}`);
 
 // Initialize multi-tenant WhatsApp Client Manager
 whatsappManager = new WhatsAppClientManager(pool, chromiumPath);
+
+// Initialize Discord Bot Manager for automatic thread creation
+discordBotManager = new DiscordBotManager();
+(async () => {
+    try {
+        await discordBotManager.initialize();
+    } catch (error) {
+        console.error('❌ Discord bot initialization failed:', error.message);
+    }
+})();
 
 /**
  * Get the tenant schema that owns a specific bridge
@@ -2814,6 +2828,45 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
         );
         
         bridge.fractal_id = generatedFractalId;
+        
+        // AUTO-CREATE DISCORD THREAD VIA BOT (one thread per bridge)
+        if (discordBotManager && discordBotManager.isReady() && output01Url) {
+            try {
+                const threadInfo = await discordBotManager.createThreadForBridge(
+                    output01Url,
+                    name,
+                    tenantId,
+                    bridge.id
+                );
+                
+                await client.query(
+                    `UPDATE bridges 
+                     SET output_credentials = output_credentials || $1::jsonb
+                     WHERE id = $2`,
+                    [JSON.stringify({ thread_id: threadInfo.threadId, thread_name: threadInfo.threadName }), bridge.id]
+                );
+                
+                bridge.output_credentials.thread_id = threadInfo.threadId;
+                bridge.output_credentials.thread_name = threadInfo.threadName;
+                
+                try {
+                    await discordBotManager.sendInitialMessage(threadInfo.threadId, name, output01Url);
+                } catch (msgError) {
+                    console.error(`⚠️  Failed to send initial message (non-critical):`, msgError.message);
+                }
+                
+                console.log(`🧵 Auto-created Discord thread for bridge ${generatedFractalId}: ${threadInfo.threadName}`);
+            } catch (error) {
+                console.error(`⚠️  Failed to auto-create thread for bridge ${generatedFractalId}:`, error.message);
+                
+                if (discordBotManager.isTransientError(error)) {
+                    console.log(`📝 Queueing retry for transient error...`);
+                    discordBotManager.queueRetry(bridge.id, tenantId, output01Url, name, client, 60000);
+                } else {
+                    console.log(`❌ Permanent error - bridge will use webhook-only mode`);
+                }
+            }
+        }
         
         // Return sanitized bridge data
         const sanitized = sanitizeForRole(bridge, userRole);
