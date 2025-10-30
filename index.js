@@ -2679,7 +2679,18 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
         `);
         
         console.log(`✅ Found ${result.rows.length} active bridges in ${tenantSchema} for ${user.email}`);
-        res.json(result.rows);
+        
+        // SECURITY: Sanitize response - remove raw IDs, only expose fractalized IDs
+        const sanitizedBridges = result.rows.map(bridge => {
+            // Generate fractal_id if missing (for backward compatibility)
+            if (!bridge.fractal_id) {
+                bridge.fractal_id = fractalId.generate('bridge', tenantId, bridge.id);
+            }
+            delete bridge.id; // NEVER expose raw database IDs
+            return bridge;
+        });
+        
+        res.json(sanitizedBridges);
     } catch (error) {
         console.error(`❌ Error in /api/bots for user ${req.userId}:`, error);
         console.error('Stack trace:', error.stack);
