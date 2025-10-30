@@ -1,3 +1,2 @@
-2025/10/30-22:35:06.505 a04 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/shared_proto_db/MANIFEST-000001
-2025/10/30-22:35:06.505 a04 Recovering log #3
-2025/10/30-22:35:06.505 a04 Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/shared_proto_db/000003.log 
+2025/10/30-22:41:35.524 10f1 Creating DB /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/shared_proto_db since it was missing.
+2025/10/30-22:41:35.551 10f1 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/shared_proto_db/MANIFEST-000001
