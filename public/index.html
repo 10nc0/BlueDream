@@ -233,27 +233,35 @@
         <div id="devPanelTab-content" class="tab-content" style="display: none;">
             <div class="section-header">
                 <h1 class="section-title">🔧 Dev Panel - System Overview</h1>
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    <div style="font-size: 0.875rem; color: #94a3b8;">All admins across all tenants</div>
-                    <button class="create-bot-btn" onclick="openCreateUserModal()">+ Create Admin</button>
+                <div style="font-size: 0.875rem; color: #94a3b8;">All bridges across all tenants with horizontal isolation</div>
+            </div>
+
+            <!-- Horizontal Admin Cards (hidden for now) -->
+            <div id="devPanelAdminCards" style="display: none;"></div>
+
+            <!-- System-Wide Bridges Section (Discord-style layout) -->
+            <div style="display: grid; grid-template-columns: 280px 1fr; gap: 1.5rem; height: calc(100vh - 250px); margin-top: 1.5rem;">
+                <!-- Sidebar: Bridge List -->
+                <div class="glass-card" style="padding: 1rem; overflow-y: auto;">
+                    <div style="margin-bottom: 1rem; padding: 0.5rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                        <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem;">System Bridges</div>
+                        <div id="devPanelBridgeCount" style="font-size: 1.5rem; font-weight: 700; color: white;">0</div>
+                    </div>
+                    
+                    <div id="devPanelBridgeSidebar">
+                        <div style="text-align: center; padding: 2rem; color: #94a3b8;">
+                            <p>Loading bridges...</p>
+                        </div>
+                    </div>
                 </div>
-            </div>
-
-            <!-- Horizontal Admin Cards (system-wide overview) -->
-            <div id="devPanelAdminCards" style="display: flex; gap: 1.5rem; overflow-x: auto; padding: 1rem 0; margin-top: 1rem;">
-                <!-- Admin cards will render here -->
-            </div>
-
-            <!-- System-Wide Bridges Section -->
-            <div class="section-header" style="margin-top: 2rem;">
-                <h2 class="section-title" style="font-size: 1.25rem;">🌉 All Bridges (System-Wide)</h2>
-                <div style="font-size: 0.875rem; color: #94a3b8;">Bridges across all tenants with horizontal isolation</div>
-            </div>
-            
-            <div id="devPanelBridgesContainer" style="margin-top: 1rem;">
-                <!-- Bridges grouped by tenant will render here -->
-                <div style="text-align: center; padding: 3rem; color: #94a3b8;">
-                    <p>Loading system-wide bridges...</p>
+                
+                <!-- Main Content: Bridge Details -->
+                <div class="glass-card" style="padding: 1.5rem; overflow-y: auto;">
+                    <div id="devPanelBridgeDetail">
+                        <div style="text-align: center; padding: 3rem; color: #94a3b8;">
+                            <p>Select a bridge to view details</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -3157,49 +3165,18 @@
             }
         }
         
-        // Load Dev Panel (horizontal admin cards for system overview)
+        // Load Dev Panel (system-wide bridges overview)
         async function loadDevPanelAdmins() {
-            console.log('🔧 Loading Dev Panel...', {currentUser, role: currentUser?.role});
-            try {
-                console.log('📡 Fetching /api/users for Dev Panel...');
-                const response = await authFetch('/api/users');
-                console.log('📥 API Response:', response.status, response.statusText);
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                const allUsers = await response.json();
-                console.log('✅ Received users:', allUsers.length, allUsers);
-                
-                // Also load system-wide bridges
-                loadDevPanelBridges();
-                
-                // Group users by tenant_schema to identify admins
-                const adminsByTenant = {};
-                allUsers.forEach(user => {
-                    const schema = user.tenant_schema || 'public';
-                    if (!adminsByTenant[schema]) {
-                        adminsByTenant[schema] = [];
-                    }
-                    adminsByTenant[schema].push(user);
-                });
-                
-                // Sort tenant schemas
-                const sortedTenants = Object.keys(adminsByTenant).sort((a, b) => {
-                    if (a === 'public') return -1;
-                    if (b === 'public') return 1;
-                    const numA = parseInt(a.replace('tenant_', '')) || 0;
-                    const numB = parseInt(b.replace('tenant_', '')) || 0;
-                    return numA - numB;
-                });
-                
-                renderDevPanelAdminCards(sortedTenants, adminsByTenant);
-            } catch (error) {
-                console.error('Error loading dev panel:', error);
-                const container = document.getElementById('devPanelAdminCards');
-                if (container) {
-                    container.innerHTML = `<div style="padding: 3rem; color: #ef4444;">Error loading admins: ${error.message}</div>`;
-                }
+            console.log('🔧 Loading Dev Panel...');
+            
+            // Hide admin cards section (requires complex permissions)
+            const adminCardsContainer = document.getElementById('devPanelAdminCards');
+            if (adminCardsContainer) {
+                adminCardsContainer.style.display = 'none';
             }
+            
+            // Just load system-wide bridges
+            loadDevPanelBridges();
         }
         
         // Render horizontal admin cards in Dev Panel (system overview)
@@ -3327,6 +3304,9 @@
         }
         
         // Load system-wide bridges for Dev Panel
+        let devPanelBridges = [];
+        let selectedDevBridgeId = null;
+        
         async function loadDevPanelBridges() {
             try {
                 console.log('🌉 Loading system-wide bridges for Dev Panel...');
@@ -3334,64 +3314,151 @@
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
-                const bridges = await response.json();
-                console.log(`✅ Received ${bridges.length} bridges:`, bridges);
-                renderDevPanelBridges(bridges);
+                devPanelBridges = await response.json();
+                console.log(`✅ Received ${devPanelBridges.length} bridges:`, devPanelBridges);
+                renderDevPanelBridgesSidebar();
+                
+                // Auto-select first bridge
+                if (devPanelBridges.length > 0 && !selectedDevBridgeId) {
+                    selectedDevBridgeId = devPanelBridges[0].fractal_id;
+                    renderDevPanelBridgeDetail(devPanelBridges[0]);
+                }
             } catch (error) {
                 console.error('Error loading Dev Panel bridges:', error);
-                const container = document.getElementById('devPanelBridgesContainer');
-                if (container) {
-                    container.innerHTML = `<div style="padding: 3rem; color: #ef4444; text-align: center;">Error loading bridges: ${error.message}</div>`;
+                const sidebar = document.getElementById('devPanelBridgeSidebar');
+                if (sidebar) {
+                    sidebar.innerHTML = `<div style="padding: 2rem; color: #ef4444; text-align: center;">Error: ${error.message}</div>`;
                 }
             }
         }
         
-        // Render system-wide bridges grouped by tenant
-        function renderDevPanelBridges(bridges) {
-            const container = document.getElementById('devPanelBridgesContainer');
-            if (!container) return;
+        // Render Dev Panel bridges in Discord-style sidebar
+        function renderDevPanelBridgesSidebar() {
+            const sidebar = document.getElementById('devPanelBridgeSidebar');
+            const countEl = document.getElementById('devPanelBridgeCount');
             
-            if (bridges.length === 0) {
-                container.innerHTML = '<div style="padding: 3rem; color: #94a3b8; text-align: center;">No bridges found across all tenants</div>';
+            if (!sidebar) return;
+            
+            if (countEl) {
+                countEl.textContent = devPanelBridges.length;
+            }
+            
+            if (devPanelBridges.length === 0) {
+                sidebar.innerHTML = '<div style="padding: 2rem; color: #94a3b8; text-align: center;">No bridges</div>';
                 return;
             }
             
-            // Group bridges by tenant
-            const bridgesByTenant = {};
-            bridges.forEach(bridge => {
-                const key = `tenant_${bridge.tenant_id}`;
-                if (!bridgesByTenant[key]) {
-                    bridgesByTenant[key] = {
-                        tenantId: bridge.tenant_id,
-                        ownerEmail: bridge.tenant_owner_email,
-                        bridges: []
-                    };
-                }
-                bridgesByTenant[key].bridges.push(bridge);
+            // Group by tenant
+            const byTenant = {};
+            devPanelBridges.forEach(bridge => {
+                const tenant = `tenant_${bridge.tenant_id}`;
+                if (!byTenant[tenant]) byTenant[tenant] = [];
+                byTenant[tenant].push(bridge);
             });
             
-            // Render grouped bridges
-            const tenantKeys = Object.keys(bridgesByTenant).sort((a, b) => {
-                const numA = parseInt(a.replace('tenant_', ''));
-                const numB = parseInt(b.replace('tenant_', ''));
-                return numA - numB;
-            });
-            
-            container.innerHTML = tenantKeys.map(key => {
-                const tenantData = bridgesByTenant[key];
-                const adminNumber = String(tenantData.tenantId).padStart(2, '0');
-                const isDevAdmin = tenantData.tenantId === 1;
+            sidebar.innerHTML = Object.keys(byTenant).sort().map(tenant => {
+                const bridges = byTenant[tenant];
+                const tenantNum = tenant.replace('tenant_', '');
                 
                 return `
-                    <div class="glass-card" style="margin-bottom: 1.5rem; padding: 1.5rem;">
-                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
-                            <div style="width: 50px; height: 50px; border-radius: 50%; background: ${isDevAdmin ? 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'}; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.25rem; font-weight: 700; flex-shrink: 0;">
-                                ${adminNumber}
-                            </div>
-                            <div style="flex: 1;">
-                                <div style="color: white; font-weight: 600; font-size: 1.125rem;">
-                                    Admin #${adminNumber} ${isDevAdmin ? '(Dev)' : '(Genesis Admin)'}
+                    <div style="margin-bottom: 1rem;">
+                        <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem; padding: 0 0.5rem;">
+                            Tenant ${tenantNum}
+                        </div>
+                        ${bridges.map(bridge => {
+                            const isSelected = bridge.fractal_id === selectedDevBridgeId;
+                            const statusIcon = getStatusBadge(bridge.status).emoji;
+                            
+                            return `
+                                <div class="channel-item ${isSelected ? 'active' : ''}" 
+                                     data-bridge-id="${bridge.fractal_id}"
+                                     onclick="selectDevBridge('${bridge.fractal_id}')"
+                                     style="padding: 0.75rem; margin: 0.25rem 0; cursor: pointer; border-radius: 8px; background: ${isSelected ? 'rgba(255,255,255,0.1)' : 'transparent'}; transition: all 0.2s;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span style="font-size: 1rem;">${statusIcon}</span>
+                                        <span style="color: ${isSelected ? 'white' : '#cbd5e1'}; font-weight: ${isSelected ? '600' : '400'}; font-size: 0.875rem;">
+                                            ${bridge.name || bridge.input_platform + ' → ' + bridge.output_platform}
+                                        </span>
+                                    </div>
                                 </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Select and display dev bridge details
+        function selectDevBridge(fractalId) {
+            selectedDevBridgeId = fractalId;
+            const bridge = devPanelBridges.find(b => b.fractal_id === fractalId);
+            if (bridge) {
+                renderDevPanelBridgesSidebar(); // Re-render to update selection
+                renderDevPanelBridgeDetail(bridge);
+            }
+        }
+        
+        // Render bridge detail view
+        function renderDevPanelBridgeDetail(bridge) {
+            const detail = document.getElementById('devPanelBridgeDetail');
+            if (!detail) return;
+            
+            const statusBadge = getStatusBadge(bridge.status);
+            const tenantNum = String(bridge.tenant_id).padStart(2, '0');
+            
+            detail.innerHTML = `
+                <div style="margin-bottom: 1.5rem;">
+                    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                        <h2 style="color: white; font-size: 1.5rem; font-weight: 700; margin: 0;">
+                            ${bridge.name || bridge.input_platform + ' → ' + bridge.output_platform}
+                        </h2>
+                        <span style="background: ${statusBadge.color}; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">
+                            ${statusBadge.emoji} ${statusBadge.label}
+                        </span>
+                    </div>
+                    
+                    <div style="display: grid; gap: 1rem;">
+                        <div class="detail-row">
+                            <span class="detail-label">Tenant</span>
+                            <span class="detail-value">Admin #${tenantNum} (${bridge.tenant_owner_email})</span>
+                        </div>
+                        
+                        <div class="detail-row">
+                            <span class="detail-label">Fractal ID</span>
+                            <span class="detail-value" style="font-family: monospace; font-size: 0.875rem;">${bridge.fractal_id}</span>
+                        </div>
+                        
+                        <div class="detail-row">
+                            <span class="detail-label">Input Platform</span>
+                            <span class="detail-value">${bridge.input_platform}</span>
+                        </div>
+                        
+                        <div class="detail-row">
+                            <span class="detail-label">Output Platform</span>
+                            <span class="detail-value">${bridge.output_platform}</span>
+                        </div>
+                        
+                        ${bridge.contact_info ? `
+                        <div class="detail-row">
+                            <span class="detail-label">Contact Info</span>
+                            <span class="detail-value">${bridge.contact_info}</span>
+                        </div>
+                        ` : ''}
+                        
+                        <div class="detail-row">
+                            <span class="detail-label">Created</span>
+                            <span class="detail-value">${new Date(bridge.created_at).toLocaleString()}</span>
+                        </div>
+                        
+                        ${bridge.output_0n_url ? `
+                        <div class="detail-row">
+                            <span class="detail-label">User Webhook (Output #0n)</span>
+                            <span class="detail-value" style="font-size: 0.875rem; word-break: break-all;">${bridge.output_0n_url}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
                                 <div style="color: #94a3b8; font-size: 0.875rem;">
                                     ${escapeHtml(tenantData.ownerEmail)} • ${key}
                                 </div>
