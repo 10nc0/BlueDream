@@ -23,6 +23,12 @@ async function setTenantContext(req, res, next) {
     // Acquire a dedicated client from the pool for this request
     const client = await pool.connect();
     
+    // CRITICAL: Store client IMMEDIATELY to ensure cleanup always releases it
+    req.dbClient = client;
+    
+    // Track whether transaction was started (for safe cleanup)
+    let transactionStarted = false;
+    
     // Guard against double-cleanup (MUST be declared before any async work)
     let cleanupCalled = false;
     
@@ -38,13 +44,18 @@ async function setTenantContext(req, res, next) {
         if (!dbClient) return; // Already cleaned up
         
         try {
-            await dbClient.query('COMMIT');
+            // Only COMMIT/ROLLBACK if transaction was started
+            if (transactionStarted) {
+                await dbClient.query('COMMIT');
+            }
         } catch (err) {
             console.error('❌ Commit failed:', err.message);
-            try {
-                await dbClient.query('ROLLBACK');
-            } catch (rollbackErr) {
-                console.error('❌ Rollback failed:', rollbackErr.message);
+            if (transactionStarted) {
+                try {
+                    await dbClient.query('ROLLBACK');
+                } catch (rollbackErr) {
+                    console.error('❌ Rollback failed:', rollbackErr.message);
+                }
             }
         } finally {
             // Always release, even if commit/rollback fails
@@ -82,7 +93,6 @@ async function setTenantContext(req, res, next) {
         // If no user, continue without tenant context (will be caught by requireAuth)
         if (!userId) {
             req.tenantContext = null;
-            req.dbClient = null;
             // Client will be released by cleanup on 'finish'
             return next();
         }
@@ -118,6 +128,7 @@ async function setTenantContext(req, res, next) {
             // Dev role: Global access - can query all schemas
             // Start transaction but don't restrict search_path
             await client.query('BEGIN');
+            transactionStarted = true; // Mark transaction started for safe cleanup
             req.tenantContext.globalAccess = true;
             // Only dev users get to know about tenant IDs
             req.tenantContext.tenantId = user.tenant_id;
@@ -127,6 +138,7 @@ async function setTenantContext(req, res, next) {
             // Admin/write-only/read-only: Restrict to their tenant schema
             // Start transaction with LOCAL search_path (transaction-scoped)
             await client.query('BEGIN');
+            transactionStarted = true; // Mark transaction started for safe cleanup
             await client.query(`SET LOCAL search_path TO ${user.tenant_schema}, public`);
             req.tenantContext.globalAccess = false;
             // NEVER expose tenant_id to non-dev users (prevents horizontal awareness)
@@ -140,9 +152,6 @@ async function setTenantContext(req, res, next) {
             }
             return;
         }
-        
-        // Store the dedicated client in the request object
-        req.dbClient = client;
         
         next();
     } catch (error) {
