@@ -108,22 +108,25 @@ async function setTenantContext(req, res, next) {
             if (cleanupCalled) return; // Prevent double-cleanup
             cleanupCalled = true;
             
+            // Capture client reference immediately to avoid race conditions
+            const dbClient = req.dbClient;
+            req.dbClient = null;
+            
+            if (!dbClient) return; // Already cleaned up
+            
             try {
-                if (req.dbClient) {
-                    await req.dbClient.query('COMMIT');
-                    req.dbClient.release();
-                    req.dbClient = null;
-                }
+                await dbClient.query('COMMIT');
+                dbClient.release();
             } catch (err) {
-                console.error('❌ Error during client cleanup:', err);
+                // Only log non-null errors
+                if (err && err.message !== 'Cannot read properties of null') {
+                    console.error('❌ Error during client cleanup:', err.message);
+                }
                 try {
-                    if (req.dbClient) {
-                        await req.dbClient.query('ROLLBACK');
-                        req.dbClient.release();
-                        req.dbClient = null;
-                    }
+                    await dbClient.query('ROLLBACK');
+                    dbClient.release();
                 } catch (rollbackErr) {
-                    // Ignore rollback errors - connection might be dead
+                    // Silently ignore - connection might be dead
                 }
             }
         };

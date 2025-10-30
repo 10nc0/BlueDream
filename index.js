@@ -3581,6 +3581,43 @@ async function autoRestoreWhatsAppSessions() {
     }
 }
 
+// Global error handlers to prevent Puppeteer crashes from killing the app
+process.on('unhandledRejection', (reason, promise) => {
+    // Check if it's a Puppeteer/WhatsApp error
+    if (reason && typeof reason === 'object') {
+        const errorMsg = reason.message || String(reason);
+        
+        // Ignore Puppeteer context/protocol errors (these happen during disconnect)
+        if (errorMsg.includes('Target closed') || 
+            errorMsg.includes('Protocol error') ||
+            errorMsg.includes('Session closed') ||
+            errorMsg.includes('Connection closed')) {
+            console.log('⚠️  Ignoring Puppeteer disconnect error (expected during logout)');
+            return;
+        }
+    }
+    
+    // Log other unhandled rejections
+    console.error('❌ Unhandled rejection:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+    // Check if it's a Puppeteer error
+    const errorMsg = error.message || String(error);
+    
+    if (errorMsg.includes('Target closed') || 
+        errorMsg.includes('Protocol error') ||
+        errorMsg.includes('Session closed') ||
+        errorMsg.includes('Connection closed')) {
+        console.log('⚠️  Ignoring Puppeteer exception (expected during logout)');
+        return;
+    }
+    
+    // Log and exit for other uncaught exceptions
+    console.error('❌ Uncaught exception:', error);
+    process.exit(1);
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🌐 Dashboard available at http://localhost:${PORT}`);
