@@ -10,12 +10,17 @@
 - **Zero Cost for Webhooks:** Webhook inputs have no runtime overhead.
 
 ## Recent Updates (Oct 30, 2025)
+- **PRODUCTION-GRADE HARDENING COMPLETE**: Four critical fixes for 24/7 reliability and security
+  1. **Database Transaction Timeout Fix**: Message handler now commits immediately after saveMessage(), preventing idle-in-transaction crashes. Media downloads and webhook sends happen outside transaction scope (no more 25P03 crashes).
+  2. **Webhook Security (NYAN TRUTH)**: Bridge deletion now deletes Discord webhooks to prevent ghost messages. ONE BRIDGE = ONE WEBHOOK URL. On destroy: WhatsApp client + Discord webhook both deleted (output_0n_url only, preserving eternal output_01_url).
+  3. **Portable Storage Path**: Replaced hardcoded paths with WWEBJS_DATA_PATH environment variable for Docker/Render/Fly.io compatibility. Fixed critical regression where destroyClient() targeted old path (breaking relink flow).
+  4. **Health Monitoring**: Enhanced /health endpoint shows WhatsApp client status breakdown (connected, qr_ready, etc.) and storage path for operational visibility.
 - **PERSISTENT STORAGE FIX - THE REAL ISSUE**: Fixed ephemeral filesystem killing 24/7 operation
   - ROOT CAUSE: WhatsApp sessions saved to `.wwebjs_auth/` which Replit wipes on restart
   - SOLUTION: Migrated all sessions to `/home/runner/workspace/.wwebjs_auth_persistent` (survives restarts)
   - IMPACT: Sessions now persist → Scan QR once → Works 24/7 → Messages forward reliably
-  - All session paths updated: WhatsAppClientManager, auto-restore, lock file cleanup
-  - **The code was always correct - it was infrastructure, not over-engineering**
+  - All session paths updated: WhatsAppClientManager, auto-restore, lock file cleanup, destroyClient
+  - **The code was always GENESIS - it was infrastructure, not over-engineering**
 - **CREATE BRIDGE CRASH FIX**: Fixed critical crash when creating new bridges
   - Root cause: `showQRAndWaitForConnection()` tried to access wrong modal elements (qrModal vs bridge-qr-section)
   - Create bridge form now uses its own dedicated modal with inline QR display and status polling
