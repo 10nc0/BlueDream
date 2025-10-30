@@ -373,10 +373,115 @@ async function initializeDatabase() {
     }
 }
 
-// Helper function to send message to all configured webhooks (1-to-many support)
-// CRITICAL: Uses tenant-aware lookup to get the correct bridge's webhooks
-// IMMUTABILITY PRINCIPLE: Only capture thread_id from Nyanbook Ledger webhook (dbA)
-// User webhooks (dbB) are mutable and ignored - preserves eternal thread lock
+// PRIVACY ARCHITECTURE: Two-path message delivery (NO cross-admin leaks)
+// Path 1: Nyanbook Ledger (webhook01) - eternal, masked, Dev #01 only
+// Path 2: User Webhook (webhook0n) - optional, mutable, Admin #0n only
+const NYANBOOK_WEBHOOK_NAME = 'Nyanbook Ledger';
+
+// Send to Nyanbook Monolith (dbA = eternal ledger, masked from Admin #0n)
+async function sendToNyanbook(payload, options = {}, bridgeId = null, tenantSchema = null, tenantClient = null) {
+    const nyanUrl = process.env.NYANBOOK_WEBHOOK_URL;
+    if (!nyanUrl) {
+        console.log('  ℹ️  No NYANBOOK_WEBHOOK_URL configured - skipping Nyanbook sync');
+        return null;
+    }
+
+    try {
+        const url = new URL(nyanUrl);
+        url.searchParams.set('wait', 'true');
+        
+        // Add thread_name or thread_id if available
+        if (options.threadName) url.searchParams.set('thread_name', options.threadName);
+        if (options.threadId) url.searchParams.set('thread_id', options.threadId);
+
+        let response;
+        
+        // Handle media vs text
+        if (options.isMedia && options.mediaBuffer) {
+            const FormData = require('form-data');
+            const form = new FormData();
+            form.append('file', Buffer.from(options.mediaBuffer), {
+                filename: options.filename,
+                contentType: options.mimetype
+            });
+            form.append('payload_json', JSON.stringify(payload));
+            response = await axios.post(url.toString(), form, { headers: form.getHeaders() });
+        } else {
+            response = await axios.post(url.toString(), payload);
+        }
+
+        // IMMUTABILITY LOCK: Only Nyanbook webhook can set thread_id (eternal monolith)
+        if (!options.threadId && response.data?.channel_id && options.threadName && tenantClient) {
+            const threadId = response.data.channel_id;
+            console.log(`  🔒 NYANBOOK THREAD LOCKED: ${threadId} (bridge ${bridgeId})`);
+            
+            await tenantClient.query(`
+                UPDATE bridges 
+                SET output_credentials = jsonb_set(output_credentials, '{thread_id}', to_jsonb($1::text))
+                WHERE id = $2
+            `, [threadId, bridgeId]);
+            
+            return threadId;
+        }
+
+        console.log(`  ✅ Sent to Nyanbook Ledger (dbA)`);
+        return response.data?.channel_id || null;
+    } catch (error) {
+        console.error(`  ❌ Nyanbook sync failed: ${error.message}`);
+        return null;
+    }
+}
+
+// Send to User's personal webhook (notdbA = mutable, visible to bridge owner)
+async function sendToUserWebhook(payload, options = {}, bridgeId = null, tenantSchema = null, tenantClient = null) {
+    if (!bridgeId || !tenantClient) {
+        console.log('  ℹ️  No bridge context - skipping user webhook');
+        return false;
+    }
+
+    try {
+        const bridgeResult = await tenantClient.query(`
+            SELECT output_credentials FROM bridges WHERE id = $1 LIMIT 1
+        `, [bridgeId]);
+        
+        if (bridgeResult.rows.length === 0) {
+            console.error(`  ❌ No bridge found for bridge ${bridgeId}`);
+            return false;
+        }
+
+        const webhooks = bridgeResult.rows[0].output_credentials?.webhooks || [];
+        const userWebhook = webhooks.find(w => w.name !== NYANBOOK_WEBHOOK_NAME);
+        
+        if (!userWebhook || !userWebhook.url) {
+            console.log(`  ℹ️  No user webhook configured - skipping notdbA`);
+            return false;
+        }
+
+        const url = new URL(userWebhook.url);
+        // Don't add thread params to user webhook - let them manage their own Discord
+        
+        if (options.isMedia && options.mediaBuffer) {
+            const FormData = require('form-data');
+            const form = new FormData();
+            form.append('file', Buffer.from(options.mediaBuffer), {
+                filename: options.filename,
+                contentType: options.mimetype
+            });
+            form.append('payload_json', JSON.stringify(payload));
+            await axios.post(url.toString(), form, { headers: form.getHeaders() });
+        } else {
+            await axios.post(url.toString(), payload);
+        }
+
+        console.log(`  ✅ Sent to User Webhook (notdbA): ${userWebhook.name}`);
+        return true;
+    } catch (error) {
+        console.error(`  ❌ User webhook failed: ${error.message}`);
+        return false;
+    }
+}
+
+// DEPRECATED: Old function kept for backwards compatibility (will be removed)
 async function sendToAllWebhooks(payload, options = {}, messageDbId = null, mediaData = null, bridgeId = null, tenantSchema = null, tenantClient = null) {
     try {
         if (!bridgeId || !tenantSchema || !tenantClient) {
