@@ -1,3 +1,3 @@
-2025/10/30-20:59:59.346 19699 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_9_bridge_1/Default/Site Characteristics Database/MANIFEST-000001
-2025/10/30-20:59:59.350 19699 Recovering log #3
-2025/10/30-20:59:59.354 19699 Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_9_bridge_1/Default/Site Characteristics Database/000003.log 
+2025/10/30-21:01:48.031 19a18 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_9_bridge_1/Default/Site Characteristics Database/MANIFEST-000001
+2025/10/30-21:01:48.031 19a18 Recovering log #3
+2025/10/30-21:01:48.032 19a18 Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_9_bridge_1/Default/Site Characteristics Database/000003.log 
