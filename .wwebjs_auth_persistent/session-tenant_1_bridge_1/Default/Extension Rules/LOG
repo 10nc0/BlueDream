@@ -1,2 +1,2 @@
-2025/10/30-22:41:35.313 10fe Creating DB /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Extension Rules since it was missing.
-2025/10/30-22:41:35.355 10fe Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Extension Rules/MANIFEST-000001
+2025/10/30-22:43:29.138 1528 Creating DB /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Extension Rules since it was missing.
+2025/10/30-22:43:29.179 1528 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Extension Rules/MANIFEST-000001
