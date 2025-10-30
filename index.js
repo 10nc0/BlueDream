@@ -18,14 +18,43 @@ const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./te
 const WhatsAppClientManager = require('./whatsapp-client-manager');
 const fractalId = require('./utils/fractal-id');
 
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
 const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBERS.split(',').map(n => n.trim()) : [];
 
-if (!DISCORD_WEBHOOK_URL) {
-    console.error('❌ ERROR: DISCORD_WEBHOOK_URL environment variable is required!');
-    console.error('Please set your Discord webhook URL in the Secrets tab.');
-    process.exit(1);
+// Global webhook management (file-based for Replit-proof persistence)
+const WEBHOOK_FILE_PATH = path.join(__dirname, 'discord_webhook.txt');
+let GLOBAL_DISCORD_WEBHOOK = null;
+
+// Helper functions for global webhook management
+async function loadGlobalWebhook() {
+    try {
+        if (fs.existsSync(WEBHOOK_FILE_PATH)) {
+            GLOBAL_DISCORD_WEBHOOK = fs.readFileSync(WEBHOOK_FILE_PATH, 'utf8').trim();
+            if (GLOBAL_DISCORD_WEBHOOK) {
+                console.log('✅ Global Discord webhook loaded from file');
+            }
+        } else {
+            console.log('⚠️  No global webhook configured. Use /dev panel to set webhook.');
+        }
+    } catch (error) {
+        console.error('❌ Failed to load global webhook:', error);
+    }
+}
+
+async function saveGlobalWebhook(url) {
+    try {
+        fs.writeFileSync(WEBHOOK_FILE_PATH, url);
+        GLOBAL_DISCORD_WEBHOOK = url;
+        console.log('✅ Global Discord webhook saved to file');
+        return true;
+    } catch (error) {
+        console.error('❌ Failed to save global webhook:', error);
+        return false;
+    }
+}
+
+function getGlobalWebhook() {
+    return GLOBAL_DISCORD_WEBHOOK;
 }
 
 const pool = new Pool({
@@ -2004,8 +2033,59 @@ app.post('/api/auth/forgot-password/reset', async (req, res) => {
 });
 
 // ===========================
-// DEV PANEL API (Dev Role Only)
+// DEV PANEL API (Admin Role Only)
 // ===========================
+
+// Get global Discord webhook (admin only)
+app.get('/api/dev/webhook', requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+        const webhook = getGlobalWebhook();
+        res.json({ webhook_url: webhook || '' });
+    } catch (error) {
+        console.error('❌ Error fetching global webhook:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Set global Discord webhook (admin only)
+app.post('/api/dev/webhook', requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+        const { webhook_url } = req.body;
+        
+        // Validate webhook URL
+        if (!webhook_url || !webhook_url.trim()) {
+            return res.status(400).send('Webhook URL is required');
+        }
+        
+        if (!webhook_url.includes('discord.com/api/webhooks')) {
+            return res.status(400).send('Invalid Discord webhook URL');
+        }
+        
+        // Save webhook
+        const success = await saveGlobalWebhook(webhook_url.trim());
+        
+        if (success) {
+            // Log admin action
+            await pool.query(`
+                INSERT INTO audit_logs (actor, action, target, details, ip_address)
+                VALUES ($1, $2, $3, $4, $5)
+            `, [
+                req.userEmail || `user_${req.userId}`,
+                'GLOBAL_WEBHOOK_UPDATE',
+                'system',
+                JSON.stringify({ webhook_preview: webhook_url.substring(0, 50) + '...' }),
+                req.ip || req.connection?.remoteAddress || 'unknown'
+            ]);
+            
+            res.send('OK');
+        } else {
+            res.status(500).send('Failed to save webhook');
+        }
+    } catch (error) {
+        console.error('❌ Error saving global webhook:', error);
+        res.status(500).send(error.message);
+    }
+});
 
 // Get all bridges across all tenants (dev role only)
 app.get('/api/dev/bridges', requireAuth, requireRole('dev'), async (req, res) => {
@@ -3760,6 +3840,9 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🌐 Dashboard available at http://localhost:${PORT}`);
     await initializeDatabase();
     console.log('✅ Multi-tenant WhatsApp Bridge ready');
+    
+    // Load global Discord webhook from file
+    await loadGlobalWebhook();
     
     // Auto-restore WhatsApp sessions for 24/7 uptime
     await autoRestoreWhatsAppSessions();
