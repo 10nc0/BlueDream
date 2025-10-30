@@ -3174,17 +3174,17 @@ app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('
             success: true, 
             message: 'WhatsApp session relinking... New QR code will be available shortly.',
             status: clientState.status,
-            bridgeId: bridgeId
+            bridgeId: id
         });
     } catch (error) {
-        console.error(`❌ Error relinking WhatsApp for bridge ${bridgeId}:`, error);
+        console.error(`❌ Error relinking WhatsApp for bridge ${id}:`, error);
         console.error('Stack trace:', error.stack);
         
         // Ensure JSON response even on error
         if (!res.headersSent) {
             res.status(500).json({ 
                 error: error.message || 'Unknown error occurred during relink',
-                bridgeId: bridgeId
+                bridgeId: id
             });
         }
     }
