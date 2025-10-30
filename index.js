@@ -18,6 +18,7 @@ const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
 const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./tenant-middleware');
 const WhatsAppClientManager = require('./whatsapp-client-manager');
+const fractalId = require('./utils/fractal-id');
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
@@ -2690,7 +2691,12 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
     try {
         const client = req.dbClient || pool;
         const userRole = req.tenantContext?.userRole || 'read-only';
+        const tenantId = req.tenantContext?.tenantId;
         const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags } = req.body;
+        
+        if (!tenantId) {
+            return res.status(400).json({ error: 'Tenant context required' });
+        }
         
         const result = await client.query(
             `INSERT INTO bridges (name, input_platform, output_platform, input_credentials, output_credentials, contact_info, tags, status)
@@ -2698,7 +2704,24 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
             [name, inputPlatform, outputPlatform, inputCredentials || {}, outputCredentials || {}, contactInfo || null, tags || [], 'inactive']
         );
         
-        const sanitized = sanitizeForRole(result.rows[0], userRole);
+        const bridge = result.rows[0];
+        
+        // Generate fractalized ID (opaque, tenant-scoped, non-enumerable)
+        const generatedFractalId = fractalId.generate('bridge', tenantId, bridge.id);
+        
+        // Update bridge with fractalized ID
+        await client.query(
+            `UPDATE bridges SET fractal_id = $1 WHERE id = $2`,
+            [generatedFractalId, bridge.id]
+        );
+        
+        bridge.fractal_id = generatedFractalId;
+        
+        // Sanitize response: remove raw ID, keep fractal_id
+        const sanitized = sanitizeForRole(bridge, userRole);
+        delete sanitized.id; // SECURITY: Never expose raw database IDs
+        
+        console.log(`✅ Created bridge with fractal_id: ${generatedFractalId} for tenant ${tenantId}`);
         res.json(sanitized);
     } catch (error) {
         console.error('❌ Error in POST /api/bots:', error);
