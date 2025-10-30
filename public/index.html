@@ -625,16 +625,18 @@
         async function authFetch(url, options = {}) {
             const accessToken = localStorage.getItem('accessToken');
             
+            // Always set Content-Type for JSON requests
+            options.headers = {
+                'Content-Type': 'application/json',
+                ...options.headers
+            };
+            
             // Add Authorization header if token exists
             if (accessToken) {
-                options.headers = {
-                    ...options.headers,
-                    'Authorization': `Bearer ${accessToken}`
-                };
+                options.headers['Authorization'] = `Bearer ${accessToken}`;
             }
             
-            // CRITICAL: Include credentials to send session cookies
-            options.credentials = 'include';
+            // NOTE: Do NOT use credentials: 'include' for JWT auth (that's for cookies only)
             
             let response = await fetch(url, options);
             
@@ -1765,7 +1767,7 @@
                 const response = await authFetch(url, {
                     method,
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(bridgeData)
+                    body: JSON.stringify(botData)
                 });
 
                 if (response.ok) {
