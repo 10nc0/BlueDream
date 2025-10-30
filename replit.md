@@ -10,6 +10,13 @@
 - **Zero Cost for Webhooks:** Webhook inputs have no runtime overhead.
 
 ## Recent Updates (Oct 30, 2025)
+- **ANTI-SPAM KICK DETECTION**: Critical session age tracking fix for WhatsApp auto-reconnect
+  - Session creation time now captured at 'ready' event (not disconnect) for accurate age calculation
+  - LOGOUT on new sessions (<5 mins) = anti-spam kick → auto-reconnect preserved
+  - LOGOUT on established sessions (>5 mins) = real user logout → permanent destroy
+  - QR modal auto-close now detects 'ready' OR 'connected' status (WhatsApp progression: qr_ready → authenticated → ready → connected)
+  - Modal close delay reduced to 1.5s for faster UX
+  - UI text updated: "dedicated Discord thread" → "your Discord webhook" for clarity
 - **AUTO-RECONNECT MECHANISM COMPLETE**: WhatsApp sessions now self-heal without user intervention
   - Intelligent disconnect detection: only permanently destroys on LOGOUT/NAVIGATION
   - Auto-reconnect with exponential backoff (10s → 20s → 40s → 60s max)
