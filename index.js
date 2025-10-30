@@ -2140,19 +2140,14 @@ app.get('/api/dev/bridges', requireAuth, requireRole('dev'), async (req, res) =>
             const tenantSchema = `tenant_${tenant.tenant_id}`;
             
             try {
+                // DISCORD-FIRST: No message counts - Discord threads are sole storage
                 const bridgesResult = await pool.query(`
                     SELECT 
                         b.*,
-                        COUNT(m.id) as message_count,
-                        COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
-                        COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
-                        COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count,
                         $1::integer as tenant_id,
                         $2::text as tenant_schema,
                         $3::text as tenant_owner_email
                     FROM ${tenantSchema}.bridges b
-                    LEFT JOIN ${tenantSchema}.messages m ON b.id = m.bridge_id
-                    GROUP BY b.id
                     ORDER BY b.archived ASC, b.created_at DESC
                 `, [tenant.tenant_id, tenantSchema, tenant.email]);
                 
@@ -2508,54 +2503,35 @@ app.post('/api/relink', requireRole('admin', 'write-only'), async (req, res) => 
     });
 });
 
+// DISCORD-FIRST: Messages stored in Discord threads, not PostgreSQL
 app.get('/api/messages', requireAuth, async (req, res) => {
     try {
-        // Get tenant schema from authenticated user
-        const userResult = await pool.query(
-            'SELECT id, email, tenant_id FROM users WHERE id = $1',
-            [req.userId]
-        );
-        
-        if (!userResult.rows.length) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-        
-        const tenantId = userResult.rows[0].tenant_id;
-        const tenantSchema = `tenant_${tenantId}`;
-        
-        const client = req.dbClient || pool;
-        const userRole = req.tenantContext?.userRole || 'read-only';
-        const { search, status } = req.query;
-        
-        // TENANT-AWARE: Pass tenant schema to helper function
-        const filtered = await getMessages(client, tenantSchema, search, status);
-        const sanitized = sanitizeForRole(filtered, userRole);
-        res.json(sanitized);
+        // Return empty messages array - Discord threads are the sole storage
+        res.json({ 
+            messages: [], 
+            total: 0, 
+            page: 1, 
+            limit: 50, 
+            totalPages: 0,
+            note: 'Messages are stored in Discord threads. Use the Discord UI to view message history.'
+        });
     } catch (error) {
         console.error('❌ Error in /api/messages:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
+// DISCORD-FIRST: Stats not available - Discord threads are sole storage
 app.get('/api/stats', requireAuth, async (req, res) => {
     try {
-        // Get tenant schema from authenticated user
-        const userResult = await pool.query(
-            'SELECT id, email, tenant_id FROM users WHERE id = $1',
-            [req.userId]
-        );
-        
-        if (!userResult.rows.length) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-        
-        const tenantId = userResult.rows[0].tenant_id;
-        const tenantSchema = `tenant_${tenantId}`;
-        
-        const client = req.dbClient || pool;
-        // TENANT-AWARE: Pass tenant schema to helper function
-        const stats = await getMessageStats(client, tenantSchema);
-        res.json(stats);
+        // Return zero stats - Discord manages all message data
+        res.json({ 
+            total: 0, 
+            success: 0, 
+            failed: 0, 
+            pending: 0,
+            note: 'Message statistics are not tracked in PostgreSQL. View full history in Discord threads.'
+        });
     } catch (error) {
         console.error('❌ Error in /api/stats:', error);
         res.status(500).json({ error: error.message });
@@ -2588,17 +2564,11 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
         
         // EXPLICIT SCHEMA INDEXING: Use parameterized schema names (fractalized architecture)
         // ALL users (including dev) only see non-archived bridges in main UI
+        // DISCORD-FIRST: No message counts - Discord threads are sole storage
         const result = await pool.query(`
-            SELECT 
-                b.*,
-                COUNT(m.id) as message_count,
-                COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
-                COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
-                COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count
+            SELECT b.*
             FROM ${tenantSchema}.bridges b
-            LEFT JOIN ${tenantSchema}.messages m ON b.id = m.bridge_id
             WHERE b.archived = false
-            GROUP BY b.id
             ORDER BY b.created_at DESC
         `);
         
@@ -3211,134 +3181,31 @@ app.get('/api/bridges/:id/stats', requireAuth, async (req, res) => {
 
 // REMOVED: Duplicate QR endpoint - using the multi-instance version above (line ~2741)
 
-// Get media for a specific message
-// CRITICAL: Uses explicit schema indexing for fractalized architecture
+// DISCORD-FIRST: Media stored in Discord threads, not PostgreSQL
 app.get('/api/messages/:id/media', requireAuth, async (req, res) => {
-    const { id } = req.params;
-    console.log(`🖼️ Media request for message ${id} by user ${req.userId}`);
-    
     try {
-        // Get user's tenant schema
-        const userResult = await pool.query(
-            'SELECT tenant_id, email FROM users WHERE id = $1',
-            [req.userId]
-        );
-        
-        if (!userResult.rows.length) {
-            console.error(`❌ User ${req.userId} not found`);
-            return res.status(404).json({ error: 'User not found' });
-        }
-        
-        const tenantId = userResult.rows[0].tenant_id;
-        const tenantSchema = `tenant_${tenantId}`;
-        const userEmail = userResult.rows[0].email;
-        
-        console.log(`🔍 Looking for message ${id} in ${tenantSchema} for ${userEmail}`);
-        
-        // EXPLICIT SCHEMA INDEXING: Query tenant-specific messages table
-        const result = await pool.query(
-            `SELECT media_data, media_type, sender_name FROM ${tenantSchema}.messages WHERE id = $1`,
-            [id]
-        );
-        
-        if (result.rows.length === 0) {
-            console.error(`❌ Message ${id} not found in ${tenantSchema}`);
-            return res.status(404).json({ error: 'Message not found' });
-        }
-        
-        const message = result.rows[0];
-        if (!message.media_data) {
-            console.error(`❌ Message ${id} has no media attached`);
-            return res.status(404).json({ error: 'No media attached to this message' });
-        }
-        
-        console.log(`✅ Media found for message ${id} in ${tenantSchema} (type: ${message.media_type})`);
-        res.json({
-            media_data: message.media_data,
-            media_type: message.media_type,
-            sender_name: message.sender_name
+        // Media is stored in Discord threads
+        res.status(404).json({ 
+            error: 'Media not available in PostgreSQL',
+            note: 'All media is stored in Discord threads. View media directly in Discord.'
         });
     } catch (error) {
-        console.error(`❌ Error loading media for message ${id}:`, error);
+        console.error(`❌ Error in /api/messages/:id/media:`, error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// OPTIMIZED: Added pagination to prevent loading 1000 messages at once
-// CRITICAL: Uses explicit schema indexing for fractalized architecture
+// DISCORD-FIRST: Messages stored in Discord threads, not PostgreSQL
 app.get('/api/bridges/:id/messages', requireAuth, async (req, res) => {
     try {
-        const { id } = req.params; // fractal_id
-        const { search, status, page = 1, limit = 50 } = req.query;
-        
-        // Get user's tenant schema
-        const userResult = await pool.query(
-            'SELECT tenant_id FROM users WHERE id = $1',
-            [req.userId]
-        );
-        
-        if (!userResult.rows.length) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-        
-        const tenantId = userResult.rows[0].tenant_id;
-        const tenantSchema = `tenant_${tenantId}`;
-        
-        // SECURITY: Verify bridge belongs to user's tenant before returning messages using fractal_id
-        const bridgeResult = await pool.query(
-            `SELECT id, fractal_id FROM ${tenantSchema}.bridges WHERE fractal_id = $1`,
-            [id]
-        );
-        
-        if (!bridgeResult.rows.length) {
-            console.warn(`⚠️  User ${req.userId} attempted to access messages for bridge ${id} outside their tenant`);
-            return res.status(404).json({ error: 'Bridge not found' });
-        }
-        
-        const internalId = bridgeResult.rows[0].id;
-        const offset = (parseInt(page) - 1) * parseInt(limit);
-        
-        // EXPLICIT SCHEMA INDEXING: Build query with tenant-specific schema (use internal ID for FK)
-        let query = `SELECT * FROM ${tenantSchema}.messages WHERE bridge_id = $1`;
-        const params = [internalId];
-        let paramCount = 2;
-        
-        if (search) {
-            query += ` AND (LOWER(sender_name) LIKE $${paramCount} OR sender_contact LIKE $${paramCount} OR LOWER(message_content) LIKE $${paramCount})`;
-            params.push(`%${search.toLowerCase()}%`);
-            paramCount++;
-        }
-        
-        if (status && status !== 'all') {
-            query += ` AND discord_status = $${paramCount}`;
-            params.push(status);
-            paramCount++;
-        }
-        
-        query += ` ORDER BY timestamp DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-        params.push(parseInt(limit), offset);
-        
-        const result = await pool.query(query, params);
-        
-        // Get total count for pagination with explicit schema indexing
-        let countQuery = `SELECT COUNT(*) FROM ${tenantSchema}.messages WHERE bridge_id = $1`;
-        const countParams = [internalId];
-        if (search) {
-            countQuery += ` AND (LOWER(sender_name) LIKE $2 OR sender_contact LIKE $2 OR LOWER(message_content) LIKE $2)`;
-            countParams.push(`%${search.toLowerCase()}%`);
-        }
-        if (status && status !== 'all') {
-            countQuery += ` AND discord_status = $${countParams.length + 1}`;
-            countParams.push(status);
-        }
-        const countResult = await pool.query(countQuery, countParams);
-        
-        res.json({
-            messages: result.rows,
-            total: parseInt(countResult.rows[0].count),
-            page: parseInt(page),
-            limit: parseInt(limit),
-            totalPages: Math.ceil(parseInt(countResult.rows[0].count) / parseInt(limit))
+        // Return empty messages array - Discord threads are the sole storage
+        res.json({ 
+            messages: [], 
+            total: 0, 
+            page: 1, 
+            limit: 50, 
+            totalPages: 0,
+            note: 'Messages are stored in Discord threads. Use the Discord UI to view message history.'
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
