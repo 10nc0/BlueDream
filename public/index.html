@@ -606,6 +606,13 @@
         let botWebhooks = []; // Store webhook outputs for 1-to-many feature
         let users = [];
         let sessions = [];
+        
+        // Platform glossary for roadmap features
+        const glossary = {
+            platforms: {
+                coming_soon: ['Telegram', 'Line', 'Signal', 'WeChat']
+            }
+        };
 
         // HTML sanitization to prevent XSS attacks
         function escapeHtml(unsafe) {
@@ -1618,8 +1625,8 @@
             // Convert string id to number for comparison
             const bridgeId = typeof id === 'string' ? parseInt(id) : id;
             const bridge = bridges.find(b => b.id === bridgeId);
-            if (!bot) {
-                console.error('Bot not found:', id, 'Available bots:', bridges.map(b => b.id));
+            if (!bridge) {
+                console.error('Bridge not found:', id, 'Available bridges:', bridges.map(b => b.id));
                 return;
             }
             
@@ -3386,7 +3393,7 @@
             `;
             
             const rect = targetEl.getBoundingClientRect();
-            hintEl.style.top = `${rect.bridgetom + 12}px`;
+            hintEl.style.top = `${rect.bottom + 12}px`;
             hintEl.style.left = `${rect.left}px`;
             
             document.body.appendChild(hintEl);
