@@ -120,9 +120,14 @@ async function fetchMediaFromServer(messageId, retryCount = 0, maxRetries = 3) {
     const baseDelay = 1000; // 1 second
     
     try {
-        // Use the global authFetch function
+        // Use the global authFetch function (wait for it to be available)
         if (!window.authFetch) {
-            throw new Error('authFetch not available - script loading order issue');
+            console.warn(`⚠️ authFetch not yet available for message ${messageId} - will retry`);
+            // Wait and retry if authFetch isn't loaded yet
+            await new Promise(resolve => setTimeout(resolve, 100));
+            if (!window.authFetch) {
+                throw new Error('authFetch not available after waiting');
+            }
         }
         
         console.log(`📥 Fetching media for message ${messageId} (attempt ${retryCount + 1}/${maxRetries + 1})...`);

@@ -589,12 +589,8 @@
         </div>
     </div>
 
-    <script src="/js/ui/tooltips.js"></script>
-    <script src="/js/ui/onboarding.js"></script>
-    <script src="/js/ui/search.js"></script>
-    <script src="/js/ui/analytics.js"></script>
-    <script src="/js/ui/media-loader.js"></script>
     <script>
+        console.log('🚀 Main script loading...');
         let bridges = [];
         let filteredBridges = [];
         let editingBridgeId = null;
@@ -3158,7 +3154,11 @@
         // Draw animated pixel black cat (Flipper Zero style) - 2.5x bigger with cursor interaction
         function initHopAnimation() {
             const canvas = document.getElementById('hopCanvas');
-            if (!canvas) return;
+            if (!canvas) {
+                console.warn('⚠️ Cat canvas not found!');
+                return;
+            }
+            console.log('🐱 Initializing cat animation...');
             
             const ctx = canvas.getContext('2d');
             let frame = 0;
@@ -3310,10 +3310,14 @@
 
         // Initialize
         handleOAuthCallback();
+        console.log('🔐 Checking authentication...');
         checkAuth().then(authenticated => {
+            console.log('🔐 Auth result:', authenticated);
             if (authenticated) {
                 loadBridges();
                 initHopAnimation();
+            } else {
+                console.warn('⚠️ Not authenticated - skipping cat animation');
             }
         });
         // ===== SYSTEM STATUS BAR =====
@@ -3435,5 +3439,12 @@
             showOnboardingHint('analytics');
         }, 5000);
     </script>
+    
+    <!-- Load external scripts AFTER authFetch is defined -->
+    <script src="/js/ui/tooltips.js"></script>
+    <script src="/js/ui/onboarding.js"></script>
+    <script src="/js/ui/search.js"></script>
+    <script src="/js/ui/analytics.js"></script>
+    <script src="/js/ui/media-loader.js"></script>
 </body>
 </html>
