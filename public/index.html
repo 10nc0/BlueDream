@@ -2199,44 +2199,9 @@
                     const data = await qrResponse.json();
                     console.log(`QR watch attempt ${attempts}:`, data.qr ? 'QR exists' : 'No QR (scanned!)', `status: ${data.status}`);
                     
-                    // QR disappeared = user scanned successfully!
-                    if (!data.qr && data.status === 'authenticated') {
-                        console.log('🎉 QR scanned! User authenticated successfully');
-                        clearInterval(qrWatcherInterval);
-                        qrWatcherInterval = null;
-                        
-                        // Show success message
-                        const modalTitle = document.getElementById('qrModalTitle');
-                        const qrImage = document.getElementById('qrCodeImage');
-                        const instructions = document.getElementById('qrInstructions');
-                        const loadingMsg = document.getElementById('qrLoadingMessage');
-                        
-                        modalTitle.textContent = '✅ Scan Successful!';
-                        qrImage.style.display = 'none';
-                        instructions.style.display = 'none';
-                        loadingMsg.style.display = 'none';
-                        
-                        const qrContainer = document.getElementById('qrCodeContainer');
-                        qrContainer.innerHTML = `
-                            <div style="text-align: center;">
-                                <div style="font-size: 5rem; margin-bottom: 1rem;">✅</div>
-                                <p style="color: rgba(16, 185, 129, 1); font-size: 1.5rem; font-weight: bold; margin: 0;">
-                                    WhatsApp Linking...
-                                </p>
-                                <p style="color: rgba(255, 255, 255, 0.8); font-size: 1rem; margin-top: 0.5rem;">
-                                    Closing in 3 seconds...
-                                </p>
-                            </div>
-                        `;
-                        
-                        // Close after 3 seconds and refresh
-                        setTimeout(() => {
-                            closeQRModal();
-                            renderBridges();
-                        }, 3000);
-                    } else if (!data.qr && (data.status === 'connected' || data.status === 'ready')) {
-                        // Already fully connected or ready!
-                        console.log('✅ WhatsApp fully connected!');
+                    // UNIFIED: Check for all success states (authenticated, connected, ready, active)
+                    if (!data.qr && (data.status === 'authenticated' || data.status === 'connected' || data.status === 'ready' || data.status === 'active')) {
+                        console.log(`✅ WhatsApp ${data.status}! Auto-closing modal...`);
                         clearInterval(qrWatcherInterval);
                         qrWatcherInterval = null;
                         
@@ -2246,6 +2211,9 @@
                                 <div style="font-size: 5rem; margin-bottom: 1rem;">🎉</div>
                                 <p style="color: rgba(16, 185, 129, 1); font-size: 1.5rem; font-weight: bold; margin: 0;">
                                     Connected Successfully!
+                                </p>
+                                <p style="color: rgba(255, 255, 255, 0.8); font-size: 1rem; margin-top: 0.5rem;">
+                                    Closing in 1.5 seconds...
                                 </p>
                             </div>
                         `;
