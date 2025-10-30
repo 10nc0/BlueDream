@@ -1109,7 +1109,7 @@
                         <div style="font-size: 3rem; margin-bottom: 1rem;">🎭</div>
                         <h3 style="color: #fff; margin-bottom: 0.5rem;">Discord Native UI</h3>
                         <p style="color: #94a3b8; font-size: 0.875rem; max-width: 500px; margin: 0 auto;">
-                            All messages are sent to a dedicated Discord thread with full UI, search, and attachment support - at $0 storage cost!
+                            All messages are sent to your Discord webhook with full UI, search, and attachment support - at $0 storage cost!
                         </p>
                     </div>
                     
@@ -2233,8 +2233,8 @@
                             closeQRModal();
                             renderBridges();
                         }, 3000);
-                    } else if (!data.qr && data.status === 'connected') {
-                        // Already fully connected!
+                    } else if (!data.qr && (data.status === 'connected' || data.status === 'ready')) {
+                        // Already fully connected or ready!
                         console.log('✅ WhatsApp fully connected!');
                         clearInterval(qrWatcherInterval);
                         qrWatcherInterval = null;
@@ -2252,7 +2252,7 @@
                         setTimeout(() => {
                             closeQRModal();
                             renderBridges();
-                        }, 2000);
+                        }, 1500);
                     } else if (attempts >= maxAttempts) {
                         // Timeout
                         clearInterval(qrWatcherInterval);

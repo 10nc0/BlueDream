@@ -117,6 +117,11 @@ class WhatsAppClientManager {
                     clientState.phoneNumber = `+${phoneNumber}`;
                     clientState.qrCode = null;
                     clientState.reconnectAttempts = 0; // Reset reconnect counter on successful connection
+                    
+                    // Track session creation time (for anti-spam detection)
+                    if (!clientState.createdAt) {
+                        clientState.createdAt = Date.now();
+                    }
 
                     // Update bridge with connected status and admin number
                     await this.updateBotStatus(bridgeId, tenantSchema, 'connected', null, `+${phoneNumber}`);
@@ -147,12 +152,34 @@ class WhatsAppClientManager {
                     clientState.status = 'disconnected';
                     await this.updateBotStatus(bridgeId, tenantSchema, 'disconnected', null, null, reason);
                     
-                    // SMART RECONNECT: Only destroy if explicitly stopped/logged out
-                    const shouldDestroy = reason === 'NAVIGATION' || reason === 'LOGOUT' || clientState.intentionalStop;
+                    // Calculate session age (must be set during ready event)
+                    const sessionAge = clientState.createdAt ? (Date.now() - clientState.createdAt) : 0;
+                    const isNewSession = sessionAge < 5 * 60 * 1000; // Less than 5 minutes old
+                    
+                    // SMART RECONNECT: Distinguish user logout vs WhatsApp anti-spam kick
+                    let shouldDestroy = false;
+                    
+                    if (clientState.intentionalStop) {
+                        // User clicked Stop button - permanent destroy
+                        shouldDestroy = true;
+                        console.log(`🗑️  Intentional stop for ${compositeKey} - destroying client`);
+                    } else if (reason === 'NAVIGATION') {
+                        // WhatsApp Web navigated away - permanent destroy
+                        shouldDestroy = true;
+                        console.log(`🗑️  Navigation detected for ${compositeKey} - destroying client`);
+                    } else if (reason === 'LOGOUT' && !isNewSession) {
+                        // LOGOUT on established session (>5 mins) = real user logout - permanent destroy
+                        shouldDestroy = true;
+                        console.log(`🗑️  User logout detected for ${compositeKey} (session age: ${Math.round(sessionAge/1000)}s) - destroying client`);
+                    } else if (reason === 'LOGOUT' && isNewSession) {
+                        // LOGOUT on new session (<5 mins) = likely WhatsApp anti-spam kick - try reconnect
+                        shouldDestroy = false;
+                        console.log(`🔄 Anti-spam kick detected for ${compositeKey} (session age: ${Math.round(sessionAge/1000)}s) - will auto-reconnect`);
+                    }
                     
                     if (shouldDestroy) {
-                        console.log(`🗑️  Permanent disconnect for ${compositeKey} (reason: ${reason}) - destroying client`);
                         this.clients.delete(compositeKey);
+                        this.messageHandlers.delete(compositeKey);
                         setImmediate(async () => {
                             try {
                                 if (clientState.client) {
@@ -163,7 +190,7 @@ class WhatsAppClientManager {
                             }
                         });
                     } else {
-                        // AUTO-RECONNECT: Network issue or temporary disconnect
+                        // AUTO-RECONNECT: Network issue, temporary disconnect, or anti-spam kick
                         console.log(`🔄 Temporary disconnect for ${compositeKey} (reason: ${reason}) - will auto-reconnect in 10s`);
                         
                         // Destroy old Puppeteer instance
