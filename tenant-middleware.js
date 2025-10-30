@@ -23,29 +23,67 @@ async function setTenantContext(req, res, next) {
     // Acquire a dedicated client from the pool for this request
     const client = await pool.connect();
     
+    // Guard against double-cleanup (MUST be declared before any async work)
+    let cleanupCalled = false;
+    
+    // Attach cleanup EARLY, before any async work or early returns
+    const cleanup = async () => {
+        if (cleanupCalled) return; // Prevent double-cleanup
+        cleanupCalled = true;
+        
+        // Capture client reference immediately to avoid race conditions
+        const dbClient = req.dbClient;
+        req.dbClient = null;
+        
+        if (!dbClient) return; // Already cleaned up
+        
+        try {
+            await dbClient.query('COMMIT');
+        } catch (err) {
+            console.error('❌ Commit failed:', err.message);
+            try {
+                await dbClient.query('ROLLBACK');
+            } catch (rollbackErr) {
+                console.error('❌ Rollback failed:', rollbackErr.message);
+            }
+        } finally {
+            // Always release, even if commit/rollback fails
+            dbClient.release();
+        }
+    };
+    
+    // Attach ONCE to prevent double-firing
+    res.once('finish', cleanup);
+    res.once('close', cleanup);
+    
     try {
         let userId = null;
         
-        // Try JWT token first
+        // Try JWT token first (wrapped in try/catch to prevent crashes on malformed tokens)
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
-            const decoded = authService.verifyToken(token);
-            if (decoded && decoded.type === 'access') {
-                userId = decoded.userId;
+            try {
+                const decoded = authService.verifyToken(token);
+                if (decoded && decoded.type === 'access') {
+                    userId = decoded.userId;
+                }
+            } catch (jwtError) {
+                // Invalid token - silently fall back to session
+                console.warn('⚠️  Invalid JWT token:', jwtError.message);
             }
         }
         
-        // Fall back to session
-        if (!userId && req.session && req.session.userId) {
+        // Fall back to session (using optional chaining)
+        if (!userId && req.session?.userId) {
             userId = req.session.userId;
         }
         
-        // If no user, release client and continue (will be caught by requireAuth)
+        // If no user, continue without tenant context (will be caught by requireAuth)
         if (!userId) {
-            client.release();
             req.tenantContext = null;
             req.dbClient = null;
+            // Client will be released by cleanup on 'finish'
             return next();
         }
         
@@ -58,8 +96,11 @@ async function setTenantContext(req, res, next) {
         `, [userId]);
         
         if (userResult.rows.length === 0) {
-            client.release();
-            return res.status(401).json({ error: 'User not found' });
+            // Client will be released by cleanup on 'finish'
+            if (!res.headersSent) {
+                return res.status(401).json({ error: 'User not found' });
+            }
+            return;
         }
         
         const user = userResult.rows[0];
@@ -93,58 +134,23 @@ async function setTenantContext(req, res, next) {
             console.log(`🔒 User ${user.email} - Isolated to ${user.tenant_schema}`);
         } else {
             // User without tenant (shouldn't happen for non-dev users)
-            client.release();
-            return res.status(403).json({ error: 'No tenant assigned to user' });
+            // Client will be released by cleanup on 'finish'
+            if (!res.headersSent) {
+                return res.status(403).json({ error: 'No tenant assigned to user' });
+            }
+            return;
         }
         
         // Store the dedicated client in the request object
         req.dbClient = client;
         
-        // Guard against double-cleanup
-        let cleanupCalled = false;
-        
-        // Ensure client is released after response completes
-        const cleanup = async () => {
-            if (cleanupCalled) return; // Prevent double-cleanup
-            cleanupCalled = true;
-            
-            // Capture client reference immediately to avoid race conditions
-            const dbClient = req.dbClient;
-            req.dbClient = null;
-            
-            if (!dbClient) return; // Already cleaned up
-            
-            try {
-                await dbClient.query('COMMIT');
-                dbClient.release();
-            } catch (err) {
-                // Only log non-null errors
-                if (err && err.message !== 'Cannot read properties of null') {
-                    console.error('❌ Error during client cleanup:', err.message);
-                }
-                try {
-                    await dbClient.query('ROLLBACK');
-                    dbClient.release();
-                } catch (rollbackErr) {
-                    // Silently ignore - connection might be dead
-                }
-            }
-        };
-        
-        // Handle response completion
-        res.on('finish', cleanup);
-        res.on('close', cleanup);
-        
         next();
     } catch (error) {
         console.error('❌ Tenant middleware error:', error);
-        try {
-            await client.query('ROLLBACK');
-        } catch (rollbackErr) {
-            console.error('❌ Rollback error:', rollbackErr);
+        // Do NOT manually release client - cleanup will handle it on 'finish'
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Tenant context error' });
         }
-        client.release();
-        res.status(500).json({ error: 'Tenant context error' });
     }
 }
 
@@ -170,25 +176,29 @@ async function getAllTenantSchemas(client, userRole) {
 
 /**
  * Sanitize data before sending to non-dev users
- * Removes tenant_id and any cross-tenant awareness
+ * Recursively removes tenant_id and any cross-tenant awareness from nested objects
  */
 function sanitizeForRole(data, userRole) {
     if (userRole === 'dev') {
         return data; // Dev sees everything
     }
     
-    // Strip tenant_id from all objects for non-dev users
-    if (Array.isArray(data)) {
-        return data.map(item => {
-            const { tenant_id, tenant_schema, ...rest } = item;
-            return rest;
-        });
-    } else if (typeof data === 'object' && data !== null) {
-        const { tenant_id, tenant_schema, ...rest } = data;
-        return rest;
-    }
+    // Recursive helper to strip sensitive fields
+    const strip = (obj) => {
+        if (Array.isArray(obj)) {
+            return obj.map(strip);
+        }
+        if (obj && typeof obj === 'object') {
+            const { tenant_id, tenant_schema, ...rest } = obj;
+            // Recursively sanitize nested objects
+            return Object.fromEntries(
+                Object.entries(rest).map(([key, value]) => [key, strip(value)])
+            );
+        }
+        return obj;
+    };
     
-    return data;
+    return strip(data);
 }
 
 module.exports = {
