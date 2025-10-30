@@ -3429,22 +3429,55 @@ async function cleanupChromiumLockFiles() {
             console.log('✅ No orphaned Chromium processes found');
         }
         
-        // Step 2: Clean up lock files
+        // Step 2: Clean up lock files and Chromium metadata that caches PIDs
         let cleanedCount = 0;
         const lockFileNames = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'];
+        const metadataFiles = ['DevToolsActivePort', 'Last Version'];
         
         for (const folder of sessionFolders) {
             if (!fs.existsSync(folder)) continue;
             
+            // Remove lock files
             for (const lockFile of lockFileNames) {
                 const lockPath = path.join(folder, lockFile);
                 if (fs.existsSync(lockPath)) {
                     try {
                         fs.unlinkSync(lockPath);
                         cleanedCount++;
-                        console.log(`🗑️  Removed: ${lockPath}`);
+                        console.log(`🗑️  Removed lock: ${lockPath}`);
                     } catch (err) {
                         console.error(`⚠️  Failed to remove ${lockPath}:`, err.message);
+                    }
+                }
+            }
+            
+            // Remove metadata files that cache process info
+            for (const metaFile of metadataFiles) {
+                const metaPath = path.join(folder, metaFile);
+                if (fs.existsSync(metaPath)) {
+                    try {
+                        fs.unlinkSync(metaPath);
+                        cleanedCount++;
+                        console.log(`🗑️  Removed metadata: ${metaPath}`);
+                    } catch (err) {
+                        console.error(`⚠️  Failed to remove ${metaPath}:`, err.message);
+                    }
+                }
+            }
+            
+            // Remove Default profile's singleton lock files if they exist
+            const defaultDir = path.join(folder, 'Default');
+            if (fs.existsSync(defaultDir)) {
+                for (const lockFile of lockFileNames) {
+                    const lockPath = path.join(defaultDir, lockFile);
+                    if (fs.existsSync(lockPath)) {
+                        try {
+                            fs.unlinkSync(lockPath);
+                            cleanedCount++;
+                            console.log(`🗑️  Removed Default lock: ${lockPath}`);
+                        } catch (err) {
+                            console.error(`⚠️  Failed to remove ${lockPath}:`, err.message);
+                        }
                     }
                 }
             }
