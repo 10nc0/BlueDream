@@ -1,7 +1,7 @@
 # Your Nyanbook~ 🌈
 
 ## Overview
-"Your Nyanbook" is a multi-input messaging bridge designed to forward messages from any platform (WhatsApp, Telegram, Twitter/X, SMS, Email) to Discord. It features robust authentication, permanent message retention, and a PostgreSQL database. The project is deployed as a multi-tenant SaaS application where all users access the same instance via a public URL, with each user having an isolated PostgreSQL schema.
+"Your Nyanbook" is a multi-input messaging bridge designed to forward messages from any platform (WhatsApp, Telegram, Twitter/X, SMS, Email) to Discord. It features robust authentication, permanent message retention via Discord threads, and a PostgreSQL database for bridge configuration and routing. The project is deployed as a multi-tenant SaaS application where all users access the same instance via a public URL, with each user having an isolated PostgreSQL schema.
 
 **Key Capabilities:**
 - **Hybrid Input Model:** Supports WhatsApp (with QR login and session management) and Generic Webhooks for various platforms.
@@ -96,23 +96,25 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **Backend**: Node.js with Express.
 - **Frontend**: SPA with client-side authentication.
 - **Authentication**: Email/password authentication using JWT tokens in `localStorage`. Multi-user authentication with role-based access control (admin, read-only, write-only).
-- **Database**: PostgreSQL (Neon-backed) with fractalized multi-tenancy:
+- **Database (Source of Truth)**: PostgreSQL (Neon-backed) with fractalized multi-tenancy:
     - **Global Schema**: `public` for core authentication (`users`, `sessions`, `audit_logs`).
-    - **Tenant Schemas**: Isolated `tenant_X` for per-tenant data (`bridges` only - messages stored in Discord).
+    - **Tenant Schemas**: Isolated `tenant_X` for per-tenant bridge metadata (`bridges` table: config, thread_id, webhook_url, status).
     - **Horizontal Isolation**: Dedicated database clients and `SET LOCAL search_path` for complete data separation.
-    - **Zero Storage Cost**: PostgreSQL only stores bridge metadata; Discord threads handle all message storage at $0 cost.
+    - **Bridge Metadata Only**: PostgreSQL stores bridge configuration, routing data (thread_id, webhook_url), and tenant isolation - NOT messages.
+    - **Crash Recovery**: Bridge state persists in DB, enabling system recovery and reconnection after crashes.
 - **WhatsApp Integration**: Multi-instance `whatsapp-web.js` with `WhatsAppClientManager` to manage independent, tenant-scoped sessions. Sessions are persistent across restarts.
-- **Discord Integration (SOLE STORAGE SOLUTION)**: 
+- **Discord Integration (Output Layer + UI)**: 
     - **Global Webhook**: Admin-configurable webhook via `/dev` panel (file-based, Replit-proof persistence).
     - **Bot-Managed Threads**: Discord bot client creates dedicated thread for each bridge on creation (naming: `BridgeName (tX-bY)`).
     - **Automatic Thread Creation**: Happens at bridge creation time via `DiscordBotManager` with retry logic for transient failures.
-    - **Smart Thread Reuse**: Thread ID stored in `output_credentials.thread_id`, all messages route to same thread.
-    - **Discord as Database**: All messages stored exclusively in Discord - no PostgreSQL message storage.
-    - **Native UI**: Dashboard shows Discord thread info with "Open Discord" button for full native experience.
-    - **Zero Cost**: Discord provides UI, search, attachments, and permanent storage at $0 - scales to 1000+ users for free.
+    - **Smart Thread Reuse**: Thread ID stored in PostgreSQL (`output_credentials.thread_id`), enabling message routing and crash recovery.
+    - **Fire-and-Forget Messages**: Messages forwarded directly to Discord threads - NOT stored in PostgreSQL.
+    - **Discord = Output + UI**: Beautiful human interface with real-time updates, search, and attachments.
+    - **PostgreSQL = Routing**: Database stores thread_id and webhook_url, enabling the bot to route messages correctly.
+    - **Zero Cost**: Discord provides UI and message display at $0 - scales to 1000+ users for free.
 - **Media Handling**: Forwards images, videos, and documents directly to Discord threads.
-- **Search**: Discord's native search (full-text, date filters, attachments, etc.) - no custom implementation needed.
-- **Data Retention**: Permanent storage in Discord threads - deletion only via bridge removal.
+- **Search**: Discord's native search UI (full-text, date filters, attachments, etc.) - no custom implementation needed.
+- **Message Flow**: WhatsApp → Bridge service (lookup thread_id from PostgreSQL) → Discord bot (forward to thread_id) → Discord UI. PostgreSQL provides routing metadata only; messages never touch the database.
 
 ### Feature Specifications
 - **Multi-Tenant SaaS**: Complete horizontal tenant isolation.
@@ -133,10 +135,12 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **24/7 Bridge Uptime**: Auto-restore ensures connected bridges reconnect after server restarts.
 - **Automatic Lock File Cleanup**: Prevents launch failures.
 - **Safari/iPad Compatibility**: Achieved via JWT in `localStorage` to avoid ITP cookie blocking.
-- **Permanent Data Retention**: Disallows message deletion (except via bridge cascade).
 - **Scalability**: Designed for Replit Autoscale deployment with health checks.
 - **Fractalized Bridge IDs**: SHA-256 hash-based, non-enumerable, tenant-scoped IDs to prevent enumeration attacks.
-- **Discord-First Architecture**: Uses Discord threads as the complete UI/storage solution, eliminating custom message UI and PostgreSQL storage costs. Each bridge gets a persistent Discord thread where all messages are sent, with Discord handling UI, search, and attachments at zero cost.
+- **PostgreSQL Source of Truth**: Database stores bridge configuration, thread_id, webhook_url, tenant isolation, and session state - the single source of truth for routing, recovery, and security.
+- **Discord Output Layer**: Messages forwarded to Discord threads for beautiful UI and real-time display - Discord is NOT a database, it's the output channel.
+- **Fire-and-Forget Messages**: Messages sent to Discord immediately, NOT stored in PostgreSQL, keeping the database lean and fast.
+- **Crash Recovery Architecture**: PostgreSQL stores all bridge state (thread_id, webhook_url) → system crash → DB survives → bot recreates threads → messages resume flowing.
 - **Admin Dev Panel**: `/dev` endpoint for admins to configure global Discord webhook via file-based storage (Replit-proof persistence).
 
 ## External Dependencies
