@@ -1858,8 +1858,53 @@
                         const startData = await startRes.json();
                         console.log('📱 WhatsApp session started:', startData);
                         
-                        // 3. UNIFIED: Show QR and wait for connection using merged flow
-                        showQRAndWaitForConnection(bridge.fractal_id, bridgeName);
+                        // 3. SHOW QR CODE IN CREATE BRIDGE MODAL
+                        if (startData.qrCode) {
+                            document.getElementById('bridge-qr-img').src = startData.qrCode;
+                        } else {
+                            // Fallback: fetch QR from separate endpoint
+                            document.getElementById('bridge-qr-img').src = `/api/bridges/${bridge.fractal_id}/qr`;
+                        }
+                        
+                        document.getElementById('bridge-name-display').textContent = bridgeName;
+                        document.getElementById('bridge-fractal-id').textContent = bridge.fractal_id;
+                        document.getElementById('bridge-form-section').style.display = 'none';
+                        document.getElementById('bridge-qr-section').style.display = 'block';
+                        
+                        // 4. POLL STATUS → AUTO-CLOSE ON SUCCESS
+                        console.log('🔄 Polling for connection status...');
+                        let pollInterval = setInterval(async () => {
+                            try {
+                                const statusRes = await fetch(`/api/bridges/${bridge.fractal_id}/qr`, {
+                                    headers: { 
+                                        'Authorization': `Bearer ${token}`
+                                    }
+                                });
+                                
+                                if (statusRes.ok) {
+                                    const status = await statusRes.json();
+                                    console.log('📊 Status:', status);
+                                    
+                                    // Close modal when WhatsApp connects
+                                    if (status.status === 'ready' || status.status === 'connected' || status.status === 'active' || status.status === 'authenticated') {
+                                        clearInterval(pollInterval);
+                                        document.querySelector('.bridge-qr-status').innerHTML = '✅ Connected! Closing...';
+                                        document.querySelector('.bridge-qr-status').style.background = 'rgba(34, 197, 94, 0.2)';
+                                        document.querySelector('.bridge-qr-status').style.borderColor = 'rgba(34, 197, 94, 0.3)';
+                                        document.querySelector('.bridge-qr-status').style.color = '#22c55e';
+                                        setTimeout(() => {
+                                            closeCreateBridgeModal();
+                                            loadBridges();
+                                        }, 1500);
+                                    }
+                                }
+                            } catch (pollError) {
+                                console.error('Poll error:', pollError);
+                            }
+                        }, 2000);
+                        
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = originalText;
                         
                     } catch (err) {
                         console.error('❌ Error:', err);
