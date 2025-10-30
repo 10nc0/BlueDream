@@ -385,24 +385,10 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action_type)
         `);
         
-        // Create performance indexes for frequently queried columns
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp DESC)
-        `);
+        // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
+        // No messages table needed - Discord threads provide permanent storage at zero cost
         
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_messages_bridge_id ON messages(bridge_id)
-        `);
-        
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_messages_status ON messages(discord_status)
-        `);
-        
-        // Composite index for bridge + timestamp (most common query pattern)
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_messages_bot_timestamp ON messages(bridge_id, timestamp DESC)
-        `);
-        
+        console.log('✅ Core schema initialized with security tables');
         console.log('✅ Database initialized successfully');
     } catch (error) {
         console.error('❌ Database initialization error:', error.message);
@@ -674,30 +660,10 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
 }
 
 async function saveMessage(client, message, bridgeId = 1) {
-    try {
-        const result = await client.query(
-            `INSERT INTO messages (bridge_id, timestamp, sender_name, sender_contact, message_content, discord_status, discord_error, has_media, media_type, media_data, sender_photo_url)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-             RETURNING id`,
-            [
-                bridgeId,
-                message.timestamp,
-                message.senderName,
-                message.senderContact,
-                message.messageContent,
-                message.discordStatus,
-                message.discordError || null,
-                message.hasMedia || false,
-                message.mediaType || null,
-                message.mediaData || null,
-                message.senderPhotoUrl || null
-            ]
-        );
-        return result.rows[0].id;
-    } catch (error) {
-        console.error('Error saving message to database:', error.message);
-        return null;
-    }
+    // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
+    // This function is kept for backward compatibility but does nothing
+    // Discord threads provide permanent storage, search, and UI at zero cost
+    return null;
 }
 
 async function updateMessageStatus(client, messageId, status, errorMessage = null, mediaData = null, mediaType = null) {
@@ -3114,17 +3080,8 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
             const bridge = bridgeResult.rows[0];
             const internalId = bridge.id;
             
-            // Store message in database
+            // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
             const senderName = username || phone || email || 'External';
-            const messageResult = await client.query(`
-                INSERT INTO messages (
-                    bridge_id, sender_name, sender_contact, message_content, 
-                    timestamp, discord_status, media_type
-                ) VALUES ($1, $2, $3, $4, NOW(), 'pending', $5)
-                RETURNING id
-            `, [internalId, senderName, phone || email || 'webhook', text || '', media_url ? 'image' : null]);
-            
-            const messageDbId = messageResult.rows[0].id;
             
             // Prepare Discord payload
             const discordPayload = {
