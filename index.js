@@ -3191,43 +3191,35 @@ app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('
 });
 
 // Get WhatsApp session status for a bot
-app.get('/api/bridges/:id/status', requireAuth, async (req, res) => {
+app.get('/api/bridges/:id/status', requireAuth, setTenantContext, async (req, res) => {
     try {
-        const { id } = req.params; // This is now fractal_id
-        
-        // SECURITY: Get user's tenant first
-        const userResult = await pool.query(
-            'SELECT tenant_id FROM users WHERE id = $1',
-            [req.userId]
-        );
-        
-        if (!userResult.rows.length) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-        
-        const userTenantId = userResult.rows[0].tenant_id;
-        const userTenantSchema = `tenant_${userTenantId}`;
+        const { id } = req.params; // This is fractal_id
+        const client = req.dbClient || pool;
+        const tenantSchema = req.tenantContext.tenantSchema;
         
         // SECURITY: Verify bridge belongs to user's tenant using fractal_id
-        const bridgeResult = await pool.query(
-            `SELECT id, fractal_id FROM ${userTenantSchema}.bridges WHERE fractal_id = $1`,
+        const bridgeResult = await client.query(
+            `SELECT id, fractal_id FROM bridges WHERE fractal_id = $1`,
             [id]
         );
         
         if (!bridgeResult.rows.length) {
             console.warn(`⚠️  User ${req.userId} attempted to access bridge ${id} outside their tenant`);
-            return res.status(404).json({ error: 'Bridge not found' });
+            return res.json({ 
+                status: 'inactive', 
+                message: 'Bridge not found in your tenant'
+            });
         }
         
         const internalId = bridgeResult.rows[0].id;
         
-        // Get status only if bridge belongs to user's tenant (use composite key)
-        const clientState = whatsappManager.getClient(internalId, userTenantSchema);
+        // Get status using composite key (tenant:bridge)
+        const clientState = whatsappManager.getClient(internalId, tenantSchema);
         
         if (!clientState) {
             return res.json({ 
                 status: 'inactive', 
-                message: 'No WhatsApp session for this bot'
+                message: 'No WhatsApp session for this bridge'
             });
         }
         
