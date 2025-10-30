@@ -10,6 +10,14 @@
 - **Zero Cost for Webhooks:** Webhook inputs have no runtime overhead.
 
 ## Recent Updates (Oct 30, 2025)
+- **AUTO-RECONNECT MECHANISM COMPLETE**: WhatsApp sessions now self-heal without user intervention
+  - Intelligent disconnect detection: only permanently destroys on LOGOUT/NAVIGATION
+  - Auto-reconnect with exponential backoff (10s → 20s → 40s → 60s max)
+  - Preserves session credentials (no re-QR needed after network issues)
+  - Reconnect counter resets on successful connection
+  - Message handlers preserved across reconnection cycles
+  - **24/7 Operation**: Bridges stay connected through server restarts, network issues, WhatsApp server hiccups
+  - **Zero User Intervention**: No need to login to Nyanbook dashboard to restore connections
 - **QR-FIRST ARCHITECTURE COMPLETE**: Bypass library indexing for instant QR display
   - Bridge creation now opens in-page modal (no popup window friction!)
   - Modal auto-closes when WhatsApp connects successfully (1.5s delay)

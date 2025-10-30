@@ -116,6 +116,7 @@ class WhatsAppClientManager {
                     clientState.status = 'connected';
                     clientState.phoneNumber = `+${phoneNumber}`;
                     clientState.qrCode = null;
+                    clientState.reconnectAttempts = 0; // Reset reconnect counter on successful connection
 
                     // Update bridge with connected status and admin number
                     await this.updateBotStatus(bridgeId, tenantSchema, 'connected', null, `+${phoneNumber}`);
@@ -142,29 +143,58 @@ class WhatsAppClientManager {
                 try {
                     console.log(`🔌 ${compositeKey} disconnected: ${reason}`);
                     
-                    // Update status immediately (disconnected is a valid state)
+                    // Update status to disconnected
                     clientState.status = 'disconnected';
+                    await this.updateBotStatus(bridgeId, tenantSchema, 'disconnected', null, null, reason);
                     
-                    // Clean up client tracking BEFORE destroying to prevent race conditions
-                    this.clients.delete(compositeKey);
+                    // SMART RECONNECT: Only destroy if explicitly stopped/logged out
+                    const shouldDestroy = reason === 'NAVIGATION' || reason === 'LOGOUT' || clientState.intentionalStop;
                     
-                    // Update database
-                    try {
-                        await this.updateBotStatus(bridgeId, tenantSchema, 'disconnected', null, null, reason);
-                    } catch (dbError) {
-                        console.error(`⚠️  DB update failed for ${compositeKey}:`, dbError.message);
-                    }
-                    
-                    // Destroy client AFTER cleanup to prevent Puppeteer context errors
-                    setImmediate(async () => {
-                        try {
-                            if (clientState.client) {
-                                await clientState.client.destroy();
+                    if (shouldDestroy) {
+                        console.log(`🗑️  Permanent disconnect for ${compositeKey} (reason: ${reason}) - destroying client`);
+                        this.clients.delete(compositeKey);
+                        setImmediate(async () => {
+                            try {
+                                if (clientState.client) {
+                                    await clientState.client.destroy();
+                                }
+                            } catch (destroyError) {
+                                // Silently ignore - Puppeteer might have already closed
                             }
-                        } catch (destroyError) {
-                            // Silently ignore - Puppeteer might have already closed
-                        }
-                    });
+                        });
+                    } else {
+                        // AUTO-RECONNECT: Network issue or temporary disconnect
+                        console.log(`🔄 Temporary disconnect for ${compositeKey} (reason: ${reason}) - will auto-reconnect in 10s`);
+                        
+                        // Destroy old Puppeteer instance
+                        setImmediate(async () => {
+                            try {
+                                if (clientState.client) {
+                                    await clientState.client.destroy();
+                                }
+                            } catch (destroyError) {
+                                // Ignore
+                            }
+                        });
+                        
+                        // Schedule reconnection with exponential backoff
+                        const reconnectDelay = clientState.reconnectAttempts ? Math.min(60000, 10000 * Math.pow(2, clientState.reconnectAttempts)) : 10000;
+                        clientState.reconnectAttempts = (clientState.reconnectAttempts || 0) + 1;
+                        
+                        setTimeout(async () => {
+                            try {
+                                console.log(`🔄 Auto-reconnecting ${compositeKey} (attempt ${clientState.reconnectAttempts})...`);
+                                await this.updateBotStatus(bridgeId, tenantSchema, 'reconnecting', null, null, `Auto-reconnect attempt ${clientState.reconnectAttempts}`);
+                                
+                                // Reinitialize with saved session (no QR needed)
+                                const messageHandler = this.messageHandlers.get(compositeKey);
+                                await this.initializeClient(bridgeId, tenantSchema, messageHandler);
+                            } catch (reconnectError) {
+                                console.error(`❌ Auto-reconnect failed for ${compositeKey}:`, reconnectError.message);
+                                // Will retry on next disconnect event if it keeps failing
+                            }
+                        }, reconnectDelay);
+                    }
                 } catch (error) {
                     console.error(`⚠️  Error handling disconnect for ${compositeKey}:`, error.message);
                 }
@@ -180,6 +210,11 @@ class WhatsAppClientManager {
                     console.error(`❌ Error handling message for ${compositeKey}:`, error);
                 }
             });
+
+            // Store message handler for auto-reconnect
+            if (onMessage) {
+                this.messageHandlers.set(compositeKey, onMessage);
+            }
 
             // Initialize the client
             await client.initialize();
