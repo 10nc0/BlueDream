@@ -1,3 +1,2 @@
-2025/10/30-22:05:57.645 1de1e Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Session Storage/MANIFEST-000001
-2025/10/30-22:05:57.646 1de1e Recovering log #3
-2025/10/30-22:05:57.648 1de1e Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Session Storage/000003.log 
+2025/10/30-22:09:14.286 1e2ad Creating DB /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Session Storage since it was missing.
+2025/10/30-22:09:14.313 1e2ad Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Session Storage/MANIFEST-000001
