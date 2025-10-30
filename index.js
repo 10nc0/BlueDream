@@ -406,6 +406,7 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
         }
         
         const webhooks = bridgeResult.rows[0].output_credentials?.webhooks || [];
+        const threadName = bridgeResult.rows[0].output_credentials?.thread_name; // Discord thread embedding
         
         // Fallback to legacy webhook_url if webhooks array is empty
         if (webhooks.length === 0 && bridgeResult.rows[0].output_credentials?.webhook_url) {
@@ -426,6 +427,12 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
         if (webhooks.length === 0) {
             throw new Error('No webhooks configured');
         }
+        
+        // Add thread_name to payload for Discord thread embedding (creates/uses private thread)
+        const enhancedPayload = {
+            ...payload,
+            ...(threadName && { thread_name: threadName })
+        };
         
         // Send to all webhooks
         let successCount = 0;
@@ -448,14 +455,14 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
                         contentType: options.mimetype
                     });
                     
-                    form.append('payload_json', JSON.stringify(payload));
+                    form.append('payload_json', JSON.stringify(enhancedPayload));
                     
                     await axios.post(webhook.url, form, {
                         headers: form.getHeaders()
                     });
                 } else {
-                    // For text-only messages, send JSON payload directly
-                    await axios.post(webhook.url, payload);
+                    // For text-only messages, send JSON payload directly with thread_name
+                    await axios.post(webhook.url, enhancedPayload);
                 }
                 
                 successCount++;
@@ -2519,10 +2526,19 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
         // Tag dev-created bridges with admin_id='01' for fractalized ID generation
         const createdByAdminId = (userRole === 'dev' && isGenesisAdmin) ? '01' : null;
         
+        // Generate unique Discord thread name for this bridge (DISCORD UI EMBEDDING)
+        const threadName = `nyanbook-t${tenantId}-${Date.now()}`;
+        
+        // Merge thread_name into output_credentials for Discord thread embedding
+        const mergedOutputCredentials = {
+            ...(outputCredentials || {}),
+            thread_name: threadName
+        };
+        
         const result = await client.query(
             `INSERT INTO bridges (name, input_platform, output_platform, input_credentials, output_credentials, contact_info, tags, status, created_by_admin_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [name, inputPlatform, outputPlatform, inputCredentials || {}, outputCredentials || {}, contactInfo || null, tags || [], 'inactive', createdByAdminId]
+            [name, inputPlatform, outputPlatform, inputCredentials || {}, mergedOutputCredentials, contactInfo || null, tags || [], 'inactive', createdByAdminId]
         );
         
         const bridge = result.rows[0];
