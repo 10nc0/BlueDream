@@ -10,12 +10,16 @@
 - **Zero Cost for Webhooks:** Webhook inputs have no runtime overhead.
 
 ## Recent Updates (Oct 30, 2025)
-- **QR FLOW UNIFICATION COMPLETE**: Eliminated code duplication in QR display logic
-  - Merged two separate QR implementations (create bridge + relink) into single `showQRAndWaitForConnection()` function
-  - Reduced maintenance burden and failure points by 50%
+- **CREATE BRIDGE CRASH FIX**: Fixed critical crash when creating new bridges
+  - Root cause: `showQRAndWaitForConnection()` tried to access wrong modal elements (qrModal vs bridge-qr-section)
+  - Create bridge form now uses its own dedicated modal with inline QR display and status polling
+  - Relink flow continues using unified `showQRAndWaitForConnection()` function for "Generate QR" button
+  - Both flows properly poll `/api/bridges/:id/qr` for status and auto-close on connection
+- **QR FLOW IMPROVEMENTS**: Enhanced QR display reliability and logging
   - Enhanced QR endpoint with comprehensive logging: tracks status, hasQR, tenant:bridge indexing
   - Fixed logging inconsistencies: all endpoints now use "bridges" terminology (not legacy "bots")
-  - QR endpoint properly returns status field in all code paths (was already present, now verified with logging)
+  - QR endpoint properly returns status field in all code paths (verified with detailed logging)
+  - Create bridge and relink flows both support auto-close on successful WhatsApp connection
 - **ANTI-SPAM KICK DETECTION**: Critical session age tracking fix for WhatsApp auto-reconnect
   - Session creation time now captured at 'ready' event (not disconnect) for accurate age calculation
   - LOGOUT on new sessions (<5 mins) = anti-spam kick → auto-reconnect preserved
