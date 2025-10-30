@@ -1,3 +1,3 @@
-2025/10/30-21:15:57.877 1aa70 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_12_bridge_1/Default/shared_proto_db/metadata/MANIFEST-000001
-2025/10/30-21:15:57.879 1aa70 Recovering log #3
-2025/10/30-21:15:57.879 1aa70 Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_12_bridge_1/Default/shared_proto_db/metadata/000003.log 
+2025/10/30-21:20:26.568 1b200 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_12_bridge_1/Default/shared_proto_db/metadata/MANIFEST-000001
+2025/10/30-21:20:26.568 1b200 Recovering log #3
+2025/10/30-21:20:26.568 1b200 Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_12_bridge_1/Default/shared_proto_db/metadata/000003.log 
