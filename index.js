@@ -96,6 +96,12 @@ app.get('/signup.html', (req, res) => {
     res.sendFile(__dirname + '/public/signup.html');
 });
 
+// Serve dev panel (auth happens client-side via JWT)
+app.get('/dev', (req, res) => {
+    console.log(`[${getTimestamp()}] 🛠️  Dev panel accessed - IP: ${req.ip}`);
+    res.sendFile(__dirname + '/public/dev.html');
+});
+
 // UAT/Test route: LOCALHOST ONLY for testing and screenshots
 app.get('/uat', async (req, res) => {
     // SECURITY: Check socket address (cannot be spoofed) instead of X-Forwarded-For

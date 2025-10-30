@@ -9,6 +9,12 @@
 - **Multi-Tenant SaaS:** Single deployment with fractalized database architecture ensuring 100% tenant isolation.
 - **Zero Cost for Webhooks:** Webhook inputs have no runtime overhead.
 
+## Recent Updates (Oct 30, 2025)
+- **Genesis Admin Fixed**: First user EVER = Dev #01 (role='dev', god view to dbA), all subsequent users = Admin #0n (role='admin', isolated tenant with own dbB)
+- **Dev Panel UI**: `/dev` endpoint now mirrors bridges tab with dbA/notdbA view switch
+- **Fractalized Multi-Tenant**: No invites needed - each signup creates isolated tenant (Admin #02, #03, etc.)
+- **Webhook Architecture**: dbA (Webhook #01 = Nyanbook Monolith) vs dbB (Webhook #0n = User's personal webhook)
+
 ## User Preferences
 - **Design**: Apple glassmorphism aesthetic with Discord-style message layout
 - **Privacy**: Messages sent TO bridge only (not group monitoring)

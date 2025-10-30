@@ -226,7 +226,8 @@
                 
                 const userData = await userRes.json();
                 
-                if (userData.role !== 'admin') {
+                // Allow both 'dev' and 'admin' roles
+                if (userData.role !== 'admin' && userData.role !== 'dev') {
                     app.innerHTML = `
                         <div class="card" style="text-align: center;">
                             <h2>🚫 Access Denied</h2>
@@ -245,36 +246,123 @@
             }
         }
 
-        function renderAdminPanel(user) {
+        let currentUser = null;
+        let allBridges = [];
+        let viewMode = 'dbA'; // 'dbA' (Nyanbook Ledger) or 'notdbA' (User's webhook)
+
+        async function renderAdminPanel(user) {
+            currentUser = user;
             const app = document.getElementById('app');
+            
+            // Dev #01 has god view, Admin #0n sees only their bridges
+            const isDev = user.role === 'dev';
+            
             app.innerHTML = `
                 <a href="/" class="back-link">← Back to Dashboard</a>
                 
                 <div class="header">
                     <h1>🛠️ Nyanbook~ Dev Panel</h1>
-                    <p>Admin: ${user.email}</p>
+                    <p style="margin-bottom: 1rem;">${isDev ? '👑 Dev #01' : '🔑 Admin'}: ${user.email}</p>
+                    
+                    ${isDev ? `
+                        <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 1.5rem;">
+                            <button onclick="switchView('dbA')" style="width: auto; background: ${viewMode === 'dbA' ? 'linear-gradient(135deg, #00ff88, #00ccff)' : 'rgba(255,255,255,0.1)'}; color: ${viewMode === 'dbA' ? '#000' : '#94a3b8'};">
+                                📜 dbA (Nyanbook Ledger)
+                            </button>
+                            <button onclick="switchView('notdbA')" style="width: auto; background: ${viewMode === 'notdbA' ? 'linear-gradient(135deg, #00ff88, #00ccff)' : 'rgba(255,255,255,0.1)'}; color: ${viewMode === 'notdbA' ? '#000' : '#94a3b8'};">
+                                📝 notdbA (User Webhooks)
+                            </button>
+                        </div>
+                    ` : ''}
                 </div>
 
-                <div class="card">
-                    <h2>📊 System Info</h2>
-                    <p style="color: #94a3b8; font-size: 0.875rem; line-height: 1.8;">
-                        <strong style="color: #00ff88;">Discord-First Architecture:</strong><br>
-                        • Each bridge creates its own Discord thread for message storage<br>
-                        • Zero storage cost - Discord handles UI, search, and attachments<br>
-                        • Messages table dropped - Discord threads are sole storage<br>
-                        • Multi-tenant fractalized database isolation<br>
-                        • Each tenant has isolated database schema
-                    </p>
+                <div id="bridgesList" class="card">
+                    <h2>🌉 Bridges</h2>
+                    <div style="text-align: center; padding: 2rem; color: #94a3b8;">
+                        Loading bridges...
+                    </div>
                 </div>
-
-                <div class="card">
-                    <h2>💡 How It Works</h2>
-                    <p style="color: #94a3b8; font-size: 0.875rem; line-height: 1.8;">
-                        1. Create a bridge in the main dashboard<br>
-                        2. Add your Discord webhook URL in bridge settings<br>
-                        3. Messages automatically forward to Discord threads<br>
-                        4. View all message history directly in Discord - forever, for free
+            `;
+            
+            await loadBridges();
+        }
+        
+        async function switchView(mode) {
+            viewMode = mode;
+            await renderAdminPanel(currentUser);
+        }
+        
+        async function loadBridges() {
+            try {
+                const response = await fetch('/api/bridges', {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                
+                if (!response.ok) throw new Error('Failed to load bridges');
+                
+                allBridges = await response.json();
+                renderBridges();
+            } catch (error) {
+                console.error('Error loading bridges:', error);
+                document.getElementById('bridgesList').innerHTML = `
+                    <h2>🌉 Bridges</h2>
+                    <p style="text-align: center; color: #ef4444; padding: 2rem;">
+                        Failed to load bridges
                     </p>
+                `;
+            }
+        }
+        
+        function renderBridges() {
+            const container = document.getElementById('bridgesList');
+            
+            if (allBridges.length === 0) {
+                container.innerHTML = `
+                    <h2>🌉 Bridges</h2>
+                    <p style="text-align: center; color: #94a3b8; padding: 2rem;">
+                        No bridges created yet. Create your first bridge in the <a href="/" style="color: #00ff88;">main dashboard</a>!
+                    </p>
+                `;
+                return;
+            }
+            
+            const isDev = currentUser.role === 'dev';
+            const viewLabel = isDev && viewMode === 'dbA' ? 'dbA (Nyanbook Ledger)' : 'notdbA (User Webhook)';
+            
+            container.innerHTML = `
+                <h2>🌉 Bridges ${isDev ? `<span style="color: #00ff88; font-size: 0.875rem;">(${viewLabel})</span>` : ''}</h2>
+                <div style="display: grid; gap: 1rem; margin-top: 1.5rem;">
+                    ${allBridges.map(bridge => `
+                        <div style="background: rgba(0,0,0,0.3); border-radius: 12px; padding: 1.5rem; border: 1px solid rgba(255,255,255,0.1);">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                                <div>
+                                    <h3 style="color: #fff; font-size: 1.125rem; margin-bottom: 0.5rem;">
+                                        ${bridge.input_platform} → ${bridge.output_platform}
+                                    </h3>
+                                    <p style="color: #94a3b8; font-size: 0.875rem; font-family: monospace;">
+                                        ID: ${bridge.fractal_id?.substring(0, 12)}...
+                                    </p>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="background: rgba(16, 185, 129, 0.2); color: #10b981; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.875rem; font-weight: 600;">
+                                        ${bridge.message_count || 0} msgs
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="background: rgba(88, 101, 242, 0.1); border-radius: 8px; padding: 1rem; margin-top: 1rem;">
+                                <p style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.75rem;">
+                                    💡 Thread: <code style="color: #00ff88;">${bridge.output_credentials?.thread_name || 'Not created yet'}</code>
+                                </p>
+                                <button 
+                                    onclick="window.open('https://discord.com/channels/@me', '_blank')"
+                                    style="background: #5865f2; color: white; width: 100%;"
+                                >
+                                    🚀 Open Discord ${isDev && viewMode === 'dbA' ? '(dbA Ledger)' : '(notdbA)'}
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')}
                 </div>
             `;
         }
