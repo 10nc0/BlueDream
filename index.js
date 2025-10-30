@@ -3388,7 +3388,7 @@ async function updateAnalytics(bridgeId) {
     }
 }
 
-// Clean up stale Chromium lock files to prevent launch failures
+// Clean up stale Chromium lock files and orphaned processes to prevent launch failures
 async function cleanupChromiumLockFiles() {
     try {
         const sessionDir = '.wwebjs_auth';
@@ -3402,8 +3402,34 @@ async function cleanupChromiumLockFiles() {
             .filter(name => name.startsWith('session-'))
             .map(name => path.join(sessionDir, name));
         
-        console.log(`🔍 Scanning ${sessionFolders.length} session folders for stale lock files...`);
+        console.log(`🔍 Scanning ${sessionFolders.length} session folders for stale lock files and orphaned processes...`);
         
+        // Step 1: Kill orphaned Chromium processes
+        try {
+            const { execSync } = require('child_process');
+            
+            // Find and kill Chromium processes related to our session directories
+            const chromiumProcesses = execSync('ps aux | grep chromium | grep -v grep || true', { encoding: 'utf8' });
+            
+            if (chromiumProcesses.trim()) {
+                console.log('🔍 Found running Chromium processes - checking for orphaned sessions...');
+                
+                // Kill all Chromium processes (they'll be restarted if needed)
+                try {
+                    execSync('pkill -9 chromium || true', { encoding: 'utf8' });
+                    console.log('✅ Terminated orphaned Chromium processes');
+                    // Wait for processes to fully terminate
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch (killErr) {
+                    console.log('⚠️  No Chromium processes to kill or already terminated');
+                }
+            }
+        } catch (psErr) {
+            // No processes found or ps command failed - continue with cleanup
+            console.log('✅ No orphaned Chromium processes found');
+        }
+        
+        // Step 2: Clean up lock files
         let cleanedCount = 0;
         const lockFileNames = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'];
         
