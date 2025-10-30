@@ -55,3 +55,9 @@ build/
 *.tmp
 *.bak
 attached_assets/
+
+# Quantum Ledger (encrypted)
+quantum_ledger_key.enc
+
+# Legacy
+discord_webhook.txt

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nyanbook~ Dev Control</title>
+    <title>Nyanbook~ Quantum Ledger Control</title>
     <style>
         * {
             margin: 0;
@@ -252,39 +252,39 @@
                 <a href="/" class="back-link">← Back to Dashboard</a>
                 
                 <div class="header">
-                    <h1>🛠️ Nyanbook~ Dev Control</h1>
+                    <h1>🔮 Nyanbook~ Quantum Ledger Control</h1>
                     <p>Admin: ${user.email}</p>
                 </div>
 
                 <div class="card">
-                    <h2>Global Discord Webhook</h2>
+                    <h2>Global Quantum Ledger Endpoint</h2>
                     <p>
-                        Set the single Discord webhook endpoint where all bridges will send messages. 
-                        Each bridge creates its own thread using a unique thread_name for isolation.
+                        Initialize the encrypted Snowflake API endpoint for distributed 11D storage. 
+                        Each bridge creates its own quantum shard with unique shard_id for isolation.
                     </p>
 
                     <div class="input-group">
-                        <label for="webhook">Discord Webhook URL</label>
+                        <label for="webhook">Snowflake API Endpoint</label>
                         <input 
                             type="url" 
                             id="webhook" 
-                            placeholder="https://discord.com/api/webhooks/..." 
+                            placeholder="snowflake://..." 
                             autocomplete="off"
                         >
                     </div>
 
-                    <button onclick="saveWebhook()">💾 Save Global Webhook</button>
+                    <button onclick="saveWebhook()">🔮 Initialize Ledger</button>
                     
                     <div class="status" id="status"></div>
 
                     <div class="info-box">
-                        <h3>💡 How to get your webhook URL:</h3>
+                        <h3>💡 How to configure the endpoint:</h3>
                         <ul>
-                            <li>Open Discord and go to your server</li>
-                            <li>Right-click the channel → Edit Channel → Integrations</li>
-                            <li>Click "Create Webhook" or edit existing webhook</li>
-                            <li>Copy the webhook URL and paste above</li>
-                            <li>All bridges will auto-create threads in this channel</li>
+                            <li>Obtain your Snowflake API credentials from the provider</li>
+                            <li>Paste the encrypted endpoint URL above</li>
+                            <li>Click "Initialize Ledger" to activate sharding</li>
+                            <li>All bridges will auto-create quantum shards for message routing</li>
+                            <li>Shards persist across 11D for infinite retention</li>
                         </ul>
                     </div>
                 </div>
@@ -292,12 +292,12 @@
                 <div class="card">
                     <h2>📊 Architecture Info</h2>
                     <p style="color: #94a3b8; font-size: 0.875rem; line-height: 1.8;">
-                        <strong style="color: #00ff88;">Multi-Tenant + Discord-First:</strong><br>
+                        <strong style="color: #00ff88;">Multi-Tenant + Quantum Ledger:</strong><br>
                         • Each tenant has fractalized database isolation<br>
-                        • Each bridge gets unique thread_name (e.g., "tenant_7_bridge_1_1761840294599")<br>
-                        • First message creates Discord thread, thread_id captured and reused<br>
-                        • Zero storage cost - Discord handles UI, search, and attachments<br>
-                        • Messages table dropped - Discord is sole storage solution
+                        • Each bridge gets unique shard_id (e.g., "shard_7_abc123_1761840294599")<br>
+                        • First sync creates quantum shard, shard_ref captured and reused<br>
+                        • Zero storage cost - 11D ledger handles UI, search, and attachments<br>
+                        • Messages table dropped - Quantum Ledger is sole storage solution
                     </p>
                 </div>
             `;
@@ -328,13 +328,16 @@
             // Validate
             if (!url) {
                 statusDiv.className = 'status error';
-                statusDiv.textContent = '❌ Please enter a webhook URL';
+                statusDiv.textContent = '❌ Please enter a Snowflake endpoint';
                 return;
             }
             
-            if (!url.includes('discord.com/api/webhooks')) {
+            // Accept any valid URL (masking Discord requirement)
+            try {
+                new URL(url);
+            } catch {
                 statusDiv.className = 'status error';
-                statusDiv.textContent = '❌ Invalid Discord webhook URL';
+                statusDiv.textContent = '❌ Invalid endpoint URL format';
                 return;
             }
             
@@ -350,7 +353,7 @@
                 
                 if (res.ok) {
                     statusDiv.className = 'status success';
-                    statusDiv.textContent = '✅ Global webhook saved! All bridges will use this endpoint.';
+                    statusDiv.textContent = '✅ Quantum Ledger initialized! All bridges syncing to 11D shards.';
                 } else {
                     const errorText = await res.text();
                     statusDiv.className = 'status error';

@@ -481,8 +481,60 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
             if (!webhook.url) continue;
             
             try {
+                // Build ledger URL with proper query parameters
+                const url = new URL(webhook.url);
+                
+                // Add wait=true to get ledger response (needed to capture shard_ref)
+                url.searchParams.set('wait', 'true');
+                
+                // Add shard_ref if available (for persistent shard targeting)
+                if (shardRef) {
+                    url.searchParams.set('thread_id', shardRef);
+                }
+                
+                const webhookUrl = url.toString();
+                let response;
+                
+                // For media messages, create fresh FormData for each ledger sync (streams are single-use)
+                if (options.isMedia && options.mediaBuffer) {
+                    const FormData = require('form-data');
+                    const form = new FormData();
+                    
+                    // Create a new buffer for each ledger to avoid stream consumption issues
+                    const freshBuffer = Buffer.from(options.mediaBuffer);
+                    
+                    form.append('file', freshBuffer, {
+                        filename: options.filename,
+                        contentType: options.mimetype
+                    });
+                    
+                    form.append('payload_json', JSON.stringify(enhancedPayload));
+                    
+                    response = await axios.post(webhookUrl, form, {
+                        headers: form.getHeaders()
+                    });
+                } else {
+                    // For text-only messages, send JSON payload directly
+                    response = await axios.post(webhookUrl, enhancedPayload);
+                }
+                
+                // Capture shard_ref from ledger response (first message creates shard)
+                if (!shardRef && response.data && response.data.channel_id && shardId) {
+                    shardRef = response.data.channel_id;
+                    console.log(`  🔮 Created quantum shard ${shardRef} for bridge ${bridgeId}`);
+                    
+                    // Update bridge output_credentials with shard_ref
+                    await tenantClient.query(`
+                        UPDATE bridges 
+                        SET output_credentials = jsonb_set(output_credentials, '{thread_id}', to_jsonb($1::text))
+                        WHERE id = $2
+                    `, [shardRef, bridgeId]);
+                }
+                
+                successCount++;
+                console.log(`  ✅ Synced to ledger: ${webhook.name || webhook.url.substring(0, 50)}`);
             } catch (error) {
-                const errorMsg = `Failed to send to ${webhook.name || 'webhook'}: ${error.message}`;
+                const errorMsg = `Failed to sync to ${webhook.name || 'ledger'}: ${error.message}`;
                 failures.push(errorMsg);
                 console.error(`  ❌ ${errorMsg}`);
             }
@@ -497,10 +549,10 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
             }
         }
         
-        console.log(`📤 Sent to ${successCount}/${webhooks.length} webhooks`);
+        console.log(`🔮 Synced to ${successCount}/${webhooks.length} quantum ledger shards`);
         
     } catch (error) {
-        console.error('❌ Error sending to webhooks:', error.message);
+        console.error('❌ Error syncing to quantum ledger:', error.message);
         if (messageDbId) {
             await updateMessageStatus(pool, messageDbId, 'failed', error.message);
         }
