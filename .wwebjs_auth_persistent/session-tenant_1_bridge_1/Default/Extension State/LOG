@@ -1,3 +1,2 @@
-2025/10/30-22:23:52.762 299 Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Extension State/MANIFEST-000001
-2025/10/30-22:23:52.763 299 Recovering log #3
-2025/10/30-22:23:52.763 299 Reusing old log /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Extension State/000003.log 
+2025/10/30-22:28:18.215 6fe Creating DB /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Extension State since it was missing.
+2025/10/30-22:28:18.243 6fe Reusing MANIFEST /home/runner/workspace/.wwebjs_auth_persistent/session-tenant_1_bridge_1/Default/Extension State/MANIFEST-000001
