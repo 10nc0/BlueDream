@@ -2169,7 +2169,30 @@ app.post('/api/auth/forgot-password/reset', async (req, res) => {
 // Get all bridges across all tenants (dev role only)
 app.get('/api/dev/bridges', requireAuth, requireRole('dev'), async (req, res) => {
     try {
-        console.log('🔧 Dev Panel: Fetching all bridges across all tenants...');
+        // TRIPLE SECURITY CHECK: Dev Panel requires dev + genesis_admin + tenant_01
+        const userResult = await pool.query(
+            'SELECT role, is_genesis_admin, tenant_id FROM users WHERE id = $1',
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const user = userResult.rows[0];
+        
+        // Enforce triple security check
+        if (user.role !== 'dev' || !user.is_genesis_admin || user.tenant_id !== 1) {
+            console.warn(`⚠️  SECURITY: User ${req.userId} attempted Dev Panel access without proper credentials`);
+            console.warn(`   - Role: ${user.role} (needs: dev)`);
+            console.warn(`   - Genesis Admin: ${user.is_genesis_admin} (needs: true)`);
+            console.warn(`   - Tenant ID: ${user.tenant_id} (needs: 1)`);
+            return res.status(403).json({ 
+                error: 'Access denied. Dev Panel requires dev role + genesis_admin + tenant_01 access.' 
+            });
+        }
+        
+        console.log('🔧 Dev Panel: Triple security check passed. Fetching all bridges across all tenants...');
         
         // Get all tenant schemas
         const tenantsResult = await pool.query(`
@@ -2225,10 +2248,40 @@ app.get('/api/dev/bridges', requireAuth, requireRole('dev'), async (req, res) =>
 // Get all users (admin and dev roles)
 app.get('/api/users', requireAuth, requireRole('admin', 'dev'), async (req, res) => {
     try {
-        // Dev users get global view across all tenants
-        // Admin users only see their own tenant (handled by setTenantContext middleware)
-        const result = await pool.query('SELECT id, email, role, tenant_id, is_genesis_admin, created_at FROM users ORDER BY created_at DESC');
-        res.json(result.rows);
+        // Get requesting user's info
+        const userResult = await pool.query(
+            'SELECT role, is_genesis_admin, tenant_id FROM users WHERE id = $1',
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const user = userResult.rows[0];
+        
+        // TRIPLE SECURITY CHECK for Dev Panel cross-tenant access
+        if (user.role === 'dev') {
+            // Dev users need triple check for global view
+            if (!user.is_genesis_admin || user.tenant_id !== 1) {
+                console.warn(`⚠️  SECURITY: Dev user ${req.userId} attempted global user list without proper credentials`);
+                return res.status(403).json({ 
+                    error: 'Access denied. Dev Panel requires dev role + genesis_admin + tenant_01 access.' 
+                });
+            }
+            // Dev with triple check passed - return all users
+            const result = await pool.query('SELECT id, email, role, tenant_id, is_genesis_admin, created_at FROM users ORDER BY created_at DESC');
+            res.json(result.rows);
+        } else if (user.role === 'admin') {
+            // Admin users only see their own tenant
+            const result = await pool.query(
+                'SELECT id, email, role, tenant_id, is_genesis_admin, created_at FROM users WHERE tenant_id = $1 ORDER BY created_at DESC',
+                [user.tenant_id]
+            );
+            res.json(result.rows);
+        } else {
+            return res.status(403).json({ error: 'Access denied' });
+        }
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
