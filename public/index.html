@@ -909,9 +909,9 @@
             sidebar.innerHTML = Object.entries(groupedBots).map(([platform, bots]) => `
                 <div class="bridge-category">
                     <div class="category-header">${platform}</div>
-                    ${bridges.map(bridge => `
+                    ${bots.map(bridge => `
                         <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" onclick="selectBridge('${bridge.fractal_id}')">
-                            <span class="channel-name">${bridge.input_platform} → ${bridge.output_platform}</span>
+                            <span class="channel-name">${bridge.name || `${bridge.input_platform} → ${bridge.output_platform}`}</span>
                             <div class="channel-badges">
                                 ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
                             </div>

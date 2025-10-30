@@ -18,6 +18,8 @@
   - Output #0n user-configurable via `userOutputUrl` in create form (mutable, visible)
   - Bridge creation fixed: `archived=false` explicitly set (was NULL, causing invisibility bug)
   - **UI Masking**: "webhook" → "bridge" in all user-facing text (except create form keeps "Webhook Outputs" for clarity)
+  - **Frontend Rendering Bug Fixed**: Line 912 changed from `bridges.map()` to `bots.map()` - was breaking platform grouping
+  - **UI Enhancement**: Sidebar now shows bridge names (e.g., "Bridge #99") instead of generic "whatsapp → discord"
 - **Genesis Admin Fixed**: First user EVER = Dev #01 (role='dev', god view to dbA), all subsequent users = Admin #0n (role='admin', isolated tenant with own dbB)
 - **Dev Panel UI**: `/dev` endpoint now mirrors bridges tab with dbA/notdbA view switch
 - **Fractalized Multi-Tenant**: No invites needed - each signup creates isolated tenant (Admin #02, #03, etc.)
