@@ -406,7 +406,8 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
         }
         
         const webhooks = bridgeResult.rows[0].output_credentials?.webhooks || [];
-        const threadName = bridgeResult.rows[0].output_credentials?.thread_name; // Discord thread embedding
+        const threadName = bridgeResult.rows[0].output_credentials?.thread_name;
+        let threadId = bridgeResult.rows[0].output_credentials?.thread_id; // Discord thread embedding
         
         // Fallback to legacy webhook_url if webhooks array is empty
         if (webhooks.length === 0 && bridgeResult.rows[0].output_credentials?.webhook_url) {
@@ -428,10 +429,11 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
             throw new Error('No webhooks configured');
         }
         
-        // Add thread_name to payload for Discord thread embedding (creates/uses private thread)
+        // Prepare payload for Discord thread embedding
+        // Use thread_name for first message (creates thread), then thread_id for subsequent messages
         const enhancedPayload = {
             ...payload,
-            ...(threadName && { thread_name: threadName })
+            ...(threadName && !threadId && { thread_name: threadName }) // Only use thread_name if no thread_id yet
         };
         
         // Send to all webhooks
@@ -442,6 +444,20 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
             if (!webhook.url) continue;
             
             try {
+                // Build webhook URL with proper query parameters
+                const url = new URL(webhook.url);
+                
+                // Add wait=true to get Discord response (needed to capture thread_id)
+                url.searchParams.set('wait', 'true');
+                
+                // Add thread_id if available (for persistent thread targeting)
+                if (threadId) {
+                    url.searchParams.set('thread_id', threadId);
+                }
+                
+                const webhookUrl = url.toString();
+                let response;
+                
                 // For media messages, create fresh FormData for each webhook (streams are single-use)
                 if (options.isMedia && options.mediaBuffer) {
                     const FormData = require('form-data');
@@ -457,12 +473,26 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
                     
                     form.append('payload_json', JSON.stringify(enhancedPayload));
                     
-                    await axios.post(webhook.url, form, {
+                    response = await axios.post(webhookUrl, form, {
                         headers: form.getHeaders()
                     });
                 } else {
-                    // For text-only messages, send JSON payload directly with thread_name
-                    await axios.post(webhook.url, enhancedPayload);
+                    // For text-only messages, send JSON payload directly
+                    response = await axios.post(webhookUrl, enhancedPayload);
+                }
+                
+                // Capture thread_id from Discord's response (first message creates thread)
+                // Discord returns channel_id which is the thread ID when posting to a forum/thread
+                if (!threadId && response.data && response.data.channel_id && threadName) {
+                    threadId = response.data.channel_id;
+                    console.log(`  🧵 Created Discord thread ${threadId} for bridge ${bridgeId} (channel: ${response.data.channel_id})`);
+                    
+                    // Update bridge output_credentials with thread_id
+                    await tenantClient.query(`
+                        UPDATE bridges 
+                        SET output_credentials = jsonb_set(output_credentials, '{thread_id}', to_jsonb($1::text))
+                        WHERE id = $2
+                    `, [threadId, bridgeId]);
                 }
                 
                 successCount++;

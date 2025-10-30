@@ -30,10 +30,14 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
     - **Tenant Schemas**: Isolated `tenant_X` for per-tenant data (`bridges`, `messages`, `users`).
     - **Horizontal Isolation**: Dedicated database clients and `SET LOCAL search_path` for complete data separation.
 - **WhatsApp Integration**: Multi-instance `whatsapp-web.js` with `WhatsAppClientManager` to manage independent, tenant-scoped sessions. Sessions are persistent across restarts.
-- **Discord Integration**: Uses Discord webhooks for message forwarding.
+- **Discord Integration**: 
+    - **Webhooks**: Uses Discord webhooks for message forwarding with 1-to-many support.
+    - **Thread Embedding**: Each bridge generates a unique `thread_name` (e.g., `nyanbook-t7-1761839223643`) stored in `output_credentials`.
+    - **Discord UI Embedding**: Dashboard offers toggle between custom message view and native Discord iframe embed.
+    - **Zero Storage Cost**: Discord threads provide full UI, search, attachments, and permanent storage at $0 cost.
 - **Media Handling**: Supports forwarding of images, videos, and documents with lazy-loading and a triple-layer caching system.
-- **Search**: Natural language date parsing and intelligent regex detection.
-- **Data Retention**: Messages are write-only, with deletion only cascading from bridge removal.
+- **Search**: Natural language date parsing and intelligent regex detection (custom view) + Discord's native search (embedded view).
+- **Data Retention**: Messages are write-only, with deletion only cascading from bridge removal. Discord threads provide redundant permanent storage.
 
 ### Feature Specifications
 - **Multi-Tenant SaaS**: Complete horizontal tenant isolation.
@@ -57,6 +61,8 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **Permanent Data Retention**: Disallows message deletion (except via bridge cascade).
 - **Scalability**: Designed for Replit Autoscale deployment with health checks.
 - **Fractalized Bridge IDs**: SHA-256 hash-based, non-enumerable, tenant-scoped IDs to prevent enumeration attacks.
+- **Discord as Full UI**: Leverages Discord threads for zero-cost UI, storage, search, and attachments. Users can toggle between custom view and native Discord embed.
+- **Dual View Architecture**: Custom message view for search/filtering + Discord iframe for full-featured native experience.
 
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)

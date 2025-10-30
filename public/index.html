@@ -1077,16 +1077,46 @@
                     ${messageCache[bridge.fractal_id] ? renderDiscordMessages(messageCache[bridge.fractal_id], bridge.fractal_id) : '<div class="loading-msg">Loading messages...</div>'}
                 </div>
                 
-                <div class="discord-embed-container" id="discord-embed-${bridge.fractal_id}" style="display: none; height: 600px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 1px solid rgba(88, 101, 242, 0.3);">
-                    <iframe 
-                        src="https://discord.com/channels/@me" 
-                        width="100%" 
-                        height="100%" 
-                        frameborder="0"
-                        style="border-radius: 12px;"
-                    ></iframe>
-                    <div style="padding: 1rem; text-align: center; background: rgba(88, 101, 242, 0.1); color: #94a3b8; font-size: 0.875rem;">
-                        💡 Tip: Look for thread "${bridge.output_credentials?.thread_name || `nyanbook-${bridge.fractal_id}`}" in your Discord
+                <div class="discord-embed-container" id="discord-embed-${bridge.fractal_id}" style="display: none; padding: 2rem; border-radius: 12px; background: rgba(88, 101, 242, 0.05); border: 2px dashed rgba(88, 101, 242, 0.3);">
+                    <div style="text-align: center; margin-bottom: 1.5rem;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">🎭</div>
+                        <h3 style="color: #fff; margin-bottom: 0.5rem;">Discord Native UI</h3>
+                        <p style="color: #94a3b8; font-size: 0.875rem; max-width: 500px; margin: 0 auto;">
+                            All messages are sent to a dedicated Discord thread with full UI, search, and attachment support - at $0 storage cost!
+                        </p>
+                    </div>
+                    
+                    <div style="background: rgba(0,0,0,0.3); padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                            <span style="color: #94a3b8; font-size: 0.875rem; font-weight: 600;">Thread Name:</span>
+                            <code style="background: rgba(88, 101, 242, 0.2); color: #5865f2; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.875rem;">
+                                ${bridge.output_credentials?.thread_name || 'Not yet created'}
+                            </code>
+                        </div>
+                        ${bridge.output_credentials?.thread_id ? `
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <span style="color: #94a3b8; font-size: 0.875rem; font-weight: 600;">Thread ID:</span>
+                            <code style="background: rgba(34, 197, 94, 0.2); color: #22c55e; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.875rem;">
+                                ${bridge.output_credentials.thread_id}
+                            </code>
+                        </div>
+                        ` : `
+                        <div style="text-align: center; padding: 1rem; background: rgba(234, 179, 8, 0.1); border-radius: 6px; border: 1px solid rgba(234, 179, 8, 0.3);">
+                            <span style="color: #eab308; font-size: 0.875rem;">⏳ Thread will be created when first message is sent</span>
+                        </div>
+                        `}
+                    </div>
+                    
+                    <div style="text-align: center; padding: 1.5rem; background: rgba(88, 101, 242, 0.1); border-radius: 8px;">
+                        <p style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 1rem;">
+                            💡 <strong>How to view:</strong> Open Discord and look for the thread "${bridge.output_credentials?.thread_name || 'your thread'}" in the channel where your webhook posts
+                        </p>
+                        <button 
+                            onclick="window.open('https://discord.com/channels/@me', '_blank')"
+                            style="background: #5865f2; color: white; padding: 0.75rem 1.5rem; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; font-size: 0.875rem;"
+                        >
+                            🚀 Open Discord
+                        </button>
                     </div>
                 </div>
             `;
