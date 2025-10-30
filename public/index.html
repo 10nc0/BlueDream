@@ -1056,33 +1056,45 @@
                     
                     <div style="background: rgba(0,0,0,0.3); padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem;">
                         ${currentUser?.role === 'dev' ? `
-                            <!-- Dev #01 God View: Show Nyanbook Ledger metadata (dbA) -->
-                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-                                <span style="color: #94a3b8; font-size: 0.875rem; font-weight: 600;">🔒 Ledger Thread:</span>
-                                <code style="background: rgba(88, 101, 242, 0.2); color: #5865f2; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.875rem;">
-                                    ${bridge.output_credentials?.thread_name || 'Not yet created'}
-                                </code>
+                            <!-- Dev #01 God View: Show BOTH Output #01 (Ledger) + Output #0n (User Discord) -->
+                            <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                <h4 style="color: #00ff88; font-size: 0.875rem; margin-bottom: 0.75rem; font-weight: 600;">🔒 Output #01: Eternal Ledger (dbA)</h4>
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                                    <span style="color: #94a3b8; font-size: 0.75rem;">Thread Name:</span>
+                                    <code style="background: rgba(88, 101, 242, 0.2); color: #5865f2; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.75rem;">
+                                        ${bridge.output_credentials?.thread_name || 'Not yet created'}
+                                    </code>
+                                </div>
+                                ${bridge.output_credentials?.thread_id ? `
+                                <div style="display: flex; align-items: center; justify-content: space-between;">
+                                    <span style="color: #94a3b8; font-size: 0.75rem;">Thread ID:</span>
+                                    <code style="background: rgba(34, 197, 94, 0.2); color: #22c55e; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.75rem;">
+                                        ${bridge.output_credentials.thread_id}
+                                    </code>
+                                </div>
+                                ` : `
+                                <div style="text-align: center; padding: 0.5rem; background: rgba(234, 179, 8, 0.1); border-radius: 6px; border: 1px solid rgba(234, 179, 8, 0.3); margin-top: 0.5rem;">
+                                    <span style="color: #eab308; font-size: 0.75rem;">⏳ Thread created on first message</span>
+                                </div>
+                                `}
                             </div>
-                            ${bridge.output_credentials?.thread_id ? `
-                            <div style="display: flex; align-items: center; justify-content: space-between;">
-                                <span style="color: #94a3b8; font-size: 0.875rem; font-weight: 600;">🆔 Thread ID:</span>
-                                <code style="background: rgba(34, 197, 94, 0.2); color: #22c55e; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.875rem;">
-                                    ${bridge.output_credentials.thread_id}
-                                </code>
+                            <div>
+                                <h4 style="color: #60a5fa; font-size: 0.875rem; margin-bottom: 0.75rem; font-weight: 600;">📡 Output #0n: User Discord (Your Server)</h4>
+                                <div style="text-align: center; padding: 1rem; background: ${bridge.output_0n_url ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)'}; border-radius: 6px; border: 1px solid ${bridge.output_0n_url ? 'rgba(34, 197, 94, 0.3)' : 'rgba(234, 179, 8, 0.3)'};">
+                                    <span style="color: ${bridge.output_0n_url ? '#22c55e' : '#eab308'}; font-size: 0.875rem;">
+                                        ${bridge.output_0n_url ? '✅ User webhook configured' : '⚠️ No user webhook set'}
+                                    </span>
+                                </div>
                             </div>
-                            ` : `
-                            <div style="text-align: center; padding: 1rem; background: rgba(234, 179, 8, 0.1); border-radius: 6px; border: 1px solid rgba(234, 179, 8, 0.3);">
-                                <span style="color: #eab308; font-size: 0.875rem;">⏳ Ledger thread will be created when first message is sent</span>
-                            </div>
-                            `}
                         ` : `
-                            <!-- Admin #0n View: Show personal webhook status (notdbA, NO ledger metadata) -->
+                            <!-- Admin #0n View: Show ONLY Output #0n (User Discord, NO ledger info) -->
                             <div style="text-align: center; padding: 1.5rem;">
-                                <div style="font-size: 2rem; margin-bottom: 0.75rem;">📝</div>
+                                <div style="font-size: 2rem; margin-bottom: 0.75rem;">📡</div>
+                                <h4 style="color: #60a5fa; font-size: 0.875rem; margin-bottom: 0.5rem; font-weight: 600;">Your Discord Output</h4>
                                 <p style="color: #94a3b8; font-size: 0.875rem; line-height: 1.6;">
-                                    ${bridge.output_credentials?.webhooks?.find(w => w.name !== 'Nyanbook Ledger') 
+                                    ${bridge.output_0n_url 
                                         ? '<strong style="color: #22c55e;">✅ Your webhook is configured</strong><br>Messages will be sent to your Discord channel' 
-                                        : '<strong style="color: #eab308;">⚠️ No personal webhook configured</strong><br>Add your Discord webhook in Settings to receive messages'}
+                                        : '<strong style="color: #eab308;">⚠️ No webhook configured</strong><br>Edit this bridge to add your Discord webhook URL'}
                                 </p>
                             </div>
                         `}
