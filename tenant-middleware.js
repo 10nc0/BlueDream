@@ -126,14 +126,15 @@ async function setTenantContext(req, res, next) {
         // Begin transaction and set search_path based on role hierarchy
         if (user.role === 'dev') {
             // Dev role: Global access - can query all schemas
-            // Start transaction but don't restrict search_path
+            // BUT still need search_path set to their tenant schema for INSERT/UPDATE operations
             await client.query('BEGIN');
             transactionStarted = true; // Mark transaction started for safe cleanup
+            await client.query(`SET LOCAL search_path TO ${user.tenant_schema}, public`);
             req.tenantContext.globalAccess = true;
             // Only dev users get to know about tenant IDs
             req.tenantContext.tenantId = user.tenant_id;
             req.tenantContext.tenantSchema = user.tenant_schema;
-            console.log(`🔧 Dev user ${user.email} - Global database access`);
+            console.log(`🔧 Dev user ${user.email} - Global database access (default schema: ${user.tenant_schema})`);
         } else if (user.tenant_id && user.tenant_schema) {
             // Admin/write-only/read-only: Restrict to their tenant schema
             // Start transaction with LOCAL search_path (transaction-scoped)
