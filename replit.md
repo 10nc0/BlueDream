@@ -103,6 +103,13 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
     - **Auth Flow**: Register → creates tenant schema + user + mapping → Login → queries mapping → tenant_X.users → JWT with tenant context
     - **Session Management**: Both JWT and cookie-based sessions maintain tenant context across all endpoints
     - **Production Tested**: Complete flow validated (register → login → auth status → refresh → logout) with architect approval
+- **Email Normalization Security** (October 31, 2025): Case-insensitive email uniqueness enforcement across all authentication flows:
+    - **Read-Check-Bounce Pattern**: Signup endpoint checks `core.user_email_to_tenant` with LOWER() BEFORE any database writes
+    - **Normalized Storage**: All email INSERTs use `email.toLowerCase().trim()` for consistent storage
+    - **Case-Insensitive Lookups**: Login and Sybil protection queries use LOWER() to match regardless of case
+    - **Complete Coverage**: Normalization applied to signup, login, invite flows, and Sybil tracking
+    - **Prevents Duplicates**: Blocks `phi_dao@pm.me`, `PHI_DAO@PM.ME`, `Phi_Dao@Pm.Me` from creating multiple tenants
+    - **Input Validation**: Login endpoint validates email/password presence before normalization to prevent errors
 - **Autoscale Deployment**: Configured for Replit Autoscale with pay-per-traffic billing (~$26-50/mo for light usage). Sleeps when idle to minimize costs while maintaining 24/7 availability during active periods.
 
 ## External Dependencies
