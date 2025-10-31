@@ -3683,13 +3683,29 @@ app.get('/api/messages/:id/media', requireAuth, async (req, res) => {
     }
 });
 
-// DISCORD-FIRST: Messages stored in Discord threads - fetch from Discord API
+// UNIFIED DISCORD MESSAGE FETCH: Schema switcheroo for 2 tabs, 2 databases
+// Bridges Tab (source=user) → output_0n webhook (user choice: channel OR thread)
+// Dev Panel (source=ledger) → output_01 webhook (always thread, dev-only, permanent)
 app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, res) => {
     try {
         const { id } = req.params; // fractal_id
         const client = req.dbClient || pool;
         const limit = parseInt(req.query.limit) || 50;
         const before = req.query.before; // Discord message ID for pagination
+        const source = req.query.source || 'user'; // Schema switcheroo: ledger|user
+        
+        // ROLE GATE: Only dev users can access Ledger (source=ledger)
+        if (source === 'ledger' && req.tenantContext?.userRole !== 'dev') {
+            console.warn(`⚠️  Non-dev user ${req.userId} attempted to access Ledger messages`);
+            return res.status(403).json({ 
+                error: 'Access denied: Ledger messages are only accessible to dev role users'
+            });
+        }
+        
+        // Validate source parameter
+        if (!['user', 'ledger'].includes(source)) {
+            return res.status(400).json({ error: 'Invalid source parameter. Use: user or ledger' });
+        }
         
         // Get bridge with thread info
         const bridgeResult = await client.query(
@@ -3709,17 +3725,22 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
             outputCredentials = JSON.parse(outputCredentials);
         }
         
-        // DUAL-OUTPUT: Bridges tab uses output_0n (user-facing) - supports both channels and threads
-        const output0n = outputCredentials?.output_0n;
+        // SCHEMA SWITCHEROO: Pick the right output based on source parameter
+        const outputKey = source === 'ledger' ? 'output_01' : 'output_0n';
+        const outputData = outputCredentials?.[outputKey];
+        const sourceName = source === 'ledger' ? 'Ledger' : 'User';
         
-        console.log(`  📍 Bridges tab fetching from output_0n: ${output0n ? `${output0n.type} (${output0n.type === 'thread' ? output0n.thread_id : output0n.channel_id})` : 'none'}`);
+        console.log(`  📍 ${sourceName} view fetching from ${outputKey}: ${outputData ? `${outputData.type} (${outputData.type === 'thread' ? outputData.thread_id : outputData.channel_id})` : 'none'}`);
         
-        if (!output0n) {
+        if (!outputData) {
+            const note = source === 'ledger' 
+                ? 'No Ledger output configured for this bridge yet'
+                : 'No user Discord output configured. Messages are only visible in Dev Panel.';
             return res.json({ 
                 messages: [], 
                 total: 0,
                 hasMore: false,
-                note: 'No user Discord output configured. Messages are only visible in Dev Panel.'
+                note
             });
         }
         
@@ -3735,7 +3756,7 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
         
         try {
             // Fetch channel or thread based on type
-            const destinationId = output0n.type === 'thread' ? output0n.thread_id : output0n.channel_id;
+            const destinationId = outputData.type === 'thread' ? outputData.thread_id : outputData.channel_id;
             const destination = await discordBotManager.client.channels.fetch(destinationId);
             
             if (!destination) {
@@ -3743,7 +3764,7 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
                     messages: [], 
                     total: 0,
                     hasMore: false,
-                    note: `Discord ${output0n.type} not found`
+                    note: `Discord ${outputData.type} not found`
                 });
             }
             
@@ -3795,132 +3816,7 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
     }
 });
 
-// DEV-ONLY: Get messages from thread_01 (Nyanbook Ledger)
-// Role-gated endpoint: Only dev users can access Ledger messages
-app.get('/api/dev/bridges/:id/messages', requireAuth, setTenantContext, async (req, res) => {
-    try {
-        const client = req.dbClient || pool;
-        const { id } = req.params; // fractal_id
-        const userRole = req.tenantContext?.userRole;
-        const limit = parseInt(req.query.limit) || 50;
-        const before = req.query.before; // Discord message ID for pagination
-        
-        // ROLE GATE: Only dev users can access Ledger
-        if (userRole !== 'dev') {
-            console.warn(`⚠️  Non-dev user ${req.userId} attempted to access Dev Panel messages`);
-            return res.status(403).json({ 
-                error: 'Access denied: Dev Panel is only accessible to dev role users'
-            });
-        }
-        
-        console.log(`🔧 Dev Panel: Fetching Ledger messages for bridge ${id} (user: ${req.userId})`);
-        
-        // Get bridge with thread info
-        const bridgeResult = await client.query(
-            'SELECT id, name, output_credentials FROM bridges WHERE fractal_id = $1',
-            [id]
-        );
-        
-        if (bridgeResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Bridge not found' });
-        }
-        
-        const bridge = bridgeResult.rows[0];
-        
-        // Parse JSON if needed
-        let outputCredentials = bridge.output_credentials;
-        if (typeof outputCredentials === 'string') {
-            outputCredentials = JSON.parse(outputCredentials);
-        }
-        
-        // DUAL-OUTPUT: Dev Panel uses output_01 (Ledger) - supports both channels and threads
-        const output01 = outputCredentials?.output_01;
-        
-        console.log(`  📍 Dev Panel fetching from output_01: ${output01 ? `${output01.type} (${output01.type === 'thread' ? output01.thread_id : output01.channel_id})` : 'none'}`);
-        
-        if (!output01) {
-            return res.json({ 
-                messages: [], 
-                total: 0,
-                hasMore: false,
-                note: 'No Ledger output configured for this bridge yet'
-            });
-        }
-        
-        // Fetch messages from Discord using bot
-        if (!discordBotManager.client || !discordBotManager.ready) {
-            return res.json({ 
-                messages: [], 
-                total: 0,
-                hasMore: false,
-                note: 'Discord bot not ready - messages temporarily unavailable'
-            });
-        }
-        
-        try {
-            // Fetch channel or thread based on type
-            const destinationId = output01.type === 'thread' ? output01.thread_id : output01.channel_id;
-            const destination = await discordBotManager.client.channels.fetch(destinationId);
-            
-            if (!destination) {
-                return res.json({ 
-                    messages: [], 
-                    total: 0,
-                    hasMore: false,
-                    note: `Ledger ${output01.type} not found`
-                });
-            }
-            
-            // Fetch messages from Discord (force: true bypasses cache for real-time updates)
-            const options = { limit, force: true };
-            if (before) options.before = before;
-            
-            const discordMessages = await destination.messages.fetch(options);
-            
-            // Transform Discord messages to UI format
-            const messages = Array.from(discordMessages.values()).map(msg => {
-                const attachment = msg.attachments.size > 0 ? msg.attachments.first() : null;
-                return {
-                    id: msg.id,
-                    sender_name: msg.author.username,
-                    sender_avatar: msg.author.displayAvatarURL(),
-                    message_content: msg.content || '',
-                    timestamp: msg.createdAt.toISOString(),
-                    has_media: msg.attachments.size > 0,
-                    media_url: attachment ? attachment.url : null,
-                    media_type: attachment ? attachment.contentType : null,
-                    embeds: msg.embeds.map(e => ({
-                        title: e.title,
-                        description: e.description,
-                        color: e.color,
-                        fields: e.fields
-                    }))
-                };
-            });
-            
-            console.log(`  ✅ Dev Panel: Retrieved ${messages.length} messages from Ledger`);
-            
-            res.json({ 
-                messages,
-                total: messages.length,
-                hasMore: discordMessages.size === limit,
-                oldestMessageId: messages.length > 0 ? messages[messages.length - 1].id : null,
-                source: 'thread_01_ledger'
-            });
-        } catch (discordError) {
-            console.error('❌ Dev Panel: Failed to fetch from Ledger:', discordError.message);
-            return res.json({ 
-                messages: [], 
-                total: 0,
-                hasMore: false,
-                error: 'Failed to fetch messages from Ledger: ' + discordError.message
-            });
-        }
-    } catch (error) {
-        console.error('❌ Error in /api/dev/bridges/:id/messages:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
+// DEPRECATED: Removed duplicate endpoint - use /api/bridges/:id/messages?source=ledger instead
 
 // ===========================
 // ONBOARDING API
