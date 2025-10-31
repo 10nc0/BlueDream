@@ -111,6 +111,11 @@ app.use(cors({
         // Allow requests with no origin (mobile apps, Postman, etc.)
         if (!origin) return callback(null, true);
         
+        // Allow localhost for development
+        if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+            return callback(null, true);
+        }
+        
         // Allow any Replit domain (for development and production)
         if (origin.includes('.replit.dev') || origin.includes('.repl.co')) {
             return callback(null, true);
@@ -121,8 +126,10 @@ app.use(cors({
             return callback(null, true);
         }
         
+        // Log blocked origin for debugging
+        console.error(`❌ CORS blocked origin: ${origin}`);
+        
         // SECURITY: Default deny if not in Replit domains or whitelist
-        // If ALLOWED_ORIGINS is empty, only Replit domains are allowed
         callback(new Error('Not allowed by CORS'));
     },
     credentials: true, // Required for cookie-based auth
