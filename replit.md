@@ -106,6 +106,18 @@ Comprehensive iPhone-first responsive redesign prioritizing message content visi
 - **Design Philosophy**: Preserved glassmorphism aesthetic, Apple-inspired spacing tokens, and Discord-style message layout
 - **Architect Verified**: Confirmed 60% enforcement, responsive scaling iPhone→iPad→MacBook, no regressions
 
+### UI Alignment & Full-Screen Lock (Nov 1, 2025)
+Comprehensive alignment fixes and full-screen optimization following user feedback:
+- **Header Branding**: Changed to two-line format: "Your Nyanbook~" + "X to Discord Note with Search Indexing" subtitle
+- **Header Alignment**: User info and logout button now use `margin-left: auto` to align all the way to the right edge
+- **Cat + Time Layout**: Changed from vertical stack to horizontal flexbox with `align-items: center` for proper vertical alignment
+- **Sidebar Spacing**: Reduced padding from `1rem` to `0.75rem` to remove excessive space above cat animation
+- **Bridge List Items**: Message count now conditionally renders only when > 0 (hides when 0 for cleaner UI)
+- **Full-Screen Lock**: Added `overflow: hidden` to html/body with `height: 100vh` to disable page scroll
+- **Zero Whitespace**: Added `margin: 0; padding: 0` to html/body to remove all blank space above header
+- **Scroll Isolation**: Only Discord embed messages scroll, all other content is locked in place
+- **Architect Verified**: All 8 alignment/spacing issues resolved, message count logic correct, full-screen lock functional
+
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)
 - **WhatsApp**: Baileys library
