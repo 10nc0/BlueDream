@@ -1408,10 +1408,18 @@ app.post('/api/auth/login', async (req, res) => {
     console.log(`[${getTimestamp()}] 🔐 Login attempt - Email: ${email}, IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
     
     try {
+        // Validate input before normalization
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+        
+        // Normalize email for case-insensitive lookup
+        const normalizedEmail = email.toLowerCase().trim();
+        
         // Lookup email → tenant mapping
         const mappingResult = await pool.query(
-            'SELECT tenant_id, tenant_schema, user_id FROM core.user_email_to_tenant WHERE email = $1',
-            [email]
+            'SELECT tenant_id, tenant_schema, user_id FROM core.user_email_to_tenant WHERE LOWER(email) = $1',
+            [normalizedEmail]
         );
         
         if (mappingResult.rows.length === 0) {
@@ -1422,8 +1430,8 @@ app.post('/api/auth/login', async (req, res) => {
         
         // Query user from tenant-scoped table
         const result = await pool.query(
-            `SELECT * FROM ${tenant_schema}.users WHERE id = $1 AND email = $2`,
-            [user_id, email]
+            `SELECT * FROM ${tenant_schema}.users WHERE id = $1 AND LOWER(email) = $2`,
+            [user_id, normalizedEmail]
         );
         
         if (result.rows.length === 0) {
@@ -1530,11 +1538,14 @@ app.post('/api/auth/signup', async (req, res) => {
             return res.status(400).json({ error: 'Password must be at least 6 characters' });
         }
         
+        // Normalize email to lowercase for case-insensitive uniqueness
+        const normalizedEmail = email.toLowerCase().trim();
+        
         // CRITICAL: Email uniqueness gatefencing - check BEFORE any writes
         // Read-Check-Bounce pattern to enforce one email = one tenant globally
         const emailCheck = await pool.query(
-            'SELECT tenant_id FROM core.user_email_to_tenant WHERE email = $1',
-            [email]
+            'SELECT tenant_id FROM core.user_email_to_tenant WHERE LOWER(email) = $1',
+            [normalizedEmail]
         );
         if (emailCheck.rows.length > 0) {
             console.log(`[${getTimestamp()}] 🚫 Signup blocked - Email already exists in tenant ${emailCheck.rows[0].tenant_id}`);
@@ -1560,7 +1571,7 @@ app.post('/api/auth/signup', async (req, res) => {
                 INSERT INTO users (email, password_hash, role, tenant_id, is_genesis_admin)
                 VALUES ($1, $2, $3, $4, false)
                 RETURNING id, email, role, tenant_id, is_genesis_admin
-            `, [email, passwordHash, invite.target_role, invite.tenant_id]);
+            `, [normalizedEmail, passwordHash, invite.target_role, invite.tenant_id]);
             
             newUser = result.rows[0];
             tenantId = invite.tenant_id;
@@ -1605,7 +1616,7 @@ app.post('/api/auth/signup', async (req, res) => {
                 INSERT INTO users (email, password_hash, role, is_genesis_admin)
                 VALUES ($1, $2, $3, $4)
                 RETURNING id, email, role, is_genesis_admin
-            `, [email, passwordHash, userRole, isGenesis]);
+            `, [normalizedEmail, passwordHash, userRole, isGenesis]);
             
             newUser = result.rows[0];
             

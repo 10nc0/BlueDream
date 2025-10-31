@@ -335,11 +335,14 @@ class TenantManager {
         const TENANT_LIMIT_PER_IP = 10;
         const COOLDOWN_HOURS = 24;
 
+        // Normalize email to lowercase for consistent checks
+        const normalizedEmail = email.toLowerCase().trim();
+
         const emailCheck = await this.pool.query(`
             SELECT tenant_count, blocked, block_reason, last_tenant_created_at
             FROM core.sybil_protection
             WHERE identifier_type = 'email' AND identifier_value = $1
-        `, [email]);
+        `, [normalizedEmail]);
 
         if (emailCheck.rows.length > 0) {
             const record = emailCheck.rows[0];
@@ -380,6 +383,9 @@ class TenantManager {
     }
 
     async recordTenantCreation(email, ipAddress) {
+        // Normalize email to lowercase for consistent tracking
+        const normalizedEmail = email.toLowerCase().trim();
+        
         await this.pool.query(`
             INSERT INTO core.sybil_protection (identifier_type, identifier_value, tenant_count, last_tenant_created_at)
             VALUES ('email', $1, 1, NOW())
@@ -387,7 +393,7 @@ class TenantManager {
             DO UPDATE SET 
                 tenant_count = core.sybil_protection.tenant_count + 1,
                 last_tenant_created_at = NOW()
-        `, [email]);
+        `, [normalizedEmail]);
 
         if (ipAddress) {
             await this.pool.query(`
