@@ -261,13 +261,13 @@ body {
   background: linear-gradient(135deg, var(--color-red-500) 0%, var(--color-red-600) 100%);
   color: white;
   border: none;
-  padding: 0.375rem 0.75rem;
+  padding: 0.375rem 0.625rem;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 600;
   transition: all var(--transition-base);
   white-space: nowrap;
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
 }
 
 .logout-btn:hover {
