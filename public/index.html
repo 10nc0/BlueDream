@@ -88,16 +88,9 @@
                     </div>
                     
                     <div class="bridge-form-group">
-                        <label>Your Discord Output (Optional)</label>
-                        <input type="url" id="bridge-output-input" placeholder="https://discord.com/api/webhooks/...">
-                        <div style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(0, 255, 136, 0.1); border-radius: 8px; border-left: 3px solid #00ff88;">
-                            <p style="color: #00ff88; font-size: 0.875rem; margin: 0; font-weight: 600;">
-                                🆓 Skip this - Start with Ledger Only!
-                            </p>
-                            <p style="color: #94a3b8; font-size: 0.75rem; margin: 0.5rem 0 0 0;">
-                                Leave blank to use Nyanbook Ledger (free, instant setup). View messages in Dev Panel → Ledger tab.
-                            </p>
-                        </div>
+                        <label>Your Discord Webhook URL</label>
+                        <input type="url" id="bridge-output-input" placeholder="https://discord.com/api/webhooks/..." required>
+                        <small style="color: #64748b; font-size: 0.75rem;">Required - this is where you'll receive your messages</small>
                     </div>
                     
                     <button type="submit" class="bridge-submit-btn">✨ Generate QR & Activate</button>

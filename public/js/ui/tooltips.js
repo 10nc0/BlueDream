@@ -74,18 +74,10 @@ function showTooltip(element, text) {
     // Position tooltip
     let top, left;
     
-    // Decide if tooltip should be above or below
-    if (spaceBelow < tooltipHeight + 20 && spaceAbove > spaceBelow) {
-        // Show above
-        tooltipElement.classList.add('arrow-bottom');
-        tooltipElement.classList.remove('arrow-top');
-        top = rect.top - tooltipHeight - 15; // 15px offset for arrow
-    } else {
-        // Show below
-        tooltipElement.classList.add('arrow-top');
-        tooltipElement.classList.remove('arrow-bottom');
-        top = rect.bottom + 10;
-    }
+    // Always show tooltip below (fixes table edge coverage issue)
+    tooltipElement.classList.add('arrow-top');
+    tooltipElement.classList.remove('arrow-bottom');
+    top = rect.bottom + 10;
     
     // Center horizontally on element
     left = rect.left + (rect.width / 2) - (tooltipWidth / 2);

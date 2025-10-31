@@ -69,7 +69,7 @@ input::placeholder {
 [data-tooltip]::before {
     content: attr(data-tooltip);
     position: absolute;
-    bottom: calc(100% + 8px);
+    top: calc(100% + 8px);
     left: 50%;
     transform: translateX(-50%);
     padding: 0.5rem 0.75rem;
@@ -92,11 +92,11 @@ input::placeholder {
 [data-tooltip]::after {
     content: '';
     position: absolute;
-    bottom: calc(100% + 2px);
+    top: calc(100% + 2px);
     left: 50%;
     transform: translateX(-50%);
     border: 6px solid transparent;
-    border-top-color: rgba(59, 130, 246, 0.3);
+    border-bottom-color: rgba(59, 130, 246, 0.3);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s;
@@ -106,7 +106,7 @@ input::placeholder {
 [data-tooltip]:hover::before,
 [data-tooltip]:hover::after {
     opacity: 1;
-    transform: translateX(-50%) translateY(-4px);
+    transform: translateX(-50%) translateY(4px);
 }
 
 /* Badge with icon indicators */
