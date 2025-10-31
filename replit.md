@@ -36,7 +36,7 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
   - `public` schema: Only `sessions` table for express-session global store
   - **CRITICAL**: NO `public.users` table - all user data lives exclusively in `tenant_X.users` (first principles: single source of truth)
 - **WhatsApp Integration**: Multi-instance `Baileys` with `BaileysClientManager` for independent, tenant-scoped persistent sessions.
-- **Discord Integration (Dual Output + Unified Fetch)**: Messages are sent to both a dev oversight webhook (Ledger) and the user's webhook. A Discord bot creates dedicated threads for each bridge on the Ledger webhook. The UI fetches messages from the Ledger thread for both display and development, offering a transparent user experience without requiring bot invites to user channels.
+- **Discord Integration (Dual Output + Unified Fetch)**: Messages are sent to both outputs: (1) **output_01 (Ledger)** - Thread created by bot for dev oversight + user message viewing, (2) **output_0n (User)** - Webhook-only output (write-only, no thread creation since bot lacks permissions in user's server). **All message fetching happens from output_01** (Ledger thread) since bot cannot read from user's Discord. output_0n exists purely for message forwarding to user's server.
 - **Media Handling**: Retry-safe atomic storage via `media_buffer` in PostgreSQL for base64-encoded media, ensuring zero media loss. Includes delivery tracking, smart retry backoff, and automatic 3-day purge. `BYTEA` type is used for binary-safe storage.
 - **Search**: Utilizes Discord's native search UI.
 

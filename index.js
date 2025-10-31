@@ -3723,20 +3723,20 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
             outputCredentials = JSON.parse(outputCredentials);
         }
         
-        // SCHEMA SWITCHEROO: ALWAYS fetch from output_01 (Ledger thread)
-        // Why? Bot has full access to Ledger, but NO access to user's webhook0n channels
-        // Messages go to BOTH outputs, so Ledger has complete history
+        // ALWAYS FETCH FROM LEDGER (output_01): Bot has read access to Ledger thread only
+        // output_0n is WEBHOOK-ONLY (write-only) - bot cannot read from user's Discord server
+        // Messages sent to BOTH outputs, but fetched from Ledger only
         const outputData = outputCredentials?.output_01;
-        const sourceName = source === 'ledger' ? 'Ledger' : 'User';
+        const sourceName = source === 'ledger' ? 'Ledger (Dev Panel)' : 'User View (via Ledger)';
         
-        console.log(`  📍 ${sourceName} view fetching from output_01 (Ledger): ${outputData ? `${outputData.type} (${outputData.thread_id})` : 'none'}`);
+        console.log(`  📍 ${sourceName} fetching from output_01 (Ledger thread): ${outputData ? `${outputData.type} (${outputData.thread_id})` : 'none'}`);
         
-        if (!outputData) {
+        if (!outputData || !outputData.thread_id) {
             return res.json({ 
                 messages: [], 
                 total: 0,
                 hasMore: false,
-                note: 'No Ledger thread configured for this bridge yet. Messages cannot be fetched.'
+                note: 'No Ledger thread configured for this bridge yet. Create the bridge thread first.'
             });
         }
         
@@ -3752,15 +3752,15 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
         
         try {
             // Fetch from Ledger thread (output_01 is always a thread)
-            const destinationId = outputData.thread_id;
-            const destination = await discordBotManager.client.channels.fetch(destinationId);
+            const threadId = outputData.thread_id;
+            const thread = await discordBotManager.client.channels.fetch(threadId);
             
-            if (!destination) {
+            if (!thread) {
                 return res.json({ 
                     messages: [], 
                     total: 0,
                     hasMore: false,
-                    note: `Discord ${outputData.type} not found`
+                    note: `Ledger thread not found (ID: ${threadId})`
                 });
             }
             
@@ -3768,7 +3768,7 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
             const options = { limit, force: true };
             if (before) options.before = before;
             
-            const discordMessages = await destination.messages.fetch(options);
+            const discordMessages = await thread.messages.fetch(options);
             
             console.log(`  🔍 Filtering messages: bridge created ${bridgeCreatedAt.toISOString()}, fetched ${discordMessages.size} messages`);
             

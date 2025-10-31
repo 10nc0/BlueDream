@@ -207,40 +207,16 @@ class DiscordBotManager {
             }
         }
 
-        // OUTPUT #0n: User Discord (USER CHOICE: channel or thread)
+        // OUTPUT #0n: User Discord (WEBHOOK-ONLY - no thread/channel creation)
+        // Bot cannot access user's Discord server, so we just store webhook metadata
         if (webhook0nUrl) {
-            try {
-                if (threadModeUser) {
-                    console.log(`  📍 Creating thread for output_0n (User chose THREAD)...`);
-                    const threadInfo = await this.createThreadForBridge(
-                        webhook0nUrl,
-                        bridgeName,
-                        tenantId,
-                        bridgeId
-                    );
-                    results.output_0n = {
-                        type: 'thread',
-                        thread_id: threadInfo.threadId,
-                        thread_name: threadInfo.threadName,
-                        channel_id: threadInfo.channelId
-                    };
-                    console.log(`  ✅ output_0n (THREAD): ${threadInfo.threadId}`);
-                } else {
-                    console.log(`  📍 Using channel for output_0n (User chose CHANNEL)...`);
-                    const channel = await this.getChannelFromWebhookUrl(webhook0nUrl);
-                    results.output_0n = {
-                        type: 'channel',
-                        channel_id: channel.id,
-                        channel_name: channel.name
-                    };
-                    console.log(`  ✅ output_0n (CHANNEL): ${channel.id} - ${channel.name}`);
-                }
-            } catch (error) {
-                console.error(`  ❌ Failed to create output_0n:`, error.message);
-                results.errors.push({ output: 'output_0n', error: error.message });
-            }
+            results.output_0n = {
+                type: 'webhook',
+                webhook_url: webhook0nUrl
+            };
+            console.log(`  ✅ output_0n (WEBHOOK-ONLY): stored metadata`);
         } else {
-            console.log(`  ⏭️  Skipping output_0n creation (no webhook0n provided)`);
+            console.log(`  ⏭️  Skipping output_0n (no webhook provided)`);
         }
 
         console.log(`🧵 Dual output creation complete: ${results.output_01 ? '✅' : '❌'} output_01, ${results.output_0n ? '✅' : '⏭️'} output_0n`);
