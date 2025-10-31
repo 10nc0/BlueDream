@@ -3119,14 +3119,18 @@
                 event.target.classList.add('active');
             }
             
-            // Update tab content - hide all first
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            // Update tab content - hide all first (use inline styles for compatibility)
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+                content.style.display = 'none';
+            });
             
             // Handle devPanel tab (special case with different ID)
             if (tabName === 'devPanel') {
                 const devPanel = document.getElementById('devPanelTab-content');
                 if (devPanel) {
                     devPanel.classList.add('active');
+                    devPanel.style.display = 'block';
                     loadDevPanelAdmins();
                 }
             } else {
@@ -3134,6 +3138,7 @@
                 const tabContent = document.getElementById(`${tabName}Tab`);
                 if (tabContent) {
                     tabContent.classList.add('active');
+                    tabContent.style.display = 'block';
                     
                     // Load data for the tab
                     if (tabName === 'bridges') {
