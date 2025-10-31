@@ -1187,6 +1187,30 @@
                         `}
                     </div>
                 </div>
+
+                ${currentUser?.role === 'dev' && bridge.output_credentials?.thread_id ? `
+                    <!-- Dev #01 Message Preview from Discord Thread -->
+                    <div style="margin-top: 1.5rem; padding: 1.5rem; background: rgba(30, 41, 59, 0.6); border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.2);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <h3 style="color: #fff; font-size: 1rem; margin: 0;">📨 Recent Messages</h3>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="text" id="msg-search-${bridge.fractal_id}" placeholder="🔍 Search messages..." 
+                                    style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem;" 
+                                    oninput="filterDiscordMessages('${bridge.fractal_id}')">
+                                <select id="status-filter-${bridge.fractal_id}" onchange="filterDiscordMessages('${bridge.fractal_id}')" 
+                                    style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem;">
+                                    <option value="all">All</option>
+                                    <option value="success">Success</option>
+                                    <option value="failed">Failed</option>
+                                    <option value="pending">Pending</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="discord-messages-${bridge.fractal_id}" class="discord-messages-container" style="max-height: 600px; overflow-y: auto;">
+                            <div class="no-messages">Loading messages...</div>
+                        </div>
+                    </div>
+                ` : ''}
             `;
         }
 
