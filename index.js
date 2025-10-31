@@ -61,12 +61,12 @@ const BAILEYS_DATA_PATH = process.env.BAILEYS_DATA_PATH || '/home/runner/workspa
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false },
-    max: 20,
+    max: 40, // Increased from 20 to handle concurrent requests from aggressive frontend polling
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000,
     statement_timeout: 30000,
     query_timeout: 30000,
-    idle_in_transaction_session_timeout: 30000
+    idle_in_transaction_session_timeout: 30000 // No longer needed since we removed transactions from middleware
 });
 
 const tenantManager = new TenantManager(pool);

@@ -26,9 +26,6 @@ async function setTenantContext(req, res, next) {
     // CRITICAL: Store client IMMEDIATELY to ensure cleanup always releases it
     req.dbClient = client;
     
-    // Track whether transaction was started (for safe cleanup)
-    let transactionStarted = false;
-    
     // Guard against double-cleanup (MUST be declared before any async work)
     let cleanupCalled = false;
     
@@ -44,21 +41,12 @@ async function setTenantContext(req, res, next) {
         if (!dbClient) return; // Already cleaned up
         
         try {
-            // Only COMMIT/ROLLBACK if transaction was started
-            if (transactionStarted) {
-                await dbClient.query('COMMIT');
-            }
+            // Reset search_path to default before releasing (prevents schema leaks)
+            await dbClient.query('RESET search_path');
         } catch (err) {
-            console.error('❌ Commit failed:', err.message);
-            if (transactionStarted) {
-                try {
-                    await dbClient.query('ROLLBACK');
-                } catch (rollbackErr) {
-                    console.error('❌ Rollback failed:', rollbackErr.message);
-                }
-            }
+            console.error('❌ Failed to reset search_path:', err.message);
         } finally {
-            // Always release, even if commit/rollback fails
+            // Always release, even if reset fails
             dbClient.release();
         }
     };
@@ -141,13 +129,11 @@ async function setTenantContext(req, res, next) {
             isGenesisAdmin: user.is_genesis_admin
         };
         
-        // Begin transaction and set search_path based on role hierarchy
+        // Set search_path based on role hierarchy (connection-scoped, no transaction)
         if (user.role === 'dev') {
             // Dev role: Global access - can query all schemas
             // BUT still need search_path set to their tenant schema for INSERT/UPDATE operations
-            await client.query('BEGIN');
-            transactionStarted = true; // Mark transaction started for safe cleanup
-            await client.query(`SET LOCAL search_path TO ${tenant_schema}, public`);
+            await client.query(`SET search_path TO ${tenant_schema}, public`);
             req.tenantContext.globalAccess = true;
             // Only dev users get to know about tenant IDs
             req.tenantContext.tenantId = tenant_id;
@@ -155,10 +141,7 @@ async function setTenantContext(req, res, next) {
             console.log(`🔧 Dev user ${user.email} - Global database access (default schema: ${tenant_schema})`);
         } else if (tenant_id && tenant_schema) {
             // Admin/write-only/read-only: Restrict to their tenant schema
-            // Start transaction with LOCAL search_path (transaction-scoped)
-            await client.query('BEGIN');
-            transactionStarted = true; // Mark transaction started for safe cleanup
-            await client.query(`SET LOCAL search_path TO ${tenant_schema}, public`);
+            await client.query(`SET search_path TO ${tenant_schema}, public`);
             req.tenantContext.globalAccess = false;
             // Store tenant_id for SERVER-SIDE use (fractal ID generation, routing)
             // sanitizeForRole() will strip it from API responses to prevent horizontal awareness
