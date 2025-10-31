@@ -2377,28 +2377,12 @@ app.get('/api/users', requireAuth, requireRole('admin', 'dev'), async (req, res)
         
         // SECURITY CHECK for Dev Panel cross-tenant access
         if (user.role === 'dev' && user.is_genesis_admin) {
-            // Genesis Admin can see all users across all tenants
-            const allUsers = [];
-            
-            // Get all tenant schemas
-            const tenantsResult = await pool.query(`
-                SELECT id, tenant_schema FROM core.tenant_catalog ORDER BY id ASC
-            `);
-            
-            for (const tenant of tenantsResult.rows) {
-                try {
-                    const usersResult = await pool.query(`
-                        SELECT id, email, role, tenant_id, is_genesis_admin, created_at 
-                        FROM ${tenant.tenant_schema}.users 
-                        ORDER BY created_at DESC
-                    `);
-                    allUsers.push(...usersResult.rows);
-                } catch (error) {
-                    console.warn(`⚠️  Could not fetch users from ${tenant.tenant_schema}:`, error.message);
-                }
-            }
-            
-            res.json(allUsers);
+            // Genesis Admin: Return users from their own tenant only (for now)
+            // Cross-tenant visibility requires additional security controls
+            const result = await pool.query(
+                `SELECT id, email, role, tenant_id, is_genesis_admin, created_at FROM ${tenantSchema}.users ORDER BY created_at DESC`
+            );
+            res.json(result.rows);
         } else if (user.role === 'admin') {
             // Admin users only see their own tenant
             const result = await pool.query(
@@ -2454,6 +2438,7 @@ app.put('/api/users/:id/role', requireAuth, requireRole('admin'), async (req, re
 // Delete user (admin only)
 app.delete('/api/users/:id', requireAuth, requireRole('admin'), async (req, res) => {
     const { id } = req.params;
+    const client = await pool.connect();
     
     try {
         // Use tenant schema from middleware
@@ -2469,23 +2454,39 @@ app.delete('/api/users/:id', requireAuth, requireRole('admin'), async (req, res)
         }
         
         // Get user info before deletion for audit log
-        const userData = await pool.query(`SELECT email, role FROM ${tenantSchema}.users WHERE id = $1`, [id]);
+        const userData = await client.query(`SELECT email, role FROM ${tenantSchema}.users WHERE id = $1`, [id]);
         if (userData.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
         
         const deletedUser = userData.rows[0];
         
-        const result = await pool.query(`DELETE FROM ${tenantSchema}.users WHERE id = $1 RETURNING id`, [id]);
+        // CRITICAL: Use dedicated client for atomic transaction
+        await client.query('BEGIN');
         
-        // Log user deletion
-        await logAudit(pool, req, 'DELETE_USER', 'USER', id, deletedUser.email, {
-            role: deletedUser.role
-        }, tenantSchema);
-        
-        res.json({ success: true });
+        try {
+            // Delete user from tenant schema
+            await client.query(`DELETE FROM ${tenantSchema}.users WHERE id = $1`, [id]);
+            
+            // Delete email mapping from core schema (prevents re-registration issues)
+            await client.query(`DELETE FROM core.user_email_to_tenant WHERE email = $1`, [deletedUser.email]);
+            
+            await client.query('COMMIT');
+            
+            // Log user deletion (outside transaction)
+            await logAudit(pool, req, 'DELETE_USER', 'USER', id, deletedUser.email, {
+                role: deletedUser.role
+            }, tenantSchema);
+            
+            res.json({ success: true });
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        }
     } catch (error) {
         res.status(500).json({ error: error.message });
+    } finally {
+        client.release();
     }
 });
 
