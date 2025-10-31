@@ -1587,15 +1587,24 @@ app.post('/api/auth/signup', async (req, res) => {
             const invite = validation.invite;
             const passwordHash = await bcrypt.hash(password, 10);
             
-            // Create user with invite's target role and tenant
+            // Create user in tenant-scoped users table (first principles!)
+            const schemaName = `tenant_${invite.tenant_id}`;
             const result = await pool.query(`
-                INSERT INTO users (email, password_hash, role, tenant_id, is_genesis_admin)
+                INSERT INTO ${schemaName}.users (email, password_hash, role, tenant_id, is_genesis_admin)
                 VALUES ($1, $2, $3, $4, false)
                 RETURNING id, email, role, tenant_id, is_genesis_admin
             `, [normalizedEmail, passwordHash, invite.target_role, invite.tenant_id]);
             
             newUser = result.rows[0];
+            tenantUserId = newUser.id;
             tenantId = invite.tenant_id;
+            
+            // Map email to tenant in core (for login routing)
+            await pool.query(`
+                INSERT INTO core.user_email_to_tenant (email, tenant_id, tenant_schema, user_id)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (email) DO NOTHING
+            `, [normalizedEmail, tenantId, schemaName, tenantUserId]);
             
             // Consume the invite token
             await tenantManager.consumeInviteToken(inviteToken);
@@ -1604,9 +1613,9 @@ app.post('/api/auth/signup', async (req, res) => {
         }
         // BRANCH: Fractalized multi-tenant signup (no invite needed)
         else {
-            // Check if this is the FIRST user ever (Genesis Admin #01)
-            const userCountResult = await pool.query('SELECT COUNT(*) as count FROM users');
-            const isFirstUser = userCountResult.rows[0].count === '0';
+            // Check if this is the FIRST tenant ever (Genesis Admin #01)
+            const tenantCountResult = await pool.query('SELECT COUNT(*) as count FROM core.tenant_catalog');
+            const isFirstUser = parseInt(tenantCountResult.rows[0].count) === 0;
             
             // Check Sybil attack prevention
             const sybilCheck = await tenantManager.checkSybilRisk(email, req.ip);
@@ -1633,27 +1642,27 @@ app.post('/api/auth/signup', async (req, res) => {
             const userRole = isFirstUser ? 'dev' : 'admin';
             const isGenesis = isFirstUser;
             
-            const result = await pool.query(`
-                INSERT INTO users (email, password_hash, role, is_genesis_admin)
-                VALUES ($1, $2, $3, $4)
-                RETURNING id, email, role, is_genesis_admin
-            `, [normalizedEmail, passwordHash, userRole, isGenesis]);
-            
-            newUser = result.rows[0];
-            
-            // Create new fractalized tenant schema for this user
-            const tenant = await tenantManager.createTenant(newUser.id);
+            // Create new fractalized tenant schema (pass placeholder ID since tenant creates the user)
+            const tenant = await tenantManager.createTenant(0);  // Placeholder, will be updated
             tenantId = tenant.tenantId;
             const schemaName = `tenant_${tenantId}`;
             
-            // Insert user into tenant-scoped users table
+            // Insert user ONLY into tenant-scoped users table (first principles!)
             const tenantUserResult = await pool.query(`
                 INSERT INTO ${schemaName}.users (email, password_hash, role, tenant_id, is_genesis_admin)
                 VALUES ($1, $2, $3, $4, $5)
-                RETURNING id
+                RETURNING id, email, role, tenant_id, is_genesis_admin
             `, [normalizedEmail, passwordHash, userRole, tenantId, isGenesis]);
             
-            tenantUserId = tenantUserResult.rows[0].id;
+            newUser = tenantUserResult.rows[0];
+            tenantUserId = newUser.id;
+            
+            // Map email to tenant in core (for login routing)
+            await pool.query(`
+                INSERT INTO core.user_email_to_tenant (email, tenant_id, tenant_schema, user_id)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (email) DO NOTHING
+            `, [normalizedEmail, tenantId, schemaName, tenantUserId]);
             
             // Record tenant creation for Sybil tracking
             await tenantManager.recordTenantCreation(email, req.ip);
@@ -1731,7 +1740,7 @@ app.post('/api/auth/signup', async (req, res) => {
 // Create invite token (admin only)
 app.post('/api/invites', requireAuth, async (req, res) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'dev') {
+        if (req.userRole !== 'admin' && req.userRole !== 'dev') {
             return res.status(403).json({ error: 'Only admins can create invites' });
         }
         
@@ -1742,25 +1751,25 @@ app.post('/api/invites', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Invalid target role' });
         }
         
-        const tenantContext = await tenantManager.getTenantContext(req.user.id);
-        if (!tenantContext || !tenantContext.tenant_id) {
+        // Use tenant context from requireAuth middleware (already set!)
+        if (!req.tenantId) {
             return res.status(400).json({ error: 'User not associated with a tenant' });
         }
         
         const token = await tenantManager.generateInviteToken(
-            tenantContext.tenant_id,
-            req.user.id,
+            req.tenantId,
+            req.userId,
             targetRole,
             expiresInDays,
             maxUses
         );
         
-        logAudit(pool, req, 'CREATE_INVITE', 'INVITE', token, req.user.email, {
-            tenant_id: tenantContext.tenant_id,
+        logAudit(pool, req, 'CREATE_INVITE', 'INVITE', token, req.userEmail, {
+            tenant_id: req.tenantId,
             target_role: targetRole,
             expires_in_days: expiresInDays,
             max_uses: maxUses
-        });
+        }, req.tenantSchema);
         
         // Generate full invite URL
         const baseUrl = `https://${req.get('host')}`;
@@ -1807,12 +1816,12 @@ app.get('/api/invites/validate/:token', async (req, res) => {
 // List invites for current tenant (admin only)
 app.get('/api/invites', requireAuth, async (req, res) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'dev') {
+        if (req.userRole !== 'admin' && req.userRole !== 'dev') {
             return res.status(403).json({ error: 'Only admins can list invites' });
         }
         
-        const tenantContext = await tenantManager.getTenantContext(req.user.id);
-        if (!tenantContext || !tenantContext.tenant_id) {
+        // Use tenant context from requireAuth middleware (already set!)
+        if (!req.tenantId) {
             return res.status(400).json({ error: 'User not associated with a tenant' });
         }
         
@@ -1822,7 +1831,7 @@ app.get('/api/invites', requireAuth, async (req, res) => {
             FROM core.invites
             WHERE tenant_id = $1
             ORDER BY created_at DESC
-        `, [tenantContext.tenant_id]);
+        `, [req.tenantId]);
         
         res.json({ invites: result.rows });
     } catch (error) {
@@ -1834,22 +1843,21 @@ app.get('/api/invites', requireAuth, async (req, res) => {
 // Revoke invite (admin only)
 app.delete('/api/invites/:id', requireAuth, async (req, res) => {
     try {
-        if (req.user.role !== 'admin' && req.user.role !== 'dev') {
+        if (req.userRole !== 'admin' && req.userRole !== 'dev') {
             return res.status(403).json({ error: 'Only admins can revoke invites' });
         }
         
         const { id } = req.params;
-        const tenantContext = await tenantManager.getTenantContext(req.user.id);
         
         await pool.query(`
             UPDATE core.invites
             SET status = 'revoked'
             WHERE id = $1 AND tenant_id = $2
-        `, [id, tenantContext.tenant_id]);
+        `, [id, req.tenantId]);
         
-        logAudit(pool, req, 'REVOKE_INVITE', 'INVITE', id, req.user.email, {
-            tenant_id: tenantContext.tenant_id
-        });
+        logAudit(pool, req, 'REVOKE_INVITE', 'INVITE', id, req.userEmail, {
+            tenant_id: req.tenantId
+        }, req.tenantSchema);
         
         res.json({ success: true });
     } catch (error) {
@@ -1860,14 +1868,20 @@ app.delete('/api/invites/:id', requireAuth, async (req, res) => {
 
 // Phone OTP auth removed - use email-based auth (/api/auth/register/public, /api/auth/login) for multi-tenant architecture
 
-// Register new user (admin only)
+// Register new user (admin only) - DEPRECATED: Use /api/admin/users/invite instead
 app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
     const { email, phone, password, role } = req.body;
     
     try {
+        // Use tenant schema from requireAuth middleware
+        const tenantSchema = req.tenantSchema;
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
+        }
+        
         // SECURITY: Role hierarchy validation - prevent privilege escalation
-        // Get the creator's role
-        const creatorResult = await pool.query('SELECT role FROM users WHERE id = $1', [req.userId]);
+        // Get the creator's role from tenant-scoped users table
+        const creatorResult = await pool.query(`SELECT role FROM ${tenantSchema}.users WHERE id = $1`, [req.userId]);
         const creatorRole = creatorResult.rows[0]?.role;
         
         // Role creation rules:
@@ -1889,11 +1903,12 @@ app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
         
         const passwordHash = password ? await bcrypt.hash(password, 10) : null;
         
+        // Insert into tenant-scoped users table
         const result = await pool.query(`
-            INSERT INTO users (email, phone, password_hash, role)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO ${tenantSchema}.users (email, phone, password_hash, role, tenant_id)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id, email, phone, role
-        `, [email || null, phone || null, passwordHash, role || 'read-only']);
+        `, [email || null, phone || null, passwordHash, role || 'read-only', req.tenantId]);
         
         const newUser = result.rows[0];
         
@@ -1902,7 +1917,7 @@ app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
             role: newUser.role,
             created_with: email ? 'email' : 'phone',
             created_by_role: creatorRole
-        });
+        }, tenantSchema);
         
         res.json({ success: true, user: newUser });
     } catch (error) {
@@ -3610,18 +3625,11 @@ app.get('/api/bridges/:id/status', requireAuth, setTenantContext, async (req, re
 // Get archived bridges (with message history)
 app.get('/api/bridges/archived', requireAuth, async (req, res) => {
     try {
-        // Get tenant schema from authenticated user
-        const userResult = await pool.query(
-            'SELECT id, email, tenant_id FROM users WHERE id = $1',
-            [req.userId]
-        );
-        
-        if (!userResult.rows.length) {
-            return res.status(404).json({ error: 'User not found' });
+        // Use tenant schema from requireAuth middleware (already set!)
+        const tenantSchema = req.tenantSchema;
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
         }
-        
-        const tenantId = userResult.rows[0].tenant_id;
-        const tenantSchema = `tenant_${tenantId}`;
         
         // TENANT-AWARE: Query from tenant schema
         const result = await pool.query(`
@@ -3648,18 +3656,11 @@ app.get('/api/bridges/:id/stats', requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
         
-        // Get tenant schema from authenticated user
-        const userResult = await pool.query(
-            'SELECT id, email, tenant_id FROM users WHERE id = $1',
-            [req.userId]
-        );
-        
-        if (!userResult.rows.length) {
-            return res.status(404).json({ error: 'User not found' });
+        // Use tenant schema from requireAuth middleware (already set!)
+        const tenantSchema = req.tenantSchema;
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
         }
-        
-        const tenantId = userResult.rows[0].tenant_id;
-        const tenantSchema = `tenant_${tenantId}`;
         
         // TENANT-AWARE: Query from tenant schema
         const result = await pool.query(`
@@ -3907,18 +3908,11 @@ app.get('/api/messages/search', requireAuth, async (req, res) => {
     }
     
     try {
-        // Get tenant schema from authenticated user
-        const userResult = await pool.query(
-            'SELECT id, email, tenant_id FROM users WHERE id = $1',
-            [req.userId]
-        );
-        
-        if (!userResult.rows.length) {
-            return res.status(404).json({ error: 'User not found' });
+        // Use tenant schema from requireAuth middleware (already set!)
+        const tenantSchema = req.tenantSchema;
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
         }
-        
-        const tenantId = userResult.rows[0].tenant_id;
-        const tenantSchema = `tenant_${tenantId}`;
         
         // TENANT-AWARE: Query from tenant schema
         let query = `SELECT * FROM ${tenantSchema}.messages WHERE bridge_id = $1`;
@@ -4001,21 +3995,13 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
     const { days = 30, bridge_id } = req.query;
     
     try {
-        // Get tenant schema from authenticated user
-        const userResult = await pool.query(
-            'SELECT id, email, tenant_id FROM users WHERE id = $1',
-            [req.userId]
-        );
-        
-        if (!userResult.rows.length) {
-            return res.status(404).json({ error: 'User not found' });
+        // Use tenant schema from requireAuth middleware (already set!)
+        const tenantSchema = req.tenantSchema;
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
         }
         
-        const user = userResult.rows[0];
-        const tenantId = user.tenant_id;
-        const tenantSchema = `tenant_${tenantId}`;
-        
-        console.log(`📊 Analytics request from ${user.email} (tenant: ${tenantSchema}, bridge: ${bridge_id || 'all'})`);
+        console.log(`📊 Analytics request from ${req.userEmail} (tenant: ${tenantSchema}, bridge: ${bridge_id || 'all'})`);
         
         // Build WHERE clause for bridge filter
         const bridgeFilter = bridge_id ? `AND bridge_id = ${parseInt(bridge_id)}` : '';
