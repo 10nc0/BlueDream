@@ -276,6 +276,37 @@
                     ` : ''}
                 </div>
 
+                ${isDev ? `
+                    <div class="card" id="ledgerSettings">
+                        <h2>⚙️ Nyanbook Ledger Settings</h2>
+                        <p style="color: #94a3b8; margin-bottom: 1.5rem;">
+                            Configure system-wide webhook and bot settings. These values are stored securely and apply to all tenants.
+                        </p>
+                        
+                        <div class="input-group">
+                            <label for="webhookUrl">🔗 Nyanbook Ledger Webhook URL (Output #01)</label>
+                            <input type="url" id="webhookUrl" placeholder="https://discord.com/api/webhooks/..." />
+                            <p style="color: #64748b; font-size: 0.75rem; margin-top: 0.5rem;">
+                                Centralized Discord webhook for all tenant messages
+                            </p>
+                        </div>
+                        
+                        <div class="input-group">
+                            <label for="botToken">🤖 Discord Bot Token</label>
+                            <input type="text" id="botToken" placeholder="Enter bot token..." />
+                            <p style="color: #64748b; font-size: 0.75rem; margin-top: 0.5rem;">
+                                Used for thread creation and management
+                            </p>
+                        </div>
+                        
+                        <button onclick="saveLedgerSettings()" style="margin-top: 1rem;">
+                            💾 Save Settings
+                        </button>
+                        
+                        <div id="settingsStatus" class="status"></div>
+                    </div>
+                ` : ''}
+
                 <div id="bridgesList" class="card">
                     <h2>🌉 Bridges</h2>
                     <div style="text-align: center; padding: 2rem; color: #94a3b8;">
@@ -284,12 +315,99 @@
                 </div>
             `;
             
+            if (isDev) {
+                await loadLedgerSettings();
+            }
             await loadBridges();
         }
         
         async function switchView(mode) {
             viewMode = mode;
             await renderAdminPanel(currentUser);
+        }
+        
+        async function loadLedgerSettings() {
+            try {
+                const response = await fetch('/api/admin/ledger-settings', {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                
+                if (!response.ok) throw new Error('Failed to load settings');
+                
+                const settings = await response.json();
+                
+                // Populate form with current values (masked for security)
+                if (settings.webhookUrl) {
+                    document.getElementById('webhookUrl').value = settings.webhookUrl;
+                }
+                if (settings.botToken) {
+                    document.getElementById('botToken').value = settings.botToken;
+                }
+            } catch (error) {
+                console.error('Error loading ledger settings:', error);
+                document.getElementById('settingsStatus').innerHTML = `
+                    <p style="color: #ef4444;">⚠️ Failed to load current settings</p>
+                `;
+            }
+        }
+        
+        async function saveLedgerSettings() {
+            const webhookUrl = document.getElementById('webhookUrl').value.trim();
+            const botToken = document.getElementById('botToken').value.trim();
+            const statusDiv = document.getElementById('settingsStatus');
+            
+            if (!webhookUrl && !botToken) {
+                statusDiv.innerHTML = `
+                    <p style="color: #f59e0b;">⚠️ Please enter at least one value to update</p>
+                `;
+                return;
+            }
+            
+            statusDiv.innerHTML = `
+                <p style="color: #00ff88;">⏳ Saving settings...</p>
+            `;
+            
+            try {
+                const response = await fetch('/api/admin/ledger-settings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`
+                    },
+                    body: JSON.stringify({
+                        webhookUrl: webhookUrl || undefined,
+                        botToken: botToken || undefined
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to save settings');
+                }
+                
+                const result = await response.json();
+                
+                statusDiv.innerHTML = `
+                    <p style="color: #00ff88;">✅ ${result.message}</p>
+                    <p style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.5rem;">
+                        ${result.requiresRestart ? '⚠️ Server restart required for changes to take effect' : 'Changes applied successfully'}
+                    </p>
+                `;
+                
+                // Clear sensitive inputs after save
+                document.getElementById('webhookUrl').value = '';
+                document.getElementById('botToken').value = '';
+                
+                setTimeout(() => {
+                    statusDiv.innerHTML = '';
+                }, 5000);
+                
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                statusDiv.innerHTML = `
+                    <p style="color: #ef4444;">❌ ${error.message}</p>
+                `;
+            }
         }
         
         async function loadBridges() {
