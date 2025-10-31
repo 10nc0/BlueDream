@@ -29,8 +29,12 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 ### Technical Implementations
 - **Backend**: Node.js with Express.
 - **Frontend**: SPA with client-side authentication.
-- **Authentication**: Email/password authentication using JWT tokens in `localStorage` with role-based access control. Multi-tenant user architecture with isolated `tenant_X.users` and `core.user_email_to_tenant` for email-to-tenant mapping.
-- **Database (Source of Truth)**: PostgreSQL (Neon-backed) with fractalized multi-tenancy. Uses a `public` schema for core authentication and isolated `tenant_X` schemas for per-tenant bridge metadata. PostgreSQL stores bridge configuration, routing data, and tenant isolation, but NOT message content.
+- **Authentication**: Email/password authentication using JWT tokens in `localStorage` with role-based access control. **Pure tenant_X architecture**: Users stored ONLY in `tenant_X.users` (no global user table). Email-to-tenant routing via `core.user_email_to_tenant` mapping table. First signup becomes Genesis Admin (dev role, tenant_1, god view).
+- **Database (Source of Truth)**: PostgreSQL (Neon-backed) with **pure fractalized multi-tenancy**. Database schema architecture:
+  - `core` schema: Tenant registry (`tenant_catalog`), email routing (`user_email_to_tenant`), invites, security tables (sybil protection, rate limits)
+  - `tenant_X` schemas: Per-tenant isolation with `users`, `bridges`, `active_sessions`, `audit_logs`, `refresh_tokens`, `media_buffer`
+  - `public` schema: Only `sessions` table for express-session global store
+  - **CRITICAL**: NO `public.users` table - all user data lives exclusively in `tenant_X.users` (first principles: single source of truth)
 - **WhatsApp Integration**: Multi-instance `Baileys` with `BaileysClientManager` for independent, tenant-scoped persistent sessions.
 - **Discord Integration (Dual Output + Unified Fetch)**: Messages are sent to both a dev oversight webhook (Ledger) and the user's webhook. A Discord bot creates dedicated threads for each bridge on the Ledger webhook. The UI fetches messages from the Ledger thread for both display and development, offering a transparent user experience without requiring bot invites to user channels.
 - **Media Handling**: Retry-safe atomic storage via `media_buffer` in PostgreSQL for base64-encoded media, ensuring zero media loss. Includes delivery tracking, smart retry backoff, and automatic 3-day purge. `BYTEA` type is used for binary-safe storage.
@@ -48,7 +52,7 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **Quick-Start Wizard**: Guides initial user setup.
 
 ### System Design Choices
-- **Multi-Tenant Isolation**: Fractalized database architecture prevents cross-tenant data access.
+- **Multi-Tenant Isolation**: Pure fractalized database architecture prevents cross-tenant data access. Each tenant has complete schema isolation with their own `users`, `bridges`, `sessions`, and `audit_logs` tables. Zero data leakage between tenants.
 - **Session Persistence**: WhatsApp sessions survive server restarts.
 - **24/7 Bridge Uptime**: Auto-restore ensures connected bridges reconnect.
 - **Safari/iPad Compatibility**: Achieved via JWT in `localStorage`.
@@ -61,6 +65,18 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **Production Hardening**: Includes database connection pool timeouts, strict JWT security, staggered resource initialization, security headers (CORS, Helmet), environment-aware cookies, and robust audit logging.
 - **Chromium Removal**: Eliminated Playwright/Chromium dependencies for optimized production deployment, reducing size and improving cold start times.
 - **Secret Management**: Relies on Replit Secrets for secure environment variable management; admin panel secret updates were removed to prevent misleading UX.
+
+## Recent Architecture Changes (Oct 31, 2025)
+### Pure Tenant_X Migration
+Completed full migration to pure tenant_X architecture with NO global `public.users` table:
+- **Before**: Dual storage with `public.users` + `tenant_X.users` (data inconsistency risk)
+- **After**: Single source of truth - users stored ONLY in `tenant_X.users`
+- **Signup Flow**: Creates user in `tenant_X.users` → maps email in `core.user_email_to_tenant`
+- **Login Flow**: Queries `core.user_email_to_tenant` → retrieves user from `tenant_X.users`
+- **Genesis Admin**: First tenant signup gets `role='dev'`, `is_genesis_admin=true`, `tenant_1`
+- **Database Cleanup**: Dropped `public.users`, `public.active_sessions`, `public.audit_logs` tables
+- **InitializeDatabase Fix**: Removed public schema table creation (except `sessions`)
+- **Architect Verified**: Post-restart confirmation that tables stay in tenant schemas only
 
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)
