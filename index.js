@@ -3037,7 +3037,7 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
             
             // Find bridge by fractal_id
             const bridgeResult = await client.query(
-                'SELECT id, fractal_id, output_credentials FROM bridges WHERE fractal_id = $1',
+                'SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM bridges WHERE fractal_id = $1',
                 [fractalIdParam]
             );
             
@@ -3049,6 +3049,11 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
             
             const bridge = bridgeResult.rows[0];
             const internalId = bridge.id;
+            
+            // Parse JSON if needed (PostgreSQL returns JSON as string sometimes)
+            if (bridge && typeof bridge.output_credentials === 'string') {
+                bridge.output_credentials = JSON.parse(bridge.output_credentials);
+            }
             
             // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
             const senderName = username || phone || email || 'External';
