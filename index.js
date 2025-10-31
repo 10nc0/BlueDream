@@ -2343,27 +2343,31 @@ app.get('/api/dev/bridges', requireAuth, requireRole('dev'), async (req, res) =>
         
         console.log('🔧 Dev Panel: Triple security check passed. Fetching all bridges across all tenants...');
         
-        // Get all tenant schemas
+        // MULTI-TENANT FIX: Find all tenants via core.user_email_to_tenant, then check each tenant schema
         const tenantsResult = await pool.query(`
-            SELECT 
-                u.id as user_id,
-                u.email,
-                u.tenant_id,
-                COUNT(DISTINCT CASE WHEN u2.tenant_id = u.tenant_id THEN u2.id END) as user_count
-            FROM users u
-            LEFT JOIN users u2 ON u2.tenant_id = u.tenant_id
-            WHERE u.is_genesis_admin = true
-            GROUP BY u.id, u.email, u.tenant_id
-            ORDER BY u.tenant_id ASC
+            SELECT DISTINCT 
+                tenant_id,
+                tenant_schema
+            FROM core.user_email_to_tenant
+            ORDER BY tenant_id ASC
         `);
         
         const allBridges = [];
         
         // Query each tenant's bridges
         for (const tenant of tenantsResult.rows) {
-            const tenantSchema = `tenant_${tenant.tenant_id}`;
+            const tenantSchema = tenant.tenant_schema;
             
             try {
+                // Get tenant owner email (genesis admin)
+                const ownerResult = await pool.query(`
+                    SELECT email FROM ${tenantSchema}.users 
+                    WHERE is_genesis_admin = true 
+                    LIMIT 1
+                `);
+                
+                const ownerEmail = ownerResult.rows.length > 0 ? ownerResult.rows[0].email : 'unknown';
+                
                 // DISCORD-FIRST: No message counts - Discord threads are sole storage
                 const bridgesResult = await pool.query(`
                     SELECT 
@@ -2373,7 +2377,7 @@ app.get('/api/dev/bridges', requireAuth, requireRole('dev'), async (req, res) =>
                         $3::text as tenant_owner_email
                     FROM ${tenantSchema}.bridges b
                     ORDER BY b.archived ASC, b.created_at DESC
-                `, [tenant.tenant_id, tenantSchema, tenant.email]);
+                `, [tenant.tenant_id, tenantSchema, ownerEmail]);
                 
                 allBridges.push(...bridgesResult.rows);
             } catch (error) {
