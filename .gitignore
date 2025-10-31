@@ -9,6 +9,7 @@ node_modules/
 # WhatsApp session data (Contains WhatsApp credentials)
 .wwebjs_auth/
 .wwebjs_cache/
+.baileys_auth_persistent/
 
 # Logs
 npm-debug.log*

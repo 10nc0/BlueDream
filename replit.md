@@ -18,6 +18,13 @@
 - **UX**: Auto-expanding single bridges, responsive sidebar collapse
 
 ## System Architecture
+### Global Constants (Isolated UI Islands)
+The system uses two immutable global constants protected from dynamic UI changes:
+1. **NYANBOOK_LEDGER_WEBHOOK_URL** (`NYANBOOK_WEBHOOK_URL` env var): Dev-only Discord webhook (webhook01) for ledger oversight
+2. **CAT_CONFIG** (`public/js/ui/cat-animation.js`): Pixel cat animation settings (canvas size: 125x125, scale: 3.5, colors, interaction behavior)
+
+These constants are isolated in dedicated configuration islands to prevent future UI refactoring from breaking core functionality.
+
 ### UI/UX Decisions
 The dashboard is a Single Page Application (SPA) with an Apple glassmorphism design, featuring a Discord-style two-pane layout. It includes real-time updates, circular avatars, status badges, responsive design for mobile, and custom tooltips for accessibility.
 

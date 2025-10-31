@@ -1,0 +1,174 @@
+// ========================================
+// GLOBAL CONSTANT #2: CAT ANIMATION CONFIG
+// ========================================
+// Second global constant (after webhook01 Nyanbook Ledger URL)
+// Isolated UI island - protected from dynamic UI changes
+
+const CAT_CONFIG = Object.freeze({
+    // Canvas dimensions (fixed, immutable)
+    CANVAS_WIDTH: 125,
+    CANVAS_HEIGHT: 125,
+    CANVAS_ID: 'hopCanvas',
+    
+    // Animation settings
+    SCALE: 3.5,
+    ANIMATION_SPEED: 60,
+    JUMP_FRAME_INTERVAL: 15,
+    JUMP_HEIGHT: 3,
+    
+    // Interaction settings
+    FLEE_DISTANCE: 200,
+    FLEE_STRENGTH: 15,
+    
+    // Colors
+    COLORS: {
+        BODY: '#1a1a1a',
+        EYES: '#22c55e',
+        NOSE: '#ec4899',
+        WHISKERS: '#ffffff',
+        TIME_ACTIVE: '#1a1a1a',
+        TIME_IDLE: '#ffffff'
+    }
+});
+
+// Initialize cat animation (auth-gated)
+function initHopAnimation() {
+    const canvas = document.getElementById(CAT_CONFIG.CANVAS_ID);
+    if (!canvas) {
+        console.warn('⚠️ Cat canvas not found!');
+        return;
+    }
+    console.log('🐱 Initializing cat animation...');
+    
+    const ctx = canvas.getContext('2d');
+    let frame = 0;
+    let mouseX = -1000;
+    let mouseY = -1000;
+    let catX = CAT_CONFIG.CANVAS_WIDTH / 2;
+    let catY = CAT_CONFIG.CANVAS_HEIGHT / 2;
+    
+    // Track mouse/touch position globally
+    document.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+    });
+    
+    // Touch support for mobile devices (iPhone/iPad)
+    document.addEventListener('touchmove', (e) => {
+        if (e.touches.length > 0) {
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+        }
+    });
+    
+    document.addEventListener('touchstart', (e) => {
+        if (e.touches.length > 0) {
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+        }
+    });
+    
+    function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, fleeing = false) {
+        ctx.clearRect(0, 0, CAT_CONFIG.CANVAS_WIDTH, CAT_CONFIG.CANVAS_HEIGHT);
+        
+        const scale = CAT_CONFIG.SCALE;
+        const isJump = Math.floor(frameNum / CAT_CONFIG.JUMP_FRAME_INTERVAL) % 2 === 0;
+        const yOffset = isJump ? -CAT_CONFIG.JUMP_HEIGHT * scale : 0;
+        
+        // Flip cat if fleeing (running away)
+        if (fleeing) {
+            ctx.save();
+            ctx.translate(CAT_CONFIG.CANVAS_WIDTH, 0);
+            ctx.scale(-1, 1);
+        }
+        
+        // Black cat body
+        ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
+        
+        // Body (main)
+        ctx.fillRect(14 * scale + offsetX, 22 * scale + yOffset + offsetY, 12 * scale, 8 * scale);
+        
+        // Head
+        ctx.fillRect(15 * scale + offsetX, 15 * scale + yOffset + offsetY, 10 * scale, 7 * scale);
+        
+        // Ears (pointy cat ears)
+        ctx.fillRect(15 * scale + offsetX, 12 * scale + yOffset + offsetY, 3 * scale, 3 * scale);
+        ctx.fillRect(22 * scale + offsetX, 12 * scale + yOffset + offsetY, 3 * scale, 3 * scale);
+        
+        // Tail (curved up)
+        ctx.fillRect(25 * scale + offsetX, 23 * scale + yOffset + offsetY, 2 * scale, 4 * scale);
+        ctx.fillRect(26 * scale + offsetX, 20 * scale + yOffset + offsetY, 2 * scale, 3 * scale);
+        
+        // Eyes (green glow)
+        ctx.fillStyle = CAT_CONFIG.COLORS.EYES;
+        ctx.fillRect(17 * scale + offsetX, 17 * scale + yOffset + offsetY, 2 * scale, 2 * scale);
+        ctx.fillRect(21 * scale + offsetX, 17 * scale + yOffset + offsetY, 2 * scale, 2 * scale);
+        
+        // Nose (pink)
+        ctx.fillStyle = CAT_CONFIG.COLORS.NOSE;
+        ctx.fillRect(19 * scale + offsetX, 20 * scale + yOffset + offsetY, 2 * scale, 1 * scale);
+        
+        // Whiskers (white)
+        ctx.fillStyle = CAT_CONFIG.COLORS.WHISKERS;
+        if (!isJump) {
+            // Left whiskers
+            ctx.fillRect(12 * scale + offsetX, 19 * scale + offsetY, 2 * scale, 1 * scale);
+            ctx.fillRect(12 * scale + offsetX, 21 * scale + offsetY, 2 * scale, 1 * scale);
+            // Right whiskers
+            ctx.fillRect(26 * scale + offsetX, 19 * scale + offsetY, 2 * scale, 1 * scale);
+            ctx.fillRect(26 * scale + offsetX, 21 * scale + offsetY, 2 * scale, 1 * scale);
+        }
+        
+        // Feet/paws
+        ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
+        if (!isJump) {
+            ctx.fillRect(15 * scale + offsetX, 30 * scale + offsetY, 3 * scale, 2 * scale);
+            ctx.fillRect(22 * scale + offsetX, 30 * scale + offsetY, 3 * scale, 2 * scale);
+        }
+        
+        if (fleeing) {
+            ctx.restore();
+        }
+    }
+    
+    function animate() {
+        // Get canvas position relative to viewport
+        const rect = canvas.getBoundingClientRect();
+        const canvasCenterX = rect.left + rect.width / 2;
+        const canvasCenterY = rect.top + rect.height / 2;
+        
+        // Calculate distance from mouse to canvas center
+        const dx = mouseX - canvasCenterX;
+        const dy = mouseY - canvasCenterY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Cat behavior: flee if cursor is close (within FLEE_DISTANCE), otherwise neutral
+        let offsetX = 0;
+        let offsetY = 0;
+        let fleeing = false;
+        
+        if (distance < CAT_CONFIG.FLEE_DISTANCE) {
+            // Flee away from cursor
+            fleeing = true;
+            const fleeStrength = CAT_CONFIG.FLEE_STRENGTH * (1 - distance / CAT_CONFIG.FLEE_DISTANCE);
+            offsetX = -(dx / distance) * fleeStrength;
+            offsetY = -(dy / distance) * fleeStrength;
+        }
+        
+        // Alternate time color with cat animation (black vs white)
+        const timeEl = document.getElementById('currentTime');
+        if (timeEl) {
+            const isJump = Math.floor(frame / CAT_CONFIG.JUMP_FRAME_INTERVAL) % 2 === 0;
+            timeEl.style.color = isJump ? CAT_CONFIG.COLORS.TIME_ACTIVE : CAT_CONFIG.COLORS.TIME_IDLE;
+        }
+        
+        drawPixelCat(frame, offsetX, offsetY, fleeing);
+        frame++;
+        requestAnimationFrame(animate);
+    }
+    
+    animate();
+}
+
+// Note: initHopAnimation is called from index.html after authentication check
+// This ensures the cat animation only runs for authenticated users
