@@ -52,6 +52,15 @@
   --breakpoint-lg: 1024px;
   --breakpoint-xl: 1400px;
   
+  /* Responsive Sidebar Widths (iPhone X → iPad → Mac)
+   * Mobile (≤767px): 100% width (column layout, stacks vertically)
+   * Tablet (768-1023px): 240px sidebar (~31% of 768px iPad width, row layout)
+   * Desktop (≥1024px): 280px sidebar (~19% of 1440px MacBook width, row layout)
+   * Message area: flex: 1 fills remaining space automatically in row layout
+   * Breakpoints aligned with .bridge-layout flex-direction: row at 768px
+   */
+  --sidebar-width: 240px; /* Default for tablet/desktop */
+  
   /* Border Radius */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
@@ -461,21 +470,32 @@ body {
   flex-shrink: 0;
 }
 
-@media (min-width: 768px) {
+/* Mobile (iPhone X): Full width on small screens (column layout) */
+@media (max-width: 767px) {
   .bridge-sidebar {
-    width: 160px;
+    width: 100%;
   }
 }
 
+/* Tablet (iPad): 768-1023px viewport - Fixed sidebar width (row layout starts here) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root {
+    --sidebar-width: 240px;
+  }
+  
+  .bridge-sidebar {
+    width: var(--sidebar-width);
+  }
+}
+
+/* Desktop (Mac): ≥1024px viewport - Fixed sidebar width (row layout) */
 @media (min-width: 1024px) {
-  .bridge-sidebar {
-    width: 180px;
+  :root {
+    --sidebar-width: 280px;
   }
-}
-
-@media (min-width: 1400px) {
+  
   .bridge-sidebar {
-    width: 200px;
+    width: var(--sidebar-width);
   }
 }
 
@@ -545,8 +565,7 @@ body {
 
 .bridge-detail {
   flex: 1 1 auto;
-  flex-basis: 65%;
-  min-width: 60%;
+  min-width: 0;
   background: var(--color-surface);
   backdrop-filter: blur(10px);
   border: 1px solid var(--color-border);
