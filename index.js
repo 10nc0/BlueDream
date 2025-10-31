@@ -21,6 +21,15 @@ const fractalId = require('./utils/fractal-id');
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
 const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBERS.split(',').map(n => n.trim()) : [];
 
+// GLOBAL CONSTANTS: Nyanbook Ledger (Output #01) - centralized monitoring for all tenants
+// SECURITY: Loaded from environment variable (never hardcode webhooks in source code)
+const NYANBOOK_LEDGER_WEBHOOK = process.env.NYANBOOK_WEBHOOK_URL;
+
+if (!NYANBOOK_LEDGER_WEBHOOK) {
+    console.error('❌ CRITICAL: NYANBOOK_WEBHOOK_URL environment variable not set!');
+    console.error('   Bridge creation will fail without Output #01 webhook configured.');
+}
+
 // PERSISTENT STORAGE: Baileys uses JSON files for auth (no browser needed)
 const BAILEYS_DATA_PATH = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
 
@@ -408,9 +417,9 @@ async function sendToLedger(payload, options = {}, bridge = null) {
     // WEBHOOK-FIRST: Use webhook URL directly from bridge object
     let ledgerUrl = bridge?.output_01_url;
     
-    // Fallback to environment variable if bridge doesn't have URL configured
+    // Fallback to global constant if bridge doesn't have URL configured
     if (!ledgerUrl || !ledgerUrl.trim()) {
-        ledgerUrl = process.env.NYANBOOK_WEBHOOK_URL;
+        ledgerUrl = NYANBOOK_LEDGER_WEBHOOK;
     }
     
     if (!ledgerUrl) {
@@ -2743,7 +2752,7 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
         
         // WEBHOOK-CENTRIC: Dual-output architecture
         // Output #01: Nyanbook Ledger (eternal, automatic, masked from Admin #0n)
-        const output01Url = process.env.NYANBOOK_WEBHOOK_URL || null;
+        const output01Url = NYANBOOK_LEDGER_WEBHOOK;
         
         // Output #0n: User's Discord (mutable, optional, visible to owner)
         const output0nUrl = userOutputUrl || null;
@@ -2909,9 +2918,9 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
         const tenantSchema = req.tenantContext.tenantSchema;
         
         // SECURITY: Verify bridge belongs to user's tenant using fractal_id
-        // CRITICAL: Get webhook URLs BEFORE archiving so we can delete them
+        // CRITICAL: Get webhook URLs and thread info BEFORE archiving so we can clean them up
         const bridgeResult = await client.query(
-            `SELECT id, fractal_id, output_01_url, output_0n_url FROM bridges WHERE fractal_id = $1`,
+            `SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM bridges WHERE fractal_id = $1`,
             [id]
         );
         
@@ -2942,6 +2951,21 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
         // NOTE: output_01_url (Nyanbook Ledger) is ETERNAL and shared - never delete it
         if (bridge.output_01_url) {
             console.log(`ℹ️  Preserving output_01_url (Nyanbook Ledger) - eternal webhook, not bridge-specific`);
+        }
+        
+        // DELETE DISCORD THREAD: Archive the dedicated thread in Nyanbook Ledger
+        if (bridge.output_credentials?.thread_id && discordBotManager && discordBotManager.isReady()) {
+            try {
+                const threadId = bridge.output_credentials.thread_id;
+                const thread = await discordBotManager.client.channels.fetch(threadId);
+                
+                if (thread) {
+                    await thread.setArchived(true);
+                    console.log(`🧵 Discord thread ${threadId} archived for deleted bridge ${id}`);
+                }
+            } catch (threadError) {
+                console.warn(`⚠️  Could not archive Discord thread for bridge ${id}:`, threadError.message);
+            }
         }
         
         // Stop WhatsApp client if active (but keep session files for potential restoration)
