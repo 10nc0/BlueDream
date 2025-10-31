@@ -85,6 +85,9 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
     - Schema-qualified queries (`${tenantSchema}.media_buffer`) prevent "relation does not exist" errors
     - 3-day purge job runs daily to prevent bloat while ensuring retry window
     - Migration automatically adds media_buffer to existing tenant schemas on startup
+- **Binary-Safe Media Storage**: media_buffer.media_data column uses BYTEA type (not TEXT) to handle Excel, ZIP, PDFs, and all binary files containing null bytes. Automatic migration converts existing TEXT columns to BYTEA on startup.
+- **FRACTAL_SALT Security Enforcement**: Server refuses to start without FRACTAL_SALT environment variable configured, ensuring secure bridge ID generation. Provides clear setup instructions and pre-generated salt value on first run.
+- **Autoscale Deployment**: Configured for Replit Autoscale with pay-per-traffic billing (~$26-50/mo for light usage). Sleeps when idle to minimize costs while maintaining 24/7 availability during active periods.
 
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)

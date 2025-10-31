@@ -20,6 +20,28 @@ const BaileysClientManager = require('./baileys-client-manager');
 const DiscordBotManager = require('./discord-bot-manager');
 const fractalId = require('./utils/fractal-id');
 
+// SECURITY: Enforce FRACTAL_SALT configuration before server starts
+if (!process.env.FRACTAL_SALT) {
+    const crypto = require('crypto');
+    const autoSalt = crypto.randomBytes(32).toString('hex');
+    console.error('❌ CRITICAL: FRACTAL_SALT environment variable not set!');
+    console.error('');
+    console.error('🔐 FRACTAL_SALT is required for secure bridge ID generation.');
+    console.error('');
+    console.error('📋 SETUP INSTRUCTIONS:');
+    console.error('   1. Go to Replit Secrets tab');
+    console.error('   2. Add a new secret: FRACTAL_SALT');
+    console.error('   3. Generate a secure value: https://www.random.org/strings/?num=1&len=64&digits=on&upperalpha=on&loweralpha=on&unique=on&format=plain');
+    console.error('   4. Paste the generated string as the value');
+    console.error('   5. Restart the server');
+    console.error('');
+    console.error('⚠️  For your convenience, here\'s a pre-generated salt (use this if you prefer):');
+    console.error(`   ${autoSalt}`);
+    console.error('');
+    console.error('🛑 Server will not start until FRACTAL_SALT is configured.');
+    process.exit(1);
+}
+
 const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.split(',').map(g => g.trim()) : [];
 const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBERS.split(',').map(n => n.trim()) : [];
 
