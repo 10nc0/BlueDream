@@ -915,6 +915,7 @@
                         <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" onclick="selectBridge('${bridge.fractal_id}')">
                             <span class="channel-name">${bridge.name || `${bridge.input_platform} → ${bridge.output_platform}`}</span>
                             <div class="channel-badges">
+                                ${bridge._matchType === 'message' ? `<span class="badge" style="background: rgba(34, 197, 94, 0.2); border-color: rgba(34, 197, 94, 0.3); color: #22c55e;" title="Match found in messages">💬</span>` : ''}
                                 ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
                             </div>
                         </button>
@@ -952,6 +953,7 @@
                         <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" onclick="selectBridge('${bridge.fractal_id}')">
                             <span class="channel-name">${bridge.input_platform} → ${bridge.output_platform}</span>
                             <div class="channel-badges">
+                                ${bridge._matchType === 'message' ? `<span class="badge" style="background: rgba(34, 197, 94, 0.2); border-color: rgba(34, 197, 94, 0.3); color: #22c55e;" title="Match found in messages">💬</span>` : ''}
                                 ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
                             </div>
                         </button>
@@ -1674,6 +1676,23 @@
             }, 300); // 300ms debounce
         }
 
+        // UNIVERSAL SEARCH: Extract searchable text from bridge's cached messages
+        function getMessageSearchText(bridgeId) {
+            const messages = messageCache[bridgeId];
+            if (!messages || !Array.isArray(messages)) return '';
+            
+            // Extract all searchable content from messages (matching Discord message search)
+            return messages.map(msg => {
+                const parts = [
+                    msg.sender_name || '',
+                    msg.message_content || '',
+                    msg.sender_contact || '',
+                    extractEmbedSearchText(msg.embeds)
+                ];
+                return parts.join(' ');
+            }).join(' ').toLowerCase();
+        }
+
         function filterBots() {
             const searchTerm = document.getElementById('searchBox').value;
             const platformFilter = document.getElementById('platformFilter').value;
@@ -1698,10 +1717,12 @@
             filteredBridges = bridges.filter(bridge => {
                 // Search match using universal search function
                 let matchesSearch = true;
+                let matchType = null; // Track where match came from
+                
                 if (searchTerm && !naturalDateRange) {
                     // Only filter by text if NOT a pure date search
                     // COMPREHENSIVE: Search ALL bridge fields (matching Discord message search strength)
-                    const searchableText = [
+                    const bridgeMetadata = [
                         bridge.bridge_name || bridge.name || '',        // ✅ Bridge title
                         bridge.input_platform || '',                    // ✅ Input platform
                         bridge.output_platform || '',                   // ✅ Output platform
@@ -1710,7 +1731,25 @@
                         bridge.created_at ? new Date(bridge.created_at).toLocaleString() : '', // ✅ Creation date
                         ...(bridge.tags || [])                          // ✅ Tags
                     ].join(' ').toLowerCase();
-                    matchesSearch = window.searchState.performSearch(searchTerm, searchableText);
+                    
+                    // UNIVERSAL SEARCH: Check bridge metadata first
+                    const matchesMetadata = window.searchState.performSearch(searchTerm, bridgeMetadata);
+                    
+                    // UNIVERSAL SEARCH: Check cached messages if metadata doesn't match
+                    let matchesMessages = false;
+                    if (!matchesMetadata && messageCache[bridge.fractal_id]) {
+                        const messageText = getMessageSearchText(bridge.fractal_id);
+                        matchesMessages = window.searchState.performSearch(searchTerm, messageText);
+                    }
+                    
+                    matchesSearch = matchesMetadata || matchesMessages;
+                    
+                    // Store match type for visual indicator
+                    if (matchesMessages) {
+                        bridge._matchType = 'message';
+                    } else if (matchesMetadata) {
+                        bridge._matchType = 'metadata';
+                    }
                 }
                 
                 const matchesPlatform = !platformFilter || bridge.input_platform === platformFilter;
