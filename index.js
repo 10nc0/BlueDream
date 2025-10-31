@@ -3707,9 +3707,9 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
             return res.status(400).json({ error: 'Invalid source parameter. Use: user or ledger' });
         }
         
-        // Get bridge with thread info
+        // Get bridge with thread info and creation timestamp
         const bridgeResult = await client.query(
-            'SELECT id, name, output_credentials FROM bridges WHERE fractal_id = $1',
+            'SELECT id, name, output_credentials, created_at FROM bridges WHERE fractal_id = $1',
             [id]
         );
         
@@ -3718,6 +3718,7 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
         }
         
         const bridge = bridgeResult.rows[0];
+        const bridgeCreatedAt = new Date(bridge.created_at);
         
         // Parse JSON if needed
         let outputCredentials = bridge.output_credentials;
@@ -3774,26 +3775,37 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
             
             const discordMessages = await destination.messages.fetch(options);
             
-            // Transform Discord messages to UI format
-            const messages = Array.from(discordMessages.values()).map(msg => {
-                const attachment = msg.attachments.size > 0 ? msg.attachments.first() : null;
-                return {
-                    id: msg.id,
-                    sender_name: msg.author.username,
-                    sender_avatar: msg.author.displayAvatarURL(),
-                    message_content: msg.content || '',
-                    timestamp: msg.createdAt.toISOString(),
-                    has_media: msg.attachments.size > 0,
-                    media_url: attachment ? attachment.url : null,
-                    media_type: attachment ? attachment.contentType : null,
-                    embeds: msg.embeds.map(e => ({
-                        title: e.title,
-                        description: e.description,
-                        color: e.color,
-                        fields: e.fields
-                    }))
-                };
-            });
+            console.log(`  🔍 Filtering messages: bridge created ${bridgeCreatedAt.toISOString()}, fetched ${discordMessages.size} messages`);
+            
+            // Transform Discord messages to UI format and filter by bridge creation time
+            const messages = Array.from(discordMessages.values())
+                .filter(msg => {
+                    // Only show messages created AFTER the bridge was created
+                    const isAfterCreation = msg.createdAt >= bridgeCreatedAt;
+                    if (!isAfterCreation) {
+                        console.log(`  ⏭️  Skipping legacy message from ${msg.createdAt.toISOString()} (before bridge creation)`);
+                    }
+                    return isAfterCreation;
+                })
+                .map(msg => {
+                    const attachment = msg.attachments.size > 0 ? msg.attachments.first() : null;
+                    return {
+                        id: msg.id,
+                        sender_name: msg.author.username,
+                        sender_avatar: msg.author.displayAvatarURL(),
+                        message_content: msg.content || '',
+                        timestamp: msg.createdAt.toISOString(),
+                        has_media: msg.attachments.size > 0,
+                        media_url: attachment ? attachment.url : null,
+                        media_type: attachment ? attachment.contentType : null,
+                        embeds: msg.embeds.map(e => ({
+                            title: e.title,
+                            description: e.description,
+                            color: e.color,
+                            fields: e.fields
+                        }))
+                    };
+                });
             
             res.json({ 
                 messages,
