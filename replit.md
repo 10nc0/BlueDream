@@ -73,6 +73,13 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 
 ### Production Hardening (October 2025)
 - **Database Connection Pool**: Configured with timeout protections (connectionTimeoutMillis, idleTimeoutMillis, statement_timeout, query_timeout, idle_in_transaction_session_timeout) to prevent idle-in-transaction crashes.
+- **Legacy Code Cleanup** (October 31, 2025): Removed all deprecated authentication and test endpoints to eliminate security risks and schema isolation bugs:
+    - **Removed Test/UAT Endpoints**: Eliminated `/uat`, test mode logic in `/` and `/index.html` routes that injected fake credentials
+    - **Removed Phone OTP Auth**: Deleted `/api/auth/otp/request`, `/api/auth/otp/verify`, `/api/auth/forgot-password/*` endpoints (no Twilio configured)
+    - **Fixed User Management**: All endpoints (`/api/users`, `/api/users/:id/role`, `/api/users/:id`, `/api/users/:id/email`, `/api/users/:id/password`) now use tenant-scoped queries
+    - **Atomic User Deletion**: DELETE `/api/users/:id` uses dedicated PostgreSQL client with BEGIN/COMMIT transaction to delete from both `tenant_X.users` AND `core.user_email_to_tenant` atomically, preventing orphaned email mappings and re-registration failures
+    - **QR Code Fix**: `/api/bridges/:id/qr` endpoint now queries `${tenantSchema}.users` instead of `public.users`, fixing schema isolation bug
+    - **Genesis Admin Simplification**: `/api/users` endpoint returns same-tenant users only (cross-tenant visibility deferred to Dev Panel)
 - **JWT Security**: Invalid JWT tokens return 401 immediately without falling back to session auth, preventing auth bypass attacks.
 - **Manager Initialization**: WhatsApp and Discord managers initialized inside app.listen callback to eliminate race conditions.
 - **Resource Throttling**: Auto-restore sessions staggered by 500ms to prevent resource explosion from opening 100+ WebSockets simultaneously.
