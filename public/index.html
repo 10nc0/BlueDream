@@ -2116,6 +2116,37 @@
                     return;
                 }
                 
+                // CRITICAL FIX: Poll for client readiness after relink
+                // Relink destroys and recreates the client, need to wait for initialization
+                console.log('⏳ Waiting for Baileys client to initialize after relink...');
+                
+                let attempts = 0;
+                const maxAttempts = 15; // 15 attempts * 500ms = 7.5 seconds max
+                
+                while (attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    attempts++;
+                    
+                    const statusCheck = await authFetch(`/api/bridges/${bridgeId}/qr`);
+                    if (statusCheck.ok) {
+                        const data = await statusCheck.json();
+                        
+                        // Client is ready if it has a QR or is already connected
+                        if (data.qr || data.status === 'qr_ready' || data.status === 'connected' || data.status === 'active') {
+                            console.log(`✅ Baileys client ready after ${attempts * 500}ms`);
+                            break;
+                        }
+                    }
+                    
+                    // Continue polling...
+                    console.log(`⏳ Client not ready yet (attempt ${attempts}/${maxAttempts})...`);
+                }
+                
+                if (attempts >= maxAttempts) {
+                    alert('⏱️ Timeout: WhatsApp client took too long to initialize. Please try again.');
+                    return;
+                }
+                
                 // Show unified QR modal
                 showQRAndWaitForConnection(bridgeId, bridgeName);
             } catch (error) {
