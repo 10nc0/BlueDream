@@ -428,8 +428,8 @@ async function sendToLedger(payload, options = {}, bridge = null) {
     }
 
     try {
-        // Debug logging
-        console.log(`  🔍 Ledger URL: ${ledgerUrl?.substring(0, 50)}...`);
+        // Debug logging (mask webhook URL for security)
+        console.log(`  🔍 Ledger URL: ${ledgerUrl ? '[MASKED_LEDGER_WEBHOOK]' : 'none'}`);
         console.log(`  🔍 Thread ID: ${options.threadId || 'none'}`);
         console.log(`  🔍 Thread Name: ${options.threadName || 'none'}`);
         
@@ -2834,10 +2834,10 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
             }
         }
         
-        // Return sanitized bridge data
+        // Return sanitized bridge data (output_01_url is automatically stripped for non-dev users)
         const sanitized = sanitizeForRole(bridge, userRole);
         
-        console.log(`✅ Created bridge ${generatedFractalId} (Output #01: ${output01Url ? 'Ledger' : 'None'}, Output #0n: ${output0nUrl ? 'User' : 'None'})`);
+        console.log(`✅ Created bridge ${generatedFractalId} (Output #01: ${output01Url ? '[LEDGER]' : 'None'}, Output #0n: ${output0nUrl ? '[USER_WEBHOOK]' : 'None'})`);
         res.json(sanitized);
     } catch (error) {
         console.error('❌ Error in POST /api/bridges:', error);

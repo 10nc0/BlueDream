@@ -188,7 +188,7 @@ async function getAllTenantSchemas(client, userRole) {
 
 /**
  * Sanitize data before sending to non-dev users
- * Recursively removes tenant_id, tenant_schema, and raw id from nested objects
+ * Recursively removes tenant_id, tenant_schema, raw id, and Nyanbook Ledger webhook from nested objects
  * Forces non-dev users to use opaque fractalized IDs only (IDOR protection)
  */
 function sanitizeForRole(data, userRole) {
@@ -202,8 +202,11 @@ function sanitizeForRole(data, userRole) {
             return obj.map(strip);
         }
         if (obj && typeof obj === 'object') {
-            // Strip: tenant_id, tenant_schema (horizontal awareness), id (IDOR protection)
-            const { tenant_id, tenant_schema, id, ...rest } = obj;
+            // Strip sensitive fields:
+            // - tenant_id, tenant_schema (horizontal awareness)
+            // - id (IDOR protection)
+            // - output_01_url (Nyanbook Ledger webhook - cross-tenant security)
+            const { tenant_id, tenant_schema, id, output_01_url, ...rest } = obj;
             // Recursively sanitize nested objects
             return Object.fromEntries(
                 Object.entries(rest).map(([key, value]) => [key, strip(value)])
