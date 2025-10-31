@@ -86,7 +86,16 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
     - 3-day purge job runs daily to prevent bloat while ensuring retry window
     - Migration automatically adds media_buffer to existing tenant schemas on startup
 - **Binary-Safe Media Storage**: media_buffer.media_data column uses BYTEA type (not TEXT) to handle Excel, ZIP, PDFs, and all binary files containing null bytes. Automatic migration converts existing TEXT columns to BYTEA on startup.
-- **FRACTAL_SALT Security Enforcement**: Server refuses to start without FRACTAL_SALT environment variable configured, ensuring secure bridge ID generation. Provides clear setup instructions and pre-generated salt value on first run.
+- **FRACTAL_SALT Security Enforcement**: Server refuses to start without FRACTAL_SALT environment variable configured, ensuring secure bridge ID generation. Provides clear setup instructions and pre-generated salt value on startup.
+- **Multi-Tenant User Architecture** (October 2025): Complete tenant-scoped authentication refactor for true horizontal isolation:
+    - **User Storage**: Users stored in `tenant_X.users` (NOT `public.users`) ensuring zero cross-tenant data exposure
+    - **Email → Tenant Mapping**: `core.user_email_to_tenant` lookup table enables fast login queries without schema enumeration
+    - **Tenant-Scoped Refresh Tokens**: `tenant_X.refresh_tokens` tables with schema-qualified auth-service queries
+    - **Middleware Isolation**: `requireAuth` and `setTenantContext` query tenant-specific tables via email mapping
+    - **JWT Tenant Context**: All tokens include tenantId, adminId, and isGenesisAdmin for complete context propagation
+    - **Auth Flow**: Register → creates tenant schema + user + mapping → Login → queries mapping → tenant_X.users → JWT with tenant context
+    - **Session Management**: Both JWT and cookie-based sessions maintain tenant context across all endpoints
+    - **Production Tested**: Complete flow validated (register → login → auth status → refresh → logout) with architect approval
 - **Autoscale Deployment**: Configured for Replit Autoscale with pay-per-traffic billing (~$26-50/mo for light usage). Sleeps when idle to minimize costs while maintaining 24/7 availability during active periods.
 
 ## External Dependencies
