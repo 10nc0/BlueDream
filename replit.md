@@ -84,7 +84,7 @@ Fixed critical bugs preventing genesis admin achievement:
 - **Ghost Tenant Fix**: Auto-restore now queries `core.tenant_catalog` instead of `information_schema` (prevents errors from orphaned schemas)
 - **UI Detection**: Dashboard now properly detects `isGenesisAdmin` flag and displays 🌟 badge + Dev Panel access
 - **CORS Whitelist**: Added `.replit.app` domain support for published site
-- **Cache-Busting**: Added `Cache-Control: no-cache` headers to login/signup pages to prevent browser caching issues
+- **Cache-Busting**: Added `Cache-Control: no-store, no-cache, must-revalidate, private` + `Pragma: no-cache` + `Expires: 0` headers to ALL auth endpoints (`/api/auth/check-genesis`, `/api/auth/status`, `/api/auth/login`, `/api/auth/register/public`) to prevent browser/CDN caching of authentication state
 
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)
