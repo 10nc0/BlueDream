@@ -187,44 +187,7 @@ app.get('/dev', (req, res) => {
     res.sendFile(__dirname + '/public/dev.html');
 });
 
-// UAT/Test route: LOCALHOST ONLY for testing and screenshots
-app.get('/uat', async (req, res) => {
-    // SECURITY: Check socket address (cannot be spoofed) instead of X-Forwarded-For
-    const socketIP = req.socket.remoteAddress;
-    const isLocalhost = socketIP === '127.0.0.1' || 
-                       socketIP === '::1' || 
-                       socketIP === '::ffff:127.0.0.1' ||
-                       (socketIP && socketIP.startsWith('127.'));
-    
-    if (!isLocalhost) {
-        console.warn(`[${getTimestamp()}] ⚠️  UAT access denied - Socket IP: ${socketIP}`);
-        return res.status(403).send('UAT mode is only available from localhost');
-    }
-    
-    try {
-        const userResult = await pool.query('SELECT id, email, role FROM users WHERE email = $1', ['admin@bridge.local']);
-        const user = userResult.rows.length > 0 ? userResult.rows[0] : { id: 1, email: 'admin@bridge.local', role: 'admin' };
-        
-        const accessToken = authService.signAccessToken(user.id, user.email, user.role);
-        const { token: refreshToken } = authService.signRefreshToken(user.id, user.email, user.role);
-        
-        console.log(`[${getTimestamp()}] 🧪 UAT mode accessed - Socket IP: ${socketIP}`);
-        
-        const html = fs.readFileSync(__dirname + '/public/index.html', 'utf8');
-        const injectedHtml = html.replace(
-            '</head>',
-            `<script>
-                // UAT mode: inject real auth tokens for testing (LOCALHOST ONLY)
-                localStorage.setItem('accessToken', '${accessToken}');
-                localStorage.setItem('refreshToken', '${refreshToken}');
-            </script></head>`
-        );
-        res.send(injectedHtml);
-    } catch (error) {
-        console.error('UAT mode error:', error);
-        res.status(500).send('UAT mode initialization failed');
-    }
-});
+// UAT/Test route removed - use real signup flow for multi-tenant architecture
 
 // Health check endpoint with Baileys WhatsApp client status monitoring
 app.get('/health', (req, res) => {
@@ -263,91 +226,17 @@ app.get('/health', (req, res) => {
 });
 
 // Serve main dashboard - client-side JWT auth will handle access control
-app.get('/', async (req, res) => {
+app.get('/', (req, res) => {
     // Health check support: return 200 for HEAD requests (used by deployment health checks)
     if (req.method === 'HEAD') {
         return res.status(200).end();
     }
     
-    // Test/UAT mode: LOCALHOST ONLY to prevent unauthorized admin access
-    if (req.query.test === '1' || req.query.uat === '1') {
-        // SECURITY: Check socket address (cannot be spoofed) instead of X-Forwarded-For
-        const socketIP = req.socket.remoteAddress;
-        const isLocalhost = socketIP === '127.0.0.1' || 
-                           socketIP === '::1' || 
-                           socketIP === '::ffff:127.0.0.1' ||
-                           (socketIP && socketIP.startsWith('127.'));
-        
-        if (!isLocalhost) {
-            console.warn(`[${getTimestamp()}] ⚠️  Test mode denied - Socket IP: ${socketIP}`);
-            return res.sendFile(__dirname + '/public/index.html');
-        }
-        
-        try {
-            const userResult = await pool.query('SELECT id, email, role FROM users WHERE email = $1', ['admin@bridge.local']);
-            const user = userResult.rows.length > 0 ? userResult.rows[0] : { id: 1, email: 'admin@bridge.local', role: 'admin' };
-            
-            const accessToken = authService.signAccessToken(user.id, user.email, user.role);
-            const { token: refreshToken } = authService.signRefreshToken(user.id, user.email, user.role);
-            
-            console.log(`[${getTimestamp()}] 🧪 Test mode accessed - Socket IP: ${socketIP}`);
-            
-            const html = fs.readFileSync(__dirname + '/public/index.html', 'utf8');
-            const injectedHtml = html.replace(
-                '</head>',
-                `<script>
-                    // Test/UAT mode: inject real auth tokens (LOCALHOST ONLY)
-                    localStorage.setItem('accessToken', '${accessToken}');
-                    localStorage.setItem('refreshToken', '${refreshToken}');
-                </script></head>`
-            );
-            return res.send(injectedHtml);
-        } catch (error) {
-            console.error('Test mode error:', error);
-        }
-    }
     res.sendFile(__dirname + '/public/index.html');
 });
 
 // Serve index.html - client-side JWT auth will handle access control
-app.get('/index.html', async (req, res) => {
-    // Test/UAT mode: LOCALHOST ONLY to prevent unauthorized admin access
-    if (req.query.test === '1' || req.query.uat === '1') {
-        // SECURITY: Check socket address (cannot be spoofed) instead of X-Forwarded-For
-        const socketIP = req.socket.remoteAddress;
-        const isLocalhost = socketIP === '127.0.0.1' || 
-                           socketIP === '::1' || 
-                           socketIP === '::ffff:127.0.0.1' ||
-                           (socketIP && socketIP.startsWith('127.'));
-        
-        if (!isLocalhost) {
-            console.warn(`[${getTimestamp()}] ⚠️  Test mode denied - Socket IP: ${socketIP}`);
-            return res.sendFile(__dirname + '/public/index.html');
-        }
-        
-        try {
-            const userResult = await pool.query('SELECT id, email, role FROM users WHERE email = $1', ['admin@bridge.local']);
-            const user = userResult.rows.length > 0 ? userResult.rows[0] : { id: 1, email: 'admin@bridge.local', role: 'admin' };
-            
-            const accessToken = authService.signAccessToken(user.id, user.email, user.role);
-            const { token: refreshToken } = authService.signRefreshToken(user.id, user.email, user.role);
-            
-            console.log(`[${getTimestamp()}] 🧪 Test mode accessed - Socket IP: ${socketIP}`);
-            
-            const html = fs.readFileSync(__dirname + '/public/index.html', 'utf8');
-            const injectedHtml = html.replace(
-                '</head>',
-                `<script>
-                    // Test/UAT mode: inject real auth tokens (LOCALHOST ONLY)
-                    localStorage.setItem('accessToken', '${accessToken}');
-                    localStorage.setItem('refreshToken', '${refreshToken}');
-                </script></head>`
-            );
-            return res.send(injectedHtml);
-        } catch (error) {
-            console.error('Test mode error:', error);
-        }
-    }
+app.get('/index.html', (req, res) => {
     res.sendFile(__dirname + '/public/index.html');
 });
 
@@ -1921,115 +1810,7 @@ app.delete('/api/invites/:id', requireAuth, async (req, res) => {
     }
 });
 
-// Phone OTP: Request OTP
-app.post('/api/auth/otp/request', async (req, res) => {
-    const { phone } = req.body;
-    
-    try {
-        // Generate 6-digit OTP
-        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-        
-        // Check if user exists, if not create one
-        const existingUser = await pool.query('SELECT id FROM users WHERE phone = $1', [phone]);
-        
-        if (existingUser.rows.length === 0) {
-            await pool.query(`
-                INSERT INTO users (phone, otp_code, otp_expires_at)
-                VALUES ($1, $2, $3)
-            `, [phone, otpCode, otpExpiresAt]);
-        } else {
-            await pool.query(`
-                UPDATE users 
-                SET otp_code = $1, otp_expires_at = $2
-                WHERE phone = $3
-            `, [otpCode, otpExpiresAt, phone]);
-        }
-        
-        // TODO: Send OTP via Twilio (requires TWILIO credentials in env)
-        // For now, return OTP in response (DEV ONLY - remove in production!)
-        console.log(`📱 OTP for ${phone}: ${otpCode}`);
-        
-        res.json({ 
-            success: true, 
-            message: 'OTP sent',
-            // DEV ONLY - remove this in production!
-            devOtp: otpCode 
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Phone OTP: Verify OTP
-app.post('/api/auth/otp/verify', async (req, res) => {
-    const { phone, otp } = req.body;
-    
-    try {
-        const result = await pool.query(`
-            SELECT * FROM users 
-            WHERE phone = $1 AND otp_code = $2 AND otp_expires_at > NOW()
-        `, [phone, otp]);
-        
-        if (result.rows.length === 0) {
-            return res.status(401).json({ error: 'Invalid or expired OTP' });
-        }
-        
-        const user = result.rows[0];
-        
-        // Clear OTP after successful verification
-        await pool.query(`
-            UPDATE users 
-            SET otp_code = NULL, otp_expires_at = NULL
-            WHERE id = $1
-        `, [user.id]);
-        
-        req.session.userId = user.id;
-        req.session.userEmail = user.email;
-        req.session.userRole = user.role;
-        
-        // Generate JWT tokens
-        const accessToken = authService.signAccessToken(user.id, user.email || user.phone, user.role);
-        const { token: refreshToken, tokenId } = authService.signRefreshToken(user.id, user.email || user.phone, user.role);
-        
-        // Store refresh token in database
-        const deviceInfo = req.get('user-agent') || 'unknown';
-        await authService.storeRefreshToken(pool, user.id, tokenId, deviceInfo, req.ip);
-        
-        // Save session explicitly before sending response
-        req.session.save(async (err) => {
-            if (err) {
-                console.error('Session save error:', err);
-                return res.status(500).json({ error: 'Session save failed' });
-            }
-            
-            // Create session tracking record
-            await createSessionRecord(user.id, req.sessionID, req);
-            
-            // Log successful OTP login
-            logAudit(req, 'LOGIN', 'USER', user.id.toString(), user.phone, {
-                method: 'phone_otp',
-                role: user.role,
-                authType: 'jwt+cookie'
-            });
-            
-            res.json({ 
-                success: true, 
-                user: { 
-                    id: user.id, 
-                    phone: user.phone, 
-                    role: user.role 
-                },
-                // JWT tokens for token-based auth
-                accessToken,
-                refreshToken,
-                tokenExpiry: authService.ACCESS_TOKEN_EXPIRY
-            });
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
+// Phone OTP auth removed - use email-based auth (/api/auth/register/public, /api/auth/login) for multi-tenant architecture
 
 // Register new user (admin only)
 app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
@@ -2435,86 +2216,7 @@ app.post('/api/auth/register/public', async (req, res) => {
     }
 });
 
-// Forgot password: Request reset code
-app.post('/api/auth/forgot-password/request', async (req, res) => {
-    const { phone } = req.body;
-    
-    try {
-        // Check if user exists
-        const existingUser = await pool.query('SELECT id FROM users WHERE phone = $1', [phone]);
-        
-        if (existingUser.rows.length === 0) {
-            return res.status(404).json({ error: 'No account found with this phone number' });
-        }
-
-        // Generate 6-digit OTP
-        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-        
-        await pool.query(`
-            UPDATE users 
-            SET otp_code = $1, otp_expires_at = $2
-            WHERE phone = $3
-        `, [otpCode, otpExpiresAt, phone]);
-        
-        console.log(`🔑 Password Reset OTP for ${phone}: ${otpCode}`);
-        
-        res.json({ 
-            success: true, 
-            message: 'Reset code sent',
-            devOtp: otpCode
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Forgot password: Reset password with OTP
-app.post('/api/auth/forgot-password/reset', async (req, res) => {
-    const { phone, otp, newPassword } = req.body;
-    
-    try {
-        if (!newPassword || newPassword.length < 8) {
-            return res.status(400).json({ error: 'Password must be at least 8 characters' });
-        }
-
-        // Verify OTP
-        const result = await pool.query(`
-            SELECT * FROM users 
-            WHERE phone = $1 AND otp_code = $2 AND otp_expires_at > NOW()
-        `, [phone, otp]);
-        
-        if (result.rows.length === 0) {
-            return res.status(401).json({ error: 'Invalid or expired reset code' });
-        }
-        
-        const user = result.rows[0];
-        const passwordHash = await bcrypt.hash(newPassword, 10);
-        
-        // Update password and clear OTP
-        await pool.query(`
-            UPDATE users 
-            SET password_hash = $1, otp_code = NULL, otp_expires_at = NULL
-            WHERE id = $2
-        `, [passwordHash, user.id]);
-        
-        // Log password reset
-        await pool.query(`
-            INSERT INTO audit_logs (actor, action, target, details, ip_address)
-            VALUES ($1, $2, $3, $4, $5)
-        `, [
-            user.email || user.phone,
-            'PASSWORD_RESET',
-            user.id.toString(),
-            JSON.stringify({ method: 'phone_otp' }),
-            req.ip || req.connection?.remoteAddress || 'unknown'
-        ]);
-        
-        res.json({ success: true, message: 'Password reset successful' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
+// Forgot password endpoints removed - use email-based auth for multi-tenant architecture
 
 // ===========================
 // DEV PANEL API (Admin Role Only)
