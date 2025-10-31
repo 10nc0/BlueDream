@@ -178,7 +178,7 @@ class TenantManager {
                 CREATE TABLE IF NOT EXISTS ${schemaName}.media_buffer (
                     id SERIAL PRIMARY KEY,
                     bridge_id INTEGER REFERENCES ${schemaName}.bridges(id) ON DELETE CASCADE,
-                    media_data TEXT NOT NULL,
+                    media_data BYTEA NOT NULL,
                     media_type TEXT NOT NULL,
                     filename TEXT NOT NULL,
                     sender_name TEXT,

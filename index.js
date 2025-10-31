@@ -454,7 +454,7 @@ async function initializeDatabase() {
                 CREATE TABLE IF NOT EXISTS ${schema_name}.media_buffer (
                     id SERIAL PRIMARY KEY,
                     bridge_id INTEGER REFERENCES ${schema_name}.bridges(id) ON DELETE CASCADE,
-                    media_data TEXT NOT NULL,
+                    media_data BYTEA NOT NULL,
                     media_type TEXT NOT NULL,
                     filename TEXT NOT NULL,
                     sender_name TEXT,
@@ -480,6 +480,23 @@ async function initializeDatabase() {
                 CREATE INDEX IF NOT EXISTS idx_media_buffer_pending
                 ON ${schema_name}.media_buffer(delivered_to_ledger, delivered_to_user)
                 WHERE delivered_to_ledger = false OR delivered_to_user = false
+            `);
+            
+            // ALTER existing tables to convert TEXT to BYTEA (safe migration for binary files)
+            await pool.query(`
+                DO $$ 
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_schema = '${schema_name}' 
+                        AND table_name = 'media_buffer' 
+                        AND column_name = 'media_data' 
+                        AND data_type = 'text'
+                    ) THEN
+                        ALTER TABLE ${schema_name}.media_buffer 
+                        ALTER COLUMN media_data TYPE BYTEA USING decode(media_data, 'base64');
+                    END IF;
+                END $$;
             `);
         }
         
@@ -602,7 +619,7 @@ async function sendToLedger(payload, options = {}, bridge = null) {
                 }
                 
                 const { media_data, media_type, filename } = mediaResult.rows[0];
-                const buffer = Buffer.from(media_data, 'base64');
+                const buffer = media_data;
                 
                 const FormData = require('form-data');
                 const form = new FormData();
@@ -675,7 +692,7 @@ async function sendToUserOutput(payload, options = {}, bridge = null) {
                 }
                 
                 const { media_data, media_type, filename } = mediaResult.rows[0];
-                const buffer = Buffer.from(media_data, 'base64');
+                const buffer = media_data;
                 
                 const FormData = require('form-data');
                 const form = new FormData();
@@ -1051,7 +1068,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                                     bridge_id, media_data, media_type, filename, sender_name
                                 ) VALUES ($1, $2, $3, $4, $5)
                                 RETURNING id
-                            `, [bridgeId, base64Data, media.mimetype, filename, senderName]);
+                            `, [bridgeId, Buffer.from(base64Data, 'base64'), media.mimetype, filename, senderName]);
                             mediaBufferId = result.rows[0].id;
                             await mediaClient.query('COMMIT');
                             console.log(`💾 [Bridge ${bridgeId}] Media saved to buffer: ${media.mimetype} (ID: ${mediaBufferId})`);
