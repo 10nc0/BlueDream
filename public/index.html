@@ -1172,6 +1172,12 @@
         function renderDiscordMessages(data, bridgeId) {
             const messages = Array.isArray(data) ? data : data?.messages;
             
+            console.log('🎨 Rendering messages:', messages?.length, 'messages');
+            if (messages && messages.length > 0) {
+                console.log('📋 First message embeds:', messages[0].embeds);
+                console.log('📝 Message content:', messages[0].message_content);
+            }
+            
             if (!messages || messages.length === 0) {
                 return '<div class="no-messages">No messages yet. Messages will appear here when they arrive.</div>';
             }

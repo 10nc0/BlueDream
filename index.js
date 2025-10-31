@@ -240,11 +240,18 @@ app.get('/', (req, res) => {
         return res.status(200).end();
     }
     
+    // Cache-busting headers to ensure UI updates are immediately visible
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(__dirname + '/public/index.html');
 });
 
 // Serve index.html - client-side JWT auth will handle access control
 app.get('/index.html', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(__dirname + '/public/index.html');
 });
 
