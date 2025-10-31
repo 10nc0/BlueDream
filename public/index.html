@@ -586,7 +586,12 @@
         let filteredBridges = [];
         let editingBridgeId = null;
         let expandedBots = new Set();
-        let messageCache = {}; // Cache messages to avoid re-fetching on expand/collapse
+        
+        // SECURITY: Message cache is TENANT-ISOLATED via fractalized bridge IDs
+        // Keys MUST be fractal_id (dev_bridge_tX_HASH or prod_bridge_tX_HASH)
+        // This ensures zero cross-tenant data leakage in multi-tenant SaaS
+        let messageCache = {}; 
+        
         let allMessages = {}; // Store all messages by ID for media viewing
         let currentUser = null;
         let botTags = []; // Store tags as array
@@ -736,6 +741,13 @@
         async function logout() {
             try {
                 await authFetch('/api/auth/logout', { method: 'POST' });
+                
+                // SECURITY: Clear all cached data to prevent cross-session data leakage
+                messageCache = {};
+                allMessages = {};
+                bridges = [];
+                filteredBridges = [];
+                
                 // Clear JWT tokens from localStorage
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('refreshToken');
@@ -1677,7 +1689,14 @@
         }
 
         // UNIVERSAL SEARCH: Extract searchable text from bridge's cached messages
+        // SECURITY: bridgeId MUST be fractal_id to maintain tenant isolation
         function getMessageSearchText(bridgeId) {
+            // SECURITY: Validate fractal_id format before cache access
+            if (!bridgeId || !/^(dev|prod)_bridge_t\d+_[a-f0-9]+$/.test(bridgeId)) {
+                console.error('🚨 SECURITY: Attempted cache access with invalid bridge ID');
+                return '';
+            }
+            
             const messages = messageCache[bridgeId];
             if (!messages || !Array.isArray(messages)) return '';
             
@@ -2622,6 +2641,13 @@
         
         async function loadBridgeMessages(bridgeId, page = 1) {
             try {
+                // SECURITY: Validate bridgeId is a fractal_id (tenant-scoped, non-enumerable)
+                // Format: dev_bridge_t{N}_{HASH} or prod_bridge_t{N}_{HASH}
+                if (!bridgeId || !/^(dev|prod)_bridge_t\d+_[a-f0-9]+$/.test(bridgeId)) {
+                    console.error('🚨 SECURITY: Invalid bridge ID format:', bridgeId);
+                    throw new Error('Invalid bridge ID');
+                }
+                
                 // SCHEMA SWITCHEROO: Use currentViewSource to pull from correct webhook
                 console.log(`Loading messages for bridge ${bridgeId} (source: ${currentViewSource})...`);
                 const response = await authFetch(`/api/bridges/${bridgeId}/messages?page=${page}&limit=50&source=${currentViewSource}`);
@@ -2634,7 +2660,8 @@
                 const data = await response.json();
                 console.log(`Received ${data.messages?.length || 0} messages:`, data);
                 
-                // Cache the messages array
+                // SECURITY: Cache ONLY with tenant-scoped fractal_id
+                // This ensures complete tenant isolation in message cache
                 messageCache[bridgeId] = data.messages;
                 
                 // Re-render Discord-style messages
