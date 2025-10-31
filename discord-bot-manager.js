@@ -166,66 +166,95 @@ class DiscordBotManager {
     }
 
     /**
-     * DUAL-THREAD ARCHITECTURE: Create TWO threads for a bridge
-     * - thread_01 → Nyanbook Ledger (webhook01) - dev-only visibility
-     * - thread_0n → User Discord (webhook0n) - user-facing visibility
+     * DUAL-OUTPUT ARCHITECTURE: Create output destinations for a bridge
+     * Supports BOTH channels and threads:
+     * - output_01 → Nyanbook Ledger (webhook01) - dev-only visibility
+     * - output_0n → User Discord (webhook0n) - user-facing visibility
+     * 
+     * Mode detection:
+     * - threadMode: false → Use channel directly (channel-only mode like Bridge 01 Garuda)
+     * - threadMode: true → Create threads within channel (thread mode)
      */
-    async createDualThreadsForBridge(webhook01Url, webhook0nUrl, bridgeName, tenantId, bridgeId) {
-        console.log(`🧵 Creating dual threads for bridge: ${bridgeName} (t${tenantId}-b${bridgeId})`);
+    async createDualThreadsForBridge(webhook01Url, webhook0nUrl, bridgeName, tenantId, bridgeId, threadMode = true) {
+        console.log(`🧵 Creating dual outputs for bridge: ${bridgeName} (t${tenantId}-b${bridgeId}) [mode: ${threadMode ? 'thread' : 'channel'}]`);
         
         const results = {
-            thread_01: null,
-            thread_0n: null,
+            output_01: null,
+            output_0n: null,
             errors: []
         };
 
-        // THREAD #01: Nyanbook Ledger (always created)
+        // OUTPUT #01: Nyanbook Ledger (always created)
         if (webhook01Url) {
             try {
-                console.log(`  📍 Creating thread_01 for webhook01 (Ledger)...`);
-                const threadInfo = await this.createThreadForBridge(
-                    webhook01Url,
-                    bridgeName,
-                    tenantId,
-                    bridgeId
-                );
-                results.thread_01 = {
-                    thread_id: threadInfo.threadId,
-                    thread_name: threadInfo.threadName,
-                    channel_id: threadInfo.channelId
-                };
-                console.log(`  ✅ thread_01 created: ${threadInfo.threadId}`);
+                if (threadMode) {
+                    console.log(`  📍 Creating thread_01 for webhook01 (Ledger)...`);
+                    const threadInfo = await this.createThreadForBridge(
+                        webhook01Url,
+                        bridgeName,
+                        tenantId,
+                        bridgeId
+                    );
+                    results.output_01 = {
+                        type: 'thread',
+                        thread_id: threadInfo.threadId,
+                        thread_name: threadInfo.threadName,
+                        channel_id: threadInfo.channelId
+                    };
+                    console.log(`  ✅ output_01 (thread): ${threadInfo.threadId}`);
+                } else {
+                    console.log(`  📍 Using channel for webhook01 (Ledger)...`);
+                    const channel = await this.getChannelFromWebhookUrl(webhook01Url);
+                    results.output_01 = {
+                        type: 'channel',
+                        channel_id: channel.id,
+                        channel_name: channel.name
+                    };
+                    console.log(`  ✅ output_01 (channel): ${channel.id} - ${channel.name}`);
+                }
             } catch (error) {
-                console.error(`  ❌ Failed to create thread_01:`, error.message);
-                results.errors.push({ thread: 'thread_01', error: error.message });
+                console.error(`  ❌ Failed to create output_01:`, error.message);
+                results.errors.push({ output: 'output_01', error: error.message });
             }
         }
 
-        // THREAD #0n: User Discord (only if webhook0n provided)
+        // OUTPUT #0n: User Discord (only if webhook0n provided)
         if (webhook0nUrl) {
             try {
-                console.log(`  📍 Creating thread_0n for webhook0n (User)...`);
-                const threadInfo = await this.createThreadForBridge(
-                    webhook0nUrl,
-                    bridgeName,
-                    tenantId,
-                    bridgeId
-                );
-                results.thread_0n = {
-                    thread_id: threadInfo.threadId,
-                    thread_name: threadInfo.threadName,
-                    channel_id: threadInfo.channelId
-                };
-                console.log(`  ✅ thread_0n created: ${threadInfo.threadId}`);
+                if (threadMode) {
+                    console.log(`  📍 Creating thread_0n for webhook0n (User)...`);
+                    const threadInfo = await this.createThreadForBridge(
+                        webhook0nUrl,
+                        bridgeName,
+                        tenantId,
+                        bridgeId
+                    );
+                    results.output_0n = {
+                        type: 'thread',
+                        thread_id: threadInfo.threadId,
+                        thread_name: threadInfo.threadName,
+                        channel_id: threadInfo.channelId
+                    };
+                    console.log(`  ✅ output_0n (thread): ${threadInfo.threadId}`);
+                } else {
+                    console.log(`  📍 Using channel for webhook0n (User)...`);
+                    const channel = await this.getChannelFromWebhookUrl(webhook0nUrl);
+                    results.output_0n = {
+                        type: 'channel',
+                        channel_id: channel.id,
+                        channel_name: channel.name
+                    };
+                    console.log(`  ✅ output_0n (channel): ${channel.id} - ${channel.name}`);
+                }
             } catch (error) {
-                console.error(`  ❌ Failed to create thread_0n:`, error.message);
-                results.errors.push({ thread: 'thread_0n', error: error.message });
+                console.error(`  ❌ Failed to create output_0n:`, error.message);
+                results.errors.push({ output: 'output_0n', error: error.message });
             }
         } else {
-            console.log(`  ⏭️  Skipping thread_0n creation (no webhook0n provided)`);
+            console.log(`  ⏭️  Skipping output_0n creation (no webhook0n provided)`);
         }
 
-        console.log(`🧵 Dual thread creation complete: ${results.thread_01 ? '✅' : '❌'} thread_01, ${results.thread_0n ? '✅' : '⏭️'} thread_0n`);
+        console.log(`🧵 Dual output creation complete: ${results.output_01 ? '✅' : '❌'} output_01, ${results.output_0n ? '✅' : '⏭️'} output_0n`);
         
         return results;
     }
