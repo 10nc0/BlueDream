@@ -1530,10 +1530,15 @@ app.post('/api/auth/signup', async (req, res) => {
             return res.status(400).json({ error: 'Password must be at least 6 characters' });
         }
         
-        // Check if email already exists
-        const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-        if (existingUser.rows.length > 0) {
-            return res.status(400).json({ error: 'Email already registered' });
+        // CRITICAL: Email uniqueness gatefencing - check BEFORE any writes
+        // Read-Check-Bounce pattern to enforce one email = one tenant globally
+        const emailCheck = await pool.query(
+            'SELECT tenant_id FROM core.user_email_to_tenant WHERE email = $1',
+            [email]
+        );
+        if (emailCheck.rows.length > 0) {
+            console.log(`[${getTimestamp()}] 🚫 Signup blocked - Email already exists in tenant ${emailCheck.rows[0].tenant_id}`);
+            return res.status(409).json({ error: 'Email already registered' });
         }
         
         let newUser;
