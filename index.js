@@ -3726,22 +3726,20 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
             outputCredentials = JSON.parse(outputCredentials);
         }
         
-        // SCHEMA SWITCHEROO: Pick the right output based on source parameter
-        const outputKey = source === 'ledger' ? 'output_01' : 'output_0n';
-        const outputData = outputCredentials?.[outputKey];
+        // SCHEMA SWITCHEROO: ALWAYS fetch from output_01 (Ledger thread)
+        // Why? Bot has full access to Ledger, but NO access to user's webhook0n channels
+        // Messages go to BOTH outputs, so Ledger has complete history
+        const outputData = outputCredentials?.output_01;
         const sourceName = source === 'ledger' ? 'Ledger' : 'User';
         
-        console.log(`  📍 ${sourceName} view fetching from ${outputKey}: ${outputData ? `${outputData.type} (${outputData.type === 'thread' ? outputData.thread_id : outputData.channel_id})` : 'none'}`);
+        console.log(`  📍 ${sourceName} view fetching from output_01 (Ledger): ${outputData ? `${outputData.type} (${outputData.thread_id})` : 'none'}`);
         
         if (!outputData) {
-            const note = source === 'ledger' 
-                ? 'No Ledger output configured for this bridge yet'
-                : 'No user Discord output configured. Messages are only visible in Dev Panel.';
             return res.json({ 
                 messages: [], 
                 total: 0,
                 hasMore: false,
-                note
+                note: 'No Ledger thread configured for this bridge yet. Messages cannot be fetched.'
             });
         }
         
@@ -3756,8 +3754,8 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
         }
         
         try {
-            // Fetch channel or thread based on type
-            const destinationId = outputData.type === 'thread' ? outputData.thread_id : outputData.channel_id;
+            // Fetch from Ledger thread (output_01 is always a thread)
+            const destinationId = outputData.thread_id;
             const destination = await discordBotManager.client.channels.fetch(destinationId);
             
             if (!destination) {
