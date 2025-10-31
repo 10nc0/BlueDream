@@ -3585,7 +3585,7 @@
             const uptimeEl = document.getElementById('systemUptimeCompact');
             if (uptimeEl) uptimeEl.textContent = `${hours}h ${minutes}m`;
             
-            // Update current time
+            // Update current time (two-line format under cat animation)
             const now = new Date();
             const year = now.getFullYear();
             const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -3596,7 +3596,7 @@
             const ampm = timeHours >= 12 ? 'PM' : 'AM';
             const displayHours = timeHours % 12 || 12;
             const currentTimeEl = document.getElementById('currentTime');
-            if (currentTimeEl) currentTimeEl.textContent = `${year}/${month}/${day} - ${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
+            if (currentTimeEl) currentTimeEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
             
             // Update bridge count in compact indicators only
             const bridgeCountEl = document.getElementById('bridgeCountCompact');
