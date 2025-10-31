@@ -850,13 +850,13 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
             await tenantClient.query('COMMIT');
             tenantClient.release();
             
-            // Fetch bridge data for output routing (need output_credentials for thread info)
+            // Fetch bridge data for output routing (WEBHOOK-FIRST: need webhook URLs)
             const bridgeClient = await pool.connect();
             let bridge;
             try {
                 await bridgeClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
                 const bridgeResult = await bridgeClient.query(
-                    'SELECT id, output_credentials FROM bridges WHERE id = $1',
+                    'SELECT id, output_01_url, output_0n_url, output_credentials FROM bridges WHERE id = $1',
                     [bridgeId]
                 );
                 bridge = bridgeResult.rows[0];

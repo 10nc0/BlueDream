@@ -27,27 +27,26 @@ class DiscordBotManager {
                 ]
             });
 
-            this.client.once('ready', () => {
-                console.log(`✅ Discord bot logged in as ${this.client.user.tag}`);
-                this.ready = true;
-            });
-
             this.client.on('error', (error) => {
                 console.error('❌ Discord bot error:', error.message);
             });
 
-            await this.client.login(botToken);
-            
-            await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    reject(new Error('Bot login timeout (30s)'));
-                }, 30000);
+            // Wait for ready event with timeout
+            await Promise.race([
+                new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('Bot login timeout (30s)'));
+                    }, 30000);
 
-                this.client.once('ready', () => {
-                    clearTimeout(timeout);
-                    resolve();
-                });
-            });
+                    this.client.once('ready', () => {
+                        clearTimeout(timeout);
+                        this.ready = true;
+                        console.log(`✅ Discord bot logged in as ${this.client.user.tag}`);
+                        resolve();
+                    });
+                }),
+                this.client.login(botToken)
+            ]);
 
             console.log('🤖 Discord bot ready for thread management');
         } catch (error) {
@@ -73,7 +72,12 @@ class DiscordBotManager {
 
             const webhook = await this.client.fetchWebhook(webhookId);
             
-            let channel = await webhook.fetchChannel();
+            // Discord.js v14: Use channelId property and client.channels.fetch
+            if (!webhook.channelId) {
+                throw new Error(`No channel ID found for webhook ${webhookId}`);
+            }
+            
+            const channel = await this.client.channels.fetch(webhook.channelId);
             
             if (!channel) {
                 throw new Error(`Channel not found for webhook ${webhookId}`);
