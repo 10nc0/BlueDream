@@ -111,6 +111,12 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
     - **Prevents Duplicates**: Blocks `phi_dao@pm.me`, `PHI_DAO@PM.ME`, `Phi_Dao@Pm.Me` from creating multiple tenants
     - **Input Validation**: Login endpoint validates email/password presence before normalization to prevent errors
 - **Autoscale Deployment**: Configured for Replit Autoscale with pay-per-traffic billing (~$26-50/mo for light usage). Sleeps when idle to minimize costs while maintaining 24/7 availability during active periods.
+- **Chromium Removal** (October 31, 2025): Removed all Chromium/Playwright dependencies for production optimization:
+    - **Deleted Packages**: Removed `@playwright/test` and `playwright` packages (reduced deployment size, improved cold start)
+    - **Deleted Files**: Removed `playwright.config.js`, `tests/ui-audit/`, `whatsapp-client-manager.js` (legacy Puppeteer code), `UI_AUDIT_GUIDE.md`, `TESTING_GUIDE.md`
+    - **Code Cleanup**: Removed unused `cleanupChromiumLockFiles()` function from index.js
+    - **Rationale**: System uses Baileys (WebSocket-based, no browser) and Discord REST API - no browser automation needed
+    - **Debug Strategy**: Logging and annotation preferred over screenshot testing for production debugging
 
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)
