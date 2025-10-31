@@ -1866,8 +1866,18 @@
                         if (startData.qrCode) {
                             document.getElementById('bridge-qr-img').src = startData.qrCode;
                         } else {
-                            // Fallback: fetch QR from separate endpoint
-                            document.getElementById('bridge-qr-img').src = `/api/bridges/${bridge.fractal_id}/qr`;
+                            // Fallback: fetch QR from separate endpoint (returns JSON)
+                            const qrRes = await fetch(`/api/bridges/${bridge.fractal_id}/qr`, {
+                                headers: { 
+                                    'Authorization': `Bearer ${token}`
+                                }
+                            });
+                            if (qrRes.ok) {
+                                const qrData = await qrRes.json();
+                                if (qrData.qr) {
+                                    document.getElementById('bridge-qr-img').src = qrData.qr;
+                                }
+                            }
                         }
                         
                         document.getElementById('bridge-name-display').textContent = bridgeName;
