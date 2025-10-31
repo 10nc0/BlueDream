@@ -1301,6 +1301,11 @@ function requireRole(...allowedRoles) {
 
 // Check if user is logged in (supports both JWT and cookies) - TENANT-AWARE
 app.get('/api/auth/status', async (req, res) => {
+    // CACHE-BUSTING: Prevent browsers/CDNs from caching auth status
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    
     try {
         // Check JWT first
         const authHeader = req.headers.authorization;
@@ -1358,6 +1363,11 @@ app.get('/api/auth/status', async (req, res) => {
 
 // Email/Password Login
 app.post('/api/auth/login', async (req, res) => {
+    // CACHE-BUSTING: Prevent browsers/CDNs from caching login responses
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    
     const { email, password } = req.body;
     
     // Log all login attempts
@@ -1468,6 +1478,11 @@ app.post('/api/auth/login', async (req, res) => {
 
 // Check if next signup would be the genesis user (first user)
 app.get('/api/auth/check-genesis', async (req, res) => {
+    // CACHE-BUSTING: Prevent browsers/CDNs from caching genesis status
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    
     try {
         // Multi-tenant: Check tenant_catalog instead of public.users
         const tenantCount = await pool.query('SELECT COUNT(*) FROM core.tenant_catalog');
@@ -2134,6 +2149,11 @@ app.post('/api/sessions/revoke-all', requireRole('admin'), async (req, res) => {
 
 // Public registration (no auth required) - Multi-tenant architecture
 app.post('/api/auth/register/public', async (req, res) => {
+    // CACHE-BUSTING: Prevent browsers/CDNs from caching signup responses
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    
     const { email, password } = req.body;
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';
     
