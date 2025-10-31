@@ -5,6 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const bodyParser = require('body-parser');
+const cors = require('cors');
+const helmet = require('helmet');
 const QRCode = require('qrcode');
 const { Pool } = require('pg');
 const session = require('express-session');
@@ -35,7 +37,13 @@ const BAILEYS_DATA_PATH = process.env.BAILEYS_DATA_PATH || '/home/runner/workspa
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false }
+    ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false },
+    max: 20,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000,
+    statement_timeout: 30000,
+    query_timeout: 30000,
+    idle_in_transaction_session_timeout: 30000
 });
 
 const tenantManager = new TenantManager(pool);
@@ -64,6 +72,41 @@ app.locals.pool = pool;
 // Trust proxy - required for HTTPS cookie support in Replit environment
 app.set('trust proxy', 1);
 
+// SECURITY: Helmet for production-grade security headers
+app.use(helmet({
+    contentSecurityPolicy: false, // Disabled to allow inline scripts for SPA
+    crossOriginEmbedderPolicy: false // Required for iframe embedding
+}));
+
+// SECURITY: CORS with origin whitelist
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : [];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // Allow requests with no origin (mobile apps, Postman, etc.)
+        if (!origin) return callback(null, true);
+        
+        // Allow any Replit domain (for development and production)
+        if (origin.includes('.replit.dev') || origin.includes('.repl.co')) {
+            return callback(null, true);
+        }
+        
+        // Check against whitelist (if configured)
+        if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        
+        // SECURITY: Default deny if not in Replit domains or whitelist
+        // If ALLOWED_ORIGINS is empty, only Replit domains are allowed
+        callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true, // Required for cookie-based auth
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(bodyParser.json());
 
 // Configure session management with PostgreSQL store
@@ -79,7 +122,7 @@ app.use(session({
     cookie: {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
         httpOnly: true,
-        secure: true, // Required for Safari/iPad over HTTPS
+        secure: process.env.NODE_ENV === 'production', // true in production, false in dev
         sameSite: 'none', // Required for cross-site iframe embedding
         partitioned: true // Required for Safari to accept cookies in iframes (CHIPS)
     },
@@ -624,20 +667,15 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
         
         // Update message status based on results
         if (messageDbId) {
-            if (successCount > 0) {
-                await updateMessageStatus(pool, messageDbId, 'success', null, mediaData, options.mimetype);
-            } else if (failures.length > 0) {
-                await updateMessageStatus(pool, messageDbId, 'failed', failures.join('; '));
-            }
+            // DEAD CODE REMOVED: updateMessageStatus calls
+            // Messages tracked in Discord only, no PostgreSQL status updates needed
         }
         
         console.log(`📤 Sent to ${successCount}/${webhooks.length} Discord webhooks`);
         
     } catch (error) {
         console.error('❌ Error sending to Discord:', error.message);
-        if (messageDbId) {
-            await updateMessageStatus(pool, messageDbId, 'failed', error.message);
-        }
+        // DEAD CODE REMOVED: updateMessageStatus call
         throw error;
     }
 }
@@ -649,111 +687,13 @@ async function saveMessage(client, message, bridgeId = 1) {
     return null;
 }
 
-async function updateMessageStatus(client, messageId, status, errorMessage = null, mediaData = null, mediaType = null) {
-    try {
-        await client.query(
-            `UPDATE messages 
-             SET discord_status = $1, 
-                 discord_error = $2, 
-                 media_data = COALESCE($3, media_data),
-                 media_type = COALESCE($5, media_type),
-                 has_media = CASE WHEN $3 IS NOT NULL THEN true ELSE has_media END
-             WHERE id = $4`,
-            [status, errorMessage, mediaData, messageId, mediaType]
-        );
-    } catch (error) {
-        console.error('Error updating message status:', error.message);
-    }
-}
+// DEAD CODE REMOVED: updateMessageStatus, getMessages, getMessageStats
+// REASON: Messages stored ONLY in Discord (not PostgreSQL)
+// Discord threads provide permanent storage, search, and message management
+// No PostgreSQL messages table exists in tenant schemas
 
-async function getMessages(client, tenantSchema, searchFilter = null, statusFilter = null) {
-    try {
-        // TENANT-AWARE: Use explicit schema indexing
-        let query = `SELECT * FROM ${tenantSchema}.messages`;
-        const conditions = [];
-        const params = [];
-        let paramCount = 1;
-        
-        if (searchFilter) {
-            conditions.push(`(
-                LOWER(sender_name) LIKE $${paramCount} OR
-                sender_contact LIKE $${paramCount} OR
-                LOWER(message_content) LIKE $${paramCount}
-            )`);
-            params.push(`%${searchFilter.toLowerCase()}%`);
-            paramCount++;
-        }
-        
-        if (statusFilter && statusFilter !== 'all') {
-            conditions.push(`discord_status = $${paramCount}`);
-            params.push(statusFilter);
-            paramCount++;
-        }
-        
-        if (conditions.length > 0) {
-            query += ' WHERE ' + conditions.join(' AND ');
-        }
-        
-        query += ' ORDER BY timestamp DESC LIMIT 1000';
-        
-        const result = await client.query(query, params);
-        
-        return result.rows.map(row => ({
-            id: row.id,
-            timestamp: row.timestamp,
-            sender_name: row.sender_name,
-            sender_contact: row.sender_contact,
-            message_content: row.message_content,
-            discord_status: row.discord_status,
-            discord_error: row.discord_error,
-            has_media: row.has_media,
-            media_type: row.media_type,
-            media_data: row.media_data,
-            sender_photo_url: row.sender_photo_url
-        }));
-    } catch (error) {
-        console.error('Error retrieving messages from database:', error.message);
-        return [];
-    }
-}
-
-async function getMessageStats(client, tenantSchema) {
-    try {
-        // TENANT-AWARE: Use explicit schema indexing
-        const result = await client.query(`
-            SELECT 
-                COUNT(*) as total,
-                COUNT(*) FILTER (WHERE discord_status = 'success') as success,
-                COUNT(*) FILTER (WHERE discord_status = 'failed') as failed,
-                COUNT(*) FILTER (WHERE discord_status = 'pending') as pending
-            FROM ${tenantSchema}.messages
-        `);
-        
-        return {
-            total: parseInt(result.rows[0].total),
-            success: parseInt(result.rows[0].success),
-            failed: parseInt(result.rows[0].failed),
-            pending: parseInt(result.rows[0].pending)
-        };
-    } catch (error) {
-        console.error('Error retrieving stats from database:', error.message);
-        return { total: 0, success: 0, failed: 0, pending: 0 };
-    }
-}
-
-// Initialize multi-tenant Baileys WhatsApp Client Manager (no browser needed!)
-whatsappManager = new BaileysClientManager(pool);
-console.log('✅ Baileys WhatsApp Client Manager initialized (no Chromium required)');
-
-// Initialize Discord Bot Manager for automatic thread creation
-discordBotManager = new DiscordBotManager();
-(async () => {
-    try {
-        await discordBotManager.initialize();
-    } catch (error) {
-        console.error('❌ Discord bot initialization failed:', error.message);
-    }
-})();
+// Manager initialization moved to app.listen() to prevent race conditions
+// This ensures managers are fully initialized before server accepts requests
 
 /**
  * Get the tenant schema that owns a specific bridge
@@ -990,19 +930,8 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                     }
                 } catch (mediaError) {
                     console.error(`❌ [Bridge ${bridgeId}] Error downloading media:`, mediaError.message);
-                    if (messageDbId) {
-                        const errClient = await pool.connect();
-                        try {
-                            await errClient.query('BEGIN');
-                            await errClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
-                            await updateMessageStatus(errClient, messageDbId, 'failed', mediaError.message);
-                            await errClient.query('COMMIT');
-                        } catch (err) {
-                            await errClient.query('ROLLBACK');
-                        } finally {
-                            errClient.release();
-                        }
-                    }
+                    // DEAD CODE REMOVED: updateMessageStatus call
+                    // Messages tracked in Discord only, no PostgreSQL status updates needed
                     return;
                 }
             }
@@ -1029,19 +958,8 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
         }
     } catch (error) {
         console.error(`❌ [Bridge ${bridgeId}] Error handling message:`, error.message);
-        if (messageDbId) {
-            const client = await pool.connect();
-            try {
-                await client.query('BEGIN');
-                await client.query(`SET LOCAL search_path TO ${tenantSchema}`);
-                await updateMessageStatus(client, messageDbId, 'failed', error.message);
-                await client.query('COMMIT');
-            } catch (err) {
-                await client.query('ROLLBACK');
-            } finally {
-                client.release();
-            }
-        }
+        // DEAD CODE REMOVED: updateMessageStatus call
+        // Messages tracked in Discord only, no PostgreSQL status updates needed
     }
 }
 
@@ -1148,10 +1066,13 @@ async function createSessionRecord(userId, sessionId, req) {
 // Helper function to log audit events
 async function logAudit(client, req, actionType, targetType, targetId, targetEmail, details = {}) {
     try {
-        const actorUserId = req.session?.userId || null;
-        let actorEmail = null;
+        // AUDIT FIX: Use req.userId (from requireAuth) first, fallback to session
+        // This prevents audit gaps when session is destroyed during logout
+        const actorUserId = req.userId || req.session?.userId || null;
+        let actorEmail = req.userEmail || null;
         
-        if (actorUserId) {
+        // Fetch email if we have userId but not email
+        if (actorUserId && !actorEmail) {
             const userResult = await client.query('SELECT email FROM users WHERE id = $1', [actorUserId]);
             actorEmail = userResult.rows[0]?.email || null;
         }
@@ -1195,10 +1116,14 @@ function requireAuth(req, res, next) {
             req.userRole = decoded.role;
             req.authMethod = 'jwt';
             return next();
+        } else {
+            // SECURITY: Invalid JWT present - do NOT fall back to session
+            // An attacker could send a bad JWT to bypass token revocation
+            return res.status(401).json({ error: 'Invalid or expired token' });
         }
     }
     
-    // Fall back to cookie-based session auth
+    // Fall back to cookie-based session auth (only if no JWT provided)
     if (req.session && req.session.userId) {
         req.userId = req.session.userId;
         req.userEmail = req.session.userEmail;
@@ -2609,8 +2534,6 @@ app.delete('/api/sessions/:sid', requireRole('admin'), async (req, res) => {
 
 app.get('/api/status', requireAuth, async (req, res) => {
     try {
-        const client = req.dbClient || pool;
-        const stats = await getMessageStats(client);
         const allClients = whatsappManager.getAllClients();
         
         // Aggregate status across all active bridges
@@ -2618,7 +2541,7 @@ app.get('/api/status', requireAuth, async (req, res) => {
         const qrPendingCount = allClients.filter(c => c.status === 'qr_ready').length;
         
         res.json({
-            messagesCount: stats.total,
+            messagesCount: 0, // Messages tracked in Discord only, not in PostgreSQL
             activeBots: activeCount,
             qrPending: qrPendingCount,
             totalClients: allClients.length,
@@ -4017,6 +3940,10 @@ async function autoRestoreWhatsAppSessions() {
                             );
                             restoredCount++;
                             console.log(`✅ ${schema_name}:${bridge.id} restored successfully`);
+                            
+                            // THROTTLE: Prevent resource explosion from opening 100+ WebSockets at once
+                            // Stagger initialization by 500ms to avoid overwhelming system resources
+                            await new Promise(resolve => setTimeout(resolve, 500));
                         } catch (error) {
                             console.error(`⚠️  Failed to restore ${schema_name}:${bridge.id}:`, error.message);
                             skippedCount++;
@@ -4222,6 +4149,21 @@ app.post('/api/admin/ledger-settings', requireAuth, requireRole('dev'), async (r
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🌐 Dashboard available at http://localhost:${PORT}`);
+    
+    // CRITICAL: Initialize managers BEFORE database/session restore
+    // This prevents race conditions where routes try to access null managers
+    whatsappManager = new BaileysClientManager(pool);
+    console.log('✅ Baileys WhatsApp Client Manager initialized (no Chromium required)');
+    
+    discordBotManager = new DiscordBotManager();
+    try {
+        await discordBotManager.initialize();
+        console.log('🤖 Discord bot ready for thread management');
+    } catch (error) {
+        console.error('❌ Discord bot initialization failed:', error.message);
+        console.error('   Bridge thread creation will be unavailable');
+    }
+    
     await initializeDatabase();
     console.log('✅ Multi-tenant WhatsApp Bridge ready');
     
