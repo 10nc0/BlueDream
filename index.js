@@ -427,9 +427,10 @@ async function sendToLedger(payload, options = {}, bridge = null) {
         const url = new URL(ledgerUrl);
         url.searchParams.set('wait', 'true');
         
-        // CRITICAL: thread_id must be in payload body, NOT URL params (Discord API requirement)
+        // CRITICAL: thread_id must be URL query parameter (Discord API requirement)
         if (options.threadId) {
-            payload.thread_id = options.threadId;
+            url.searchParams.set('thread_id', options.threadId);
+            console.log(`  📍 Targeting thread: ${options.threadId}`);
         }
 
         let response;
