@@ -812,8 +812,9 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
             const chat = await message.getChat();
             const contact = await message.getContact();
             
-            // Check if we should forward this message (basic filtering)
-            const shouldForward = !chat.isGroup && message.fromMe === false;
+            // NYANBOOK = PERSONAL DIARY: Forward ALL non-group messages (including messages from self)
+            // Only filter: Group messages (to prevent spam)
+            const shouldForward = !chat.isGroup;
             if (!shouldForward) {
                 await tenantClient.query('ROLLBACK');
                 tenantClient.release();
