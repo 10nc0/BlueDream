@@ -3666,21 +3666,25 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
             const discordMessages = await thread.messages.fetch(options);
             
             // Transform Discord messages to UI format
-            const messages = Array.from(discordMessages.values()).map(msg => ({
-                id: msg.id,
-                sender_name: msg.author.username,
-                sender_avatar: msg.author.displayAvatarURL(),
-                message_content: msg.content || '',
-                timestamp: msg.createdAt.toISOString(),
-                has_media: msg.attachments.size > 0,
-                media_url: msg.attachments.size > 0 ? msg.attachments.first().url : null,
-                embeds: msg.embeds.map(e => ({
-                    title: e.title,
-                    description: e.description,
-                    color: e.color,
-                    fields: e.fields
-                }))
-            }));
+            const messages = Array.from(discordMessages.values()).map(msg => {
+                const attachment = msg.attachments.size > 0 ? msg.attachments.first() : null;
+                return {
+                    id: msg.id,
+                    sender_name: msg.author.username,
+                    sender_avatar: msg.author.displayAvatarURL(),
+                    message_content: msg.content || '',
+                    timestamp: msg.createdAt.toISOString(),
+                    has_media: msg.attachments.size > 0,
+                    media_url: attachment ? attachment.url : null,
+                    media_type: attachment ? attachment.contentType : null,
+                    embeds: msg.embeds.map(e => ({
+                        title: e.title,
+                        description: e.description,
+                        color: e.color,
+                        fields: e.fields
+                    }))
+                };
+            });
             
             res.json({ 
                 messages,
