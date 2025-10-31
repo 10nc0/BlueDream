@@ -2918,9 +2918,9 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
         const tenantSchema = req.tenantContext.tenantSchema;
         
         // SECURITY: Verify bridge belongs to user's tenant using fractal_id
-        // CRITICAL: Get webhook URLs and thread info BEFORE archiving so we can clean them up
+        // CRITICAL: Get webhook URLs BEFORE archiving so we can delete them
         const bridgeResult = await client.query(
-            `SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM bridges WHERE fractal_id = $1`,
+            `SELECT id, fractal_id, output_01_url, output_0n_url FROM bridges WHERE fractal_id = $1`,
             [id]
         );
         
@@ -2953,19 +2953,10 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
             console.log(`ℹ️  Preserving output_01_url (Nyanbook Ledger) - eternal webhook, not bridge-specific`);
         }
         
-        // DELETE DISCORD THREAD: Archive the dedicated thread in Nyanbook Ledger
-        if (bridge.output_credentials?.thread_id && discordBotManager && discordBotManager.isReady()) {
-            try {
-                const threadId = bridge.output_credentials.thread_id;
-                const thread = await discordBotManager.client.channels.fetch(threadId);
-                
-                if (thread) {
-                    await thread.setArchived(true);
-                    console.log(`🧵 Discord thread ${threadId} archived for deleted bridge ${id}`);
-                }
-            } catch (threadError) {
-                console.warn(`⚠️  Could not archive Discord thread for bridge ${id}:`, threadError.message);
-            }
+        // SCRIBE OF SCRIBE PRINCIPLE: Discord threads are PERMANENT and IMMUTABLE
+        // NEVER delete or archive threads - they are the eternal record
+        if (bridge.output_credentials?.thread_id) {
+            console.log(`📜 Preserving Discord thread ${bridge.output_credentials.thread_id} - eternal ledger, never deleted`);
         }
         
         // Stop WhatsApp client if active (but keep session files for potential restoration)
