@@ -2146,20 +2146,27 @@ app.post('/api/auth/register/public', async (req, res) => {
             return res.status(400).json({ error: 'Password must be at least 8 characters' });
         }
 
-        // Rate limit + sybil check
-        const rateLimitCheck = await tenantManager.checkRateLimit('signup', 'email', email);
-        if (!rateLimitCheck.allowed) {
-            return res.status(429).json({ error: rateLimitCheck.reason });
-        }
-
-        const sybilCheck = await tenantManager.checkSybilRisk(email, ip);
-        if (!sybilCheck.allowed) {
-            return res.status(403).json({ error: sybilCheck.reason });
-        }
-
-        // Check if this is the first user (Genesis Admin)
+        // Check if this is the first user (Genesis Admin) BEFORE rate limits
         const tenantCountResult = await pool.query('SELECT COUNT(*) as count FROM core.tenant_catalog');
-        const isGenesisAdmin = parseInt(tenantCountResult.rows[0].count) === 0;
+        const isFirstUser = parseInt(tenantCountResult.rows[0].count) === 0;
+        const isGenesisAdmin = isFirstUser;
+
+        // FIRST PRINCIPLES: Genesis admin should NEVER be blocked by rate limits or sybil protection
+        if (!isFirstUser) {
+            // Rate limit check for non-genesis signups
+            const rateLimitCheck = await tenantManager.checkRateLimit('signup', 'email', email);
+            if (!rateLimitCheck.allowed) {
+                return res.status(429).json({ error: rateLimitCheck.reason });
+            }
+
+            // Sybil protection check for non-genesis signups
+            const sybilCheck = await tenantManager.checkSybilRisk(email, ip);
+            if (!sybilCheck.allowed) {
+                return res.status(403).json({ error: sybilCheck.reason });
+            }
+        } else {
+            console.log(`[${getTimestamp()}] 🌟 Genesis admin signup (PUBLIC) detected - skipping all rate limits and sybil protection`);
+        }
         
         // Hash password
         const passwordHash = await bcrypt.hash(password, 12);
