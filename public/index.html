@@ -90,12 +90,13 @@
             <nav class="bridge-sidebar" id="bridgeSidebar" style="border-right: 1px solid rgba(148, 163, 184, 0.1); display: flex; flex-direction: column; overflow: hidden;">
                 <!-- Cat + Time + Search Section -->
                 <div style="padding: 0.75rem 1rem; border-bottom: 1px solid rgba(148, 163, 184, 0.1); flex-shrink: 0;">
-                    <!-- Cat & Time Row -->
-                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+                    <!-- Cat -->
+                    <div style="display: flex; justify-content: center; margin-bottom: 0.5rem;">
                         <canvas id="hopCanvas" class="character-canvas" width="125" height="125"></canvas>
-                        <div style="color: #94a3b8; font-size: 0.75rem; line-height: 1.4;">
-                            <span id="currentTime">2025/10/28 - 3:00:00PM</span>
-                        </div>
+                    </div>
+                    <!-- Date & Time -->
+                    <div style="text-align: center; color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.75rem;">
+                        <span id="currentTime">2025/10/28 - 3:00:00PM</span>
                     </div>
                     <!-- Search -->
                     <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..." oninput="debouncedFilterBots()" style="width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; color: #e2e8f0; font-size: 0.875rem;">
@@ -271,6 +272,10 @@
                 <button class="close-btn" onclick="closeBotModal()">×</button>
             </div>
             <form id="botForm" onsubmit="saveBotClicked(event)">
+                <div class="form-group">
+                    <label class="form-label">Bridge Name</label>
+                    <input type="text" class="form-input" id="botName" placeholder="e.g., My WhatsApp Bridge" required>
+                </div>
                 <div class="form-group">
                     <label class="form-label">Platform</label>
                     <select class="form-select" id="botPlatform" required>
@@ -1967,6 +1972,7 @@
             
             editingBridgeId = fractalId;
             document.getElementById('modalTitle').textContent = 'Edit Bridge';
+            document.getElementById('botName').value = bridge.name || '';
             document.getElementById('botPlatform').value = bridge.input_platform;
             document.getElementById('botDestinationPlatform').value = bridge.output_platform;
             document.getElementById('botContact').value = bridge.contact_info || '';
@@ -1989,6 +1995,7 @@
 
         function closeBotModal() {
             document.getElementById('botModal').classList.remove('active');
+            document.getElementById('botName').value = '';
             editingBridgeId = null;
             botTags = [];
             botWebhooks = [];
@@ -2044,6 +2051,7 @@
         async function saveBotClicked(event) {
             event.preventDefault();
             
+            const bridgeName = document.getElementById('botName').value;
             const inputPlatform = document.getElementById('botPlatform').value;
             const outputPlatform = document.getElementById('botDestinationPlatform').value;
             const contact = document.getElementById('botContact').value;
@@ -2065,7 +2073,7 @@
             }
             
             const botData = {
-                name: `${inputPlatform} → ${outputPlatform} Bridge`,
+                name: bridgeName || `${inputPlatform} → ${outputPlatform} Bridge`,
                 inputPlatform: inputPlatform,
                 outputPlatform: outputPlatform,
                 inputCredentials: {},
