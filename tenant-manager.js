@@ -258,6 +258,33 @@ class TenantManager {
             `);
 
             await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.active_sessions (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES ${schemaName}.users(id) ON DELETE CASCADE,
+                    session_id VARCHAR(255) UNIQUE NOT NULL,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    device_type TEXT,
+                    browser TEXT,
+                    os TEXT,
+                    location TEXT,
+                    login_time TIMESTAMPTZ DEFAULT NOW(),
+                    last_activity TIMESTAMPTZ DEFAULT NOW(),
+                    is_active BOOLEAN DEFAULT true
+                )
+            `);
+
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_active_sessions_user 
+                ON ${schemaName}.active_sessions(user_id)
+            `);
+
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_active_sessions_session 
+                ON ${schemaName}.active_sessions(session_id)
+            `);
+
+            await client.query(`
                 CREATE TABLE IF NOT EXISTS ${schemaName}.audit_logs (
                     id SERIAL PRIMARY KEY,
                     timestamp TIMESTAMPTZ DEFAULT NOW(),

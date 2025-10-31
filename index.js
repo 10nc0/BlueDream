@@ -1272,15 +1272,16 @@ async function getLocationFromIP(ipAddress) {
     }
 }
 
-// Create session tracking record
-async function createSessionRecord(userId, sessionId, req) {
+// Create session tracking record (multi-tenant)
+async function createSessionRecord(userId, sessionId, req, tenantSchema) {
     try {
         const userAgent = req.get('user-agent') || '';
         const { deviceType, browser, os } = parseUserAgent(userAgent);
         const location = await getLocationFromIP(req.ip);
         
+        // Use tenant-scoped active_sessions table
         await pool.query(`
-            INSERT INTO active_sessions (user_id, session_id, ip_address, user_agent, device_type, browser, os, location)
+            INSERT INTO ${tenantSchema}.active_sessions (user_id, session_id, ip_address, user_agent, device_type, browser, os, location)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `, [userId, sessionId, req.ip, userAgent, deviceType, browser, os, location]);
         
@@ -1292,32 +1293,39 @@ async function createSessionRecord(userId, sessionId, req) {
 
 // ============ AUDIT LOGGING SYSTEM ============
 
-// Helper function to log audit events
-async function logAudit(client, req, actionType, targetType, targetId, targetEmail, details = {}) {
+// Helper function to log audit events (multi-tenant)
+async function logAudit(client, req, actionType, targetType, targetId, targetEmail, details = {}, tenantSchema = null) {
     try {
         // AUDIT FIX: Use req.userId (from requireAuth) first, fallback to session
         // This prevents audit gaps when session is destroyed during logout
         const actorUserId = req.userId || req.session?.userId || null;
         let actorEmail = req.userEmail || null;
         
-        // Fetch email if we have userId but not email
+        // Auto-detect tenant schema from req.tenantSchema if not provided
+        const schema = tenantSchema || req.tenantSchema;
+        
+        if (!schema) {
+            console.warn('⚠️ Audit logging skipped - no tenant schema available');
+            return;
+        }
+        
+        // Fetch email if we have userId but not email (from tenant-scoped users table)
         if (actorUserId && !actorEmail) {
-            const userResult = await client.query('SELECT email FROM users WHERE id = $1', [actorUserId]);
+            const userResult = await client.query(`SELECT email FROM ${schema}.users WHERE id = $1`, [actorUserId]);
             actorEmail = userResult.rows[0]?.email || null;
         }
         
+        // Use tenant-scoped audit_logs table
         await client.query(`
-            INSERT INTO audit_logs (
-                actor_user_id, actor_email, action_type, target_type, 
-                target_id, target_email, details, ip_address, user_agent
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO ${schema}.audit_logs (
+                actor_user_id, action_type, target_type, 
+                target_id, details, ip_address, user_agent
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         `, [
             actorUserId,
-            actorEmail,
             actionType,
             targetType,
             targetId,
-            targetEmail,
             JSON.stringify(details),
             req.ip || req.connection?.remoteAddress || 'unknown',
             req.get('user-agent') || 'unknown'
@@ -1344,6 +1352,7 @@ async function requireAuth(req, res, next) {
             req.userEmail = decoded.email;
             req.userRole = decoded.role;
             req.tenantId = decoded.tenantId;
+            req.tenantSchema = `tenant_${decoded.tenantId}`; // CRITICAL: Set tenant schema for multi-tenant isolation
             req.authMethod = 'jwt';
             return next();
         } else {
@@ -1575,14 +1584,14 @@ app.post('/api/auth/login', async (req, res) => {
             }
             
             // Create session tracking record
-            await createSessionRecord(user.id, req.sessionID, req);
+            await createSessionRecord(user.id, req.sessionID, req, tenant_schema);
             
             // Log successful login
             logAudit(pool, req, 'LOGIN', 'USER', user.id.toString(), user.email, {
                 method: 'email_password',
                 role: user.role,
                 authType: 'jwt+cookie'
-            });
+            }, tenant_schema);
             
             console.log(`[${getTimestamp()}] ✅ Login successful - User: ${user.email}, SessionID: ${req.sessionID}, JWT issued`);
             
@@ -1607,8 +1616,9 @@ app.post('/api/auth/login', async (req, res) => {
 // Check if next signup would be the genesis user (first user)
 app.get('/api/auth/check-genesis', async (req, res) => {
     try {
-        const userCount = await pool.query('SELECT COUNT(*) FROM users');
-        const isFirstUser = parseInt(userCount.rows[0].count) === 0;
+        // Multi-tenant: Check tenant_catalog instead of public.users
+        const tenantCount = await pool.query('SELECT COUNT(*) FROM core.tenant_catalog');
+        const isFirstUser = parseInt(tenantCount.rows[0].count) === 0;
         res.json({ isFirstUser });
     } catch (error) {
         res.status(500).json({ error: 'Failed to check status' });
@@ -2564,9 +2574,16 @@ app.post('/api/dev/webhook', requireAuth, requireRole('admin'), async (req, res)
 // Get all bridges across all tenants (dev role only)
 app.get('/api/dev/bridges', requireAuth, requireRole('dev'), async (req, res) => {
     try {
-        // TRIPLE SECURITY CHECK: Dev Panel requires dev + genesis_admin + tenant_01
+        // Use tenant schema from requireAuth middleware
+        const tenantSchema = req.tenantSchema;
+        
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
+        }
+        
+        // SECURITY CHECK: Dev Panel requires dev + genesis_admin
         const userResult = await pool.query(
-            'SELECT role, is_genesis_admin, tenant_id FROM users WHERE id = $1',
+            `SELECT role, is_genesis_admin, tenant_id FROM ${tenantSchema}.users WHERE id = $1`,
             [req.userId]
         );
         
@@ -2576,14 +2593,13 @@ app.get('/api/dev/bridges', requireAuth, requireRole('dev'), async (req, res) =>
         
         const user = userResult.rows[0];
         
-        // Enforce triple security check
-        if (user.role !== 'dev' || !user.is_genesis_admin || user.tenant_id !== 1) {
+        // Enforce security check: dev role + genesis_admin flag
+        if (user.role !== 'dev' || !user.is_genesis_admin) {
             console.warn(`⚠️  SECURITY: User ${req.userId} attempted Dev Panel access without proper credentials`);
             console.warn(`   - Role: ${user.role} (needs: dev)`);
             console.warn(`   - Genesis Admin: ${user.is_genesis_admin} (needs: true)`);
-            console.warn(`   - Tenant ID: ${user.tenant_id} (needs: 1)`);
             return res.status(403).json({ 
-                error: 'Access denied. Dev Panel requires dev role + genesis_admin + tenant_01 access.' 
+                error: 'Access denied. Dev Panel requires dev role + genesis_admin status.' 
             });
         }
         
@@ -3013,20 +3029,27 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
     console.log(`🔍 /api/bridges called by user ${req.userId}`);
     
     try {
-        // Get tenant schema from authenticated user
+        // Use tenant schema from requireAuth middleware
+        const tenantSchema = req.tenantSchema;
+        
+        if (!tenantSchema) {
+            console.error(`❌ No tenant schema set for user ${req.userId}`);
+            return res.status(500).json({ error: 'Tenant context not found' });
+        }
+        
+        // Get user info from tenant-scoped table
         const userResult = await pool.query(
-            'SELECT id, email, tenant_id FROM users WHERE id = $1',
+            `SELECT id, email, tenant_id FROM ${tenantSchema}.users WHERE id = $1`,
             [req.userId]
         );
         
         if (!userResult.rows.length) {
-            console.error(`❌ User ${req.userId} not found in database`);
+            console.error(`❌ User ${req.userId} not found in ${tenantSchema}`);
             return res.status(404).json({ error: 'User not found' });
         }
         
         const user = userResult.rows[0];
         const tenantId = user.tenant_id;
-        const tenantSchema = `tenant_${tenantId}`;
         
         console.log(`📊 Loading bridges for ${user.email} (user_id=${req.userId}) from ${tenantSchema}`);
         
