@@ -65,6 +65,16 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **Webhook Security**: User output webhooks (output_0n_url) CANNOT equal the Nyanbook Ledger webhook (output_01_url) to prevent cross-tenant data exposure.
 - **Duplicate Webhooks Allowed**: Multiple bridges can share the same input platform or output_0n_url webhook, but output_0n_url ≠ output_01_url always.
 
+### Production Hardening (October 2025)
+- **Database Connection Pool**: Configured with timeout protections (connectionTimeoutMillis, idleTimeoutMillis, statement_timeout, query_timeout, idle_in_transaction_session_timeout) to prevent idle-in-transaction crashes.
+- **JWT Security**: Invalid JWT tokens return 401 immediately without falling back to session auth, preventing auth bypass attacks.
+- **Manager Initialization**: WhatsApp and Discord managers initialized inside app.listen callback to eliminate race conditions.
+- **Resource Throttling**: Auto-restore sessions staggered by 500ms to prevent resource explosion from opening 100+ WebSockets simultaneously.
+- **Security Headers**: CORS with default-deny (allows only Replit domains + explicit whitelist) and Helmet for production-grade HTTP protections.
+- **Environment-Aware Cookies**: Secure flag conditional on NODE_ENV (production only) for dev mode compatibility.
+- **Audit Logging**: Prefers req.userId over req.session?.userId to prevent audit gaps after session.destroy().
+- **Dead Code Removal**: Eliminated obsolete PostgreSQL message functions (updateMessageStatus, getMessageStats) since messages stored only in Discord.
+
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)
 - **WhatsApp**: Baileys library
