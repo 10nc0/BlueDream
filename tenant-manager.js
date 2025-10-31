@@ -335,6 +335,14 @@ class TenantManager {
         const TENANT_LIMIT_PER_IP = 10;
         const COOLDOWN_HOURS = 24;
 
+        // FIRST PRINCIPLES: Genesis admin should NEVER be blocked
+        const tenantCountResult = await this.pool.query('SELECT COUNT(*) as count FROM core.tenant_catalog');
+        const isFirstUser = parseInt(tenantCountResult.rows[0].count) === 0;
+        if (isFirstUser) {
+            console.log('🌟 Genesis admin detected - bypassing all sybil protection');
+            return { allowed: true };
+        }
+
         // Normalize email to lowercase for consistent checks
         const normalizedEmail = email.toLowerCase().trim();
 
