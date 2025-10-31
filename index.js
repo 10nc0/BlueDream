@@ -2356,9 +2356,16 @@ app.get('/api/dev/bridges', requireAuth, requireRole('dev'), async (req, res) =>
 // Get all users (admin and dev roles)
 app.get('/api/users', requireAuth, requireRole('admin', 'dev'), async (req, res) => {
     try {
+        // Use tenant schema from middleware
+        const tenantSchema = req.tenantSchema;
+        
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
+        }
+        
         // Get requesting user's info
         const userResult = await pool.query(
-            'SELECT role, is_genesis_admin, tenant_id FROM users WHERE id = $1',
+            `SELECT role, is_genesis_admin, tenant_id FROM ${tenantSchema}.users WHERE id = $1`,
             [req.userId]
         );
         
@@ -2368,23 +2375,34 @@ app.get('/api/users', requireAuth, requireRole('admin', 'dev'), async (req, res)
         
         const user = userResult.rows[0];
         
-        // TRIPLE SECURITY CHECK for Dev Panel cross-tenant access
-        if (user.role === 'dev') {
-            // Dev users need triple check for global view
-            if (!user.is_genesis_admin || user.tenant_id !== 1) {
-                console.warn(`⚠️  SECURITY: Dev user ${req.userId} attempted global user list without proper credentials`);
-                return res.status(403).json({ 
-                    error: 'Access denied. Dev Panel requires dev role + genesis_admin + tenant_01 access.' 
-                });
+        // SECURITY CHECK for Dev Panel cross-tenant access
+        if (user.role === 'dev' && user.is_genesis_admin) {
+            // Genesis Admin can see all users across all tenants
+            const allUsers = [];
+            
+            // Get all tenant schemas
+            const tenantsResult = await pool.query(`
+                SELECT id, tenant_schema FROM core.tenant_catalog ORDER BY id ASC
+            `);
+            
+            for (const tenant of tenantsResult.rows) {
+                try {
+                    const usersResult = await pool.query(`
+                        SELECT id, email, role, tenant_id, is_genesis_admin, created_at 
+                        FROM ${tenant.tenant_schema}.users 
+                        ORDER BY created_at DESC
+                    `);
+                    allUsers.push(...usersResult.rows);
+                } catch (error) {
+                    console.warn(`⚠️  Could not fetch users from ${tenant.tenant_schema}:`, error.message);
+                }
             }
-            // Dev with triple check passed - return all users
-            const result = await pool.query('SELECT id, email, role, tenant_id, is_genesis_admin, created_at FROM users ORDER BY created_at DESC');
-            res.json(result.rows);
+            
+            res.json(allUsers);
         } else if (user.role === 'admin') {
             // Admin users only see their own tenant
             const result = await pool.query(
-                'SELECT id, email, role, tenant_id, is_genesis_admin, created_at FROM users WHERE tenant_id = $1 ORDER BY created_at DESC',
-                [user.tenant_id]
+                `SELECT id, email, role, tenant_id, is_genesis_admin, created_at FROM ${tenantSchema}.users ORDER BY created_at DESC`
             );
             res.json(result.rows);
         } else {
@@ -2401,12 +2419,19 @@ app.put('/api/users/:id/role', requireAuth, requireRole('admin'), async (req, re
     const { role } = req.body;
     
     try {
+        // Use tenant schema from middleware
+        const tenantSchema = req.tenantSchema;
+        
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
+        }
+        
         // Get old role before update
-        const oldData = await pool.query('SELECT role, email FROM users WHERE id = $1', [id]);
+        const oldData = await pool.query(`SELECT role, email FROM ${tenantSchema}.users WHERE id = $1`, [id]);
         const oldRole = oldData.rows[0]?.role;
         
         const result = await pool.query(`
-            UPDATE users 
+            UPDATE ${tenantSchema}.users 
             SET role = $1, updated_at = NOW()
             WHERE id = $2
             RETURNING id, email, role, tenant_id, is_genesis_admin
@@ -2418,7 +2443,7 @@ app.put('/api/users/:id/role', requireAuth, requireRole('admin'), async (req, re
         await logAudit(pool, req, 'UPDATE_ROLE', 'USER', id, updatedUser.email, {
             old_role: oldRole,
             new_role: role
-        });
+        }, tenantSchema);
         
         res.json(updatedUser);
     } catch (error) {
@@ -2431,25 +2456,32 @@ app.delete('/api/users/:id', requireAuth, requireRole('admin'), async (req, res)
     const { id } = req.params;
     
     try {
+        // Use tenant schema from middleware
+        const tenantSchema = req.tenantSchema;
+        
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
+        }
+        
         // Prevent deleting yourself
-        if (parseInt(id) === req.session.userId) {
+        if (parseInt(id) === req.userId) {
             return res.status(400).json({ error: 'Cannot delete your own account' });
         }
         
         // Get user info before deletion for audit log
-        const userData = await pool.query('SELECT email, role FROM users WHERE id = $1', [id]);
+        const userData = await pool.query(`SELECT email, role FROM ${tenantSchema}.users WHERE id = $1`, [id]);
         if (userData.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
         
         const deletedUser = userData.rows[0];
         
-        const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
+        const result = await pool.query(`DELETE FROM ${tenantSchema}.users WHERE id = $1 RETURNING id`, [id]);
         
         // Log user deletion
         await logAudit(pool, req, 'DELETE_USER', 'USER', id, deletedUser.email, {
             role: deletedUser.role
-        });
+        }, tenantSchema);
         
         res.json({ success: true });
     } catch (error) {
@@ -2458,11 +2490,18 @@ app.delete('/api/users/:id', requireAuth, requireRole('admin'), async (req, res)
 });
 
 // Update user email (admin only)
-app.put('/api/users/:id/email', requireRole('admin'), async (req, res) => {
+app.put('/api/users/:id/email', requireAuth, requireRole('admin'), async (req, res) => {
     const { id } = req.params;
     const { email } = req.body;
     
     try {
+        // Use tenant schema from middleware
+        const tenantSchema = req.tenantSchema;
+        
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
+        }
+        
         // Validate email presence and format
         if (!email || !email.trim()) {
             return res.status(400).json({ error: 'Email is required' });
@@ -2473,21 +2512,21 @@ app.put('/api/users/:id/email', requireRole('admin'), async (req, res) => {
             return res.status(400).json({ error: 'Invalid email format' });
         }
         
-        // Check if email already exists
-        const existingUser = await pool.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, id]);
+        // Check if email already exists in this tenant
+        const existingUser = await pool.query(`SELECT id FROM ${tenantSchema}.users WHERE email = $1 AND id != $2`, [email, id]);
         if (existingUser.rows.length > 0) {
             return res.status(400).json({ error: 'Email already exists' });
         }
         
         // Get old email before update
-        const oldData = await pool.query('SELECT email FROM users WHERE id = $1', [id]);
+        const oldData = await pool.query(`SELECT email FROM ${tenantSchema}.users WHERE id = $1`, [id]);
         const oldEmail = oldData.rows[0]?.email;
         
         const result = await pool.query(`
-            UPDATE users 
+            UPDATE ${tenantSchema}.users 
             SET email = $1, updated_at = NOW()
             WHERE id = $2
-            RETURNING id, email, phone, role
+            RETURNING id, email, role
         `, [email, id]);
         
         if (result.rows.length === 0) {
@@ -2496,11 +2535,18 @@ app.put('/api/users/:id/email', requireRole('admin'), async (req, res) => {
         
         const updatedUser = result.rows[0];
         
+        // Update email mapping in core schema
+        await pool.query(`
+            UPDATE core.user_email_to_tenant 
+            SET email = $1, updated_at = NOW()
+            WHERE email = $2
+        `, [email, oldEmail]);
+        
         // Log email change
         await logAudit(pool, req, 'UPDATE_EMAIL', 'USER', id, updatedUser.email, {
             old_email: oldEmail,
             new_email: email
-        });
+        }, tenantSchema);
         
         res.json(updatedUser);
     } catch (error) {
@@ -2509,22 +2555,29 @@ app.put('/api/users/:id/email', requireRole('admin'), async (req, res) => {
 });
 
 // Update user password (admin only)
-app.put('/api/users/:id/password', requireRole('admin'), async (req, res) => {
+app.put('/api/users/:id/password', requireAuth, requireRole('admin'), async (req, res) => {
     const { id } = req.params;
     const { password } = req.body;
     
     try {
+        // Use tenant schema from middleware
+        const tenantSchema = req.tenantSchema;
+        
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
+        }
+        
         // Validate password presence and strength
         if (!password || !password.trim()) {
             return res.status(400).json({ error: 'Password is required' });
         }
         
-        if (password.length < 6) {
-            return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+        if (password.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters long' });
         }
         
         // Get user info for audit log
-        const userData = await pool.query('SELECT email, phone FROM users WHERE id = $1', [id]);
+        const userData = await pool.query(`SELECT email FROM ${tenantSchema}.users WHERE id = $1`, [id]);
         if (userData.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -2533,15 +2586,15 @@ app.put('/api/users/:id/password', requireRole('admin'), async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         
         await pool.query(`
-            UPDATE users 
-            SET password = $1, updated_at = NOW()
+            UPDATE ${tenantSchema}.users 
+            SET password_hash = $1, updated_at = NOW()
             WHERE id = $2
         `, [hashedPassword, id]);
         
         // Log password change
-        await logAudit(pool, req, 'UPDATE_PASSWORD', 'USER', id, user.email || user.phone, {
+        await logAudit(pool, req, 'UPDATE_PASSWORD', 'USER', id, user.email, {
             updated_by_admin: true
-        });
+        }, tenantSchema);
         
         res.json({ success: true });
     } catch (error) {
