@@ -36,7 +36,13 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
     - **Smart Thread Reuse**: Thread ID stored in PostgreSQL, enabling message routing and crash recovery.
     - **Fire-and-Forget Messages**: Messages forwarded directly to Discord threads - NOT stored in PostgreSQL.
     - **Discord = Output + UI**: Provides a human interface with real-time updates, search, and attachments.
-- **Media Handling**: Forwards images, videos, and documents directly to Discord threads.
+- **Media Handling**: Retry-safe atomic storage architecture ensures zero media loss:
+    - **Critical Path**: WhatsApp → downloadMedia() → PostgreSQL media_buffer → Discord webhooks
+    - **Atomic Storage**: Media base64-encoded and committed to media_buffer BEFORE webhook delivery
+    - **Schema-Qualified Queries**: All media_buffer queries use `${tenantSchema}.media_buffer` syntax to prevent transaction scope issues
+    - **Dual Delivery Tracking**: delivered_to_ledger and delivered_to_user flags enable independent retry logic
+    - **3-Day Purge**: Automatic cleanup runs every 24 hours (safe because Nyanbook Ledger has permanent copy)
+    - **Retry Support**: delivery_attempts counter and last_delivery_attempt timestamp enable smart retry backoff
 - **Search**: Utilizes Discord's native search UI.
 
 ### Feature Specifications
@@ -74,6 +80,11 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **Environment-Aware Cookies**: Secure flag conditional on NODE_ENV (production only) for dev mode compatibility.
 - **Audit Logging**: Prefers req.userId over req.session?.userId to prevent audit gaps after session.destroy().
 - **Dead Code Removal**: Eliminated obsolete PostgreSQL message functions (updateMessageStatus, getMessageStats) since messages stored only in Discord.
+- **Retry-Safe Media Flow**: Atomic PostgreSQL media_buffer prevents zero data loss on delivery failures:
+    - media_buffer table stores base64 media with delivery status flags (delivered_to_ledger, delivered_to_user)
+    - Schema-qualified queries (`${tenantSchema}.media_buffer`) prevent "relation does not exist" errors
+    - 3-day purge job runs daily to prevent bloat while ensuring retry window
+    - Migration automatically adds media_buffer to existing tenant schemas on startup
 
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)
