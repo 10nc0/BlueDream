@@ -117,6 +117,13 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
     - **Code Cleanup**: Removed unused `cleanupChromiumLockFiles()` function from index.js
     - **Rationale**: System uses Baileys (WebSocket-based, no browser) and Discord REST API - no browser automation needed
     - **Debug Strategy**: Logging and annotation preferred over screenshot testing for production debugging
+- **Secret Management Fix** (October 31, 2025): Removed broken admin panel endpoints for updating Discord bot token and webhook URL:
+    - **Removed Endpoints**: Deleted `/api/admin/ledger-settings` GET and POST endpoints that incorrectly wrote to `.env` files
+    - **Removed UI**: Deleted ledger settings form from `public/dev.html` Dev Panel
+    - **Issue Fixed**: Admin panel falsely indicated successful token updates while changes were ignored (Replit uses Secrets, not `.env`)
+    - **Correct Flow**: Update secrets via Replit Secrets UI → Restart server → Discord bot reads new token on initialization
+    - **Security Improvement**: Eliminates misleading UX where users thought they were updating secrets when they weren't
+    - **Deployment Persistence**: Secrets automatically sync across deployments without manual re-entry
 
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)
