@@ -238,15 +238,21 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
     const isImage = normalizedType.startsWith('image/');
     const isVideo = normalizedType.startsWith('video/');
     const isAudio = normalizedType.startsWith('audio/');
+    const isPDF = normalizedType.includes('pdf');
+    const isOfficeDoc = normalizedType.includes('word') || normalizedType.includes('document') || 
+                        normalizedType.includes('excel') || normalizedType.includes('spreadsheet') ||
+                        normalizedType.includes('powerpoint') || normalizedType.includes('presentation');
     
     if (isImage) {
         // Progressive loading with blur placeholder
         const img = document.createElement('img');
         img.alt = `Media from Discord`;
         img.style.width = '100%';
+        img.style.maxWidth = '500px';
         img.style.height = 'auto';
         img.style.borderRadius = '8px';
-        img.style.transition = 'filter 0.3s ease-in-out';
+        img.style.cursor = 'pointer';
+        img.style.transition = 'filter 0.3s ease-in-out, transform 0.2s ease';
         img.style.filter = 'blur(10px)';
         img.src = generateBlurPlaceholder();
         
@@ -256,6 +262,20 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
         
         img.onerror = () => {
             containerEl.innerHTML = '<div class="media-error">Failed to load image from Discord CDN</div>';
+        };
+        
+        // Click to view full size in same page (lightbox effect)
+        img.onclick = () => {
+            const lightbox = document.createElement('div');
+            lightbox.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; cursor: pointer;';
+            
+            const fullImg = document.createElement('img');
+            fullImg.src = mediaUrl;
+            fullImg.style.cssText = 'max-width: 90%; max-height: 90%; border-radius: 8px;';
+            
+            lightbox.appendChild(fullImg);
+            lightbox.onclick = () => document.body.removeChild(lightbox);
+            document.body.appendChild(lightbox);
         };
         
         // Set actual URL after placeholder
@@ -270,6 +290,7 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
         const video = document.createElement('video');
         video.controls = true;
         video.style.width = '100%';
+        video.style.maxWidth = '600px';
         video.style.borderRadius = '8px';
         video.src = mediaUrl;
         
@@ -284,6 +305,7 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
         const audio = document.createElement('audio');
         audio.controls = true;
         audio.style.width = '100%';
+        audio.style.maxWidth = '400px';
         audio.src = mediaUrl;
         
         audio.onerror = () => {
@@ -293,17 +315,88 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
         containerEl.innerHTML = '';
         containerEl.appendChild(audio);
         
-    } else {
-        // Unknown type - show download link
-        const link = document.createElement('a');
-        link.href = mediaUrl;
-        link.target = '_blank';
-        link.textContent = `📎 Download attachment (${mediaType || 'unknown type'})`;
-        link.style.color = '#60a5fa';
-        link.style.textDecoration = 'none';
+    } else if (isPDF) {
+        // Inline PDF viewer using embed
+        const pdfContainer = document.createElement('div');
+        pdfContainer.style.cssText = 'width: 100%; max-width: 700px; margin: 0.5rem 0;';
+        
+        const embed = document.createElement('embed');
+        embed.src = mediaUrl;
+        embed.type = 'application/pdf';
+        embed.style.cssText = 'width: 100%; height: 600px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);';
+        
+        const downloadBtn = document.createElement('a');
+        downloadBtn.href = mediaUrl;
+        downloadBtn.download = '';
+        downloadBtn.innerHTML = '📥 Download PDF';
+        downloadBtn.style.cssText = 'display: inline-block; margin-top: 0.5rem; padding: 0.5rem 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 6px; text-decoration: none; font-size: 0.9rem; transition: transform 0.2s;';
+        downloadBtn.onmouseover = () => downloadBtn.style.transform = 'translateY(-2px)';
+        downloadBtn.onmouseout = () => downloadBtn.style.transform = 'translateY(0)';
+        
+        pdfContainer.appendChild(embed);
+        pdfContainer.appendChild(downloadBtn);
         
         containerEl.innerHTML = '';
-        containerEl.appendChild(link);
+        containerEl.appendChild(pdfContainer);
+        
+    } else if (isOfficeDoc) {
+        // Office documents - show styled download button
+        const docContainer = document.createElement('div');
+        docContainer.style.cssText = 'padding: 1rem; background: rgba(47, 49, 54, 0.6); border-radius: 8px; margin: 0.5rem 0;';
+        
+        let icon = '📄';
+        let label = 'Document';
+        if (normalizedType.includes('word') || normalizedType.includes('document')) {
+            icon = '📝';
+            label = 'Word Document';
+        } else if (normalizedType.includes('excel') || normalizedType.includes('spreadsheet')) {
+            icon = '📊';
+            label = 'Excel Spreadsheet';
+        } else if (normalizedType.includes('powerpoint') || normalizedType.includes('presentation')) {
+            icon = '📽️';
+            label = 'PowerPoint Presentation';
+        }
+        
+        const downloadBtn = document.createElement('a');
+        downloadBtn.href = mediaUrl;
+        downloadBtn.download = '';
+        downloadBtn.innerHTML = `${icon} Download ${label}`;
+        downloadBtn.style.cssText = 'display: inline-block; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 6px; text-decoration: none; font-size: 1rem; transition: transform 0.2s, box-shadow 0.2s;';
+        downloadBtn.onmouseover = () => {
+            downloadBtn.style.transform = 'translateY(-2px)';
+            downloadBtn.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
+        };
+        downloadBtn.onmouseout = () => {
+            downloadBtn.style.transform = 'translateY(0)';
+            downloadBtn.style.boxShadow = 'none';
+        };
+        
+        docContainer.appendChild(downloadBtn);
+        containerEl.innerHTML = '';
+        containerEl.appendChild(docContainer);
+        
+    } else {
+        // Other files - styled download button
+        const fileContainer = document.createElement('div');
+        fileContainer.style.cssText = 'padding: 1rem; background: rgba(47, 49, 54, 0.6); border-radius: 8px; margin: 0.5rem 0;';
+        
+        const downloadBtn = document.createElement('a');
+        downloadBtn.href = mediaUrl;
+        downloadBtn.download = '';
+        downloadBtn.innerHTML = `📎 Download File (${mediaType || 'unknown type'})`;
+        downloadBtn.style.cssText = 'display: inline-block; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 6px; text-decoration: none; font-size: 1rem; transition: transform 0.2s, box-shadow 0.2s;';
+        downloadBtn.onmouseover = () => {
+            downloadBtn.style.transform = 'translateY(-2px)';
+            downloadBtn.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
+        };
+        downloadBtn.onmouseout = () => {
+            downloadBtn.style.transform = 'translateY(0)';
+            downloadBtn.style.boxShadow = 'none';
+        };
+        
+        fileContainer.appendChild(downloadBtn);
+        containerEl.innerHTML = '';
+        containerEl.appendChild(fileContainer);
     }
 }
 
