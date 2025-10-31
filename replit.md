@@ -67,7 +67,7 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **Secret Management**: Relies on Replit Secrets for secure environment variable management; admin panel secret updates were removed to prevent misleading UX.
 
 ## Recent Architecture Changes (Oct 31, 2025)
-### Pure Tenant_X Migration
+### Pure Tenant_X Migration + Genesis Admin Hardening
 Completed full migration to pure tenant_X architecture with NO global `public.users` table:
 - **Before**: Dual storage with `public.users` + `tenant_X.users` (data inconsistency risk)
 - **After**: Single source of truth - users stored ONLY in `tenant_X.users`
@@ -77,6 +77,14 @@ Completed full migration to pure tenant_X architecture with NO global `public.us
 - **Database Cleanup**: Dropped `public.users`, `public.active_sessions`, `public.audit_logs` tables
 - **InitializeDatabase Fix**: Removed public schema table creation (except `sessions`)
 - **Architect Verified**: Post-restart confirmation that tables stay in tenant schemas only
+
+### Genesis Admin System Hardening (Oct 31, 2025)
+Fixed critical bugs preventing genesis admin achievement:
+- **Sybil Protection Bypass**: Genesis admin now skips ALL rate limits and sybil checks (first principles: genesis should never be blocked)
+- **Ghost Tenant Fix**: Auto-restore now queries `core.tenant_catalog` instead of `information_schema` (prevents errors from orphaned schemas)
+- **UI Detection**: Dashboard now properly detects `isGenesisAdmin` flag and displays 🌟 badge + Dev Panel access
+- **CORS Whitelist**: Added `.replit.app` domain support for published site
+- **Cache-Busting**: Added `Cache-Control: no-cache` headers to login/signup pages to prevent browser caching issues
 
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)

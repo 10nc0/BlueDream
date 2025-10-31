@@ -4038,12 +4038,13 @@ async function autoRestoreWhatsAppSessions() {
     try {
         console.log('🔄 Auto-restoring Baileys WhatsApp sessions from saved data...');
         
-        // Get all tenant schemas
+        // FIRST PRINCIPLES: Only restore from REGISTERED tenants (ignore orphaned schemas)
+        // Query core.tenant_catalog instead of information_schema to avoid ghost tenants
         const schemas = await pool.query(`
-            SELECT schema_name 
-            FROM information_schema.schemata 
-            WHERE schema_name LIKE 'tenant_%'
-            ORDER BY schema_name
+            SELECT tenant_schema as schema_name
+            FROM core.tenant_catalog
+            WHERE status = 'active'
+            ORDER BY id
         `);
         
         let restoredCount = 0;
