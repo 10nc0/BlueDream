@@ -866,6 +866,11 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                     [bridgeId]
                 );
                 bridge = bridgeResult.rows[0];
+                
+                // Parse JSON if needed (PostgreSQL returns JSON as string sometimes)
+                if (bridge && typeof bridge.output_credentials === 'string') {
+                    bridge.output_credentials = JSON.parse(bridge.output_credentials);
+                }
             } finally {
                 bridgeClient.release();
             }
@@ -3440,19 +3445,105 @@ app.get('/api/messages/:id/media', requireAuth, async (req, res) => {
     }
 });
 
-// DISCORD-FIRST: Messages stored in Discord threads, not PostgreSQL
-app.get('/api/bridges/:id/messages', requireAuth, async (req, res) => {
+// DISCORD-FIRST: Messages stored in Discord threads - fetch from Discord API
+app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, res) => {
     try {
-        // Return empty messages array - Discord threads are the sole storage
-        res.json({ 
-            messages: [], 
-            total: 0, 
-            page: 1, 
-            limit: 50, 
-            totalPages: 0,
-            note: 'Messages are stored in Discord threads. Use the Discord UI to view message history.'
-        });
+        const { id } = req.params; // fractal_id
+        const client = req.dbClient || pool;
+        const limit = parseInt(req.query.limit) || 50;
+        const before = req.query.before; // Discord message ID for pagination
+        
+        // Get bridge with thread info
+        const bridgeResult = await client.query(
+            'SELECT id, name, output_credentials FROM bridges WHERE fractal_id = $1',
+            [id]
+        );
+        
+        if (bridgeResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Bridge not found' });
+        }
+        
+        const bridge = bridgeResult.rows[0];
+        
+        // Parse JSON if needed
+        let outputCredentials = bridge.output_credentials;
+        if (typeof outputCredentials === 'string') {
+            outputCredentials = JSON.parse(outputCredentials);
+        }
+        
+        const threadId = outputCredentials?.thread_id;
+        
+        if (!threadId) {
+            return res.json({ 
+                messages: [], 
+                total: 0,
+                hasMore: false,
+                note: 'No Discord thread configured for this bridge yet'
+            });
+        }
+        
+        // Fetch messages from Discord thread using bot
+        if (!discordBotManager.client || !discordBotManager.ready) {
+            return res.json({ 
+                messages: [], 
+                total: 0,
+                hasMore: false,
+                note: 'Discord bot not ready - messages temporarily unavailable'
+            });
+        }
+        
+        try {
+            const thread = await discordBotManager.client.channels.fetch(threadId);
+            
+            if (!thread) {
+                return res.json({ 
+                    messages: [], 
+                    total: 0,
+                    hasMore: false,
+                    note: 'Discord thread not found'
+                });
+            }
+            
+            // Fetch messages from Discord
+            const options = { limit };
+            if (before) options.before = before;
+            
+            const discordMessages = await thread.messages.fetch(options);
+            
+            // Transform Discord messages to UI format
+            const messages = Array.from(discordMessages.values()).map(msg => ({
+                id: msg.id,
+                sender_name: msg.author.username,
+                sender_avatar: msg.author.displayAvatarURL(),
+                message_content: msg.content || '',
+                timestamp: msg.createdAt.toISOString(),
+                has_media: msg.attachments.size > 0,
+                media_url: msg.attachments.size > 0 ? msg.attachments.first().url : null,
+                embeds: msg.embeds.map(e => ({
+                    title: e.title,
+                    description: e.description,
+                    color: e.color,
+                    fields: e.fields
+                }))
+            }));
+            
+            res.json({ 
+                messages,
+                total: messages.length,
+                hasMore: discordMessages.size === limit,
+                oldestMessageId: messages.length > 0 ? messages[messages.length - 1].id : null
+            });
+        } catch (discordError) {
+            console.error('❌ Failed to fetch from Discord:', discordError.message);
+            return res.json({ 
+                messages: [], 
+                total: 0,
+                hasMore: false,
+                error: 'Failed to fetch messages from Discord: ' + discordError.message
+            });
+        }
     } catch (error) {
+        console.error('❌ Error in /api/bridges/:id/messages:', error);
         res.status(500).json({ error: error.message });
     }
 });
