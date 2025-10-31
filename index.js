@@ -1553,22 +1553,28 @@ app.post('/api/auth/signup', async (req, res) => {
             const tenantCountResult = await pool.query('SELECT COUNT(*) as count FROM core.tenant_catalog');
             const isFirstUser = parseInt(tenantCountResult.rows[0].count) === 0;
             
-            // Check Sybil attack prevention
-            const sybilCheck = await tenantManager.checkSybilRisk(email, req.ip);
-            if (!sybilCheck.allowed) {
-                console.log(`[${getTimestamp()}] 🚫 Sybil protection blocked - Email: ${email}, Reason: ${sybilCheck.reason}`);
-                return res.status(429).json({ error: sybilCheck.reason });
-            }
-            
-            // Check rate limits
-            const rateLimitEmail = await tenantManager.checkRateLimit('tenant_creation', 'email', email);
-            if (!rateLimitEmail.allowed) {
-                return res.status(429).json({ error: rateLimitEmail.reason });
-            }
-            
-            const rateLimitIP = await tenantManager.checkRateLimit('tenant_creation', 'ip', req.ip);
-            if (!rateLimitIP.allowed) {
-                return res.status(429).json({ error: rateLimitIP.reason });
+            // FIRST PRINCIPLES: Genesis admin should NEVER be blocked by rate limits
+            // Only apply sybil/rate limit checks for non-genesis signups
+            if (!isFirstUser) {
+                // Check Sybil attack prevention
+                const sybilCheck = await tenantManager.checkSybilRisk(email, req.ip);
+                if (!sybilCheck.allowed) {
+                    console.log(`[${getTimestamp()}] 🚫 Sybil protection blocked - Email: ${email}, Reason: ${sybilCheck.reason}`);
+                    return res.status(429).json({ error: sybilCheck.reason });
+                }
+                
+                // Check rate limits
+                const rateLimitEmail = await tenantManager.checkRateLimit('tenant_creation', 'email', email);
+                if (!rateLimitEmail.allowed) {
+                    return res.status(429).json({ error: rateLimitEmail.reason });
+                }
+                
+                const rateLimitIP = await tenantManager.checkRateLimit('tenant_creation', 'ip', req.ip);
+                if (!rateLimitIP.allowed) {
+                    return res.status(429).json({ error: rateLimitIP.reason });
+                }
+            } else {
+                console.log(`[${getTimestamp()}] 🌟 Genesis admin signup detected - skipping all rate limits and sybil protection`);
             }
             
             const passwordHash = await bcrypt.hash(password, 10);
