@@ -12,44 +12,13 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-    <div class="header">
-        <!-- Left Section: Status Indicators -->
-        <div class="header-section header-left">
-            <div class="status-indicators-vertical">
-                <div class="indicator-vertical" id="systemStatusCompact">
-                    <span class="status-dot healthy"></span> System: <span id="systemStatusValueCompact">Healthy</span>
-                </div>
-                <div class="indicator-vertical">
-                    Bridges: <span id="bridgeCountCompact">0</span>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Center Section: Logo, Cat, Clock -->
-        <div class="header-section header-center">
-            <div class="header-cat-clock">
-                <div class="animated-character">
-                    <canvas id="hopCanvas" class="character-canvas" width="125" height="125"></canvas>
-                </div>
-                <div class="header-clock">
-                    <span id="currentTime">2025/10/28 - 3:00:00PM</span>
-                </div>
-            </div>
-            <div class="header-branding">
-                <div class="logo">
-                    <span>Your Nyanbook~</span>
-                </div>
-                <div class="tagline-wrapper">
-                    <span class="tagline">X to Discord Note</span>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Right Section: User Info & Logout -->
-        <div class="header-section header-right">
-            <div class="header-user-info">
+    <!-- Minimal header: Just user info -->
+    <div class="header" style="background: rgba(30, 41, 59, 0.8); padding: 0.75rem 1.5rem; backdrop-filter: blur(10px); border-bottom: 1px solid rgba(148, 163, 184, 0.1);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="color: #94a3b8; font-size: 0.875rem;">Your Nyanbook~</div>
+            <div style="display: flex; align-items: center; gap: 1rem;">
                 <div id="userInfo"></div>
-                <button class="logout-btn" onclick="logout()">Logout</button>
+                <button class="logout-btn" onclick="logout()" style="padding: 0.375rem 0.75rem; font-size: 0.875rem;">Logout</button>
             </div>
         </div>
     </div>
@@ -114,44 +83,37 @@
         </div>
     </div>
 
-    <div class="container">
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('bridges')">🌉 Bridges</button>
-            <button class="tab" onclick="switchTab('analytics')">📊 Analytics</button>
-            <button class="tab" id="usersTabBtn" onclick="switchTab('users')" style="display: none;">👥 Users</button>
-            <button class="tab" id="devPanelBtn" onclick="switchTab('devPanel')" style="display: none; background: white; color: #1a1a2e;">🔧 Dev Panel</button>
-        </div>
-
-        <!-- Bridges Tab -->
-        <div id="bridgesTab" class="tab-content active">
-            <div class="section-header">
-                <h1 class="section-title">Bridge Library</h1>
-                <button class="create-bot-btn" onclick="openCreatePopup()">+ Create Bridge</button>
-            </div>
-
-            <div class="search-filter" style="flex-wrap: wrap;">
-                <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search bridges, messages, senders... or try 'yesterday', 'october', 'last week'..." oninput="debouncedFilterBots()" style="flex: 1; min-width: 300px;">
-                <select class="filter-dropdown" id="platformFilter" onchange="filterBots()">
-                    <option value="">All Platforms</option>
-                </select>
-                <select class="filter-dropdown" id="messageTypeFilter" onchange="filterBots()">
-                    <option value="">All Message Types</option>
-                    <option value="text">📝 Text Only</option>
-                    <option value="image">🖼️ Images</option>
-                    <option value="video">🎥 Videos</option>
-                    <option value="audio">🎵 Audio</option>
-                    <option value="document">📄 Documents</option>
-                </select>
-                <div id="searchContextBadge" style="display: none; padding: 0.5rem 0.75rem; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 0.5rem; color: #3b82f6; font-size: 0.75rem; font-weight: 600; white-space: nowrap;"></div>
-            </div>
-
-            <div class="bridge-layout">
-                <nav class="bridge-sidebar" id="bridgeSidebar">
+    <div class="container" style="padding: 0; max-width: 100%; height: calc(100vh - 60px);">
+        <!-- Single column WhatsApp-style layout -->
+        <div id="bridgesTab" class="tab-content active" style="display: flex; height: 100%; padding: 0;">
+            <!-- Sidebar with cat, search, and bridges -->
+            <nav class="bridge-sidebar" id="bridgeSidebar" style="border-right: 1px solid rgba(148, 163, 184, 0.1); display: flex; flex-direction: column; overflow: hidden;">
+                <!-- Cat + Time + Search Section -->
+                <div style="padding: 1rem; border-bottom: 1px solid rgba(148, 163, 184, 0.1); flex-shrink: 0;">
+                    <!-- Cat -->
+                    <div style="display: flex; justify-content: center; margin-bottom: 0.5rem;">
+                        <canvas id="hopCanvas" class="character-canvas" width="125" height="125"></canvas>
+                    </div>
+                    <!-- Date & Time -->
+                    <div style="text-align: center; color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.75rem;">
+                        <span id="currentTime">2025/10/28 - 3:00:00PM</span>
+                    </div>
+                    <!-- Search -->
+                    <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..." oninput="debouncedFilterBots()" style="width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; color: #e2e8f0; font-size: 0.875rem;">
+                    <!-- Create Bridge Button -->
+                    <button class="create-bot-btn" onclick="openCreatePopup()" style="width: 100%; padding: 0.5rem; background: #5865f2; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.875rem;">+ Create Bridge</button>
+                </div>
+                
+                <!-- Bridge List (scrollable) -->
+                <div id="bridgeListContainer" style="flex: 1; overflow-y: auto; padding: 0;">
                     <!-- Bot list will render here -->
-                </nav>
-                <section class="bridge-detail" id="bridgeDetail">
-                    <!-- Selected bridge details will render here -->
-                </section>
+                </div>
+            </nav>
+            
+            <!-- Message Detail -->
+            <section class="bridge-detail" id="bridgeDetail" style="flex: 1; display: flex; flex-direction: column;">
+                <!-- Selected bridge details will render here -->
+            </section>
             </div>
         </div>
 
@@ -892,11 +854,11 @@
         let selectedBridgeFractalId = null;
 
         function renderBridges(skipDetailRender = false) {
-            const sidebar = document.getElementById('bridgeSidebar');
+            const sidebar = document.getElementById('bridgeListContainer');
             const detail = document.getElementById('bridgeDetail');
             
             if (filteredBridges.length === 0) {
-                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No bridges found</p>';
+                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.875rem;">No bridges found</p>';
                 detail.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Create your first bridge to get started!</p>';
                 return;
             }
@@ -907,41 +869,18 @@
                 selectedBridgeFractalId = filteredBridges[0].fractal_id;
             }
             
-            // Group bots by input platform
-            const groupedBots = {};
-            filteredBridges.forEach(bridge => {
-                if (!groupedBots[bridge.input_platform]) {
-                    groupedBots[bridge.input_platform] = [];
-                }
-                groupedBots[bridge.input_platform].push(bridge);
-            });
-            
-            // Render sidebar with roadmap teaser
-            const roadmapCard = roadmapGlossary?.platforms?.coming_soon ? `
-                <div class="roadmap-card" style="margin-top: 1rem;">
-                    <div class="roadmap-title">🚀 Coming Soon</div>
-                    <div class="roadmap-platforms">
-                        ${roadmapGlossary.platforms.coming_soon.map(p => `
-                            <span class="roadmap-platform">${p}</span>
-                        `).join('')}
+            // Clean WhatsApp-style list (no platform grouping)
+            sidebar.innerHTML = filteredBridges.map(bridge => `
+                <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" onclick="selectBridge('${bridge.fractal_id}')" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border: none; background: ${bridge.fractal_id === selectedBridgeFractalId ? 'rgba(88, 101, 242, 0.15)' : 'transparent'}; border-left: 3px solid ${bridge.fractal_id === selectedBridgeFractalId ? '#5865f2' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.2s;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="color: #e2e8f0; font-weight: 500; font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bridge.name || `${bridge.input_platform} → Discord`}</div>
+                        <div style="color: #94a3b8; font-size: 0.75rem; margin-top: 0.125rem;">
+                            ${bridge.message_count > 0 ? `${bridge.message_count} messages` : 'No messages yet'}
+                        </div>
                     </div>
-                </div>
-            ` : '';
-            
-            sidebar.innerHTML = Object.entries(groupedBots).map(([platform, bots]) => `
-                <div class="bridge-category">
-                    <div class="category-header">${platform}</div>
-                    ${bots.map(bridge => `
-                        <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" onclick="selectBridge('${bridge.fractal_id}')">
-                            <span class="channel-name">${bridge.name || `${bridge.input_platform} → ${bridge.output_platform}`}</span>
-                            <div class="channel-badges">
-                                ${bridge._matchType === 'message' ? `<span class="badge" style="background: rgba(34, 197, 94, 0.2); border-color: rgba(34, 197, 94, 0.3); color: #22c55e;" title="Match found in messages">💬</span>` : ''}
-                                ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
-                            </div>
-                        </button>
-                    `).join('')}
-                </div>
-            `).join('') + roadmapCard;
+                    ${bridge._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.3); color: #22c55e; padding: 0.125rem 0.375rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">💬</span>` : ''}
+                </button>
+            `).join('');
             
             // Only render detail panel if not skipping (avoids destroying loaded media during auto-refresh)
             if (!skipDetailRender) {
@@ -969,28 +908,18 @@
             }
             
             // Re-render sidebar to update active state
-            const sidebar = document.getElementById('bridgeSidebar');
-            const groupedBots = {};
-            filteredBridges.forEach(bridge => {
-                if (!groupedBots[bridge.input_platform]) {
-                    groupedBots[bridge.input_platform] = [];
-                }
-                groupedBots[bridge.input_platform].push(bridge);
-            });
+            const sidebar = document.getElementById('bridgeListContainer');
             
-            sidebar.innerHTML = Object.entries(groupedBots).map(([platform, platformBridges]) => `
-                <div class="bridge-category">
-                    <div class="category-header">${platform}</div>
-                    ${platformBridges.map(bridge => `
-                        <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" onclick="selectBridge('${bridge.fractal_id}')">
-                            <span class="channel-name">${bridge.input_platform} → ${bridge.output_platform}</span>
-                            <div class="channel-badges">
-                                ${bridge._matchType === 'message' ? `<span class="badge" style="background: rgba(34, 197, 94, 0.2); border-color: rgba(34, 197, 94, 0.3); color: #22c55e;" title="Match found in messages">💬</span>` : ''}
-                                ${bridge.message_count > 0 ? `<span class="badge">${bridge.message_count}</span>` : ''}
-                            </div>
-                        </button>
-                    `).join('')}
-                </div>
+            sidebar.innerHTML = filteredBridges.map(bridge => `
+                <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" onclick="selectBridge('${bridge.fractal_id}')" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border: none; background: ${bridge.fractal_id === selectedBridgeFractalId ? 'rgba(88, 101, 242, 0.15)' : 'transparent'}; border-left: 3px solid ${bridge.fractal_id === selectedBridgeFractalId ? '#5865f2' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.2s;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="color: #e2e8f0; font-weight: 500; font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bridge.name || `${bridge.input_platform} → Discord`}</div>
+                        <div style="color: #94a3b8; font-size: 0.75rem; margin-top: 0.125rem;">
+                            ${bridge.message_count > 0 ? `${bridge.message_count} messages` : 'No messages yet'}
+                        </div>
+                    </div>
+                    ${bridge._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.3); color: #22c55e; padding: 0.125rem 0.375rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">💬</span>` : ''}
+                </button>
             `).join('');
             
             // Render detail panel for selected bridge
@@ -1064,24 +993,16 @@
             
             const detail = document.getElementById('bridgeDetail');
             detail.innerHTML = `
-                <div class="discord-header">
-                    <div class="discord-channel-info">
-                        <span class="discord-channel-name"># ${platform}-discord</span>
-                        <span class="discord-stats">
-                            ${platform === 'whatsapp' ? getWhatsAppStatusBadge() : ''}
-                            <span class="stat-badge" data-tooltip="${glossary?.tooltips?.message_count || 'Total messages received'}">${bridge.message_count || 0} 📊</span>
-                            <span class="stat-badge ${successClass}" data-tooltip="${glossary?.tooltips?.forwarded_count || 'Successfully forwarded messages'}">${bridge.forwarded_count || 0} ✓</span>
-                            <span class="stat-badge error ${failedClass}" data-tooltip="${glossary?.tooltips?.failed_count || 'Failed to forward'}">${bridge.failed_count || 0} ✗</span>
-                        </span>
+                <!-- Minimal header bar -->
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(148, 163, 184, 0.1);">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;">
+                        <div style="color: #e2e8f0; font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bridge.name || `${platform} → Discord`}</div>
+                        ${platform === 'whatsapp' && whatsappStatus ? `<span style="background: ${whatsappStatus === 'ready' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(251, 191, 36, 0.2)'}; color: ${whatsappStatus === 'ready' ? '#10b981' : '#fbbf24'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${whatsappStatus === 'ready' ? '✅' : '⏳'}</span>` : ''}
                     </div>
-                    <div class="discord-actions">
-                        ${isDevPanelView ? `
-                            <button class="btn-icon" onclick="showBridgeInfo('${bridge.fractal_id}')" title="Bridge Information" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">ℹ️</button>
-                        ` : `
-                            ${platform === 'whatsapp' ? getWhatsAppActions() : ''}
-                            <button class="btn-icon" onclick="editBridge('${bridge.fractal_id}')" title="Edit Bridge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">✏️</button>
-                            <button class="btn-icon btn-danger" onclick="confirmDeleteBridge('${bridge.fractal_id}')" title="Delete Bridge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🗑️</button>
-                        `}
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" onclick="generateNewQR('${bridge.fractal_id}')" title="Generate QR" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🔗</button>` : ''}
+                        ${!isDevPanelView ? `<button class="btn-icon" onclick="editBridge('${bridge.fractal_id}')" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
+                        ${!isDevPanelView ? `<button class="btn-icon" onclick="confirmDeleteBridge('${bridge.fractal_id}')" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
                     </div>
                 </div>
 
@@ -2549,8 +2470,8 @@
                             
                             // If no bridges left, show empty state
                             if (bridges.length === 0) {
-                                const sidebar = document.getElementById('bridgeSidebar');
-                                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">No bridges found</p>';
+                                const sidebar = document.getElementById('bridgeListContainer');
+                                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.875rem;">No bridges found</p>';
                             }
                         }, 750);
                     } else {
@@ -3594,7 +3515,7 @@
                 }
             } catch (error) {
                 console.error('❌ Dev Panel: Failed to load bridges:', error);
-                const sidebar = document.getElementById('bridgeSidebar');
+                const sidebar = document.getElementById('bridgeListContainer');
                 if (sidebar) {
                     sidebar.innerHTML = `<div style="padding: 2rem; color: #ef4444; text-align: center;">Error: ${error.message}</div>`;
                 }
