@@ -421,6 +421,11 @@
             
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            
+            // Prevent double-click
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Signing In...';
             
             try {
                 const res = await fetch('/api/auth/login', {
@@ -445,9 +450,15 @@
                     }, 1000);
                 } else {
                     showError(data.error || 'Login failed');
+                    // Re-enable button on error
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Sign In';
                 }
             } catch (error) {
                 showError('Network error. Please try again.');
+                // Re-enable button on error
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Sign In';
             }
         }
 

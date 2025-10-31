@@ -337,11 +337,16 @@
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
+            const submitBtn = event.target.querySelector('button[type="submit"]');
 
             if (password !== confirmPassword) {
                 showError('Passwords do not match');
                 return;
             }
+
+            // Prevent double-click
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating Account...';
 
             try {
                 const response = await fetch('/api/auth/register/public', {
@@ -370,10 +375,16 @@
                 } else {
                     console.error('Signup failed:', data);
                     showError(data.error || `Signup failed (HTTP ${response.status})`);
+                    // Re-enable button on error
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Create Account';
                 }
             } catch (error) {
                 console.error('Signup error:', error);
                 showError(error.message || 'Network error. Please try again.');
+                // Re-enable button on error
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Account';
             }
         }
 
