@@ -86,6 +86,15 @@ Fixed critical bugs preventing genesis admin achievement:
 - **CORS Whitelist**: Added `.replit.app` domain support for published site
 - **Cache-Busting**: Added `Cache-Control: no-store, no-cache, must-revalidate, private` + `Pragma: no-cache` + `Expires: 0` headers to ALL auth endpoints (`/api/auth/check-genesis`, `/api/auth/status`, `/api/auth/login`, `/api/auth/register/public`) to prevent browser/CDN caching of authentication state
 
+### Webhook-Only Architecture + Dynamic Indexing Fix (Oct 31, 2025)
+Fixed message display failure caused by output structure migration:
+- **Root Cause**: UI checked `output_credentials.thread_id` (pre-migration) but database stores `output_credentials.output_01.thread_id` (post-migration)
+- **Impact**: Message container never rendered → messages couldn't display
+- **Solution**: Updated all UI references from flat structure to nested `output_01` structure
+- **Discord Bot Manager**: Removed thread/channel creation attempts for output_0n (webhook-only metadata storage)
+- **Message Fetching**: Always fetches from output_01 (Ledger thread) regardless of UI tab, since bot cannot access user Discord servers
+- **Architecture**: Dual-output send (01+0n), single-source fetch (01 only)
+
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)
 - **WhatsApp**: Baileys library
