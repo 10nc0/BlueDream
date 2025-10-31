@@ -575,7 +575,7 @@ async function sendToLedger(payload, options = {}, bridge = null) {
 }
 
 // Send to User Output (Output #0n = user's personal Discord, mutable)
-// WEBHOOK-FIRST: Accepts bridge object directly, no database queries needed
+// DUAL-THREAD: Routes to thread_0n specifically created for user visibility
 async function sendToUserOutput(payload, options = {}, bridge = null) {
     if (!bridge) {
         console.log('  ℹ️  No bridge context - skipping Output #0n');
@@ -592,7 +592,13 @@ async function sendToUserOutput(payload, options = {}, bridge = null) {
         }
 
         const url = new URL(userOutputUrl);
-        // Don't add thread params to user output - let them manage their own Discord
+        url.searchParams.set('wait', 'true');
+        
+        // DUAL-THREAD: Route to thread_0n if available
+        if (options.threadId) {
+            url.searchParams.set('thread_id', options.threadId);
+            console.log(`  📍 Targeting thread_0n: ${options.threadId}`);
+        }
         
         // Handle media vs text - read from media_buffer if provided
         if (options.isMedia && options.mediaBufferId) {
@@ -1025,24 +1031,29 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                             inline: false
                         });
                         
-                        // WEBHOOK-FIRST ARCHITECTURE: Dual-output delivery from media_buffer
-                        const threadName = bridge.output_credentials?.thread_name;
-                        const threadId = bridge.output_credentials?.thread_id;
+                        // DUAL-THREAD ARCHITECTURE: Route to correct threads from media_buffer
+                        const thread01Id = bridge.output_credentials?.thread_01_id;
+                        const thread01Name = bridge.output_credentials?.thread_01_name;
+                        const thread0nId = bridge.output_credentials?.thread_0n_id;
+                        const thread0nName = bridge.output_credentials?.thread_0n_name;
                         
-                        // Path 1: Nyanbook Ledger (Output #01) - reads from media_buffer
+                        console.log(`📍 Routing media to dual threads: thread_01=${thread01Id || 'none'}, thread_0n=${thread0nId || 'none'}`);
+                        
+                        // Path 1: Nyanbook Ledger (Output #01) → thread_01
                         await sendToLedger(discordPayload, {
                             isMedia: true,
                             mediaBufferId: mediaBufferId,
                             tenantSchema: tenantSchema,
-                            threadName,
-                            threadId
+                            threadName: thread01Name,
+                            threadId: thread01Id
                         }, bridge);
                         
-                        // Path 2: User Webhook (Output #0n) - reads from media_buffer
+                        // Path 2: User Webhook (Output #0n) → thread_0n
                         await sendToUserOutput(discordPayload, {
                             isMedia: true,
                             mediaBufferId: mediaBufferId,
-                            tenantSchema: tenantSchema
+                            tenantSchema: tenantSchema,
+                            threadId: thread0nId
                         }, bridge);
                         
                         console.log(`✅ [Bridge ${bridgeId}] Forwarded ${attachmentType}: ${filename} from ${senderName}`);
@@ -1054,20 +1065,26 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                 }
             }
 
-            // WEBHOOK-FIRST ARCHITECTURE: Dual-output delivery  
-            // Output #01: Nyanbook Ledger (eternal, Dev #01 only)
-            // Output #0n: User Discord (mutable, Admin #0n only)
-            const threadName = bridge.output_credentials?.thread_name;
-            const threadId = bridge.output_credentials?.thread_id;
+            // DUAL-THREAD ARCHITECTURE: Route to correct threads
+            // thread_01 → Nyanbook Ledger (webhook01) - dev-only visibility
+            // thread_0n → User Discord (webhook0n) - user-facing visibility
+            const thread01Id = bridge.output_credentials?.thread_01_id;
+            const thread01Name = bridge.output_credentials?.thread_01_name;
+            const thread0nId = bridge.output_credentials?.thread_0n_id;
+            const thread0nName = bridge.output_credentials?.thread_0n_name;
             
-            // Path 1: Nyanbook Ledger (Output #01)
+            console.log(`📍 Routing message to dual threads: thread_01=${thread01Id || 'none'}, thread_0n=${thread0nId || 'none'}`);
+            
+            // Path 1: Nyanbook Ledger (Output #01) → thread_01
             await sendToLedger(discordPayload, {
-                threadName,
-                threadId
+                threadName: thread01Name,
+                threadId: thread01Id
             }, bridge);
             
-            // Path 2: User Webhook (Output #0n)
-            await sendToUserOutput(discordPayload, {}, bridge);
+            // Path 2: User Webhook (Output #0n) → thread_0n
+            await sendToUserOutput(discordPayload, {
+                threadId: thread0nId
+            }, bridge);
             
             console.log(`✅ [Bridge ${bridgeId}] Forwarded message from ${senderName}`);
         } catch (error) {
@@ -2915,42 +2932,73 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
         
         bridge.fractal_id = generatedFractalId;
         
-        // AUTO-CREATE DISCORD THREAD VIA BOT (one thread per bridge)
-        if (discordBotManager && discordBotManager.isReady() && output01Url) {
+        // AUTO-CREATE DUAL DISCORD THREADS VIA BOT
+        // thread_01 → Nyanbook Ledger (webhook01) - dev-only visibility
+        // thread_0n → User Discord (webhook0n) - user-facing visibility
+        if (discordBotManager && discordBotManager.isReady()) {
             try {
-                const threadInfo = await discordBotManager.createThreadForBridge(
+                console.log(`🧵 Initiating dual thread creation for bridge ${bridge.id}...`);
+                const dualThreads = await discordBotManager.createDualThreadsForBridge(
                     output01Url,
+                    output0nUrl,
                     name,
                     tenantId,
                     bridge.id
                 );
                 
+                // Build output_credentials with both thread IDs
+                const threadCredentials = {};
+                
+                if (dualThreads.thread_01) {
+                    threadCredentials.thread_01_id = dualThreads.thread_01.thread_id;
+                    threadCredentials.thread_01_name = dualThreads.thread_01.thread_name;
+                    console.log(`  ✅ Stored thread_01: ${dualThreads.thread_01.thread_id}`);
+                }
+                
+                if (dualThreads.thread_0n) {
+                    threadCredentials.thread_0n_id = dualThreads.thread_0n.thread_id;
+                    threadCredentials.thread_0n_name = dualThreads.thread_0n.thread_name;
+                    console.log(`  ✅ Stored thread_0n: ${dualThreads.thread_0n.thread_id}`);
+                }
+                
+                // Log any errors but don't fail bridge creation
+                if (dualThreads.errors.length > 0) {
+                    console.warn(`⚠️  Thread creation errors:`, dualThreads.errors);
+                }
+                
                 await client.query(
                     `UPDATE bridges 
                      SET output_credentials = output_credentials || $1::jsonb
                      WHERE id = $2`,
-                    [JSON.stringify({ thread_id: threadInfo.threadId, thread_name: threadInfo.threadName }), bridge.id]
+                    [JSON.stringify(threadCredentials), bridge.id]
                 );
                 
-                bridge.output_credentials.thread_id = threadInfo.threadId;
-                bridge.output_credentials.thread_name = threadInfo.threadName;
+                // Update bridge object with thread credentials
+                bridge.output_credentials = { ...bridge.output_credentials, ...threadCredentials };
                 
-                try {
-                    await discordBotManager.sendInitialMessage(threadInfo.threadId, name, output01Url);
-                } catch (msgError) {
-                    console.error(`⚠️  Failed to send initial message (non-critical):`, msgError.message);
+                // Send initial messages to both threads
+                if (dualThreads.thread_01) {
+                    try {
+                        await discordBotManager.sendInitialMessage(dualThreads.thread_01.thread_id, name, output01Url);
+                        console.log(`  ✅ Sent initial message to thread_01`);
+                    } catch (msgError) {
+                        console.error(`  ⚠️  Failed to send initial message to thread_01:`, msgError.message);
+                    }
                 }
                 
-                console.log(`🧵 Auto-created Discord thread for bridge ${generatedFractalId}: ${threadInfo.threadName}`);
+                if (dualThreads.thread_0n) {
+                    try {
+                        await discordBotManager.sendInitialMessage(dualThreads.thread_0n.thread_id, name, output0nUrl);
+                        console.log(`  ✅ Sent initial message to thread_0n`);
+                    } catch (msgError) {
+                        console.error(`  ⚠️  Failed to send initial message to thread_0n:`, msgError.message);
+                    }
+                }
+                
+                console.log(`🧵 Dual-thread setup complete for bridge ${generatedFractalId}`);
             } catch (error) {
-                console.error(`⚠️  Failed to auto-create thread for bridge ${generatedFractalId}:`, error.message);
-                
-                if (discordBotManager.isTransientError(error)) {
-                    console.log(`📝 Queueing retry for transient error...`);
-                    discordBotManager.queueRetry(bridge.id, tenantId, output01Url, name, client, 60000);
-                } else {
-                    console.log(`❌ Permanent error - bridge will use webhook-only mode`);
-                }
+                console.error(`⚠️  Failed to create dual threads for bridge ${generatedFractalId}:`, error.message);
+                console.log(`❌ Bridge will use webhook-only mode (no Discord thread UI)`);
             }
         }
         
@@ -3648,14 +3696,17 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
             outputCredentials = JSON.parse(outputCredentials);
         }
         
-        const threadId = outputCredentials?.thread_id;
+        // DUAL-THREAD: Bridges tab uses thread_0n (user-facing)
+        const threadId = outputCredentials?.thread_0n_id;
+        
+        console.log(`  📍 Bridges tab fetching from thread_0n: ${threadId || 'none'}`);
         
         if (!threadId) {
             return res.json({ 
                 messages: [], 
                 total: 0,
                 hasMore: false,
-                note: 'No Discord thread configured for this bridge yet'
+                note: 'No user Discord thread configured. Messages are only visible in Dev Panel.'
             });
         }
         
@@ -3725,6 +3776,131 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
         }
     } catch (error) {
         console.error('❌ Error in /api/bridges/:id/messages:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// DEV-ONLY: Get messages from thread_01 (Nyanbook Ledger)
+// Role-gated endpoint: Only dev users can access Ledger messages
+app.get('/api/dev/bridges/:id/messages', requireAuth, setTenantContext, async (req, res) => {
+    try {
+        const client = req.dbClient || pool;
+        const { id } = req.params; // fractal_id
+        const userRole = req.tenantContext?.userRole;
+        const limit = parseInt(req.query.limit) || 50;
+        const before = req.query.before; // Discord message ID for pagination
+        
+        // ROLE GATE: Only dev users can access Ledger
+        if (userRole !== 'dev') {
+            console.warn(`⚠️  Non-dev user ${req.userId} attempted to access Dev Panel messages`);
+            return res.status(403).json({ 
+                error: 'Access denied: Dev Panel is only accessible to dev role users'
+            });
+        }
+        
+        console.log(`🔧 Dev Panel: Fetching Ledger messages for bridge ${id} (user: ${req.userId})`);
+        
+        // Get bridge with thread info
+        const bridgeResult = await client.query(
+            'SELECT id, name, output_credentials FROM bridges WHERE fractal_id = $1',
+            [id]
+        );
+        
+        if (bridgeResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Bridge not found' });
+        }
+        
+        const bridge = bridgeResult.rows[0];
+        
+        // Parse JSON if needed
+        let outputCredentials = bridge.output_credentials;
+        if (typeof outputCredentials === 'string') {
+            outputCredentials = JSON.parse(outputCredentials);
+        }
+        
+        // DUAL-THREAD: Dev Panel uses thread_01 (Ledger)
+        const threadId = outputCredentials?.thread_01_id;
+        
+        console.log(`  📍 Dev Panel fetching from thread_01: ${threadId || 'none'}`);
+        
+        if (!threadId) {
+            return res.json({ 
+                messages: [], 
+                total: 0,
+                hasMore: false,
+                note: 'No Ledger thread configured for this bridge yet'
+            });
+        }
+        
+        // Fetch messages from Discord thread using bot
+        if (!discordBotManager.client || !discordBotManager.ready) {
+            return res.json({ 
+                messages: [], 
+                total: 0,
+                hasMore: false,
+                note: 'Discord bot not ready - messages temporarily unavailable'
+            });
+        }
+        
+        try {
+            const thread = await discordBotManager.client.channels.fetch(threadId);
+            
+            if (!thread) {
+                return res.json({ 
+                    messages: [], 
+                    total: 0,
+                    hasMore: false,
+                    note: 'Ledger thread not found'
+                });
+            }
+            
+            // Fetch messages from Discord (force: true bypasses cache for real-time updates)
+            const options = { limit, force: true };
+            if (before) options.before = before;
+            
+            const discordMessages = await thread.messages.fetch(options);
+            
+            // Transform Discord messages to UI format
+            const messages = Array.from(discordMessages.values()).map(msg => {
+                const attachment = msg.attachments.size > 0 ? msg.attachments.first() : null;
+                return {
+                    id: msg.id,
+                    sender_name: msg.author.username,
+                    sender_avatar: msg.author.displayAvatarURL(),
+                    message_content: msg.content || '',
+                    timestamp: msg.createdAt.toISOString(),
+                    has_media: msg.attachments.size > 0,
+                    media_url: attachment ? attachment.url : null,
+                    media_type: attachment ? attachment.contentType : null,
+                    embeds: msg.embeds.map(e => ({
+                        title: e.title,
+                        description: e.description,
+                        color: e.color,
+                        fields: e.fields
+                    }))
+                };
+            });
+            
+            console.log(`  ✅ Dev Panel: Retrieved ${messages.length} messages from Ledger`);
+            
+            res.json({ 
+                messages,
+                total: messages.length,
+                hasMore: discordMessages.size === limit,
+                oldestMessageId: messages.length > 0 ? messages[messages.length - 1].id : null,
+                source: 'thread_01_ledger'
+            });
+        } catch (discordError) {
+            console.error('❌ Dev Panel: Failed to fetch from Ledger:', discordError.message);
+            return res.json({ 
+                messages: [], 
+                total: 0,
+                hasMore: false,
+                error: 'Failed to fetch messages from Ledger: ' + discordError.message
+            });
+        }
+    } catch (error) {
+        console.error('❌ Error in /api/dev/bridges/:id/messages:', error);
         res.status(500).json({ error: error.message });
     }
 });

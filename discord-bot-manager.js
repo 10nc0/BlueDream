@@ -165,6 +165,71 @@ class DiscordBotManager {
         }
     }
 
+    /**
+     * DUAL-THREAD ARCHITECTURE: Create TWO threads for a bridge
+     * - thread_01 → Nyanbook Ledger (webhook01) - dev-only visibility
+     * - thread_0n → User Discord (webhook0n) - user-facing visibility
+     */
+    async createDualThreadsForBridge(webhook01Url, webhook0nUrl, bridgeName, tenantId, bridgeId) {
+        console.log(`🧵 Creating dual threads for bridge: ${bridgeName} (t${tenantId}-b${bridgeId})`);
+        
+        const results = {
+            thread_01: null,
+            thread_0n: null,
+            errors: []
+        };
+
+        // THREAD #01: Nyanbook Ledger (always created)
+        if (webhook01Url) {
+            try {
+                console.log(`  📍 Creating thread_01 for webhook01 (Ledger)...`);
+                const threadInfo = await this.createThreadForBridge(
+                    webhook01Url,
+                    bridgeName,
+                    tenantId,
+                    bridgeId
+                );
+                results.thread_01 = {
+                    thread_id: threadInfo.threadId,
+                    thread_name: threadInfo.threadName,
+                    channel_id: threadInfo.channelId
+                };
+                console.log(`  ✅ thread_01 created: ${threadInfo.threadId}`);
+            } catch (error) {
+                console.error(`  ❌ Failed to create thread_01:`, error.message);
+                results.errors.push({ thread: 'thread_01', error: error.message });
+            }
+        }
+
+        // THREAD #0n: User Discord (only if webhook0n provided)
+        if (webhook0nUrl) {
+            try {
+                console.log(`  📍 Creating thread_0n for webhook0n (User)...`);
+                const threadInfo = await this.createThreadForBridge(
+                    webhook0nUrl,
+                    bridgeName,
+                    tenantId,
+                    bridgeId
+                );
+                results.thread_0n = {
+                    thread_id: threadInfo.threadId,
+                    thread_name: threadInfo.threadName,
+                    channel_id: threadInfo.channelId
+                };
+                console.log(`  ✅ thread_0n created: ${threadInfo.threadId}`);
+            } catch (error) {
+                console.error(`  ❌ Failed to create thread_0n:`, error.message);
+                results.errors.push({ thread: 'thread_0n', error: error.message });
+            }
+        } else {
+            console.log(`  ⏭️  Skipping thread_0n creation (no webhook0n provided)`);
+        }
+
+        console.log(`🧵 Dual thread creation complete: ${results.thread_01 ? '✅' : '❌'} thread_01, ${results.thread_0n ? '✅' : '⏭️'} thread_0n`);
+        
+        return results;
+    }
+
     async sendInitialMessage(threadId, bridgeName, webhookUrl, retryCount = 0) {
         if (!this.client || !this.ready) {
             throw new Error('Discord bot not initialized or not ready');
