@@ -368,10 +368,12 @@
                         window.location.href = '/';
                     }, 1500);
                 } else {
-                    showError(data.error || 'Signup failed');
+                    console.error('Signup failed:', data);
+                    showError(data.error || `Signup failed (HTTP ${response.status})`);
                 }
             } catch (error) {
-                showError('Network error. Please try again.');
+                console.error('Signup error:', error);
+                showError(error.message || 'Network error. Please try again.');
             }
         }
 

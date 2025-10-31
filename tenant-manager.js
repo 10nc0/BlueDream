@@ -147,6 +147,24 @@ class TenantManager {
 
             await client.query(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
 
+            // TENANT-SCOPED USERS TABLE: Each tenant has isolated user records
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.users (
+                    id SERIAL PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT,
+                    role TEXT DEFAULT 'read-only' CHECK (role IN ('dev', 'admin', 'read-only', 'write-only')),
+                    tenant_id INTEGER NOT NULL,
+                    is_genesis_admin BOOLEAN DEFAULT false,
+                    google_id TEXT UNIQUE,
+                    provider TEXT DEFAULT 'email',
+                    otp_code TEXT,
+                    otp_expires_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            `);
+
             await client.query(`
                 CREATE TABLE IF NOT EXISTS ${schemaName}.bridges (
                     id SERIAL PRIMARY KEY,
@@ -420,16 +438,12 @@ class TenantManager {
                 WHERE id = $2
             `, [schemaName, tenantId]);
 
-            // Link user to tenant
-            await client.query(`
-                UPDATE users 
-                SET tenant_id = $1, is_genesis_admin = true, updated_at = NOW()
-                WHERE id = $2
-            `, [tenantId, genesisUserId]);
+            // DO NOT UPDATE global users table (doesn't exist in multi-tenant architecture)
+            // User will be inserted into tenant_X.users after schema creation
 
             await client.query('COMMIT');
 
-            // Create the actual tenant schema
+            // Create the actual tenant schema (including users table)
             await this.createTenantSchema(tenantId);
 
             console.log(`✅ Created tenant ${tenantId} with genesis user ${genesisUserId}`);
