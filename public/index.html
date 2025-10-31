@@ -1168,6 +1168,27 @@
             }
         }
 
+        // Extract searchable text from embeds
+        function extractEmbedSearchText(embeds) {
+            if (!embeds || !Array.isArray(embeds)) return '';
+            
+            return embeds.map(embed => {
+                const parts = [];
+                if (embed.title) parts.push(embed.title);
+                if (embed.description) parts.push(embed.description);
+                if (embed.fields && Array.isArray(embed.fields)) {
+                    embed.fields.forEach(field => {
+                        if (field.name) parts.push(field.name);
+                        if (field.value) parts.push(field.value);
+                    });
+                }
+                if (embed.footer) {
+                    parts.push(typeof embed.footer === 'string' ? embed.footer : embed.footer.text);
+                }
+                return parts.join(' ');
+            }).join(' ');
+        }
+
         // Render Discord-style messages
         function renderDiscordMessages(data, bridgeId) {
             const messages = Array.isArray(data) ? data : data?.messages;
@@ -1182,8 +1203,17 @@
                 return '<div class="no-messages">No messages yet. Messages will appear here when they arrive.</div>';
             }
             
-            const html = messages.map(msg => `
-                <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml((msg.sender_name || '') + ' ' + msg.message_content + ' ' + (msg.sender_contact || '')).toLowerCase()}" data-status="${msg.discord_status}">
+            const html = messages.map(msg => {
+                // Build comprehensive searchable text including embeds
+                const searchableText = [
+                    msg.sender_name || '',
+                    msg.message_content || '',
+                    msg.sender_contact || '',
+                    extractEmbedSearchText(msg.embeds)
+                ].join(' ').toLowerCase();
+                
+                return `
+                <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml(searchableText)}" data-status="${msg.discord_status}">
                     <div class="discord-avatar">
                         ${msg.sender_photo_url ? 
                             `<img src="${escapeHtml(msg.sender_photo_url)}" alt="${escapeHtml(msg.sender_name || 'User')}" class="avatar-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
