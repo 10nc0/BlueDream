@@ -17,6 +17,15 @@ class BaileysMessageAdapter {
         this.fromMe = rawMessage.key.fromMe;
         this.remoteJid = rawMessage.key.remoteJid;
         
+        // Create whatsapp-web.js compatible id object
+        // whatsapp-web.js uses message.id._serialized for unique message IDs
+        this.id = {
+            fromMe: rawMessage.key.fromMe,
+            remote: rawMessage.key.remoteJid,
+            id: rawMessage.key.id,
+            _serialized: `${rawMessage.key.fromMe ? 'true' : 'false'}_${rawMessage.key.remoteJid}_${rawMessage.key.id}`
+        };
+        
         // Extract message content - unwrap containers first
         const msgContent = this._unwrapMessage(rawMessage.message);
         this.unwrappedMessage = msgContent; // Store for later use

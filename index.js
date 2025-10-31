@@ -3866,8 +3866,8 @@ async function autoRestoreWhatsAppSessions() {
                     // Check if this bridge has a saved Baileys session
                     // Baileys stores auth in a directory with JSON files (creds.json, etc.)
                     const sessionClientId = `${schema_name}_bridge_${bridge.id}`;
-                    // CRITICAL: Use persistent Baileys storage path
-                    const sessionPath = path.join(BAILEYS_DATA_PATH, sessionClientId);
+                    // CRITICAL: Use persistent Baileys storage path with "session-" prefix
+                    const sessionPath = path.join(BAILEYS_DATA_PATH, `session-${sessionClientId}`);
                     
                     // Check if Baileys session exists (directory with creds.json)
                     const hasSession = fs.existsSync(sessionPath) && 
