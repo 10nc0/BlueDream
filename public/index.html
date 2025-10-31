@@ -701,16 +701,27 @@
                 </span>`;
                 
                 // Role hierarchy: dev > admin > user
-                // Show tabs based on role
+                // Show tabs based on role AND genesis admin status
                 const devTab = document.getElementById('devPanelBtn');
                 const usersTabBtn = document.getElementById('usersTabBtn');
                 
-                if (currentUser.role === 'dev') {
-                    // Devs see everything including dev panel
+                // Genesis admins get dev role and full access
+                const isGenesisAdmin = currentUser.isGenesisAdmin || currentUser.is_genesis_admin;
+                
+                if (currentUser.role === 'dev' || isGenesisAdmin) {
+                    // Devs and Genesis Admins see everything including dev panel
                     if (devTab) devTab.style.display = 'block';
                     if (usersTabBtn) usersTabBtn.style.display = 'block';
+                    
+                    // Add visual indicator for Genesis Admin
+                    if (isGenesisAdmin) {
+                        userInfo.innerHTML = `<span style="color: ${roleColors[currentUser.role] || '#94a3b8'}; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.4;">
+                            <span>● ${currentUser.email || currentUser.phone}</span>
+                            <span style="font-size: 0.85em; opacity: 0.9;">(${currentUser.role}) 🌟 Genesis</span>
+                        </span>`;
+                    }
                 } else if (currentUser.role === 'admin') {
-                    // Admins see users tab but not dev panel
+                    // Regular admins see users tab but not dev panel
                     if (usersTabBtn) usersTabBtn.style.display = 'block';
                 }
                 
