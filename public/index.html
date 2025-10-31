@@ -594,6 +594,14 @@
         
         let allMessages = {}; // Store all messages by ID for media viewing
         let currentUser = null;
+        
+        // SEAMLESS SEARCH: Store bridge search query for auto-filtering messages
+        // When user searches in bridge library and clicks a 💬 bridge, 
+        // this context auto-filters messages without double search
+        let bridgeSearchContext = {
+            query: '',
+            bridgeId: null
+        };
         let botTags = []; // Store tags as array
         let botWebhooks = []; // Store webhook outputs for 1-to-many feature
         let users = [];
@@ -948,6 +956,18 @@
             // Store fractalized ID (opaque, non-enumerable)
             selectedBridgeFractalId = fractalId;
             
+            // SEAMLESS SEARCH: Store search context if this bridge has message match
+            const selectedBridge = filteredBridges.find(b => b.fractal_id === fractalId);
+            if (selectedBridge && selectedBridge._matchType === 'message' && selectedBridge._searchQuery) {
+                bridgeSearchContext = {
+                    query: selectedBridge._searchQuery,
+                    bridgeId: fractalId
+                };
+            } else {
+                // Clear context if not a message match
+                bridgeSearchContext = { query: '', bridgeId: null };
+            }
+            
             // Re-render sidebar to update active state
             const sidebar = document.getElementById('bridgeSidebar');
             const groupedBots = {};
@@ -1068,18 +1088,24 @@
                 ${currentUser?.role === 'dev' && bridge.output_credentials?.output_01?.thread_id ? `
                     <!-- PRODUCT-FIRST: Messages at top with maximum space -->
                     <div style="margin-top: 1rem; padding: 1.5rem; background: rgba(30, 41, 59, 0.6); border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.2);">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
                             <h3 style="color: #fff; font-size: 1rem; margin: 0;">📨 Messages</h3>
-                            <div style="display: flex; gap: 0.5rem;">
-                                <input type="text" id="msg-search-${bridge.fractal_id}" placeholder="🔍 Search..." 
-                                    style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem;" 
-                                    oninput="filterDiscordMessages('${bridge.fractal_id}')">
-                                <select id="status-filter-${bridge.fractal_id}" onchange="filterDiscordMessages('${bridge.fractal_id}')" 
-                                    style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem;">
-                                    <option value="all">All</option>
-                                    <option value="success">✓</option>
-                                    <option value="failed">✗</option>
-                                </select>
+                            <div style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1; min-width: 250px;">
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <input type="text" id="msg-search-${bridge.fractal_id}" placeholder="🔍 Search..." 
+                                        style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem; flex: 1;" 
+                                        oninput="filterDiscordMessages('${bridge.fractal_id}')">
+                                    <select id="status-filter-${bridge.fractal_id}" onchange="filterDiscordMessages('${bridge.fractal_id}')" 
+                                        style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem;">
+                                        <option value="all">All</option>
+                                        <option value="success">✓</option>
+                                        <option value="failed">✗</option>
+                                    </select>
+                                </div>
+                                <div id="search-indicator-${bridge.fractal_id}" style="display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.375rem 0.75rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between;">
+                                    <span>🔍 Filtered from bridge search</span>
+                                    <button onclick="clearBridgeSearchFilter('${bridge.fractal_id}')" style="background: none; border: none; color: #22c55e; cursor: pointer; font-size: 1.25rem; padding: 0; line-height: 1; font-weight: bold;" title="Clear filter">×</button>
+                                </div>
                             </div>
                         </div>
                         <div id="discord-messages-${bridge.fractal_id}" class="discord-messages-container" style="max-height: 600px; overflow-y: auto;">
@@ -1294,6 +1320,27 @@
                 
                 msg.style.display = (matchesSearch && matchesStatus) ? 'flex' : 'none';
             });
+        }
+
+        // SEAMLESS SEARCH: Clear bridge search filter and hide indicator
+        function clearBridgeSearchFilter(bridgeId) {
+            // Clear the search box
+            const searchBox = document.getElementById(`msg-search-${bridgeId}`);
+            if (searchBox) {
+                searchBox.value = '';
+            }
+            
+            // Hide the indicator
+            const indicator = document.getElementById(`search-indicator-${bridgeId}`);
+            if (indicator) {
+                indicator.style.display = 'none';
+            }
+            
+            // Clear the search context
+            bridgeSearchContext = { query: '', bridgeId: null };
+            
+            // Re-filter to show all messages
+            filterDiscordMessages(bridgeId);
         }
 
         function renderMessages(data, bridgeId) {
@@ -1766,6 +1813,8 @@
                     // Store match type for visual indicator
                     if (matchesMessages) {
                         bridge._matchType = 'message';
+                        // SEAMLESS SEARCH: Store query for auto-filtering when bridge is opened
+                        bridge._searchQuery = searchTerm;
                     } else if (matchesMetadata) {
                         bridge._matchType = 'metadata';
                     }
@@ -2672,6 +2721,23 @@
                     console.log(`📝 Generated HTML length: ${html.length} chars`);
                     container.innerHTML = html;
                     console.log(`✅ Rendered ${data.messages?.length || 0} messages to container`);
+                    
+                    // SEAMLESS SEARCH: Auto-populate and filter if bridge was opened from message search
+                    if (bridgeSearchContext.query && bridgeSearchContext.bridgeId === bridgeId) {
+                        const searchBox = document.getElementById(`msg-search-${bridgeId}`);
+                        const indicator = document.getElementById(`search-indicator-${bridgeId}`);
+                        if (searchBox) {
+                            searchBox.value = bridgeSearchContext.query;
+                            // Show visual indicator
+                            if (indicator) {
+                                indicator.style.display = 'flex';
+                            }
+                            // Auto-trigger filter with slight delay to ensure messages are in DOM
+                            setTimeout(() => {
+                                filterDiscordMessages(bridgeId);
+                            }, 50);
+                        }
+                    }
                     
                     // Initialize media lazy loading for this bridge's messages
                     setTimeout(() => {
