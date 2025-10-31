@@ -1478,6 +1478,69 @@ app.get('/api/auth/check-genesis', async (req, res) => {
     }
 });
 
+// TEMPORARY ADMIN ENDPOINT: One-time database cleanup for production
+// Remove this endpoint after use!
+app.get('/api/admin/wipe-db', async (req, res) => {
+    const { secret } = req.query;
+    
+    // Verify secret matches FRACTAL_SALT (reuse existing secret)
+    if (!secret || secret !== process.env.FRACTAL_SALT) {
+        console.log(`[${getTimestamp()}] 🚫 Unauthorized wipe-db attempt from IP: ${req.ip}`);
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    try {
+        console.log(`[${getTimestamp()}] 🧹 ADMIN: Starting database wipe...`);
+        
+        // Get all tenant schemas from catalog
+        const tenantQuery = await pool.query('SELECT id, schema_name FROM core.tenant_catalog ORDER BY id');
+        const tenantSchemas = tenantQuery.rows;
+        
+        console.log(`[${getTimestamp()}] Found ${tenantSchemas.length} tenant schemas to drop`);
+        
+        // Drop all tenant schemas
+        for (const tenant of tenantSchemas) {
+            await pool.query(`DROP SCHEMA IF EXISTS ${tenant.schema_name} CASCADE`);
+            console.log(`[${getTimestamp()}] ✅ Dropped schema: ${tenant.schema_name}`);
+        }
+        
+        // Truncate core tables
+        await pool.query('TRUNCATE TABLE core.tenant_catalog CASCADE');
+        await pool.query('TRUNCATE TABLE core.user_email_to_tenant CASCADE');
+        await pool.query('TRUNCATE TABLE core.sybil_protection CASCADE');
+        await pool.query('TRUNCATE TABLE core.rate_limits CASCADE');
+        await pool.query('TRUNCATE TABLE core.invites CASCADE');
+        
+        console.log(`[${getTimestamp()}] ✅ Truncated all core tables`);
+        
+        // Reset sequence
+        await pool.query('ALTER SEQUENCE core.tenant_catalog_id_seq RESTART WITH 1');
+        
+        console.log(`[${getTimestamp()}] ✅ Reset tenant_catalog sequence`);
+        
+        // Verify cleanup
+        const verifyCount = await pool.query('SELECT COUNT(*) FROM core.tenant_catalog');
+        const isClean = parseInt(verifyCount.rows[0].count) === 0;
+        
+        console.log(`[${getTimestamp()}] 🎯 Database wipe complete! Next signup will be Genesis Admin.`);
+        
+        res.json({ 
+            success: true,
+            message: 'Database wiped successfully',
+            tenantsDropped: tenantSchemas.length,
+            isFirstUser: isClean,
+            nextAction: 'Remove this endpoint and republish'
+        });
+        
+    } catch (error) {
+        console.error(`[${getTimestamp()}] ❌ Database wipe failed:`, error);
+        res.status(500).json({ 
+            error: 'Wipe failed', 
+            details: error.message 
+        });
+    }
+});
+
 // Public Signup Endpoint - Handles both new tenant creation and invite-based signup
 app.post('/api/auth/signup', async (req, res) => {
     const { email, password, inviteToken } = req.body;
