@@ -95,6 +95,17 @@ Fixed message display failure caused by output structure migration:
 - **Message Fetching**: Always fetches from output_01 (Ledger thread) regardless of UI tab, since bot cannot access user Discord servers
 - **Architecture**: Dual-output send (01+0n), single-source fetch (01 only)
 
+### Major UI Proportion Revamp (Oct 31, 2025)
+Comprehensive iPhone-first responsive redesign prioritizing message content visibility:
+- **60% Message Guarantee**: Added `flex-basis: 65%` + `min-width: 60%` to message area, ensuring messages occupy ≥60% of screen
+- **Sidebar Optimization**: Reduced width from 220px to 160-200px (responsive breakpoints) to maximize message space
+- **Typography Density**: Optimized font scale (--text-xs: 0.6875-0.75rem, --text-sm: 0.75-0.875rem, --text-base: 0.875-1rem) for better information density
+- **Padding Reduction**: Reduced spacing throughout (header: 0.375rem, tabs: 0.5rem, messages: 0.375rem) to minimize chrome overhead
+- **Vertical Space Maximization**: Compressed discord-header, discord-search, detail-header padding to maximize message viewport
+- **Cat Size Protection**: Maintained 125px × 125px cat sprite across ALL responsive breakpoints (user requirement)
+- **Design Philosophy**: Preserved glassmorphism aesthetic, Apple-inspired spacing tokens, and Discord-style message layout
+- **Architect Verified**: Confirmed 60% enforcement, responsive scaling iPhone→iPad→MacBook, no regressions
+
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)
 - **WhatsApp**: Baileys library
