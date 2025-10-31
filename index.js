@@ -12,6 +12,7 @@ const { Pool } = require('pg');
 const session = require('express-session');
 const connectPg = require('connect-pg-simple');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const twilio = require('twilio');
 const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
@@ -2212,33 +2213,95 @@ app.post('/api/auth/register/public', async (req, res) => {
             return res.status(400).json({ error: 'Password must be at least 8 characters' });
         }
 
+        // Check if this is the first user (Genesis Admin)
+        const userCountResult = await pool.query('SELECT COUNT(*) as count FROM users');
+        const isFirstUser = parseInt(userCountResult.rows[0].count) === 0;
+        
         const passwordHash = await bcrypt.hash(password, 10);
         
-        const result = await pool.query(`
-            INSERT INTO users (email, password_hash, role)
-            VALUES ($1, $2, $3)
-            RETURNING id, email, role
-        `, [email, passwordHash, 'user']);
+        let newUser;
         
-        const newUser = result.rows[0];
+        if (isFirstUser) {
+            // First user becomes Genesis Admin (Dev #01) with tenant_1
+            const result = await pool.query(`
+                INSERT INTO users (email, password_hash, role, is_genesis_admin, tenant_id)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id, email, role, is_genesis_admin, tenant_id
+            `, [email, passwordHash, 'dev', true, 1]);
+            
+            newUser = result.rows[0];
+            
+            console.log(`🌟 GENESIS ADMIN created: ${email} (User #1, Dev #01, tenant_1)`);
+        } else {
+            // Subsequent users become regular admins with new tenant
+            // Get the next tenant ID
+            const tenantResult = await pool.query(`
+                SELECT COALESCE(MAX(tenant_id), 0) + 1 as next_tenant_id FROM users
+            `);
+            const nextTenantId = tenantResult.rows[0].next_tenant_id;
+            
+            const result = await pool.query(`
+                INSERT INTO users (email, password_hash, role, is_genesis_admin, tenant_id)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id, email, role, is_genesis_admin, tenant_id
+            `, [email, passwordHash, 'admin', false, nextTenantId]);
+            
+            newUser = result.rows[0];
+            
+            console.log(`👤 New admin created: ${email} (User #${newUser.id}, tenant_${nextTenantId})`);
+        }
         
-        // Log user registration (no req session yet, so use a special log)
+        // Generate JWT tokens using auth service
+        const accessToken = authService.signAccessToken(
+            newUser.id, 
+            newUser.email, 
+            newUser.role,
+            newUser.tenant_id,
+            newUser.is_genesis_admin ? '01' : null,
+            newUser.is_genesis_admin
+        );
+        
+        const refreshTokenData = authService.signRefreshToken(
+            newUser.id, 
+            newUser.email, 
+            newUser.role,
+            newUser.tenant_id,
+            newUser.is_genesis_admin ? '01' : null,
+            newUser.is_genesis_admin
+        );
+        const refreshToken = refreshTokenData.token;
+        
+        // Log user registration
         await pool.query(`
-            INSERT INTO audit_logs (actor, action, target, details, ip_address)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO audit_logs (actor_user_id, actor_email, action_type, target_type, target_id, target_email, details, ip_address)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `, [
+            newUser.id,
             newUser.email,
             'SELF_REGISTER',
+            'USER',
             newUser.id.toString(),
-            JSON.stringify({ role: newUser.role }),
+            newUser.email,
+            JSON.stringify({ 
+                role: newUser.role, 
+                is_genesis_admin: newUser.is_genesis_admin,
+                tenant_id: newUser.tenant_id
+            }),
             req.ip || req.connection?.remoteAddress || 'unknown'
         ]);
         
-        res.json({ success: true, user: newUser });
+        res.json({ 
+            success: true, 
+            user: newUser,
+            accessToken,
+            refreshToken,
+            message: isFirstUser ? 'Genesis Admin created!' : 'Account created successfully!'
+        });
     } catch (error) {
         if (error.code === '23505') {
             res.status(400).json({ error: 'Email already exists' });
         } else {
+            console.error('Registration error:', error);
             res.status(500).json({ error: error.message });
         }
     }
