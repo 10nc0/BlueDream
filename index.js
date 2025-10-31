@@ -4206,62 +4206,6 @@ app.post('/api/internal/create-thread', async (req, res) => {
 });
 
 
-// TEMPORARY ADMIN ENDPOINT: One-time production database cleanup
-// DELETE THIS AFTER USE
-app.get('/api/admin/wipe-production-db', async (req, res) => {
-    try {
-        const { secret } = req.query;
-        
-        if (secret !== process.env.FRACTAL_SALT) {
-            return res.status(403).json({ error: 'Invalid secret' });
-        }
-        
-        console.log('🧹 ADMIN: Starting production database wipe...');
-        
-        // Get all existing tenant schemas
-        const schemas = await pool.query(`
-            SELECT schema_name 
-            FROM information_schema.schemata 
-            WHERE schema_name LIKE 'tenant_%'
-            ORDER BY schema_name
-        `);
-        
-        // Drop all tenant schemas
-        for (const { schema_name } of schemas.rows) {
-            await pool.query(`DROP SCHEMA IF EXISTS ${schema_name} CASCADE`);
-            console.log(`  ✅ Dropped ${schema_name}`);
-        }
-        
-        // Clean core tables
-        await pool.query(`TRUNCATE TABLE core.tenant_catalog CASCADE`);
-        await pool.query(`TRUNCATE TABLE core.user_email_to_tenant CASCADE`);
-        await pool.query(`TRUNCATE TABLE core.sybil_protection CASCADE`);
-        await pool.query(`TRUNCATE TABLE core.rate_limits CASCADE`);
-        await pool.query(`TRUNCATE TABLE core.invites CASCADE`);
-        await pool.query(`TRUNCATE TABLE public.sessions CASCADE`);
-        console.log('  ✅ Cleaned core tables');
-        
-        // Reset sequences
-        await pool.query(`ALTER SEQUENCE core.tenant_catalog_id_seq RESTART WITH 1`);
-        await pool.query(`ALTER SEQUENCE core.invites_id_seq RESTART WITH 1`);
-        await pool.query(`ALTER SEQUENCE core.rate_limits_id_seq RESTART WITH 1`);
-        await pool.query(`ALTER SEQUENCE core.sybil_protection_id_seq RESTART WITH 1`);
-        console.log('  ✅ Reset sequences');
-        
-        console.log('✅ ADMIN: Production database wiped successfully');
-        
-        res.json({ 
-            success: true, 
-            message: 'Production database cleaned. Ready for genesis admin signup.',
-            tenants_removed: schemas.rows.length
-        });
-        
-    } catch (error) {
-        console.error('❌ ADMIN: Database wipe failed:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🌐 Dashboard available at http://localhost:${PORT}`);
