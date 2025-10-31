@@ -419,12 +419,18 @@ async function sendToLedger(payload, options = {}, bridge = null) {
     }
 
     try {
+        // Debug logging
+        console.log(`  🔍 Ledger URL: ${ledgerUrl?.substring(0, 50)}...`);
+        console.log(`  🔍 Thread ID: ${options.threadId || 'none'}`);
+        console.log(`  🔍 Thread Name: ${options.threadName || 'none'}`);
+        
         const url = new URL(ledgerUrl);
         url.searchParams.set('wait', 'true');
         
-        // Add thread_name or thread_id if available
-        if (options.threadName) url.searchParams.set('thread_name', options.threadName);
-        if (options.threadId) url.searchParams.set('thread_id', options.threadId);
+        // CRITICAL: thread_id must be in payload body, NOT URL params (Discord API requirement)
+        if (options.threadId) {
+            payload.thread_id = options.threadId;
+        }
 
         let response;
         
@@ -442,12 +448,11 @@ async function sendToLedger(payload, options = {}, bridge = null) {
             response = await axios.post(url.toString(), payload);
         }
 
-        // WEBHOOK-FIRST: Discord returns thread_id, but we don't store it here
-        // Thread management is Discord's responsibility, not database's responsibility
-        console.log(`  ✅ Sent to Output #01 (Ledger)`);
+        console.log(`  ✅ Sent to Output #01 (Ledger) - Thread: ${options.threadId || 'channel'}`);
         return response.data?.channel_id || null;
     } catch (error) {
         console.error(`  ❌ Output #01 failed: ${error.message}`);
+        console.error(`  🔍 URL attempted: ${ledgerUrl?.substring(0, 50)}...`);
         return null;
     }
 }
