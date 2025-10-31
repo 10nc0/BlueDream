@@ -1318,7 +1318,7 @@ app.get('/api/auth/status', async (req, res) => {
                 if (mappingResult.rows.length > 0) {
                     const { tenant_schema } = mappingResult.rows[0];
                     const result = await pool.query(
-                        `SELECT id, email, role, google_id FROM ${tenant_schema}.users WHERE id = $1`,
+                        `SELECT id, email, role, google_id, is_genesis_admin, tenant_id FROM ${tenant_schema}.users WHERE id = $1`,
                         [decoded.userId]
                     );
                     
@@ -1339,7 +1339,7 @@ app.get('/api/auth/status', async (req, res) => {
             if (mappingResult.rows.length > 0) {
                 const { tenant_schema } = mappingResult.rows[0];
                 const result = await pool.query(
-                    `SELECT id, email, role, google_id FROM ${tenant_schema}.users WHERE id = $1`,
+                    `SELECT id, email, role, google_id, is_genesis_admin, tenant_id FROM ${tenant_schema}.users WHERE id = $1`,
                     [req.session.userId]
                 );
                 
@@ -1624,9 +1624,24 @@ app.post('/api/auth/signup', async (req, res) => {
         req.session.userRole = newUser.role;
         req.session.tenantId = tenantId;
         
-        // Generate JWT tokens
-        const accessToken = authService.signAccessToken(newUser.id, newUser.email, newUser.role);
-        const { token: refreshToken, tokenId } = authService.signRefreshToken(newUser.id, newUser.email, newUser.role);
+        // Generate JWT tokens with full tenant context (CRITICAL: must include isGenesisAdmin!)
+        const adminId = isGenesisAdmin ? '01' : null;
+        const accessToken = authService.signAccessToken(
+            newUser.id, 
+            newUser.email, 
+            newUser.role,
+            tenantId,
+            adminId,
+            isGenesisAdmin
+        );
+        const { token: refreshToken, tokenId } = authService.signRefreshToken(
+            newUser.id, 
+            newUser.email, 
+            newUser.role,
+            tenantId,
+            adminId,
+            isGenesisAdmin
+        );
         
         // Store refresh token in tenant schema using tenant-scoped user ID
         const deviceInfo = req.get('user-agent') || 'unknown';
