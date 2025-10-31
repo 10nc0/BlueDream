@@ -70,6 +70,11 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **Scribe of Scribe Principle**: Discord threads are PERMANENT and IMMUTABLE - never deleted even when bridges are archived.
 - **Webhook Security**: User output webhooks (output_0n_url) CANNOT equal the Nyanbook Ledger webhook (output_01_url) to prevent cross-tenant data exposure.
 - **Duplicate Webhooks Allowed**: Multiple bridges can share the same input platform or output_0n_url webhook, but output_0n_url ≠ output_01_url always.
+- **Asymmetric Dual-Output Architecture** (October 31, 2025): Critical design enforcing different output types for isolation:
+    - **output_01 (Nyanbook Ledger)**: ALWAYS thread - mandatory, never channel. Prevents flooding and ensures per-bridge isolation. Thread auto-created on bridge creation.
+    - **output_0n (User Discord)**: USER CHOICE - can be channel OR thread. Allows flexibility for user's preferred Discord organization.
+    - **Enforcement**: Code-level guarantee that output_01 always creates a thread regardless of user choice, while output_0n respects `threadModeUser` parameter.
+    - **Rationale**: Ledger channel would be flooded with all tenant uploads. Thread isolation is non-negotiable for cross-tenant security.
 
 ### Production Hardening (October 2025)
 - **Database Connection Pool**: Configured with timeout protections (connectionTimeoutMillis, idleTimeoutMillis, statement_timeout, query_timeout, idle_in_transaction_session_timeout) to prevent idle-in-transaction crashes.
