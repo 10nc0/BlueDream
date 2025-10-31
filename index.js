@@ -1575,6 +1575,7 @@ app.post('/api/auth/signup', async (req, res) => {
         let newUser;
         let isGenesisAdmin = false;
         let tenantId = null;
+        let tenantUserId = null;
         
         // BRANCH: Invite-based signup (join existing tenant)
         if (inviteToken) {
@@ -1643,6 +1644,16 @@ app.post('/api/auth/signup', async (req, res) => {
             // Create new fractalized tenant schema for this user
             const tenant = await tenantManager.createTenant(newUser.id);
             tenantId = tenant.tenantId;
+            const schemaName = `tenant_${tenantId}`;
+            
+            // Insert user into tenant-scoped users table
+            const tenantUserResult = await pool.query(`
+                INSERT INTO ${schemaName}.users (email, password_hash, role, tenant_id, is_genesis_admin)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id
+            `, [normalizedEmail, passwordHash, userRole, tenantId, isGenesis]);
+            
+            tenantUserId = tenantUserResult.rows[0].id;
             
             // Record tenant creation for Sybil tracking
             await tenantManager.recordTenantCreation(email, req.ip);
@@ -1650,9 +1661,9 @@ app.post('/api/auth/signup', async (req, res) => {
             isGenesisAdmin = isGenesis;
             
             if (isGenesis) {
-                console.log(`[${getTimestamp()}] 🌟 GENESIS ADMIN #01 created - Email: ${email}, Tenant: ${tenantId} (Dev with God view)`);
+                console.log(`[${getTimestamp()}] 🌟 GENESIS ADMIN #01 created - Email: ${email}, Tenant: ${tenantId}, TenantUser: ${tenantUserId} (Dev with God view)`);
             } else {
-                console.log(`[${getTimestamp()}] ✅ Admin #0${tenantId} created - Email: ${email}, Tenant: ${tenantId} (Fractalized)`);
+                console.log(`[${getTimestamp()}] ✅ Admin #0${tenantId} created - Email: ${email}, Tenant: ${tenantId}, TenantUser: ${tenantUserId} (Fractalized)`);
             }
         }
         
@@ -1666,9 +1677,10 @@ app.post('/api/auth/signup', async (req, res) => {
         const accessToken = authService.signAccessToken(newUser.id, newUser.email, newUser.role);
         const { token: refreshToken, tokenId } = authService.signRefreshToken(newUser.id, newUser.email, newUser.role);
         
-        // Store refresh token
+        // Store refresh token in tenant schema using tenant-scoped user ID
         const deviceInfo = req.get('user-agent') || 'unknown';
-        await authService.storeRefreshToken(pool, newUser.id, tokenId, deviceInfo, req.ip);
+        const tenantUserIdForToken = tenantUserId ||  newUser.id; // Use tenant user ID if available
+        await authService.storeRefreshToken(pool, `tenant_${tenantId}`, tenantUserIdForToken, tokenId, deviceInfo, req.ip);
         
         // Save session
         req.session.save(async (err) => {
