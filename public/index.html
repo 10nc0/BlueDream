@@ -1700,12 +1700,16 @@
                 let matchesSearch = true;
                 if (searchTerm && !naturalDateRange) {
                     // Only filter by text if NOT a pure date search
+                    // COMPREHENSIVE: Search ALL bridge fields (matching Discord message search strength)
                     const searchableText = [
-                        bridge.input_platform,
-                        bridge.output_platform,
-                        bridge.contact_info || '',
-                        ...(bridge.tags || [])
-                    ].join(' ');
+                        bridge.bridge_name || bridge.name || '',        // ✅ Bridge title
+                        bridge.input_platform || '',                    // ✅ Input platform
+                        bridge.output_platform || '',                   // ✅ Output platform
+                        bridge.contact_info || '',                      // ✅ Contact info
+                        bridge.status || '',                            // ✅ Status
+                        bridge.created_at ? new Date(bridge.created_at).toLocaleString() : '', // ✅ Creation date
+                        ...(bridge.tags || [])                          // ✅ Tags
+                    ].join(' ').toLowerCase();
                     matchesSearch = window.searchState.performSearch(searchTerm, searchableText);
                 }
                 
