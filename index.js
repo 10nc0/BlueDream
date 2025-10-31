@@ -117,7 +117,7 @@ app.use(cors({
         }
         
         // Allow any Replit domain (for development and production)
-        if (origin.includes('.replit.dev') || origin.includes('.repl.co')) {
+        if (origin.includes('.replit.dev') || origin.includes('.repl.co') || origin.includes('.replit.app')) {
             return callback(null, true);
         }
         
@@ -172,12 +172,20 @@ app.use((req, res, next) => {
 // Serve login page without authentication (must come before requireAuth check)
 app.get('/login.html', (req, res) => {
     console.log(`[${getTimestamp()}] 📱 Login page accessed - IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
+    // Prevent browser caching to ensure latest JavaScript is always loaded
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(__dirname + '/public/login.html');
 });
 
 // Serve signup page without authentication
 app.get('/signup.html', (req, res) => {
     console.log(`[${getTimestamp()}] 📝 Signup page accessed - IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
+    // Prevent browser caching to ensure latest JavaScript is always loaded
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(__dirname + '/public/signup.html');
 });
 
