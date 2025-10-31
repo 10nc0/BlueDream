@@ -868,6 +868,13 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                 );
                 bridge = bridgeResult.rows[0];
                 
+                console.log(`🔍 DEBUG: Loaded bridge from DB:`, {
+                    id: bridge?.id,
+                    output_01_url: bridge?.output_01_url?.substring(0, 50),
+                    output_0n_url: bridge?.output_0n_url?.substring(0, 50),
+                    credentials_type: typeof bridge?.output_credentials
+                });
+                
                 // Parse JSON if needed (PostgreSQL returns JSON as string sometimes)
                 if (bridge && typeof bridge.output_credentials === 'string') {
                     bridge.output_credentials = JSON.parse(bridge.output_credentials);
