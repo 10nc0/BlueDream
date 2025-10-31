@@ -3681,8 +3681,8 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
                 });
             }
             
-            // Fetch messages from Discord
-            const options = { limit };
+            // Fetch messages from Discord (force: true bypasses cache for real-time updates)
+            const options = { limit, force: true };
             if (before) options.before = before;
             
             const discordMessages = await thread.messages.fetch(options);
