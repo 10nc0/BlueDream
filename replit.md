@@ -61,6 +61,9 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **PostgreSQL Source of Truth**: Database stores bridge configuration, thread_id, webhook_url, tenant isolation, and session state.
 - **Discord Output Layer**: Messages forwarded to Discord threads, not stored in PostgreSQL.
 - **Crash Recovery Architecture**: PostgreSQL stores all bridge state, enabling system recovery and message flow resumption after crashes.
+- **Scribe of Scribe Principle**: Discord threads are PERMANENT and IMMUTABLE - never deleted even when bridges are archived.
+- **Webhook Security**: User output webhooks (output_0n_url) CANNOT equal the Nyanbook Ledger webhook (output_01_url) to prevent cross-tenant data exposure.
+- **Duplicate Webhooks Allowed**: Multiple bridges can share the same input platform or output_0n_url webhook, but output_0n_url ≠ output_01_url always.
 
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)

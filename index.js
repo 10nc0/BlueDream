@@ -2757,6 +2757,13 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
         // Output #0n: User's Discord (mutable, optional, visible to owner)
         const output0nUrl = userOutputUrl || null;
         
+        // SECURITY: Prevent user webhook from being same as Ledger webhook (privacy breach)
+        if (output0nUrl && output0nUrl === NYANBOOK_LEDGER_WEBHOOK) {
+            return res.status(400).json({ 
+                error: 'Security violation: User output webhook cannot be the same as the system Ledger webhook. This would expose all tenant messages to your webhook.'
+            });
+        }
+        
         // Tag dev-created bridges with admin_id='01' for fractalized ID generation
         const createdByAdminId = (userRole === 'dev' && isGenesisAdmin) ? '01' : null;
         
@@ -2844,6 +2851,13 @@ app.put('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin', 
         const userRole = req.tenantContext?.userRole || 'read-only';
         const { id } = req.params; // fractal_id
         const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status, userOutputUrl } = req.body;
+        
+        // SECURITY: Prevent user webhook from being same as Ledger webhook (privacy breach)
+        if (userOutputUrl && userOutputUrl === NYANBOOK_LEDGER_WEBHOOK) {
+            return res.status(400).json({ 
+                error: 'Security violation: User output webhook cannot be the same as the system Ledger webhook. This would expose all tenant messages to your webhook.'
+            });
+        }
         
         // Build update query dynamically based on what's provided
         const updates = [];
