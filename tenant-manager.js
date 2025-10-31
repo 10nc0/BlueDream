@@ -94,29 +94,19 @@ class TenantManager {
             `);
 
             await client.query(`
-                ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES core.tenant_catalog(id) ON DELETE SET NULL
-            `);
-            
-            await client.query(`
-                ALTER TABLE users ADD COLUMN IF NOT EXISTS is_genesis_admin BOOLEAN DEFAULT false
-            `);
-
-            await client.query(`
-                DO $$ 
-                BEGIN
-                    IF NOT EXISTS (
-                        SELECT 1 FROM pg_constraint 
-                        WHERE conname = 'users_role_check_with_dev'
-                    ) THEN
-                        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
-                        ALTER TABLE users ADD CONSTRAINT users_role_check_with_dev 
-                        CHECK (role IN ('dev', 'admin', 'read-only', 'write-only'));
-                    END IF;
-                END $$;
+                CREATE TABLE IF NOT EXISTS core.user_email_to_tenant (
+                    email TEXT PRIMARY KEY,
+                    tenant_id INTEGER NOT NULL REFERENCES core.tenant_catalog(id) ON DELETE CASCADE,
+                    tenant_schema TEXT NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                )
             `);
 
             await client.query(`
-                CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id)
+                CREATE INDEX IF NOT EXISTS idx_user_email_tenant 
+                ON core.user_email_to_tenant(email)
             `);
 
             await client.query('COMMIT');
@@ -242,6 +232,29 @@ class TenantManager {
                     expires_at TIMESTAMPTZ,
                     active BOOLEAN DEFAULT true
                 )
+            `);
+
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.refresh_tokens (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES ${schemaName}.users(id) ON DELETE CASCADE,
+                    token_hash TEXT UNIQUE NOT NULL,
+                    device_info TEXT,
+                    ip_address TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    expires_at TIMESTAMPTZ NOT NULL,
+                    revoked_at TIMESTAMPTZ
+                )
+            `);
+
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user 
+                ON ${schemaName}.refresh_tokens(user_id)
+            `);
+
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash 
+                ON ${schemaName}.refresh_tokens(token_hash)
             `);
 
             await client.query(`

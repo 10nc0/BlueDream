@@ -1324,7 +1324,7 @@ async function logAudit(client, req, actionType, targetType, targetId, targetEma
 // ============ AUTHENTICATION MIDDLEWARE ============
 
 // Middleware to check if user is authenticated (supports both JWT and cookies)
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
     // Try JWT authentication first (Authorization header)
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -1332,10 +1332,11 @@ function requireAuth(req, res, next) {
         const decoded = authService.verifyToken(token);
         
         if (decoded && decoded.type === 'access') {
-            // Valid JWT token
+            // Valid JWT token - set user context from JWT payload
             req.userId = decoded.userId;
             req.userEmail = decoded.email;
             req.userRole = decoded.role;
+            req.tenantId = decoded.tenantId;
             req.authMethod = 'jwt';
             return next();
         } else {
@@ -1347,11 +1348,30 @@ function requireAuth(req, res, next) {
     
     // Fall back to cookie-based session auth (only if no JWT provided)
     if (req.session && req.session.userId) {
-        req.userId = req.session.userId;
-        req.userEmail = req.session.userEmail;
-        req.userRole = req.session.userRole;
-        req.authMethod = 'cookie';
-        return next();
+        // Lookup email → tenant mapping for session-based auth
+        try {
+            const mappingResult = await pool.query(
+                'SELECT tenant_id, tenant_schema FROM core.user_email_to_tenant WHERE email = $1',
+                [req.session.userEmail]
+            );
+            
+            if (mappingResult.rows.length === 0) {
+                return res.status(401).json({ error: 'User not found' });
+            }
+            
+            const { tenant_id, tenant_schema } = mappingResult.rows[0];
+            
+            req.userId = req.session.userId;
+            req.userEmail = req.session.userEmail;
+            req.userRole = req.session.userRole;
+            req.tenantId = tenant_id;
+            req.tenantSchema = tenant_schema;
+            req.authMethod = 'cookie';
+            return next();
+        } catch (error) {
+            console.error('Session auth error:', error);
+            return res.status(500).json({ error: 'Authentication failed' });
+        }
     }
     
     // No valid authentication found
@@ -1369,7 +1389,24 @@ function requireRole(...allowedRoles) {
             return res.status(401).json({ error: 'Authentication required' });
         }
         
-        const result = await pool.query('SELECT role FROM users WHERE id = $1', [req.userId]);
+        // Get tenant schema from tenant mapping
+        const mappingResult = await pool.query(
+            'SELECT tenant_schema FROM core.user_email_to_tenant WHERE email = $1',
+            [req.userEmail]
+        );
+        
+        if (mappingResult.rows.length === 0) {
+            return res.status(401).json({ error: 'User not found' });
+        }
+        
+        const { tenant_schema } = mappingResult.rows[0];
+        
+        // Query user role from tenant-scoped table
+        const result = await pool.query(
+            `SELECT role FROM ${tenant_schema}.users WHERE id = $1`,
+            [req.userId]
+        );
+        
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'User not found' });
         }
@@ -1401,30 +1438,61 @@ function requireRole(...allowedRoles) {
 
 // ============ AUTHENTICATION ROUTES ============
 
-// Check if user is logged in (supports both JWT and cookies)
+// Check if user is logged in (supports both JWT and cookies) - TENANT-AWARE
 app.get('/api/auth/status', async (req, res) => {
-    // Check JWT first
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.substring(7);
-        const decoded = authService.verifyToken(token);
-        
-        if (decoded && decoded.type === 'access') {
-            const result = await pool.query('SELECT id, email, role, google_id FROM users WHERE id = $1', [decoded.userId]);
-            if (result.rows.length > 0) {
-                return res.json({ authenticated: true, user: result.rows[0], authMethod: 'jwt' });
+    try {
+        // Check JWT first
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.substring(7);
+            const decoded = authService.verifyToken(token);
+            
+            if (decoded && decoded.type === 'access') {
+                // Get tenant from JWT and query tenant_X.users
+                const mappingResult = await pool.query(
+                    'SELECT tenant_schema FROM core.user_email_to_tenant WHERE email = $1',
+                    [decoded.email]
+                );
+                
+                if (mappingResult.rows.length > 0) {
+                    const { tenant_schema } = mappingResult.rows[0];
+                    const result = await pool.query(
+                        `SELECT id, email, role, google_id FROM ${tenant_schema}.users WHERE id = $1`,
+                        [decoded.userId]
+                    );
+                    
+                    if (result.rows.length > 0) {
+                        return res.json({ authenticated: true, user: result.rows[0], authMethod: 'jwt' });
+                    }
+                }
             }
         }
-    }
-    
-    // Fall back to session
-    if (req.session && req.session.userId) {
-        const result = await pool.query('SELECT id, email, role, google_id FROM users WHERE id = $1', [req.session.userId]);
-        if (result.rows.length > 0) {
-            return res.json({ authenticated: true, user: result.rows[0], authMethod: 'cookie' });
+        
+        // Fall back to session
+        if (req.session && req.session.userId && req.session.userEmail) {
+            const mappingResult = await pool.query(
+                'SELECT tenant_schema FROM core.user_email_to_tenant WHERE email = $1',
+                [req.session.userEmail]
+            );
+            
+            if (mappingResult.rows.length > 0) {
+                const { tenant_schema } = mappingResult.rows[0];
+                const result = await pool.query(
+                    `SELECT id, email, role, google_id FROM ${tenant_schema}.users WHERE id = $1`,
+                    [req.session.userId]
+                );
+                
+                if (result.rows.length > 0) {
+                    return res.json({ authenticated: true, user: result.rows[0], authMethod: 'cookie' });
+                }
+            }
         }
+        
+        res.json({ authenticated: false });
+    } catch (error) {
+        console.error('Auth status error:', error);
+        res.json({ authenticated: false });
     }
-    res.json({ authenticated: false });
 });
 
 // Email/Password Login
@@ -1435,7 +1503,24 @@ app.post('/api/auth/login', async (req, res) => {
     console.log(`[${getTimestamp()}] 🔐 Login attempt - Email: ${email}, IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
     
     try {
-        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        // Lookup email → tenant mapping
+        const mappingResult = await pool.query(
+            'SELECT tenant_id, tenant_schema, user_id FROM core.user_email_to_tenant WHERE email = $1',
+            [email]
+        );
+        
+        if (mappingResult.rows.length === 0) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+        
+        const { tenant_schema, user_id } = mappingResult.rows[0];
+        
+        // Query user from tenant-scoped table
+        const result = await pool.query(
+            `SELECT * FROM ${tenant_schema}.users WHERE id = $1 AND email = $2`,
+            [user_id, email]
+        );
+        
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -1450,14 +1535,30 @@ app.post('/api/auth/login', async (req, res) => {
         req.session.userId = user.id;
         req.session.userEmail = user.email;
         req.session.userRole = user.role;
+        req.session.tenantId = user.tenant_id;
         
-        // Generate JWT tokens
-        const accessToken = authService.signAccessToken(user.id, user.email, user.role);
-        const { token: refreshToken, tokenId } = authService.signRefreshToken(user.id, user.email, user.role);
+        // Generate JWT tokens with full tenant context
+        const adminId = user.is_genesis_admin ? '01' : null;
+        const accessToken = authService.signAccessToken(
+            user.id, 
+            user.email, 
+            user.role,
+            user.tenant_id,
+            adminId,
+            user.is_genesis_admin
+        );
+        const { token: refreshToken, tokenId } = authService.signRefreshToken(
+            user.id, 
+            user.email, 
+            user.role,
+            user.tenant_id,
+            adminId,
+            user.is_genesis_admin
+        );
         
-        // Store refresh token in database
+        // Store refresh token in tenant-scoped database
         const deviceInfo = req.get('user-agent') || 'unknown';
-        await authService.storeRefreshToken(pool, user.id, tokenId, deviceInfo, req.ip);
+        await authService.storeRefreshToken(pool, tenant_schema, user.id, tokenId, deviceInfo, req.ip);
         
         // Save session explicitly before sending response
         req.session.save(async (err) => {
@@ -1982,14 +2083,24 @@ app.post('/api/auth/refresh', async (req, res) => {
             return res.status(401).json({ error: 'Invalid refresh token' });
         }
         
-        // Check if refresh token is still valid in database
-        const isValid = await authService.isRefreshTokenValid(pool, decoded.tokenId, decoded.userId);
+        // Get tenant schema from JWT tenantId
+        const tenantSchema = `tenant_${decoded.tenantId}`;
+        
+        // Check if refresh token is still valid in tenant-scoped database
+        const isValid = await authService.isRefreshTokenValid(pool, tenantSchema, decoded.tokenId, decoded.userId);
         if (!isValid) {
             return res.status(401).json({ error: 'Refresh token revoked or expired' });
         }
         
-        // Generate new access token
-        const accessToken = authService.signAccessToken(decoded.userId, decoded.email, decoded.role);
+        // Generate new access token with full tenant context
+        const accessToken = authService.signAccessToken(
+            decoded.userId, 
+            decoded.email, 
+            decoded.role,
+            decoded.tenantId,
+            decoded.adminId,
+            decoded.isGenesisAdmin
+        );
         
         res.json({ 
             success: true,
@@ -2007,9 +2118,12 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
         const userId = req.userId;
         const sessionId = req.sessionID;
         
-        // Revoke all refresh tokens for this user (JWT logout)
-        if (userId) {
-            await authService.revokeAllUserTokens(pool, userId);
+        // Get tenant schema (from requireAuth middleware or construct from tenantId)
+        const tenantSchema = req.tenantSchema || `tenant_${req.tenantId}`;
+        
+        // Revoke all refresh tokens for this user in tenant-scoped database (JWT logout)
+        if (userId && tenantSchema) {
+            await authService.revokeAllUserTokens(pool, tenantSchema, userId);
             
             // Mark session as inactive (cookie-based logout)
             if (sessionId) {
@@ -2244,6 +2358,17 @@ app.post('/api/auth/register/public', async (req, res) => {
         `, [email, passwordHash, isGenesisAdmin ? 'dev' : 'admin', tenantId, isGenesisAdmin]);
 
         const newUser = userResult.rows[0];
+
+        // Insert email → tenant mapping for fast login lookups
+        await pool.query(`
+            INSERT INTO core.user_email_to_tenant (email, tenant_id, tenant_schema, user_id)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (email) DO UPDATE SET
+                tenant_id = EXCLUDED.tenant_id,
+                tenant_schema = EXCLUDED.tenant_schema,
+                user_id = EXCLUDED.user_id,
+                updated_at = NOW()
+        `, [email, tenantId, schemaName, newUser.id]);
 
         // Generate JWT tokens
         const accessToken = authService.signAccessToken(

@@ -69,6 +69,7 @@ async function setTenantContext(req, res, next) {
     
     try {
         let userId = null;
+        let userEmail = null;
         
         // Try JWT token first (wrapped in try/catch to prevent crashes on malformed tokens)
         const authHeader = req.headers.authorization;
@@ -78,6 +79,7 @@ async function setTenantContext(req, res, next) {
                 const decoded = authService.verifyToken(token);
                 if (decoded && decoded.type === 'access') {
                     userId = decoded.userId;
+                    userEmail = decoded.email;
                 }
             } catch (jwtError) {
                 // Invalid token - silently fall back to session
@@ -88,22 +90,38 @@ async function setTenantContext(req, res, next) {
         // Fall back to session (using optional chaining)
         if (!userId && req.session?.userId) {
             userId = req.session.userId;
+            userEmail = req.session.userEmail;
         }
         
         // If no user, continue without tenant context (will be caught by requireAuth)
-        if (!userId) {
+        if (!userId || !userEmail) {
             req.tenantContext = null;
             // Client will be released by cleanup on 'finish'
             return next();
         }
         
-        // Get user's tenant and role
-        const userResult = await client.query(`
-            SELECT u.id, u.email, u.role, u.tenant_id, u.is_genesis_admin, t.tenant_schema
-            FROM users u
-            LEFT JOIN core.tenant_catalog t ON u.tenant_id = t.id
-            WHERE u.id = $1
-        `, [userId]);
+        // Lookup email → tenant mapping
+        const mappingResult = await client.query(
+            'SELECT tenant_id, tenant_schema FROM core.user_email_to_tenant WHERE email = $1',
+            [userEmail]
+        );
+        
+        if (mappingResult.rows.length === 0) {
+            if (!res.headersSent) {
+                return res.status(401).json({ error: 'User tenant mapping not found' });
+            }
+            return;
+        }
+        
+        const { tenant_id, tenant_schema } = mappingResult.rows[0];
+        
+        // Get user's full details from tenant-scoped table
+        const userResult = await client.query(
+            `SELECT id, email, role, tenant_id, is_genesis_admin 
+             FROM ${tenant_schema}.users 
+             WHERE id = $1 AND email = $2`,
+            [userId, userEmail]
+        );
         
         if (userResult.rows.length === 0) {
             // Client will be released by cleanup on 'finish'
@@ -129,24 +147,24 @@ async function setTenantContext(req, res, next) {
             // BUT still need search_path set to their tenant schema for INSERT/UPDATE operations
             await client.query('BEGIN');
             transactionStarted = true; // Mark transaction started for safe cleanup
-            await client.query(`SET LOCAL search_path TO ${user.tenant_schema}, public`);
+            await client.query(`SET LOCAL search_path TO ${tenant_schema}, public`);
             req.tenantContext.globalAccess = true;
             // Only dev users get to know about tenant IDs
-            req.tenantContext.tenantId = user.tenant_id;
-            req.tenantContext.tenantSchema = user.tenant_schema;
-            console.log(`🔧 Dev user ${user.email} - Global database access (default schema: ${user.tenant_schema})`);
-        } else if (user.tenant_id && user.tenant_schema) {
+            req.tenantContext.tenantId = tenant_id;
+            req.tenantContext.tenantSchema = tenant_schema;
+            console.log(`🔧 Dev user ${user.email} - Global database access (default schema: ${tenant_schema})`);
+        } else if (tenant_id && tenant_schema) {
             // Admin/write-only/read-only: Restrict to their tenant schema
             // Start transaction with LOCAL search_path (transaction-scoped)
             await client.query('BEGIN');
             transactionStarted = true; // Mark transaction started for safe cleanup
-            await client.query(`SET LOCAL search_path TO ${user.tenant_schema}, public`);
+            await client.query(`SET LOCAL search_path TO ${tenant_schema}, public`);
             req.tenantContext.globalAccess = false;
             // Store tenant_id for SERVER-SIDE use (fractal ID generation, routing)
             // sanitizeForRole() will strip it from API responses to prevent horizontal awareness
-            req.tenantContext.tenantId = user.tenant_id;
-            req.tenantContext.tenantSchema = user.tenant_schema;
-            console.log(`🔒 User ${user.email} - Isolated to ${user.tenant_schema}`);
+            req.tenantContext.tenantId = tenant_id;
+            req.tenantContext.tenantSchema = tenant_schema;
+            console.log(`🔒 User ${user.email} - Isolated to ${tenant_schema}`);
         } else {
             // User without tenant (shouldn't happen for non-dev users)
             // Client will be released by cleanup on 'finish'
