@@ -1265,10 +1265,33 @@
                             <span class="discord-status-badge status-${msg.discord_status}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
                         </div>
                         <div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>
-                        <div class="discord-text">${escapeHtml(msg.message_content)}</div>
+                        ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
+                        ${msg.embeds && msg.embeds.length > 0 ? msg.embeds.map(embed => `
+                            <div class="discord-embed" style="border-left: 4px solid ${embed.color ? '#' + embed.color.toString(16).padStart(6, '0') : '#5865F2'}; background: rgba(47, 49, 54, 0.6); border-radius: 4px; padding: 0.75rem; margin-top: 0.5rem; max-width: 520px;">
+                                ${embed.title ? `<div class="embed-title" style="font-weight: 600; color: #00AFF4; margin-bottom: 0.5rem;">${escapeHtml(embed.title)}</div>` : ''}
+                                ${embed.description ? `<div class="embed-description" style="color: #DCDDDE; margin-bottom: 0.5rem; white-space: pre-wrap;">${escapeHtml(embed.description)}</div>` : ''}
+                                ${embed.fields && embed.fields.length > 0 ? `
+                                    <div class="embed-fields" style="display: grid; grid-template-columns: repeat(${embed.fields.some(f => !f.inline) ? '1' : '2'}, 1fr); gap: 0.5rem;">
+                                        ${embed.fields.map(field => `
+                                            <div class="embed-field" style="${field.inline ? 'display: inline-block;' : ''}">
+                                                <div class="embed-field-name" style="font-weight: 600; color: #B9BBBE; font-size: 0.875rem; margin-bottom: 0.25rem;">${escapeHtml(field.name)}</div>
+                                                <div class="embed-field-value" style="color: #DCDDDE; font-size: 0.875rem;">${escapeHtml(field.value)}</div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                ` : ''}
+                                ${embed.footer ? `<div class="embed-footer" style="color: #72767D; font-size: 0.75rem; margin-top: 0.5rem;">${escapeHtml(embed.footer.text || embed.footer)}</div>` : ''}
+                                ${embed.image ? `<img src="${escapeHtml(embed.image.url || embed.image)}" style="max-width: 100%; border-radius: 4px; margin-top: 0.5rem;" alt="Embed image">` : ''}
+                            </div>
+                        `).join('') : ''}
                         ${msg.has_media ? `
                             <div class="discord-media-preview" id="media-preview-${msg.id}" data-message-id="${msg.id}" data-media-type="${escapeHtml(msg.media_type || '')}">
                                 <div class="media-loading">Loading media...</div>
+                            </div>
+                        ` : ''}
+                        ${msg.media_url && !msg.has_media ? `
+                            <div class="discord-attachment" style="margin-top: 0.5rem;">
+                                <img src="${escapeHtml(msg.media_url)}" style="max-width: 400px; border-radius: 4px;" alt="Discord attachment" loading="lazy" onerror="this.style.display='none'">
                             </div>
                         ` : ''}
                     </div>
