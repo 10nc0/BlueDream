@@ -3598,9 +3598,16 @@ app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
         const { id } = req.params; // fractal_id
         console.log(`📱 /api/bridges/:id/qr called for ${id} by user ${req.userId}`);
         
-        // SECURITY: Get user's tenant first
+        // Use tenant schema from requireAuth middleware
+        const tenantSchema = req.tenantSchema;
+        
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
+        }
+        
+        // Get user's tenant_id for bridge indexing
         const userResult = await pool.query(
-            'SELECT tenant_id FROM users WHERE id = $1',
+            `SELECT tenant_id FROM ${tenantSchema}.users WHERE id = $1`,
             [req.userId]
         );
         
@@ -3610,7 +3617,7 @@ app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
         }
         
         const userTenantId = userResult.rows[0].tenant_id;
-        const userTenantSchema = `tenant_${userTenantId}`;
+        const userTenantSchema = tenantSchema;
         
         // SECURITY: Verify bridge belongs to user's tenant using fractal_id
         const bridgeResult = await pool.query(
