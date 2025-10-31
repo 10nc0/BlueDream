@@ -862,16 +862,22 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
             let bridge;
             try {
                 await bridgeClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
+                
+                // CRITICAL DEBUG: Verify search_path is set correctly
+                const schemaCheck = await bridgeClient.query('SELECT current_schema()');
+                console.log(`🔍 SCHEMA CHECK: Current schema = ${schemaCheck.rows[0].current_schema}, expected = ${tenantSchema}`);
+                
                 const bridgeResult = await bridgeClient.query(
-                    'SELECT id, output_01_url, output_0n_url, output_credentials FROM bridges WHERE id = $1',
+                    `SELECT id, output_01_url, output_0n_url, output_credentials FROM ${tenantSchema}.bridges WHERE id = $1`,
                     [bridgeId]
                 );
                 bridge = bridgeResult.rows[0];
                 
                 console.log(`🔍 DEBUG: Loaded bridge from DB:`, {
+                    schema: tenantSchema,
                     id: bridge?.id,
-                    output_01_url: bridge?.output_01_url?.substring(0, 50),
-                    output_0n_url: bridge?.output_0n_url?.substring(0, 50),
+                    output_01_url: bridge?.output_01_url?.substring(0, 70),
+                    output_0n_url: bridge?.output_0n_url?.substring(0, 70),
                     credentials_type: typeof bridge?.output_credentials
                 });
                 
