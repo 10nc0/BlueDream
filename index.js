@@ -4043,6 +4043,54 @@ process.on('uncaughtException', (error) => {
     process.exit(1);
 });
 
+// INTERNAL API: Create Discord thread manually (for recovery/debugging)
+app.post('/api/internal/create-thread', async (req, res) => {
+    try {
+        const { bridgeId, tenantId } = req.body;
+        
+        if (!bridgeId || !tenantId) {
+            return res.status(400).json({ error: 'bridgeId and tenantId required' });
+        }
+        
+        const tenantSchema = `tenant_${tenantId}`;
+        const bridge = await pool.query(
+            `SELECT id, name, output_01_url, output_credentials FROM ${tenantSchema}.bridges WHERE id = $1`,
+            [bridgeId]
+        );
+        
+        if (!bridge.rows.length) {
+            return res.status(404).json({ error: 'Bridge not found' });
+        }
+        
+        const bridgeData = bridge.rows[0];
+        
+        if (!discordBotManager || !discordBotManager.isReady()) {
+            return res.status(503).json({ error: 'Discord bot not ready' });
+        }
+        
+        const threadInfo = await discordBotManager.createThreadForBridge(
+            bridgeData.output_01_url,
+            bridgeData.name,
+            tenantId,
+            bridgeData.id
+        );
+        
+        await pool.query(
+            `UPDATE ${tenantSchema}.bridges 
+             SET output_credentials = output_credentials || $1::jsonb
+             WHERE id = $2`,
+            [JSON.stringify({ thread_id: threadInfo.threadId, thread_name: threadInfo.threadName }), bridgeData.id]
+        );
+        
+        await discordBotManager.sendInitialMessage(threadInfo.threadId, bridgeData.name, bridgeData.output_01_url);
+        
+        res.json({ success: true, threadInfo });
+    } catch (error) {
+        console.error('❌ Internal thread creation error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🌐 Dashboard available at http://localhost:${PORT}`);
