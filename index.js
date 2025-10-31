@@ -266,25 +266,12 @@ async function initializeDatabase() {
     try {
         await tenantManager.initializeCoreSchema();
         
-        // ✅ REMOVED: Legacy public schema bridges/messages tables
-        // All bridge and message data now lives in tenant_X schemas (fractalized multi-tenancy)
+        // ✅ PURE TENANT_X ARCHITECTURE:
+        // - users, active_sessions, audit_logs, refresh_tokens: ALL in tenant_X schemas (created by TenantManager)
+        // - core schema: Only tenant_catalog, user_email_to_tenant, invites, sybil_protection, rate_limits
+        // - public schema: Only sessions (express-session global store)
         
-        // Create users table for authentication
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                email TEXT UNIQUE,
-                phone TEXT UNIQUE,
-                password_hash TEXT,
-                role TEXT DEFAULT 'read-only' CHECK (role IN ('admin', 'read-only', 'write-only')),
-                otp_code TEXT,
-                otp_expires_at TIMESTAMPTZ,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        `);
-        
-        // Create sessions table for session storage
+        // Create sessions table for express-session (global session store)
         await pool.query(`
             CREATE TABLE IF NOT EXISTS sessions (
                 sid VARCHAR NOT NULL PRIMARY KEY,
@@ -295,65 +282,6 @@ async function initializeDatabase() {
         
         await pool.query(`
             CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire)
-        `);
-        
-        // Create active_sessions table for tracking session metadata
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS active_sessions (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                session_id VARCHAR NOT NULL,
-                ip_address TEXT,
-                user_agent TEXT,
-                device_type TEXT,
-                browser TEXT,
-                os TEXT,
-                location TEXT,
-                login_time TIMESTAMPTZ DEFAULT NOW(),
-                last_activity TIMESTAMPTZ DEFAULT NOW(),
-                is_active BOOLEAN DEFAULT TRUE
-            )
-        `);
-        
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_active_sessions_user ON active_sessions(user_id)
-        `);
-        
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_active_sessions_session ON active_sessions(session_id)
-        `);
-        
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_active_sessions_active ON active_sessions(is_active, last_activity DESC)
-        `);
-        
-        // Create audit_logs table for tracking all user and session changes
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS audit_logs (
-                id SERIAL PRIMARY KEY,
-                timestamp TIMESTAMPTZ DEFAULT NOW(),
-                actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-                actor_email TEXT,
-                action_type TEXT NOT NULL,
-                target_type TEXT NOT NULL,
-                target_id TEXT,
-                target_email TEXT,
-                details JSONB,
-                ip_address TEXT,
-                user_agent TEXT
-            )
-        `);
-        
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp DESC)
-        `);
-        
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_user_id)
-        `);
-        
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action_type)
         `);
         
         // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
