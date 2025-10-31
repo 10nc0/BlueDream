@@ -3584,13 +3584,15 @@ app.get('/api/bridges/:id/stats', requireAuth, async (req, res) => {
 
 // REMOVED: Duplicate QR endpoint - using the multi-instance version above (line ~2741)
 
-// DISCORD-FIRST: Media stored in Discord threads, not PostgreSQL
+// DISCORD-FIRST: Media stored in Discord threads, not PostgreSQL  
+// Frontend should use Discord CDN URLs directly (from message.media_url)
 app.get('/api/messages/:id/media', requireAuth, async (req, res) => {
     try {
         // Media is stored in Discord threads
+        // The frontend should use message.media_url (Discord CDN URL) directly
         res.status(404).json({ 
-            error: 'Media not available in PostgreSQL',
-            note: 'All media is stored in Discord threads. View media directly in Discord.'
+            error: 'Media not available via this endpoint',
+            note: 'Use message.media_url (Discord CDN URL) directly from message data'
         });
     } catch (error) {
         console.error(`❌ Error in /api/messages/:id/media:`, error);

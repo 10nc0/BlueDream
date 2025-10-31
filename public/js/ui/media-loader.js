@@ -178,6 +178,19 @@ async function loadMedia(messageId) {
     console.log(`📥 Starting media load for message ${messageId}`);
     
     try {
+        // DISCORD-FIRST: Check if message has Discord CDN URL (stored in data attribute)
+        const mediaUrl = previewEl.dataset.mediaUrl;
+        const mediaType = previewEl.dataset.mediaType;
+        
+        if (mediaUrl) {
+            console.log(`🌐 Using Discord CDN URL for message ${messageId}: ${mediaUrl.substring(0, 50)}...`);
+            // Render directly from Discord CDN - no server fetch needed
+            renderMediaFromUrl(previewEl, messageId, mediaUrl, mediaType);
+            console.log(`✅ Media rendered successfully from Discord CDN for message ${messageId}`);
+            return;
+        }
+        
+        // Fallback: Legacy path for media stored in PostgreSQL (if any)
         // Check cache first
         let mediaData = await getCachedMedia(messageId);
         
@@ -213,6 +226,84 @@ async function loadMedia(messageId) {
         errorDiv.textContent = `Failed to load media: ${error.message}`;
         previewEl.innerHTML = ''; // Clear existing content
         previewEl.appendChild(errorDiv);
+    }
+}
+
+// Render media directly from Discord CDN URL
+function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
+    console.log(`🌐 Rendering media from URL for message ${messageId}: ${mediaUrl.substring(0, 50)}...`);
+    
+    // Determine media category from MIME type
+    const normalizedType = (mediaType || '').toLowerCase();
+    const isImage = normalizedType.startsWith('image/');
+    const isVideo = normalizedType.startsWith('video/');
+    const isAudio = normalizedType.startsWith('audio/');
+    
+    if (isImage) {
+        // Progressive loading with blur placeholder
+        const img = document.createElement('img');
+        img.alt = `Media from Discord`;
+        img.style.width = '100%';
+        img.style.height = 'auto';
+        img.style.borderRadius = '8px';
+        img.style.transition = 'filter 0.3s ease-in-out';
+        img.style.filter = 'blur(10px)';
+        img.src = generateBlurPlaceholder();
+        
+        img.onload = () => {
+            img.style.filter = 'none';
+        };
+        
+        img.onerror = () => {
+            containerEl.innerHTML = '<div class="media-error">Failed to load image from Discord CDN</div>';
+        };
+        
+        // Set actual URL after placeholder
+        setTimeout(() => {
+            img.src = mediaUrl;
+        }, 50);
+        
+        containerEl.innerHTML = '';
+        containerEl.appendChild(img);
+        
+    } else if (isVideo) {
+        const video = document.createElement('video');
+        video.controls = true;
+        video.style.width = '100%';
+        video.style.borderRadius = '8px';
+        video.src = mediaUrl;
+        
+        video.onerror = () => {
+            containerEl.innerHTML = '<div class="media-error">Failed to load video from Discord CDN</div>';
+        };
+        
+        containerEl.innerHTML = '';
+        containerEl.appendChild(video);
+        
+    } else if (isAudio) {
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.style.width = '100%';
+        audio.src = mediaUrl;
+        
+        audio.onerror = () => {
+            containerEl.innerHTML = '<div class="media-error">Failed to load audio from Discord CDN</div>';
+        };
+        
+        containerEl.innerHTML = '';
+        containerEl.appendChild(audio);
+        
+    } else {
+        // Unknown type - show download link
+        const link = document.createElement('a');
+        link.href = mediaUrl;
+        link.target = '_blank';
+        link.textContent = `📎 Download attachment (${mediaType || 'unknown type'})`;
+        link.style.color = '#60a5fa';
+        link.style.textDecoration = 'none';
+        
+        containerEl.innerHTML = '';
+        containerEl.appendChild(link);
     }
 }
 

@@ -1265,7 +1265,7 @@
                             </div>
                         `).join('') : ''}
                         ${msg.has_media ? `
-                            <div class="discord-media-preview" id="media-preview-${msg.id}" data-message-id="${msg.id}" data-media-type="${escapeHtml(msg.media_type || '')}">
+                            <div class="discord-media-preview" id="media-preview-${msg.id}" data-message-id="${msg.id}" data-media-url="${escapeHtml(msg.media_url || '')}" data-media-type="${escapeHtml(msg.media_type || '')}">
                                 <div class="media-loading">Loading media...</div>
                             </div>
                         ` : ''}
