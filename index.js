@@ -4184,19 +4184,22 @@ process.on('uncaughtException', (error) => {
     process.exit(1);
 });
 
-// INTERNAL API: Create Discord thread manually (for recovery/debugging)
-app.post('/api/internal/create-thread', async (req, res) => {
+// Create Discord thread for output_01 (Nyanbook Ledger) manually
+// Use this to fix bridges that didn't get threads during creation
+app.post('/api/bridges/:id/create-thread', requireAuth, setTenantContext, async (req, res) => {
     try {
-        const { bridgeId, tenantId } = req.body;
+        const { id } = req.params; // fractal_id
+        const client = req.dbClient || pool;
+        const tenantId = req.tenantContext?.tenantId;
         
-        if (!bridgeId || !tenantId) {
-            return res.status(400).json({ error: 'bridgeId and tenantId required' });
+        if (!tenantId) {
+            return res.status(400).json({ error: 'Tenant context required' });
         }
         
-        const tenantSchema = `tenant_${tenantId}`;
-        const bridge = await pool.query(
-            `SELECT id, name, output_01_url, output_credentials FROM ${tenantSchema}.bridges WHERE id = $1`,
-            [bridgeId]
+        // Get bridge by fractal_id
+        const bridge = await client.query(
+            `SELECT id, name, output_01_url, output_credentials, tenant_id FROM bridges WHERE fractal_id = $1`,
+            [id]
         );
         
         if (!bridge.rows.length) {
@@ -4205,29 +4208,71 @@ app.post('/api/internal/create-thread', async (req, res) => {
         
         const bridgeData = bridge.rows[0];
         
-        if (!discordBotManager || !discordBotManager.isReady()) {
-            return res.status(503).json({ error: 'Discord bot not ready' });
+        // Check if thread already exists
+        let outputCredentials = bridgeData.output_credentials;
+        if (typeof outputCredentials === 'string') {
+            outputCredentials = JSON.parse(outputCredentials);
         }
         
+        if (outputCredentials?.output_01?.thread_id) {
+            return res.json({ 
+                success: true, 
+                message: 'Thread already exists',
+                threadInfo: outputCredentials.output_01
+            });
+        }
+        
+        // Check Discord bot status
+        if (!discordBotManager || !discordBotManager.isReady()) {
+            return res.status(503).json({ 
+                error: 'Discord bot not ready',
+                note: 'Thread creation temporarily unavailable'
+            });
+        }
+        
+        // Create thread for output_01 (Nyanbook Ledger)
+        console.log(`🧵 Creating output_01 thread for bridge ${id} (${bridgeData.name})...`);
         const threadInfo = await discordBotManager.createThreadForBridge(
             bridgeData.output_01_url,
-            bridgeData.name,
-            tenantId,
+            `${bridgeData.name} [Ledger]`,
+            bridgeData.tenant_id,
             bridgeData.id
         );
         
-        await pool.query(
-            `UPDATE ${tenantSchema}.bridges 
-             SET output_credentials = output_credentials || $1::jsonb
-             WHERE id = $2`,
-            [JSON.stringify({ thread_id: threadInfo.threadId, thread_name: threadInfo.threadName }), bridgeData.id]
+        // Update output_credentials with output_01 thread info
+        const updatedCredentials = {
+            ...outputCredentials,
+            output_01: {
+                type: 'thread',
+                thread_id: threadInfo.threadId,
+                thread_name: threadInfo.threadName,
+                channel_id: threadInfo.channelId
+            }
+        };
+        
+        await client.query(
+            `UPDATE bridges 
+             SET output_credentials = $1::jsonb
+             WHERE fractal_id = $2`,
+            [JSON.stringify(updatedCredentials), id]
         );
         
-        await discordBotManager.sendInitialMessage(threadInfo.threadId, bridgeData.name, bridgeData.output_01_url);
+        // Send initial activation message to thread
+        await discordBotManager.sendInitialMessage(
+            threadInfo.threadId, 
+            bridgeData.name, 
+            bridgeData.output_01_url
+        );
         
-        res.json({ success: true, threadInfo });
+        console.log(`✅ output_01 thread created: ${threadInfo.threadId}`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Thread created successfully',
+            threadInfo: updatedCredentials.output_01
+        });
     } catch (error) {
-        console.error('❌ Internal thread creation error:', error);
+        console.error('❌ Thread creation error:', error);
         res.status(500).json({ error: error.message });
     }
 });
