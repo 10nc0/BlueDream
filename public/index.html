@@ -3309,6 +3309,18 @@
             }
         }
         
+        // Helper function to get status badge info
+        function getStatusBadge(status) {
+            const badges = {
+                'connected': { emoji: '✅', label: 'Connected', color: 'rgba(34, 197, 94, 0.8)' },
+                'inactive': { emoji: '⏸️', label: 'Inactive', color: 'rgba(148, 163, 184, 0.8)' },
+                'disconnected': { emoji: '🔌', label: 'Disconnected', color: 'rgba(239, 68, 68, 0.8)' },
+                'auth_failed': { emoji: '❌', label: 'Auth Failed', color: 'rgba(239, 68, 68, 0.8)' },
+                'error': { emoji: '⚠️', label: 'Error', color: 'rgba(239, 68, 68, 0.8)' }
+            };
+            return badges[status] || badges['inactive'];
+        }
+        
         // Load system-wide bridges for Dev Panel
         let devPanelBridges = [];
         let selectedDevBridgeId = null;
