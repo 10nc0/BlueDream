@@ -457,21 +457,33 @@ body {
 
 @media (min-width: 768px) {
   .bridge-sidebar {
-    width: 220px;
+    width: 160px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .bridge-sidebar {
+    width: 180px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .bridge-sidebar {
+    width: 200px;
   }
 }
 
 .bridge-category {
-  margin-bottom: 0.625rem;
+  margin-bottom: 0.5rem;
 }
 
 .category-header {
-  font-size: 0.625rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-secondary);
-  padding: 0.25rem 0.375rem;
+  padding: 0.1875rem 0.3125rem;
   margin-bottom: 0.125rem;
 }
 
@@ -1623,8 +1635,8 @@ body {
   }
   
   .animated-character {
-    width: 100px;
-    height: 100px;
+    width: 125px;
+    height: 125px;
   }
   
   .header-clock {
@@ -1757,8 +1769,8 @@ body {
   }
   
   .animated-character {
-    width: 80px;
-    height: 80px;
+    width: 125px;
+    height: 125px;
   }
   
   .header-branding {
@@ -1795,8 +1807,8 @@ body {
   }
   
   .animated-character {
-    width: 100px;
-    height: 100px;
+    width: 125px;
+    height: 125px;
   }
   
   .logo {
