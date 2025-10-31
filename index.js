@@ -440,6 +440,49 @@ async function initializeDatabase() {
         // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
         // No messages table needed - Discord threads provide permanent storage at zero cost
         
+        // MIGRATION: Add media_buffer table to existing tenant schemas
+        // This ensures retry-safe media delivery for all existing tenants
+        const schemas = await pool.query(`
+            SELECT schema_name 
+            FROM information_schema.schemata 
+            WHERE schema_name LIKE 'tenant_%'
+            ORDER BY schema_name
+        `);
+        
+        for (const { schema_name } of schemas.rows) {
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS ${schema_name}.media_buffer (
+                    id SERIAL PRIMARY KEY,
+                    bridge_id INTEGER REFERENCES ${schema_name}.bridges(id) ON DELETE CASCADE,
+                    media_data TEXT NOT NULL,
+                    media_type TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    sender_name TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    delivered_to_ledger BOOLEAN DEFAULT false,
+                    delivered_to_user BOOLEAN DEFAULT false,
+                    delivery_attempts INTEGER DEFAULT 0,
+                    last_delivery_attempt TIMESTAMPTZ
+                )
+            `);
+
+            await pool.query(`
+                CREATE INDEX IF NOT EXISTS idx_media_buffer_created_at 
+                ON ${schema_name}.media_buffer(created_at DESC)
+            `);
+
+            await pool.query(`
+                CREATE INDEX IF NOT EXISTS idx_media_buffer_bridge 
+                ON ${schema_name}.media_buffer(bridge_id)
+            `);
+            
+            await pool.query(`
+                CREATE INDEX IF NOT EXISTS idx_media_buffer_pending
+                ON ${schema_name}.media_buffer(delivered_to_ledger, delivered_to_user)
+                WHERE delivered_to_ledger = false OR delivered_to_user = false
+            `);
+        }
+        
         console.log('✅ Core schema initialized with security tables');
         console.log('✅ Database initialized successfully');
     } catch (error) {
@@ -487,16 +530,46 @@ async function sendToLedger(payload, options = {}, bridge = null) {
 
         let response;
         
-        // Handle media vs text
-        if (options.isMedia && options.mediaBuffer) {
-            const FormData = require('form-data');
-            const form = new FormData();
-            form.append('file', Buffer.from(options.mediaBuffer), {
-                filename: options.filename,
-                contentType: options.mimetype
-            });
-            form.append('payload_json', JSON.stringify(payload));
-            response = await axios.post(url.toString(), form, { headers: form.getHeaders() });
+        // Handle media vs text - read from media_buffer if provided
+        if (options.isMedia && options.mediaBufferId) {
+            // Read media from buffer table (retry-safe storage)
+            // CRITICAL: Use schema-qualified queries instead of SET LOCAL search_path
+            const mediaClient = await pool.connect();
+            try {
+                const mediaResult = await mediaClient.query(`
+                    SELECT media_data, media_type, filename 
+                    FROM ${options.tenantSchema}.media_buffer 
+                    WHERE id = $1
+                `, [options.mediaBufferId]);
+                
+                if (mediaResult.rows.length === 0) {
+                    throw new Error(`Media buffer ID ${options.mediaBufferId} not found`);
+                }
+                
+                const { media_data, media_type, filename } = mediaResult.rows[0];
+                const buffer = Buffer.from(media_data, 'base64');
+                
+                const FormData = require('form-data');
+                const form = new FormData();
+                form.append('file', buffer, {
+                    filename: filename,
+                    contentType: media_type
+                });
+                form.append('payload_json', JSON.stringify(payload));
+                response = await axios.post(url.toString(), form, { headers: form.getHeaders() });
+                
+                // Mark as delivered to ledger (schema-qualified)
+                await mediaClient.query(`
+                    UPDATE ${options.tenantSchema}.media_buffer 
+                    SET delivered_to_ledger = true, 
+                        delivery_attempts = delivery_attempts + 1,
+                        last_delivery_attempt = NOW()
+                    WHERE id = $1
+                `, [options.mediaBufferId]);
+                
+            } finally {
+                mediaClient.release();
+            }
         } else {
             response = await axios.post(url.toString(), payload);
         }
@@ -530,15 +603,46 @@ async function sendToUserOutput(payload, options = {}, bridge = null) {
         const url = new URL(userOutputUrl);
         // Don't add thread params to user output - let them manage their own Discord
         
-        if (options.isMedia && options.mediaBuffer) {
-            const FormData = require('form-data');
-            const form = new FormData();
-            form.append('file', Buffer.from(options.mediaBuffer), {
-                filename: options.filename,
-                contentType: options.mimetype
-            });
-            form.append('payload_json', JSON.stringify(payload));
-            await axios.post(url.toString(), form, { headers: form.getHeaders() });
+        // Handle media vs text - read from media_buffer if provided
+        if (options.isMedia && options.mediaBufferId) {
+            // Read media from buffer table (retry-safe storage)
+            // CRITICAL: Use schema-qualified queries instead of SET LOCAL search_path
+            const mediaClient = await pool.connect();
+            try {
+                const mediaResult = await mediaClient.query(`
+                    SELECT media_data, media_type, filename 
+                    FROM ${options.tenantSchema}.media_buffer 
+                    WHERE id = $1
+                `, [options.mediaBufferId]);
+                
+                if (mediaResult.rows.length === 0) {
+                    throw new Error(`Media buffer ID ${options.mediaBufferId} not found`);
+                }
+                
+                const { media_data, media_type, filename } = mediaResult.rows[0];
+                const buffer = Buffer.from(media_data, 'base64');
+                
+                const FormData = require('form-data');
+                const form = new FormData();
+                form.append('file', buffer, {
+                    filename: filename,
+                    contentType: media_type
+                });
+                form.append('payload_json', JSON.stringify(payload));
+                await axios.post(url.toString(), form, { headers: form.getHeaders() });
+                
+                // Mark as delivered to user output (schema-qualified)
+                await mediaClient.query(`
+                    UPDATE ${options.tenantSchema}.media_buffer 
+                    SET delivered_to_user = true,
+                        delivery_attempts = delivery_attempts + 1,
+                        last_delivery_attempt = NOW()
+                    WHERE id = $1
+                `, [options.mediaBufferId]);
+                
+            } finally {
+                mediaClient.release();
+            }
         } else {
             await axios.post(url.toString(), payload);
         }
@@ -866,72 +970,70 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                 embeds: [embed]
             };
 
-            // Handle media messages (transaction already committed above)
+            // CRITICAL MEDIA FLOW: WhatsApp → Buffer → PostgreSQL → Discord Webhooks
+            // Purpose: Ensure zero media loss with retry-safe atomic storage
             if (message.hasMedia) {
                 try {
                     const media = await message.downloadMedia();
-                    if (media && media.mimetype.startsWith('image/')) {
-                        const mediaData = `data:${media.mimetype};base64,${media.data}`;
-                        const buffer = Buffer.from(media.data, 'base64');
-                        const filename = `whatsapp_image_${Date.now()}.${media.mimetype.split('/')[1]}`;
+                    if (media && (media.mimetype.startsWith('image/') || media.mimetype.startsWith('video/') || media.mimetype.startsWith('audio/'))) {
+                        const base64Data = media.data; // Already base64 from Baileys
+                        const filename = `whatsapp_${media.mimetype.split('/')[0]}_${Date.now()}.${media.mimetype.split('/')[1]}`;
                         
-                        // CRITICAL: Save media to database so it can be viewed in the dashboard
-                        // Need new transaction since we already committed above
+                        // ATOMIC COMMIT: Save media to buffer BEFORE webhook delivery
+                        // This ensures retry safety - if webhook fails, media is still in DB
                         const mediaClient = await pool.connect();
+                        let mediaBufferId = null;
                         try {
                             await mediaClient.query('BEGIN');
                             await mediaClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
-                            await mediaClient.query(`
-                                UPDATE messages 
-                                SET media_data = $1, media_type = $2 
-                                WHERE id = $3
-                            `, [mediaData, media.mimetype, messageDbId]);
+                            const result = await mediaClient.query(`
+                                INSERT INTO media_buffer (
+                                    bridge_id, media_data, media_type, filename, sender_name
+                                ) VALUES ($1, $2, $3, $4, $5)
+                                RETURNING id
+                            `, [bridgeId, base64Data, media.mimetype, filename, senderName]);
+                            mediaBufferId = result.rows[0].id;
                             await mediaClient.query('COMMIT');
-                            console.log(`💾 Saved media to database for message ${messageDbId}`);
+                            console.log(`💾 [Bridge ${bridgeId}] Media saved to buffer (ID: ${mediaBufferId})`);
                         } catch (err) {
                             await mediaClient.query('ROLLBACK');
-                            console.error(`❌ Failed to save media:`, err.message);
+                            console.error(`❌ Failed to save media to buffer:`, err.message);
+                            throw err;
                         } finally {
                             mediaClient.release();
                         }
                         
                         embed.fields.push({
                             name: '📎 Attachment',
-                            value: `Image (${media.mimetype})`,
+                            value: `${media.mimetype.split('/')[0].toUpperCase()} (${media.mimetype})`,
                             inline: false
                         });
                         
-                        // WEBHOOK-FIRST ARCHITECTURE: Dual-output delivery
-                        // Output #01: Nyanbook Ledger (eternal, Dev #01 only)
-                        // Output #0n: User Discord (mutable, Admin #0n only)
+                        // WEBHOOK-FIRST ARCHITECTURE: Dual-output delivery from media_buffer
                         const threadName = bridge.output_credentials?.thread_name;
                         const threadId = bridge.output_credentials?.thread_id;
                         
-                        // Path 1: Nyanbook Ledger (Output #01)
+                        // Path 1: Nyanbook Ledger (Output #01) - reads from media_buffer
                         await sendToLedger(discordPayload, {
                             isMedia: true,
-                            mediaBuffer: buffer,
-                            filename: filename,
-                            mimetype: media.mimetype,
+                            mediaBufferId: mediaBufferId,
+                            tenantSchema: tenantSchema,
                             threadName,
                             threadId
                         }, bridge);
                         
-                        // Path 2: User Webhook (Output #0n)
+                        // Path 2: User Webhook (Output #0n) - reads from media_buffer
                         await sendToUserOutput(discordPayload, {
                             isMedia: true,
-                            mediaBuffer: buffer,
-                            filename: filename,
-                            mimetype: media.mimetype
+                            mediaBufferId: mediaBufferId,
+                            tenantSchema: tenantSchema
                         }, bridge);
                         
                         console.log(`✅ [Bridge ${bridgeId}] Forwarded media message from ${senderName}`);
                         return;
                     }
                 } catch (mediaError) {
-                    console.error(`❌ [Bridge ${bridgeId}] Error downloading media:`, mediaError.message);
-                    // DEAD CODE REMOVED: updateMessageStatus call
-                    // Messages tracked in Discord only, no PostgreSQL status updates needed
+                    console.error(`❌ [Bridge ${bridgeId}] Error in media flow:`, mediaError.message);
                     return;
                 }
             }
@@ -4170,6 +4272,48 @@ app.listen(PORT, '0.0.0.0', async () => {
     // Auto-restore WhatsApp sessions for 24/7 uptime
     await autoRestoreWhatsAppSessions();
     console.log('📱 All bridges with saved sessions are now active');
+    
+    // 3-DAY MEDIA PURGE: Clean up old media from buffer
+    // Nyanbook Ledger has permanent copy, so buffer only needed for retry safety
+    async function purgeOldMedia() {
+        try {
+            console.log('🧹 Starting 3-day media purge...');
+            
+            // Get all tenant schemas
+            const schemas = await pool.query(`
+                SELECT schema_name 
+                FROM information_schema.schemata 
+                WHERE schema_name LIKE 'tenant_%'
+                ORDER BY schema_name
+            `);
+            
+            let totalPurged = 0;
+            
+            for (const { schema_name } of schemas.rows) {
+                const result = await pool.query(`
+                    DELETE FROM ${schema_name}.media_buffer 
+                    WHERE created_at < NOW() - INTERVAL '3 days'
+                    RETURNING id
+                `);
+                
+                if (result.rowCount > 0) {
+                    console.log(`  🗑️  Purged ${result.rowCount} media entries from ${schema_name}`);
+                    totalPurged += result.rowCount;
+                }
+            }
+            
+            console.log(`✅ Media purge complete: ${totalPurged} total entries removed`);
+        } catch (error) {
+            console.error('❌ Media purge failed:', error.message);
+        }
+    }
+    
+    // Run purge immediately on startup
+    await purgeOldMedia();
+    
+    // Schedule purge every 24 hours
+    setInterval(purgeOldMedia, 24 * 60 * 60 * 1000);
+    console.log('⏰ 3-day media purge scheduled (runs every 24 hours)');
 });
 
 // Graceful shutdown

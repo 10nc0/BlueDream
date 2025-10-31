@@ -170,44 +170,42 @@ class TenantManager {
 
             // DISCORD-FIRST ARCHITECTURE: Messages table dropped - Discord threads are sole storage
             // All message history, search, and UI handled by Discord at $0 cost
-            /*
+            
+            // MEDIA BUFFER: Temporary storage for retry-safe webhook delivery
+            // Purpose: Ensure zero media loss between WhatsApp download and Discord webhook delivery
+            // Lifecycle: Purged after 3 days (Nyanbook Ledger has permanent copy)
             await client.query(`
-                CREATE TABLE IF NOT EXISTS ${schemaName}.messages (
+                CREATE TABLE IF NOT EXISTS ${schemaName}.media_buffer (
                     id SERIAL PRIMARY KEY,
                     bridge_id INTEGER REFERENCES ${schemaName}.bridges(id) ON DELETE CASCADE,
-                    sender_name TEXT NOT NULL,
-                    sender_number TEXT,
-                    sender_contact TEXT,
-                    message_text TEXT,
-                    message_content TEXT,
-                    timestamp TIMESTAMPTZ DEFAULT NOW(),
-                    discord_status TEXT DEFAULT 'pending',
-                    discord_error TEXT,
-                    media_data BYTEA,
-                    media_type TEXT,
-                    media_filename TEXT,
-                    has_media BOOLEAN DEFAULT false,
-                    error_message TEXT,
-                    sender_photo_url TEXT,
-                    fractal_id TEXT UNIQUE
+                    media_data TEXT NOT NULL,
+                    media_type TEXT NOT NULL,
+                    filename TEXT NOT NULL,
+                    sender_name TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    delivered_to_ledger BOOLEAN DEFAULT false,
+                    delivered_to_user BOOLEAN DEFAULT false,
+                    delivery_attempts INTEGER DEFAULT 0,
+                    last_delivery_attempt TIMESTAMPTZ
                 )
             `);
 
             await client.query(`
-                CREATE INDEX IF NOT EXISTS idx_messages_timestamp 
-                ON ${schemaName}.messages(timestamp DESC)
+                CREATE INDEX IF NOT EXISTS idx_media_buffer_created_at 
+                ON ${schemaName}.media_buffer(created_at DESC)
             `);
 
             await client.query(`
-                CREATE INDEX IF NOT EXISTS idx_messages_bridge 
-                ON ${schemaName}.messages(bridge_id)
+                CREATE INDEX IF NOT EXISTS idx_media_buffer_bridge 
+                ON ${schemaName}.media_buffer(bridge_id)
+            `);
+            
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_media_buffer_pending
+                ON ${schemaName}.media_buffer(delivered_to_ledger, delivered_to_user)
+                WHERE delivered_to_ledger = false OR delivered_to_user = false
             `);
 
-            await client.query(`
-                CREATE INDEX IF NOT EXISTS idx_messages_fractal_id 
-                ON ${schemaName}.messages(fractal_id)
-            `);
-            */
 
             await client.query(`
                 CREATE INDEX IF NOT EXISTS idx_bridges_fractal_id 
