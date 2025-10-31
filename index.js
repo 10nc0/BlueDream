@@ -497,6 +497,61 @@ async function initializeDatabase() {
 // UI MASKING: "webhook" → "bridge" terminology everywhere except create form
 // DATABASE ROLE: Stores ONLY routing metadata (webhook URLs, thread IDs) - NOT messages
 
+// HELPER: Get file extension from MIME type (supports ALL formats)
+function getFileExtension(mimetype) {
+    const mimeMap = {
+        // Images
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/png': 'png',
+        'image/gif': 'gif',
+        'image/webp': 'webp',
+        'image/svg+xml': 'svg',
+        'image/bmp': 'bmp',
+        'image/tiff': 'tiff',
+        // Videos
+        'video/mp4': 'mp4',
+        'video/mpeg': 'mpeg',
+        'video/quicktime': 'mov',
+        'video/x-msvideo': 'avi',
+        'video/webm': 'webm',
+        'video/3gpp': '3gp',
+        // Audio
+        'audio/mpeg': 'mp3',
+        'audio/mp3': 'mp3',
+        'audio/ogg': 'ogg',
+        'audio/opus': 'opus',
+        'audio/wav': 'wav',
+        'audio/webm': 'weba',
+        'audio/aac': 'aac',
+        'audio/x-m4a': 'm4a',
+        // Documents - Microsoft Office
+        'application/msword': 'doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+        'application/vnd.ms-excel': 'xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+        'application/vnd.ms-powerpoint': 'ppt',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+        // Documents - Other
+        'application/pdf': 'pdf',
+        'application/zip': 'zip',
+        'application/x-rar-compressed': 'rar',
+        'application/x-7z-compressed': '7z',
+        'text/plain': 'txt',
+        'text/csv': 'csv',
+        'application/json': 'json',
+        'application/xml': 'xml',
+        'text/html': 'html',
+        'application/rtf': 'rtf',
+        // Archives
+        'application/gzip': 'gz',
+        'application/x-tar': 'tar',
+    };
+    
+    // Return mapped extension or extract from mimetype
+    return mimeMap[mimetype] || mimetype.split('/').pop().replace(/[^a-z0-9]/gi, '');
+}
+
 // Send to Ledger (Output #01 = eternal monolith, immutable thread_id storage)
 // WEBHOOK-FIRST: Accepts bridge object directly, no database queries needed
 async function sendToLedger(payload, options = {}, bridge = null) {
@@ -895,7 +950,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                 chatName,
                 messageContent,
                 hasMedia: message.hasMedia,
-                mediaType: message.hasMedia ? 'image' : null,
+                mediaType: null, // Will be set after downloadMedia()
                 mediaData: null,
                 senderPhotoUrl,
                 timestamp: timestamp.toISOString(),
@@ -972,12 +1027,17 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
 
             // CRITICAL MEDIA FLOW: WhatsApp → Buffer → PostgreSQL → Discord Webhooks
             // Purpose: Ensure zero media loss with retry-safe atomic storage
+            // SUPPORTS ALL FORMATS: Photos, videos, audio, PDFs, Excel, Word, stickers, etc.
             if (message.hasMedia) {
                 try {
                     const media = await message.downloadMedia();
-                    if (media && (media.mimetype.startsWith('image/') || media.mimetype.startsWith('video/') || media.mimetype.startsWith('audio/'))) {
+                    if (media) {
+                        // ✅ FULL ATTACHMENT SUPPORT: Accept ALL MIME types
+                        // Baileys downloadMedia() handles everything WhatsApp sends
                         const base64Data = media.data; // Already base64 from Baileys
-                        const filename = `whatsapp_${media.mimetype.split('/')[0]}_${Date.now()}.${media.mimetype.split('/')[1]}`;
+                        const fileExtension = getFileExtension(media.mimetype);
+                        const mediaCategory = media.mimetype.split('/')[0]; // image, video, audio, application
+                        const filename = `whatsapp_${mediaCategory}_${Date.now()}.${fileExtension}`;
                         
                         // ATOMIC COMMIT: Save media to buffer BEFORE webhook delivery
                         // This ensures retry safety - if webhook fails, media is still in DB
@@ -994,7 +1054,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                             `, [bridgeId, base64Data, media.mimetype, filename, senderName]);
                             mediaBufferId = result.rows[0].id;
                             await mediaClient.query('COMMIT');
-                            console.log(`💾 [Bridge ${bridgeId}] Media saved to buffer (ID: ${mediaBufferId})`);
+                            console.log(`💾 [Bridge ${bridgeId}] Media saved to buffer: ${media.mimetype} (ID: ${mediaBufferId})`);
                         } catch (err) {
                             await mediaClient.query('ROLLBACK');
                             console.error(`❌ Failed to save media to buffer:`, err.message);
@@ -1003,9 +1063,29 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                             mediaClient.release();
                         }
                         
+                        // Smart attachment description based on MIME type
+                        let attachmentEmoji = '📎';
+                        let attachmentType = mediaCategory.toUpperCase();
+                        if (media.mimetype.includes('pdf')) {
+                            attachmentEmoji = '📄';
+                            attachmentType = 'PDF Document';
+                        } else if (media.mimetype.includes('word') || media.mimetype.includes('document')) {
+                            attachmentEmoji = '📝';
+                            attachmentType = 'Word Document';
+                        } else if (media.mimetype.includes('excel') || media.mimetype.includes('spreadsheet')) {
+                            attachmentEmoji = '📊';
+                            attachmentType = 'Excel Spreadsheet';
+                        } else if (media.mimetype.includes('powerpoint') || media.mimetype.includes('presentation')) {
+                            attachmentEmoji = '📽️';
+                            attachmentType = 'PowerPoint Presentation';
+                        } else if (media.mimetype === 'image/webp') {
+                            attachmentEmoji = '🎨';
+                            attachmentType = 'Sticker';
+                        }
+                        
                         embed.fields.push({
-                            name: '📎 Attachment',
-                            value: `${media.mimetype.split('/')[0].toUpperCase()} (${media.mimetype})`,
+                            name: `${attachmentEmoji} Attachment`,
+                            value: `${attachmentType} (${media.mimetype})`,
                             inline: false
                         });
                         
@@ -1029,7 +1109,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                             tenantSchema: tenantSchema
                         }, bridge);
                         
-                        console.log(`✅ [Bridge ${bridgeId}] Forwarded media message from ${senderName}`);
+                        console.log(`✅ [Bridge ${bridgeId}] Forwarded ${attachmentType}: ${filename} from ${senderName}`);
                         return;
                     }
                 } catch (mediaError) {
