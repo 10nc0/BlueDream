@@ -341,12 +341,12 @@
             
             // Clean WhatsApp-style list (no platform grouping)
             sidebar.innerHTML = filteredBridges.map(bridge => `
-                <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" data-fractal-id="${bridge.fractal_id}" class="channel-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border: none; background: ${bridge.fractal_id === selectedBridgeFractalId ? 'rgba(88, 101, 242, 0.15)' : 'transparent'}; border-left: 3px solid ${bridge.fractal_id === selectedBridgeFractalId ? '#5865f2' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.2s;">
+                <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: none; background: ${bridge.fractal_id === selectedBridgeFractalId ? 'rgba(88, 101, 242, 0.1)' : 'transparent'}; border-left: 2px solid ${bridge.fractal_id === selectedBridgeFractalId ? '#818cf8' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.15s; margin: 0.125rem 0;">
                     <div style="flex: 1; min-width: 0;">
-                        <div style="color: #e2e8f0; font-weight: 500; font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bridge.name || `${bridge.input_platform} → Discord`}</div>
-                        ${bridge.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.125rem;">${bridge.message_count} messages</div>` : ''}
+                        <div style="color: ${bridge.fractal_id === selectedBridgeFractalId ? '#e2e8f0' : '#cbd5e1'}; font-weight: ${bridge.fractal_id === selectedBridgeFractalId ? '600' : '500'}; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bridge.name || `${bridge.input_platform} → Discord`}</div>
+                        ${bridge.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.125rem;">${bridge.message_count}</div>` : ''}
                     </div>
-                    ${bridge._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.3); color: #22c55e; padding: 0.125rem 0.375rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">💬</span>` : ''}
+                    ${bridge._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem;">💬</span>` : ''}
                 </button>
             `).join('');
             
@@ -379,12 +379,12 @@
             const sidebar = document.getElementById('bridgeListContainer');
             
             sidebar.innerHTML = filteredBridges.map(bridge => `
-                <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" data-fractal-id="${bridge.fractal_id}" class="channel-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border: none; background: ${bridge.fractal_id === selectedBridgeFractalId ? 'rgba(88, 101, 242, 0.15)' : 'transparent'}; border-left: 3px solid ${bridge.fractal_id === selectedBridgeFractalId ? '#5865f2' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.2s;">
+                <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: none; background: ${bridge.fractal_id === selectedBridgeFractalId ? 'rgba(88, 101, 242, 0.1)' : 'transparent'}; border-left: 2px solid ${bridge.fractal_id === selectedBridgeFractalId ? '#818cf8' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.15s; margin: 0.125rem 0;">
                     <div style="flex: 1; min-width: 0;">
-                        <div style="color: #e2e8f0; font-weight: 500; font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bridge.name || `${bridge.input_platform} → Discord`}</div>
-                        ${bridge.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.125rem;">${bridge.message_count} messages</div>` : ''}
+                        <div style="color: ${bridge.fractal_id === selectedBridgeFractalId ? '#e2e8f0' : '#cbd5e1'}; font-weight: ${bridge.fractal_id === selectedBridgeFractalId ? '600' : '500'}; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bridge.name || `${bridge.input_platform} → Discord`}</div>
+                        ${bridge.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.125rem;">${bridge.message_count}</div>` : ''}
                     </div>
-                    ${bridge._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.3); color: #22c55e; padding: 0.125rem 0.375rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">💬</span>` : ''}
+                    ${bridge._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem;">💬</span>` : ''}
                 </button>
             `).join('');
             
