@@ -3085,14 +3085,60 @@ app.put('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin', 
     try {
         const client = req.dbClient || pool;
         const userRole = req.tenantContext?.userRole || 'read-only';
+        const tenantSchema = req.tenantContext.tenantSchema;
+        const userId = req.userId;
         const { id } = req.params; // fractal_id
-        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status, userOutputUrl } = req.body;
+        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status, userOutputUrl, password } = req.body;
         
         // SECURITY: Prevent user webhook from being same as Ledger webhook (privacy breach)
         if (userOutputUrl && userOutputUrl === NYANBOOK_LEDGER_WEBHOOK) {
             return res.status(400).json({ 
                 error: 'Security violation: User output webhook cannot be the same as the system Ledger webhook. This would expose all tenant messages to your webhook.'
             });
+        }
+        
+        // SECURITY: Password required when changing webhook0n URL
+        if (userOutputUrl !== undefined || (outputCredentials && outputCredentials.webhooks)) {
+            // Check if webhook URL is actually changing
+            const currentBridge = await client.query(
+                'SELECT output_0n_url, output_credentials FROM bridges WHERE fractal_id = $1',
+                [id]
+            );
+            
+            if (currentBridge.rows.length > 0) {
+                const existingWebhookUrl = currentBridge.rows[0].output_0n_url;
+                const newWebhookUrl = userOutputUrl || (outputCredentials?.webhooks?.[0]?.url);
+                
+                // If webhook is changing, require password verification
+                if (newWebhookUrl && newWebhookUrl !== existingWebhookUrl) {
+                    if (!password) {
+                        return res.status(403).json({ 
+                            error: 'Password required to change webhook URL',
+                            requiresPassword: true
+                        });
+                    }
+                    
+                    // Verify password
+                    const userResult = await client.query(
+                        `SELECT password_hash FROM ${tenantSchema}.users WHERE id = $1`,
+                        [userId]
+                    );
+                    
+                    if (userResult.rows.length === 0) {
+                        return res.status(401).json({ error: 'User not found' });
+                    }
+                    
+                    const isPasswordValid = await bcrypt.compare(password, userResult.rows[0].password_hash);
+                    if (!isPasswordValid) {
+                        return res.status(401).json({ 
+                            error: 'Invalid password. Webhook URL not changed.',
+                            invalidPassword: true
+                        });
+                    }
+                    
+                    console.log(`🔐 Password verified for webhook change on bridge ${id} by user ${userId}`);
+                }
+            }
         }
         
         // Build update query dynamically based on what's provided

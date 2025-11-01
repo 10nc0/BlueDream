@@ -2527,6 +2527,28 @@
             // Filter out empty webhooks
             const validWebhooks = botWebhooks.filter(w => w.url && w.url.trim());
             
+            // SECURITY: Check if webhook URL is changing (requires password)
+            let webhookChanged = false;
+            let password = null;
+            
+            if (editingBridgeId) {
+                const existingBridge = bridges.find(b => b.fractal_id === editingBridgeId);
+                const existingWebhookUrl = existingBridge?.output_0n_url;
+                const newWebhookUrl = validWebhooks[0]?.url;
+                
+                if (newWebhookUrl && newWebhookUrl !== existingWebhookUrl) {
+                    webhookChanged = true;
+                    
+                    // Prompt for password
+                    password = prompt('🔐 Password Required\n\nYou are changing the webhook URL. Please enter your password to confirm this security-sensitive change:');
+                    
+                    if (!password) {
+                        alert('⚠️ Webhook change cancelled. Password is required to modify webhook URLs.');
+                        return;
+                    }
+                }
+            }
+            
             // CRITICAL FIX: When editing, preserve existing output_credentials structure
             let outputCredentials;
             if (editingBridgeId) {
@@ -2568,6 +2590,11 @@
                 tags: botTags,
                 status: 'active'
             };
+            
+            // Add password if webhook is changing
+            if (password) {
+                botData.password = password;
+            }
 
             try {
                 const url = editingBridgeId ? `/api/bridges/${editingBridgeId}` : '/api/bridges';
@@ -2586,7 +2613,15 @@
                     alert(message);
                 } else {
                     const errorData = await response.json().catch(() => ({}));
-                    alert(`Failed to save bot: ${errorData.error || response.statusText}`);
+                    
+                    // Handle password errors specifically
+                    if (errorData.invalidPassword) {
+                        alert('❌ Invalid password. Webhook URL was not changed. All other changes have been saved.');
+                    } else if (errorData.requiresPassword) {
+                        alert('❌ Password required to change webhook URL.');
+                    } else {
+                        alert(`Failed to save bot: ${errorData.error || response.statusText}`);
+                    }
                 }
             } catch (error) {
                 console.error('Error saving bot:', error);
