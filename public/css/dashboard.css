@@ -2873,6 +2873,22 @@ body::before {
     transform: scale(1);
     transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     order: 2; /* Goose appears after the eggs */
+    overflow: hidden; /* Contain spinning yin-yang */
+}
+
+/* ☯️ SPINNING SYMBOL - Spins only when expanded */
+.thumbs-zone .singularity-btn .yin-yang {
+    display: inline-block;
+    transition: transform 0.4s ease;
+}
+
+.thumbs-zone .singularity-btn.spinning .yin-yang {
+    animation: spin-yin-yang 6s linear infinite; /* 6s = φ-harmonic, slower = zen */
+}
+
+@keyframes spin-yin-yang {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 /* EXPAND: When layer-01 is expanded, goose poofs AFTER laying all eggs */
