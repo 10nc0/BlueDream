@@ -3724,10 +3724,7 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
         
         const internalBridgeId = bridgeResult.rows[0].id;
         
-        // Extract metadata using regex (no AI costs)
-        const extracted = metadataExtractor.extract(metadata_text);
-        
-        // Check if drop already exists to APPEND tags instead of replacing
+        // Check if drop already exists to APPEND text instead of replacing
         const existingDrop = await client.query(
             'SELECT * FROM drops WHERE bridge_id = $1 AND discord_message_id = $2',
             [internalBridgeId, discord_message_id]
@@ -3735,12 +3732,11 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
         
         let dropResult;
         if (existingDrop.rows.length > 0) {
-            // APPEND new tags to existing tags (remove duplicates)
-            const existingTags = existingDrop.rows[0].extracted_tags || [];
-            const existingDates = existingDrop.rows[0].extracted_dates || [];
-            const mergedTags = [...new Set([...existingTags, ...extracted.tags])];
-            const mergedDates = [...new Set([...existingDates, ...extracted.dates])];
+            // APPEND new text to existing text
             const combinedText = existingDrop.rows[0].metadata_text + ' ' + metadata_text;
+            
+            // Extract metadata from COMBINED text (not just new text) to catch all tags
+            const extracted = metadataExtractor.extract(combinedText);
             
             dropResult = await client.query(`
                 UPDATE drops
@@ -3750,8 +3746,11 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
                     updated_at = NOW()
                 WHERE bridge_id = $4 AND discord_message_id = $5
                 RETURNING *
-            `, [combinedText, mergedTags, mergedDates, internalBridgeId, discord_message_id]);
+            `, [combinedText, extracted.tags, extracted.dates, internalBridgeId, discord_message_id]);
         } else {
+            // Extract metadata from NEW text for first save
+            const extracted = metadataExtractor.extract(metadata_text);
+            
             // Insert new drop
             dropResult = await client.query(`
                 INSERT INTO drops (bridge_id, discord_message_id, metadata_text, extracted_tags, extracted_dates)
