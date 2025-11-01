@@ -95,9 +95,22 @@ app.locals.pool = pool;
 // Trust proxy - required for HTTPS cookie support in Replit environment
 app.set('trust proxy', 1);
 
-// SECURITY: Helmet for production-grade security headers
+// SECURITY: Helmet for production-grade security headers with strict CSP
 app.use(helmet({
-    contentSecurityPolicy: false, // Disabled to allow inline scripts for SPA
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"], // External JS externalized to /vendor/
+            styleSrc: ["'self'", "'unsafe-inline'"], // Inline styles required for dynamic UI
+            imgSrc: ["'self'", "data:", "https:"], // Discord CDN media + data URIs
+            connectSrc: ["'self'"], // API calls to same origin only
+            fontSrc: ["'self'"],
+            frameSrc: ["'self'"], // For iframe embedding if needed
+            objectSrc: ["'none'"],
+            baseUri: ["'self'"],
+            formAction: ["'self'"]
+        }
+    },
     crossOriginEmbedderPolicy: false // Required for iframe embedding
 }));
 
