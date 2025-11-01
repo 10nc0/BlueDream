@@ -2836,24 +2836,34 @@ body.mobile-mode .bridge-detail > div:first-child {
     display: none !important; /* Hide bridge header (name + controls) on mobile */
 }
 
-/* Mobile Mode: Make toolbar scrollable to prevent clipping */
+/* Mobile Mode: Compact Toolbar - 40% height reduction, squeeze search */
 body.mobile-mode .bridge-detail > div > div:first-child {
-    overflow-x: auto !important; /* Allow horizontal scroll */
-    overflow-y: hidden !important;
-    -webkit-overflow-scrolling: touch !important; /* Smooth scroll on iOS */
-    scrollbar-width: none; /* Hide scrollbar on Firefox */
-    -ms-overflow-style: none; /* Hide scrollbar on IE/Edge */
-    white-space: nowrap !important; /* Prevent wrapping */
+    padding: 0.3rem !important; /* Reduced from 0.5rem (40% reduction) */
+    gap: 0.3rem !important; /* Reduced gap */
+    overflow: visible !important; /* No scrolling */
 }
 
-/* Hide scrollbar on Webkit browsers */
-body.mobile-mode .bridge-detail > div > div:first-child::-webkit-scrollbar {
-    display: none;
+/* Mobile Mode: Squeeze search box (minimal width) */
+body.mobile-mode .bridge-detail > div > div:first-child input[type="text"] {
+    flex: 0 1 80px !important; /* Squeezed to 80px instead of flex: 1 */
+    min-width: 80px !important;
+    padding: 0.25rem 0.5rem !important; /* Reduced padding */
+    font-size: 0.75rem !important; /* Smaller text */
 }
 
-/* Make toolbar items stay inline */
-body.mobile-mode .bridge-detail > div > div:first-child > * {
-    flex-shrink: 0 !important; /* Prevent items from shrinking */
+/* Mobile Mode: Compact all toolbar items */
+body.mobile-mode .bridge-detail > div > div:first-child label,
+body.mobile-mode .bridge-detail > div > div:first-child select,
+body.mobile-mode .bridge-detail > div > div:first-child button {
+    padding: 0.25rem 0.4rem !important; /* Reduced padding (40% less) */
+    font-size: 0.7rem !important; /* Smaller text */
+    white-space: nowrap !important;
+}
+
+/* Mobile Mode: Extra compact export button */
+body.mobile-mode button[data-export-bridge] {
+    padding: 0.25rem 0.5rem !important;
+    font-size: 0.7rem !important;
 }
 
 /* Desktop Mode: Default behavior */
