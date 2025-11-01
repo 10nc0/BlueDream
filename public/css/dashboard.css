@@ -2773,8 +2773,8 @@ body::before {
 }
 
 /* φ-BREATH YIN-YANG ROTATION — Mobile Only: Idle state rotates once per 2 breath cycles */
-body.mobile-mode .singularity-btn {
-    animation: yinyang-breathe-rotate calc(var(--breath-duration, 4000ms) * 2) linear infinite;
+body.mobile-mode .singularity-btn:not(.creation-spinning) {
+    animation: yinyang-breathe-rotate calc(var(--breath-duration, 4000ms) * 2) linear infinite !important;
 }
 
 /* CREATION SPIN — Mobile Only: Fast spinning when expanded (creation mode) - 80% pace */
@@ -2889,39 +2889,11 @@ body.mobile-mode .singularity-btn.creation-spinning {
 .thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(6) { transition-delay: 25ms !important; }    /* sixth */
 .thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(7) { transition-delay: 0ms !important; }     /* seventh */
 
-/* Singularity (The Goose) - stays visible while laying eggs, then poofs */
+/* Singularity Button 00 - Always visible, always spinning/breathing */
 .thumbs-zone .singularity-btn {
-    opacity: 1;
-    transform: scale(1);
-    transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-    order: 2; /* Goose appears after the eggs */
-}
-
-/* EXPAND: When layer-01 is expanded, goose poofs AFTER laying all eggs */
-.thumbs-zone .layer-01.show ~ .singularity-btn,
-.thumbs-zone:has(.layer-01.show) .singularity-btn {
-    opacity: 0;
-    transform: scale(0);
-    pointer-events: none;
-    transition-delay: 0.6s; /* Wait for all eggs to be laid (600ms) */
-}
-
-/* COLLAPSE: Singularity reappears AFTER buttons fuse (with snap effect) */
-.thumbs-zone .layer-01.collapsing ~ .singularity-btn,
-.thumbs-zone:has(.layer-01.collapsing) .singularity-btn {
-    opacity: 1;
-    transform: scale(1);
-    pointer-events: auto;
-    transition-delay: 0.5s; /* Wait for fusion to complete */
-}
-
-/* Hidden state - instant hide */
-.thumbs-zone .layer-01[hidden] ~ .singularity-btn,
-.thumbs-zone:has(.layer-01[hidden]) .singularity-btn {
-    opacity: 1;
-    transform: scale(1);
-    pointer-events: auto;
-    transition-delay: 0s;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    order: 2; /* Button appears after the eggs */
 }
 
 /* Legacy class support */
