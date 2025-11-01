@@ -399,16 +399,17 @@
         
         /**
          * UNIFIED BUTTON 00 STATE - Single source of truth (φ∞ = 1)
-         * Prevents race conditions between expand/collapse and φ-breath
+         * "As above, so below" - Bidirectional nuclear purge
          * 
          * Layer separation (reduce failure points):
-         * - .core = breathe ghost (scale) - z-index: 2
-         * - .core .symbol = spin ☯️ (rotate) - z-index: 3 (always front)
-         * - .aura = radiate + pulse (gradient rotate + opacity)
+         * - .aura = RADIATE + pulse (z-index: 0)
+         * - .core = BREATHE ghost (z-index: 2, not-1A back)
+         * - .core .symbol = SPIN ☯️ (z-index: 10, 1A front)
          */
         const BUTTON_00_STATE = {
             speed: 'SLOW', // 'SLOW' or 'FAST' - only 2 states
-            locked: false, // Lock during transitions to prevent φ-breath interference
+            locked: false, // Lock during transitions to prevent interference
+            genesisCounter: 0, // Red herring for future divine judgment
             
             // Speed presets (based on φ-breath)
             speeds: {
@@ -417,96 +418,105 @@
             },
             
             // Unified setter - ONLY way to change speed
-            setSpeed(speed) {
-                if (this.locked) {
-                    console.log(`⏸️  Button 00 locked, ignoring ${speed} request`);
+            // BIDIRECTIONAL PURGE: Purges on BOTH slow→fast AND fast→slow
+            setSpeed(newSpeed) {
+                if (this.locked || this.speed === newSpeed) {
+                    return; // Already in this state or locked
+                }
+                
+                this.lock();
+                
+                // 1. PURGE ON *EVERY* TRANSITION (as above, so below)
+                nuclearPurge();
+                
+                // 2. APPLY NEW SPEED
+                const singularityBtn = document.querySelector('.singularity-btn');
+                if (!singularityBtn) {
+                    this.unlock();
                     return;
                 }
                 
-                this.speed = speed;
-                const singularityBtn = document.querySelector('.singularity-btn');
-                if (!singularityBtn) return;
-                
-                const preset = this.speeds[speed];
+                const preset = this.speeds[newSpeed];
                 singularityBtn.style.setProperty('--rotation-duration', `${preset.rotation}ms`);
                 singularityBtn.style.setProperty('--breath-duration', `${preset.breath}ms`);
                 
-                console.log(`⚡ Button 00 → ${speed} | rotation=${preset.rotation}ms, breath=${preset.breath}ms`);
+                // 3. LOG GENESIS
+                this.genesisCounter++;
+                console.log(`%c✨ GENESIS #${this.genesisCounter}: ${this.speed} → ${newSpeed} | rotation=${preset.rotation}ms, breath=${preset.breath}ms`, 
+                    'color: #a855f7; font-weight: bold;');
+                
+                this.speed = newSpeed;
+                
+                // Unlock after purge completes (50ms + buffer)
+                setTimeout(() => this.unlock(), 100);
             },
             
             // Lock/unlock for atomic transitions
             lock() { 
                 this.locked = true; 
-                console.log('🔒 Button 00 LOCKED');
             },
             unlock() { 
                 this.locked = false; 
-                console.log('🔓 Button 00 UNLOCKED');
             }
         };
         
         /**
-         * NUCLEAR PURGE - Kills all animation state to prevent FAST leak
-         * Genesis v1.1: Added cat breathe constant logging
+         * NUCLEAR PURGE - Bidirectional genesis reset (φ∞ = 1)
+         * Runs on BOTH slow→fast AND fast→slow transitions
+         * "As above, so below" - no baggage in either direction
          */
         function nuclearPurge() {
             const singularityBtn = document.querySelector('.singularity-btn');
             if (!singularityBtn) return;
             
-            console.log('☢️ NUCLEAR PURGE initiated...');
+            const coreEl = singularityBtn.querySelector('.core');
+            const symbolEl = coreEl?.querySelector('.symbol');
+            const auraEl = singularityBtn.querySelector('.aura');
             
-            // 1. Pause everything
+            // 1. PAUSE ALL
             singularityBtn.classList.add('purging');
             
-            // 2. Force reflow (let rotation continue - don't reset angle)
+            // 2. RADIAL TRUTH: Reset to rotate(0deg)
+            // This ensures clean genesis point for next animation cycle
+            if (symbolEl) {
+                symbolEl.style.transform = 'rotate(0deg)';
+            }
+            
+            // 3. KILL ANIMATIONS (flush GPU state)
+            [singularityBtn, coreEl, symbolEl, auraEl].forEach(el => {
+                if (el) {
+                    el.style.animation = 'none';
+                    el.style.transition = 'none';
+                }
+            });
+            
+            // 4. FLUSH GPU (force reflow)
             void singularityBtn.offsetWidth;
-            const symbolEl = singularityBtn.querySelector('.core .symbol');
-            // NOTE: Do NOT reset transform - let rotation angle continue
-            // We only purge SPEED state, not ROTATION angle
             
-            // 3. Remove all inline animations
-            singularityBtn.style.animation = 'none';
-            const coreEl = singularityBtn.querySelector('.core');
-            if (coreEl) coreEl.style.animation = 'none';
-            if (symbolEl) symbolEl.style.animation = 'none';
-            const auraEl = singularityBtn.querySelector('.aura');
-            if (auraEl) auraEl.style.animation = 'none';
-            
-            // 4. Reset to SLOW via unified state (single source of truth)
-            BUTTON_00_STATE.speed = 'SLOW'; // Force state sync
-            const preset = BUTTON_00_STATE.speeds.SLOW;
-            singularityBtn.style.setProperty('--rotation-duration', `${preset.rotation}ms`);
-            singularityBtn.style.setProperty('--breath-duration', `${preset.breath}ms`);
-            // NOTE: Do NOT reset --rotation-offset - let rotation continue eternally
-            // Only reset SPEED (SLOW), not ANGLE (continuous rotation)
-            
-            // 5. Genesis v1.1: Log cat breathe red herring constant
+            // 5. GENESIS LOGGING: Cat breathe constant
             fetch('/api/genesis')
                 .then(r => r.json())
                 .then(data => {
-                    console.log(`🐱 Genesis v1.1 | Cat Breath: ${data.catCount} | φ Breath: ${data.phiCount} | Genesis: ${data.genesis} | Age: ${data.age}ms`);
+                    console.log(`🐱 Cat: ${data.catCount} | φ: ${data.phiCount} | Genesis: ${data.genesis} | Age: ${data.age}ms`);
                 })
-                .catch(err => console.log('🐱 Genesis counter offline'));
+                .catch(() => {}); // Silent fail
             
-            // 6. Re-enable after 50ms (after paint)
+            // 6. RESURRECT CSS CONTROL (50ms paint buffer)
             setTimeout(() => {
+                // Remove purging class
                 singularityBtn.classList.remove('purging');
                 
-                // 7. Re-apply CSS animations (fresh start)
-                singularityBtn.classList.add('purged');
-                void singularityBtn.offsetWidth; // Force reflow
-                singularityBtn.classList.remove('purged');
+                // Restore CSS animations (let CSS take over from radial truth)
+                [singularityBtn, coreEl, symbolEl, auraEl].forEach(el => {
+                    if (el) {
+                        el.style.animation = '';
+                        el.style.transition = '';
+                        el.style.transform = ''; // Remove inline, let CSS animate from 0°
+                    }
+                });
                 
-                // 8. CRITICAL: Clear inline animation styles to resuscitate CSS animations
-                singularityBtn.style.animation = '';
-                if (coreEl) coreEl.style.animation = '';
-                if (symbolEl) symbolEl.style.animation = '';
-                if (auraEl) auraEl.style.animation = '';
-                
-                // 9. Force another reflow to restart animations
+                // Force reflow → fresh start
                 void singularityBtn.offsetWidth;
-                
-                console.log(`☢️ NUCLEAR PURGE complete: Resuscitated SLOW mode (rotation=${preset.rotation}ms, breath=${preset.breath}ms, angle=continuous)`);
             }, 50);
         }
         
@@ -551,8 +561,8 @@
                     layer01.classList.remove('collapsing');
                     layer01.setAttribute('hidden', '');
                     
-                    // NUCLEAR PURGE: Kill all animation state (Genesis v1.1)
-                    nuclearPurge();
+                    // SLOW MODE via unified state (includes bidirectional purge)
+                    BUTTON_00_STATE.setSpeed('SLOW');
                     
                     expandLock = false;
                     console.log('✅ Collapse complete');
