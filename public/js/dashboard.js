@@ -305,33 +305,57 @@
             console.log('🔘 Thumbs zone initialized with basic buttons');
         }
 
-        // ===== SINGULARITY STATE MANAGEMENT ☯️ =====
+        // ===== φ-BREATH SINGULARITY ☯️ =====
+        // Golden Ratio: The breath of truth
+        const φ = 1.618033988749895;
+        const N = 3000; // Base breath (ms)
+        
         let thumbsExpanded = true;
         let thumbsIdleTimer = null;
         
+        // φ^0 = idle collapse, φ^1 = tap expand
+        function setBreathCycle(power) {
+            const duration = N * Math.pow(φ, power);
+            const singularityBtn = document.querySelector('.singularity-btn');
+            if (singularityBtn) {
+                singularityBtn.style.setProperty('--breath-duration', `${duration}ms`);
+            }
+        }
+        
         function resetThumbsIdleTimer() {
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
+            setBreathCycle(0); // φ^0 = 3s calm breath
             thumbsIdleTimer = setTimeout(() => {
                 if (thumbsExpanded && isMobile()) {
                     collapseToSingularity();
                 }
-            }, 10000); // 10 seconds idle
+            }, N * Math.pow(φ, 0)); // 3000ms - φ^0
         }
         
         function collapseToSingularity() {
+            if (!thumbsExpanded) return;
             thumbsExpanded = false;
-            const thumbsZone = document.querySelector('.thumbs-zone');
-            if (thumbsZone) {
-                thumbsZone.classList.add('collapsed');
+            const layer01 = document.querySelector('.thumbs-zone .layer-01');
+            if (layer01) {
+                layer01.classList.remove('show');
+                setTimeout(() => {
+                    layer01.setAttribute('hidden', '');
+                }, 400); // Match CSS transition
             }
+            setBreathCycle(0); // Return to φ^0 calm
         }
         
         function expandFromSingularity() {
+            if (thumbsExpanded) return;
             thumbsExpanded = true;
-            const thumbsZone = document.querySelector('.thumbs-zone');
-            if (thumbsZone) {
-                thumbsZone.classList.remove('collapsed');
+            const layer01 = document.querySelector('.thumbs-zone .layer-01');
+            if (layer01) {
+                layer01.removeAttribute('hidden');
+                setTimeout(() => {
+                    layer01.classList.add('show');
+                }, 10);
             }
+            setBreathCycle(1); // φ^1 = ~4.854s expanded breath
             resetThumbsIdleTimer();
         }
         
@@ -361,8 +385,8 @@
             // ☯️ SINGULARITY BUTTON (Button 00) - Always present, expands all
             html += `<button class="singularity-btn" data-action="singularity" aria-label="Expand all actions">☯️</button>`;
             
-            // Layer 01 buttons - Hidden when collapsed
-            html += `<div class="layer-01">`;
+            // Layer 01 buttons - Hidden when collapsed (start expanded with 'show' class)
+            html += `<div class="layer-01 show">`;
             
             // Position 1: Create button (ONLY way to genesis form)
             html += `<button data-action="create" aria-label="Create new bridge">✍🏻</button>`;
@@ -400,8 +424,9 @@
             thumbsZone.innerHTML = html;
             console.log(`🔘 Thumbs zone HTML length: ${html.length} chars`);
             
-            // Start idle timer on mobile
+            // Start φ-breath cycle on mobile
             if (isMobile()) {
+                setBreathCycle(0); // Start in φ^0 calm state
                 resetThumbsIdleTimer();
             }
         }
