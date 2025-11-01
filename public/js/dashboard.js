@@ -4729,13 +4729,19 @@ document.addEventListener('DOMContentLoaded', function() {
 // Save a drop (link metadata to Discord message) - APPENDS to existing tags
 async function saveDrop(bridgeId, messageId, metadataText, section) {
     try {
+        const token = localStorage.getItem('accessToken');
         console.log('💾 Saving drop:', { bridgeId, messageId, metadataText });
+        console.log('🔑 Token check:', token ? `YES (${token.substring(0, 20)}...)` : 'NO - MISSING!');
+        
+        if (!token) {
+            throw new Error('Authentication token missing. Please refresh the page and log in again.');
+        }
         
         const response = await fetch('/api/drops', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+                'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
                 bridge_id: bridgeId,
@@ -4749,6 +4755,12 @@ async function saveDrop(bridgeId, messageId, metadataText, section) {
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             console.error('❌ Save failed:', errorData);
+            
+            // If token expired, suggest refresh
+            if (response.status === 401) {
+                throw new Error('Session expired. Please refresh the page to log in again.');
+            }
+            
             throw new Error(errorData.error || 'Failed to save drop');
         }
         
@@ -4769,13 +4781,19 @@ async function saveDrop(bridgeId, messageId, metadataText, section) {
 // Remove a specific tag from a message's drop
 async function removeTag(bridgeId, messageId, tag) {
     try {
+        const token = localStorage.getItem('accessToken');
         console.log('🗑️ Removing tag:', { bridgeId, messageId, tag });
+        console.log('🔑 Token check:', token ? `YES (${token.substring(0, 20)}...)` : 'NO - MISSING!');
+        
+        if (!token) {
+            throw new Error('Authentication token missing. Please refresh the page and log in again.');
+        }
         
         const response = await fetch('/api/drops/tag', {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+                'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
                 bridge_id: bridgeId,
