@@ -2912,9 +2912,9 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
             // ARCHITECTURAL SWITCHEROO: Hide the silent cat (webhook01/output_01)
             // Users should never see the Nyanbook Ledger webhook
             // Only expose output_0n (user's webhook) in the UI
-            const { output_01_url, ...bridgeWithoutLedger } = bridge;
+            delete bridge.output_01_url;
             
-            return bridgeWithoutLedger;
+            return bridge;
         });
         
         // SECURITY: Strip raw IDs for non-dev users (IDOR protection)
