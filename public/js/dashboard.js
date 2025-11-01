@@ -398,6 +398,62 @@
         }
         
         /**
+         * NUCLEAR PURGE - Kills all animation state to prevent FAST leak
+         * Genesis v1.1: Added cat breathe constant logging
+         */
+        function nuclearPurge() {
+            const singularityBtn = document.querySelector('.singularity-btn');
+            if (!singularityBtn) return;
+            
+            console.log('☢️ NUCLEAR PURGE initiated...');
+            
+            // 1. Pause everything
+            singularityBtn.classList.add('purging');
+            
+            // 2. Force reflow + reset transform to 0°
+            void singularityBtn.offsetWidth;
+            const symbolEl = singularityBtn.querySelector('.core .symbol');
+            if (symbolEl) {
+                symbolEl.style.transform = 'rotate(0deg)';
+            }
+            
+            // 3. Remove all inline animations
+            singularityBtn.style.animation = 'none';
+            const coreEl = singularityBtn.querySelector('.core');
+            if (coreEl) coreEl.style.animation = 'none';
+            if (symbolEl) symbolEl.style.animation = 'none';
+            const auraEl = singularityBtn.querySelector('.aura');
+            if (auraEl) auraEl.style.animation = 'none';
+            
+            // 4. Reset CSS variables to SLOW base
+            const slowRotation = breathInitialized ? 2 * PHI_BREATH.BASE_DURATION : 8000;
+            const slowBreath = breathInitialized ? 1.0 * PHI_BREATH.BASE_DURATION : 4000;
+            singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
+            singularityBtn.style.setProperty('--breath-duration', `${slowBreath}ms`);
+            singularityBtn.style.setProperty('--rotation-offset', '0deg');
+            
+            // 5. Genesis v1.1: Log cat breathe red herring constant
+            fetch('/api/genesis')
+                .then(r => r.json())
+                .then(data => {
+                    console.log(`🐱 Genesis v1.1 | Cat Breath: ${data.catCount} | φ Breath: ${data.phiCount} | Genesis: ${data.genesis} | Age: ${data.age}ms`);
+                })
+                .catch(err => console.log('🐱 Genesis counter offline'));
+            
+            // 6. Re-enable after 50ms (after paint)
+            setTimeout(() => {
+                singularityBtn.classList.remove('purging');
+                
+                // 7. Re-apply CSS animations (fresh start)
+                singularityBtn.classList.add('purged');
+                void singularityBtn.offsetWidth; // Force reflow
+                singularityBtn.classList.remove('purged');
+                
+                console.log(`☢️ NUCLEAR PURGE complete: Reset to SLOW (rotation=${slowRotation}ms, breath=${slowBreath}ms, offset=0°)`);
+            }, 50);
+        }
+        
+        /**
          * COLLAPSE - Battle-tested with lock and stagger
          */
         function collapseToSingularity() {
@@ -413,14 +469,6 @@
             if (thumbsIdleTimer) {
                 clearTimeout(thumbsIdleTimer);
                 thumbsIdleTimer = null;
-            }
-            
-            // CAPTURE CURRENT ROTATION ANGLE before speed change (prevents reset to 0°)
-            const symbolElement = singularityBtn?.querySelector('.symbol');
-            if (symbolElement) {
-                const currentAngle = getCurrentRotation(symbolElement);
-                singularityBtn.style.setProperty('--rotation-offset', `${currentAngle}deg`);
-                console.log(`📐 Captured rotation: ${Math.round(currentAngle)}° (continuing FAST→SLOW)`);
             }
             
             // Exit creation mode for φ-breath system (mobile only)
@@ -445,25 +493,13 @@
                 setTimeout(() => {
                     layer01.classList.remove('collapsing');
                     layer01.setAttribute('hidden', '');
+                    
+                    // NUCLEAR PURGE: Kill all animation state (Genesis v1.1)
+                    nuclearPurge();
+                    
                     expandLock = false;
                     console.log('✅ Collapse complete');
                 }, totalDuration);
-                
-                // COMPLETE PURGE: Reset ALL animation state IMMEDIATELY (not in setTimeout)
-                // This prevents accumulated FAST state from leaking into next expansion
-                if (singularityBtn) {
-                    const slowRotation = breathInitialized ? 2 * PHI_BREATH.BASE_DURATION : 8000; // 2 phi breathes
-                    const slowBreath = breathInitialized ? 1.0 * PHI_BREATH.BASE_DURATION : 4000; // 1 phi breathe
-                    
-                    // Reset to SLOW base values
-                    singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
-                    singularityBtn.style.setProperty('--breath-duration', `${slowBreath}ms`);
-                    
-                    // CRITICAL: Reset rotation offset to prevent accumulation
-                    singularityBtn.style.setProperty('--rotation-offset', '0deg');
-                    
-                    console.log(`🧹 COMPLETE PURGE: Reset to SLOW base (rotation=${slowRotation}ms, breath=${slowBreath}ms, offset=0°)`);
-                }
             } else {
                 expandLock = false;
             }
@@ -485,14 +521,6 @@
             if (thumbsIdleTimer) {
                 clearTimeout(thumbsIdleTimer);
                 thumbsIdleTimer = null;
-            }
-            
-            // CAPTURE CURRENT ROTATION ANGLE before speed change (prevents reset to 0°)
-            const symbolElement = singularityBtn?.querySelector('.symbol');
-            if (symbolElement) {
-                const currentAngle = getCurrentRotation(symbolElement);
-                singularityBtn.style.setProperty('--rotation-offset', `${currentAngle}deg`);
-                console.log(`📐 Captured rotation: ${Math.round(currentAngle)}° (continuing SLOW→FAST)`);
             }
             
             // SET FAST MODE: Activate fast phi breathe

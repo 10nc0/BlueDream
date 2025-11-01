@@ -2713,6 +2713,20 @@ body::before {
     transform: none !important; /* JS NEVER touches this - CSS variables only */
 }
 
+/* NUCLEAR PURGE HOOKS - Kill all animation state on collapse */
+.singularity-btn.purging * {
+    animation-play-state: paused !important;
+}
+
+.singularity-btn.purged .core .symbol {
+    transform: rotate(0deg) !important;
+    animation: none !important;
+}
+
+.singularity-btn.purged {
+    animation: none !important;
+}
+
 /* CORE - breathing ghost layer (scale only) */
 .singularity-btn .core {
     position: absolute;
