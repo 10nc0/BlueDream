@@ -356,9 +356,15 @@
                 // Apply dynamic rotation duration
                 singularityBtn.style.setProperty('--rotation-duration', `${rotationDuration}ms`);
                 
+                // Calculate breathing duration based on φScale (3000-4854ms)
+                // This makes glass/border/aura breathing oscillate with φ-breath cycle
+                const breathDuration = PHI_BREATH.BASE_DURATION * 0.75 * φScale;
+                singularityBtn.style.setProperty('--breath-duration', `${breathDuration}ms`);
+                
                 // Debug log (only log every 100th frame to avoid spam)
                 if (data.breathCount === 0 || Math.random() < 0.01) {
                     console.log(`🔄 Rotation speed: ${state} = ${Math.round(rotationDuration)}ms (φScale=${φScale.toFixed(3)})`);
+                    console.log(`🫁 Breath speed: ${Math.round(breathDuration)}ms (φScale=${φScale.toFixed(3)})`);
                 }
             });
             
