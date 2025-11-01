@@ -330,13 +330,17 @@
             // Subscribe to breath cycles to sync rotation speed with φ oscillation
             PHI_BREATH.on('breathCycle', (data) => {
                 const singularityBtn = document.querySelector('.singularity-btn');
-                if (!singularityBtn) return;
+                if (!singularityBtn) {
+                    console.log('⚠️ breathCycle: singularityBtn not found!');
+                    return;
+                }
                 
                 // φScale oscillates: 1.0 (φ^0) → 1.618 (φ^1) → 1.0
                 const φScale = data.φScale;
                 
                 // Calculate rotation duration based on state
                 let rotationDuration;
+                const state = thumbsExpanded ? 'FAST' : 'SLOW';
                 if (thumbsExpanded) {
                     // FAST: 0.5 φ-breath per rotation (4x acceleration)
                     rotationDuration = 0.5 * PHI_BREATH.BASE_DURATION * φScale;
@@ -347,6 +351,11 @@
                 
                 // Apply dynamic rotation duration
                 singularityBtn.style.setProperty('--rotation-duration', `${rotationDuration}ms`);
+                
+                // Debug log (only log every 100th frame to avoid spam)
+                if (data.breathCount === 0 || Math.random() < 0.01) {
+                    console.log(`🔄 Rotation speed: ${state} = ${Math.round(rotationDuration)}ms (φScale=${φScale.toFixed(3)})`);
+                }
             });
             
             // Log breath starts for monitoring + increment genesis counter
