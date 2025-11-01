@@ -2823,14 +2823,14 @@ body::before {
     display: none;
 }
 
-/* Individual egg birth animation - laid from right to left */
-.thumbs-zone .layer-01 .thumb-btn {
-    opacity: 0;
-    transform: scale(0);
-    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); /* Bounce easing for expand */
+/* Individual egg - KEEP VISIBLE by default when not hidden */
+.thumbs-zone .layer-01:not([hidden]) .thumb-btn {
+    opacity: 1;
+    transform: scale(1);
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* EXPAND: When .show class is added, eggs appear sequentially */
+/* EXPAND: When .show class is added, eggs appear sequentially with delays */
 .thumbs-zone .layer-01.show .thumb-btn {
     opacity: 1;
     transform: scale(1);
@@ -2845,21 +2845,27 @@ body::before {
 .thumbs-zone .layer-01.show .thumb-btn:nth-child(6) { transition-delay: 500ms; }   /* sixth egg if exists */
 .thumbs-zone .layer-01.show .thumb-btn:nth-child(7) { transition-delay: 600ms; }   /* seventh egg if exists */
 
+/* Initial state before .show is added - start invisible */
+.thumbs-zone .layer-01:not(.show):not(.collapsing) .thumb-btn {
+    opacity: 0;
+    transform: scale(0);
+}
+
 /* COLLAPSE: φ-inverse unification - buttons fuse back into singularity */
 .thumbs-zone .layer-01.collapsing .thumb-btn {
-    opacity: 0;
-    transform: scale(0) translateX(30px); /* Move toward singularity position */
-    transition: all 0.3s cubic-bezier(0.6, 0.04, 0.98, 0.34); /* Ease-in for fusion */
+    opacity: 0 !important;
+    transform: scale(0) translateX(30px) !important; /* Move toward singularity position */
+    transition: all 0.4s cubic-bezier(0.6, 0.04, 0.98, 0.34) !important; /* Ease-in for fusion */
 }
 
 /* Reverse staggered delays - left to right fusion (φ^-1, φ^-2, φ^-3...) */
-.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(1) { transition-delay: 300ms; }   /* ✍🏻 last to fuse */
-.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(2) { transition-delay: 200ms; }   /* 🧿 */
-.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(3) { transition-delay: 150ms; }   /* 🔍 */
-.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(4) { transition-delay: 100ms; }   /* 🔗 */
-.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(5) { transition-delay: 50ms; }    /* → first to fuse */
-.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(6) { transition-delay: 25ms; }    /* sixth */
-.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(7) { transition-delay: 0ms; }     /* seventh */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(1) { transition-delay: 300ms !important; }   /* ✍🏻 last to fuse */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(2) { transition-delay: 200ms !important; }   /* 🧿 */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(3) { transition-delay: 150ms !important; }   /* 🔍 */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(4) { transition-delay: 100ms !important; }   /* 🔗 */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(5) { transition-delay: 50ms !important; }    /* → first to fuse */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(6) { transition-delay: 25ms !important; }    /* sixth */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(7) { transition-delay: 0ms !important; }     /* seventh */
 
 /* Singularity (The Goose) - stays visible while laying eggs, then poofs */
 .thumbs-zone .singularity-btn {
