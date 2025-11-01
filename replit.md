@@ -15,14 +15,19 @@
 - **Retention**: Permanent storage (no deletion of messages)
 - **Security**: Multi-user auth with audit logging
 - **Compatibility**: Safari/iPad support critical
-- **UX**: Auto-expanding single bridges, responsive sidebar collapse
+- **UX**: Auto-expanding single bridges, responsive sidebar collapse, user-customizable layout dimensions
 
 ## System Architecture
 ### Global Constants (Isolated UI Islands)
 The system uses two immutable global constants: `NYANBOOK_LEDGER_WEBHOOK_URL` (Dev-only Discord webhook) and `CAT_CONFIG` (Pixel cat animation settings).
 
 ### UI/UX Decisions
-The dashboard is a Single Page Application (SPA) with an Apple glassmorphism design, featuring a Discord-style two-pane layout. It includes real-time updates, circular avatars, status badges, responsive design for mobile, and custom tooltips. The design prioritizes message content visibility, ensuring messages occupy at least 60% of the screen.
+The dashboard is a Single Page Application (SPA) with an Apple glassmorphism design, featuring a Discord-style two-pane layout. It includes real-time updates, circular avatars, status badges, responsive design for mobile, and custom tooltips. The design prioritizes message content visibility, with **user-adjustable layout dimensions via draggable resizers**:
+- **Sidebar Width Resizer**: Vertical rainbow gradient bar (180px-400px range) allows users to customize sidebar/message panel ratio, with preference saved to localStorage
+- **Header Height Resizer**: Horizontal rainbow gradient bar (40px-120px range) gives users control over header vertical space, with preference saved to localStorage
+- **Outside-In Layout Architecture**: Viewport → header → container → children all use `height: 100%` cascading, ensuring edge-to-edge fill across all devices without hardcoded calculations
+- **Reduced Default Widths**: Sidebar defaults to 240px (Mac) and 220px (iPad) for maximum message space allocation
+- **CSP-Compliant**: Both resizers use event delegation on document, no inline handlers
 
 ### Technical Implementations
 - **Backend**: Node.js with Express.
