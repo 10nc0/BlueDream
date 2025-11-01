@@ -2775,11 +2775,13 @@ body::before {
 /* φ-BREATH YIN-YANG ROTATION — Mobile Only: Idle state rotates once per 2 breath cycles */
 body.mobile-mode .singularity-btn:not(.creation-spinning) {
     animation: yinyang-breathe-rotate calc(var(--breath-duration, 4000ms) * 2) linear infinite !important;
+    transform: rotate(var(--rotation-offset, 0deg));
 }
 
 /* CREATION SPIN — Mobile Only: Fast spinning when expanded (creation mode) - 80% pace */
 body.mobile-mode .singularity-btn.creation-spinning {
     animation: creation-spin 1.25s linear infinite !important;
+    transform: rotate(var(--rotation-offset, 0deg));
 }
 
 /* BREATHING KEYFRAMES — ALL IN SYNC */
@@ -2822,14 +2824,14 @@ body.mobile-mode .singularity-btn.creation-spinning {
 
 /* φ-BREATH YIN-YANG ROTATION — Idle state rotation synced to breath cycle */
 @keyframes yinyang-breathe-rotate {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
+    from { transform: rotate(var(--rotation-offset, 0deg)); }
+    to   { transform: rotate(calc(var(--rotation-offset, 0deg) + 360deg)); }
 }
 
 /* CREATION SPIN — Fast spinning during expanded state */
 @keyframes creation-spin {
-    from { transform: rotate(0deg) scale(1); }
-    to   { transform: rotate(1080deg) scale(1); } /* 3 full rotations */
+    from { transform: rotate(var(--rotation-offset, 0deg)) scale(1); }
+    to   { transform: rotate(calc(var(--rotation-offset, 0deg) + 1080deg)) scale(1); } /* 3 full rotations */
 }
 
 /* Layer 01 buttons container - The eggs laid by the goose */

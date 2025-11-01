@@ -353,17 +353,46 @@
             }
         }
         
+        // Get current rotation angle from computed transform matrix
+        function getCurrentRotation(element) {
+            const style = window.getComputedStyle(element);
+            const transform = style.transform || style.webkitTransform;
+            
+            if (transform === 'none') {
+                return 0;
+            }
+            
+            // Parse matrix(a, b, c, d, tx, ty) or matrix3d
+            const values = transform.split('(')[1].split(')')[0].split(',');
+            const a = parseFloat(values[0]);
+            const b = parseFloat(values[1]);
+            
+            // Calculate angle from transformation matrix
+            // atan2(b, a) gives the rotation in radians
+            const angle = Math.atan2(b, a) * (180 / Math.PI);
+            
+            // Normalize to 0-360 range
+            return ((angle % 360) + 360) % 360;
+        }
+        
         function collapseToSingularity() {
             console.log('🔄 COLLAPSE: Button 00 spinning slower');
             thumbsExpanded = false;
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
             const singularityBtn = document.querySelector('.singularity-btn');
             
-            // Clear any existing timer
+            // Clear any existing auto-collapse timer
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             
-            // Exit creation mode - stop fast spinning, return to breath rotation
+            // Capture current rotation angle before switching animation
             if (isMobile() && singularityBtn) {
+                const currentRotation = getCurrentRotation(singularityBtn);
+                console.log(`🔄 Current rotation: ${currentRotation}deg`);
+                
+                // Apply current rotation as CSS variable to maintain continuity
+                singularityBtn.style.setProperty('--rotation-offset', `${currentRotation}deg`);
+                
+                // Exit creation mode - stop fast spinning, return to breath rotation
                 singularityBtn.classList.remove('creation-spinning');
                 if (breathInitialized) {
                     PHI_BREATH.exitCreationMode();
@@ -432,8 +461,14 @@
                 if (singularityBtn) {
                     console.log('🌀 Button 00 enters CREATION SPIN (always visible)');
                     
+                    // Capture current rotation angle before switching animation
+                    const currentRotation = getCurrentRotation(singularityBtn);
+                    console.log(`🔄 Current rotation: ${currentRotation}deg`);
+                    
                     // Add creation spinning class for mobile
                     if (isMobile()) {
+                        // Apply current rotation as CSS variable to maintain continuity
+                        singularityBtn.style.setProperty('--rotation-offset', `${currentRotation}deg`);
                         singularityBtn.classList.add('creation-spinning');
                         if (breathInitialized) {
                             PHI_BREATH.enterCreationMode();
@@ -448,6 +483,14 @@
             
             // Set breath animation
             setBreathCycle(breathDuration);
+            
+            // Auto-collapse after φ-breath (unless manually interrupted)
+            thumbsIdleTimer = setTimeout(() => {
+                console.log('⏰ φ-breath complete, auto-collapsing');
+                if (thumbsExpanded && isMobile()) {
+                    collapseToSingularity();
+                }
+            }, breathDuration);
         }
         
         /**
@@ -4668,12 +4711,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const action = thumbBtn.dataset.action;
             const bridgeId = thumbBtn.dataset.bridgeId;
             
-            // ☯️ SINGULARITY BUTTON - Toggle expand/collapse
+            // ☯️ SINGULARITY BUTTON - Expand or interrupt
             if (action === 'singularity') {
                 if (isMobile()) {
                     console.log('🌌 Singularity clicked');
-                    // Toggle between expand and collapse
+                    // If expanded, interrupt and collapse immediately
                     if (thumbsExpanded) {
+                        console.log('⚡ Interrupting φ-breath, collapsing now');
                         collapseToSingularity();
                     } else {
                         expandFromSingularity();
