@@ -807,16 +807,22 @@
                                 <img src="${escapeHtml(msg.media_url)}" style="max-width: 400px; border-radius: 4px;" alt="Discord attachment" loading="lazy" onerror="this.style.display='none'">
                             </div>
                         ` : ''}
-                        <div class="message-drop-section" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">
-                            <div class="drop-display hidden"></div>
-                            <button class="drop-link-btn" data-action="link-metadata" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">
-                                🏷️ Link Metadata
-                            </button>
-                            <div class="drop-input-container hidden">
-                                <input type="text" class="drop-input" placeholder="#FromDad Christmas 2021" data-message-id="${msg.id}">
-                                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                                    <button class="drop-save-btn" data-action="save-drop" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">Save</button>
-                                    <button class="drop-cancel-btn" data-action="cancel-drop" data-message-id="${msg.id}">Cancel</button>
+                        <div style="display: flex; gap: 0.75rem; align-items: flex-start; margin-top: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.375rem; cursor: pointer;">
+                                <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" style="width: 16px; height: 16px; cursor: pointer; accent-color: #a855f7;">
+                                <span style="font-size: 0.75rem; color: #94a3b8;">Export</span>
+                            </label>
+                            <div class="message-drop-section" style="flex: 1;" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">
+                                <div class="drop-display hidden"></div>
+                                <button class="drop-link-btn" data-action="link-metadata" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">
+                                    🏷️ Link Metadata
+                                </button>
+                                <div class="drop-input-container hidden">
+                                    <input type="text" class="drop-input" placeholder="#FromDad Christmas 2021" data-message-id="${msg.id}">
+                                    <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                        <button class="drop-save-btn" data-action="save-drop" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">Save</button>
+                                        <button class="drop-cancel-btn" data-action="cancel-drop" data-message-id="${msg.id}">Cancel</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -2196,67 +2202,16 @@
             }
         }
         
-        // Create export checkboxes in a PURE OVERLAY (never modifies message DOM)
-        // Messages remain 100% read-only, checkboxes positioned via data-message-id mapping
-        function createExportCheckboxes(bridgeId, messages) {
-            console.log(`📋 Creating ${messages.length} export checkboxes in PURE OVERLAY (no message DOM modification)`);
+        // Restore checkbox checked states after rendering
+        function restoreCheckboxStates(bridgeId) {
+            if (!selectedMessages[bridgeId]) return;
             
-            const container = document.getElementById(`discord-messages-${bridgeId}`);
-            if (!container) {
-                console.warn(`⚠️ Container not found for bridge ${bridgeId}`);
-                return;
-            }
-            
-            // Get or create the pure overlay container (separate from messages)
-            let overlay = document.getElementById(`checkbox-overlay-${bridgeId}`);
-            if (!overlay) {
-                overlay = document.createElement('div');
-                overlay.id = `checkbox-overlay-${bridgeId}`;
-                overlay.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 1000;';
-                container.style.position = 'relative'; // Ensure container is positioned
-                container.appendChild(overlay);
-                console.log(`✓ Created pure overlay container for bridge ${bridgeId}`);
-            } else {
-                // Clear existing checkboxes
-                overlay.innerHTML = '';
-                console.log(`✓ Cleared existing overlay for bridge ${bridgeId}`);
-            }
-            
-            // Create checkboxes positioned over each message
-            messages.forEach(msg => {
-                const messageEl = document.querySelector(`[data-msg-id="${msg.id}"]`);
-                if (!messageEl) {
-                    console.warn(`⚠️ Message element not found for ID: ${msg.id}`);
-                    return;
-                }
-                
-                // Get message position relative to container
-                const messageRect = messageEl.getBoundingClientRect();
-                const containerRect = container.getBoundingClientRect();
-                const scrollTop = container.scrollTop;
-                
-                // Calculate position
-                const top = (messageRect.top - containerRect.top) + scrollTop;
-                const right = 8; // 0.5rem = 8px
-                
-                // Create checkbox
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.className = 'message-export-checkbox message-checkbox';
-                checkbox.dataset.messageId = msg.id;
-                checkbox.dataset.msgId = msg.id;
-                checkbox.dataset.bridgeId = bridgeId;
-                checkbox.style.cssText = `position: absolute; top: ${top}px; right: ${right}px; width: 18px; height: 18px; cursor: pointer; accent-color: #a855f7; pointer-events: auto; z-index: 10;`;
-                
-                // Restore checked state
-                if (selectedMessages[bridgeId]?.has(msg.id)) {
+            selectedMessages[bridgeId].forEach(msgId => {
+                const checkbox = document.querySelector(`input.message-export-checkbox[data-message-id="${msgId}"]`);
+                if (checkbox) {
                     checkbox.checked = true;
                 }
-                
-                overlay.appendChild(checkbox);
             });
-            
-            console.log(`✅ Created ${messages.length} checkboxes in pure overlay (messages untouched)`);
         }
         
         // Update export button state based on selected messages
@@ -2438,7 +2393,7 @@
                     
                     // Dynamically create export checkboxes AFTER HTML render
                     // This ensures they're truly interactive and separate from read-only message structure
-                    createExportCheckboxes(bridgeId, data.messages);
+                    restoreCheckboxStates(bridgeId);
                     
                     // Hydrate drops (Personal Cloud OS metadata)
                     hydrateDropsForBridge(bridgeId);
