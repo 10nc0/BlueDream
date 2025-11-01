@@ -2772,18 +2772,11 @@ body::before {
     pointer-events: none;
 }
 
-/* IDLE ROTATION — Mobile Only: Slow rotation (2 φ-breath with oscillation) */
-/* φ^0: 2 × 4000ms × 1.0 = 8000ms per rotation */
-/* φ^1: 2 × 4000ms × 1.618 = 12944ms per rotation */
-body.mobile-mode .singularity-btn:not(.creation-spinning) {
-    animation: yinyang-breathe-rotate var(--rotation-duration, 8000ms) linear infinite !important;
-}
-
-/* EXPANDED ROTATION — Mobile Only: Fast rotation (0.5 φ-breath with oscillation, 4x acceleration) */
-/* φ^0: 0.5 × 4000ms × 1.0 = 2000ms per rotation */
-/* φ^1: 0.5 × 4000ms × 1.618 = 3236ms per rotation */
-body.mobile-mode .singularity-btn.creation-spinning {
-    animation: creation-spin var(--rotation-duration, 2000ms) linear infinite !important;
+/* UNIFIED ROTATION — Mobile Only: Single animation, duration controlled by state */
+/* IDLE: φ^0 = 8000ms, φ^1 = 12944ms per rotation (slow) */
+/* EXPANDED: φ^0 = 2000ms, φ^1 = 3236ms per rotation (fast, 4x acceleration) */
+body.mobile-mode .singularity-btn {
+    animation: yinyang-breathe-rotate var(--rotation-duration, 8000ms) linear infinite;
 }
 
 /* BREATHING KEYFRAMES — ALL IN SYNC */
