@@ -41,6 +41,19 @@
         // ===================================================================
         
         const ACTION_REGISTRY = {
+            singularity: {
+                id: 'singularity',
+                label: '☯️',
+                icon: '☯️',
+                mobileIcon: '☯️',
+                desktopLabel: '☯️ Expand All',
+                tooltip: 'Expand all actions (superposition state)',
+                priority: 0, // Highest priority - always visible
+                showInMobile: true,
+                showInDesktop: false,
+                requireAuth: true,
+                handler: () => expandFromSingularity()
+            },
             create: {
                 id: 'create',
                 label: '✍🏻 Create Bridge',
@@ -292,6 +305,36 @@
             console.log('🔘 Thumbs zone initialized with basic buttons');
         }
 
+        // ===== SINGULARITY STATE MANAGEMENT ☯️ =====
+        let thumbsExpanded = true;
+        let thumbsIdleTimer = null;
+        
+        function resetThumbsIdleTimer() {
+            if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
+            thumbsIdleTimer = setTimeout(() => {
+                if (thumbsExpanded && isMobile()) {
+                    collapseToSingularity();
+                }
+            }, 10000); // 10 seconds idle
+        }
+        
+        function collapseToSingularity() {
+            thumbsExpanded = false;
+            const thumbsZone = document.querySelector('.thumbs-zone');
+            if (thumbsZone) {
+                thumbsZone.classList.add('collapsed');
+            }
+        }
+        
+        function expandFromSingularity() {
+            thumbsExpanded = true;
+            const thumbsZone = document.querySelector('.thumbs-zone');
+            if (thumbsZone) {
+                thumbsZone.classList.remove('collapsed');
+            }
+            resetThumbsIdleTimer();
+        }
+        
         /**
          * Render thumbs zone buttons (simplified)
          * Position 1 (rightmost): Create (✍🏻) - ONLY button for genesis form
@@ -314,6 +357,12 @@
             }
             
             let html = '';
+            
+            // ☯️ SINGULARITY BUTTON (Button 00) - Always present, expands all
+            html += `<button class="singularity-btn" data-action="singularity" aria-label="Expand all actions">☯️</button>`;
+            
+            // Layer 01 buttons - Hidden when collapsed
+            html += `<div class="layer-01">`;
             
             // Position 1: Create button (ONLY way to genesis form)
             html += `<button data-action="create" aria-label="Create new bridge">✍🏻</button>`;
@@ -346,8 +395,15 @@
                 html += `<button data-action="next" aria-label="Next bridge">→</button>`;
             }
             
+            html += `</div>`; // Close layer-01
+            
             thumbsZone.innerHTML = html;
             console.log(`🔘 Thumbs zone HTML length: ${html.length} chars`);
+            
+            // Start idle timer on mobile
+            if (isMobile()) {
+                resetThumbsIdleTimer();
+            }
         }
 
         /**
@@ -4495,6 +4551,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (thumbBtn) {
             const action = thumbBtn.dataset.action;
             const bridgeId = thumbBtn.dataset.bridgeId;
+            
+            // Reset idle timer on any thumbs zone interaction
+            if (isMobile()) {
+                resetThumbsIdleTimer();
+            }
             
             // Registry-based actions (create, audit, search)
             if (ACTION_REGISTRY[action]) {

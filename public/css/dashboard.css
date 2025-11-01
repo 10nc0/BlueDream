@@ -2685,6 +2685,117 @@ body::before {
     background: rgba(30, 41, 59, 0.9);
 }
 
+/* ===================================================================
+   ☯️ SINGULARITY BUTTON - Cosmic Superposition State
+   All buttons collapse into this singular cosmic point
+   =================================================================== */
+.singularity-btn {
+    position: relative;
+    font-size: 1.6rem !important;
+    z-index: 1001;
+}
+
+/* Animated Aura/Shine Effect */
+.singularity-btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: radial-gradient(circle, 
+        rgba(34, 211, 238, 0.6) 0%, 
+        rgba(168, 85, 247, 0.4) 50%, 
+        rgba(236, 72, 153, 0.2) 100%);
+    transform: translate(-50%, -50%);
+    animation: singularityAura 3s ease-in-out infinite;
+    pointer-events: none;
+}
+
+/* Pulsing outer glow */
+.singularity-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 120%;
+    height: 120%;
+    border-radius: 50%;
+    background: radial-gradient(circle, 
+        rgba(34, 211, 238, 0.3) 0%, 
+        transparent 70%);
+    transform: translate(-50%, -50%);
+    animation: singularityPulse 2s ease-in-out infinite;
+    pointer-events: none;
+}
+
+@keyframes singularityAura {
+    0%, 100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.6;
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.3);
+        opacity: 0.8;
+    }
+}
+
+@keyframes singularityPulse {
+    0%, 100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.4;
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.5);
+        opacity: 0;
+    }
+}
+
+/* Layer 01 buttons container */
+.thumbs-zone .layer-01 {
+    display: flex;
+    flex-direction: row-reverse;
+    flex-wrap: wrap;
+    gap: 12px;
+    transition: all 0.4s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* Collapsed State - All layer-01 buttons hidden */
+.thumbs-zone.collapsed .layer-01 {
+    opacity: 0;
+    transform: scale(0);
+    pointer-events: none;
+    width: 0;
+    gap: 0;
+}
+
+.thumbs-zone.collapsed .layer-01 button {
+    width: 0;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+/* Enhanced aura when collapsed (singularity is alone) */
+.thumbs-zone.collapsed .singularity-btn::before {
+    animation: singularityAuraEnhanced 2s ease-in-out infinite;
+}
+
+@keyframes singularityAuraEnhanced {
+    0%, 100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.8;
+        box-shadow: 0 0 20px rgba(34, 211, 238, 0.6);
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.5);
+        opacity: 1;
+        box-shadow: 0 0 40px rgba(168, 85, 247, 0.8);
+    }
+}
+
 /* Legacy class support */
 .thumb-btn {
     width: 48px;
