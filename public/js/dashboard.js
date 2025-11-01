@@ -1523,7 +1523,7 @@
                                 ${embed.description ? `<div class="embed-description" style="color: #DCDDDE; margin-bottom: 0.5rem; white-space: pre-wrap;">${escapeHtml(embed.description)}</div>` : ''}
                                 ${embed.fields && embed.fields.length > 0 ? `
                                     <div class="embed-fields" style="display: grid; grid-template-columns: repeat(${embed.fields.some(f => !f.inline) ? '1' : '2'}, 1fr); gap: 0.5rem;">
-                                        ${embed.fields.map(field => `
+                                        ${embed.fields.filter(field => !field.name.includes('📝 Attachment')).map(field => `
                                             <div class="embed-field" style="${field.inline ? 'display: inline-block;' : ''}">
                                                 <div class="embed-field-name" style="font-weight: 600; color: #B9BBBE; font-size: 0.875rem; margin-bottom: 0.25rem;">${escapeHtml(field.name)}</div>
                                                 <div class="embed-field-value" style="color: #DCDDDE; font-size: 0.875rem;">${escapeHtml(field.value)}</div>
