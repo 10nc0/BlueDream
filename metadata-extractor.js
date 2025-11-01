@@ -20,7 +20,14 @@
 class MetadataExtractor {
     constructor() {
         // Date patterns (for temporal classification)
+        // ORDER MATTERS: Most specific patterns first (multi-word before single-word)
         this.datePatterns = [
+            // Natural language multi-word dates (MUST come first)
+            /\b(?:next|last|this)\s+(?:week|month|year|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december)\b/gi,
+            
+            // Month YYYY (Christmas 2021, Summer 2025)
+            /\b(?:January|February|March|April|May|June|July|August|September|October|November|December|Christmas|Easter|Summer|Winter|Fall|Spring)\s+\d{4}\b/gi,
+            
             // YYYY-MM-DD (2025-06-15)
             /\b\d{4}-\d{2}-\d{2}\b/g,
             
@@ -33,17 +40,14 @@ class MetadataExtractor {
             // DD-MMM-YYYY (25-Oct-2025)
             /\b\d{1,2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{4}\b/gi,
             
-            // Month YYYY (Christmas 2021, Summer 2025)
-            /\b(?:January|February|March|April|May|June|July|August|September|October|November|December|Christmas|Easter|Summer|Winter|Fall|Spring)\s+\d{4}\b/gi,
+            // MM/DD/YYYY or DD/MM/YYYY
+            /\b\d{1,2}\/\d{1,2}\/\d{4}\b/g,
             
             // YYYY (standalone year)
             /\b(19|20)\d{2}\b/g,
             
-            // MM/DD/YYYY or DD/MM/YYYY
-            /\b\d{1,2}\/\d{1,2}\/\d{4}\b/g,
-            
-            // Natural language dates (Today, Yesterday, Last week, etc.)
-            /\b(?:today|yesterday|tomorrow|last\s+week|last\s+month|this\s+week|this\s+month)\b/gi
+            // Natural language single-word dates (MUST come after multi-word)
+            /\b(?:today|yesterday|tomorrow)\b/gi
         ];
     }
 
@@ -92,13 +96,32 @@ class MetadataExtractor {
 
     /**
      * Extract all metadata from text
+     * TIGHTEST FUNNEL UPFRONT: Extract dates first, then tags from remainder
      * @param {string} text - Freeform text
      * @returns {Object} - { tags: string[], dates: string[] }
      */
     extract(text) {
+        if (!text || typeof text !== 'string') {
+            return { tags: [], dates: [] };
+        }
+        
+        // Step 1: Extract dates FIRST (tightest funnel)
+        const dates = this.extractDates(text);
+        
+        // Step 2: Remove date phrases from text to avoid duplicate tagging
+        let remainingText = text;
+        dates.forEach(date => {
+            // Remove the date phrase from text (case-insensitive)
+            const regex = new RegExp(date.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+            remainingText = remainingText.replace(regex, '');
+        });
+        
+        // Step 3: Extract tags from REMAINING text (after dates removed)
+        const tags = this.extractTags(remainingText);
+        
         return {
-            tags: this.extractTags(text),
-            dates: this.extractDates(text)
+            tags: tags,
+            dates: dates
         };
     }
 
