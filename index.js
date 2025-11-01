@@ -3722,18 +3722,38 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
         // Extract metadata using regex (no AI costs)
         const extracted = metadataExtractor.extract(metadata_text);
         
-        // Insert or update drop
-        const dropResult = await client.query(`
-            INSERT INTO drops (bridge_id, discord_message_id, metadata_text, extracted_tags, extracted_dates)
-            VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (bridge_id, discord_message_id)
-            DO UPDATE SET
-                metadata_text = $3,
-                extracted_tags = $4,
-                extracted_dates = $5,
-                updated_at = NOW()
-            RETURNING *
-        `, [internalBridgeId, discord_message_id, metadata_text, extracted.tags, extracted.dates]);
+        // Check if drop already exists to APPEND tags instead of replacing
+        const existingDrop = await client.query(
+            'SELECT * FROM drops WHERE bridge_id = $1 AND discord_message_id = $2',
+            [internalBridgeId, discord_message_id]
+        );
+        
+        let dropResult;
+        if (existingDrop.rows.length > 0) {
+            // APPEND new tags to existing tags (remove duplicates)
+            const existingTags = existingDrop.rows[0].extracted_tags || [];
+            const existingDates = existingDrop.rows[0].extracted_dates || [];
+            const mergedTags = [...new Set([...existingTags, ...extracted.tags])];
+            const mergedDates = [...new Set([...existingDates, ...extracted.dates])];
+            const combinedText = existingDrop.rows[0].metadata_text + ' ' + metadata_text;
+            
+            dropResult = await client.query(`
+                UPDATE drops
+                SET metadata_text = $1,
+                    extracted_tags = $2,
+                    extracted_dates = $3,
+                    updated_at = NOW()
+                WHERE bridge_id = $4 AND discord_message_id = $5
+                RETURNING *
+            `, [combinedText, mergedTags, mergedDates, internalBridgeId, discord_message_id]);
+        } else {
+            // Insert new drop
+            dropResult = await client.query(`
+                INSERT INTO drops (bridge_id, discord_message_id, metadata_text, extracted_tags, extracted_dates)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING *
+            `, [internalBridgeId, discord_message_id, metadata_text, extracted.tags, extracted.dates]);
+        }
         
         res.json({ 
             success: true, 
@@ -3773,6 +3793,53 @@ app.get('/api/drops/:bridge_id', requireAuth, setTenantContext, async (req, res)
         res.json({ drops: dropsResult.rows });
     } catch (error) {
         console.error('❌ Error fetching drops:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Delete a specific tag from a message's drop
+app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => {
+    try {
+        const { bridge_id, discord_message_id, tag } = req.body;
+        const client = req.dbClient || pool;
+        
+        if (!bridge_id || !discord_message_id || !tag) {
+            return res.status(400).json({ 
+                error: 'Missing required fields: bridge_id, discord_message_id, tag' 
+            });
+        }
+        
+        // Verify bridge belongs to user's tenant
+        const bridgeResult = await client.query(
+            'SELECT id FROM bridges WHERE fractal_id = $1',
+            [bridge_id]
+        );
+        
+        if (bridgeResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Bridge not found in your tenant' });
+        }
+        
+        const internalBridgeId = bridgeResult.rows[0].id;
+        
+        // Remove tag from array using PostgreSQL array functions
+        const dropResult = await client.query(`
+            UPDATE drops
+            SET extracted_tags = array_remove(extracted_tags, $1),
+                updated_at = NOW()
+            WHERE bridge_id = $2 AND discord_message_id = $3
+            RETURNING *
+        `, [tag, internalBridgeId, discord_message_id]);
+        
+        if (dropResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Drop not found' });
+        }
+        
+        res.json({ 
+            success: true, 
+            drop: dropResult.rows[0]
+        });
+    } catch (error) {
+        console.error('❌ Error removing tag:', error);
         res.status(500).json({ error: error.message });
     }
 });

@@ -3851,7 +3851,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ============ DROPS API - Personal Cloud OS ============
-// Save a drop (link metadata to Discord message)
+// Save a drop (link metadata to Discord message) - APPENDS to existing tags
 async function saveDrop(bridgeId, messageId, metadataText, section) {
     try {
         const response = await fetch('/api/drops', {
@@ -3873,16 +3873,50 @@ async function saveDrop(bridgeId, messageId, metadataText, section) {
         
         const data = await response.json();
         
-        // Hide input, show success
+        // Clear input but keep it visible for adding more tags
         section.querySelector('.drop-input-container').classList.add('hidden');
-        section.querySelector('.drop-link-btn').classList.add('hidden');
+        section.querySelector('.drop-input').value = '';
         
-        // Display the drop
-        displayDrop(section, data.drop, data.extracted);
+        // Display the drop (will show all tags as bubbles) - pass fractal_id
+        displayDrop(section, data.drop, data.extracted, bridgeId);
         
     } catch (error) {
         console.error('Error saving drop:', error);
         alert('Failed to save metadata. Please try again.');
+    }
+}
+
+// Remove a specific tag from a message's drop
+async function removeTag(bridgeId, messageId, tag) {
+    try {
+        const response = await fetch('/api/drops/tag', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+            },
+            body: JSON.stringify({
+                bridge_id: bridgeId,
+                discord_message_id: messageId,
+                tag: tag
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to remove tag');
+        }
+        
+        const data = await response.json();
+        
+        // Re-display the drop with updated tags - MUST pass fractal_id
+        const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-bridge-id="${bridgeId}"]`);
+        if (section && data.drop) {
+            displayDrop(section, data.drop, null, bridgeId); // Pass fractal_id!
+        }
+        
+    } catch (error) {
+        console.error('Error removing tag:', error);
+        alert('Failed to remove tag. Please try again.');
     }
 }
 
@@ -3907,35 +3941,43 @@ async function fetchDrops(bridgeId) {
     }
 }
 
-// Display a drop in the UI
-function displayDrop(section, drop, extracted) {
+// Display a drop in the UI with bubble tags (click to delete)
+function displayDrop(section, drop, extracted, fractalBridgeId) {
     const display = section.querySelector('.drop-display');
     if (!display) return;
+    
+    // Get fractal_id from section if not provided
+    const bridgeFractalId = fractalBridgeId || section.getAttribute('data-bridge-id');
     
     // Handle both formats: extracted object (from POST response) or direct arrays (from GET response)
     const tags = extracted?.tags || drop.extracted_tags || [];
     const dates = extracted?.dates || drop.extracted_dates || [];
     
+    // Tag bubbles with × delete button (use fractal_id, NOT internal bridge_id)
     const tagsHTML = tags.length > 0 
-        ? tags.map(tag => `<span class="drop-tag">${escapeHtml(tag)}</span>`).join(' ')
+        ? tags.map(tag => `
+            <span class="drop-tag" style="display: inline-flex; align-items: center; gap: 0.25rem; background: rgba(168, 85, 247, 0.2); color: #c084fc; padding: 0.25rem 0.5rem; border-radius: 1rem; font-size: 0.75rem; margin-right: 0.25rem;">
+                ${escapeHtml(tag)}
+                <button class="tag-remove" data-action="remove-tag" data-tag="${escapeHtml(tag)}" data-message-id="${drop.discord_message_id}" data-bridge-id="${bridgeFractalId}" style="background: none; border: none; color: #c084fc; cursor: pointer; font-size: 1rem; line-height: 1; padding: 0; margin-left: 0.125rem; opacity: 0.7; transition: opacity 0.2s;">×</button>
+            </span>
+        `).join(' ')
         : '';
     
     const datesHTML = dates.length > 0
-        ? dates.map(date => `<span class="drop-date">📅 ${escapeHtml(date)}</span>`).join(' ')
+        ? dates.map(date => `<span class="drop-date" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 0.25rem 0.5rem; border-radius: 1rem; font-size: 0.75rem; margin-right: 0.25rem;">📅 ${escapeHtml(date)}</span>`).join(' ')
         : '';
     
     display.innerHTML = `
         <div class="drop-metadata">
-            <div class="drop-text">${escapeHtml(drop.metadata_text)}</div>
-            ${tagsHTML ? `<div class="drop-tags">${tagsHTML}</div>` : ''}
-            ${datesHTML ? `<div class="drop-dates">${datesHTML}</div>` : ''}
+            ${tagsHTML ? `<div class="drop-tags" style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.5rem;">${tagsHTML}</div>` : ''}
+            ${datesHTML ? `<div class="drop-dates" style="display: flex; flex-wrap: wrap; gap: 0.25rem;">${datesHTML}</div>` : ''}
         </div>
     `;
     display.classList.remove('hidden');
     
-    // Hide the "Link Metadata" button since drop already exists
+    // KEEP the input visible to allow adding more tags
     const linkBtn = section.querySelector('.drop-link-btn');
-    if (linkBtn) linkBtn.classList.add('hidden');
+    if (linkBtn) linkBtn.classList.remove('hidden'); // Show button to add more tags
 }
 
 // Hydrate drops for all messages in a bridge
@@ -3945,7 +3987,7 @@ async function hydrateDropsForBridge(bridgeId) {
     drops.forEach(drop => {
         const section = document.querySelector(`.message-drop-section[data-message-id="${drop.discord_message_id}"][data-bridge-id="${bridgeId}"]`);
         if (section) {
-            displayDrop(section, drop);
+            displayDrop(section, drop, null, bridgeId); // Pass fractal_id
         }
     });
 }
@@ -4153,10 +4195,22 @@ document.addEventListener('click', function(e) {
         const messageId = target.getAttribute('data-message-id');
         const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"]`);
         if (section) {
-            // Hide input, show button
+            // Hide input, show button, clear input
             section.querySelector('.drop-input-container').classList.add('hidden');
-            section.querySelector('.drop-link-btn').classList.remove('hidden');
             section.querySelector('.drop-input').value = '';
+        }
+        return;
+    }
+    
+    // Remove tag button (× on tag bubble)
+    if (target.hasAttribute('data-action') && target.getAttribute('data-action') === 'remove-tag') {
+        e.preventDefault();
+        const tag = target.getAttribute('data-tag');
+        const messageId = target.getAttribute('data-message-id');
+        const bridgeId = target.getAttribute('data-bridge-id');
+        
+        if (tag && messageId && bridgeId) {
+            removeTag(bridgeId, messageId, tag);
         }
         return;
     }
