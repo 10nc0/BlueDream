@@ -166,24 +166,24 @@
             let html = '';
             
             // Button 1: Create bridge (closest to thumb, always visible)
-            html += '<button class="thumb-btn" data-action="create" aria-label="Create Bridge">🌉</button>';
+            html += '<button class="thumb-btn" data-action="create" aria-label="Create Bridge">➕</button>';
             
             // Buttons 2-5: Show up to 4 bridges (or fan if > 5 bridges)
             if (activeBridges.length === 0) {
                 // No bridges - show utility buttons
-                html += '<button class="thumb-btn" data-action="audit" aria-label="Audit">🤖</button>';
+                html += '<button class="thumb-btn" data-action="audit" aria-label="Agent Actions">☯️</button>';
                 html += '<button class="thumb-btn" data-action="search" aria-label="Search">🔍</button>';
             } else if (activeBridges.length <= 4) {
                 // Show all bridges (1-4)
                 activeBridges.forEach((bridge, index) => {
-                    const icon = index === 0 ? '💬' : `${index + 1}`;
+                    const icon = `${index + 1}`;
                     html += `<button class="thumb-btn" data-action="toggle-bridge" data-bridge-id="${bridge.fractal_id}" aria-label="${escapeHtml(bridge.name)}">${icon}</button>`;
                 });
             } else {
                 // Show first 3 bridges + fan button for remaining bridges
                 for (let i = 0; i < 3; i++) {
                     const bridge = activeBridges[i];
-                    const icon = i === 0 ? '💬' : `${i + 1}`;
+                    const icon = `${i + 1}`;
                     html += `<button class="thumb-btn" data-action="toggle-bridge" data-bridge-id="${bridge.fractal_id}" aria-label="${escapeHtml(bridge.name)}">${icon}</button>`;
                 }
                 
@@ -1043,8 +1043,8 @@
                                 📎
                             </a>
                         ` : ''}
-                        <button class="agent-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Agent • Check • Remind • Alert • Reward • Execute v2.0" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
-                            🤖
+                        <button class="agent-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="☯️ Check • Remind • Alert • Reward • Execute" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                            ☯️
                         </button>
                         <button class="tag-add-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                             🏷️
@@ -1379,7 +1379,7 @@
                                     <span class="bridge-fan-item-arrow">→</span>
                                 </div>
                                 <div class="bridge-fan-item" data-action="audit" style="opacity: 0.9;">
-                                    <span class="bridge-fan-item-name">🤖 Agent Actions</span>
+                                    <span class="bridge-fan-item-name">☯️ Check • Remind • Alert • Reward • Execute</span>
                                     <span class="bridge-fan-item-arrow">→</span>
                                 </div>
                             </div>
@@ -1429,7 +1429,7 @@
                     } else if (action === 'audit') {
                         // Placeholder for future agent layer
                         closeBridgeFanModal();
-                        showToast('🤖 Agent features coming soon!', 'info');
+                        showToast('☯️ Agent features coming soon! Check • Remind • Alert • Reward • Execute', 'info');
                     }
                 });
             });
@@ -3967,7 +3967,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 break;
             case 'audit':
                 // Placeholder for future agent layer (Check • Remind • Alert • Reward • Execute)
-                showToast('🤖 Agent features coming soon!', 'info');
+                showToast('☯️ Agent features coming soon! Check • Remind • Alert • Reward • Execute', 'info');
                 break;
             case 'search':
                 // Open search modal or focus search input
@@ -4687,7 +4687,7 @@ document.addEventListener('click', function(e) {
         e.preventDefault();
         const messageId = target.getAttribute('data-message-id');
         const bridgeId = target.getAttribute('data-bridge-id');
-        alert('🤖 Agent Layer v2.0\n\nCheck • Remind • Alert • Reward • Execute\n\nComing soon! This will enable intelligent automation for your messages.');
+        alert('☯️ Agent Layer v2.0\n\nCheck • Remind • Alert • Reward • Execute\n\nComing soon! This will enable intelligent automation for your messages.');
         return;
     }
     
