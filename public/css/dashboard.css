@@ -470,7 +470,7 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  min-height: calc(100vh - 160px);
+  height: calc(100vh - 140px);
 }
 
 @media (min-width: 768px) {
@@ -487,6 +487,14 @@ body::before {
   border-radius: var(--radius-md);
   padding: 0.3125rem;
   flex-shrink: 0;
+  overflow-y: auto;
+}
+
+/* Set equal heights for sidebar and detail on tablet/desktop */
+@media (min-width: 768px) {
+  .bridge-sidebar {
+    height: calc(100vh - 140px);
+  }
 }
 
 /* Mobile (iPhone X): Full width on small screens (column layout) */
@@ -593,7 +601,7 @@ body::before {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - 140px);
+  height: calc(100vh - 140px);
 }
 
 .detail-header {
