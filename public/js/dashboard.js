@@ -383,14 +383,13 @@
         
         function collapseToSingularity() {
             console.log('🔄 COLLAPSE: Button 00 spinning slower');
-            thumbsExpanded = false;
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
             const singularityBtn = document.querySelector('.singularity-btn');
             
             // Clear any existing auto-collapse timer
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             
-            // Capture current rotation angle before switching animation
+            // IMMEDIATELY switch to slow spin (synchronized with state)
             if (isMobile() && singularityBtn) {
                 const currentRotation = getCurrentRotation(singularityBtn);
                 console.log(`🔄 Current rotation: ${currentRotation}deg`);
@@ -404,6 +403,9 @@
                     PHI_BREATH.exitCreationMode();
                 }
             }
+            
+            // THEN update state (slow spin is already active)
+            thumbsExpanded = false;
             
             if (layer01) {
                 // CRITICAL FIX: Add .collapsing BEFORE removing .show to prevent buttons from snapping to invisible base state
@@ -444,12 +446,30 @@
         
         function expandFromSingularity() {
             console.log('🌌 EXPAND: Button 00 spinning faster');
-            thumbsExpanded = true;
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
             const singularityBtn = document.querySelector('.singularity-btn');
             
             // Clear any existing auto-collapse timer
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
+            
+            // IMMEDIATELY switch to fast spin (synchronized with state)
+            if (singularityBtn && isMobile()) {
+                console.log('🌀 Button 00 enters CREATION SPIN (always visible)');
+                
+                // Capture current rotation angle before switching animation
+                const currentRotation = getCurrentRotation(singularityBtn);
+                console.log(`🔄 Current rotation: ${currentRotation}deg`);
+                
+                // Apply current rotation as CSS variable to maintain continuity
+                singularityBtn.style.setProperty('--rotation-offset', `${currentRotation}deg`);
+                singularityBtn.classList.add('creation-spinning');
+                if (breathInitialized) {
+                    PHI_BREATH.enterCreationMode();
+                }
+            }
+            
+            // THEN update state (fast spin is already active)
+            thumbsExpanded = true;
             
             if (layer01) {
                 // Remove hidden and show eggs
@@ -461,27 +481,6 @@
                     console.log('✨ Eggs appearing sequentially');
                 }, 10);
             }
-            
-            // Button 00 enters CREATION SPIN mode (fast spinning, always visible)
-            setTimeout(() => {
-                if (singularityBtn) {
-                    console.log('🌀 Button 00 enters CREATION SPIN (always visible)');
-                    
-                    // Capture current rotation angle before switching animation
-                    const currentRotation = getCurrentRotation(singularityBtn);
-                    console.log(`🔄 Current rotation: ${currentRotation}deg`);
-                    
-                    // Add creation spinning class for mobile
-                    if (isMobile()) {
-                        // Apply current rotation as CSS variable to maintain continuity
-                        singularityBtn.style.setProperty('--rotation-offset', `${currentRotation}deg`);
-                        singularityBtn.classList.add('creation-spinning');
-                        if (breathInitialized) {
-                            PHI_BREATH.enterCreationMode();
-                        }
-                    }
-                }
-            }, 600);
             
             // Use constant φ-breath duration (4000ms base)
             const breathDuration = breathInitialized ? PHI_BREATH.BASE_DURATION : 4000;
