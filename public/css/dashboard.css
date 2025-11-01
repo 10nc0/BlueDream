@@ -2719,7 +2719,7 @@ body::before {
 }
 
 .singularity-btn.purged .core .symbol {
-    transform: rotate(0deg) !important;
+    /* Do NOT reset rotation - let it continue eternally */
     animation: none !important;
 }
 

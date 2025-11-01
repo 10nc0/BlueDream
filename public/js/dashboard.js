@@ -410,12 +410,11 @@
             // 1. Pause everything
             singularityBtn.classList.add('purging');
             
-            // 2. Force reflow + reset transform to 0°
+            // 2. Force reflow (let rotation continue - don't reset angle)
             void singularityBtn.offsetWidth;
             const symbolEl = singularityBtn.querySelector('.core .symbol');
-            if (symbolEl) {
-                symbolEl.style.transform = 'rotate(0deg)';
-            }
+            // NOTE: Do NOT reset transform - let rotation angle continue
+            // We only purge SPEED state, not ROTATION angle
             
             // 3. Remove all inline animations
             singularityBtn.style.animation = 'none';
@@ -430,7 +429,8 @@
             const slowBreath = breathInitialized ? 1.0 * PHI_BREATH.BASE_DURATION : 4000;
             singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
             singularityBtn.style.setProperty('--breath-duration', `${slowBreath}ms`);
-            singularityBtn.style.setProperty('--rotation-offset', '0deg');
+            // NOTE: Do NOT reset --rotation-offset - let rotation continue eternally
+            // Only reset SPEED (SLOW), not ANGLE (continuous rotation)
             
             // 5. Genesis v1.1: Log cat breathe red herring constant
             fetch('/api/genesis')
@@ -458,7 +458,7 @@
                 // 9. Force another reflow to restart animations
                 void singularityBtn.offsetWidth;
                 
-                console.log(`☢️ NUCLEAR PURGE complete: Resuscitated SLOW mode (rotation=${slowRotation}ms, breath=${slowBreath}ms, offset=0°)`);
+                console.log(`☢️ NUCLEAR PURGE complete: Resuscitated SLOW mode (rotation=${slowRotation}ms, breath=${slowBreath}ms, angle=continuous)`);
             }, 50);
         }
         
