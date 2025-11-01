@@ -2728,7 +2728,7 @@ body::before {
     }
 }
 
-/* Layer 01 buttons container */
+/* Layer 01 buttons container - The expanded reality */
 .thumbs-zone .layer-01 {
     display: flex;
     flex-direction: row-reverse;
@@ -2736,17 +2736,40 @@ body::before {
     gap: 12px;
     margin-bottom: 12px;
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(20px) scale(0.5);
     transition: all 0.4s ease;
 }
 
 .thumbs-zone .layer-01.show {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
 }
 
 .thumbs-zone .layer-01[hidden] {
     display: none;
+}
+
+/* Singularity visibility - hides when expanded */
+.thumbs-zone .singularity-btn {
+    opacity: 1;
+    transform: scale(1);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* When layer-01 is expanded, singularity disappears */
+.thumbs-zone .layer-01.show ~ .singularity-btn,
+.thumbs-zone:has(.layer-01.show) .singularity-btn {
+    opacity: 0;
+    transform: scale(0);
+    pointer-events: none;
+}
+
+/* Singularity reappears when collapsed */
+.thumbs-zone .layer-01[hidden] ~ .singularity-btn,
+.thumbs-zone:has(.layer-01[hidden]) .singularity-btn {
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
 }
 
 /* Legacy class support */

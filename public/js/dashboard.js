@@ -382,10 +382,7 @@
             
             let html = '';
             
-            // ☯️ SINGULARITY BUTTON (Button 00) - Always present, expands all
-            html += `<button class="singularity-btn" data-action="singularity" aria-label="Expand all actions">☯️</button>`;
-            
-            // Layer 01 buttons - Hidden when collapsed (start expanded with 'show' class)
+            // Layer 01 buttons - The expanded reality (start expanded with 'show' class)
             html += `<div class="layer-01 show">`;
             
             // Position 1: Create button (ONLY way to genesis form)
@@ -420,6 +417,10 @@
             }
             
             html += `</div>`; // Close layer-01
+            
+            // ☯️ SINGULARITY BUTTON (Button 00) - Transcendental layer that splits into buttons
+            // Appears AFTER layer-01 so CSS ~ selector works
+            html += `<button class="singularity-btn" data-action="singularity" aria-label="Expand all actions">☯️</button>`;
             
             thumbsZone.innerHTML = html;
             console.log(`🔘 Thumbs zone HTML length: ${html.length} chars`);
