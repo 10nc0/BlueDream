@@ -764,6 +764,14 @@
                 
                 return `
                 <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml(searchableText)}" data-status="${msg.discord_status}" style="position: relative;">
+                    <div style="position: absolute; top: 0.5rem; right: 0.5rem; display: flex; flex-direction: row; gap: 0.5rem; align-items: center; z-index: 10;">
+                        <button class="tag-add-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 4px; color: #c084fc; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer;">
+                            🏷️
+                        </button>
+                        <div style="width: 16px; height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" style="width: 16px; height: 16px; cursor: pointer; accent-color: #a855f7; margin: 0;">
+                        </div>
+                    </div>
                     <div class="discord-avatar">
                         ${msg.sender_photo_url ? 
                             `<img src="${escapeHtml(msg.sender_photo_url)}" alt="${escapeHtml(msg.sender_name || 'User')}" class="avatar-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
@@ -810,20 +818,13 @@
                                 <img src="${escapeHtml(msg.media_url)}" style="max-width: 400px; border-radius: 4px;" alt="Discord attachment" loading="lazy" onerror="this.style.display='none'">
                             </div>
                         ` : ''}
-                        <div style="display: flex; gap: 0.75rem; align-items: center; margin-top: 0.5rem;">
-                            ${msg.media_url ? `
-                                <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" class="attachment-download-btn" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 4px; color: #c084fc; text-decoration: none; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0;">
+                        ${msg.media_url ? `
+                            <div style="margin-top: 0.5rem;">
+                                <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" class="attachment-download-btn" style="display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 4px; color: #c084fc; text-decoration: none; font-size: 0.875rem; transition: all 0.2s;">
                                     📎
                                 </a>
-                            ` : ''}
-                            <label style="display: flex; align-items: center; gap: 0.375rem; cursor: pointer;">
-                                <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" style="width: 16px; height: 16px; cursor: pointer; accent-color: #a855f7;">
-                                <span style="font-size: 0.75rem; color: #94a3b8;">Export</span>
-                            </label>
-                            <button class="tag-add-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 4px; color: #c084fc; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer;">
-                                🏷️
-                            </button>
-                        </div>
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
             `;
