@@ -331,43 +331,14 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
         containerEl.appendChild(pdfContainer);
         
     } else if (isOfficeDoc) {
-        // Office documents - show file type indicator
-        const docContainer = document.createElement('div');
-        docContainer.style.cssText = 'padding: 0.75rem; background: rgba(47, 49, 54, 0.4); border-radius: 6px; margin: 0.5rem 0; border-left: 3px solid rgba(168, 85, 247, 0.6);';
-        
-        let icon = '📄';
-        let label = 'Document';
-        if (normalizedType.includes('word') || normalizedType.includes('document')) {
-            icon = '📝';
-            label = 'Word Document';
-        } else if (normalizedType.includes('excel') || normalizedType.includes('spreadsheet')) {
-            icon = '📊';
-            label = 'Excel Spreadsheet';
-        } else if (normalizedType.includes('powerpoint') || normalizedType.includes('presentation')) {
-            icon = '📽️';
-            label = 'PowerPoint Presentation';
-        }
-        
-        const infoText = document.createElement('div');
-        infoText.innerHTML = `${icon} ${label} <span style="color: #94a3b8; font-size: 0.75rem;">(Use attachment icon to download)</span>`;
-        infoText.style.cssText = 'color: #e2e8f0; font-size: 0.875rem;';
-        
-        docContainer.appendChild(infoText);
+        // Office documents - no preview needed (📎 download button provides access)
         containerEl.innerHTML = '';
-        containerEl.appendChild(docContainer);
+        containerEl.style.display = 'none'; // Hide preview area entirely
         
     } else {
-        // Other files - show file type indicator
-        const fileContainer = document.createElement('div');
-        fileContainer.style.cssText = 'padding: 0.75rem; background: rgba(47, 49, 54, 0.4); border-radius: 6px; margin: 0.5rem 0; border-left: 3px solid rgba(168, 85, 247, 0.6);';
-        
-        const infoText = document.createElement('div');
-        infoText.innerHTML = `📎 File (${mediaType || 'unknown type'}) <span style="color: #94a3b8; font-size: 0.75rem;">(Use attachment icon to download)</span>`;
-        infoText.style.cssText = 'color: #e2e8f0; font-size: 0.875rem;';
-        
-        fileContainer.appendChild(infoText);
+        // Other files - no preview needed (📎 download button provides access)
         containerEl.innerHTML = '';
-        containerEl.appendChild(fileContainer);
+        containerEl.style.display = 'none'; // Hide preview area entirely
     }
 }
 
