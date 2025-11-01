@@ -408,56 +408,35 @@
         }
         
         function collapseToSingularity() {
-            console.log('🔄 COLLAPSE: Button 00 spinning slower');
+            console.log('🔄 COLLAPSE eggs');
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
-            const singularityBtn = document.querySelector('.singularity-btn');
             
             // Clear any existing auto-collapse timer
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             
-            // Update state FIRST
+            // Update state FIRST (breathCycle listener will handle Button 00 speed)
             thumbsExpanded = false;
-            window.thumbsExpanded = false; // Expose to global for breathCycle listener
-            
-            // ☯️ TRANSCENDENT BUTTON 00: Set SLOW rotation speed IMMEDIATELY (don't wait for breathCycle)
-            if (singularityBtn) {
-                // Slow: 2 × 4000ms = 8000ms (φ^0 base, breathCycle will add φ-oscillation)
-                const slowRotation = 2 * PHI_BREATH.BASE_DURATION;
-                singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
-                console.log(`🐌 Button 00 INSTANT slow spin: ${slowRotation}ms`);
-            }
+            window.thumbsExpanded = false;
             
             // Exit creation mode for φ-breath system
             if (isMobile() && breathInitialized) {
-                console.log('😌 Exited CREATION MODE - returning to φ-breath');
+                console.log('😌 Exited CREATION MODE');
                 PHI_BREATH.exitCreationMode();
             }
             
             if (layer01) {
-                // CRITICAL FIX: Add .collapsing BEFORE removing .show to prevent buttons from snapping to invisible base state
-                console.log('⬅️ Buttons fusing left to right (φ-inverse fusion)');
+                // Add .collapsing BEFORE removing .show
+                console.log('⬅️ Eggs fusing (φ-inverse fusion)');
                 
-                // Step 1: Add .collapsing class first
                 layer01.classList.add('collapsing');
-                
-                // Step 2: Force layout reflow to ensure .collapsing styles are applied
                 void layer01.offsetWidth; // Force reflow
-                
-                // Step 3: Now remove .show - buttons stay visible because .collapsing maintains them
                 layer01.classList.remove('show');
                 
-                console.log('🎬 Fusion animation triggered - buttons visible and animating');
+                console.log('🎬 Fusion animation triggered - eggs animating');
                 
-                // ☯️ returns to idle rotation (always visible, no snap needed)
+                // Wait for fusion animation to complete
                 setTimeout(() => {
-                    if (singularityBtn) {
-                        console.log('✨ UNITY: ☯️ returns to idle breath rotation');
-                    }
-                }, 500);
-                
-                // Wait for fusion animation to complete (buttons fuse into singularity)
-                setTimeout(() => {
-                    console.log('✅ Collapse complete, ready for next cycle');
+                    console.log('✅ Collapse complete');
                     layer01.setAttribute('hidden', '');
                     layer01.classList.remove('collapsing');
                 }, 800); // 300ms (longest button delay) + 400ms (fusion) + 100ms buffer
@@ -471,28 +450,19 @@
         }
         
         function expandFromSingularity() {
-            console.log('🌌 EXPAND: Button 00 spinning faster');
+            console.log('🌌 EXPAND eggs');
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
-            const singularityBtn = document.querySelector('.singularity-btn');
             
             // Clear any existing auto-collapse timer
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             
-            // Update state FIRST
+            // Update state FIRST (breathCycle listener will handle Button 00 speed)
             thumbsExpanded = true;
-            window.thumbsExpanded = true; // Expose to global for breathCycle listener
-            
-            // ☯️ TRANSCENDENT BUTTON 00: Set FAST rotation speed IMMEDIATELY (don't wait for breathCycle)
-            if (singularityBtn) {
-                // Fast: 0.5 × 4000ms = 2000ms (φ^0 base, breathCycle will add φ-oscillation)
-                const fastRotation = 0.5 * PHI_BREATH.BASE_DURATION;
-                singularityBtn.style.setProperty('--rotation-duration', `${fastRotation}ms`);
-                console.log(`⚡ Button 00 INSTANT fast spin: ${fastRotation}ms`);
-            }
+            window.thumbsExpanded = true;
             
             // Enter creation mode for φ-breath system
             if (isMobile() && breathInitialized) {
-                console.log('🌀 Entered CREATION MODE - fast spinning');
+                console.log('🌀 Entered CREATION MODE');
                 PHI_BREATH.enterCreationMode();
             }
             
