@@ -337,10 +337,17 @@
             thumbsExpanded = false;
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
             if (layer01) {
+                // Start collapse: remove .show and add .collapsing for φ-inverse fusion animation
                 layer01.classList.remove('show');
                 setTimeout(() => {
+                    layer01.classList.add('collapsing');
+                }, 10);
+                
+                // Wait for fusion animation to complete (buttons fuse + singularity appears)
+                setTimeout(() => {
                     layer01.setAttribute('hidden', '');
-                }, 400); // Match CSS transition
+                    layer01.classList.remove('collapsing');
+                }, 700); // 300ms (longest button delay) + 300ms (fusion) + 100ms buffer
             }
             setBreathCycle(0); // Return to φ^0 calm
         }
