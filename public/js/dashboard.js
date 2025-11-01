@@ -410,13 +410,21 @@
         function collapseToSingularity() {
             console.log('🔄 COLLAPSE eggs');
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
+            const singularityBtn = document.querySelector('.singularity-btn');
             
             // Clear any existing auto-collapse timer
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             
-            // Update state FIRST (breathCycle listener will handle Button 00 speed)
+            // DEFAULT IDLE: Set SLOW rotation IMMEDIATELY
             thumbsExpanded = false;
             window.thumbsExpanded = false;
+            
+            if (singularityBtn) {
+                // SLOW: 2 × BASE_DURATION = 8000ms base (φ-oscillation adds on top)
+                const slowBase = 2 * PHI_BREATH.BASE_DURATION;
+                singularityBtn.style.setProperty('--rotation-duration', `${slowBase}ms`);
+                console.log(`🐌 SLOW spin activated: ${slowBase}ms`);
+            }
             
             // Exit creation mode for φ-breath system
             if (isMobile() && breathInitialized) {
@@ -452,13 +460,21 @@
         function expandFromSingularity() {
             console.log('🌌 EXPAND eggs');
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
+            const singularityBtn = document.querySelector('.singularity-btn');
             
             // Clear any existing auto-collapse timer
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             
-            // Update state FIRST (breathCycle listener will handle Button 00 speed)
+            // ☯️ FIRST CONDITION (STRONGEST): Set FAST rotation IMMEDIATELY
             thumbsExpanded = true;
             window.thumbsExpanded = true;
+            
+            if (singularityBtn) {
+                // FAST: 0.5 × BASE_DURATION = 2000ms base (φ-oscillation adds on top)
+                const fastBase = 0.5 * PHI_BREATH.BASE_DURATION;
+                singularityBtn.style.setProperty('--rotation-duration', `${fastBase}ms`);
+                console.log(`⚡ FAST spin activated: ${fastBase}ms`);
+            }
             
             // Enter creation mode for φ-breath system
             if (isMobile() && breathInitialized) {
