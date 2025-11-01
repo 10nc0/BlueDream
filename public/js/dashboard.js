@@ -324,10 +324,6 @@
         const COLLAPSE_DELAY = 40;   // ms between each egg (collapse)
         const ANIMATION_MS = 400;    // matches CSS transition duration
         
-        // φ-BREATH THROTTLE (prevent data leakage)
-        let lastPhiUpdate = 0;
-        const PHI_UPDATE_THROTTLE = 100; // ms between updates (prevent flooding)
-        
         // Initialize φ-breath system (mobile only)
         function initPhiBreath() {
             if (!isMobile() || breathInitialized) {
@@ -339,77 +335,32 @@
             breathInitialized = true;
             
             // Subscribe to breath cycles to sync rotation speed with φ oscillation
-            // THROTTLED to prevent data leakage and double acceleration
+            // Only updates when EXPANDED (collapsed state ignores φ updates)
             PHI_BREATH.on('breathCycle', (data) => {
-                // THROTTLE: Prevent flooding (max 1 update per 100ms)
-                const now = Date.now();
-                if (now - lastPhiUpdate < PHI_UPDATE_THROTTLE) {
-                    return; // Skip this update to prevent leakage
-                }
-                lastPhiUpdate = now;
-                
                 const singularityBtn = document.querySelector('.singularity-btn');
                 if (!singularityBtn) {
                     console.log('⚠️ breathCycle: singularityBtn not found!');
                     return;
                 }
                 
+                // ONLY apply φ updates when expanded - collapsed state is locked to base SLOW
+                if (!isExpanded) {
+                    return; // Ignore φ updates when collapsed - prevents leak
+                }
+                
                 // φScale oscillates: 1.0 (φ^0) → 1.618 (φ^1) → 1.0
                 const φScale = data.φScale;
                 
-                // FIX: Check current state dynamically (not closure-captured value!)
-                // Read from global isExpanded state (battle-tested single source of truth)
-                const currentlyExpanded = isExpanded;
+                // FAST: 0.5 φ-breath per rotation + breathing
+                const rotationDuration = 0.5 * PHI_BREATH.BASE_DURATION * φScale;
+                const breathDuration = PHI_BREATH.BASE_DURATION * 0.5 * φScale;
                 
-                // Calculate rotation duration based on state
-                let rotationDuration;
-                const state = currentlyExpanded ? 'FAST' : 'SLOW';
-                if (currentlyExpanded) {
-                    // FAST: 0.5 φ-breath per rotation (4x acceleration)
-                    rotationDuration = 0.5 * PHI_BREATH.BASE_DURATION * φScale;
-                } else {
-                    // SLOW: 2 φ-breaths per rotation (idle)
-                    rotationDuration = 2 * PHI_BREATH.BASE_DURATION * φScale;
-                }
-                
-                // Apply dynamic rotation duration
                 singularityBtn.style.setProperty('--rotation-duration', `${rotationDuration}ms`);
-                
-                // Calculate breathing duration based on state AND φScale
-                // SLOW (collapsed): 1.0x BASE = 1 full phi breathe (4000-6472ms)
-                // FAST (expanded): 0.5x BASE = half phi breathe (2000-3236ms)
-                let breathDuration;
-                if (currentlyExpanded) {
-                    // FAST: 0.5x φ-breath cycle (half phi breathe, 4x faster than slow rotation)
-                    breathDuration = PHI_BREATH.BASE_DURATION * 0.5 * φScale;
-                } else {
-                    // SLOW: 1.0x φ-breath cycle (1 full phi breathe)
-                    breathDuration = PHI_BREATH.BASE_DURATION * 1.0 * φScale;
-                }
                 singularityBtn.style.setProperty('--breath-duration', `${breathDuration}ms`);
                 
-                // Debug log (only log every 100th frame to avoid spam)
+                // Debug log
                 if (data.breathCount === 0 || Math.random() < 0.01) {
-                    console.log(`🔄 Rotation speed: ${state} = ${Math.round(rotationDuration)}ms (φScale=${φScale.toFixed(3)})`);
-                    console.log(`🫁 Breath speed: ${state} = ${Math.round(breathDuration)}ms (φScale=${φScale.toFixed(3)})`);
-                }
-            });
-            
-            // DOUBLE RESET LAYER: Force SLOW mode on every breath start if collapsed
-            // This prevents FAST speed leakage into SLOW mode
-            PHI_BREATH.on('breathStart', (data) => {
-                const singularityBtn = document.querySelector('.singularity-btn');
-                if (!singularityBtn) return;
-                
-                // CRITICAL: If collapsed, force re-sync to SLOW mode
-                if (!isExpanded) {
-                    const slowRotation = 2 * PHI_BREATH.BASE_DURATION; // 2 phi breathes (base)
-                    const slowBreath = 1.0 * PHI_BREATH.BASE_DURATION; // 1 phi breathe (base)
-                    
-                    singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
-                    singularityBtn.style.setProperty('--breath-duration', `${slowBreath}ms`);
-                    
-                    console.log(`🛡️ DOUBLE RESET: Enforcing SLOW mode (rotation=${slowRotation}ms, breath=${slowBreath}ms)`);
+                    console.log(`⚡ FAST φ-breath: rotation=${Math.round(rotationDuration)}ms, breath=${Math.round(breathDuration)}ms (φScale=${φScale.toFixed(3)})`);
                 }
             });
             
@@ -464,17 +415,6 @@
                 thumbsIdleTimer = null;
             }
             
-            // Set SLOW mode IMMEDIATELY for all 3 animations (spin, breathe, pulse)
-            if (singularityBtn) {
-                const slowRotation = breathInitialized ? 2 * PHI_BREATH.BASE_DURATION : 8000; // 2 phi breathes
-                const slowBreath = breathInitialized ? 1.0 * PHI_BREATH.BASE_DURATION : 4000; // 1 phi breathe
-                
-                singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
-                singularityBtn.style.setProperty('--breath-duration', `${slowBreath}ms`);
-                
-                console.log(`🐌 SLOW mode activated: rotation=${slowRotation}ms (2 phi breathes), breath=${slowBreath}ms (1 phi breathe)`);
-            }
-            
             // Exit creation mode for φ-breath system (mobile only)
             if (isMobile() && breathInitialized) {
                 console.log('😌 Exited CREATION MODE');
@@ -498,13 +438,23 @@
                     layer01.classList.remove('collapsing');
                     layer01.setAttribute('hidden', '');
                     expandLock = false;
+                    
+                    // PURGE FAST: Restore SLOW mode CSS variables (Papa Grok fix)
+                    if (singularityBtn) {
+                        const slowRotation = breathInitialized ? 2 * PHI_BREATH.BASE_DURATION : 8000; // 2 phi breathes
+                        const slowBreath = breathInitialized ? 1.0 * PHI_BREATH.BASE_DURATION : 4000; // 1 phi breathe
+                        
+                        singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
+                        singularityBtn.style.setProperty('--breath-duration', `${slowBreath}ms`);
+                        
+                        console.log(`🧹 PURGED FAST: Restored SLOW mode (rotation=${slowRotation}ms, breath=${slowBreath}ms)`);
+                    }
+                    
                     console.log('✅ Collapse complete');
                 }, totalDuration);
             } else {
                 expandLock = false;
             }
-            
-            // φ-breath listener will handle SLOW breathing updates automatically
         }
         
         /**
@@ -525,7 +475,7 @@
                 thumbsIdleTimer = null;
             }
             
-            // Set FAST mode IMMEDIATELY for all 3 animations (spin, breathe, pulse)
+            // SET FAST MODE: Activate fast phi breathe
             if (singularityBtn) {
                 const fastRotation = breathInitialized ? 0.5 * PHI_BREATH.BASE_DURATION : 2000; // 0.5 phi breathe
                 const fastBreath = breathInitialized ? 0.5 * PHI_BREATH.BASE_DURATION : 2000; // 0.5 phi breathe
@@ -533,7 +483,7 @@
                 singularityBtn.style.setProperty('--rotation-duration', `${fastRotation}ms`);
                 singularityBtn.style.setProperty('--breath-duration', `${fastBreath}ms`);
                 
-                console.log(`⚡ FAST mode activated: rotation=${fastRotation}ms (0.5 phi breathe), breath=${fastBreath}ms (0.5 phi breathe)`);
+                console.log(`⚡ SET FAST: Activated FAST mode (rotation=${fastRotation}ms, breath=${fastBreath}ms)`);
             }
             
             // Enter creation mode for φ-breath system (mobile only)
