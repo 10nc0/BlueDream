@@ -2686,11 +2686,14 @@ body::before {
 }
 
 /* ===================================================================
-   ☯️ SINGULARITY BUTTON — LIQUID GLASS (FIXED)
-   3 Layers: (a) Core Glass, (b) Button Border, (c) Rainbow Aura
-   All breathe in sync. No square. No lag.
+   ☯️ SINGULARITY BUTTON v1.1 — ZERO-CONFLICT ISOLATION
+   Container (button) = never animated, immune to JS transforms
+   Core (span) = ☯️ symbol + glass effect + spin animation
+   Aura (span) = rainbow halo + pulse animation
+   All 3 animations synchronized via --breath-duration and --rotation-duration
    =================================================================== */
 
+/* CONTAINER - never animated, JS-proof */
 .singularity-btn {
     width: 56px;
     height: 56px;
@@ -2699,24 +2702,35 @@ body::before {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.8rem;
-    color: #1e293b !important;
-    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
     cursor: pointer;
     overflow: visible;
     z-index: 1001;
-    transform-origin: center center;
-    transition: opacity 0.3s ease;
     flex-shrink: 0;
     border: none;
     background: transparent;
-    touch-action: manipulation; /* Prevent double-tap zoom on iOS */
-    -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
-    animation: yinyang-breathe-rotate var(--rotation-duration, 8000ms) linear infinite; /* ETERNAL SPIN - Never stops! */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    transform: none !important; /* JS NEVER touches this - CSS variables only */
 }
 
-/* (a) CORE GLASS — Liquid iOS frosted effect */
-.singularity-btn::before {
+/* CORE - the ☯️ symbol with eternal spin */
+.singularity-btn .core {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    color: #1e293b !important;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    z-index: 2;
+    transform-origin: center center;
+    animation: yinyang-breathe-rotate var(--rotation-duration, 8000ms) linear infinite;
+}
+
+/* CORE GLASS LAYER - liquid iOS frosted effect with breathe */
+.singularity-btn .core::before {
     content: '';
     position: absolute;
     inset: 0;
@@ -2737,8 +2751,8 @@ body::before {
     z-index: -2;
 }
 
-/* (b) BUTTON BORDER — Rainbow edge (rotation only, no breathe conflict) */
-.singularity-btn::after {
+/* CORE BORDER - rainbow edge with rotation */
+.singularity-btn .core::after {
     content: '';
     position: absolute;
     inset: -3px;
@@ -2755,7 +2769,7 @@ body::before {
     z-index: -1;
 }
 
-/* (c) RAINBOW AURA — Pulsating halo */
+/* AURA - rainbow halo with pulse */
 .singularity-btn .aura {
     position: absolute;
     inset: -12px;
