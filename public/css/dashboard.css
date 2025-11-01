@@ -2772,6 +2772,16 @@ body::before {
     pointer-events: none;
 }
 
+/* φ-BREATH YIN-YANG ROTATION — Mobile Only: Idle state rotates once per breath cycle */
+body.mobile-mode .singularity-btn {
+    animation: yinyang-breathe-rotate var(--breath-duration, 4000ms) linear infinite;
+}
+
+/* CREATION SPIN — Mobile Only: Fast spinning when expanded (creation mode) */
+body.mobile-mode .singularity-btn.creation-spinning {
+    animation: creation-spin 1s linear infinite !important;
+}
+
 /* BREATHING KEYFRAMES — ALL IN SYNC */
 @keyframes glass-breathe {
     0%, 100% { transform: scale(1); }
@@ -2808,6 +2818,18 @@ body::before {
 @keyframes aura-rotate {
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
+}
+
+/* φ-BREATH YIN-YANG ROTATION — Idle state rotation synced to breath cycle */
+@keyframes yinyang-breathe-rotate {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* CREATION SPIN — Fast spinning during expanded state */
+@keyframes creation-spin {
+    from { transform: rotate(0deg) scale(1); }
+    to   { transform: rotate(1080deg) scale(1); } /* 3 full rotations */
 }
 
 /* Layer 01 buttons container - The eggs laid by the goose */
