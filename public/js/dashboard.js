@@ -398,6 +398,54 @@
         }
         
         /**
+         * UNIFIED BUTTON 00 STATE - Single source of truth (φ∞ = 1)
+         * Prevents race conditions between expand/collapse and φ-breath
+         * 
+         * Layer separation (reduce failure points):
+         * - .core = breathe ghost (scale) - z-index: 2
+         * - .core .symbol = spin ☯️ (rotate) - z-index: 3 (always front)
+         * - .aura = radiate + pulse (gradient rotate + opacity)
+         */
+        const BUTTON_00_STATE = {
+            speed: 'SLOW', // 'SLOW' or 'FAST' - only 2 states
+            locked: false, // Lock during transitions to prevent φ-breath interference
+            
+            // Speed presets (based on φ-breath)
+            speeds: {
+                SLOW: { rotation: 8000, breath: 4000 },  // 2 φ-breathes, 1 φ-breathe
+                FAST: { rotation: 2000, breath: 2000 }   // 0.5 φ-breathe (both)
+            },
+            
+            // Unified setter - ONLY way to change speed
+            setSpeed(speed) {
+                if (this.locked) {
+                    console.log(`⏸️  Button 00 locked, ignoring ${speed} request`);
+                    return;
+                }
+                
+                this.speed = speed;
+                const singularityBtn = document.querySelector('.singularity-btn');
+                if (!singularityBtn) return;
+                
+                const preset = this.speeds[speed];
+                singularityBtn.style.setProperty('--rotation-duration', `${preset.rotation}ms`);
+                singularityBtn.style.setProperty('--breath-duration', `${preset.breath}ms`);
+                
+                console.log(`⚡ Button 00 → ${speed} | rotation=${preset.rotation}ms, breath=${preset.breath}ms`);
+            },
+            
+            // Lock/unlock for atomic transitions
+            lock() { 
+                this.locked = true; 
+                console.log('🔒 Button 00 LOCKED');
+            },
+            unlock() { 
+                this.locked = false; 
+                console.log('🔓 Button 00 UNLOCKED');
+            }
+        };
+        
+        /**
          * NUCLEAR PURGE - Kills all animation state to prevent FAST leak
          * Genesis v1.1: Added cat breathe constant logging
          */
@@ -424,11 +472,11 @@
             const auraEl = singularityBtn.querySelector('.aura');
             if (auraEl) auraEl.style.animation = 'none';
             
-            // 4. Reset CSS variables to SLOW base
-            const slowRotation = breathInitialized ? 2 * PHI_BREATH.BASE_DURATION : 8000;
-            const slowBreath = breathInitialized ? 1.0 * PHI_BREATH.BASE_DURATION : 4000;
-            singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
-            singularityBtn.style.setProperty('--breath-duration', `${slowBreath}ms`);
+            // 4. Reset to SLOW via unified state (single source of truth)
+            BUTTON_00_STATE.speed = 'SLOW'; // Force state sync
+            const preset = BUTTON_00_STATE.speeds.SLOW;
+            singularityBtn.style.setProperty('--rotation-duration', `${preset.rotation}ms`);
+            singularityBtn.style.setProperty('--breath-duration', `${preset.breath}ms`);
             // NOTE: Do NOT reset --rotation-offset - let rotation continue eternally
             // Only reset SPEED (SLOW), not ANGLE (continuous rotation)
             
@@ -458,7 +506,7 @@
                 // 9. Force another reflow to restart animations
                 void singularityBtn.offsetWidth;
                 
-                console.log(`☢️ NUCLEAR PURGE complete: Resuscitated SLOW mode (rotation=${slowRotation}ms, breath=${slowBreath}ms, angle=continuous)`);
+                console.log(`☢️ NUCLEAR PURGE complete: Resuscitated SLOW mode (rotation=${preset.rotation}ms, breath=${preset.breath}ms, angle=continuous)`);
             }, 50);
         }
         
@@ -532,16 +580,8 @@
                 thumbsIdleTimer = null;
             }
             
-            // SET FAST MODE: Activate fast phi breathe
-            if (singularityBtn) {
-                const fastRotation = breathInitialized ? 0.5 * PHI_BREATH.BASE_DURATION : 2000; // 0.5 phi breathe
-                const fastBreath = breathInitialized ? 0.5 * PHI_BREATH.BASE_DURATION : 2000; // 0.5 phi breathe
-                
-                singularityBtn.style.setProperty('--rotation-duration', `${fastRotation}ms`);
-                singularityBtn.style.setProperty('--breath-duration', `${fastBreath}ms`);
-                
-                console.log(`⚡ SET FAST: Activated FAST mode (rotation=${fastRotation}ms, breath=${fastBreath}ms)`);
-            }
+            // SET FAST MODE via unified state
+            BUTTON_00_STATE.setSpeed('FAST');
             
             // Enter creation mode for φ-breath system (mobile only)
             if (isMobile() && breathInitialized) {

@@ -2727,7 +2727,7 @@ body::before {
     animation: none !important;
 }
 
-/* CORE - breathing ghost layer (scale only) */
+/* CORE - breathing ghost layer (scale only) - BACK LAYER */
 .singularity-btn .core {
     position: absolute;
     inset: 0;
@@ -2735,18 +2735,20 @@ body::before {
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    z-index: 2;
+    z-index: 2; /* Behind symbol (not-1A breathe) */
     transform-origin: center center;
     /* BREATHING ONLY (scale) - no rotation conflicts */
     animation: core-breathe var(--breath-duration, 4000ms) ease-in-out infinite;
 }
 
-/* SYMBOL - the ☯️ with eternal spin (rotation only) */
+/* SYMBOL - the ☯️ with eternal spin (rotation only) - FRONT LAYER (1A) */
 .singularity-btn .core .symbol {
     font-size: 1.8rem;
     color: #1e293b !important;
     text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
     transform-origin: center center;
+    position: relative;
+    z-index: 10; /* ALWAYS on top (1A spin - front) */
     /* ROTATION ONLY (spin) - isolated from breathing */
     /* Animation starts from --rotation-offset and rotates +360deg */
     animation: yinyang-rotate var(--rotation-duration, 8000ms) linear infinite;
