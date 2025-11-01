@@ -2908,8 +2908,13 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
             if (!bridge.fractal_id) {
                 bridge.fractal_id = fractalId.generate('bridge', tenantId, bridge.id, bridge.created_by_admin_id);
             }
-            // Keep id for backward compatibility during transition
-            return bridge;
+            
+            // ARCHITECTURAL SWITCHEROO: Hide the silent cat (webhook01/output_01)
+            // Users should never see the Nyanbook Ledger webhook
+            // Only expose output_0n (user's webhook) in the UI
+            const { output_01_url, ...bridgeWithoutLedger } = bridge;
+            
+            return bridgeWithoutLedger;
         });
         
         // SECURITY: Strip raw IDs for non-dev users (IDOR protection)
