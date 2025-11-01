@@ -387,16 +387,14 @@
                 
                 console.log('🎬 Fusion animation triggered - buttons visible and animating');
                 
-                // ☯️ SNAP! Singularity reappears after fusion
+                // ☯️ returns to idle rotation (always visible, no snap needed)
                 setTimeout(() => {
                     if (singularityBtn) {
-                        console.log('✨ SNAP! ☯️ returns');
-                        singularityBtn.style.opacity = '1';
-                        singularityBtn.style.transform = 'scale(1)';
+                        console.log('✨ UNITY: ☯️ returns to idle breath rotation');
                     }
                 }, 500);
                 
-                // Wait for fusion animation to complete (buttons fuse + singularity appears)
+                // Wait for fusion animation to complete (buttons fuse into singularity)
                 setTimeout(() => {
                     console.log('✅ Collapse complete, ready for next cycle');
                     layer01.setAttribute('hidden', '');
@@ -433,12 +431,10 @@
                 }, 10);
             }
             
-            // Goose vanishes and enters CREATION SPIN mode (fast spinning)
+            // Button 00 enters CREATION SPIN mode (fast spinning, always visible)
             setTimeout(() => {
                 if (singularityBtn) {
-                    console.log('💨 POOF! Goose vanishes - entering CREATION SPIN');
-                    singularityBtn.style.opacity = '0';
-                    singularityBtn.style.transform = 'scale(0)';
+                    console.log('🌀 Button 00 enters CREATION SPIN (always visible)');
                     
                     // Add creation spinning class for mobile
                     if (isMobile()) {

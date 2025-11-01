@@ -2772,14 +2772,14 @@ body::before {
     pointer-events: none;
 }
 
-/* φ-BREATH YIN-YANG ROTATION — Mobile Only: Idle state rotates once per breath cycle */
+/* φ-BREATH YIN-YANG ROTATION — Mobile Only: Idle state rotates once per 2 breath cycles */
 body.mobile-mode .singularity-btn {
-    animation: yinyang-breathe-rotate var(--breath-duration, 4000ms) linear infinite;
+    animation: yinyang-breathe-rotate calc(var(--breath-duration, 4000ms) * 2) linear infinite;
 }
 
-/* CREATION SPIN — Mobile Only: Fast spinning when expanded (creation mode) */
+/* CREATION SPIN — Mobile Only: Fast spinning when expanded (creation mode) - 80% pace */
 body.mobile-mode .singularity-btn.creation-spinning {
-    animation: creation-spin 1s linear infinite !important;
+    animation: creation-spin 1.25s linear infinite !important;
 }
 
 /* BREATHING KEYFRAMES — ALL IN SYNC */
