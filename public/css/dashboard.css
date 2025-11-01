@@ -2627,7 +2627,8 @@ body::before {
 }
 
 /* ===================================================================
-   MOBILE UI - FLOATING THUMBS ZONE
+   MOBILE UI - FLOATING THUMBS ZONE (iPhone-Optimized)
+   Standardized: White text + accent borders + 48x48px
    =================================================================== */
 
 /* Thumbs Zone: Bottom-right floating pill navigation */
@@ -2636,7 +2637,7 @@ body::before {
     bottom: 16px;
     right: 16px;
     display: none; /* Hidden by default, shown in mobile mode */
-    flex-direction: row-reverse; /* Right-to-left: n-4-3-2-1 */
+    flex-direction: row-reverse; /* Right-to-left: → 🔗 🔍 🧿 ✍🏻 */
     gap: 12px;
     z-index: 1000;
     pointer-events: none; /* Allow clicks through container */
@@ -2646,15 +2647,48 @@ body::before {
     pointer-events: auto; /* Re-enable clicks on buttons */
 }
 
+.thumbs-zone button {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.85); /* Deep void */
+    border: 1.5px solid;
+    backdrop-filter: blur(12px);
+    color: #ffffff !important; /* FORCE WHITE */
+    font-size: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    transition: all 0.2s ease;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Accent borders by action type */
+.thumbs-zone button[data-action="create"] { border-color: #22d3ee; } /* Cyan */
+.thumbs-zone button[data-action="audit"]  { border-color: #a855f7; } /* Purple */
+.thumbs-zone button[data-action="search"] { border-color: #60a5fa; } /* Blue */
+.thumbs-zone button[data-action="fan"]    { border-color: #94a3b8; } /* Slate */
+.thumbs-zone button[data-action="next"]   { border-color: #ec4899; } /* Pink */
+
+/* Active state (tap feedback) */
+.thumbs-zone button:active {
+    transform: scale(0.92);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    background: rgba(30, 41, 59, 0.9);
+}
+
+/* Legacy class support */
 .thumb-btn {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: rgba(30, 41, 59, 0.9);
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    backdrop-filter: blur(10px);
-    color: #e2e8f0;
-    font-size: 1.5rem;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1.5px solid rgba(148, 163, 184, 0.3);
+    backdrop-filter: blur(12px);
+    color: #ffffff !important;
+    font-size: 1.4rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2664,16 +2698,8 @@ body::before {
     -webkit-tap-highlight-color: transparent;
 }
 
-.thumb-btn:hover,
 .thumb-btn:active {
-    background: rgba(30, 41, 59, 1);
-    border-color: rgba(168, 85, 247, 0.5);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(168, 85, 247, 0.3);
-}
-
-.thumb-btn:active {
-    transform: translateY(0);
+    transform: scale(0.92);
 }
 
 /* Mobile Mode Overrides */

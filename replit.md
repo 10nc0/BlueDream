@@ -36,10 +36,14 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 **Mobile Mode (width < 768px AND portrait orientation):**
 - **Automatic Mode Detection**: JavaScript detects viewport size and orientation, applying mobile-specific layout without resizers
 - **Compact Header**: 60×60px cat animation, smaller date/time font (0.65rem), maximized vertical space for messages (70% of screen)
-- **Floating Thumbs Zone**: Bottom-right pill bar with 48×48px buttons in n-4-3-2-1 layout:
-  - Position 1 (rightmost): Create bridge button (🌉, closest to thumb for frequent action)
-  - Positions 2-4: Up to 3 direct bridge buttons (💬, 2, 3) for instant navigation
-  - Position n (leftmost): Fan button (+N) when 4+ bridges exist, opens modal with all bridges
+- **Floating Thumbs Zone**: Bottom-right pill bar with 48×48px buttons in standardized layout:
+  - Position 1 (rightmost): Create Bridge (✍🏻, cyan border, closest to thumb)
+  - Position 2: Audit (🧿, purple border, ward off evil, action & closure)
+  - Position 3: Search (🔍, blue border, find messages)
+  - Position 4: Fan Toggle (🔗, slate border, when 4+ bridges exist)
+  - Position n (leftmost): Next Bridge (→, pink border, navigate forward)
+  - **Standardized Styling**: White text (#ffffff) on deep void background (rgba(15,23,42,0.85)) with accent-colored borders
+  - **Touch Optimized**: 48×48px circular buttons, scale(0.92) on :active for tap feedback
 - **Bridge Fan Modal**: Full-screen glassmorphism modal showing numbered bridge list + utility actions (Search 🔍, Audit 🧿)
 - **Touch Interactions (iPhone-Optimized, φ12)**:
   - **Tap-to-Zoom**: Media images open in full-screen modal with 44×44px close button (Apple HIG compliant)

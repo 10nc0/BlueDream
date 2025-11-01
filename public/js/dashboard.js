@@ -244,45 +244,53 @@
         /**
          * Render thumbs zone buttons (n-4-3-2-1 layout)
          * UNIFIED: Uses ACTION_REGISTRY for consistency with desktop
+         * Order: → 🔗 🔍 🧿 ✍🏻 (right-to-left for thumb access)
          */
         function renderThumbsZone() {
             const thumbsZone = document.getElementById('thumbsZone');
             if (!thumbsZone) return;
             
             const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
-            const maxVisibleBridges = 5;
             const mobileActions = getVisibleActions(true);
             
             let html = '';
             
             // Priority 1: Create button (always visible, rightmost for thumb access)
             const createAction = ACTION_REGISTRY.create;
-            html += `<button class="thumb-btn" data-action="${createAction.id}" aria-label="${createAction.tooltip}">${createAction.mobileIcon}</button>`;
+            html += `<button data-action="create" aria-label="${createAction.tooltip}">${createAction.mobileIcon}</button>`;
             
             // Buttons 2-5: Bridges or utility actions
             if (activeBridges.length === 0) {
-                // No bridges - show utility actions from registry
-                mobileActions.forEach(action => {
-                    if (action.id !== 'create') {
-                        html += `<button class="thumb-btn" data-action="${action.id}" aria-label="${action.tooltip}">${action.mobileIcon}</button>`;
-                    }
-                });
-            } else if (activeBridges.length <= 4) {
-                // Show all bridges (1-4)
+                // No bridges - show utility actions from registry (Audit, Search)
+                const auditAction = ACTION_REGISTRY.audit;
+                const searchAction = ACTION_REGISTRY.search;
+                if (auditAction) {
+                    html += `<button data-action="audit" aria-label="${auditAction.tooltip}">${auditAction.mobileIcon}</button>`;
+                }
+                if (searchAction) {
+                    html += `<button data-action="search" aria-label="${searchAction.tooltip}">${searchAction.mobileIcon}</button>`;
+                }
+            } else if (activeBridges.length <= 3) {
+                // Show all bridges (1-3) as numbers
                 activeBridges.forEach((bridge, index) => {
                     const icon = `${index + 1}`;
-                    html += `<button class="thumb-btn" data-action="toggle-bridge" data-bridge-id="${bridge.fractal_id}" aria-label="${escapeHtml(bridge.name)}">${icon}</button>`;
+                    html += `<button data-action="toggle-bridge" data-bridge-id="${bridge.fractal_id}" aria-label="${escapeHtml(bridge.name)}">${icon}</button>`;
                 });
             } else {
-                // Show first 3 bridges + fan button
-                for (let i = 0; i < 3; i++) {
+                // Show first 2 bridges + fan button (🔗)
+                for (let i = 0; i < 2; i++) {
                     const bridge = activeBridges[i];
                     const icon = `${i + 1}`;
-                    html += `<button class="thumb-btn" data-action="toggle-bridge" data-bridge-id="${bridge.fractal_id}" aria-label="${escapeHtml(bridge.name)}">${icon}</button>`;
+                    html += `<button data-action="toggle-bridge" data-bridge-id="${bridge.fractal_id}" aria-label="${escapeHtml(bridge.name)}">${icon}</button>`;
                 }
                 
-                const remainingCount = activeBridges.length - 3;
-                html += `<button class="thumb-btn" data-action="fan" aria-label="More bridges">+${remainingCount}</button>`;
+                const remainingCount = activeBridges.length - 2;
+                html += `<button data-action="fan" aria-label="More bridges (${activeBridges.length} total)">🔗</button>`;
+            }
+            
+            // Add navigation button if multiple bridges exist
+            if (activeBridges.length > 1) {
+                html += `<button data-action="next" aria-label="Next bridge">→</button>`;
             }
             
             thumbsZone.innerHTML = html;
@@ -4122,7 +4130,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // UNIFIED: Thumbs zone + desktop button event delegation (CSP-compliant)
     document.addEventListener('click', function(e) {
-        const thumbBtn = e.target.closest('.thumb-btn');
+        const thumbBtn = e.target.closest('.thumb-btn, .thumbs-zone button');
         const createBtn = e.target.closest('.create-bot-btn');
         const auditBtn = e.target.closest('.audit-type-btn');
         
@@ -4137,11 +4145,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            // Custom actions (toggle-bridge, fan)
+            // Custom actions (toggle-bridge, fan, next)
             if (action === 'toggle-bridge' && bridgeId) {
                 loadMessages(bridgeId, 'user');
             } else if (action === 'fan') {
                 showBridgeFanModal();
+            } else if (action === 'next') {
+                // Next bridge navigation
+                const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
+                if (activeBridges.length <= 1) return;
+                
+                const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
+                const currentIndex = activeBridges.findIndex(b => b.fractal_id === currentBridgeId);
+                
+                if (currentIndex !== -1) {
+                    const nextIndex = currentIndex < activeBridges.length - 1 ? currentIndex + 1 : 0;
+                    const nextBridge = activeBridges[nextIndex];
+                    if (nextBridge) {
+                        loadMessages(nextBridge.fractal_id, 'user');
+                        showToast(`→ ${nextBridge.name}`, 'info');
+                    }
+                }
             }
             return;
         }
