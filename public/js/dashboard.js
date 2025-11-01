@@ -215,7 +215,7 @@
                 bubble.className = 'tag-bubble';
                 bubble.innerHTML = `
                     ${tag}
-                    <button type="button" class="tag-remove" onclick="removeTag('${tag}')">×</button>
+                    <button type="button" class="tag-remove" data-tag="${tag}">×</button>
                 `;
                 container.appendChild(bubble);
             });
@@ -326,7 +326,7 @@
             
             // Clean WhatsApp-style list (no platform grouping)
             sidebar.innerHTML = filteredBridges.map(bridge => `
-                <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" onclick="selectBridge('${bridge.fractal_id}')" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border: none; background: ${bridge.fractal_id === selectedBridgeFractalId ? 'rgba(88, 101, 242, 0.15)' : 'transparent'}; border-left: 3px solid ${bridge.fractal_id === selectedBridgeFractalId ? '#5865f2' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.2s;">
+                <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" data-fractal-id="${bridge.fractal_id}" class="channel-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border: none; background: ${bridge.fractal_id === selectedBridgeFractalId ? 'rgba(88, 101, 242, 0.15)' : 'transparent'}; border-left: 3px solid ${bridge.fractal_id === selectedBridgeFractalId ? '#5865f2' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.2s;">
                     <div style="flex: 1; min-width: 0;">
                         <div style="color: #e2e8f0; font-weight: 500; font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bridge.name || `${bridge.input_platform} → Discord`}</div>
                         ${bridge.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.125rem;">${bridge.message_count} messages</div>` : ''}
@@ -364,7 +364,7 @@
             const sidebar = document.getElementById('bridgeListContainer');
             
             sidebar.innerHTML = filteredBridges.map(bridge => `
-                <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" onclick="selectBridge('${bridge.fractal_id}')" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border: none; background: ${bridge.fractal_id === selectedBridgeFractalId ? 'rgba(88, 101, 242, 0.15)' : 'transparent'}; border-left: 3px solid ${bridge.fractal_id === selectedBridgeFractalId ? '#5865f2' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.2s;">
+                <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" data-fractal-id="${bridge.fractal_id}" class="channel-item" style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border: none; background: ${bridge.fractal_id === selectedBridgeFractalId ? 'rgba(88, 101, 242, 0.15)' : 'transparent'}; border-left: 3px solid ${bridge.fractal_id === selectedBridgeFractalId ? '#5865f2' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.2s;">
                     <div style="flex: 1; min-width: 0;">
                         <div style="color: #e2e8f0; font-weight: 500; font-size: 0.875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bridge.name || `${bridge.input_platform} → Discord`}</div>
                         ${bridge.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.125rem;">${bridge.message_count} messages</div>` : ''}
@@ -439,7 +439,7 @@
                 if (!whatsappStatus) return '';
                 
                 // Button 1: Generate new QR (starts WhatsApp + shows QR modal)
-                return `<button class="btn-icon" onclick="generateNewQR('${bridge.fractal_id}')" title="Generate New QR Code" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">🔗</button>`;
+                return `<button class="btn-icon" data-generate-qr="${bridge.fractal_id}" title="Generate New QR Code" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">🔗</button>`;
             };
             
             const detail = document.getElementById('bridgeDetail');
@@ -451,9 +451,9 @@
                         ${platform === 'whatsapp' && whatsappStatus ? `<span style="background: ${whatsappStatus === 'ready' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(251, 191, 36, 0.2)'}; color: ${whatsappStatus === 'ready' ? '#10b981' : '#fbbf24'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${whatsappStatus === 'ready' ? '✅' : '⏳'}</span>` : ''}
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" onclick="generateNewQR('${bridge.fractal_id}')" title="Generate QR" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🔗</button>` : ''}
-                        ${!isDevPanelView ? `<button class="btn-icon" onclick="editBridge('${bridge.fractal_id}')" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
-                        ${!isDevPanelView ? `<button class="btn-icon" onclick="confirmDeleteBridge('${bridge.fractal_id}')" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
+                        ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" data-generate-qr="${bridge.fractal_id}" title="Generate QR" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🔗</button>` : ''}
+                        ${!isDevPanelView ? `<button class="btn-icon" data-edit-bridge="${bridge.fractal_id}" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
+                        ${!isDevPanelView ? `<button class="btn-icon" data-delete-bridge="${bridge.fractal_id}" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
                     </div>
                 </div>
 
@@ -464,7 +464,7 @@
                         <div style="display: flex; gap: 0.5rem; padding: 0.5rem; background: rgba(30, 41, 59, 0.4); border-radius: 6px; margin-bottom: 0.5rem;">
                             <input type="text" id="msg-search-${bridge.fractal_id}" placeholder="🔍 Search..." 
                                 style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem; flex: 1;" 
-                                oninput="filterDiscordMessages('${bridge.fractal_id}')">
+                                data-filter-messages="${bridge.fractal_id}">
                             <select id="status-filter-${bridge.fractal_id}" onchange="filterDiscordMessages('${bridge.fractal_id}')" 
                                 style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem;">
                                 <option value="all">All</option>
@@ -475,7 +475,7 @@
                         <!-- Search indicator (if active) -->
                         <div id="search-indicator-${bridge.fractal_id}" style="display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between; margin-bottom: 0.5rem;">
                             <span>🔍 Filtered from bridge search</span>
-                            <button onclick="clearBridgeSearchFilter('${bridge.fractal_id}')" style="background: none; border: none; color: #22c55e; cursor: pointer; font-size: 1.25rem; padding: 0; line-height: 1; font-weight: bold;" title="Clear filter">×</button>
+                            <button data-clear-filter="${bridge.fractal_id}" style="background: none; border: none; color: #22c55e; cursor: pointer; font-size: 1.25rem; padding: 0; line-height: 1; font-weight: bold;" title="Clear filter">×</button>
                         </div>
                         <!-- Messages: Fill remaining space -->
                         <div id="discord-messages-${bridge.fractal_id}" class="discord-messages-container" style="flex: 1; overflow-y: auto; background: rgba(30, 41, 59, 0.3); border-radius: 6px; padding: 0.75rem;">
@@ -728,8 +728,8 @@
                 <div class="message-table-container">
                     <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
                         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                            <input type="text" id="msg-filter-${bridgeId}" placeholder="🔍 Filter messages..." style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;" oninput="filterMessagesTable('${bridgeId}')">
-                            <select id="status-filter-${bridgeId}" onchange="filterMessagesTable('${bridgeId}')" style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;">
+                            <input type="text" id="msg-filter-${bridgeId}" placeholder="🔍 Filter messages..." style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;" data-filter-table="${bridgeId}">
+                            <select id="status-filter-${bridgeId}" data-status-filter="${bridgeId}" style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;">
                                 <option value="all">All Status</option>
                                 <option value="success">Success</option>
                                 <option value="failed">Failed</option>
@@ -742,13 +742,13 @@
                     <table class="message-table" id="msg-table-${bridgeId}">
                         <thead>
                             <tr>
-                                <th onclick="sortMessagesTable('${bridgeId}', 'timestamp')" style="min-width: 200px;">
+                                <th data-bridge-id="${bridgeId}" data-sort-column="timestamp" style="min-width: 200px;">
                                     Timestamp<span class="sort-icon">↕</span>
                                 </th>
-                                <th onclick="sortMessagesTable('${bridgeId}', 'contact')" style="min-width: 180px;">
+                                <th data-bridge-id="${bridgeId}" data-sort-column="contact" style="min-width: 180px;">
                                     Contact / Phone<span class="sort-icon">↕</span>
                                 </th>
-                                <th onclick="sortMessagesTable('${bridgeId}', 'message')">
+                                <th data-bridge-id="${bridgeId}" data-sort-column="message">
                                     Message<span class="sort-icon">↕</span>
                                 </th>
                                 <th style="text-align: center; width: 100px;">Status</th>
@@ -3283,3 +3283,323 @@
         setTimeout(() => {
             showOnboardingHint('analytics');
         }, 5000);
+
+// ===== EVENT LISTENER BINDINGS (CSP-Safe) =====
+// All event handlers bound here instead of inline onclick/onsubmit attributes
+document.addEventListener('DOMContentLoaded', function() {
+    // Logout button
+    const logoutBtn = document.querySelector('.logout-btn');
+    if (logoutBtn) logoutBtn.addEventListener('click', logout);
+    
+    // Modal close buttons and backdrop clicks
+    const mediaModal = document.getElementById('mediaModal');
+    if (mediaModal) {
+        mediaModal.addEventListener('click', function(e) {
+            if (e.target === this) closeMediaModal();
+        });
+        const mediaModalClose = mediaModal.querySelector('.media-modal-close');
+        if (mediaModalClose) mediaModalClose.addEventListener('click', closeMediaModal);
+    }
+    
+    const createBridgeModal = document.getElementById('createBridgeModal');
+    if (createBridgeModal) {
+        createBridgeModal.addEventListener('click', function(e) {
+            if (e.target === this) closeCreateBridgeModal();
+        });
+        const bridgeModalClose = createBridgeModal.querySelector('.bridge-modal-close');
+        if (bridgeModalClose) bridgeModalClose.addEventListener('click', closeCreateBridgeModal);
+    }
+    
+    const qrModal = document.getElementById('qrModal');
+    if (qrModal) {
+        const qrModalClose = qrModal.querySelector('.close-btn');
+        if (qrModalClose) qrModalClose.addEventListener('click', closeQRModal);
+    }
+    
+    const botModal = document.getElementById('botModal');
+    if (botModal) {
+        const botModalClose = botModal.querySelector('.close-btn');
+        if (botModalClose) botModalClose.addEventListener('click', closeBotModal);
+    }
+    
+    const userModal = document.getElementById('userModal');
+    if (userModal) {
+        const userModalClose = userModal.querySelector('.close-btn');
+        if (userModalClose) userModalClose.addEventListener('click', closeUserModal);
+    }
+    
+    const changeEmailModal = document.getElementById('changeEmailModal');
+    if (changeEmailModal) {
+        const emailModalClose = changeEmailModal.querySelector('.close-btn');
+        if (emailModalClose) emailModalClose.addEventListener('click', closeChangeEmailModal);
+    }
+    
+    const changePasswordModal = document.getElementById('changePasswordModal');
+    if (changePasswordModal) {
+        const passwordModalClose = changePasswordModal.querySelector('.close-btn');
+        if (passwordModalClose) passwordModalClose.addEventListener('click', closeChangePasswordModal);
+    }
+    
+    const quickStartWizard = document.getElementById('quickStartWizard');
+    if (quickStartWizard) {
+        const wizardClose = quickStartWizard.querySelector('.close-btn');
+        if (wizardClose) wizardClose.addEventListener('click', closeQuickStartWizard);
+    }
+    
+    const onboardingWizard = document.getElementById('onboardingWizard');
+    if (onboardingWizard) {
+        const onboardingClose = onboardingWizard.querySelector('.close-btn');
+        if (onboardingClose) onboardingClose.addEventListener('click', closeOnboardingWizard);
+    }
+    
+    const advancedSearchModal = document.getElementById('advancedSearchModal');
+    if (advancedSearchModal) {
+        const searchModalClose = advancedSearchModal.querySelector('.close-btn');
+        if (searchModalClose) searchModalClose.addEventListener('click', closeAdvancedSearch);
+    }
+    
+    // Form submissions
+    const botForm = document.getElementById('botForm');
+    if (botForm) botForm.addEventListener('submit', saveBotClicked);
+    
+    const userForm = document.getElementById('userForm');
+    if (userForm) userForm.addEventListener('submit', saveUser);
+    
+    const changeEmailForm = document.getElementById('changeEmailForm');
+    if (changeEmailForm) changeEmailForm.addEventListener('submit', saveNewEmail);
+    
+    const bridgeCreateForm = document.getElementById('bridge-create-form');
+    if (bridgeCreateForm) bridgeCreateForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        // Bridge creation logic is already in dashboard.js
+    });
+    
+    // Button clicks
+    const createBotBtn = document.querySelector('.create-bot-btn');
+    if (createBotBtn) createBotBtn.addEventListener('click', openCreatePopup);
+    
+    const revokeAllBtn = document.querySelector('[onclick*="revokeAllSessions"]');
+    if (revokeAllBtn) {
+        revokeAllBtn.removeAttribute('onclick');
+        revokeAllBtn.addEventListener('click', revokeAllSessions);
+    }
+    
+    // Search and filter inputs
+    const searchBox = document.getElementById('searchBox');
+    if (searchBox) searchBox.addEventListener('input', debouncedFilterBots);
+    
+    const sessionLocationFilter = document.getElementById('sessionLocationFilter');
+    if (sessionLocationFilter) sessionLocationFilter.addEventListener('input', loadSessions);
+    
+    const sessionDeviceFilter = document.getElementById('sessionDeviceFilter');
+    if (sessionDeviceFilter) sessionDeviceFilter.addEventListener('change', loadSessions);
+    
+    const sessionBrowserFilter = document.getElementById('sessionBrowserFilter');
+    if (sessionBrowserFilter) sessionBrowserFilter.addEventListener('change', loadSessions);
+    
+    const sessionSortBy = document.getElementById('sessionSortBy');
+    if (sessionSortBy) sessionSortBy.addEventListener('change', loadSessions);
+    
+    const sessionSortOrder = document.getElementById('sessionSortOrder');
+    if (sessionSortOrder) sessionSortOrder.addEventListener('change', loadSessions);
+    
+    const analyticsBridgeFilter = document.getElementById('analyticsBridgeFilter');
+    if (analyticsBridgeFilter) analyticsBridgeFilter.addEventListener('change', loadAnalyticsDashboard);
+    
+    const analyticsTimeRange = document.getElementById('analyticsTimeRange');
+    if (analyticsTimeRange) analyticsTimeRange.addEventListener('change', loadAnalyticsDashboard);
+    
+    // Tag input
+    const botTagsInput = document.getElementById('botTagsInput');
+    if (botTagsInput) botTagsInput.addEventListener('keypress', addTagOnEnter);
+    
+    // Wizard buttons
+    const skipQuickStartBtn = document.querySelector('[onclick*="skipQuickStart"]');
+    if (skipQuickStartBtn) {
+        skipQuickStartBtn.removeAttribute('onclick');
+        skipQuickStartBtn.addEventListener('click', skipQuickStart);
+    }
+    
+    const startBridgeSetupBtn = document.querySelector('[onclick*="startBridgeSetup"]');
+    if (startBridgeSetupBtn) {
+        startBridgeSetupBtn.removeAttribute('onclick');
+        startBridgeSetupBtn.addEventListener('click', startBridgeSetup);
+    }
+    
+    const addWebhookBtn = document.querySelector('[onclick*="addWebhookInput"]');
+    if (addWebhookBtn) {
+        addWebhookBtn.removeAttribute('onclick');
+        addWebhookBtn.addEventListener('click', addWebhookInput);
+    }
+    
+    const copyFractalIdBtn = document.querySelector('[onclick*="copyBridgeFractalId"]');
+    if (copyFractalIdBtn) {
+        copyFractalIdBtn.removeAttribute('onclick');
+        copyFractalIdBtn.addEventListener('click', copyBridgeFractalId);
+    }
+    
+    const advancedSearchBtn = document.querySelector('[onclick*="executeAdvancedSearch"]');
+    if (advancedSearchBtn) {
+        advancedSearchBtn.removeAttribute('onclick');
+        advancedSearchBtn.addEventListener('click', executeAdvancedSearch);
+    }
+    
+    // Onboarding platform selection
+    const platformOptions = document.querySelectorAll('[onclick*="selectOnboardingPlatform"]');
+    platformOptions.forEach(option => {
+        const platform = option.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+        if (platform) {
+            option.removeAttribute('onclick');
+            option.addEventListener('click', () => selectOnboardingPlatform(platform));
+        }
+    });
+    
+    // Onboarding wizard step buttons
+    const step1NextBtn = document.getElementById('step1-next');
+    if (step1NextBtn) {
+        step1NextBtn.removeAttribute('onclick');
+        step1NextBtn.addEventListener('click', onboardingStep1Next);
+    }
+    
+    const step2NextBtn = document.querySelector('[onclick*="onboardingStep2Next"]');
+    if (step2NextBtn) {
+        step2NextBtn.removeAttribute('onclick');
+        step2NextBtn.addEventListener('click', onboardingStep2Next);
+    }
+    
+    const step3CompleteBtn = document.querySelector('[onclick*="onboardingStep3Complete"]');
+    if (step3CompleteBtn) {
+        step3CompleteBtn.removeAttribute('onclick');
+        step3CompleteBtn.addEventListener('click', onboardingStep3Complete);
+    }
+});
+// This script will be appended to dashboard.js to handle event delegation
+// for dynamically generated elements
+
+// Event delegation for all dynamically generated elements
+document.addEventListener('click', function(e) {
+    const target = e.target;
+    
+    // Tag removal
+    if (target.classList.contains('tag-remove')) {
+        e.preventDefault();
+        const tag = target.getAttribute('data-tag');
+        if (tag) removeTag(tag);
+        return;
+    }
+    
+    // Webhook removal
+    if (target.hasAttribute('data-remove-webhook')) {
+        e.preventDefault();
+        const webhookId = parseInt(target.getAttribute('data-remove-webhook'));
+        if (webhookId) removeWebhook(webhookId);
+        return;
+    }
+    
+    // Bridge selection
+    if (target.classList.contains('channel-item') || target.closest('.channel-item')) {
+        const item = target.classList.contains('channel-item') ? target : target.closest('.channel-item');
+        const fractalId = item.getAttribute('data-fractal-id');
+        if (fractalId && !item.classList.contains('active')) {
+            selectBridge(fractalId);
+        }
+        return;
+    }
+    
+    // Generate QR button
+    if (target.hasAttribute('data-generate-qr')) {
+        e.preventDefault();
+        const fractalId = target.getAttribute('data-generate-qr');
+        if (fractalId) generateNewQR(fractalId);
+        return;
+    }
+    
+    // Edit bridge button
+    if (target.hasAttribute('data-edit-bridge')) {
+        e.preventDefault();
+        const fractalId = target.getAttribute('data-edit-bridge');
+        if (fractalId) editBridge(fractalId);
+        return;
+    }
+    
+    // Delete bridge button
+    if (target.hasAttribute('data-delete-bridge')) {
+        e.preventDefault();
+        const fractalId = target.getAttribute('data-delete-bridge');
+        if (fractalId) confirmDeleteBridge(fractalId);
+        return;
+    }
+    
+    // Clear bridge search filter
+    if (target.hasAttribute('data-clear-filter')) {
+        e.preventDefault();
+        const fractalId = target.getAttribute('data-clear-filter');
+        if (fractalId) clearBridgeSearchFilter(fractalId);
+        return;
+    }
+    
+    // Table column sorting
+    if (target.closest('th[data-sort-column]')) {
+        const th = target.closest('th[data-sort-column]');
+        const bridgeId = th.getAttribute('data-bridge-id');
+        const column = th.getAttribute('data-sort-column');
+        if (bridgeId && column) sortMessagesTable(bridgeId, column);
+        return;
+    }
+    
+    // Media preview
+    if (target.classList.contains('attachment-icon') && target.hasAttribute('data-message-id')) {
+        e.preventDefault();
+        const msgId = parseInt(target.getAttribute('data-message-id'));
+        if (msgId) showMediaPreview(msgId);
+        return;
+    }
+    
+    // Pagination buttons
+    if (target.hasAttribute('data-load-page')) {
+        e.preventDefault();
+        const bridgeId = target.getAttribute('data-bridge-id');
+        const page = parseInt(target.getAttribute('data-load-page'));
+        if (bridgeId && page) loadBridgeMessages(bridgeId, page);
+        return;
+    }
+});
+
+// Event delegation for input changes on dynamically generated elements
+document.addEventListener('input', function(e) {
+    const target = e.target;
+    
+    // Webhook name/URL updates
+    if (target.hasAttribute('data-webhook-id') && target.hasAttribute('data-webhook-field')) {
+        const webhookId = parseInt(target.getAttribute('data-webhook-id'));
+        const field = target.getAttribute('data-webhook-field');
+        if (webhookId && field) updateWebhook(webhookId, field, target.value);
+        return;
+    }
+    
+    // Discord messages filter
+    if (target.hasAttribute('data-filter-messages')) {
+        const fractalId = target.getAttribute('data-filter-messages');
+        if (fractalId) filterDiscordMessages(fractalId);
+        return;
+    }
+    
+    // Message table filter
+    if (target.hasAttribute('data-filter-table')) {
+        const bridgeId = target.getAttribute('data-filter-table');
+        if (bridgeId) filterMessagesTable(bridgeId);
+        return;
+    }
+});
+
+// Event delegation for status filter changes
+document.addEventListener('change', function(e) {
+    const target = e.target;
+    
+    // Status filter for message tables
+    if (target.hasAttribute('data-status-filter')) {
+        const bridgeId = target.getAttribute('data-status-filter');
+        if (bridgeId) filterMessagesTable(bridgeId);
+        return;
+    }
+});

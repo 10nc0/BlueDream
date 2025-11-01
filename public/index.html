@@ -18,24 +18,24 @@
             <div style="color: #94a3b8; font-size: 0.875rem;">Your Nyanbook~<br><span style="font-size: 0.6875rem; color: #64748b;">X to Discord Note with Search Indexing</span></div>
             <div style="display: flex; align-items: center; gap: 0.75rem; margin-left: auto;">
                 <div id="userInfo"></div>
-                <button class="logout-btn" onclick="logout()" style="padding: 0.375rem 0.75rem; font-size: 0.875rem;">Logout</button>
+                <button class="logout-btn" style="padding: 0.375rem 0.75rem; font-size: 0.875rem;">Logout</button>
             </div>
         </div>
     </div>
 
     <!-- Media Preview Modal -->
-    <div id="mediaModal" class="media-modal" onclick="if(event.target === this) closeMediaModal()">
+    <div id="mediaModal" class="media-modal">
         <div class="media-modal-content">
-            <button class="media-modal-close" onclick="closeMediaModal()">×</button>
+            <button class="media-modal-close">×</button>
             <div id="mediaModalCaption" style="color: white; text-align: center; margin-bottom: 1rem; font-weight: 600;"></div>
             <div id="mediaModalContent"></div>
         </div>
     </div>
 
     <!-- Create Bridge Modal (QR-First Architecture) -->
-    <div id="createBridgeModal" class="bridge-modal" onclick="if(event.target === this) closeCreateBridgeModal()">
+    <div id="createBridgeModal" class="bridge-modal">
         <div class="bridge-modal-content">
-            <button class="bridge-modal-close" onclick="closeCreateBridgeModal()">×</button>
+            <button class="bridge-modal-close">×</button>
             
             <!-- Form Section -->
             <div id="bridge-form-section">
@@ -77,7 +77,7 @@
                 <p id="bridge-name-display" style="color: #60a5fa; font-weight: 600; margin: 0.5rem 0;"></p>
                 <p style="font-family: 'SF Mono', 'Courier New', monospace; color: #a78bfa; font-size: 0.8rem; margin-top: 0.5rem;">
                     Fractal ID: <span id="bridge-fractal-id" style="user-select: all;"></span>
-                    <button onclick="copyBridgeFractalId()" class="bridge-copy-btn">Copy</button>
+                    <button class="bridge-copy-btn">Copy</button>
                 </p>
             </div>
         </div>
@@ -99,9 +99,9 @@
                         <span id="currentTime">2025/10/28 - 3:00:00PM</span>
                     </div>
                     <!-- Search -->
-                    <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..." oninput="debouncedFilterBots()" style="width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; color: #e2e8f0; font-size: 0.875rem;">
+                    <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..." style="width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; color: #e2e8f0; font-size: 0.875rem;">
                     <!-- Create Bridge Button -->
-                    <button class="create-bot-btn" onclick="openCreatePopup()" style="width: 100%; padding: 0.5rem; background: #5865f2; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.875rem;">+ Create Bridge</button>
+                    <button class="create-bot-btn" style="width: 100%; padding: 0.5rem; background: #5865f2; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.875rem;">+ Create Bridge</button>
                 </div>
                 
                 <!-- Bridge List (scrollable) -->
@@ -132,31 +132,31 @@
         <div id="sessionsTab" class="tab-content">
             <div class="section-header">
                 <h1 class="section-title">Active Sessions</h1>
-                <button class="create-bot-btn" style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);" onclick="revokeAllSessions()">🚫 Revoke All Sessions</button>
+                <button class="create-bot-btn" style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);">🚫 Revoke All Sessions</button>
             </div>
             
             <div class="search-filter">
-                <input type="text" class="search-box" id="sessionLocationFilter" placeholder="🌍 Filter by location..." oninput="loadSessions()">
-                <select class="filter-dropdown" id="sessionDeviceFilter" onchange="loadSessions()">
+                <input type="text" class="search-box" id="sessionLocationFilter" placeholder="🌍 Filter by location...">
+                <select class="filter-dropdown" id="sessionDeviceFilter">
                     <option value="">All Devices</option>
                     <option value="Desktop">Desktop</option>
                     <option value="Mobile">Mobile</option>
                     <option value="Tablet">Tablet</option>
                 </select>
-                <select class="filter-dropdown" id="sessionBrowserFilter" onchange="loadSessions()">
+                <select class="filter-dropdown" id="sessionBrowserFilter">
                     <option value="">All Browsers</option>
                     <option value="Chrome">Chrome</option>
                     <option value="Safari">Safari</option>
                     <option value="Firefox">Firefox</option>
                     <option value="Edge">Edge</option>
                 </select>
-                <select class="filter-dropdown" id="sessionSortBy" onchange="loadSessions()">
+                <select class="filter-dropdown" id="sessionSortBy">
                     <option value="login_time">Sort by: Login Time</option>
                     <option value="last_activity">Sort by: Last Activity</option>
                     <option value="ip_address">Sort by: IP Address</option>
                     <option value="location">Sort by: Location</option>
                 </select>
-                <select class="filter-dropdown" id="sessionSortOrder" onchange="loadSessions()">
+                <select class="filter-dropdown" id="sessionSortOrder">
                     <option value="desc">Newest First</option>
                     <option value="asc">Oldest First</option>
                 </select>
@@ -173,10 +173,10 @@
             
             <!-- Analytics Filters -->
             <div class="filter-controls" style="margin-bottom: 1.5rem;">
-                <select class="filter-dropdown" id="analyticsBridgeFilter" onchange="loadAnalyticsDashboard()">
+                <select class="filter-dropdown" id="analyticsBridgeFilter">
                     <option value="">All Bridges</option>
                 </select>
-                <select class="filter-dropdown" id="analyticsTimeRange" onchange="loadAnalyticsDashboard()">
+                <select class="filter-dropdown" id="analyticsTimeRange">
                     <option value="7">Last 7 Days</option>
                     <option value="30" selected>Last 30 Days</option>
                     <option value="90">Last 90 Days</option>
@@ -200,7 +200,7 @@
         <div class="modal-content" style="max-width: 700px;">
             <div class="modal-header">
                 <h2 class="modal-title">🚀 Quick Start: Create Your First Bridge</h2>
-                <button class="close-btn" onclick="closeQuickStartWizard()">×</button>
+                <button class="close-btn">×</button>
             </div>
             
             <div style="padding: 0 1.5rem 1.5rem;">
@@ -253,10 +253,10 @@
 
                 <!-- Action Buttons -->
                 <div style="display: flex; gap: 1rem; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(148, 163, 184, 0.1);">
-                    <button onclick="skipQuickStart()" style="flex: 1; padding: 0.75rem; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.5rem; color: #94a3b8; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    <button style="flex: 1; padding: 0.75rem; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.5rem; color: #94a3b8; font-weight: 600; cursor: pointer; transition: all 0.2s;">
                         Skip (I know what to do)
                     </button>
-                    <button onclick="startBridgeSetup()" style="flex: 2; padding: 0.75rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; border-radius: 0.5rem; color: white; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
+                    <button style="flex: 2; padding: 0.75rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; border-radius: 0.5rem; color: white; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);">
                         🚀 Let's Go! Create My Bridge
                     </button>
                 </div>
@@ -269,9 +269,9 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 class="modal-title" id="modalTitle">Create New Bridge</h2>
-                <button class="close-btn" onclick="closeBotModal()">×</button>
+                <button class="close-btn">×</button>
             </div>
-            <form id="botForm" onsubmit="saveBotClicked(event)">
+            <form id="botForm">
                 <div class="form-group">
                     <label class="form-label">Bridge Name</label>
                     <input type="text" class="form-input" id="botName" placeholder="e.g., My WhatsApp Bridge" required>
@@ -298,7 +298,7 @@
                     <div id="webhooksList" style="margin-bottom: 0.5rem;">
                         <!-- Webhook items will be added here -->
                     </div>
-                    <button type="button" class="btn" onclick="addWebhookInput()" style="width: 100%; background: rgba(59, 130, 246, 0.1); border: 1px dashed rgba(59, 130, 246, 0.3); color: #60a5fa;">+ Add Webhook Output</button>
+                    <button type="button" class="btn" style="width: 100%; background: rgba(59, 130, 246, 0.1); border: 1px dashed rgba(59, 130, 246, 0.3); color: #60a5fa;">+ Add Webhook Output</button>
                 </div>
                 <div class="form-group">
                     <label class="form-label">
@@ -311,7 +311,7 @@
                 <div class="form-group">
                     <label class="form-label">Tags</label>
                     <div class="tag-input-container" id="tagContainer">
-                        <input type="text" class="tag-input" id="botTagsInput" placeholder="Type and press Enter..." onkeypress="addTagOnEnter(event)">
+                        <input type="text" class="tag-input" id="botTagsInput" placeholder="Type and press Enter...">
                     </div>
                 </div>
                 <button type="submit" class="submit-btn">Save Bot</button>
@@ -324,9 +324,9 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 class="modal-title">Create New User</h2>
-                <button class="close-btn" onclick="closeUserModal()">×</button>
+                <button class="close-btn">×</button>
             </div>
-            <form id="userForm" onsubmit="saveUser(event)">
+            <form id="userForm">
                 <div class="form-group">
                     <label class="form-label">Email</label>
                     <input type="email" class="form-input" id="userEmail" required>
@@ -351,7 +351,7 @@
         <div class="modal-content" style="max-width: 550px; text-align: center;">
             <div class="modal-header">
                 <h2 class="modal-title" id="qrModalTitle">📱 WhatsApp QR Code</h2>
-                <button class="close-btn" onclick="closeQRModal()">×</button>
+                <button class="close-btn">×</button>
             </div>
             <div style="padding: 2rem;">
                 <!-- QR Code Container -->
@@ -390,9 +390,9 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 class="modal-title">Change Email Address</h2>
-                <button class="close-btn" onclick="closeChangeEmailModal()">×</button>
+                <button class="close-btn">×</button>
             </div>
-            <form id="changeEmailForm" onsubmit="saveNewEmail(event)">
+            <form id="changeEmailForm">
                 <input type="hidden" id="changeEmailUserId">
                 <div class="form-group">
                     <label class="form-label">Current Email</label>
@@ -412,9 +412,9 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 class="modal-title">Change Password</h2>
-                <button class="close-btn" onclick="closeChangePasswordModal()">×</button>
+                <button class="close-btn">×</button>
             </div>
-            <form id="changePasswordForm" onsubmit="saveNewPassword(event)">
+            <form id="changePasswordForm">
                 <input type="hidden" id="changePasswordUserId">
                 <div class="form-group">
                     <label class="form-label">New Password</label>
@@ -434,7 +434,7 @@
         <div class="modal-content" style="max-width: 600px;">
             <div class="modal-header">
                 <h2 class="modal-title">🌉 Create Your First Bridge</h2>
-                <button class="close-btn" onclick="closeOnboardingWizard()">×</button>
+                <button class="close-btn">×</button>
             </div>
             
             <div class="onboarding-progress" style="display: flex; gap: 0.5rem; margin-bottom: 2rem; justify-content: center;">
@@ -446,7 +446,7 @@
             <div class="onboarding-step" id="onboarding-step-1" style="display: block;">
                 <h3 style="color: #e2e8f0; margin-bottom: 1rem;">Select Input Platform</h3>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                    <div class="platform-option" onclick="selectOnboardingPlatform('WhatsApp')" style="padding: 1.5rem; border-radius: 8px; background: rgba(37, 99, 235, 0.1); border: 2px solid rgba(37, 99, 235, 0.3); cursor: pointer; text-align: center; transition: all 0.2s;">
+                    <div class="platform-option" style="padding: 1.5rem; border-radius: 8px; background: rgba(37, 99, 235, 0.1); border: 2px solid rgba(37, 99, 235, 0.3); cursor: pointer; text-align: center; transition: all 0.2s;">
                         <div style="font-size: 2rem; margin-bottom: 0.5rem;">📱</div>
                         <div style="color: #e2e8f0; font-weight: 600;">WhatsApp</div>
                     </div>
@@ -456,7 +456,7 @@
                         <div style="font-size: 0.7rem; color: #d8b4fe;">🚧 Coming Soon</div>
                     </div>
                 </div>
-                <button id="step1-next" class="submit-btn" onclick="onboardingStep1Next()" disabled style="margin-top: 1.5rem; width: 100%;">Next →</button>
+                <button id="step1-next" class="submit-btn" disabled style="margin-top: 1.5rem; width: 100%;">Next →</button>
             </div>
             
             <div class="onboarding-step" id="onboarding-step-2" style="display: none;">
@@ -465,7 +465,7 @@
                     <img id="onboarding-qr" src="" alt="QR Code" style="width: 250px; height: 250px; border-radius: 8px; background: white;">
                     <p style="margin-top: 1rem; color: #94a3b8; font-size: 0.9rem;">Open WhatsApp → Settings → Linked Devices → Link a Device</p>
                 </div>
-                <button class="submit-btn" onclick="onboardingStep2Next()" style="margin-top: 1.5rem; width: 100%;">Next →</button>
+                <button class="submit-btn" style="margin-top: 1.5rem; width: 100%;">Next →</button>
             </div>
             
             <div class="onboarding-step" id="onboarding-step-3" style="display: none;">
@@ -478,7 +478,7 @@
                     </div>
                 </div>
                 <div id="onboarding-validation-status" style="margin-top: 0.5rem; min-height: 1.5rem;"></div>
-                <button class="submit-btn" onclick="onboardingStep3Complete()" style="margin-top: 1.5rem; width: 100%;">🎉 Complete Setup</button>
+                <button class="submit-btn" style="margin-top: 1.5rem; width: 100%;">🎉 Complete Setup</button>
             </div>
         </div>
     </div>
@@ -488,7 +488,7 @@
         <div class="modal-content" style="max-width: 700px;">
             <div class="modal-header">
                 <h2 class="modal-title">🔍 Advanced Search</h2>
-                <button class="close-btn" onclick="closeAdvancedSearch()">×</button>
+                <button class="close-btn">×</button>
             </div>
             
             <input type="hidden" id="advancedSearchBotId">
@@ -501,11 +501,11 @@
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
                 <div class="form-group">
                     <label class="form-label">Date From</label>
-                    <input type="date" class="form-input" id="search-dateFrom" onchange="addSearchFilter('dateFrom')">
+                    <input type="date" class="form-input" id="search-dateFrom">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Date To</label>
-                    <input type="date" class="form-input" id="search-dateTo" onchange="addSearchFilter('dateTo')">
+                    <input type="date" class="form-input" id="search-dateTo">
                 </div>
             </div>
             
@@ -539,7 +539,7 @@
             
             <div id="searchChips" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; min-height: 2rem;"></div>
             
-            <button class="submit-btn" onclick="executeAdvancedSearch()" style="width: 100%;">🔍 Search</button>
+            <button class="submit-btn" style="width: 100%;">🔍 Search</button>
         </div>
     </div>
 
