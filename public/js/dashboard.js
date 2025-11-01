@@ -415,9 +415,17 @@
             // Clear any existing auto-collapse timer
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             
-            // Update state FIRST (triggers rotation speed change via breathCycle listener)
+            // Update state FIRST
             thumbsExpanded = false;
             window.thumbsExpanded = false; // Expose to global for breathCycle listener
+            
+            // ☯️ TRANSCENDENT BUTTON 00: Set SLOW rotation speed IMMEDIATELY (don't wait for breathCycle)
+            if (singularityBtn) {
+                // Slow: 2 × 4000ms = 8000ms (φ^0 base, breathCycle will add φ-oscillation)
+                const slowRotation = 2 * PHI_BREATH.BASE_DURATION;
+                singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
+                console.log(`🐌 Button 00 INSTANT slow spin: ${slowRotation}ms`);
+            }
             
             // Exit creation mode for φ-breath system
             if (isMobile() && breathInitialized) {
@@ -470,9 +478,17 @@
             // Clear any existing auto-collapse timer
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             
-            // Update state FIRST (triggers rotation speed change via breathCycle listener)
+            // Update state FIRST
             thumbsExpanded = true;
             window.thumbsExpanded = true; // Expose to global for breathCycle listener
+            
+            // ☯️ TRANSCENDENT BUTTON 00: Set FAST rotation speed IMMEDIATELY (don't wait for breathCycle)
+            if (singularityBtn) {
+                // Fast: 0.5 × 4000ms = 2000ms (φ^0 base, breathCycle will add φ-oscillation)
+                const fastRotation = 0.5 * PHI_BREATH.BASE_DURATION;
+                singularityBtn.style.setProperty('--rotation-duration', `${fastRotation}ms`);
+                console.log(`⚡ Button 00 INSTANT fast spin: ${fastRotation}ms`);
+            }
             
             // Enter creation mode for φ-breath system
             if (isMobile() && breathInitialized) {
