@@ -354,15 +354,13 @@
         }
         
         function collapseToSingularity() {
-            if (!thumbsExpanded) {
-                console.log('⚠️ Not expanded, ignoring collapse');
-                return;
-            }
-            
-            console.log('🔄 COLLAPSE: Starting φ-inverse fusion');
+            console.log('🔄 COLLAPSE: Button 00 spinning slower');
             thumbsExpanded = false;
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
             const singularityBtn = document.querySelector('.singularity-btn');
+            
+            // Clear any existing timer
+            if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             
             // Exit creation mode - stop fast spinning, return to breath rotation
             if (isMobile() && singularityBtn) {
@@ -410,15 +408,13 @@
         }
         
         function expandFromSingularity() {
-            if (thumbsExpanded) {
-                console.log('⚠️ Already expanded, ignoring');
-                return;
-            }
-            
-            console.log('🌌 EXPAND: Starting goose laying eggs');
+            console.log('🌌 EXPAND: Button 00 spinning faster');
             thumbsExpanded = true;
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
             const singularityBtn = document.querySelector('.singularity-btn');
+            
+            // Clear any existing auto-collapse timer
+            if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             
             if (layer01) {
                 // Remove hidden and show eggs
@@ -452,15 +448,6 @@
             
             // Set breath animation
             setBreathCycle(breathDuration);
-            
-            // Auto-collapse after φ-breath
-            if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
-            thumbsIdleTimer = setTimeout(() => {
-                console.log('⏰ φ-breath complete, starting collapse');
-                if (thumbsExpanded && isMobile()) {
-                    collapseToSingularity();
-                }
-            }, breathDuration);
         }
         
         /**
@@ -4685,7 +4672,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (action === 'singularity') {
                 if (isMobile()) {
                     console.log('🌌 Singularity clicked');
-                    expandFromSingularity();
+                    // Toggle between expand and collapse
+                    if (thumbsExpanded) {
+                        collapseToSingularity();
+                    } else {
+                        expandFromSingularity();
+                    }
                 }
                 return;
             }
