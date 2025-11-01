@@ -48,15 +48,15 @@ The cat animation is a **transcendental object** that exists as a unique, self-c
 - ✅ Responsive mouse wiggle on all devices (subtle on desktop, disabled on mobile)
 - ✅ Blinking time display synced with cat jump animation
 - ✅ Page-specific sizing: 75×75px mobile dashboard, 100×100px desktop dashboard, 125×125px auth pages
-- ✅ Cat positioned with 20px buffer from edges on mobile dashboard
+- ✅ Cat positioned with 10px buffer from edges on mobile dashboard
 - ✅ Centered alignment on all auth pages (login, signup, forgot-password)
 - ✅ Fully responsive and touch-optimized
 
 **Configuration:**
 All settings in `CAT_CONFIG` constant (localized per-page):
 - **Desktop**: FLEE_DISTANCE: 150px, FLEE_STRENGTH: 8px (subtle wiggle)
-- **Mobile**: FLEE_DISTANCE: 0px, FLEE_STRENGTH: 0px (no interaction)
-- **Dashboard**: 20px margin buffer from top-left on mobile portrait
+- **Mobile**: FLEE_DISTANCE: 120px, FLEE_STRENGTH: 6px (responsive tap interaction)
+- **Dashboard Mobile**: 10px margin buffer from top-left on mobile portrait
 - **Auth Pages**: Always centered at 125×125px regardless of mode
 
 **Debugging:**

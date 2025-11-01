@@ -19,10 +19,10 @@ const CAT_CONFIG = Object.freeze({
     JUMP_HEIGHT: 2,
     
     // Interaction settings (responsive wiggle)
-    FLEE_DISTANCE: 150,      // Reduced from 200 for subtler interaction
-    FLEE_STRENGTH: 8,        // Reduced from 15 for considerate wiggle room
-    MOBILE_FLEE_DISTANCE: 0, // No interaction on mobile
-    MOBILE_FLEE_STRENGTH: 0,
+    FLEE_DISTANCE: 150,      // Desktop: subtle interaction
+    FLEE_STRENGTH: 8,        // Desktop: considerate wiggle room
+    MOBILE_FLEE_DISTANCE: 120, // Mobile: responsive to tap (reduced range)
+    MOBILE_FLEE_STRENGTH: 6,   // Mobile: gentle wiggle on tap
     
     // Colors
     COLORS: {
