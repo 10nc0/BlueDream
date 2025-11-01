@@ -743,6 +743,7 @@
                         ${platform === 'whatsapp' && whatsappStatus ? `<span style="background: ${whatsappStatus === 'ready' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(251, 191, 36, 0.2)'}; color: ${whatsappStatus === 'ready' ? '#10b981' : '#fbbf24'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${whatsappStatus === 'ready' ? '✅' : '⏳'}</span>` : ''}
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <button class="btn-icon" data-toggle-config="${bridge.fractal_id}" title="Configuration" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">ℹ️</button>
                         ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" data-generate-qr="${bridge.fractal_id}" title="Generate QR" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🔗</button>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-edit-bridge="${bridge.fractal_id}" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-delete-bridge="${bridge.fractal_id}" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
@@ -781,46 +782,41 @@
                     </div>
                 ` : ''}
 
-                <!-- Compact footer: Discord configuration (collapsible, hidden by default) -->
-                <details style="margin-top: 0.5rem; background: rgba(88, 101, 242, 0.05); border-radius: 6px; border: 1px solid rgba(88, 101, 242, 0.2); overflow: hidden;">
-                    <summary style="padding: 0.5rem 0.75rem; cursor: pointer; font-weight: 600; color: #94a3b8; font-size: 0.8125rem; user-select: none;">
-                        ⚙️ Configuration ${bridge.output_credentials?.output_01?.thread_id ? '✓' : ''}
-                    </summary>
-                    <div style="padding: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.1);">
-                        ${currentUser?.role === 'dev' ? `
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
-                                <div style="background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 6px;">
-                                    <div style="color: #00ff88; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;">🔒 Output #01 (Ledger)</div>
-                                    <div style="color: #5865f2; font-size: 0.75rem; font-family: monospace;">${bridge.output_credentials?.output_01?.thread_name || 'Not created'}</div>
-                                </div>
-                                <div style="background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 6px;">
-                                    <div style="color: #60a5fa; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;">📡 Output #0n (User)</div>
-                                    <div style="color: ${bridge.output_0n_url ? '#22c55e' : '#eab308'}; font-size: 0.75rem;">${bridge.output_0n_url ? '✅ Connected' : '⚠️ Not set'}</div>
-                                </div>
+                <!-- Configuration panel (toggleable, hidden by default) -->
+                <div id="config-panel-${bridge.fractal_id}" style="display: none; margin-top: 0.5rem; background: rgba(88, 101, 242, 0.05); border-radius: 6px; border: 1px solid rgba(88, 101, 242, 0.2); overflow: hidden; padding: 1rem;">
+                    ${currentUser?.role === 'dev' ? `
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                            <div style="background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 6px;">
+                                <div style="color: #00ff88; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;">🔒 Output #01 (Ledger)</div>
+                                <div style="color: #5865f2; font-size: 0.75rem; font-family: monospace;">${bridge.output_credentials?.output_01?.thread_name || 'Not created'}</div>
                             </div>
-                            ${bridge.output_credentials?.output_01?.thread_id ? `
-                                <button 
-                                    data-discord-thread="${bridge.output_credentials.output_01.thread_id}"
-                                    style="width: 100%; background: #5865f2; color: white; padding: 0.5rem; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 0.875rem;"
-                                >
-                                    🚀 Open Thread in Discord
-                                </button>
-                            ` : ''}
-                        ` : `
-                            <div style="text-align: center;">
-                                <div style="color: ${bridge.output_0n_url ? '#22c55e' : '#eab308'}; font-size: 0.875rem; margin-bottom: 0.75rem;">
-                                    ${bridge.output_0n_url ? '✅ Webhook connected' : '⚠️ No webhook configured'}
-                                </div>
-                                <button 
-                                    data-discord-open="true"
-                                    style="background: #5865f2; color: white; padding: 0.5rem 1rem; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 0.875rem;"
-                                >
-                                    🚀 Open Discord
-                                </button>
+                            <div style="background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 6px;">
+                                <div style="color: #60a5fa; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;">📡 Output #0n (User)</div>
+                                <div style="color: ${bridge.output_0n_url ? '#22c55e' : '#eab308'}; font-size: 0.75rem;">${bridge.output_0n_url ? '✅ Connected' : '⚠️ Not set'}</div>
                             </div>
-                        `}
-                    </div>
-                </details>
+                        </div>
+                        ${bridge.output_credentials?.output_01?.thread_id ? `
+                            <button 
+                                data-discord-thread="${bridge.output_credentials.output_01.thread_id}"
+                                style="width: 100%; background: #5865f2; color: white; padding: 0.5rem; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 0.875rem;"
+                            >
+                                🚀 Open Thread in Discord
+                            </button>
+                        ` : ''}
+                    ` : `
+                        <div style="text-align: center;">
+                            <div style="color: ${bridge.output_0n_url ? '#22c55e' : '#eab308'}; font-size: 0.875rem; margin-bottom: 0.75rem;">
+                                ${bridge.output_0n_url ? '✅ Webhook connected' : '⚠️ No webhook configured'}
+                            </div>
+                            <button 
+                                data-discord-open="true"
+                                style="background: #5865f2; color: white; padding: 0.5rem 1rem; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 0.875rem;"
+                            >
+                                🚀 Open Discord
+                            </button>
+                        </div>
+                    `}
+                </div>
             `;
         }
 
@@ -4535,6 +4531,17 @@ document.addEventListener('click', function(e) {
         const fractalId = item.getAttribute('data-fractal-id');
         if (fractalId && !item.classList.contains('active')) {
             selectBridge(fractalId);
+        }
+        return;
+    }
+    
+    // Toggle configuration panel button
+    if (target.hasAttribute('data-toggle-config')) {
+        e.preventDefault();
+        const fractalId = target.getAttribute('data-toggle-config');
+        const configPanel = document.getElementById(`config-panel-${fractalId}`);
+        if (configPanel) {
+            configPanel.style.display = configPanel.style.display === 'none' ? 'block' : 'none';
         }
         return;
     }
