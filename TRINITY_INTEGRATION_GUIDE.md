@@ -9,18 +9,22 @@ DISCORD_BOT_TOKEN → DiscordBotManager
 └── (no message reading yet)
 ```
 
-### Target State (Trinity)
+### Target State (Trinity v1.1)
 ```
 HERMES_TOKEN → HermesBot (φ - Creator)
+├── Permissions: MANAGE_THREADS + VIEW_CHANNEL (NO SEND_MESSAGES)
 ├── createThreadForBridge() ← ONLY thread creation
-└── sendInitialMessage() ← ONLY initial setup
+└── (initial messages sent via webhook, not bot)
 
 TOTH_TOKEN → TothBot (0 - Mirror)
+├── Permissions: READ_MESSAGE_HISTORY + VIEW_CHANNEL (NO WRITE)
 ├── fetchMessagesFromThread() ← ONLY read messages
 └── on('messageCreate') ← ONLY listen/reflect
 
 INPIPE → WebhookClient (∞ - Sustainer)
-└── Webhook01 (Ledger) ← Constant, unchanged
+├── Permissions: N/A (uses webhook URLs, not bot)
+├── Sends ALL messages (including bridge activation)
+└── Webhook01 (Ledger) + User webhooks
 ```
 
 ---

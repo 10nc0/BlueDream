@@ -61,28 +61,25 @@ class HermesBot {
         }
     }
 
-    async getChannelFromWebhookUrl(webhookUrl) {
+    async getChannelFromWebhookUrl(webhookUrl, channelId = null) {
         if (!this.client || !this.ready) {
             throw new Error('Hermes bot not initialized');
         }
 
         try {
-            const webhookIdMatch = webhookUrl.match(/\/webhooks\/(\d+)\//);
-            if (!webhookIdMatch) {
-                throw new Error('Invalid webhook URL format');
-            }
-
-            const webhookId = webhookIdMatch[1];
-            const webhook = await this.client.fetchWebhook(webhookId);
+            let targetChannelId = channelId;
             
-            if (!webhook.channelId) {
-                throw new Error(`No channel ID found for webhook ${webhookId}`);
+            if (!targetChannelId) {
+                const webhookIdMatch = webhookUrl.match(/\/webhooks\/(\d+)\/([a-zA-Z0-9_-]+)/);
+                if (!webhookIdMatch) {
+                    throw new Error('Invalid webhook URL format - provide channelId explicitly or use full webhook URL');
+                }
             }
             
-            const channel = await this.client.channels.fetch(webhook.channelId);
+            const channel = await this.client.channels.fetch(targetChannelId);
             
             if (!channel) {
-                throw new Error(`Channel not found for webhook ${webhookId}`);
+                throw new Error(`Channel ${targetChannelId} not found`);
             }
 
             if (!channel.isTextBased()) {
@@ -91,13 +88,10 @@ class HermesBot {
 
             return channel;
         } catch (error) {
-            if (error.code === 10015) {
-                throw new Error(`Webhook not found or deleted: ${webhookUrl}`);
-            }
             if (error.code === 50013) {
-                throw new Error(`Missing permissions to access webhook channel`);
+                throw new Error(`Missing permissions to access channel`);
             }
-            throw new Error(`Failed to get channel from webhook: ${error.message}`);
+            throw new Error(`Failed to get channel: ${error.message}`);
         }
     }
 
@@ -120,7 +114,7 @@ class HermesBot {
         return false;
     }
 
-    async createThreadForBridge(webhookUrl, bridgeName, tenantId, bridgeId, retryCount = 0) {
+    async createThreadForBridge(webhookUrl, bridgeName, tenantId, bridgeId, channelId = null, retryCount = 0) {
         if (!this.client || !this.ready) {
             throw new Error('Hermes bot not initialized or not ready');
         }
@@ -129,7 +123,10 @@ class HermesBot {
         const baseDelay = 2000;
 
         try {
-            const channel = await this.getChannelFromWebhookUrl(webhookUrl);
+            const channel = channelId 
+                ? await this.client.channels.fetch(channelId)
+                : await this.getChannelFromWebhookUrl(webhookUrl, channelId);
+            
             const threadName = `${bridgeName} (t${tenantId}-b${bridgeId})`;
             
             const thread = await channel.threads.create({
@@ -154,7 +151,7 @@ class HermesBot {
                 console.log(`⏳ Retrying thread creation in ${delay}ms...`);
                 
                 await new Promise(resolve => setTimeout(resolve, delay));
-                return this.createThreadForBridge(webhookUrl, bridgeName, tenantId, bridgeId, retryCount + 1);
+                return this.createThreadForBridge(webhookUrl, bridgeName, tenantId, bridgeId, channelId, retryCount + 1);
             }
             
             throw error;
@@ -204,58 +201,6 @@ class HermesBot {
         return results;
     }
 
-    async sendInitialMessage(threadId, bridgeName, webhookUrl, retryCount = 0) {
-        if (!this.client || !this.ready) {
-            throw new Error('Hermes bot not initialized');
-        }
-
-        const maxRetries = 2;
-        const baseDelay = 1000;
-
-        try {
-            const thread = await this.client.channels.fetch(threadId);
-            
-            if (!thread) {
-                throw new Error(`Thread ${threadId} not found`);
-            }
-
-            await thread.send({
-                embeds: [{
-                    title: `🌈 ${bridgeName} - Bridge Activated`,
-                    description: 'All messages from this bridge will appear in this thread.',
-                    color: 0x00ff88,
-                    fields: [
-                        {
-                            name: '📱 Input Platform',
-                            value: 'WhatsApp',
-                            inline: true
-                        },
-                        {
-                            name: '📤 Output Platform',
-                            value: 'Discord Thread',
-                            inline: true
-                        }
-                    ],
-                    footer: {
-                        text: 'Your Nyanbook~ 🌈'
-                    },
-                    timestamp: new Date()
-                }]
-            });
-
-            console.log(`✅ Hermes sent initial message to thread ${threadId}`);
-        } catch (error) {
-            console.error(`❌ Hermes failed to send initial message (attempt ${retryCount + 1}/${maxRetries}):`, error.message);
-            
-            if (this.isTransientError(error) && retryCount < maxRetries) {
-                const delay = baseDelay * Math.pow(2, retryCount);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                return this.sendInitialMessage(threadId, bridgeName, webhookUrl, retryCount + 1);
-            }
-            
-            throw error;
-        }
-    }
 
     isReady() {
         return this.ready && this.client !== null;
