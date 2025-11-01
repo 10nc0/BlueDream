@@ -4312,7 +4312,7 @@ document.addEventListener('input', function(e) {
     if (!resizer || !header) return;
     
     // Min/max constraints for header height
-    const MIN_HEIGHT = 40;
+    const MIN_HEIGHT = 55; // Ensures cat and logout button always visible
     const MAX_HEIGHT = 120;
     const STORAGE_KEY = 'nyanbook_header_height';
     
