@@ -26,7 +26,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Discord Integration**: Messages are sent to both a Ledger thread for development oversight and user-defined webhooks.
 - **Media Handling**: Retry-safe atomic storage for base64-encoded media in PostgreSQL with delivery tracking and automatic purging.
 - **Search**: Leverages Discord's native search UI and an enhanced Universal Search across messages and metadata ("Drops").
-- **Metadata System (Drops)**: Allows users to add freeform metadata (text, tags, dates) to messages, stored in the `drops` table within each `tenant_X` schema, indexed with `TSVECTOR` for full-text search.
+- **Metadata System (Drops)**: Allows users to add freeform metadata (text, tags, dates) to messages, stored in the `drops` table within each `tenant_X` schema, indexed with `TSVECTOR` for full-text search. **Data hierarchy**: `tags ← message ← bridge ← tenant`, with GIN indexes on `extracted_tags[]` (1D arrays only), `discord_message_id`, and `bridge_id` for efficient querying. Tags are extracted via zero-cost regex (`MetadataExtractor`) and displayed as interactive bubbles with × delete buttons in the Discord embed UI.
 - **Unified Action Registry**: A central `ACTION_REGISTRY` object maps all UI actions for both mobile and desktop, reducing code duplication and simplifying event handling.
 - **Auto-Scaling Timeline & Export System**: Implemented for intelligent message organization and data portability. The timeline uses a density-based algorithm to group messages into 24h, 8h, or 6h buckets. The export system allows users to download a ZIP file containing messages and merged drops metadata.
 
