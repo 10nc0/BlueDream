@@ -778,6 +778,9 @@
                             <span class="discord-status-badge status-${msg.discord_status}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
                         </div>
                         <div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>
+                        <div class="message-drop-section" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">
+                            <div class="drop-display hidden"></div>
+                        </div>
                         ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
                         ${msg.embeds && msg.embeds.length > 0 ? msg.embeds.map(embed => `
                             <div class="discord-embed" style="border-left: 4px solid ${embed.color ? '#' + embed.color.toString(16).padStart(6, '0') : '#5865F2'}; background: rgba(47, 49, 54, 0.6); border-radius: 4px; padding: 0.75rem; margin-top: 0.5rem; max-width: 520px;">
@@ -807,7 +810,7 @@
                                 <img src="${escapeHtml(msg.media_url)}" style="max-width: 400px; border-radius: 4px;" alt="Discord attachment" loading="lazy" onerror="this.style.display='none'">
                             </div>
                         ` : ''}
-                        <div style="display: flex; gap: 0.75rem; align-items: flex-start; margin-top: 0.5rem;">
+                        <div style="display: flex; gap: 0.75rem; align-items: center; margin-top: 0.5rem;">
                             ${msg.media_url ? `
                                 <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" class="attachment-download-btn" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 4px; color: #c084fc; text-decoration: none; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0;">
                                     📎
@@ -817,13 +820,9 @@
                                 <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" style="width: 16px; height: 16px; cursor: pointer; accent-color: #a855f7;">
                                 <span style="font-size: 0.75rem; color: #94a3b8;">Export</span>
                             </label>
-                            <div class="message-drop-section" style="flex: 1;" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">
-                                <div class="drop-display hidden"></div>
-                                <div class="drop-input-container">
-                                    <input type="text" class="drop-input" placeholder="#FromDad Christmas 2021" data-message-id="${msg.id}">
-                                    <button class="drop-save-btn" data-action="save-drop" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" style="margin-top: 0.5rem;">Save</button>
-                                </div>
-                            </div>
+                            <button class="tag-add-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 4px; color: #c084fc; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer;">
+                                🏷️
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -3922,6 +3921,44 @@ async function removeTag(bridgeId, messageId, tag) {
     }
 }
 
+// Remove a specific date from a message's drop
+async function removeDate(bridgeId, messageId, date) {
+    try {
+        console.log('🗑️ Removing date:', { bridgeId, messageId, date });
+        
+        const response = await fetch('/api/drops/date', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+            },
+            body: JSON.stringify({
+                bridge_id: bridgeId,
+                discord_message_id: messageId,
+                date: date
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('❌ Delete failed:', errorData);
+            throw new Error(errorData.error || 'Failed to remove date');
+        }
+        
+        const data = await response.json();
+        
+        // Re-display the drop with updated dates
+        const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-bridge-id="${bridgeId}"]`);
+        if (section && data.drop) {
+            displayDrop(section, data.drop, null, bridgeId);
+        }
+        
+    } catch (error) {
+        console.error('Error removing date:', error);
+        alert('Failed to remove date. Please try again.');
+    }
+}
+
 // Fetch all drops for a bridge
 async function fetchDrops(bridgeId) {
     try {
@@ -3957,25 +3994,90 @@ function displayDrop(section, drop, extracted, fractalBridgeId) {
     
     // Tag bubbles with × delete button (use fractal_id, NOT internal bridge_id)
     const tagsHTML = tags.length > 0 
-        ? tags.map(tag => `
-            <span class="drop-tag" style="display: inline-flex; align-items: center; gap: 0.25rem; background: rgba(168, 85, 247, 0.2); color: #c084fc; padding: 0.25rem 0.5rem; border-radius: 1rem; font-size: 0.75rem; margin-right: 0.25rem;">
+        ? `<div class="drop-tags">${tags.map(tag => `
+            <span class="drop-tag">
                 ${escapeHtml(tag)}
-                <button class="tag-remove" data-action="remove-tag" data-tag="${escapeHtml(tag)}" data-message-id="${drop.discord_message_id}" data-bridge-id="${bridgeFractalId}" style="background: none; border: none; color: #c084fc; cursor: pointer; font-size: 1rem; line-height: 1; padding: 0; margin-left: 0.125rem; opacity: 0.7; transition: opacity 0.2s;">×</button>
+                <span class="drop-tag-delete" data-action="remove-tag" data-tag="${escapeHtml(tag)}" data-message-id="${drop.discord_message_id}" data-bridge-id="${bridgeFractalId}">×</span>
             </span>
-        `).join(' ')
+        `).join('')}</div>`
         : '';
     
     const datesHTML = dates.length > 0
-        ? dates.map(date => `<span class="drop-date" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 0.25rem 0.5rem; border-radius: 1rem; font-size: 0.75rem; margin-right: 0.25rem;">📅 ${escapeHtml(date)}</span>`).join(' ')
+        ? `<div class="drop-dates">${dates.map(date => `
+            <span class="drop-date">
+                📅 ${escapeHtml(date)}
+                <span class="drop-date-delete" data-action="remove-date" data-date="${escapeHtml(date)}" data-message-id="${drop.discord_message_id}" data-bridge-id="${bridgeFractalId}">×</span>
+            </span>
+        `).join('')}</div>`
         : '';
     
-    display.innerHTML = `
-        <div class="drop-metadata">
-            ${tagsHTML ? `<div class="drop-tags" style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.5rem;">${tagsHTML}</div>` : ''}
-            ${datesHTML ? `<div class="drop-dates" style="display: flex; flex-wrap: wrap; gap: 0.25rem;">${datesHTML}</div>` : ''}
+    display.innerHTML = tagsHTML + datesHTML;
+    
+    // Show or hide display based on content
+    if (tags.length > 0 || dates.length > 0) {
+        display.classList.remove('hidden');
+    } else {
+        display.classList.add('hidden');
+    }
+}
+
+// Show tag input dialog (modal)
+function showTagInputDialog(messageId, bridgeId) {
+    // Create modal overlay
+    const modal = document.createElement('div');
+    modal.className = 'tag-input-modal';
+    modal.innerHTML = `
+        <div class="tag-input-dialog">
+            <h3>🏷️ Add Tags & Dates</h3>
+            <input type="text" id="tag-input-${messageId}" placeholder="#FromDad Christmas 2021" autocomplete="off">
+            <div class="tag-input-dialog-buttons">
+                <button class="cancel-btn" data-action="close-tag-dialog">Cancel</button>
+                <button class="save-btn" data-action="save-tag-dialog" data-message-id="${messageId}" data-bridge-id="${bridgeId}">Save</button>
+            </div>
         </div>
     `;
-    display.classList.remove('hidden');
+    
+    document.body.appendChild(modal);
+    
+    // Focus input
+    const input = document.getElementById(`tag-input-${messageId}`);
+    if (input) input.focus();
+    
+    // Close on overlay click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal || e.target.hasAttribute('data-action') && e.target.getAttribute('data-action') === 'close-tag-dialog') {
+            modal.remove();
+        }
+    });
+    
+    // Save on button click
+    modal.addEventListener('click', async (e) => {
+        if (e.target.hasAttribute('data-action') && e.target.getAttribute('data-action') === 'save-tag-dialog') {
+            const metadataText = input.value.trim();
+            if (metadataText) {
+                const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-bridge-id="${bridgeId}"]`);
+                if (section) {
+                    await saveDrop(bridgeId, messageId, metadataText, section);
+                }
+            }
+            modal.remove();
+        }
+    });
+    
+    // Save on Enter key
+    input.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const metadataText = input.value.trim();
+            if (metadataText) {
+                const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-bridge-id="${bridgeId}"]`);
+                if (section) {
+                    await saveDrop(bridgeId, messageId, metadataText, section);
+                }
+            }
+            modal.remove();
+        }
+    });
 }
 
 // Hydrate drops for all messages in a bridge
@@ -4159,6 +4261,15 @@ document.addEventListener('click', function(e) {
     }
     
     // ============ DROPS - Personal Cloud OS ============
+    // Tag add button - open modal dialog
+    if (target.classList.contains('tag-add-btn')) {
+        e.preventDefault();
+        const messageId = target.getAttribute('data-message-id');
+        const bridgeId = target.getAttribute('data-bridge-id');
+        showTagInputDialog(messageId, bridgeId);
+        return;
+    }
+    
     // Save drop button
     if (target.hasAttribute('data-action') && target.getAttribute('data-action') === 'save-drop') {
         e.preventDefault();
@@ -4193,6 +4304,20 @@ document.addEventListener('click', function(e) {
             removeTag(bridgeId, messageId, tag);
         } else {
             console.error('❌ Missing attributes for tag removal!', { tag, messageId, bridgeId });
+        }
+        return;
+    }
+    
+    // Remove date button (× on date bubble)
+    if (target.hasAttribute('data-action') && target.getAttribute('data-action') === 'remove-date') {
+        e.preventDefault();
+        
+        const date = target.getAttribute('data-date');
+        const messageId = target.getAttribute('data-message-id');
+        const bridgeId = target.getAttribute('data-bridge-id');
+        
+        if (date && messageId && bridgeId) {
+            removeDate(bridgeId, messageId, date);
         }
         return;
     }
