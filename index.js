@@ -3597,6 +3597,82 @@ app.post('/api/bridges/:id/start', requireAuth, setTenantContext, requireRole('a
         const internalId = bridgeResult.rows[0].id;
         console.log(`🔍 Bridge ${id} (internal ${internalId}) belongs to ${tenantSchema}`);
         
+        // BUG FIX: Verify Discord threads exist, retry creation if missing
+        // This handles cases where initial thread creation failed during bridge creation
+        const fullBridgeResult = await client.query(
+            `SELECT name, output_01_url, output_0n_url, output_credentials FROM bridges WHERE id = $1`,
+            [internalId]
+        );
+        
+        if (fullBridgeResult.rows.length > 0) {
+            const bridge = fullBridgeResult.rows[0];
+            const outputCreds = bridge.output_credentials || {};
+            
+            // Check if Ledger thread (output_01) is missing
+            if (!outputCreds.output_01 || !outputCreds.output_01.thread_id) {
+                console.warn(`⚠️  Bridge ${id} missing Discord threads, retrying creation...`);
+                
+                if (hermesBot && hermesBot.isReady()) {
+                    try {
+                        const dualThreads = await hermesBot.createDualThreadsForBridge(
+                            bridge.output_01_url,
+                            bridge.output_0n_url,
+                            bridge.name,
+                            req.tenantContext.tenantId,
+                            internalId
+                        );
+                        
+                        // Build output_credentials with typed destinations
+                        const outputDestinations = {};
+                        
+                        if (dualThreads.output_01) {
+                            outputDestinations.output_01 = dualThreads.output_01;
+                            console.log(`  ✅ Created output_01 thread: ${dualThreads.output_01.thread_id}`);
+                        }
+                        
+                        if (dualThreads.output_0n) {
+                            outputDestinations.output_0n = dualThreads.output_0n;
+                            console.log(`  ✅ Stored output_0n: ${dualThreads.output_0n.type}`);
+                        }
+                        
+                        // Save thread IDs to database
+                        await client.query(
+                            `UPDATE bridges 
+                             SET output_credentials = output_credentials || $1::jsonb
+                             WHERE id = $2`,
+                            [JSON.stringify(outputDestinations), internalId]
+                        );
+                        
+                        console.log(`✅ Thread creation retry successful for bridge ${id}`);
+                        
+                        // Send initial messages to threads
+                        if (dualThreads.output_01 && dualThreads.output_01.type === 'thread') {
+                            try {
+                                await hermesBot.sendInitialMessage(dualThreads.output_01.thread_id, bridge.name, bridge.output_01_url);
+                            } catch (msgError) {
+                                console.error(`  ⚠️  Failed to send initial message to output_01:`, msgError.message);
+                            }
+                        }
+                        
+                        if (dualThreads.output_0n && dualThreads.output_0n.type === 'thread') {
+                            try {
+                                await hermesBot.sendInitialMessage(dualThreads.output_0n.thread_id, bridge.name, bridge.output_0n_url);
+                            } catch (msgError) {
+                                console.error(`  ⚠️  Failed to send initial message to output_0n:`, msgError.message);
+                            }
+                        }
+                    } catch (threadError) {
+                        console.error(`❌ Thread creation retry failed for bridge ${id}:`, threadError.message);
+                        console.warn(`⚠️  Bridge will continue without threads (webhook-only mode)`);
+                    }
+                } else {
+                    console.warn(`⚠️  Hermes bot not ready, cannot retry thread creation for bridge ${id}`);
+                }
+            } else {
+                console.log(`✅ Bridge ${id} already has Discord threads configured`);
+            }
+        }
+        
         // Check if already running (use composite key)
         const existingClient = whatsappManager.getClient(internalId, tenantSchema);
         if (existingClient && (existingClient.status === 'ready' || existingClient.status === 'qr_ready')) {
