@@ -316,6 +316,7 @@
         let thumbsExpanded = false;
         let thumbsIdleTimer = null;
         let breathInitialized = false;
+        let isAnimating = false; // Throttle flag to prevent tap flooding
         
         // Initialize φ-breath system (mobile only)
         function initPhiBreath() {
@@ -4730,7 +4731,15 @@ document.addEventListener('DOMContentLoaded', function() {
             // ☯️ SINGULARITY BUTTON - Expand or interrupt
             if (action === 'singularity') {
                 if (isMobile()) {
+                    // THROTTLE: Prevent tap flooding (event queue saturation)
+                    if (isAnimating) {
+                        console.log('⏸️ Tap throttled - animation in progress');
+                        return;
+                    }
+                    
+                    isAnimating = true;
                     console.log('🌌 Singularity clicked');
+                    
                     // If expanded, interrupt and collapse immediately
                     if (thumbsExpanded) {
                         console.log('⚡ Interrupting φ-breath, collapsing now');
@@ -4738,6 +4747,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     } else {
                         expandFromSingularity();
                     }
+                    
+                    // Release throttle after animation completes
+                    setTimeout(() => {
+                        isAnimating = false;
+                        console.log('✅ Throttle released');
+                    }, 600); // Match fusion animation duration
                 }
                 return;
             }

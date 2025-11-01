@@ -2710,6 +2710,8 @@ body::before {
     flex-shrink: 0;
     border: none;
     background: transparent;
+    touch-action: manipulation; /* Prevent double-tap zoom on iOS */
+    -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
 }
 
 /* (a) CORE GLASS — Liquid iOS frosted effect */
