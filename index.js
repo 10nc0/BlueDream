@@ -299,7 +299,7 @@ app.use('/api/analytics', setTenantContext);
 let whatsappManager = null;
 
 // Discord Bot Manager for automatic thread creation per bridge
-let discordBotManager = null;
+let hermesBot = null;
 
 // Trinity: Toth bot for read-only message fetching
 let tothBot = null;
@@ -458,7 +458,7 @@ function getFileExtension(mimetype) {
     return mimeMap[mimetype] || mimetype.split('/').pop().replace(/[^a-z0-9]/gi, '');
 }
 
-// Send to Ledger (Output #01 = eternal monolith, immutable thread_id storage)
+// Send to Ledger (Output #01 - internal monitoring thread)
 // WEBHOOK-FIRST: Accepts bridge object directly, no database queries needed
 async function sendToLedger(payload, options = {}, bridge = null) {
     // WEBHOOK-FIRST: Use webhook URL directly from bridge object
@@ -653,7 +653,7 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
         const threadName = bridgeResult.rows[0].output_credentials?.thread_name;
         let threadId = bridgeResult.rows[0].output_credentials?.thread_id;
         
-        // IMMUTABILITY LOCK: Identify Nyanbook Ledger webhook (dbA = eternal monolith)
+        // Identify Ledger webhook for internal monitoring
         const NYANBOOK_WEBHOOK_NAME = 'Nyanbook Ledger';
         
         // Fallback to legacy webhook_url if webhooks array is empty
@@ -681,7 +681,7 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
         for (const webhook of webhooks) {
             if (!webhook.url) continue;
             
-            // IMMUTABILITY CHECK: Is this the Nyanbook Ledger webhook (dbA)?
+            // Check if this is the Ledger webhook
             const isNyanbookLedger = webhook.name === NYANBOOK_WEBHOOK_NAME;
             
             try {
@@ -722,11 +722,10 @@ async function sendToAllWebhooks(payload, options = {}, messageDbId = null, medi
                     response = await axios.post(webhookUrl, enhancedPayload);
                 }
                 
-                // IMMUTABILITY LOCK: ONLY capture thread_id from Nyanbook Ledger webhook (dbA)
-                // User webhooks (dbB) are mutable and ignored - this preserves eternal monolith
+                // Capture thread_id from Ledger webhook response
                 if (isNyanbookLedger && !threadId && response.data && response.data.channel_id && threadName) {
                     threadId = response.data.channel_id;
-                    console.log(`  🔒 NYANBOOK THREAD LOCKED: ${threadId} (bridge ${bridgeId})`);
+                    console.log(`  🔒 Ledger thread captured: ${threadId} (bridge ${bridgeId})`);
                     
                     // Update bridge output_credentials with thread_id from Nyanbook Ledger only
                     await tenantClient.query(`
@@ -1636,8 +1635,8 @@ app.post('/api/auth/signup', async (req, res) => {
             
             const passwordHash = await bcrypt.hash(password, 10);
             
-            // FIRST USER EVER: Dev #01 (Genesis Admin with God view to dbA)
-            // SUBSEQUENT USERS: Admin #0n (fractalized tenant with their own dbB)
+            // FIRST USER EVER: Dev #01 (Genesis Admin with global access)
+            // SUBSEQUENT USERS: Admin #0n (isolated tenant with their own schema)
             const userRole = isFirstUser ? 'dev' : 'admin';
             const isGenesis = isFirstUser;
             
@@ -3010,10 +3009,10 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
         // AUTO-CREATE DUAL DISCORD THREADS VIA BOT
         // thread_01 → Nyanbook Ledger (webhook01) - dev-only visibility
         // thread_0n → User Discord (webhook0n) - user-facing visibility
-        if (discordBotManager && discordBotManager.isReady()) {
+        if (hermesBot && hermesBot.isReady()) {
             try {
                 console.log(`🧵 Initiating dual thread creation for bridge ${bridge.id}...`);
-                const dualThreads = await discordBotManager.createDualThreadsForBridge(
+                const dualThreads = await hermesBot.createDualThreadsForBridge(
                     output01Url,
                     output0nUrl,
                     name,
@@ -3060,7 +3059,7 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
                 // Send initial messages to both outputs (only for threads)
                 if (dualThreads.output_01 && dualThreads.output_01.type === 'thread') {
                     try {
-                        await discordBotManager.sendInitialMessage(dualThreads.output_01.thread_id, name, output01Url);
+                        await hermesBot.sendInitialMessage(dualThreads.output_01.thread_id, name, output01Url);
                         console.log(`  ✅ Sent initial message to output_01 thread`);
                     } catch (msgError) {
                         console.error(`  ⚠️  Failed to send initial message to output_01:`, msgError.message);
@@ -3069,7 +3068,7 @@ app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'wr
                 
                 if (dualThreads.output_0n && dualThreads.output_0n.type === 'thread') {
                     try {
-                        await discordBotManager.sendInitialMessage(dualThreads.output_0n.thread_id, name, output0nUrl);
+                        await hermesBot.sendInitialMessage(dualThreads.output_0n.thread_id, name, output0nUrl);
                         console.log(`  ✅ Sent initial message to output_0n thread`);
                     } catch (msgError) {
                         console.error(`  ⚠️  Failed to send initial message to output_0n:`, msgError.message);
@@ -4759,7 +4758,7 @@ app.post('/api/bridges/:id/create-thread', requireAuth, setTenantContext, async 
         }
         
         // Check Discord bot status
-        if (!discordBotManager || !discordBotManager.isReady()) {
+        if (!hermesBot || !hermesBot.isReady()) {
             return res.status(503).json({ 
                 error: 'Discord bot not ready',
                 note: 'Thread creation temporarily unavailable'
@@ -4768,7 +4767,7 @@ app.post('/api/bridges/:id/create-thread', requireAuth, setTenantContext, async 
         
         // Create thread for output_01 (Nyanbook Ledger)
         console.log(`🧵 Creating output_01 thread for bridge ${id} (${bridgeData.name})...`);
-        const threadInfo = await discordBotManager.createThreadForBridge(
+        const threadInfo = await hermesBot.createThreadForBridge(
             bridgeData.output_01_url,
             `${bridgeData.name} [Ledger]`,
             bridgeData.tenant_id,
@@ -4794,7 +4793,7 @@ app.post('/api/bridges/:id/create-thread', requireAuth, setTenantContext, async 
         );
         
         // Send initial activation message to thread
-        await discordBotManager.sendInitialMessage(
+        await hermesBot.sendInitialMessage(
             threadInfo.threadId, 
             bridgeData.name, 
             bridgeData.output_01_url
@@ -4825,13 +4824,13 @@ app.listen(PORT, '0.0.0.0', async () => {
     
     // TRINITY ARCHITECTURE: Hermes (φ - Creator) + Toth (0 - Mirror)
     // Security: Principle of least privilege - each bot has minimal permissions
-    discordBotManager = new HermesBot();
+    hermesBot = new HermesBot();
     tothBot = new TothBot();
     
     console.log('🌈 Initializing Trinity architecture...');
     try {
         await Promise.all([
-            discordBotManager.initialize(),
+            hermesBot.initialize(),
             tothBot.initialize()
         ]);
         console.log('✨ Trinity ready: Hermes (φ) + Toth (0)');
