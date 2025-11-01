@@ -3406,10 +3406,11 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
             console.warn(`⚠️  Could not stop WhatsApp client for bridge ${id}:`, error.message);
         }
         
-        // SOFT DELETE: Set archived=true and archived_at=NOW() (preserves all data)
+        // SOFT DELETE: Set archived=true and status='archived' (preserves all data)
+        // Note: updated_at will automatically track when the archive happened
         const result = await client.query(`
             UPDATE bridges 
-            SET archived = true, archived_at = NOW(), status = 'archived' 
+            SET archived = true, status = 'archived', updated_at = NOW() 
             WHERE fractal_id = $1 
             RETURNING *
         `, [id]);
@@ -3429,7 +3430,7 @@ app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin
             logAudit(pool, req, 'ARCHIVE', 'BOT', id, null, {
                 message: 'Bridge archived (soft delete) - all messages and session preserved',
                 tenant_schema: tenantSchema,
-                archived_at: new Date().toISOString()
+                updated_at: new Date().toISOString()
             }).catch(err => console.error('Audit log failed:', err.message));
         });
     } catch (error) {
