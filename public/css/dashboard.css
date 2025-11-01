@@ -142,6 +142,7 @@ body::before {
   top: 0;
   z-index: var(--z-sticky);
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 /* Header Sections */
