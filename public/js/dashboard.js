@@ -4005,8 +4005,9 @@ async function hydrateDropsForBridge(bridgeId) {
 document.addEventListener('click', function(e) {
     const target = e.target;
     
-    // Tag removal
-    if (target.classList.contains('tag-remove')) {
+    // Tag removal (BOT WIZARD ONLY - not for drops metadata)
+    // Skip if this is a drops tag (has data-action="remove-tag")
+    if (target.classList.contains('tag-remove') && !target.hasAttribute('data-action')) {
         e.preventDefault();
         const tag = target.getAttribute('data-tag');
         if (tag) removeTag(tag);
