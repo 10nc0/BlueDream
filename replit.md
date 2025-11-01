@@ -19,7 +19,6 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Adaptive Layout**: Desktop mode offers a resizable sidebar and header, with dynamic date/time positioning. Mobile mode features automatic layout detection, a harmonized header, and a "Floating Thumbs Zone" for quick actions.
 - **Touch Interactions**: Optimized for iPhone with tap-to-zoom for media, swipe navigation, auto-hide elements on scroll, 48px touch targets, and momentum scrolling.
 - **Transcendental Cat Component**: A self-contained, independent cat animation component (`public/js/ui/cat-animation.js`, `public/components/cat-animation.html`, `public/css/components/cat-animation.css`) exists across all pages, adapting behavior for mobile/desktop.
-- **Liquid Glass ☯️ Singularity Button**: iOS-authentic glassmorphism design with true transparency (rgba 0.3→0.1), breathing rainbow border-image animation (cyan/purple/pink → cyan/magenta/yellow), white symbol with shadow for premium contrast, and "goose laying eggs" sequential animation (100ms staggered right-to-left button spawn, then ☯️ poof at 600ms).
 
 **Technical Implementations:**
 - **Authentication**: Email/password authentication using JWT tokens, role-based access control, and user data isolated within tenant-specific PostgreSQL tables.
