@@ -2712,6 +2712,7 @@ body::before {
     background: transparent;
     touch-action: manipulation; /* Prevent double-tap zoom on iOS */
     -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
+    animation: yinyang-breathe-rotate var(--rotation-duration, 8000ms) linear infinite; /* ETERNAL SPIN - Never stops! */
 }
 
 /* (a) CORE GLASS — Liquid iOS frosted effect */
@@ -2772,13 +2773,6 @@ body::before {
         aura-rotate 8s linear infinite;
     z-index: -3;
     pointer-events: none;
-}
-
-/* UNIFIED ROTATION — ALL MODES: Single animation, duration controlled by state */
-/* IDLE: φ^0 = 8000ms, φ^1 = 12944ms per rotation (slow) */
-/* EXPANDED: φ^0 = 2000ms, φ^1 = 3236ms per rotation (fast, 4x acceleration) */
-.singularity-btn {
-    animation: yinyang-breathe-rotate var(--rotation-duration, 8000ms) linear infinite;
 }
 
 /* BREATHING KEYFRAMES — ALL IN SYNC */
