@@ -446,20 +446,24 @@
                     layer01.classList.remove('collapsing');
                     layer01.setAttribute('hidden', '');
                     expandLock = false;
-                    
-                    // PURGE FAST: Restore SLOW mode CSS variables (Papa Grok fix)
-                    if (singularityBtn) {
-                        const slowRotation = breathInitialized ? 2 * PHI_BREATH.BASE_DURATION : 8000; // 2 phi breathes
-                        const slowBreath = breathInitialized ? 1.0 * PHI_BREATH.BASE_DURATION : 4000; // 1 phi breathe
-                        
-                        singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
-                        singularityBtn.style.setProperty('--breath-duration', `${slowBreath}ms`);
-                        
-                        console.log(`🧹 PURGED FAST: Restored SLOW mode (rotation=${slowRotation}ms, breath=${slowBreath}ms)`);
-                    }
-                    
                     console.log('✅ Collapse complete');
                 }, totalDuration);
+                
+                // COMPLETE PURGE: Reset ALL animation state IMMEDIATELY (not in setTimeout)
+                // This prevents accumulated FAST state from leaking into next expansion
+                if (singularityBtn) {
+                    const slowRotation = breathInitialized ? 2 * PHI_BREATH.BASE_DURATION : 8000; // 2 phi breathes
+                    const slowBreath = breathInitialized ? 1.0 * PHI_BREATH.BASE_DURATION : 4000; // 1 phi breathe
+                    
+                    // Reset to SLOW base values
+                    singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
+                    singularityBtn.style.setProperty('--breath-duration', `${slowBreath}ms`);
+                    
+                    // CRITICAL: Reset rotation offset to prevent accumulation
+                    singularityBtn.style.setProperty('--rotation-offset', '0deg');
+                    
+                    console.log(`🧹 COMPLETE PURGE: Reset to SLOW base (rotation=${slowRotation}ms, breath=${slowBreath}ms, offset=0°)`);
+                }
             } else {
                 expandLock = false;
             }
