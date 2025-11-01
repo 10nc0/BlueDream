@@ -340,12 +340,19 @@
             const singularityBtn = document.querySelector('.singularity-btn');
             
             if (layer01) {
-                // Start collapse: remove .show and add .collapsing for φ-inverse fusion animation
-                console.log('⬅️ Buttons fusing left to right');
+                // CRITICAL FIX: Add .collapsing BEFORE removing .show to prevent buttons from snapping to invisible base state
+                console.log('⬅️ Buttons fusing left to right (φ-inverse fusion)');
+                
+                // Step 1: Add .collapsing class first
+                layer01.classList.add('collapsing');
+                
+                // Step 2: Force layout reflow to ensure .collapsing styles are applied
+                void layer01.offsetWidth; // Force reflow
+                
+                // Step 3: Now remove .show - buttons stay visible because .collapsing maintains them
                 layer01.classList.remove('show');
-                setTimeout(() => {
-                    layer01.classList.add('collapsing');
-                }, 10);
+                
+                console.log('🎬 Fusion animation triggered - buttons visible and animating');
                 
                 // ☯️ SNAP! Singularity reappears after fusion
                 setTimeout(() => {
@@ -361,7 +368,7 @@
                     console.log('✅ Collapse complete, ready for next cycle');
                     layer01.setAttribute('hidden', '');
                     layer01.classList.remove('collapsing');
-                }, 800); // 300ms (longest button delay) + 300ms (fusion) + 200ms buffer
+                }, 800); // 300ms (longest button delay) + 400ms (fusion) + 100ms buffer
             }
             
             // Return to calm breath
