@@ -324,6 +324,10 @@
         const COLLAPSE_DELAY = 40;   // ms between each egg (collapse)
         const ANIMATION_MS = 400;    // matches CSS transition duration
         
+        // φ-BREATH THROTTLE (prevent data leakage)
+        let lastPhiUpdate = 0;
+        const PHI_UPDATE_THROTTLE = 100; // ms between updates (prevent flooding)
+        
         // Initialize φ-breath system (mobile only)
         function initPhiBreath() {
             if (!isMobile() || breathInitialized) {
@@ -335,7 +339,15 @@
             breathInitialized = true;
             
             // Subscribe to breath cycles to sync rotation speed with φ oscillation
+            // THROTTLED to prevent data leakage and double acceleration
             PHI_BREATH.on('breathCycle', (data) => {
+                // THROTTLE: Prevent flooding (max 1 update per 100ms)
+                const now = Date.now();
+                if (now - lastPhiUpdate < PHI_UPDATE_THROTTLE) {
+                    return; // Skip this update to prevent leakage
+                }
+                lastPhiUpdate = now;
+                
                 const singularityBtn = document.querySelector('.singularity-btn');
                 if (!singularityBtn) {
                     console.log('⚠️ breathCycle: singularityBtn not found!');
@@ -383,10 +395,22 @@
                 }
             });
             
-            // Log breath starts for monitoring + increment genesis counter
+            // DOUBLE RESET LAYER: Force SLOW mode on every breath start if collapsed
+            // This prevents FAST speed leakage into SLOW mode
             PHI_BREATH.on('breathStart', (data) => {
-                // Breath logging is handled by the module
-                // Genesis counter increment happens server-side automatically
+                const singularityBtn = document.querySelector('.singularity-btn');
+                if (!singularityBtn) return;
+                
+                // CRITICAL: If collapsed, force re-sync to SLOW mode
+                if (!isExpanded) {
+                    const slowRotation = 2 * PHI_BREATH.BASE_DURATION; // 2 phi breathes (base)
+                    const slowBreath = 1.0 * PHI_BREATH.BASE_DURATION; // 1 phi breathe (base)
+                    
+                    singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
+                    singularityBtn.style.setProperty('--breath-duration', `${slowBreath}ms`);
+                    
+                    console.log(`🛡️ DOUBLE RESET: Enforcing SLOW mode (rotation=${slowRotation}ms, breath=${slowBreath}ms)`);
+                }
             });
             
             console.log(`🫁 φ-breath initialized: ${PHI_BREATH.BASE_DURATION}ms base cycle (φ^0 to φ^1 variation)`);
