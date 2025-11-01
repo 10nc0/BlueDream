@@ -364,15 +364,15 @@
                 singularityBtn.style.setProperty('--rotation-duration', `${rotationDuration}ms`);
                 
                 // Calculate breathing duration based on state AND φScale
-                // SLOW (collapsed): 1.5x BASE = slower breathing (6000-9708ms)
-                // FAST (expanded): 0.75x BASE = faster breathing (3000-4854ms)
+                // SLOW (collapsed): 1.0x BASE = 1 full phi breathe (4000-6472ms)
+                // FAST (expanded): 0.5x BASE = half phi breathe (2000-3236ms)
                 let breathDuration;
                 if (currentlyExpanded) {
-                    // FAST: 0.75x φ-breath cycle for faster breathing
-                    breathDuration = PHI_BREATH.BASE_DURATION * 0.75 * φScale;
+                    // FAST: 0.5x φ-breath cycle (half phi breathe, 4x faster than slow rotation)
+                    breathDuration = PHI_BREATH.BASE_DURATION * 0.5 * φScale;
                 } else {
-                    // SLOW: 1.5x φ-breath cycle for calmer, slower breathing
-                    breathDuration = PHI_BREATH.BASE_DURATION * 1.5 * φScale;
+                    // SLOW: 1.0x φ-breath cycle (1 full phi breathe)
+                    breathDuration = PHI_BREATH.BASE_DURATION * 1.0 * φScale;
                 }
                 singularityBtn.style.setProperty('--breath-duration', `${breathDuration}ms`);
                 
@@ -442,13 +442,13 @@
             
             // Set SLOW mode IMMEDIATELY for all 3 animations (spin, breathe, pulse)
             if (singularityBtn) {
-                const slowRotation = breathInitialized ? 2 * PHI_BREATH.BASE_DURATION : 8000;
-                const slowBreath = breathInitialized ? 1.5 * PHI_BREATH.BASE_DURATION : 6000; // 1.5x = slower breathing
+                const slowRotation = breathInitialized ? 2 * PHI_BREATH.BASE_DURATION : 8000; // 2 phi breathes
+                const slowBreath = breathInitialized ? 1.0 * PHI_BREATH.BASE_DURATION : 4000; // 1 phi breathe
                 
                 singularityBtn.style.setProperty('--rotation-duration', `${slowRotation}ms`);
                 singularityBtn.style.setProperty('--breath-duration', `${slowBreath}ms`);
                 
-                console.log(`🐌 SLOW mode activated: rotation=${slowRotation}ms, breath=${slowBreath}ms`);
+                console.log(`🐌 SLOW mode activated: rotation=${slowRotation}ms (2 phi breathes), breath=${slowBreath}ms (1 phi breathe)`);
             }
             
             // Exit creation mode for φ-breath system (mobile only)
@@ -503,13 +503,13 @@
             
             // Set FAST mode IMMEDIATELY for all 3 animations (spin, breathe, pulse)
             if (singularityBtn) {
-                const fastRotation = breathInitialized ? 0.5 * PHI_BREATH.BASE_DURATION : 2000;
-                const fastBreath = breathInitialized ? 0.75 * PHI_BREATH.BASE_DURATION : 3000; // 0.75x = faster breathing
+                const fastRotation = breathInitialized ? 0.5 * PHI_BREATH.BASE_DURATION : 2000; // 0.5 phi breathe
+                const fastBreath = breathInitialized ? 0.5 * PHI_BREATH.BASE_DURATION : 2000; // 0.5 phi breathe
                 
                 singularityBtn.style.setProperty('--rotation-duration', `${fastRotation}ms`);
                 singularityBtn.style.setProperty('--breath-duration', `${fastBreath}ms`);
                 
-                console.log(`⚡ FAST mode activated: rotation=${fastRotation}ms, breath=${fastBreath}ms`);
+                console.log(`⚡ FAST mode activated: rotation=${fastRotation}ms (0.5 phi breathe), breath=${fastBreath}ms (0.5 phi breathe)`);
             }
             
             // Enter creation mode for φ-breath system (mobile only)
