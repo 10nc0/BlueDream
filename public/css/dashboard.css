@@ -465,12 +465,13 @@ body::before {
 
 /* ===================================================================
    DISCORD-STYLE BRIDGE LAYOUT (Mobile First)
+   Outside-in approach: Container snaps to edges, content fills space
    =================================================================== */
 .bridge-layout {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  height: calc(100vh - 140px);
+  height: 100%;
 }
 
 @media (min-width: 768px) {
@@ -488,13 +489,7 @@ body::before {
   padding: 0.3125rem;
   flex-shrink: 0;
   overflow-y: auto;
-}
-
-/* Set equal heights for sidebar and detail on tablet/desktop */
-@media (min-width: 768px) {
-  .bridge-sidebar {
-    height: calc(100vh - 140px);
-  }
+  height: 100%;
 }
 
 /* Mobile (iPhone X): Full width on small screens (column layout) */
@@ -601,7 +596,7 @@ body::before {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 140px);
+  height: 100%;
 }
 
 .detail-header {
