@@ -23,7 +23,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage.
 - **Database**: PostgreSQL (Neon-backed) with multi-tenant architecture. Isolated schemas provide per-tenant separation for user data, bridge configuration, sessions, and audit logs.
 - **WhatsApp Integration**: Multi-instance Baileys library for independent, persistent WhatsApp sessions.
-- **Discord Integration**: Messages forwarded to user-configured Discord webhooks for permanent storage.
+- **Discord Integration**: Messages forwarded to user-configured Discord webhooks for permanent storage. Trinity security model with Hermes (φ) for thread creation (MANAGE_THREADS only) and Toth (0) for message reading (READ_MESSAGE_HISTORY only). Auto-healing system checks all bridges at startup and creates missing Discord threads automatically, with on-demand retry when users click "Generate QR".
 - **Media Handling**: Atomic storage for base64-encoded media with delivery tracking and automatic cleanup.
 - **Search**: Enhanced search functionality across messages and metadata tags.
 - **Metadata System**: Universal tagging system supporting plain words, hashtags, captions, dates, and multilingual text (English, 日本語, 中文, العربية, etc.). Tags stored with full-text search indexing.
