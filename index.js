@@ -3045,19 +3045,20 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
         
         if (hasExtendedAccess) {
             // Query all tenant schemas
-            const allSchemas = await getAllTenantSchemas(pool);
+            const allSchemas = await getAllTenantSchemas(pool, req.userRole);
             
-            for (const schema of allSchemas) {
+            for (const schemaRow of allSchemas) {
+                const schemaName = schemaRow.tenant_schema;
                 try {
                     const schemaResult = await pool.query(`
-                        SELECT b.*, '${schema}'::text as tenant_schema
-                        FROM ${schema}.bridges b
+                        SELECT b.*, '${schemaName}'::text as tenant_schema
+                        FROM ${schemaName}.bridges b
                         WHERE b.archived = false
                         ORDER BY b.created_at DESC
                     `);
                     bridges.push(...schemaResult.rows);
                 } catch (error) {
-                    console.warn(`⚠️  Could not query schema ${schema}:`, error.message);
+                    console.warn(`⚠️  Could not query schema ${schemaName}:`, error.message);
                 }
             }
             
