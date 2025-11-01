@@ -54,10 +54,12 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
   - Position 1 (rightmost): Create Bridge (✍🏻, cyan border, closest to thumb)
   - Position 2: Audit (🧿, purple border, ward off evil, action & closure)
   - Position 3: Search (🔍, blue border, find messages)
-  - Position 4: Fan Toggle (🔗, slate border, when 4+ bridges exist)
+  - Position 4: Bridge Info (📋, green border, shows current bridge name + actions: Info ℹ️, QR 🔗, Edit ✏️, Delete 🗑️)
+  - Position 4 (when 4+ bridges): Fan Toggle (🔗, slate border, shows all bridges)
   - Position n (leftmost): Next Bridge (→, pink border, navigate forward)
   - **Standardized Styling**: White text (#ffffff) on deep void background (rgba(15,23,42,0.85)) with accent-colored borders
   - **Touch Optimized**: 48×48px circular buttons, scale(0.92) on :active for tap feedback
+  - **No Bridge Header**: Bridge card header hidden on mobile for maximum message space (all actions moved to 📋 button)
 - **Bridge Fan Modal**: Full-screen glassmorphism modal showing numbered bridge list + utility actions (Search 🔍, Audit 🧿)
 - **Touch Interactions (iPhone-Optimized, φ12)**:
   - **Tap-to-Zoom**: Media images open in full-screen modal with 44×44px close button (Apple HIG compliant)

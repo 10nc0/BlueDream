@@ -2669,11 +2669,12 @@ body::before {
 }
 
 /* Accent borders by action type */
-.thumbs-zone button[data-action="create"] { border-color: #22d3ee; } /* Cyan */
-.thumbs-zone button[data-action="audit"]  { border-color: #a855f7; } /* Purple */
-.thumbs-zone button[data-action="search"] { border-color: #60a5fa; } /* Blue */
-.thumbs-zone button[data-action="fan"]    { border-color: #94a3b8; } /* Slate */
-.thumbs-zone button[data-action="next"]   { border-color: #ec4899; } /* Pink */
+.thumbs-zone button[data-action="create"]     { border-color: #22d3ee; } /* Cyan */
+.thumbs-zone button[data-action="audit"]      { border-color: #a855f7; } /* Purple */
+.thumbs-zone button[data-action="search"]     { border-color: #60a5fa; } /* Blue */
+.thumbs-zone button[data-action="bridgeinfo"] { border-color: #10b981; } /* Green */
+.thumbs-zone button[data-action="fan"]        { border-color: #94a3b8; } /* Slate */
+.thumbs-zone button[data-action="next"]       { border-color: #ec4899; } /* Pink */
 
 /* Active state (tap feedback) */
 .thumbs-zone button:active {
@@ -2829,6 +2830,11 @@ body.mobile-mode .logout-btn {
     border-radius: 4px;                 /* Smaller border radius */
 }
 
+/* Mobile Mode: Hide Bridge Header for maximum message space */
+body.mobile-mode .bridge-detail > div:first-child {
+    display: none !important; /* Hide bridge header (name + controls) on mobile */
+}
+
 /* Desktop Mode: Default behavior */
 body.desktop-mode .thumbs-zone {
     display: none !important; /* Hide thumbs zone on desktop */
@@ -2932,6 +2938,17 @@ body.desktop-mode .thumbs-zone {
 .bridge-fan-close:hover {
     background: rgba(148, 163, 184, 0.3);
     color: #e2e8f0;
+}
+
+/* Bridge Info Modal: Danger action styling */
+.bridge-fan-item.danger {
+    border-left: 2px solid rgba(239, 68, 68, 0.5);
+}
+
+.bridge-fan-item.danger:hover,
+.bridge-fan-item.danger:active {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.7);
 }
 
 /* ===================================================================

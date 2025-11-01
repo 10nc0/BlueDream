@@ -54,6 +54,19 @@
                 requireAuth: true,
                 handler: () => openCreateBridgeModal()
             },
+            bridgeinfo: {
+                id: 'bridgeinfo',
+                label: '📋 Bridge Info',
+                icon: '📋',
+                mobileIcon: '📋',
+                desktopLabel: '📋 Bridge Info',
+                tooltip: 'Bridge name and actions',
+                priority: 2, // Position 4 in thumbs zone (4-3-2-1)
+                showInMobile: true,
+                showInDesktop: false,
+                requireAuth: true,
+                handler: () => showBridgeInfoModal()
+            },
             audit: {
                 id: 'audit',
                 label: '🧿 Audit',
@@ -238,52 +251,44 @@
 
         /**
          * Render thumbs zone buttons (n-4-3-2-1 layout)
-         * UNIFIED: Uses ACTION_REGISTRY for consistency with desktop
-         * Order: → 🔗 🔍 🧿 ✍🏻 (right-to-left for thumb access)
+         * NEW LAYOUT: → 🔗/Fan 🔍/Search 🧿/Audit 📋/BridgeInfo ✍🏻/Create
+         * Position 1 (rightmost): Create (always)
+         * Position 2: Audit (always)
+         * Position 3: Search (always)
+         * Position 4: Bridge Info/Fan (shows current bridge name + actions)
+         * Position n: Next (→) if multiple bridges
          */
         function renderThumbsZone() {
             const thumbsZone = document.getElementById('thumbsZone');
             if (!thumbsZone) return;
             
             const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
-            const mobileActions = getVisibleActions(true);
             
             let html = '';
             
-            // Priority 1: Create button (always visible, rightmost for thumb access)
-            const createAction = ACTION_REGISTRY.create;
-            html += `<button data-action="create" aria-label="${createAction.tooltip}">${createAction.mobileIcon}</button>`;
+            // Position 1: Create button (always visible, rightmost for thumb access)
+            html += `<button data-action="create" aria-label="Create new bridge">✍🏻</button>`;
             
-            // Buttons 2-5: Bridges or utility actions
+            // Position 2: Audit button (always visible)
+            html += `<button data-action="audit" aria-label="View audit log">🧿</button>`;
+            
+            // Position 3: Search button (always visible)
+            html += `<button data-action="search" aria-label="Search messages">🔍</button>`;
+            
+            // Position 4: Bridge Info/Fan button
             if (activeBridges.length === 0) {
-                // No bridges - show utility actions from registry (Audit, Search)
-                const auditAction = ACTION_REGISTRY.audit;
-                const searchAction = ACTION_REGISTRY.search;
-                if (auditAction) {
-                    html += `<button data-action="audit" aria-label="${auditAction.tooltip}">${auditAction.mobileIcon}</button>`;
-                }
-                if (searchAction) {
-                    html += `<button data-action="search" aria-label="${searchAction.tooltip}">${searchAction.mobileIcon}</button>`;
-                }
+                // No bridges - hide this button
             } else if (activeBridges.length <= 3) {
-                // Show all bridges (1-3) as numbers
-                activeBridges.forEach((bridge, index) => {
-                    const icon = `${index + 1}`;
-                    html += `<button data-action="toggle-bridge" data-bridge-id="${bridge.fractal_id}" aria-label="${escapeHtml(bridge.name)}">${icon}</button>`;
-                });
+                // Show Bridge Info for active bridge
+                const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
+                const currentBridge = activeBridges.find(b => b.fractal_id === currentBridgeId) || activeBridges[0];
+                html += `<button data-action="bridgeinfo" data-bridge-id="${currentBridge.fractal_id}" aria-label="${escapeHtml(currentBridge.name)}">📋</button>`;
             } else {
-                // Show first 2 bridges + fan button (🔗)
-                for (let i = 0; i < 2; i++) {
-                    const bridge = activeBridges[i];
-                    const icon = `${i + 1}`;
-                    html += `<button data-action="toggle-bridge" data-bridge-id="${bridge.fractal_id}" aria-label="${escapeHtml(bridge.name)}">${icon}</button>`;
-                }
-                
-                const remainingCount = activeBridges.length - 2;
+                // 4+ bridges: Show Fan button (🔗)
                 html += `<button data-action="fan" aria-label="More bridges (${activeBridges.length} total)">🔗</button>`;
             }
             
-            // Add navigation button if multiple bridges exist
+            // Position n: Navigation button (→) if multiple bridges exist
             if (activeBridges.length > 1) {
                 html += `<button data-action="next" aria-label="Next bridge">→</button>`;
             }
@@ -1540,6 +1545,91 @@
             document.getElementById('mediaModalContent').innerHTML = '';
         }
 
+        // Bridge Info Modal (Mobile: Show current bridge name + actions)
+        function showBridgeInfoModal() {
+            // Get current bridge
+            const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
+            if (!currentBridgeId) {
+                showToast('⚠️ No bridge selected', 'error');
+                return;
+            }
+            
+            const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
+            const currentBridge = activeBridges.find(b => b.fractal_id === currentBridgeId);
+            
+            if (!currentBridge) {
+                showToast('⚠️ Bridge not found', 'error');
+                return;
+            }
+            
+            // Create modal
+            let bridgeInfoModal = document.getElementById('bridgeInfoModal');
+            if (!bridgeInfoModal) {
+                const modalHtml = `
+                    <div id="bridgeInfoModal" class="bridge-fan-modal">
+                        <div class="bridge-fan-content">
+                            <button class="bridge-fan-close" id="bridgeInfoClose">×</button>
+                            <h3 id="bridgeInfoName">🌉 Bridge</h3>
+                            <div class="bridge-fan-list" id="bridgeInfoActions"></div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                bridgeInfoModal = document.getElementById('bridgeInfoModal');
+                
+                // Add event listeners
+                bridgeInfoModal.addEventListener('click', function(e) {
+                    if (e.target === this) closeBridgeInfoModal();
+                });
+                document.getElementById('bridgeInfoClose').addEventListener('click', closeBridgeInfoModal);
+            }
+            
+            // Update modal content
+            document.getElementById('bridgeInfoName').textContent = `🌉 ${currentBridge.name}`;
+            
+            // Build action buttons
+            const platform = currentBridge.input_platform?.toLowerCase() || 'unknown';
+            const isWhatsApp = platform === 'whatsapp';
+            
+            const actions = [
+                { icon: 'ℹ️', label: 'Configuration', action: 'toggle-config', id: currentBridge.fractal_id },
+                ...(isWhatsApp ? [{ icon: '🔗', label: 'Generate QR', action: 'generate-qr', id: currentBridge.fractal_id }] : []),
+                { icon: '✏️', label: 'Edit Bridge', action: 'edit-bridge', id: currentBridge.fractal_id },
+                { icon: '🗑️', label: 'Delete Bridge', action: 'delete-bridge', id: currentBridge.fractal_id, danger: true }
+            ];
+            
+            document.getElementById('bridgeInfoActions').innerHTML = actions.map(action => `
+                <div class="bridge-fan-item ${action.danger ? 'danger' : ''}" data-bridge-action="${action.action}" data-bridge-id="${action.id}">
+                    <span class="bridge-fan-item-name">${action.icon} ${action.label}</span>
+                    <span class="bridge-fan-item-arrow">→</span>
+                </div>
+            `).join('');
+            
+            // Add click handlers
+            bridgeInfoModal.querySelectorAll('.bridge-fan-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    const actionType = this.dataset.bridgeAction;
+                    const bridgeId = this.dataset.bridgeId;
+                    
+                    closeBridgeInfoModal();
+                    
+                    // Trigger the appropriate action
+                    setTimeout(() => {
+                        const button = document.querySelector(`[data-${actionType}="${bridgeId}"]`);
+                        if (button) button.click();
+                    }, 100);
+                });
+            });
+            
+            // Show modal
+            bridgeInfoModal.classList.add('active');
+        }
+        
+        function closeBridgeInfoModal() {
+            const modal = document.getElementById('bridgeInfoModal');
+            if (modal) modal.classList.remove('active');
+        }
+        
         // Bridge Fan Modal (Mobile: Show all bridges + utility actions)
         function showBridgeFanModal() {
             let bridgeFanModal = document.getElementById('bridgeFanModal');
@@ -4140,9 +4230,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            // Custom actions (toggle-bridge, fan, next)
+            // Custom actions (toggle-bridge, bridgeinfo, fan, next)
             if (action === 'toggle-bridge' && bridgeId) {
                 loadMessages(bridgeId, 'user');
+            } else if (action === 'bridgeinfo') {
+                showBridgeInfoModal();
             } else if (action === 'fan') {
                 showBridgeFanModal();
             } else if (action === 'next') {
