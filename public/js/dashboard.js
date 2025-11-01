@@ -415,6 +415,14 @@
                 thumbsIdleTimer = null;
             }
             
+            // CAPTURE CURRENT ROTATION ANGLE before speed change (prevents reset to 0°)
+            const symbolElement = singularityBtn?.querySelector('.symbol');
+            if (symbolElement) {
+                const currentAngle = getCurrentRotation(symbolElement);
+                singularityBtn.style.setProperty('--rotation-offset', `${currentAngle}deg`);
+                console.log(`📐 Captured rotation: ${Math.round(currentAngle)}° (continuing FAST→SLOW)`);
+            }
+            
             // Exit creation mode for φ-breath system (mobile only)
             if (isMobile() && breathInitialized) {
                 console.log('😌 Exited CREATION MODE');
@@ -473,6 +481,14 @@
             if (thumbsIdleTimer) {
                 clearTimeout(thumbsIdleTimer);
                 thumbsIdleTimer = null;
+            }
+            
+            // CAPTURE CURRENT ROTATION ANGLE before speed change (prevents reset to 0°)
+            const symbolElement = singularityBtn?.querySelector('.symbol');
+            if (symbolElement) {
+                const currentAngle = getCurrentRotation(symbolElement);
+                singularityBtn.style.setProperty('--rotation-offset', `${currentAngle}deg`);
+                console.log(`📐 Captured rotation: ${Math.round(currentAngle)}° (continuing SLOW→FAST)`);
             }
             
             // SET FAST MODE: Activate fast phi breathe
