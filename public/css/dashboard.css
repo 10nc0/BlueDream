@@ -2641,7 +2641,9 @@ body::before {
     right: 16px;
     display: none; /* Hidden by default, shown in mobile mode */
     flex-direction: row-reverse; /* Right-to-left: → 🔗 🔍 🧿 ✍🏻 */
+    flex-wrap: wrap; /* Wrap to multiple rows if needed */
     gap: 12px;
+    max-width: calc(100vw - 32px); /* Prevent overflow beyond screen edges */
     z-index: 1000;
     pointer-events: none; /* Allow clicks through container */
 }
