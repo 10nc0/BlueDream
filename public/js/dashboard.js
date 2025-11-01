@@ -52,7 +52,7 @@
                 showInMobile: true,
                 showInDesktop: true,
                 requireAuth: true,
-                handler: () => openCreateBridgeModal()
+                handler: () => openCreatePopup()
             },
             bridgeinfo: {
                 id: 'bridgeinfo',
@@ -96,6 +96,46 @@
                     if (searchInput) {
                         searchInput.focus();
                         searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+            },
+            fan: {
+                id: 'fan',
+                label: '🔗 All Bridges',
+                icon: '🔗',
+                mobileIcon: '🔗',
+                desktopLabel: '🔗 All Bridges',
+                tooltip: 'View all bridges',
+                priority: 5,
+                showInMobile: true,
+                showInDesktop: false,
+                requireAuth: true,
+                handler: () => showBridgeFanModal()
+            },
+            next: {
+                id: 'next',
+                label: '→ Next',
+                icon: '→',
+                mobileIcon: '→',
+                desktopLabel: '→ Next Bridge',
+                tooltip: 'Navigate to next bridge',
+                priority: 6,
+                showInMobile: true,
+                showInDesktop: false,
+                requireAuth: true,
+                handler: () => {
+                    const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
+                    if (activeBridges.length <= 1) return;
+                    
+                    const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
+                    const currentIndex = activeBridges.findIndex(b => b.fractal_id === currentBridgeId);
+                    
+                    if (currentIndex !== -1) {
+                        const nextIndex = currentIndex < activeBridges.length - 1 ? currentIndex + 1 : 0;
+                        const nextBridge = activeBridges[nextIndex];
+                        if (nextBridge) {
+                            loadMessages(nextBridge.fractal_id, 'user');
+                        }
                     }
                 }
             }

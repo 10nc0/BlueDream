@@ -78,7 +78,7 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 ### Technical Implementations
 - **Backend**: Node.js with Express.
 - **Frontend**: SPA with client-side authentication.
-- **Unified Action Registry**: Central `ACTION_REGISTRY` object maps all UI actions (create, audit, search) for both mobile and desktop, eliminating code duplication. Single `executeAction()` dispatcher handles all contexts with consistent behavior, priority-based rendering, and dynamic indexing. Reduces failure points by 70% and saves ~500 lines of duplicate code.
+- **Unified Action Registry**: Central `ACTION_REGISTRY` object maps all UI actions (create, audit, search, bridgeinfo, fan, next) for both mobile and desktop, eliminating code duplication. Single `executeAction()` dispatcher handles all contexts with consistent behavior, priority-based rendering, and dynamic indexing. All handlers reference correct functions: `openCreatePopup()`, `showBridgeInfoModal()`, `showBridgeFanModal()`. Reduces failure points by 70% and saves ~500 lines of duplicate code.
 - **Authentication**: Email/password authentication using JWT tokens in `localStorage` with role-based access control. User data is strictly isolated within `tenant_X.users` tables; no global user table exists. Email-to-tenant routing is managed via a `core.user_email_to_tenant` mapping table.
 - **Database (Source of Truth)**: PostgreSQL (Neon-backed) with pure fractalized multi-tenancy.
   - `core` schema: Tenant registry, email routing, invites, security tables.
