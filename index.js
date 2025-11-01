@@ -3803,7 +3803,10 @@ app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => 
         const { bridge_id, discord_message_id, tag } = req.body;
         const client = req.dbClient || pool;
         
+        console.log('🗑️ DELETE /api/drops/tag request:', { bridge_id, discord_message_id, tag });
+        
         if (!bridge_id || !discord_message_id || !tag) {
+            console.log('❌ Missing required fields');
             return res.status(400).json({ 
                 error: 'Missing required fields: bridge_id, discord_message_id, tag' 
             });
@@ -3815,11 +3818,15 @@ app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => 
             [bridge_id]
         );
         
+        console.log('🔍 Bridge lookup result:', bridgeResult.rows);
+        
         if (bridgeResult.rows.length === 0) {
+            console.log('❌ Bridge not found for fractal_id:', bridge_id);
             return res.status(404).json({ error: 'Bridge not found in your tenant' });
         }
         
         const internalBridgeId = bridgeResult.rows[0].id;
+        console.log('✅ Internal bridge ID:', internalBridgeId);
         
         // Remove tag from array using PostgreSQL array functions
         const dropResult = await client.query(`

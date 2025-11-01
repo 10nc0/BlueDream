@@ -3889,6 +3889,8 @@ async function saveDrop(bridgeId, messageId, metadataText, section) {
 // Remove a specific tag from a message's drop
 async function removeTag(bridgeId, messageId, tag) {
     try {
+        console.log('🗑️ Removing tag:', { bridgeId, messageId, tag });
+        
         const response = await fetch('/api/drops/tag', {
             method: 'DELETE',
             headers: {
@@ -3902,8 +3904,12 @@ async function removeTag(bridgeId, messageId, tag) {
             })
         });
         
+        console.log('🔍 Response status:', response.status, response.statusText);
+        
         if (!response.ok) {
-            throw new Error('Failed to remove tag');
+            const errorData = await response.json().catch(() => ({}));
+            console.error('❌ Delete failed:', errorData);
+            throw new Error(errorData.error || 'Failed to remove tag');
         }
         
         const data = await response.json();
