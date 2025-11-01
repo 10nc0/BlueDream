@@ -3023,9 +3023,9 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
             return res.status(500).json({ error: 'Tenant context not found' });
         }
         
-        // Get user info from tenant-scoped table
+        // Get user info from tenant-scoped table (include is_genesis_admin for God View)
         const userResult = await pool.query(
-            `SELECT id, email, tenant_id FROM ${tenantSchema}.users WHERE id = $1`,
+            `SELECT id, email, tenant_id, is_genesis_admin FROM ${tenantSchema}.users WHERE id = $1`,
             [req.userId]
         );
         
@@ -3039,21 +3039,50 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
         
         console.log(`📊 Loading bridges for ${user.email} (user_id=${req.userId}) from ${tenantSchema}`);
         
-        // EXPLICIT SCHEMA INDEXING: Use parameterized schema names (fractalized architecture)
-        // ALL users (including dev) only see non-archived bridges in main UI
-        // DISCORD-FIRST: No message counts - Discord threads are sole storage
-        const result = await pool.query(`
-            SELECT b.*
-            FROM ${tenantSchema}.bridges b
-            WHERE b.archived = false
-            ORDER BY b.created_at DESC
-        `);
+        // GOD VIEW ARCHITECTURE: Dev users (admin_id='01') see ALL bridges across ALL tenants
+        // Regular users see only their own bridges (asset ownership)
+        let bridges = [];
         
-        console.log(`✅ Found ${result.rows.length} active bridges in ${tenantSchema} for ${user.email}`);
+        // Check if user is dev with genesis admin privileges
+        const isDevGodView = req.userRole === 'dev' && user.is_genesis_admin;
+        
+        if (isDevGodView) {
+            // GOD VIEW: Query ALL tenant schemas for bridges
+            console.log(`🔱 Dev God View activated for ${user.email} - fetching bridges from ALL tenants`);
+            
+            const allSchemas = await getAllTenantSchemas(pool);
+            
+            for (const schema of allSchemas) {
+                try {
+                    const schemaResult = await pool.query(`
+                        SELECT b.*, '${schema}'::text as tenant_schema
+                        FROM ${schema}.bridges b
+                        WHERE b.archived = false
+                        ORDER BY b.created_at DESC
+                    `);
+                    bridges.push(...schemaResult.rows);
+                } catch (error) {
+                    console.warn(`⚠️  Could not query schema ${schema}:`, error.message);
+                }
+            }
+            
+            console.log(`✅ God View: Found ${bridges.length} active bridges across ${allSchemas.length} tenants`);
+        } else {
+            // REGULAR USER VIEW: Only see bridges from their own tenant (asset ownership)
+            const result = await pool.query(`
+                SELECT b.*
+                FROM ${tenantSchema}.bridges b
+                WHERE b.archived = false
+                ORDER BY b.created_at DESC
+            `);
+            bridges = result.rows;
+            
+            console.log(`✅ Found ${bridges.length} active bridges in ${tenantSchema} for ${user.email}`);
+        }
         
         // PHASE 2 TRANSITION: Include both id and fractal_id during migration period
         // TODO: Remove raw id once ALL endpoints and frontend are migrated to fractal_id
-        const bridgesWithFractalIds = result.rows.map(bridge => {
+        const bridgesWithFractalIds = bridges.map(bridge => {
             // Generate fractal_id if missing (for backward compatibility)
             if (!bridge.fractal_id) {
                 bridge.fractal_id = fractalId.generate('bridge', tenantId, bridge.id, bridge.created_by_admin_id);
