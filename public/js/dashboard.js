@@ -449,7 +449,16 @@
                 void singularityBtn.offsetWidth; // Force reflow
                 singularityBtn.classList.remove('purged');
                 
-                console.log(`☢️ NUCLEAR PURGE complete: Reset to SLOW (rotation=${slowRotation}ms, breath=${slowBreath}ms, offset=0°)`);
+                // 8. CRITICAL: Clear inline animation styles to resuscitate CSS animations
+                singularityBtn.style.animation = '';
+                if (coreEl) coreEl.style.animation = '';
+                if (symbolEl) symbolEl.style.animation = '';
+                if (auraEl) auraEl.style.animation = '';
+                
+                // 9. Force another reflow to restart animations
+                void singularityBtn.offsetWidth;
+                
+                console.log(`☢️ NUCLEAR PURGE complete: Resuscitated SLOW mode (rotation=${slowRotation}ms, breath=${slowBreath}ms, offset=0°)`);
             }, 50);
         }
         
