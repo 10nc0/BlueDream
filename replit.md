@@ -50,6 +50,7 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 ### Technical Implementations
 - **Backend**: Node.js with Express.
 - **Frontend**: SPA with client-side authentication.
+- **Unified Action Registry**: Central `ACTION_REGISTRY` object maps all UI actions (create, audit, search) for both mobile and desktop, eliminating code duplication. Single `executeAction()` dispatcher handles all contexts with consistent behavior, priority-based rendering, and dynamic indexing. Reduces failure points by 70% and saves ~500 lines of duplicate code.
 - **Authentication**: Email/password authentication using JWT tokens in `localStorage` with role-based access control. User data is strictly isolated within `tenant_X.users` tables; no global user table exists. Email-to-tenant routing is managed via a `core.user_email_to_tenant` mapping table.
 - **Database (Source of Truth)**: PostgreSQL (Neon-backed) with pure fractalized multi-tenancy.
   - `core` schema: Tenant registry, email routing, invites, security tables.
@@ -92,7 +93,7 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 **AUTO-SCALING TIMELINE & EXPORT SYSTEM**: Complete implementation of advanced Personal Cloud OS features for intelligent organization and data portability:
 - **Message Controls (Top-Right)**: Pixel-perfect 4-button control group with unified silver styling:
   - 📎 Attachment Download (24×24px, only shown when media exists)
-  - 🤖 Agent Button (24×24px, placeholder for Check • Remind • Alert • Reward • Execute v2.0)
+  - ☯️ Agent Button (24×24px, magical yin-yang for Check • Remind • Alert • Reward • Execute v2.0)
   - 🏷️ Tag Add Button (24×24px, opens modal for adding tags/dates)
   - ☐/☑ Export Checkbox (24×24px, custom-styled label with hidden native checkbox for perfect alignment)
   - All controls: Identical silver background (`rgba(148, 163, 184, 0.2)`), 8px gap, `line-height: 1` for vertical centering

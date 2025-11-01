@@ -35,6 +35,95 @@
         };
 
         // ===================================================================
+        // UNIFIED ACTION REGISTRY
+        // Central map for all buttons/actions (mobile + desktop)
+        // This eliminates code duplication and creates single source of truth
+        // ===================================================================
+        
+        const ACTION_REGISTRY = {
+            create: {
+                id: 'create',
+                label: '➕ Create Bridge',
+                icon: '➕',
+                mobileIcon: '➕',
+                desktopLabel: '➕ Create Bridge',
+                tooltip: 'Create a new bridge',
+                priority: 1, // Lower = higher priority in mobile layout
+                showInMobile: true,
+                showInDesktop: true,
+                requireAuth: true,
+                handler: () => openCreateBridgeModal()
+            },
+            audit: {
+                id: 'audit',
+                label: '☯️ Agent Actions',
+                icon: '☯️',
+                mobileIcon: '☯️',
+                desktopLabel: '☯️ Agent Actions',
+                tooltip: 'Check • Remind • Alert • Reward • Execute',
+                priority: 2,
+                showInMobile: true,
+                showInDesktop: true,
+                requireAuth: true,
+                handler: () => showToast('☯️ Agent features coming soon! Check • Remind • Alert • Reward • Execute', 'info')
+            },
+            search: {
+                id: 'search',
+                label: '🔍 Search',
+                icon: '🔍',
+                mobileIcon: '🔍',
+                desktopLabel: 'Search bridges...',
+                tooltip: 'Search messages',
+                priority: 3,
+                showInMobile: false, // Only in fan modal on mobile
+                showInDesktop: false, // Inline search box on desktop
+                requireAuth: true,
+                handler: () => {
+                    const searchInput = document.getElementById('searchBox');
+                    if (searchInput) {
+                        searchInput.focus();
+                        searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+            }
+        };
+        
+        /**
+         * Execute action by ID with unified logic
+         * Works for both mobile and desktop contexts
+         */
+        function executeAction(actionId, context = {}) {
+            const action = ACTION_REGISTRY[actionId];
+            
+            if (!action) {
+                console.error(`❌ Unknown action: ${actionId}`);
+                return;
+            }
+            
+            if (action.requireAuth && !currentUser) {
+                showToast('⚠️ Please log in to perform this action', 'error');
+                return;
+            }
+            
+            // Execute with context
+            try {
+                action.handler(context);
+            } catch (error) {
+                console.error(`❌ Action ${actionId} failed:`, error);
+                showToast(`⚠️ Action failed: ${error.message}`, 'error');
+            }
+        }
+        
+        /**
+         * Get visible actions for current mode
+         */
+        function getVisibleActions(isMobileMode) {
+            return Object.values(ACTION_REGISTRY)
+                .filter(action => isMobileMode ? action.showInMobile : action.showInDesktop)
+                .sort((a, b) => a.priority - b.priority);
+        }
+
+        // ===================================================================
         // MOBILE DETECTION & MODE SWITCHING
         // ===================================================================
         
@@ -154,7 +243,7 @@
 
         /**
          * Render thumbs zone buttons (n-4-3-2-1 layout)
-         * Priority: Show up to 5 bridges, then fan collapse. Utility buttons in fan modal.
+         * UNIFIED: Uses ACTION_REGISTRY for consistency with desktop
          */
         function renderThumbsZone() {
             const thumbsZone = document.getElementById('thumbsZone');
@@ -162,17 +251,22 @@
             
             const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
             const maxVisibleBridges = 5;
+            const mobileActions = getVisibleActions(true);
             
             let html = '';
             
-            // Button 1: Create bridge (closest to thumb, always visible)
-            html += '<button class="thumb-btn" data-action="create" aria-label="Create Bridge">➕</button>';
+            // Priority 1: Create button (always visible, rightmost for thumb access)
+            const createAction = ACTION_REGISTRY.create;
+            html += `<button class="thumb-btn" data-action="${createAction.id}" aria-label="${createAction.tooltip}">${createAction.mobileIcon}</button>`;
             
-            // Buttons 2-5: Show up to 4 bridges (or fan if > 5 bridges)
+            // Buttons 2-5: Bridges or utility actions
             if (activeBridges.length === 0) {
-                // No bridges - show utility buttons
-                html += '<button class="thumb-btn" data-action="audit" aria-label="Agent Actions">☯️</button>';
-                html += '<button class="thumb-btn" data-action="search" aria-label="Search">🔍</button>';
+                // No bridges - show utility actions from registry
+                mobileActions.forEach(action => {
+                    if (action.id !== 'create') {
+                        html += `<button class="thumb-btn" data-action="${action.id}" aria-label="${action.tooltip}">${action.mobileIcon}</button>`;
+                    }
+                });
             } else if (activeBridges.length <= 4) {
                 // Show all bridges (1-4)
                 activeBridges.forEach((bridge, index) => {
@@ -180,14 +274,13 @@
                     html += `<button class="thumb-btn" data-action="toggle-bridge" data-bridge-id="${bridge.fractal_id}" aria-label="${escapeHtml(bridge.name)}">${icon}</button>`;
                 });
             } else {
-                // Show first 3 bridges + fan button for remaining bridges
+                // Show first 3 bridges + fan button
                 for (let i = 0; i < 3; i++) {
                     const bridge = activeBridges[i];
                     const icon = `${i + 1}`;
                     html += `<button class="thumb-btn" data-action="toggle-bridge" data-bridge-id="${bridge.fractal_id}" aria-label="${escapeHtml(bridge.name)}">${icon}</button>`;
                 }
                 
-                // Fan button for remaining bridges
                 const remainingCount = activeBridges.length - 3;
                 html += `<button class="thumb-btn" data-action="fan" aria-label="More bridges">+${remainingCount}</button>`;
             }
@@ -1374,14 +1467,14 @@
                             <h3>🌉 All Bridges</h3>
                             <div class="bridge-fan-list" id="bridgeFanList"></div>
                             <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.2);">
-                                <div class="bridge-fan-item" data-action="search" style="opacity: 0.9;">
-                                    <span class="bridge-fan-item-name">🔍 Search Messages</span>
-                                    <span class="bridge-fan-item-arrow">→</span>
-                                </div>
-                                <div class="bridge-fan-item" data-action="audit" style="opacity: 0.9;">
-                                    <span class="bridge-fan-item-name">☯️ Check • Remind • Alert • Reward • Execute</span>
-                                    <span class="bridge-fan-item-arrow">→</span>
-                                </div>
+                                ${Object.values(ACTION_REGISTRY)
+                                    .filter(action => ['search', 'audit'].includes(action.id))
+                                    .map(action => `
+                                        <div class="bridge-fan-item" data-action="${action.id}" style="opacity: 0.9;">
+                                            <span class="bridge-fan-item-name">${action.icon} ${action.tooltip}</span>
+                                            <span class="bridge-fan-item-arrow">→</span>
+                                        </div>
+                                    `).join('')}
                             </div>
                         </div>
                     </div>
@@ -1408,28 +1501,20 @@
                 </div>
             `).join('');
             
-            // Add click handlers to all fan items (bridges + utility actions)
+            // UNIFIED: Add click handlers to all fan items (bridges + utility actions)
             bridgeFanModal.querySelectorAll('.bridge-fan-item').forEach(item => {
                 item.addEventListener('click', function() {
                     const bridgeId = this.dataset.bridgeId;
                     const action = this.dataset.action;
                     
+                    closeBridgeFanModal();
+                    
                     if (bridgeId) {
                         // Bridge navigation
                         loadMessages(bridgeId, 'user');
-                        closeBridgeFanModal();
-                    } else if (action === 'search') {
-                        // Open search
-                        const searchInput = document.getElementById('bridgeSearchInput');
-                        if (searchInput) {
-                            closeBridgeFanModal();
-                            searchInput.focus();
-                            searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }
-                    } else if (action === 'audit') {
-                        // Placeholder for future agent layer
-                        closeBridgeFanModal();
-                        showToast('☯️ Agent features coming soon! Check • Remind • Alert • Reward • Execute', 'info');
+                    } else if (ACTION_REGISTRY[action]) {
+                        // Registry-based actions (unified with desktop/mobile)
+                        executeAction(action);
                     }
                 });
             });
@@ -3953,40 +4038,41 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize touch interactions (tap-to-zoom, swipe navigation)
     initTouchInteractions();
     
-    // Thumbs zone event delegation (CSP-compliant)
+    // UNIFIED: Thumbs zone + desktop button event delegation (CSP-compliant)
     document.addEventListener('click', function(e) {
         const thumbBtn = e.target.closest('.thumb-btn');
-        if (!thumbBtn) return;
+        const createBtn = e.target.closest('.create-bot-btn');
+        const auditBtn = e.target.closest('.audit-type-btn');
         
-        const action = thumbBtn.dataset.action;
-        const bridgeId = thumbBtn.dataset.bridgeId;
-        
-        switch(action) {
-            case 'create':
-                openCreateBridgeModal();
-                break;
-            case 'audit':
-                // Placeholder for future agent layer (Check • Remind • Alert • Reward • Execute)
-                showToast('☯️ Agent features coming soon! Check • Remind • Alert • Reward • Execute', 'info');
-                break;
-            case 'search':
-                // Open search modal or focus search input
-                const searchInput = document.getElementById('bridgeSearchInput');
-                if (searchInput) {
-                    searchInput.focus();
-                    // On mobile, may need to scroll search into view
-                    searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-                break;
-            case 'toggle-bridge':
-                if (bridgeId) {
-                    loadMessages(bridgeId, 'user');
-                }
-                break;
-            case 'fan':
-                // Expand bridge list modal
+        // Mobile thumbs zone
+        if (thumbBtn) {
+            const action = thumbBtn.dataset.action;
+            const bridgeId = thumbBtn.dataset.bridgeId;
+            
+            // Registry-based actions (create, audit, search)
+            if (ACTION_REGISTRY[action]) {
+                executeAction(action);
+                return;
+            }
+            
+            // Custom actions (toggle-bridge, fan)
+            if (action === 'toggle-bridge' && bridgeId) {
+                loadMessages(bridgeId, 'user');
+            } else if (action === 'fan') {
                 showBridgeFanModal();
-                break;
+            }
+            return;
+        }
+        
+        // Desktop sidebar buttons (same actions, different triggers)
+        if (createBtn) {
+            executeAction('create');
+            return;
+        }
+        
+        if (auditBtn) {
+            executeAction('audit');
+            return;
         }
     });
     
