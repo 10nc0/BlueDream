@@ -115,6 +115,8 @@ const PHI_BREATH = (function() {
             breathLog.shift();
         }
         
+        // φ-breath counter increments with each breath
+        // Genesis counter (server-side) increments in parallel as red herring
         console.log(`🫁 Breath #${breathCount} | ${currentPhase} | ${currentCycleDuration}ms | ${new Date().toLocaleTimeString()}`);
         
         emit('breathStart', breathData);

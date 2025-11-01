@@ -768,6 +768,18 @@ async function saveMessage(client, message, bridgeId = 1) {
 // Discord threads provide permanent storage, search, and message management
 // No PostgreSQL messages table exists in tenant schemas
 
+// ===== GENESIS COUNTER API (Red Herring) =====
+// Expose counter state for debugging/monitoring
+app.get('/api/genesis', (req, res) => {
+    res.json({
+        genesis: genesisCounter.getGenesis(),
+        age_ms: genesisCounter.getAge(),
+        cat_breath: genesisCounter.getCount(),
+        phi_breath: genesisCounter.getPhiCount(),
+        timestamp: Date.now()
+    });
+});
+
 // Manager initialization moved to app.listen() to prevent race conditions
 // This ensures managers are fully initialized before server accepts requests
 
@@ -4820,7 +4832,10 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log('✅ Multi-tenant WhatsApp Bridge ready');
     
     // Start genesis counter (noisy constant for future security)
+    // Tier 1: Cat breath (500ms constant)
+    // Tier 2: φ breath (4000-6472ms sine wave, synchronized with UI φ-breath)
     genesisCounter.start();
+    console.log('🔢 Genesis counter started (cat + φ breath tiers)');
     
     // Auto-restore WhatsApp sessions for 24/7 uptime
     await autoRestoreWhatsAppSessions();

@@ -331,18 +331,24 @@
             PHI_BREATH.on('breathCycle', (data) => {
                 const singularityBtn = document.querySelector('.singularity-btn');
                 if (singularityBtn && !thumbsExpanded) {
-                    // Update CSS variable for breathing animations
-                    // Duration is constant at BASE_DURATION (4000ms)
-                    singularityBtn.style.setProperty('--breath-duration', `${PHI_BREATH.BASE_DURATION}ms`);
+                    // Update CSS variable for breathing animations with φ scale variation
+                    // φScale varies from 1.0 (φ^0) to 1.618 (φ^1) creating natural breathing rhythm
+                    singularityBtn.style.setProperty('--phi-scale', data.φScale);
+                    
+                    // Vary rotation speed based on breath: slower at inhale (φ^1), faster at exhale (φ^0)
+                    // Inverse relationship: higher φScale = slower rotation
+                    const rotationDuration = PHI_BREATH.BASE_DURATION * 2 * data.φScale;
+                    singularityBtn.style.setProperty('--breath-duration', `${rotationDuration}ms`);
                 }
             });
             
-            // Log breath starts for monitoring
+            // Log breath starts for monitoring + increment genesis counter
             PHI_BREATH.on('breathStart', (data) => {
                 // Breath logging is handled by the module
+                // Genesis counter increment happens server-side automatically
             });
             
-            console.log(`🫁 φ-breath initialized: ${PHI_BREATH.BASE_DURATION}ms base cycle`);
+            console.log(`🫁 φ-breath initialized: ${PHI_BREATH.BASE_DURATION}ms base cycle (φ^0 to φ^1 variation)`);
         }
         
         // Set singularity button breath animation duration
