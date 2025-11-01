@@ -5044,6 +5044,100 @@ app.listen(PORT, '0.0.0.0', async () => {
     }
     
     await initializeDatabase();
+    
+    // AUTO-HEAL: Fix bridges with missing Discord threads
+    // This catches cases where thread creation failed during bridge creation
+    // (e.g., Hermes was offline, Discord API error, permission issues)
+    if (hermesBot && hermesBot.isReady()) {
+        try {
+            console.log('🔧 Auto-healing: Checking all bridges for missing Discord threads...');
+            
+            // Get all tenant schemas
+            const schemas = await pool.query(`
+                SELECT schema_name 
+                FROM information_schema.schemata 
+                WHERE schema_name LIKE 'tenant_%'
+                ORDER BY schema_name
+            `);
+            
+            let totalHealed = 0;
+            let totalChecked = 0;
+            
+            for (const { schema_name } of schemas.rows) {
+                // Get all non-archived bridges in this tenant
+                const bridges = await pool.query(`
+                    SELECT id, name, output_01_url, output_0n_url, output_credentials 
+                    FROM ${schema_name}.bridges 
+                    WHERE archived = false
+                `);
+                
+                for (const bridge of bridges.rows) {
+                    totalChecked++;
+                    const outputCreds = bridge.output_credentials || {};
+                    
+                    // Check if Ledger thread (output_01) is missing
+                    if (!outputCreds.output_01 || !outputCreds.output_01.thread_id) {
+                        console.log(`  ⚠️  Bridge "${bridge.name}" (${schema_name}) missing threads, creating...`);
+                        
+                        try {
+                            // Extract tenant_id from schema name (tenant_1 -> 1)
+                            const tenantId = parseInt(schema_name.replace('tenant_', ''));
+                            
+                            const dualThreads = await hermesBot.createDualThreadsForBridge(
+                                bridge.output_01_url,
+                                bridge.output_0n_url,
+                                bridge.name,
+                                tenantId,
+                                bridge.id
+                            );
+                            
+                            // Build output_credentials with typed destinations
+                            const outputDestinations = {};
+                            
+                            if (dualThreads.output_01) {
+                                outputDestinations.output_01 = dualThreads.output_01;
+                            }
+                            
+                            if (dualThreads.output_0n) {
+                                outputDestinations.output_0n = dualThreads.output_0n;
+                            }
+                            
+                            // Save thread IDs to database
+                            await pool.query(`
+                                UPDATE ${schema_name}.bridges 
+                                SET output_credentials = output_credentials || $1::jsonb
+                                WHERE id = $2
+                            `, [JSON.stringify(outputDestinations), bridge.id]);
+                            
+                            // Send initial messages to threads
+                            if (dualThreads.output_01 && dualThreads.output_01.type === 'thread') {
+                                try {
+                                    await hermesBot.sendInitialMessage(
+                                        dualThreads.output_01.thread_id, 
+                                        bridge.name, 
+                                        bridge.output_01_url
+                                    );
+                                } catch (msgError) {
+                                    console.error(`    ⚠️  Failed to send initial message:`, msgError.message);
+                                }
+                            }
+                            
+                            totalHealed++;
+                            console.log(`    ✅ Healed bridge "${bridge.name}" (thread: ${dualThreads.output_01?.thread_id})`);
+                        } catch (healError) {
+                            console.error(`    ❌ Failed to heal bridge "${bridge.name}":`, healError.message);
+                        }
+                    }
+                }
+            }
+            
+            console.log(`✅ Auto-heal complete: ${totalHealed}/${totalChecked} bridges healed`);
+        } catch (error) {
+            console.error('❌ Auto-heal failed:', error.message);
+        }
+    } else {
+        console.warn('⚠️  Hermes not ready, skipping auto-heal');
+    }
     console.log('✅ Multi-tenant WhatsApp Bridge ready');
     
     // Start genesis counter (noisy constant for future security)
