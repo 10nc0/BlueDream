@@ -156,10 +156,18 @@ function initHopAnimation() {
         }
         
         // Alternate time color with cat animation (black vs white)
+        const isJump = Math.floor(frame / CAT_CONFIG.JUMP_FRAME_INTERVAL) % 2 === 0;
+        const blinkColor = isJump ? CAT_CONFIG.COLORS.TIME_ACTIVE : CAT_CONFIG.COLORS.TIME_IDLE;
+        
         const timeEl = document.getElementById('currentTime');
         if (timeEl) {
-            const isJump = Math.floor(frame / CAT_CONFIG.JUMP_FRAME_INTERVAL) % 2 === 0;
-            timeEl.style.color = isJump ? CAT_CONFIG.COLORS.TIME_ACTIVE : CAT_CONFIG.COLORS.TIME_IDLE;
+            timeEl.style.color = blinkColor;
+        }
+        
+        // Also apply blinking to compact position
+        const timeElCompact = document.getElementById('currentTimeCompact');
+        if (timeElCompact) {
+            timeElCompact.style.color = blinkColor;
         }
         
         drawPixelCat(frame, offsetX, offsetY, fleeing);
