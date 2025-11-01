@@ -926,10 +926,10 @@
                 </div>
 
                 ${currentUser?.role === 'dev' && bridge.output_credentials?.output_01?.thread_id ? `
-                    <!-- MESSAGES: Full viewport height with minimal chrome -->
-                    <div style="display: flex; flex-direction: column; height: calc(100vh - 220px); margin-top: 0.5rem;">
+                    <!-- MESSAGES: Snap to bottom - fills all available space -->
+                    <div style="display: flex; flex-direction: column; flex: 1; margin-top: 0.5rem; min-height: 0;">
                         <!-- Compact search toolbar -->
-                        <div style="display: flex; gap: 0.5rem; padding: 0.5rem; background: rgba(30, 41, 59, 0.4); border-radius: 6px; margin-bottom: 0.5rem;">
+                        <div style="display: flex; gap: 0.5rem; padding: 0.5rem; background: rgba(30, 41, 59, 0.4); border-radius: 6px; margin-bottom: 0.5rem; flex-shrink: 0;">
                             <label style="display: flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.625rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">
                                 <input type="checkbox" id="select-all-${bridge.fractal_id}" data-select-all="${bridge.fractal_id}" style="cursor: pointer;">
                                 All
@@ -946,12 +946,12 @@
                             <button id="export-selected-${bridge.fractal_id}" data-export-bridge="${bridge.fractal_id}" disabled style="padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;">📦 Export</button>
                         </div>
                         <!-- Search indicator (if active) -->
-                        <div id="search-indicator-${bridge.fractal_id}" style="display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between; margin-bottom: 0.5rem;">
+                        <div id="search-indicator-${bridge.fractal_id}" style="display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between; margin-bottom: 0.5rem; flex-shrink: 0;">
                             <span>🔍 Filtered from bridge search</span>
                             <button data-clear-filter="${bridge.fractal_id}" style="background: none; border: none; color: #22c55e; cursor: pointer; font-size: 1.25rem; padding: 0; line-height: 1; font-weight: bold;" title="Clear filter">×</button>
                         </div>
-                        <!-- Messages: Fill remaining space -->
-                        <div id="discord-messages-${bridge.fractal_id}" class="discord-messages-container" style="flex: 1; overflow-y: auto; background: rgba(30, 41, 59, 0.3); border-radius: 6px; padding: 0.75rem;">
+                        <!-- Messages: Fill remaining space, snap to bottom -->
+                        <div id="discord-messages-${bridge.fractal_id}" class="discord-messages-container" style="flex: 1; overflow-y: auto; background: rgba(30, 41, 59, 0.3); border-radius: 6px; padding: 0.75rem; min-height: 0;">
                             <div class="no-messages">Loading messages...</div>
                         </div>
                     </div>
