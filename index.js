@@ -3851,6 +3851,64 @@ app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => 
     }
 });
 
+// Delete a specific date from a message's drop
+app.delete('/api/drops/date', requireAuth, setTenantContext, async (req, res) => {
+    try {
+        const { bridge_id, discord_message_id, date } = req.body;
+        const client = req.dbClient || pool;
+        
+        console.log('🗑️ DELETE /api/drops/date request:', { bridge_id, discord_message_id, date });
+        
+        if (!bridge_id || !discord_message_id || !date) {
+            console.log('❌ Missing required fields');
+            return res.status(400).json({ 
+                error: 'Missing required fields: bridge_id, discord_message_id, date' 
+            });
+        }
+        
+        // Verify bridge belongs to user's tenant
+        const bridgeResult = await client.query(
+            'SELECT id FROM bridges WHERE fractal_id = $1',
+            [bridge_id]
+        );
+        
+        console.log('🔍 Bridge lookup result:', bridgeResult.rows);
+        
+        if (bridgeResult.rows.length === 0) {
+            console.log('❌ Bridge not found for fractal_id:', bridge_id);
+            return res.status(404).json({ error: 'Bridge not found in your tenant' });
+        }
+        
+        const internalBridgeId = bridgeResult.rows[0].id;
+        console.log('✅ Internal bridge ID:', internalBridgeId);
+        
+        // Remove date from array using PostgreSQL array functions
+        const dropResult = await client.query(`
+            UPDATE drops
+            SET extracted_dates = array_remove(extracted_dates, $1),
+                updated_at = NOW()
+            WHERE bridge_id = $2 AND discord_message_id = $3
+            RETURNING *
+        `, [date, internalBridgeId, discord_message_id]);
+        
+        console.log('🔍 Drop update result:', dropResult.rows.length > 0 ? 'SUCCESS' : 'NOT FOUND');
+        
+        if (dropResult.rows.length === 0) {
+            console.log('❌ No drop found for:', { internalBridgeId, discord_message_id });
+            return res.status(404).json({ error: 'Drop not found' });
+        }
+        
+        console.log('✅ Date removed successfully');
+        res.json({ 
+            success: true, 
+            drop: dropResult.rows[0]
+        });
+    } catch (error) {
+        console.error('❌ Error removing date:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Search drops using PostgreSQL full-text search
 app.get('/api/drops/search/:bridge_id', requireAuth, setTenantContext, async (req, res) => {
     try {
