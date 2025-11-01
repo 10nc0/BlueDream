@@ -110,6 +110,8 @@ body {
    HEADER - RESPONSIVE
    =================================================================== */
 .header {
+  margin: 0;
+  padding: 0;
   background: rgba(30, 41, 59, 0.8);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--color-border);
