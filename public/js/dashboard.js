@@ -2196,11 +2196,33 @@
             }
         }
         
-        // Dynamically create export checkboxes for messages
-        // This separates checkbox state (manipulable) from Discord message IDs (read-only)
+        // Create export checkboxes in a PURE OVERLAY (never modifies message DOM)
+        // Messages remain 100% read-only, checkboxes positioned via data-message-id mapping
         function createExportCheckboxes(bridgeId, messages) {
-            console.log(`📋 Creating ${messages.length} export checkboxes for bridge ${bridgeId}`);
+            console.log(`📋 Creating ${messages.length} export checkboxes in PURE OVERLAY (no message DOM modification)`);
             
+            const container = document.getElementById(`discord-messages-${bridgeId}`);
+            if (!container) {
+                console.warn(`⚠️ Container not found for bridge ${bridgeId}`);
+                return;
+            }
+            
+            // Get or create the pure overlay container (separate from messages)
+            let overlay = document.getElementById(`checkbox-overlay-${bridgeId}`);
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = `checkbox-overlay-${bridgeId}`;
+                overlay.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 1000;';
+                container.style.position = 'relative'; // Ensure container is positioned
+                container.appendChild(overlay);
+                console.log(`✓ Created pure overlay container for bridge ${bridgeId}`);
+            } else {
+                // Clear existing checkboxes
+                overlay.innerHTML = '';
+                console.log(`✓ Cleared existing overlay for bridge ${bridgeId}`);
+            }
+            
+            // Create checkboxes positioned over each message
             messages.forEach(msg => {
                 const messageEl = document.querySelector(`[data-msg-id="${msg.id}"]`);
                 if (!messageEl) {
@@ -2208,30 +2230,33 @@
                     return;
                 }
                 
-                // Remove any existing checkbox (in case of re-render)
-                const existingCheckbox = messageEl.querySelector('.message-export-checkbox');
-                if (existingCheckbox) {
-                    existingCheckbox.remove();
-                }
+                // Get message position relative to container
+                const messageRect = messageEl.getBoundingClientRect();
+                const containerRect = container.getBoundingClientRect();
+                const scrollTop = container.scrollTop;
                 
-                // Create checkbox element dynamically
+                // Calculate position
+                const top = (messageRect.top - containerRect.top) + scrollTop;
+                const right = 8; // 0.5rem = 8px
+                
+                // Create checkbox
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.className = 'message-export-checkbox message-checkbox';
                 checkbox.dataset.messageId = msg.id;
                 checkbox.dataset.msgId = msg.id;
                 checkbox.dataset.bridgeId = bridgeId;
-                checkbox.style.cssText = 'position: absolute; top: 0.5rem; right: 0.5rem; width: 18px; height: 18px; cursor: pointer; z-index: 100; accent-color: #a855f7;';
+                checkbox.style.cssText = `position: absolute; top: ${top}px; right: ${right}px; width: 18px; height: 18px; cursor: pointer; accent-color: #a855f7; pointer-events: auto; z-index: 10;`;
                 
-                // Restore checked state if previously selected
+                // Restore checked state
                 if (selectedMessages[bridgeId]?.has(msg.id)) {
                     checkbox.checked = true;
                 }
                 
-                messageEl.appendChild(checkbox);
+                overlay.appendChild(checkbox);
             });
             
-            console.log(`✅ Created checkboxes for ${messages.length} messages`);
+            console.log(`✅ Created ${messages.length} checkboxes in pure overlay (messages untouched)`);
         }
         
         // Update export button state based on selected messages
