@@ -329,13 +329,19 @@
         }
         
         function collapseToSingularity() {
-            if (!thumbsExpanded) return;
+            if (!thumbsExpanded) {
+                console.log('⚠️ Not expanded, ignoring collapse');
+                return;
+            }
+            
+            console.log('🔄 COLLAPSE: Starting φ-inverse fusion');
             thumbsExpanded = false;
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
             const singularityBtn = document.querySelector('.singularity-btn');
             
             if (layer01) {
                 // Start collapse: remove .show and add .collapsing for φ-inverse fusion animation
+                console.log('⬅️ Buttons fusing left to right');
                 layer01.classList.remove('show');
                 setTimeout(() => {
                     layer01.classList.add('collapsing');
@@ -344,6 +350,7 @@
                 // ☯️ SNAP! Singularity reappears after fusion
                 setTimeout(() => {
                     if (singularityBtn) {
+                        console.log('✨ SNAP! ☯️ returns');
                         singularityBtn.style.opacity = '1';
                         singularityBtn.style.transform = 'scale(1)';
                     }
@@ -351,33 +358,43 @@
                 
                 // Wait for fusion animation to complete (buttons fuse + singularity appears)
                 setTimeout(() => {
+                    console.log('✅ Collapse complete, ready for next cycle');
                     layer01.setAttribute('hidden', '');
                     layer01.classList.remove('collapsing');
                 }, 800); // 300ms (longest button delay) + 300ms (fusion) + 200ms buffer
             }
             
             // Return to calm breath
+            console.log('😌 Returning to calm φ^0 breath');
             setBreathCycle(BASE_BREATH);
         }
         
         function expandFromSingularity() {
-            if (thumbsExpanded) return;
+            if (thumbsExpanded) {
+                console.log('⚠️ Already expanded, ignoring');
+                return;
+            }
+            
+            console.log('🌌 EXPAND: Starting goose laying eggs');
             thumbsExpanded = true;
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
             const singularityBtn = document.querySelector('.singularity-btn');
             
             if (layer01) {
                 // Remove hidden and show eggs
+                console.log('🥚 Showing eggs layer');
                 layer01.removeAttribute('hidden');
                 layer01.classList.remove('collapsing');
                 setTimeout(() => {
                     layer01.classList.add('show');
+                    console.log('✨ Eggs appearing sequentially');
                 }, 10);
             }
             
             // Goose vanishes after laying eggs
             setTimeout(() => {
                 if (singularityBtn) {
+                    console.log('💨 POOF! Goose vanishes');
                     singularityBtn.style.opacity = '0';
                     singularityBtn.style.transform = 'scale(0)';
                 }
@@ -393,6 +410,7 @@
             // Auto-collapse after φ-breath
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             thumbsIdleTimer = setTimeout(() => {
+                console.log('⏰ φ-breath complete, starting collapse');
                 if (thumbsExpanded && isMobile()) {
                     collapseToSingularity();
                 }
@@ -4617,9 +4635,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const action = thumbBtn.dataset.action;
             const bridgeId = thumbBtn.dataset.bridgeId;
             
-            // Reset idle timer on any thumbs zone interaction
-            if (isMobile()) {
-                resetThumbsIdleTimer();
+            // ☯️ SINGULARITY BUTTON - Toggle expand/collapse
+            if (action === 'singularity') {
+                if (isMobile()) {
+                    console.log('🌌 Singularity clicked');
+                    expandFromSingularity();
+                }
+                return;
             }
             
             // Registry-based actions (create, audit, search)
