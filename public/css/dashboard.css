@@ -2777,7 +2777,7 @@ body::before {
     z-index: -2;
 }
 
-/* CORE BORDER - rainbow edge with rotation */
+/* CORE BORDER - rainbow edge with TIME-BASED rotation */
 .singularity-btn .core::after {
     content: '';
     position: absolute;
@@ -2791,24 +2791,25 @@ body::before {
         linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
-    animation: border-rotate 6s linear infinite;
+    /* TIME-BASED: Use gradient position from --radiant-progress (0-1) */
+    background-position: calc(var(--radiant-progress, 0) * 200%) 50%;
+    animation: none !important; /* Kill separate animation - unified with clock */
     z-index: -1;
 }
 
-/* AURA - rainbow halo with pulse */
+/* AURA - rainbow halo with pulse + TIME-BASED rotation */
 .singularity-btn .aura {
     position: absolute;
     inset: -12px;
     border-radius: 50%;
     background: conic-gradient(
-        from 0deg,
+        from var(--radiant-deg, 0deg),
         #ec4899, #a855f7, #22d3ee, #10b981, #f59e0b, #ef4444, #ec4899
     );
     filter: blur(12px);
     opacity: 0.6;
-    animation: 
-        aura-pulse var(--breath-duration, 3000ms) ease-in-out infinite,
-        aura-rotate 8s linear infinite;
+    /* Only pulse animation - rotation unified with clock */
+    animation: aura-pulse var(--breath-duration, 3000ms) ease-in-out infinite;
     z-index: -3;
     pointer-events: none;
 }
@@ -2827,13 +2828,7 @@ body::before {
     50%      { transform: scale(1.05); }
 }
 
-/* Layer 3: Border rotation (rainbow gradient spin) */
-@keyframes border-rotate {
-    from { background-position: 0% 50%; }
-    to   { background-position: 200% 50%; }
-}
-
-/* Layer 4: Aura pulse (outer glow expansion + opacity) */
+/* Layer 3: Aura pulse (outer glow expansion + opacity) */
 @keyframes aura-pulse {
     0%, 100% { 
         transform: scale(1);
@@ -2845,18 +2840,7 @@ body::before {
     }
 }
 
-/* Layer 5: Aura rotation (slow rainbow spin) */
-@keyframes aura-rotate {
-    from { transform: rotate(0deg); }
-    to   { transform: rotate(360deg); }
-}
-
-/* φ-BREATH YIN-YANG ROTATION — Eternal spin, speed controlled by --rotation-duration */
-/* Continues from --rotation-offset instead of resetting to 0deg */
-@keyframes yinyang-rotate {
-    from { transform: rotate(var(--rotation-offset, 0deg)); }
-    to   { transform: rotate(calc(var(--rotation-offset, 0deg) + 360deg)); }
-}
+/* REMOVED: yinyang-rotate - now using time-based --radiant-deg directly */
 
 /* ===================================================================
    LAYER 01 - BATTLE-TESTED CLEAN SEPARATION

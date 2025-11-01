@@ -459,8 +459,11 @@
         };
         
         /**
-         * NUCLEAR PURGE - UI layers only (breathe, pulse, scale)
-         * NO LONGER TOUCHES ROTATION - rotation is time-based now
+         * NUCLEAR PURGE - QUANTUM BIDIRECTIONAL (horizontal + vertical)
+         * Purges ALL layers: 1A (visible) + not-1A (ghost breathe/radiate/pulse)
+         * 
+         * Vertical: SLOW ↔ FAST
+         * Horizontal: 1A symbol ↔ not-1A (core, aura, border)
          */
         function nuclearPurge() {
             const singularityBtn = document.querySelector('.singularity-btn');
@@ -469,17 +472,32 @@
             const coreEl = singularityBtn.querySelector('.core');
             const auraEl = singularityBtn.querySelector('.aura');
             
-            // Reset scale-based layers only
+            // PURGE BREATHE layers (scale-based)
             if (coreEl) {
+                coreEl.style.animation = 'none';
                 coreEl.style.transform = 'scale(1)';
             }
+            
+            // PURGE AURA layers (pulse + opacity)
             if (auraEl) {
+                auraEl.style.animation = 'none';
                 auraEl.style.opacity = '0.6';
                 auraEl.style.transform = 'scale(1)';
             }
             
-            // Flush GPU
+            // Flush GPU (force reflow)
             void singularityBtn.offsetWidth;
+            
+            // RESURRECT animations after 16ms (1 frame)
+            setTimeout(() => {
+                if (coreEl) {
+                    coreEl.style.animation = '';
+                }
+                if (auraEl) {
+                    auraEl.style.animation = '';
+                }
+                void singularityBtn.offsetWidth;
+            }, 16);
         }
         
         /**
