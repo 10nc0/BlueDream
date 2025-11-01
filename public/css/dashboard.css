@@ -2730,7 +2730,6 @@ body::before {
         0 8px 32px rgba(0, 0, 0, 0.12),
         0 2px 8px rgba(0, 0, 0, 0.08),
         inset 0 1px 0 rgba(255, 255, 255, 0.8);
-    animation: glass-breathe var(--breath-duration, 3000ms) ease-in-out infinite;
     z-index: -2;
 }
 
@@ -2748,9 +2747,7 @@ body::before {
         linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
-    animation: 
-        border-breathe var(--breath-duration, 3000ms) ease-in-out infinite,
-        border-rotate 6s linear infinite;
+    animation: border-rotate 6s linear infinite;
     z-index: -1;
 }
 
@@ -2765,9 +2762,7 @@ body::before {
     );
     filter: blur(12px);
     opacity: 0.6;
-    animation: 
-        aura-pulse var(--breath-duration, 3000ms) ease-in-out infinite,
-        aura-rotate 8s linear infinite;
+    animation: aura-rotate 8s linear infinite;
     z-index: -3;
     pointer-events: none;
 }
