@@ -2640,9 +2640,9 @@ body::before {
     bottom: 16px;
     right: 16px;
     display: none; /* Hidden by default, shown in mobile mode */
-    flex-direction: row-reverse; /* Right-to-left: → 🔗 🔍 🧿 ✍🏻 */
-    flex-wrap: wrap; /* Wrap to multiple rows if needed */
-    gap: 12px;
+    flex-direction: column; /* Stack vertically to prevent layout shifts */
+    align-items: flex-end; /* Align to right */
+    gap: 0;
     max-width: calc(100vw - 32px); /* Prevent overflow beyond screen edges */
     z-index: 1000;
     pointer-events: none; /* Allow clicks through container */
@@ -2704,10 +2704,12 @@ body::before {
         0 0 40px rgba(168, 85, 247, 0.4),
         0 0 60px rgba(236, 72, 153, 0.3);
     animation: breathe var(--breath-duration, 3000ms) ease-in-out infinite;
-    transition: all 0.3s ease;
+    transition: opacity 0.3s ease, transform 0.3s ease;
     backdrop-filter: blur(12px);
     z-index: 1001;
     position: relative;
+    transform-origin: center center;
+    flex-shrink: 0;
 }
 
 /* φ-Breath Animation - The cosmic inhale/exhale */
