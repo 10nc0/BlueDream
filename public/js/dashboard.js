@@ -389,17 +389,17 @@
             
             let html = '';
             
-            // Layer 01 buttons - The expanded reality (start expanded with 'show' class)
-            html += `<div class="layer-01 show">`;
+            // Layer 01 buttons - The expanded reality (start hidden, expand on singularity tap)
+            html += `<div class="layer-01" hidden>`;
             
             // Position 1: Create button (ONLY way to genesis form)
-            html += `<button data-action="create" aria-label="Create new bridge">✍🏻</button>`;
+            html += `<button class="thumb-btn" data-action="create" aria-label="Create new bridge">✍🏻</button>`;
             
             // Position 2: Audit button (always visible)
-            html += `<button data-action="audit" aria-label="View audit log">🧿</button>`;
+            html += `<button class="thumb-btn" data-action="audit" aria-label="View audit log">🧿</button>`;
             
             // Position 3: Search button (hidden on mobile via CSS)
-            html += `<button data-action="search" class="desktop-only" aria-label="Search messages">🔍</button>`;
+            html += `<button class="thumb-btn desktop-only" data-action="search" aria-label="Search messages">🔍</button>`;
             
             // Position 4: Bridge Actions (ONLY if current bridge exists)
             // Shows stacked menu with bridge actions: ℹ️ 🔗 ✏️ 🗑️
@@ -408,19 +408,19 @@
                 const currentBridge = activeBridges.find(b => b.fractal_id === currentBridgeId) || activeBridges[0];
                 
                 console.log(`🔘 Adding button 4 (🔗) for bridge: ${currentBridge.name}`);
-                html += `<button data-action="bridge-actions" data-bridge-id="${currentBridge.fractal_id}" aria-label="Bridge actions">🔗</button>`;
+                html += `<button class="thumb-btn" data-action="bridge-actions" data-bridge-id="${currentBridge.fractal_id}" aria-label="Bridge actions">🔗</button>`;
             } else {
                 console.log(`🔘 NO button 4 - no bridges found`);
             }
             
             // Position 5: Bridge Card (ONLY if 4+ bridges)
             if (activeBridges.length >= 4) {
-                html += `<button data-action="fan" aria-label="All bridges (${activeBridges.length} total)">🔗</button>`;
+                html += `<button class="thumb-btn" data-action="fan" aria-label="All bridges (${activeBridges.length} total)">🔗</button>`;
             }
             
             // Position n: Next (ONLY if 2+ bridges)
             if (activeBridges.length > 1) {
-                html += `<button data-action="next" aria-label="Next bridge">→</button>`;
+                html += `<button class="thumb-btn" data-action="next" aria-label="Next bridge">→</button>`;
             }
             
             html += `</div>`; // Close layer-01

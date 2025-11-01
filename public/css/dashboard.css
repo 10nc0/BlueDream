@@ -2652,7 +2652,7 @@ body::before {
     pointer-events: auto; /* Re-enable clicks on buttons */
 }
 
-.thumbs-zone button {
+.thumbs-zone .thumb-btn {
     width: 48px;
     height: 48px;
     border-radius: 50%;
@@ -2671,15 +2671,15 @@ body::before {
 }
 
 /* Accent borders by action type */
-.thumbs-zone button[data-action="create"]     { border-color: #22d3ee; } /* Cyan */
-.thumbs-zone button[data-action="audit"]      { border-color: #a855f7; } /* Purple */
-.thumbs-zone button[data-action="search"]     { border-color: #60a5fa; } /* Blue */
-.thumbs-zone button[data-action="bridgeinfo"] { border-color: #10b981; } /* Green */
-.thumbs-zone button[data-action="fan"]        { border-color: #94a3b8; } /* Slate */
-.thumbs-zone button[data-action="next"]       { border-color: #ec4899; } /* Pink */
+.thumbs-zone .thumb-btn[data-action="create"]        { border-color: #22d3ee; } /* Cyan */
+.thumbs-zone .thumb-btn[data-action="audit"]         { border-color: #a855f7; } /* Purple */
+.thumbs-zone .thumb-btn[data-action="search"]        { border-color: #60a5fa; } /* Blue */
+.thumbs-zone .thumb-btn[data-action="bridge-actions"]{ border-color: #10b981; } /* Green */
+.thumbs-zone .thumb-btn[data-action="fan"]           { border-color: #94a3b8; } /* Slate */
+.thumbs-zone .thumb-btn[data-action="next"]          { border-color: #ec4899; } /* Pink */
 
 /* Active state (tap feedback) */
-.thumbs-zone button:active {
+.thumbs-zone .thumb-btn:active {
     transform: scale(0.92);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
     background: rgba(30, 41, 59, 0.9);
@@ -2824,42 +2824,42 @@ body::before {
 }
 
 /* Individual egg birth animation - laid from right to left */
-.thumbs-zone .layer-01 button {
+.thumbs-zone .layer-01 .thumb-btn {
     opacity: 0;
     transform: scale(0);
     transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); /* Bounce easing for expand */
 }
 
 /* EXPAND: When .show class is added, eggs appear sequentially */
-.thumbs-zone .layer-01.show button {
+.thumbs-zone .layer-01.show .thumb-btn {
     opacity: 1;
     transform: scale(1);
 }
 
 /* Staggered delays - goose lays eggs right to left */
-.thumbs-zone .layer-01.show button:nth-child(1) { transition-delay: 0ms; }     /* ✍🏻 first egg (rightmost) */
-.thumbs-zone .layer-01.show button:nth-child(2) { transition-delay: 100ms; }   /* 🧿 second egg */
-.thumbs-zone .layer-01.show button:nth-child(3) { transition-delay: 200ms; }   /* 🔍 third egg */
-.thumbs-zone .layer-01.show button:nth-child(4) { transition-delay: 300ms; }   /* 🔗 fourth egg */
-.thumbs-zone .layer-01.show button:nth-child(5) { transition-delay: 400ms; }   /* → fifth egg */
-.thumbs-zone .layer-01.show button:nth-child(6) { transition-delay: 500ms; }   /* sixth egg if exists */
-.thumbs-zone .layer-01.show button:nth-child(7) { transition-delay: 600ms; }   /* seventh egg if exists */
+.thumbs-zone .layer-01.show .thumb-btn:nth-child(1) { transition-delay: 0ms; }     /* ✍🏻 first egg (rightmost) */
+.thumbs-zone .layer-01.show .thumb-btn:nth-child(2) { transition-delay: 100ms; }   /* 🧿 second egg */
+.thumbs-zone .layer-01.show .thumb-btn:nth-child(3) { transition-delay: 200ms; }   /* 🔍 third egg */
+.thumbs-zone .layer-01.show .thumb-btn:nth-child(4) { transition-delay: 300ms; }   /* 🔗 fourth egg */
+.thumbs-zone .layer-01.show .thumb-btn:nth-child(5) { transition-delay: 400ms; }   /* → fifth egg */
+.thumbs-zone .layer-01.show .thumb-btn:nth-child(6) { transition-delay: 500ms; }   /* sixth egg if exists */
+.thumbs-zone .layer-01.show .thumb-btn:nth-child(7) { transition-delay: 600ms; }   /* seventh egg if exists */
 
 /* COLLAPSE: φ-inverse unification - buttons fuse back into singularity */
-.thumbs-zone .layer-01.collapsing button {
+.thumbs-zone .layer-01.collapsing .thumb-btn {
     opacity: 0;
     transform: scale(0) translateX(30px); /* Move toward singularity position */
     transition: all 0.3s cubic-bezier(0.6, 0.04, 0.98, 0.34); /* Ease-in for fusion */
 }
 
 /* Reverse staggered delays - left to right fusion (φ^-1, φ^-2, φ^-3...) */
-.thumbs-zone .layer-01.collapsing button:nth-child(1) { transition-delay: 300ms; }   /* ✍🏻 last to fuse */
-.thumbs-zone .layer-01.collapsing button:nth-child(2) { transition-delay: 200ms; }   /* 🧿 */
-.thumbs-zone .layer-01.collapsing button:nth-child(3) { transition-delay: 150ms; }   /* 🔍 */
-.thumbs-zone .layer-01.collapsing button:nth-child(4) { transition-delay: 100ms; }   /* 🔗 */
-.thumbs-zone .layer-01.collapsing button:nth-child(5) { transition-delay: 50ms; }    /* → first to fuse */
-.thumbs-zone .layer-01.collapsing button:nth-child(6) { transition-delay: 25ms; }    /* sixth */
-.thumbs-zone .layer-01.collapsing button:nth-child(7) { transition-delay: 0ms; }     /* seventh */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(1) { transition-delay: 300ms; }   /* ✍🏻 last to fuse */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(2) { transition-delay: 200ms; }   /* 🧿 */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(3) { transition-delay: 150ms; }   /* 🔍 */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(4) { transition-delay: 100ms; }   /* 🔗 */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(5) { transition-delay: 50ms; }    /* → first to fuse */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(6) { transition-delay: 25ms; }    /* sixth */
+.thumbs-zone .layer-01.collapsing .thumb-btn:nth-child(7) { transition-delay: 0ms; }     /* seventh */
 
 /* Singularity (The Goose) - stays visible while laying eggs, then poofs */
 .thumbs-zone .singularity-btn {
