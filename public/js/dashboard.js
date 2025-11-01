@@ -252,7 +252,8 @@
                         class="form-input" 
                         placeholder="Webhook Name (e.g., Main Channel)" 
                         value="${escapeHtml(webhook.name)}"
-                        oninput="updateWebhook(${webhook.id}, 'name', this.value)"
+                        data-webhook-id="${webhook.id}"
+                        data-webhook-field="name"
                         style="flex: 0 0 30%;"
                     >
                     <input 
@@ -260,13 +261,14 @@
                         class="form-input" 
                         placeholder="Webhook URL" 
                         value="${escapeHtml(webhook.url)}"
-                        oninput="updateWebhook(${webhook.id}, 'url', this.value)"
+                        data-webhook-id="${webhook.id}"
+                        data-webhook-field="url"
                         style="flex: 1;"
                     >
                     <button 
                         type="button" 
                         class="btn" 
-                        onclick="removeWebhook(${webhook.id})"
+                        data-remove-webhook="${webhook.id}"
                         style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 0.5rem 1rem;"
                     >×</button>
                 </div>
@@ -465,7 +467,7 @@
                             <input type="text" id="msg-search-${bridge.fractal_id}" placeholder="🔍 Search..." 
                                 style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem; flex: 1;" 
                                 data-filter-messages="${bridge.fractal_id}">
-                            <select id="status-filter-${bridge.fractal_id}" onchange="filterDiscordMessages('${bridge.fractal_id}')" 
+                            <select id="status-filter-${bridge.fractal_id}" data-status-filter="${bridge.fractal_id}"
                                 style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem;">
                                 <option value="all">All</option>
                                 <option value="success">✓</option>
@@ -503,7 +505,7 @@
                             </div>
                             ${bridge.output_credentials?.output_01?.thread_id ? `
                                 <button 
-                                    onclick="window.open('https://discord.com/channels/@me/${bridge.output_credentials.output_01.thread_id}', '_blank')"
+                                    data-discord-thread="${bridge.output_credentials.output_01.thread_id}"
                                     style="width: 100%; background: #5865f2; color: white; padding: 0.5rem; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 0.875rem;"
                                 >
                                     🚀 Open Thread in Discord
@@ -515,7 +517,7 @@
                                     ${bridge.output_0n_url ? '✅ Webhook connected' : '⚠️ No webhook configured'}
                                 </div>
                                 <button 
-                                    onclick="window.open('https://discord.com/channels/@me', '_blank')"
+                                    data-discord-open="true"
                                     style="background: #5865f2; color: white; padding: 0.5rem 1rem; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 0.875rem;"
                                 >
                                     🚀 Open Discord
@@ -771,7 +773,7 @@
                                     </td>
                                     <td class="attachment-col">
                                         ${msg.has_media ? `
-                                            <span class="attachment-icon" onclick="showMediaPreview(${msg.id})" title="${escapeHtml(msg.media_type || 'Media')}">
+                                            <span class="attachment-icon" data-message-id="${msg.id}" title="${escapeHtml(msg.media_type || 'Media')}">
                                                 📎
                                             </span>
                                         ` : '-'}
@@ -783,9 +785,9 @@
 
                     ${totalPages > 1 ? `
                         <div style="margin-top: 1rem; display: flex; justify-content: center; gap: 0.5rem; align-items: center;">
-                            <button class="btn" ${page <= 1 ? 'disabled' : ''} onclick="loadBridgeMessages('${bridgeId}', ${page - 1})" style="padding: 0.375rem 0.75rem;">← Prev</button>
+                            <button class="btn" ${page <= 1 ? 'disabled' : ''} data-bridge-id="${bridgeId}" data-load-page="${page - 1}" style="padding: 0.375rem 0.75rem;">← Prev</button>
                             <span style="color: #94a3b8; font-size: 0.875rem;">Page ${page} / ${totalPages}</span>
-                            <button class="btn" ${page >= totalPages ? 'disabled' : ''} onclick="loadBridgeMessages('${bridgeId}', ${page + 1})" style="padding: 0.375rem 0.75rem;">Next →</button>
+                            <button class="btn" ${page >= totalPages ? 'disabled' : ''} data-bridge-id="${bridgeId}" data-load-page="${page + 1}" style="padding: 0.375rem 0.75rem;">Next →</button>
                         </div>
                     ` : ''}
                 </div>
@@ -2151,17 +2153,18 @@
                         <img src="${data.media_data}" 
                              alt="Image attachment" 
                              class="discord-media-image"
-                             onclick="showMediaPreview(${messageId})"
-                             loading="lazy">
+                             data-message-id="${messageId}"
+                             loading="lazy"
+                             style="cursor: pointer;">
                     `;
                 } else if (mediaType.includes('video')) {
                     // Inline video player
                     previewContainer.innerHTML = `
-                        <video controls class="discord-media-video" onclick="event.stopPropagation()">
+                        <video controls class="discord-media-video">
                             <source src="${data.media_data}" type="${data.media_type}">
                             Your browser doesn't support video playback.
                         </video>
-                        <div class="media-expand-hint" onclick="showMediaPreview(${messageId})">Click to view fullscreen</div>
+                        <div class="media-expand-hint" data-message-id="${messageId}" style="cursor: pointer;">Click to view fullscreen</div>
                     `;
                 } else if (mediaType.includes('audio')) {
                     // Inline audio player
@@ -2174,7 +2177,7 @@
                 } else {
                     // Fallback for other types
                     previewContainer.innerHTML = `
-                        <div class="discord-attachment" onclick="showMediaPreview(${messageId})" style="cursor: pointer;">
+                        <div class="discord-attachment" data-message-id="${messageId}" style="cursor: pointer;">
                             <span class="attachment-icon">📎</span>
                             <span class="attachment-type">${escapeHtml(data.media_type || 'Attachment')}</span>
                         </div>
@@ -2440,7 +2443,7 @@
                                 <div><strong>Last Activity:</strong> ${lastActivity}</div>
                             </div>
                             <div class="user-actions">
-                                ${session.is_active ? `<button class="btn btn-delete" onclick="revokeSession(${session.id})">Revoke</button>` : ''}
+                                ${session.is_active ? `<button class="btn btn-delete" data-revoke-session="${session.id}">Revoke</button>` : ''}
                             </div>
                         </div>
                     `;
@@ -2821,7 +2824,7 @@
                     <div class="glass-card" style="padding: 1.5rem;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                             <h2 style="font-size: 1.25rem; font-weight: 600; color: white;">👥 Tenant Users</h2>
-                            <button class="create-bot-btn" onclick="openCreateUserModal()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">+ Invite User</button>
+                            <button class="create-bot-btn" data-action="openCreateUserModal" style="padding: 0.5rem 1rem; font-size: 0.875rem;">+ Invite User</button>
                         </div>
                         
                         ${tenantUsers.length === 0 ? `
@@ -2844,7 +2847,7 @@
                                                     Created: ${new Date(user.created_at).toLocaleDateString()}
                                                 </div>
                                             </div>
-                                            ${!user.is_genesis_admin && user.role !== 'admin' ? `<button class="btn-icon btn-danger" onclick="deleteUser('${user.id}')" title="Remove User">🗑️</button>` : ''}
+                                            ${!user.is_genesis_admin && user.role !== 'admin' ? `<button class="btn-icon btn-danger" data-delete-user="${user.id}" title="Remove User">🗑️</button>` : ''}
                                         </div>
                                     </div>
                                 `).join('')}
@@ -2895,7 +2898,7 @@
                 <div class="modal-content" style="max-width: 600px;">
                     <div class="modal-header">
                         <h2 class="modal-title">ℹ️ Bridge Information</h2>
-                        <button class="close-btn" onclick="closeModal('bridgeInfoModal')">×</button>
+                        <button class="close-btn" data-close-modal="bridgeInfoModal">×</button>
                     </div>
                     <div style="padding: 1.5rem;">
                         <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 1.5rem;">
@@ -3016,7 +3019,7 @@
                             return `
                                 <div class="channel-item ${isSelected ? 'active' : ''}" 
                                      data-bridge-id="${bridge.fractal_id}"
-                                     onclick="selectDevBridge('${bridge.fractal_id}')"
+                                     data-dev-bridge="${bridge.fractal_id}"
                                      style="padding: 0.75rem; margin: 0.25rem 0; cursor: pointer; border-radius: 8px; background: ${isSelected ? 'rgba(255,255,255,0.1)' : 'transparent'}; transition: all 0.2s;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                                         <span style="font-size: 1rem;">${statusIcon}</span>
@@ -3127,7 +3130,7 @@
                                 Created: ${new Date(user.created_at).toLocaleDateString()}
                             </div>
                         </div>
-                        <button class="btn-icon btn-danger" onclick="deleteUser('${user.id}')" title="Delete User">🗑️</button>
+                        <button class="btn-icon btn-danger" data-delete-user="${user.id}" title="Delete User">🗑️</button>
                     </div>
                 </div>
             `).join('');
@@ -3253,7 +3256,7 @@
             hintEl.className = 'onboarding-hint';
             hintEl.innerHTML = `
                 ${hint.text}
-                <button class="close-hint" onclick="dismissHint('${hintKey}', this)">×</button>
+                <button class="close-hint" data-dismiss-hint('${hintKey}', this)">×</button>
             `;
             
             const rect = targetEl.getBoundingClientRect();
@@ -3547,11 +3550,34 @@ document.addEventListener('click', function(e) {
         return;
     }
     
-    // Media preview
-    if (target.classList.contains('attachment-icon') && target.hasAttribute('data-message-id')) {
+    // Revoke session button
+    if (target.hasAttribute('data-revoke-session')) {
+        e.preventDefault();
+        const sessionId = parseInt(target.getAttribute('data-revoke-session'));
+        if (sessionId) revokeSession(sessionId);
+        return;
+    }
+    
+    // Media preview - handle any element with data-message-id (images, videos, attachments)
+    if (target.hasAttribute('data-message-id') && !target.closest('video')) {
         e.preventDefault();
         const msgId = parseInt(target.getAttribute('data-message-id'));
         if (msgId) showMediaPreview(msgId);
+        return;
+    }
+    
+    // Discord thread link
+    if (target.hasAttribute('data-discord-thread')) {
+        e.preventDefault();
+        const threadId = target.getAttribute('data-discord-thread');
+        if (threadId) window.open(`https://discord.com/channels/@me/${threadId}`, '_blank');
+        return;
+    }
+    
+    // Discord DM link
+    if (target.hasAttribute('data-discord-open')) {
+        e.preventDefault();
+        window.open('https://discord.com/channels/@me', '_blank');
         return;
     }
     
@@ -3561,6 +3587,43 @@ document.addEventListener('click', function(e) {
         const bridgeId = target.getAttribute('data-bridge-id');
         const page = parseInt(target.getAttribute('data-load-page'));
         if (bridgeId && page) loadBridgeMessages(bridgeId, page);
+        return;
+    }
+    
+    // User management buttons
+    if (target.hasAttribute('data-action') && target.getAttribute('data-action') === 'openCreateUserModal') {
+        e.preventDefault();
+        openCreateUserModal();
+        return;
+    }
+    
+    if (target.hasAttribute('data-delete-user')) {
+        e.preventDefault();
+        const userId = target.getAttribute('data-delete-user');
+        if (userId) deleteUser(userId);
+        return;
+    }
+    
+    // Modal close
+    if (target.hasAttribute('data-close-modal')) {
+        e.preventDefault();
+        const modalId = target.getAttribute('data-close-modal');
+        if (modalId) closeModal(modalId);
+        return;
+    }
+    
+    // Dev panel bridge selection
+    if (target.hasAttribute('data-dev-bridge')) {
+        const fractalId = target.getAttribute('data-dev-bridge');
+        if (fractalId) selectDevBridge(fractalId);
+        return;
+    }
+    
+    // Hint dismissal
+    if (target.classList.contains('close-hint') || target.hasAttribute('data-dismiss-hint')) {
+        e.preventDefault();
+        const hintKey = target.getAttribute('data-dismiss-hint') || target.closest('[data-dismiss-hint]')?.getAttribute('data-dismiss-hint');
+        if (hintKey && typeof dismissHint === 'function') dismissHint(hintKey, target);
         return;
     }
 });
@@ -3587,18 +3650,6 @@ document.addEventListener('input', function(e) {
     // Message table filter
     if (target.hasAttribute('data-filter-table')) {
         const bridgeId = target.getAttribute('data-filter-table');
-        if (bridgeId) filterMessagesTable(bridgeId);
-        return;
-    }
-});
-
-// Event delegation for status filter changes
-document.addEventListener('change', function(e) {
-    const target = e.target;
-    
-    // Status filter for message tables
-    if (target.hasAttribute('data-status-filter')) {
-        const bridgeId = target.getAttribute('data-status-filter');
         if (bridgeId) filterMessagesTable(bridgeId);
         return;
     }

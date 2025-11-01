@@ -259,7 +259,15 @@ app.get('/index.html', (req, res) => {
 // HTML files are served through explicit authenticated routes above
 app.use(express.static('public', { 
     index: false,
-    ignore: ['*.html'] // Don't serve HTML files through static middleware
+    ignore: ['*.html'], // Don't serve HTML files through static middleware
+    setHeaders: (res, path) => {
+        // Cache-busting for JS/CSS files to ensure production deployments update immediately
+        if (path.endsWith('.js') || path.endsWith('.css')) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+        }
+    }
 }));
 
 // Apply tenant context middleware to all API routes (except auth routes)
