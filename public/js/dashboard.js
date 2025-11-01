@@ -669,14 +669,14 @@
             const hour = dt.getUTCHours();
             
             if (bucketHours === 8) {
-                if (hour === 0) return `${dayLabel} - Night (12am-8am)`;
-                if (hour === 8) return `${dayLabel} - Morning (8am-4pm)`;
-                if (hour === 16) return `${dayLabel} - Evening (4pm-12am)`;
+                if (hour === 0) return `${dayLabel} - early daytime (12am-8am)`;
+                if (hour === 8) return `${dayLabel} - daytime (8am-4pm)`;
+                if (hour === 16) return `${dayLabel} - nighttime (4pm-12am)`;
             } else if (bucketHours === 6) {
-                if (hour === 0) return `${dayLabel} - Late Night (12am-6am)`;
-                if (hour === 6) return `${dayLabel} - Morning (6am-12pm)`;
-                if (hour === 12) return `${dayLabel} - Afternoon (12pm-6pm)`;
-                if (hour === 18) return `${dayLabel} - Evening (6pm-12am)`;
+                if (hour === 0) return `${dayLabel} - early daytime (12am-6am)`;
+                if (hour === 6) return `${dayLabel} - daytime (6am-12pm)`;
+                if (hour === 12) return `${dayLabel} - daytime (12pm-6pm)`;
+                if (hour === 18) return `${dayLabel} - nighttime (6pm-12am)`;
             }
             
             return dayLabel;
