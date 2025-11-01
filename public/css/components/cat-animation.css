@@ -1,0 +1,56 @@
+/* ========================================
+   UNIVERSE FRAME TRANSCENDENTAL CAT ANIMATION
+   Self-contained styling for cat component
+   Works independently on any page
+   ======================================== */
+
+.cat-animation-component {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-shrink: 0;
+}
+
+.character-canvas {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    display: block;
+}
+
+.cat-datetime-default {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    line-height: 1;
+    margin-top: -8px;
+}
+
+/* Mobile Mode Overrides */
+body.mobile-mode .cat-animation-component {
+    width: 75px !important;
+    height: 75px !important;
+}
+
+body.mobile-mode .character-canvas {
+    width: 75px !important;
+    height: 75px !important;
+}
+
+body.mobile-mode .cat-datetime-default {
+    font-size: 0.6rem !important;
+}
+
+/* Desktop Mode (default) */
+body.desktop-mode .cat-animation-component {
+    width: 100px;
+    height: 100px;
+}
+
+body.desktop-mode .character-canvas {
+    width: 100px;
+    height: 100px;
+}

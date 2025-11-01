@@ -19,7 +19,15 @@
 
 ## System Architecture
 ### Global Constants (Isolated UI Islands)
-The system uses two immutable global constants: `NYANBOOK_LEDGER_WEBHOOK_URL` (Dev-only Discord webhook) and `CAT_CONFIG` (Pixel cat animation settings).
+The system uses two immutable global constants: `NYANBOOK_LEDGER_WEBHOOK_URL` (Dev-only Discord webhook) and `CAT_CONFIG` (Universe Frame Transcendental Cat Component).
+
+**Transcendental Cat Component:**
+- **Location**: `public/js/ui/cat-animation.js` (logic) + `public/components/cat-animation.html` (markup) + `public/css/components/cat-animation.css` (styling)
+- **Philosophy**: Self-contained, unique object that exists independently across all pages and contexts
+- **Usage**: Include the component HTML or use `#catContainer` with `#hopCanvas` canvas element
+- **Behavior**: Auto-detects mobile/desktop mode, disables mouse interaction on mobile for edge-snapping
+- **Pages**: Used on dashboard (index.html), login, signup, forgot-password
+- **Debugging**: Isolated component makes debugging easier - all cat code in dedicated files
 
 ### UI/UX Decisions
 The dashboard is a Single Page Application (SPA) with an Apple glassmorphism design, featuring a Discord-style two-pane layout. It includes real-time updates, circular avatars, status badges, responsive design for mobile, and custom tooltips. The design prioritizes message content visibility, with **adaptive layout for desktop and mobile**:

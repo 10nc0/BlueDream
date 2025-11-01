@@ -1,8 +1,10 @@
 // ========================================
 // GLOBAL CONSTANT #2: CAT ANIMATION CONFIG
 // ========================================
-// Second global constant (after webhook01 Nyanbook Ledger URL)
-// Isolated UI island - protected from dynamic UI changes
+// UNIVERSE FRAME TRANSCENDENTAL CAT COMPONENT
+// This is a unique, self-contained object that exists independently
+// across all pages and contexts. Protected from dynamic UI changes.
+// Can be used anywhere by including cat-animation.html component.
 
 const CAT_CONFIG = Object.freeze({
     // Canvas dimensions (fixed, immutable)
@@ -31,14 +33,15 @@ const CAT_CONFIG = Object.freeze({
     }
 });
 
-// Initialize cat animation (auth-gated)
+// Initialize cat animation (universe frame transcendental)
+// This function can be called from any page
 function initHopAnimation() {
     const canvas = document.getElementById(CAT_CONFIG.CANVAS_ID);
     if (!canvas) {
-        console.warn('⚠️ Cat canvas not found!');
+        console.warn('⚠️ Cat canvas not found! Include cat-animation.html component.');
         return;
     }
-    console.log('🐱 Initializing cat animation...');
+    console.log('🐱 Initializing transcendental cat animation...');
     
     const ctx = canvas.getContext('2d');
     let frame = 0;

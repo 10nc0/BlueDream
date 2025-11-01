@@ -1,0 +1,35 @@
+<!-- ========================================
+     UNIVERSAL CAT ANIMATION COMPONENT
+     Transcendental, self-contained object
+     Can be included on any page
+     ======================================== -->
+<div id="catContainer" class="cat-animation-component" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; flex-shrink: 0;">
+    <canvas id="hopCanvas" class="character-canvas" width="100" height="100" style="display: block; margin-top: -10px;"></canvas>
+    <!-- Date/Time - Default position (below cat) -->
+    <div id="dateTimeDefault" class="cat-datetime-default" style="text-align: center; color: #94a3b8; font-size: 0.7rem; white-space: nowrap; line-height: 1; margin-top: -8px;">
+        <span id="currentTime">2025/11/01 - 12:00:00PM</span>
+    </div>
+</div>
+
+<!-- Auto-initialize cat animation when component loads -->
+<script>
+(function() {
+    // Wait for cat-animation.js to load
+    function initCat() {
+        if (typeof initHopAnimation === 'function') {
+            console.log('🐱 Auto-initializing cat animation component...');
+            initHopAnimation();
+        } else {
+            console.warn('⚠️ cat-animation.js not loaded yet, retrying...');
+            setTimeout(initCat, 100);
+        }
+    }
+    
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initCat);
+    } else {
+        initCat();
+    }
+})();
+</script>

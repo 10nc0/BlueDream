@@ -5,14 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign Up | Your Nyanbook~</title>
     <link rel="stylesheet" href="/css/auth.css">
+    <link rel="stylesheet" href="/css/components/cat-animation.css">
 </head>
 <body>
     <div class="signup-container">
-        <!-- Cat Animation + Time -->
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem; margin-bottom: 1rem;">
-            <canvas id="hopCanvas" class="character-canvas" width="125" height="125"></canvas>
-            <div style="text-align: center; color: #94a3b8; font-size: 0.75rem;">
-                <span id="currentTime">2025/11/01 - 8:00:00AM</span>
+        <!-- UNIVERSE FRAME TRANSCENDENTAL CAT COMPONENT -->
+        <div style="margin-bottom: 1rem;">
+            <div id="catContainer" class="cat-animation-component" style="width: 125px; height: 125px;">
+                <canvas id="hopCanvas" class="character-canvas" width="125" height="125"></canvas>
+                <div id="dateTimeDefault" class="cat-datetime-default">
+                    <span id="currentTime">2025/11/01 - 8:00:00AM</span>
+                </div>
             </div>
         </div>
         
