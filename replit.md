@@ -40,7 +40,7 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
   - Position 1 (rightmost): Create bridge button (🌉, closest to thumb for frequent action)
   - Positions 2-4: Up to 3 direct bridge buttons (💬, 2, 3) for instant navigation
   - Position n (leftmost): Fan button (+N) when 4+ bridges exist, opens modal with all bridges
-- **Bridge Fan Modal**: Full-screen glassmorphism modal showing numbered bridge list + utility actions (Search 🔍, Audit ☯️)
+- **Bridge Fan Modal**: Full-screen glassmorphism modal showing numbered bridge list + utility actions (Search 🔍, Audit 🧿)
 - **Touch Interactions (iPhone-Optimized, φ12)**:
   - **Tap-to-Zoom**: Media images open in full-screen modal with 44×44px close button (Apple HIG compliant)
   - **Swipe Navigation**: Left/right horizontal swipe (>100px, <500ms) switches bridges with vertical scroll detection to prevent conflicts
@@ -99,7 +99,7 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 **AUTO-SCALING TIMELINE & EXPORT SYSTEM**: Complete implementation of advanced Personal Cloud OS features for intelligent organization and data portability:
 - **Message Controls (Top-Right)**: Pixel-perfect 4-button control group with unified silver styling:
   - 📎 Attachment Download (24×24px, only shown when media exists)
-  - ☯️ Audit Button (24×24px, magical yin-yang for action & closure)
+  - 🧿 Audit Button (24×24px, evil eye nazar to ward off evil, action & closure)
   - 🏷️ Tag Add Button (24×24px, opens modal for adding tags/dates)
   - ☐/☑ Export Checkbox (24×24px, custom-styled label with hidden native checkbox for perfect alignment)
   - All controls: Identical silver background (`rgba(148, 163, 184, 0.2)`), 8px gap, `line-height: 1` for vertical centering

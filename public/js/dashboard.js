@@ -43,10 +43,10 @@
         const ACTION_REGISTRY = {
             create: {
                 id: 'create',
-                label: '➕ Create Bridge',
-                icon: '➕',
-                mobileIcon: '➕',
-                desktopLabel: '➕ Create Bridge',
+                label: '✍🏻 Create Bridge',
+                icon: '✍🏻',
+                mobileIcon: '✍🏻',
+                desktopLabel: '✍🏻 Create Bridge',
                 tooltip: 'Create a new bridge',
                 priority: 1, // Lower = higher priority in mobile layout
                 showInMobile: true,
@@ -56,16 +56,16 @@
             },
             audit: {
                 id: 'audit',
-                label: '☯️ Audit',
-                icon: '☯️',
-                mobileIcon: '☯️',
-                desktopLabel: '☯️ Audit',
-                tooltip: 'Audit action & closure',
+                label: '🧿 Audit',
+                icon: '🧿',
+                mobileIcon: '🧿',
+                desktopLabel: '🧿 Audit',
+                tooltip: 'Audit action & closure (ward off evil)',
                 priority: 2,
                 showInMobile: true,
                 showInDesktop: true,
                 requireAuth: true,
-                handler: () => showToast('☯️ Audit features coming soon!', 'info')
+                handler: () => showToast('🧿 Audit features coming soon!', 'info')
             },
             search: {
                 id: 'search',
@@ -1218,8 +1218,8 @@
                                 📎
                             </a>
                         ` : ''}
-                        <button class="agent-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="☯️ Audit action & closure" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
-                            ☯️
+                        <button class="agent-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="🧿 Audit action & closure" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                            🧿
                         </button>
                         <button class="tag-add-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                             🏷️
@@ -4251,7 +4251,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     const auditTypeBtn = document.querySelector('.audit-type-btn');
     if (auditTypeBtn) auditTypeBtn.addEventListener('click', () => {
-        showToast('☯️ Audit features coming soon!', 'info');
+        showToast('🧿 Audit features coming soon!', 'info');
     });
     
     const revokeAllBtn = document.querySelector('[onclick*="revokeAllSessions"]');
@@ -4855,7 +4855,7 @@ document.addEventListener('click', function(e) {
         e.preventDefault();
         const messageId = target.getAttribute('data-message-id');
         const bridgeId = target.getAttribute('data-bridge-id');
-        alert('☯️ Audit\n\nAction & closure features coming soon!');
+        alert('🧿 Audit\n\nAction & closure features coming soon!');
         return;
     }
     
