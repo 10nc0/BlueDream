@@ -810,7 +810,8 @@
         async function loadBridges() {
             try {
                 const response = await authFetch('/api/bridges');
-                bridges = await response.json();
+                const data = await response.json();
+                bridges = data.bridges || data || [];
                 filteredBridges = bridges;
                 renderBridges();
                 updatePlatformFilter();
@@ -833,7 +834,8 @@
         async function loadBridgesQuietly() {
             try {
                 const response = await authFetch('/api/bridges');
-                bridges = await response.json();
+                const data = await response.json();
+                bridges = data.bridges || data || [];
                 filteredBridges = bridges;
                 renderBridges(true); // Skip detail render to preserve loaded media
             } catch (error) {
