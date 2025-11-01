@@ -3731,12 +3731,15 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
         );
         
         let dropResult;
+        let extracted;
+        
         if (existingDrop.rows.length > 0) {
             // APPEND new text to existing text
             const combinedText = existingDrop.rows[0].metadata_text + ' ' + metadata_text;
             
             // Extract metadata from COMBINED text (not just new text) to catch all tags
-            const extracted = metadataExtractor.extract(combinedText);
+            extracted = metadataExtractor.extract(combinedText);
+            console.log('🏷️ UPDATE - Extracted from combinedText:', { combinedText, extracted });
             
             dropResult = await client.query(`
                 UPDATE drops
@@ -3749,7 +3752,8 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
             `, [combinedText, extracted.tags, extracted.dates, internalBridgeId, discord_message_id]);
         } else {
             // Extract metadata from NEW text for first save
-            const extracted = metadataExtractor.extract(metadata_text);
+            extracted = metadataExtractor.extract(metadata_text);
+            console.log('🏷️ INSERT - Extracted from metadata_text:', { metadata_text, extracted });
             
             // Insert new drop
             dropResult = await client.query(`
@@ -3758,6 +3762,12 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
                 RETURNING *
             `, [internalBridgeId, discord_message_id, metadata_text, extracted.tags, extracted.dates]);
         }
+        
+        console.log('✅ Drop saved successfully:', {
+            metadata_text: dropResult.rows[0].metadata_text,
+            extracted_tags: dropResult.rows[0].extracted_tags,
+            extracted_dates: dropResult.rows[0].extracted_dates
+        });
         
         res.json({ 
             success: true, 
