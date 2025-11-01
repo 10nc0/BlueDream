@@ -763,8 +763,8 @@
                 ].join(' ').toLowerCase();
                 
                 return `
-                <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml(searchableText)}" data-status="${msg.discord_status}">
-                    <input type="checkbox" class="message-export-checkbox" data-message-id="${msg.id}" style="margin-right: 0.5rem; cursor: pointer;">
+                <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml(searchableText)}" data-status="${msg.discord_status}" style="position: relative;">
+                    <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-msg-id="${msg.id}" data-bridge-id="${bridgeId}" style="position: absolute; top: 0.5rem; right: 0.5rem; width: 18px; height: 18px; cursor: pointer; z-index: 10; accent-color: #a855f7;">
                     <div class="discord-avatar">
                         ${msg.sender_photo_url ? 
                             `<img src="${escapeHtml(msg.sender_photo_url)}" alt="${escapeHtml(msg.sender_name || 'User')}" class="avatar-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
