@@ -5,9 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login | Your Nyanbook~</title>
     <link rel="stylesheet" href="/css/auth.css">
+    <link rel="stylesheet" href="/css/dashboard.css">
 </head>
 <body>
     <div class="login-container">
+        <!-- Cat Animation + Time -->
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem; margin-bottom: 1rem;">
+            <canvas id="hopCanvas" class="character-canvas" width="125" height="125"></canvas>
+            <div style="text-align: center; color: #94a3b8; font-size: 0.75rem;">
+                <span id="currentTime">2025/11/01 - 8:00:00AM</span>
+            </div>
+        </div>
+        
         <div class="logo">
             <h1>Your Nyanbook~</h1>
             <p>X to Discord Note</p>
@@ -40,6 +49,7 @@
         <!-- Phone OTP form removed - deprecated (no Twilio configured) -->
     </div>
 
+    <script src="/js/ui/cat-animation.js"></script>
     <script src="/js/auth-login.js"></script>
 </body>
 </html>
