@@ -250,12 +250,13 @@
         }
 
         /**
-         * Render thumbs zone buttons (n-4-3-2-1 layout)
-         * NEW LAYOUT: → 🔗/Fan 🔍/Search 🧿/Audit 📋/BridgeInfo ✍🏻/Create
+         * Render thumbs zone buttons (n-5-4-3-2-1 layout)
+         * NEW LAYOUT: → 🔗/📋 🔍/Search 🧿/Audit 📋/BridgeInfo ✍🏻/Create
          * Position 1 (rightmost): Create (always)
          * Position 2: Audit (always)
          * Position 3: Search (always)
-         * Position 4: Bridge Info/Fan (shows current bridge name + actions)
+         * Position 4: Bridge Info (ALWAYS - shows QR/Edit/Delete for current bridge)
+         * Position 5: Bridge Card (if bridges exist) OR Create (if empty)
          * Position n: Next (→) if multiple bridges
          */
         function renderThumbsZone() {
@@ -275,17 +276,20 @@
             // Position 3: Search button (always visible)
             html += `<button data-action="search" aria-label="Search messages">🔍</button>`;
             
-            // Position 4: Bridge Info/Fan button
-            if (activeBridges.length === 0) {
-                // No bridges - hide this button
-            } else if (activeBridges.length <= 3) {
-                // Show Bridge Info for active bridge
+            // Position 4: Bridge Info button (ALWAYS show with current bridge - QR relink!)
+            if (activeBridges.length > 0) {
                 const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
                 const currentBridge = activeBridges.find(b => b.fractal_id === currentBridgeId) || activeBridges[0];
                 html += `<button data-action="bridgeinfo" data-bridge-id="${currentBridge.fractal_id}" aria-label="${escapeHtml(currentBridge.name)}">📋</button>`;
-            } else {
-                // 4+ bridges: Show Fan button (🔗)
-                html += `<button data-action="fan" aria-label="More bridges (${activeBridges.length} total)">🔗</button>`;
+            }
+            
+            // Position 5: Bridge Card OR Create fallback
+            if (activeBridges.length === 0) {
+                // No bridges: Pull up Create Bridge form (same as button 1)
+                html += `<button data-action="create" aria-label="Create new bridge">🔗</button>`;
+            } else if (activeBridges.length >= 4) {
+                // 4+ bridges: Show Fan modal (access all bridges)
+                html += `<button data-action="fan" aria-label="All bridges (${activeBridges.length} total)">🔗</button>`;
             }
             
             // Position n: Navigation button (→) if multiple bridges exist
