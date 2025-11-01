@@ -62,3 +62,18 @@ quantum_ledger_key.enc
 
 # Legacy
 discord_webhook.txt
+
+# ========================================
+# PROPRIETARY IP - Protocol Scribe's Vault
+# ========================================
+# Internal documentation (censored from public)
+TRINITY_INTEGRATION_GUIDE.md
+.dev_internal.html
+**/dev.html
+
+# Internal architecture docs (not for public)
+SECURITY_AUDIT.md
+TENANT_ISOLATION*.md
+AUTH_DOCUMENTATION.md
+GITHUB_SECURITY_CHECKLIST.md
+.IP_VAULT_README.md

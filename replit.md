@@ -1,51 +1,49 @@
 # Your Nyanbook~ 🌈
 
 ## Overview
-"Your Nyanbook" is a multi-input messaging bridge designed to forward messages from various platforms (e.g., WhatsApp, Telegram, Twitter/X, SMS, Email) to Discord. It operates as a multi-tenant SaaS application, providing robust authentication, permanent message retention via Discord threads, and a PostgreSQL database for configuration and routing. Each user has an isolated PostgreSQL schema, ensuring data separation. Key capabilities include a hybrid input model (WhatsApp, Generic Webhooks), unified output to Discord webhooks, and a multi-tenant SaaS architecture with fractalized database isolation. The project aims to provide a zero-cost solution for webhook inputs.
+"Your Nyanbook" is a multi-tenant SaaS messaging bridge designed to forward messages from WhatsApp to Discord. It operates as a secure, multi-user application with robust authentication and permanent message retention via Discord threads. Each user has isolated data storage for privacy and security.
 
 ## User Preferences
 - **Design**: Apple glassmorphism aesthetic with Discord-style message layout
 - **Privacy**: Messages sent TO bridge only (not group monitoring)
 - **Retention**: Permanent storage (no deletion of messages)
-- **Security**: Multi-user auth with audit logging
-- **Compatibility**: Safari/iPad support critical (JWT localStorage + proper cookie handling)
-- **UX**: Auto-expanding single bridges, responsive sidebar collapse, user-customizable layout dimensions
-- **Mobile**: Cat animation properly positioned above date/time on login page (100×100px with 2rem spacing)
+- **Security**: Multi-user authentication with audit logging
+- **Compatibility**: Safari/iPad support (JWT localStorage + proper cookie handling)
+- **UX**: Auto-expanding interface, responsive design, user-customizable layout
 
 ## System Architecture
 The system uses a Node.js backend with Express and a Single Page Application (SPA) frontend. It features an Apple glassmorphism design with a Discord-style two-pane layout, real-time updates, and responsive design for desktop and mobile.
 
 **UI/UX Decisions:**
-- **Adaptive Layout**: Desktop mode offers a resizable sidebar and header, with dynamic date/time positioning. Mobile mode features automatic layout detection, a harmonized header, and a "Floating Thumbs Zone" for quick actions.
+- **Adaptive Layout**: Desktop mode offers a resizable sidebar and header with dynamic positioning. Mobile mode features automatic layout detection, harmonized header, and floating action zone for quick access.
 - **Touch Interactions**: Optimized for iPhone with tap-to-zoom for media, swipe navigation, auto-hide elements on scroll, 48px touch targets, and momentum scrolling.
-- **Transcendental Cat Component**: A self-contained, independent cat animation component (`public/js/ui/cat-animation.js`, `public/components/cat-animation.html`, `public/css/components/cat-animation.css`) exists across all pages, adapting behavior for mobile/desktop.
+- **Responsive Components**: Self-contained UI components adapt behavior for mobile/desktop contexts.
 
 **Technical Implementations:**
-- **Authentication**: Email/password authentication using JWT tokens, role-based access control, and user data isolated within tenant-specific PostgreSQL tables.
-- **Database**: PostgreSQL (Neon-backed) with pure fractalized multi-tenancy. A `core` schema manages tenant registry, while `tenant_X` schemas provide per-tenant isolation for user data, bridges, sessions, audit logs, and media buffers.
-- **WhatsApp Integration**: Multi-instance Baileys for independent, tenant-scoped persistent sessions.
-- **Discord Integration (Trinity v1.1)**: Three-bot architecture following principle of least privilege. **Hermes Bot (φ - Creator)**: MANAGE_THREADS + VIEW_CHANNEL permissions, creates Discord threads for bridge isolation (no write/read message permissions). **Toth Bot (0 - Mirror)**: READ_MESSAGE_HISTORY + VIEW_CHANNEL permissions, read-only message fetching and mirroring (no write permissions). **Inpipe (∞ - Sustainer)**: WebhookClient for Ledger output (unchanged). Messages sent via webhooks to both Ledger thread (development oversight) and user-defined webhooks. Initial bridge activation messages sent via webhook (not bot). Security tokens: `HERMES_TOKEN`, `TOTH_TOKEN`.
-- **Media Handling**: Retry-safe atomic storage for base64-encoded media in PostgreSQL with delivery tracking and automatic purging.
-- **Search**: Leverages Discord's native search UI and an enhanced Universal Search across messages and metadata ("Drops").
-- **Metadata System (Drops)**: Universal tagging system supporting any input - plain words, hashtags, captions, dates, and multilingual text. Tags are stored in the `drops` table within each `tenant_X` schema, indexed with `TSVECTOR` for full-text search. **Philosophy**: Any word can be a tag - `#hashtag` is just one derivative, numeric strings are captions, dates are temporal tags. Supports liberty, culture, and all languages (English, 日本語, 中文, العربية, etc.). **Data hierarchy**: `tags ← message ← bridge ← tenant`, with GIN indexes on `extracted_tags[]` (1D arrays), `discord_message_id`, and `bridge_id`. Tags are extracted via space-delimited tokenization (`MetadataExtractor`) and displayed as interactive bubbles with × delete buttons in the Discord embed UI. **Critical fix (Nov 2025)**: PostgreSQL arrays require `::text[]` type casting when inserting/updating from JavaScript arrays.
-- **Unified Action Registry**: A central `ACTION_REGISTRY` object maps all UI actions for both mobile and desktop, reducing code duplication and simplifying event handling.
-- **Auto-Scaling Timeline & Export System**: Implemented for intelligent message organization and data portability. The timeline uses a density-based algorithm to group messages into 24h, 8h, or 6h buckets. The export system allows users to download a ZIP file containing messages and merged drops metadata.
-- **φ-Breath System**: Golden ratio breathing animation system (`public/js/ui/phi-breath.js`) with **double oscillation** - both rotation AND breathing pulse with φ-cycle. **True φ-breath variation**: Rotation speed varies from φ^0 (1.0x = 8000ms slow/2000ms fast) to φ^1 (1.618x = 12944ms slow/3236ms fast) creating natural breathing rhythm - slower at inhale (φ^1), faster at exhale (φ^0). **Breathing animations** (glass/border/aura layers) also oscillate from 3000ms (φ^0) to 4854ms (φ^1), synchronized with rotation speed via CSS `--breath-duration` variable. Works on both desktop and mobile. Features yin-yang button rotation synchronized with breath cycle at idle (8s per rotation with φ variation), and fast "creation spins" (0.5s per rotation) when singularity button expands. **Rotation fidelity**: Seamless animation transitions using transform matrix extraction - captures current rotation angle before switching animations, applies as `--rotation-offset` CSS variable, preventing frame drops or resets. **Interaction model**: Tap to expand (auto-collapse after φ-breath cycle), or tap again to interrupt and collapse immediately. Event-based architecture with breath logging and duplicate prevention guards. **v1.1 State-Aware Synchronization**: φ-breath listener reads global `isExpanded` state on every tick to apply different multipliers - SLOW (collapsed): 2.0x rotation + 1.5x breathing, FAST (expanded): 0.5x rotation + 0.75x breathing - ensuring all 3 animations (spin, breathe, pulse) remain synchronized throughout state transitions.
-- **Battle-Tested Thumbs Zone Controller**: Centralized expand/collapse system with explicit state management (`isExpanded` flag as single source of truth), animation locking (`expandLock` prevents event queue flooding), and 100ms throttling to eliminate tap spam. **Clean layer separation**: JS drives show/collapsing with explicit stagger delays (50ms expand, 40ms collapse) set per egg via `transitionDelay`, CSS provides only base transitions (no hardcoded nth-child delays). **Simplified animations**: Removed border-breathe animation that was conflicting with glass-breathe, keeping only glass-breathe (scale) + aura-pulse. **Eternal goose philosophy**: Button 00 (☯️) never stops spinning - only changes speed (FAST/SLOW), with rotation derived from time-based clock. **Mobile/Desktop agnostic**: Works universally on both platforms, auto-collapse only triggers on mobile after φ-breath cycle. **First principles**: One animation at a time (via expandLock), sequential layout guaranteed (via JS-driven stagger), no CSS/JS animation fights. **v1.4 QUANTUM PURGE + SUBSTRATE SYNC (φ∞ = 1)**: Complete synchronization of all animation substrates. **TIME-BASED ROTATION TRUTH**: `CAT_BREATHE_CLOCK` provides single source: `angle = f(time)` NOT `f(animationState)`. **60 FPS RAF loop** (`renderRadiantTruth()`) continuously updates `--radiant-deg` from `performance.now()`. **UNIFIED ROTATION**: ALL 3 layers read from clock - symbol (1A): `rotate(--radiant-deg)`, aura (ghost): `conic-gradient(from --radiant-deg)`, border (ghost): `background-position: calc(--radiant-progress × 200%)`. **QUANTUM BIDIRECTIONAL PURGE**: Integrated into `setSpeed()` - Vertical (SLOW ↔ FAST) + Horizontal (1A visible ↔ not-1A ghost substrates). On every transition: (1) preserve rotation continuity, (2) update speed, (3) purge breathe/pulse animations via `nuclearPurge()`, (4) sync `--breath-duration` CSS variable to match new speed (2000ms FAST, 4000ms SLOW), (5) log genesis with accurate old→new transition. Purge resets scale/opacity animations while rotation continues untouched from time constant. **Zero substrate leakage**: breathe, pulse, radiate, and spin all synchronized - no accumulation bugs, no rhythm desync. **Accurate genesis logging**: Captures oldSpeed before updating, showing true transitions (SLOW→FAST, not FAST→FAST). Z-index layer separation: .aura (z:0, radiate+pulse) → .core (z:2, breathe ghost, not-1A back) → .core::after (z:-1, border radiate, ghost) → .core .symbol (z:10, spin ☯️, 1A front). This atomic architecture eliminates all animation state bugs - rotation is pure, continuous, and eternal across ALL substrates.
-- **Genesis Counter v1.1**: 2-tier noisy constant inflating mechanism (`server/genesis-counter.js`) with dual counters sharing same genesis. **Tier 1 (Cat Breath)**: Constant 500ms cycle, fast-ticking. **Tier 2 (φ Breath)**: NON-CONSTANT varying cycle (sine wave oscillation between φ^0 [4000ms] and φ^1 [6472ms]), creating unpredictable breathing pattern synchronized with UI φ-breath animation. Immutable by design - only increases, never resets within runtime. Serves as red herring for future security (nonces, salting, divine judgment). In-memory singleton (new genesis each deployment). Accessible via `genesisCounter.getCount()` (cat), `getPhiCount()` (phi), `getGenesis()`, `getAge()`. API endpoint `/api/genesis` exposes state for debugging/monitoring. Starts automatically on server initialization. **v1.2 Update (Bidirectional Purge)**: Cat breathe constant is now logged on EVERY transition (both slow→fast AND fast→slow) via unified BUTTON_00_STATE system, ensuring "as above, so below" genesis symmetry.
+- **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage.
+- **Database**: PostgreSQL (Neon-backed) with multi-tenant architecture. Isolated schemas provide per-tenant separation for user data, bridge configuration, sessions, and audit logs.
+- **WhatsApp Integration**: Multi-instance Baileys library for independent, persistent WhatsApp sessions.
+- **Discord Integration**: Messages forwarded to user-configured Discord webhooks for permanent storage.
+- **Media Handling**: Atomic storage for base64-encoded media with delivery tracking and automatic cleanup.
+- **Search**: Enhanced search functionality across messages and metadata tags.
+- **Metadata System**: Universal tagging system supporting plain words, hashtags, captions, dates, and multilingual text (English, 日本語, 中文, العربية, etc.). Tags stored with full-text search indexing.
+- **Unified Interface**: Centralized action registry maps all UI actions for both mobile and desktop, reducing code duplication.
+- **Auto-Scaling Timeline**: Intelligent message organization using density-based algorithms to group messages into time buckets.
+- **Export System**: Data portability with ZIP download containing messages and metadata.
+- **Interactive UI**: Modern responsive interface with glassmorphism effects and smooth animations.
 
 **System Design Choices:**
-- **Multi-Tenant Isolation**: Pure fractalized database architecture.
-- **Session Persistence & Uptime**: WhatsApp sessions survive server restarts, and auto-restore ensures connected bridges reconnect for 24/7 uptime.
-- **Compatibility**: Safari/iPad compatibility achieved via JWT in `localStorage`.
+- **Multi-Tenant Isolation**: Database architecture ensures complete data separation between users.
+- **Session Persistence**: WhatsApp sessions survive server restarts with auto-restore for 24/7 uptime.
+- **Compatibility**: Cross-browser support including Safari/iPad via JWT in localStorage.
 - **Scalability**: Designed for Replit Autoscale deployment.
-- **Crash Recovery**: PostgreSQL stores all bridge state.
+- **Crash Recovery**: PostgreSQL stores all bridge state for automatic recovery.
 - **Message Retention**: Discord provides permanent, immutable message storage.
-- **Security**: Strict webhook validation, production hardening with database connection pool timeouts, strict JWT security, staggered resource initialization, security headers (CORS, Helmet), environment-aware cookies, and robust audit logging.
-- **Optimized Deployment**: Eliminated Playwright/Chromium dependencies.
+- **Security**: Strict webhook validation, production hardening with database connection pool timeouts, JWT security, staggered resource initialization, security headers (CORS, Helmet), environment-aware cookies, and robust audit logging.
+- **Optimized Deployment**: Lightweight architecture without heavy dependencies.
 - **CSP Compliance**: Production-ready Content Security Policy with event delegation and self-hosted libraries.
 
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)
 - **WhatsApp**: Baileys library
-- **Discord**: Discord webhooks
+- **Discord**: Discord webhooks for message delivery

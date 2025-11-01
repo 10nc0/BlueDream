@@ -56,7 +56,7 @@ Click **"Run"** - The app starts on port 5000
 ### 4. Create Your Admin Account
 1. Visit `/signup.html`
 2. Sign up with your email
-3. **You're the Genesis User (admin)!**
+3. **First user becomes admin automatically!**
 
 ---
 
@@ -100,9 +100,9 @@ Your app is now live! Users can visit it at your deployment URL.
 
 ### User Roles
 
-1. **Admin** (Genesis User)
+1. **Admin** (First User)
    - Full access to everything
-   - Manage users, bots, settings
+   - Manage users, bridges, settings
    - View audit logs
    - First signup becomes admin
 
