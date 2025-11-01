@@ -460,6 +460,41 @@ function getFileExtension(mimetype) {
 
 // Send to Ledger (Output #01 - internal monitoring thread)
 // WEBHOOK-FIRST: Accepts bridge object directly, no database queries needed
+// Message chunking for Discord's limits (4096 char embed description)
+const MESSAGE_CHUNK_SIZE = 3800; // Safe margin under 4096 limit
+
+function splitMessageIntoChunks(text, chunkSize = MESSAGE_CHUNK_SIZE) {
+    if (text.length <= chunkSize) {
+        return [text]; // No split needed
+    }
+    
+    const chunks = [];
+    let remaining = text;
+    
+    while (remaining.length > 0) {
+        if (remaining.length <= chunkSize) {
+            chunks.push(remaining);
+            break;
+        }
+        
+        // Try to split at newline for cleaner breaks
+        let splitIndex = remaining.lastIndexOf('\n', chunkSize);
+        if (splitIndex === -1 || splitIndex < chunkSize * 0.5) {
+            // No good newline, split at word boundary
+            splitIndex = remaining.lastIndexOf(' ', chunkSize);
+            if (splitIndex === -1 || splitIndex < chunkSize * 0.5) {
+                // No good word boundary, hard split
+                splitIndex = chunkSize;
+            }
+        }
+        
+        chunks.push(remaining.substring(0, splitIndex));
+        remaining = remaining.substring(splitIndex).trimStart();
+    }
+    
+    return chunks;
+}
+
 async function sendToLedger(payload, options = {}, bridge = null) {
     // WEBHOOK-FIRST: Use webhook URL directly from bridge object
     let ledgerUrl = bridge?.output_01_url;
@@ -935,10 +970,18 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                 bridgeClient.release();
             }
             
-            // Create Discord embed
+            // LONG MESSAGE HANDLING: Split + .txt attachment for immutability + portability
+            const isLongMessage = messageContent && messageContent.length > MESSAGE_CHUNK_SIZE;
+            const messageChunks = isLongMessage ? splitMessageIntoChunks(messageContent) : null;
+            
+            // Create Discord embed (or first chunk if long message)
             const embed = {
-                title: `📱 WhatsApp Message from ${senderName}`,
-                description: messageContent || '_(No text content)_',
+                title: isLongMessage 
+                    ? `📄 WhatsApp Message from ${senderName} (Part 1/${messageChunks.length})`
+                    : `📱 WhatsApp Message from ${senderName}`,
+                description: isLongMessage 
+                    ? messageChunks[0]
+                    : (messageContent || '_(No text content)_'),
                 color: 0x25D366,
                 fields: [
                     {
@@ -953,7 +996,9 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                     }
                 ],
                 footer: {
-                    text: `WhatsApp Bridge - Bridge ${bridgeId}`
+                    text: isLongMessage
+                        ? `Long message split into ${messageChunks.length} parts + .txt attachment`
+                        : `WhatsApp Bridge - Bridge ${bridgeId}`
                 }
             };
 
@@ -1062,17 +1107,94 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
             
             console.log(`📍 Routing message to dual outputs: output_01=${output01 ? `${output01.type} (${output01.type === 'thread' ? output01.thread_id : output01.channel_id})` : 'none'}, output_0n=${output0n ? `${output0n.type} (${output0n.type === 'thread' ? output0n.thread_id : output0n.channel_id})` : 'none'}`);
             
-            // Path 1: Nyanbook Ledger (Output #01) → output_01
-            await sendToLedger(discordPayload, {
-                output: output01
-            }, bridge);
-            
-            // Path 2: User Webhook (Output #0n) → output_0n
-            await sendToUserOutput(discordPayload, {
-                output: output0n
-            }, bridge);
-            
-            console.log(`✅ [Bridge ${bridgeId}] Forwarded message from ${senderName}`);
+            // LONG MESSAGE HANDLING: Send all chunks sequentially
+            if (isLongMessage) {
+                // Send first chunk (already in discordPayload)
+                await sendToLedger(discordPayload, { output: output01 }, bridge);
+                await sendToUserOutput(discordPayload, { output: output0n }, bridge);
+                console.log(`📄 [Bridge ${bridgeId}] Sent chunk 1/${messageChunks.length}`);
+                
+                // Send remaining chunks
+                for (let i = 1; i < messageChunks.length; i++) {
+                    const chunkPayload = {
+                        username: 'WhatsApp Bridge',
+                        avatar_url: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg',
+                        embeds: [{
+                            title: `📄 WhatsApp Message from ${senderName} (Part ${i + 1}/${messageChunks.length})`,
+                            description: messageChunks[i],
+                            color: 0x25D366,
+                            footer: {
+                                text: `Continued from previous message...`
+                            }
+                        }]
+                    };
+                    
+                    await sendToLedger(chunkPayload, { output: output01 }, bridge);
+                    await sendToUserOutput(chunkPayload, { output: output0n }, bridge);
+                    console.log(`📄 [Bridge ${bridgeId}] Sent chunk ${i + 1}/${messageChunks.length}`);
+                }
+                
+                // Send full .txt attachment for portability
+                const txtBuffer = Buffer.from(messageContent, 'utf-8');
+                const txtFilename = `message_${timestamp.getTime()}.txt`;
+                const FormData = require('form-data');
+                
+                const txtPayload = {
+                    username: 'WhatsApp Bridge',
+                    avatar_url: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg',
+                    embeds: [{
+                        title: `📎 Full Message Attachment`,
+                        description: `Complete message from ${senderName} (${messageContent.length} chars)`,
+                        color: 0x25D366,
+                        footer: {
+                            text: `Download for full text • Bridge ${bridgeId}`
+                        }
+                    }]
+                };
+                
+                // Send .txt to Ledger
+                const ledgerUrl = bridge?.output_01_url;
+                if (ledgerUrl) {
+                    const ledgerForm = new FormData();
+                    ledgerForm.append('file', txtBuffer, { filename: txtFilename, contentType: 'text/plain' });
+                    ledgerForm.append('payload_json', JSON.stringify(txtPayload));
+                    const ledgerUrlObj = new URL(ledgerUrl);
+                    ledgerUrlObj.searchParams.set('wait', 'true');
+                    if (output01?.type === 'thread' && output01?.thread_id) {
+                        ledgerUrlObj.searchParams.set('thread_id', output01.thread_id);
+                    }
+                    try {
+                        await axios.post(ledgerUrlObj.toString(), ledgerForm, { headers: ledgerForm.getHeaders() });
+                    } catch (err) {
+                        console.error(`❌ Failed to send .txt to Ledger:`, err.message);
+                    }
+                }
+                
+                // Send .txt to User Output
+                const userUrl = bridge?.output_0n_url;
+                if (userUrl) {
+                    const userForm = new FormData();
+                    userForm.append('file', txtBuffer, { filename: txtFilename, contentType: 'text/plain' });
+                    userForm.append('payload_json', JSON.stringify(txtPayload));
+                    const userUrlObj = new URL(userUrl);
+                    userUrlObj.searchParams.set('wait', 'true');
+                    if (output0n?.type === 'thread' && output0n?.thread_id) {
+                        userUrlObj.searchParams.set('thread_id', output0n.thread_id);
+                    }
+                    try {
+                        await axios.post(userUrlObj.toString(), userForm, { headers: userForm.getHeaders() });
+                    } catch (err) {
+                        console.error(`❌ Failed to send .txt to User:`, err.message);
+                    }
+                }
+                
+                console.log(`✅ [Bridge ${bridgeId}] Forwarded long message (${messageChunks.length} chunks + .txt) from ${senderName}`);
+            } else {
+                // Normal message - send once
+                await sendToLedger(discordPayload, { output: output01 }, bridge);
+                await sendToUserOutput(discordPayload, { output: output0n }, bridge);
+                console.log(`✅ [Bridge ${bridgeId}] Forwarded message from ${senderName}`);
+            }
         } catch (error) {
             // Transaction already committed/released above, so no ROLLBACK needed
             throw error;
