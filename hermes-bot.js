@@ -69,10 +69,23 @@ class HermesBot {
         try {
             let targetChannelId = channelId;
             
+            // If no channelId provided, extract it from webhook URL
             if (!targetChannelId) {
                 const webhookIdMatch = webhookUrl.match(/\/webhooks\/(\d+)\/([a-zA-Z0-9_-]+)/);
                 if (!webhookIdMatch) {
                     throw new Error('Invalid webhook URL format - provide channelId explicitly or use full webhook URL');
+                }
+                
+                const webhookId = webhookIdMatch[1];
+                const webhookToken = webhookIdMatch[2];
+                
+                // Fetch webhook to get channel_id
+                const axios = require('axios');
+                const webhookResponse = await axios.get(`https://discord.com/api/v10/webhooks/${webhookId}/${webhookToken}`);
+                targetChannelId = webhookResponse.data.channel_id;
+                
+                if (!targetChannelId) {
+                    throw new Error('Could not extract channel_id from webhook');
                 }
             }
             
