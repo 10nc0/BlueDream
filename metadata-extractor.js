@@ -1,18 +1,25 @@
 /**
- * Metadata Extractor - Zero-cost regex-based extraction (no AI dependencies)
+ * Metadata Extractor - Universal tagging system
  * 
- * Purpose: Extract hashtags and dates from freeform text
+ * Philosophy: Any input can be a tag. Support all cultures, languages, and formats.
+ * 
+ * Tag Types:
+ *   - Plain tags: "bug", "hello", "yes" (any word)
+ *   - Hashtags: "#important", "#work" (derivative of tags, starts with #)
+ *   - Captions: "00", "123", "v1.0" (numeric/alphanumeric identifiers)
+ *   - Temporal: "tomorrow", "2025-11-01" (dates)
+ *   - Multilingual: "こんにちは", "你好", "مرحبا" (any language)
+ * 
  * Examples:
- *   "#FromDad Christmas 2021" → tags: ['#FromDad'], dates: ['Christmas 2021']
- *   "Draft MoU v1 at client Oct-25" → tags: [], dates: ['Oct-25']
+ *   "bug hello yes" → tags: ['bug', 'hello', 'yes']
+ *   "#important work" → tags: ['#important', 'work']
+ *   "00 Draft v1.0" → tags: ['00', 'Draft', 'v1.0']
+ *   "Tomorrow meeting" → tags: ['Tomorrow', 'meeting']
  */
 
 class MetadataExtractor {
     constructor() {
-        // Hashtag regex: #word (alphanumeric + underscore)
-        this.hashtagRegex = /#[a-zA-Z0-9_]+/g;
-        
-        // Date patterns (common formats people naturally use)
+        // Date patterns (for temporal classification)
         this.datePatterns = [
             // YYYY-MM-DD (2025-06-15)
             /\b\d{4}-\d{2}-\d{2}\b/g,
@@ -41,22 +48,27 @@ class MetadataExtractor {
     }
 
     /**
-     * Extract hashtags from text
+     * Extract all tags from text (universal approach)
      * @param {string} text - Freeform text
-     * @returns {string[]} - Array of unique hashtags
+     * @returns {string[]} - Array of unique tags (all space-separated tokens)
      */
-    extractHashtags(text) {
+    extractTags(text) {
         if (!text || typeof text !== 'string') {
             return [];
         }
         
-        const matches = text.match(this.hashtagRegex) || [];
-        // Return unique hashtags, preserve case
-        return [...new Set(matches)];
+        // Split by whitespace and filter out empty strings
+        const tokens = text
+            .split(/\s+/)
+            .map(token => token.trim())
+            .filter(token => token.length > 0);
+        
+        // Return unique tokens (preserve case and order)
+        return [...new Set(tokens)];
     }
 
     /**
-     * Extract dates from text
+     * Extract dates from text (for temporal classification)
      * @param {string} text - Freeform text
      * @returns {string[]} - Array of unique date strings
      */
@@ -85,7 +97,7 @@ class MetadataExtractor {
      */
     extract(text) {
         return {
-            tags: this.extractHashtags(text),
+            tags: this.extractTags(text),
             dates: this.extractDates(text)
         };
     }
@@ -96,15 +108,18 @@ class MetadataExtractor {
     static test() {
         const extractor = new MetadataExtractor();
         
-        console.log('\n🧪 Testing Metadata Extractor\n');
+        console.log('\n🧪 Testing Universal Metadata Extractor\n');
         
         const testCases = [
-            '#FromDad Christmas 2021',
-            'Draft MoU v1 at client Oct-25',
+            'bug hello yes',
+            '#important work meeting',
+            '00 Draft v1.0 Final',
+            'Tomorrow client presentation',
+            'こんにちは 你好 مرحبا multilingual',
             'Meeting notes from 2025-06-15 #work #important',
-            'Family vacation #summer #thailand 2025',
+            'Family vacation Summer 2025',
             'Document received yesterday #urgent',
-            'Project Alpha launch Spring 2026 #milestone #teamwork'
+            'Project Alpha launch Spring 2026 milestone'
         ];
         
         testCases.forEach((text, i) => {
