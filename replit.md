@@ -61,7 +61,7 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
   - **Standardized Styling**: White text (#ffffff) on deep void background (rgba(15,23,42,0.85)) with accent-colored borders
   - **Touch Optimized**: 48×48px circular buttons, scale(0.92) on :active for tap feedback
   - **No Bridge Header**: Bridge card header hidden on mobile for maximum message space (all actions moved to 📋 button)
-  - **No Export Button**: Export button hidden on mobile (prevents clipping, desktop-only feature)
+  - **Scrollable Toolbar**: Message toolbar (All, Search, Status, Export) is horizontally scrollable on mobile with hidden scrollbar and momentum scrolling
 - **Bridge Fan Modal**: Full-screen glassmorphism modal showing numbered bridge list + utility actions (Search 🔍, Audit 🧿)
 - **Touch Interactions (iPhone-Optimized, φ12)**:
   - **Tap-to-Zoom**: Media images open in full-screen modal with 44×44px close button (Apple HIG compliant)

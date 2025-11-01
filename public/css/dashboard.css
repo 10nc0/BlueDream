@@ -2836,9 +2836,24 @@ body.mobile-mode .bridge-detail > div:first-child {
     display: none !important; /* Hide bridge header (name + controls) on mobile */
 }
 
-/* Mobile Mode: Hide Export Button (clipping off screen) */
-body.mobile-mode button[data-export-bridge] {
-    display: none !important; /* Hide export button on mobile */
+/* Mobile Mode: Make toolbar scrollable to prevent clipping */
+body.mobile-mode .bridge-detail > div > div:first-child {
+    overflow-x: auto !important; /* Allow horizontal scroll */
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important; /* Smooth scroll on iOS */
+    scrollbar-width: none; /* Hide scrollbar on Firefox */
+    -ms-overflow-style: none; /* Hide scrollbar on IE/Edge */
+    white-space: nowrap !important; /* Prevent wrapping */
+}
+
+/* Hide scrollbar on Webkit browsers */
+body.mobile-mode .bridge-detail > div > div:first-child::-webkit-scrollbar {
+    display: none;
+}
+
+/* Make toolbar items stay inline */
+body.mobile-mode .bridge-detail > div > div:first-child > * {
+    flex-shrink: 0 !important; /* Prevent items from shrinking */
 }
 
 /* Desktop Mode: Default behavior */
