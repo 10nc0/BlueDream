@@ -18,7 +18,8 @@ const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
 const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./tenant-middleware');
 const BaileysClientManager = require('./baileys-client-manager');
-const DiscordBotManager = require('./discord-bot-manager');
+const HermesBot = require('./hermes-bot');
+const TothBot = require('./toth-bot');
 const fractalId = require('./utils/fractal-id');
 const MetadataExtractor = require('./metadata-extractor');
 const genesisCounter = require('./server/genesis-counter');
@@ -4819,13 +4820,21 @@ app.listen(PORT, '0.0.0.0', async () => {
     whatsappManager = new BaileysClientManager(pool);
     console.log('✅ Baileys WhatsApp Client Manager initialized (no Chromium required)');
     
-    discordBotManager = new DiscordBotManager();
+    // TRINITY ARCHITECTURE: Hermes (φ - Creator) + Toth (0 - Mirror)
+    // Security: Principle of least privilege - each bot has minimal permissions
+    discordBotManager = new HermesBot();
+    const tothBot = new TothBot();
+    
+    console.log('🌈 Initializing Trinity architecture...');
     try {
-        await discordBotManager.initialize();
-        console.log('🤖 Discord bot ready for thread management');
+        await Promise.all([
+            discordBotManager.initialize(),
+            tothBot.initialize()
+        ]);
+        console.log('✨ Trinity ready: Hermes (φ) + Toth (0)');
     } catch (error) {
-        console.error('❌ Discord bot initialization failed:', error.message);
-        console.error('   Bridge thread creation will be unavailable');
+        console.error('❌ Trinity initialization failed:', error.message);
+        console.error('   Bridge thread creation/reading may be unavailable');
     }
     
     await initializeDatabase();
