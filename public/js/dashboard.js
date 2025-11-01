@@ -2148,12 +2148,21 @@
                     ? Array.from(selectedMessages[fractalId]) 
                     : [];
                 
+                console.log('📦 EXPORT FLOW START');
+                console.log('📦 Bridge ID:', fractalId);
+                console.log('📦 Bridge Name:', bridge.name);
+                console.log('📦 Selected IDs:', selectedIds);
+                console.log('📦 Selected Count:', selectedIds.length);
+                
                 if (selectedIds.length === 0) {
                     showToast('❌ Please select messages to export', 'error');
                     return;
                 }
                 
                 showToast(`📦 Preparing export of ${selectedIds.length} message(s)...`, 'info');
+                
+                console.log('📦 Sending POST request to /api/bridges/' + fractalId + '/export');
+                console.log('📦 Payload:', { messageIds: selectedIds });
                 
                 // Send selected message IDs to backend
                 const response = await authFetch(`/api/bridges/${fractalId}/export`, {

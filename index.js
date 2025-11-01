@@ -3827,6 +3827,12 @@ const exportBridgeHandler = async (req, res) => {
     const { bridge_id } = req.params;
     const selectedMessageIds = req.body?.messageIds || null; // POST: selected IDs, GET: null (all)
     
+    console.log('📦 ===== EXPORT HANDLER START =====');
+    console.log('📦 Method:', req.method);
+    console.log('📦 Bridge ID:', bridge_id);
+    console.log('📦 Selected Message IDs:', selectedMessageIds);
+    console.log('📦 Selected Count:', selectedMessageIds ? selectedMessageIds.length : 0);
+    
     try {
         const client = req.dbClient || pool;
         
@@ -3837,11 +3843,14 @@ const exportBridgeHandler = async (req, res) => {
         );
         
         if (bridgeResult.rows.length === 0) {
+            console.log('📦 ERROR: Bridge not found');
             return res.status(404).json({ error: 'Bridge not found in your tenant' });
         }
         
         const bridge = bridgeResult.rows[0];
         const outputCreds = bridge.output_credentials;
+        console.log('📦 Bridge found:', bridge.name);
+        console.log('📦 Output thread:', outputCreds?.output_01?.thread_id);
         
         // Fetch messages from Discord (output_01 - Ledger)
         let messages = [];
@@ -3850,6 +3859,8 @@ const exportBridgeHandler = async (req, res) => {
             if (threadId) {
                 const channel = await discordClient.channels.fetch(threadId);
                 const fetchedMessages = await channel.messages.fetch({ limit: 100 });
+                console.log('📦 Fetched', fetchedMessages.size, 'messages from Discord');
+                
                 let allMessages = fetchedMessages.map(m => ({
                     id: m.id,
                     content: m.content,
@@ -3867,16 +3878,24 @@ const exportBridgeHandler = async (req, res) => {
                     }))
                 }));
                 
+                console.log('📦 Sample message:', {
+                    id: allMessages[0]?.id,
+                    content: allMessages[0]?.content?.substring(0, 50),
+                    attachments: allMessages[0]?.attachments?.length
+                });
+                
                 // Filter to selected messages if POST request with messageIds
                 if (selectedMessageIds && selectedMessageIds.length > 0) {
                     const selectedSet = new Set(selectedMessageIds);
                     messages = allMessages.filter(m => selectedSet.has(m.id));
+                    console.log('📦 Filtered to', messages.length, 'selected messages out of', allMessages.length);
                 } else {
                     messages = allMessages;
+                    console.log('📦 Using all', messages.length, 'messages (no selection)');
                 }
             }
         } catch (err) {
-            console.log('Note: Could not fetch Discord messages:', err.message);
+            console.log('📦 ERROR fetching Discord messages:', err.message);
         }
         
         // Fetch drops from PostgreSQL
