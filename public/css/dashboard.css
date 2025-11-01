@@ -2817,16 +2817,10 @@ body.mobile-mode .singularity-btn {
     to   { transform: rotate(360deg); }
 }
 
-/* φ-BREATH YIN-YANG ROTATION — Idle state rotation synced to breath cycle */
+/* φ-BREATH YIN-YANG ROTATION — Continuous rotation, speed controlled by --rotation-duration */
 @keyframes yinyang-breathe-rotate {
-    from { transform: rotate(var(--rotation-offset, 0deg)); }
-    to   { transform: rotate(calc(var(--rotation-offset, 0deg) + 360deg)); }
-}
-
-/* CREATION SPIN — Fast spinning during expanded state (1 rotation per cycle, 4x faster) */
-@keyframes creation-spin {
-    from { transform: rotate(var(--rotation-offset, 0deg)) scale(1); }
-    to   { transform: rotate(calc(var(--rotation-offset, 0deg) + 360deg)) scale(1); } /* 1 rotation */
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
 }
 
 /* Layer 01 buttons container - The eggs laid by the goose */

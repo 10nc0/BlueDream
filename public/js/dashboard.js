@@ -396,23 +396,14 @@
             // Clear any existing auto-collapse timer
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             
-            // IMMEDIATELY switch to slow spin (synchronized with state)
-            if (isMobile() && singularityBtn) {
-                const currentRotation = getCurrentRotation(singularityBtn);
-                console.log(`🔄 Current rotation: ${currentRotation}deg`);
-                
-                // Apply current rotation as CSS variable to maintain continuity
-                singularityBtn.style.setProperty('--rotation-offset', `${currentRotation}deg`);
-                
-                // Exit creation mode - stop fast spinning, return to breath rotation
-                singularityBtn.classList.remove('creation-spinning');
-                if (breathInitialized) {
-                    PHI_BREATH.exitCreationMode();
-                }
-            }
-            
-            // THEN update state (slow spin is already active)
+            // Update state FIRST (triggers rotation speed change via breathCycle listener)
             thumbsExpanded = false;
+            
+            // Exit creation mode for φ-breath system
+            if (isMobile() && breathInitialized) {
+                console.log('😌 Exited CREATION MODE - returning to φ-breath');
+                PHI_BREATH.exitCreationMode();
+            }
             
             if (layer01) {
                 // CRITICAL FIX: Add .collapsing BEFORE removing .show to prevent buttons from snapping to invisible base state
@@ -459,24 +450,14 @@
             // Clear any existing auto-collapse timer
             if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
             
-            // IMMEDIATELY switch to fast spin (synchronized with state)
-            if (singularityBtn && isMobile()) {
-                console.log('🌀 Button 00 enters CREATION SPIN (always visible)');
-                
-                // Capture current rotation angle before switching animation
-                const currentRotation = getCurrentRotation(singularityBtn);
-                console.log(`🔄 Current rotation: ${currentRotation}deg`);
-                
-                // Apply current rotation as CSS variable to maintain continuity
-                singularityBtn.style.setProperty('--rotation-offset', `${currentRotation}deg`);
-                singularityBtn.classList.add('creation-spinning');
-                if (breathInitialized) {
-                    PHI_BREATH.enterCreationMode();
-                }
-            }
-            
-            // THEN update state (fast spin is already active)
+            // Update state FIRST (triggers rotation speed change via breathCycle listener)
             thumbsExpanded = true;
+            
+            // Enter creation mode for φ-breath system
+            if (isMobile() && breathInitialized) {
+                console.log('🌀 Entered CREATION MODE - fast spinning');
+                PHI_BREATH.enterCreationMode();
+            }
             
             if (layer01) {
                 // Remove hidden and show eggs
