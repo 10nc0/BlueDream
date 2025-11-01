@@ -138,6 +138,14 @@ class HermesBot {
 
             console.log(`🧵 Hermes created thread: "${threadName}" (ID: ${thread.id})`);
             
+            const TOTH_USER_ID = '1434213576737820733';
+            try {
+                await thread.members.add(TOTH_USER_ID);
+                console.log(`  ✅ Added Toth (mirror bot) to thread for message reading`);
+            } catch (addError) {
+                console.warn(`  ⚠️  Failed to add Toth to thread: ${addError.message}`);
+            }
+            
             return {
                 threadId: thread.id,
                 threadName: threadName,
