@@ -601,6 +601,111 @@
             }).join(' ');
         }
 
+        // TIME BUCKET SYSTEM - Personal Cloud OS Timeline Grouping
+        function calculateOptimalBucketSize(messageCount, timeSpanDays) {
+            if (timeSpanDays === 0) return 24;
+            
+            const messagesPerDay = messageCount / timeSpanDays;
+            
+            if (messagesPerDay < 10) {
+                return 24;  // Low density: daily buckets
+            } else if (messagesPerDay < 30) {
+                return 8;   // Medium density: 3 buckets per day
+            } else {
+                return 6;   // High density: 4 buckets per day
+            }
+        }
+
+        function getBucketKey(timestamp, bucketHours) {
+            const dt = new Date(timestamp);
+            const hour = dt.getUTCHours();
+            const bucketIndex = Math.floor(hour / bucketHours);
+            const bucketStartHour = bucketIndex * bucketHours;
+            
+            const bucketDate = new Date(dt);
+            bucketDate.setUTCHours(bucketStartHour, 0, 0, 0);
+            return bucketDate.toISOString();
+        }
+
+        function formatBucketLabel(timestamp, bucketHours) {
+            const dt = new Date(timestamp);
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const messageDay = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+            
+            let dayLabel;
+            if (messageDay.getTime() === today.getTime()) {
+                dayLabel = 'Today';
+            } else if (messageDay.getTime() === yesterday.getTime()) {
+                dayLabel = 'Yesterday';
+            } else {
+                dayLabel = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            }
+            
+            if (bucketHours === 24) {
+                return dayLabel;
+            }
+            
+            const hour = dt.getUTCHours();
+            
+            if (bucketHours === 8) {
+                if (hour === 0) return `${dayLabel} - Night (12am-8am)`;
+                if (hour === 8) return `${dayLabel} - Morning (8am-4pm)`;
+                if (hour === 16) return `${dayLabel} - Evening (4pm-12am)`;
+            } else if (bucketHours === 6) {
+                if (hour === 0) return `${dayLabel} - Late Night (12am-6am)`;
+                if (hour === 6) return `${dayLabel} - Morning (6am-12pm)`;
+                if (hour === 12) return `${dayLabel} - Afternoon (12pm-6pm)`;
+                if (hour === 18) return `${dayLabel} - Evening (6pm-12am)`;
+            }
+            
+            return dayLabel;
+        }
+
+        function analyzeMessageDensity(messages) {
+            if (messages.length === 0) {
+                return { bucketHours: 24, messageCount: 0, timeSpanDays: 0 };
+            }
+            
+            const timestamps = messages.map(m => new Date(m.timestamp).getTime());
+            const oldest = Math.min(...timestamps);
+            const newest = Math.max(...timestamps);
+            const timeSpanMs = newest - oldest;
+            const timeSpanDays = Math.max(1, timeSpanMs / (1000 * 60 * 60 * 24));
+            
+            const bucketHours = calculateOptimalBucketSize(messages.length, timeSpanDays);
+            
+            return {
+                bucketHours,
+                messageCount: messages.length,
+                timeSpanDays: Math.ceil(timeSpanDays)
+            };
+        }
+
+        function groupMessagesByTimeBuckets(messages, bucketHours = 24) {
+            const buckets = new Map();
+            
+            for (const msg of messages) {
+                const bucketKey = getBucketKey(msg.timestamp, bucketHours);
+                
+                if (!buckets.has(bucketKey)) {
+                    buckets.set(bucketKey, []);
+                }
+                buckets.get(bucketKey).push(msg);
+            }
+            
+            const sortedBuckets = Array.from(buckets.entries())
+                .sort((a, b) => new Date(b[0]) - new Date(a[0]));
+            
+            return sortedBuckets.map(([timestamp, messages]) => ({
+                timestamp,
+                label: formatBucketLabel(timestamp, bucketHours),
+                messages
+            }));
+        }
+
         // Render Discord-style messages
         function renderDiscordMessages(data, bridgeId) {
             const messages = Array.isArray(data) ? data : data?.messages;
@@ -615,7 +720,22 @@
                 return '<div class="no-messages">No messages yet. Messages will appear here when they arrive.</div>';
             }
             
-            const html = messages.map(msg => {
+            // Analyze density and group by time buckets
+            const density = analyzeMessageDensity(messages);
+            const buckets = groupMessagesByTimeBuckets(messages, density.bucketHours);
+            
+            console.log(`📊 Timeline: ${buckets.length} buckets (${density.bucketHours}h intervals, ${messages.length} msgs over ${density.timeSpanDays} days)`);
+            
+            // Render messages grouped by time buckets
+            const html = buckets.map(bucket => {
+                const bucketHeader = `
+                    <div class="time-bucket-header">
+                        <span class="bucket-label">${bucket.label}</span>
+                        <span class="bucket-count">${bucket.messages.length} message${bucket.messages.length !== 1 ? 's' : ''}</span>
+                    </div>
+                `;
+                
+                const messagesHtml = bucket.messages.map(msg => {
                 // Build comprehensive searchable text including embeds
                 const searchableText = [
                     msg.sender_name || '',
@@ -685,6 +805,9 @@
                     </div>
                 </div>
             `;
+                }).join('');
+                
+                return bucketHeader + messagesHtml;
             }).join('');
             
             return html;
