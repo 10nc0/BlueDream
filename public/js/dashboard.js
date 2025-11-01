@@ -1649,7 +1649,7 @@
                 </div>
             `).join('');
             
-            // Add click handlers
+            // Add click handlers with direct action execution
             bridgeInfoModal.querySelectorAll('.bridge-fan-item').forEach(item => {
                 item.addEventListener('click', function() {
                     const actionType = this.dataset.bridgeAction;
@@ -1657,10 +1657,26 @@
                     
                     closeBridgeInfoModal();
                     
-                    // Trigger the appropriate action
+                    // Execute actions directly (don't rely on hidden desktop buttons)
                     setTimeout(() => {
-                        const button = document.querySelector(`[data-${actionType}="${bridgeId}"]`);
-                        if (button) button.click();
+                        if (actionType === 'toggle-config') {
+                            // Show bridge configuration/info in modal
+                            const configPanel = document.getElementById(`config-panel-${bridgeId}`);
+                            if (configPanel) {
+                                configPanel.style.display = configPanel.style.display === 'none' ? 'block' : 'none';
+                                // Scroll to view it
+                                configPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }
+                        } else if (actionType === 'generate-qr') {
+                            // Generate QR for WhatsApp relink
+                            generateNewQR(bridgeId);
+                        } else if (actionType === 'edit-bridge') {
+                            // Edit bridge details
+                            editBridge(bridgeId);
+                        } else if (actionType === 'delete-bridge') {
+                            // Delete bridge with confirmation
+                            confirmDeleteBridge(bridgeId);
+                        }
                     }, 100);
                 });
             });
