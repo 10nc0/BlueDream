@@ -669,6 +669,19 @@
                                 <img src="${escapeHtml(msg.media_url)}" style="max-width: 400px; border-radius: 4px;" alt="Discord attachment" loading="lazy" onerror="this.style.display='none'">
                             </div>
                         ` : ''}
+                        <div class="message-drop-section" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">
+                            <div class="drop-display hidden"></div>
+                            <button class="drop-link-btn" data-action="link-metadata" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">
+                                🏷️ Link Metadata
+                            </button>
+                            <div class="drop-input-container hidden">
+                                <input type="text" class="drop-input" placeholder="#FromDad Christmas 2021" data-message-id="${msg.id}">
+                                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                    <button class="drop-save-btn" data-action="save-drop" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">Save</button>
+                                    <button class="drop-cancel-btn" data-action="cancel-drop" data-message-id="${msg.id}">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -2097,6 +2110,9 @@
                     container.innerHTML = html;
                     console.log(`✅ Rendered ${data.messages?.length || 0} messages to container`);
                     
+                    // Hydrate drops (Personal Cloud OS metadata)
+                    hydrateDropsForBridge(bridgeId);
+                    
                     // SEAMLESS SEARCH: Auto-populate and filter if bridge was opened from message search
                     if (bridgeSearchContext.query && bridgeSearchContext.bridgeId === bridgeId) {
                         const searchBox = document.getElementById(`msg-search-${bridgeId}`);
@@ -3476,6 +3492,107 @@ document.addEventListener('DOMContentLoaded', function() {
         step3CompleteBtn.addEventListener('click', onboardingStep3Complete);
     }
 });
+
+// ============ DROPS API - Personal Cloud OS ============
+// Save a drop (link metadata to Discord message)
+async function saveDrop(bridgeId, messageId, metadataText, section) {
+    try {
+        const response = await fetch('/api/drops', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+            },
+            body: JSON.stringify({
+                bridge_id: bridgeId,
+                discord_message_id: messageId,
+                metadata_text: metadataText
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to save drop');
+        }
+        
+        const data = await response.json();
+        
+        // Hide input, show success
+        section.querySelector('.drop-input-container').classList.add('hidden');
+        section.querySelector('.drop-link-btn').classList.add('hidden');
+        
+        // Display the drop
+        displayDrop(section, data.drop, data.extracted);
+        
+    } catch (error) {
+        console.error('Error saving drop:', error);
+        alert('Failed to save metadata. Please try again.');
+    }
+}
+
+// Fetch all drops for a bridge
+async function fetchDrops(bridgeId) {
+    try {
+        const response = await fetch(`/api/drops/${bridgeId}`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch drops');
+        }
+        
+        const data = await response.json();
+        return data.drops || [];
+    } catch (error) {
+        console.error('Error fetching drops:', error);
+        return [];
+    }
+}
+
+// Display a drop in the UI
+function displayDrop(section, drop, extracted) {
+    const display = section.querySelector('.drop-display');
+    if (!display) return;
+    
+    // Handle both formats: extracted object (from POST response) or direct arrays (from GET response)
+    const tags = extracted?.tags || drop.extracted_tags || [];
+    const dates = extracted?.dates || drop.extracted_dates || [];
+    
+    const tagsHTML = tags.length > 0 
+        ? tags.map(tag => `<span class="drop-tag">${escapeHtml(tag)}</span>`).join(' ')
+        : '';
+    
+    const datesHTML = dates.length > 0
+        ? dates.map(date => `<span class="drop-date">📅 ${escapeHtml(date)}</span>`).join(' ')
+        : '';
+    
+    display.innerHTML = `
+        <div class="drop-metadata">
+            <div class="drop-text">${escapeHtml(drop.metadata_text)}</div>
+            ${tagsHTML ? `<div class="drop-tags">${tagsHTML}</div>` : ''}
+            ${datesHTML ? `<div class="drop-dates">${datesHTML}</div>` : ''}
+        </div>
+    `;
+    display.classList.remove('hidden');
+    
+    // Hide the "Link Metadata" button since drop already exists
+    const linkBtn = section.querySelector('.drop-link-btn');
+    if (linkBtn) linkBtn.classList.add('hidden');
+}
+
+// Hydrate drops for all messages in a bridge
+async function hydrateDropsForBridge(bridgeId) {
+    const drops = await fetchDrops(bridgeId);
+    
+    drops.forEach(drop => {
+        const section = document.querySelector(`.message-drop-section[data-message-id="${drop.discord_message_id}"][data-bridge-id="${bridgeId}"]`);
+        if (section) {
+            displayDrop(section, drop);
+        }
+    });
+}
+
 // This script will be appended to dashboard.js to handle event delegation
 // for dynamically generated elements
 
@@ -3624,6 +3741,50 @@ document.addEventListener('click', function(e) {
         e.preventDefault();
         const hintKey = target.getAttribute('data-dismiss-hint') || target.closest('[data-dismiss-hint]')?.getAttribute('data-dismiss-hint');
         if (hintKey && typeof dismissHint === 'function') dismissHint(hintKey, target);
+        return;
+    }
+    
+    // ============ DROPS - Personal Cloud OS ============
+    // Link metadata button
+    if (target.hasAttribute('data-action') && target.getAttribute('data-action') === 'link-metadata') {
+        e.preventDefault();
+        const messageId = target.getAttribute('data-message-id');
+        const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"]`);
+        if (section) {
+            // Hide button, show input
+            target.classList.add('hidden');
+            section.querySelector('.drop-input-container').classList.remove('hidden');
+            section.querySelector('.drop-input').focus();
+        }
+        return;
+    }
+    
+    // Save drop button
+    if (target.hasAttribute('data-action') && target.getAttribute('data-action') === 'save-drop') {
+        e.preventDefault();
+        const messageId = target.getAttribute('data-message-id');
+        const bridgeId = target.getAttribute('data-bridge-id');
+        const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"]`);
+        const input = section?.querySelector('.drop-input');
+        const metadataText = input?.value.trim();
+        
+        if (metadataText && bridgeId) {
+            saveDrop(bridgeId, messageId, metadataText, section);
+        }
+        return;
+    }
+    
+    // Cancel drop button
+    if (target.hasAttribute('data-action') && target.getAttribute('data-action') === 'cancel-drop') {
+        e.preventDefault();
+        const messageId = target.getAttribute('data-message-id');
+        const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"]`);
+        if (section) {
+            // Hide input, show button
+            section.querySelector('.drop-input-container').classList.add('hidden');
+            section.querySelector('.drop-link-btn').classList.remove('hidden');
+            section.querySelector('.drop-input').value = '';
+        }
         return;
     }
 });

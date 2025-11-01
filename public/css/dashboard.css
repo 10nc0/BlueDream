@@ -2104,3 +2104,126 @@ body::before {
     font-size: 0.875rem;
     text-align: right;
 }
+
+/* ============ DROPS - Personal Cloud OS ============ */
+.message-drop-section {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.drop-link-btn {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #60a5fa;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.drop-link-btn:hover {
+    background: rgba(59, 130, 246, 0.2);
+    transform: translateY(-1px);
+}
+
+.drop-input-container {
+    margin-top: 0.5rem;
+}
+
+.drop-input {
+    width: 100%;
+    padding: 0.625rem;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.375rem;
+    color: #e2e8f0;
+    font-size: 0.875rem;
+}
+
+.drop-input:focus {
+    outline: none;
+    border-color: rgba(59, 130, 246, 0.5);
+    background: rgba(15, 23, 42, 0.9);
+}
+
+.drop-save-btn,
+.drop-cancel-btn {
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.drop-save-btn {
+    background: rgba(34, 197, 94, 0.2);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: #86efac;
+}
+
+.drop-save-btn:hover {
+    background: rgba(34, 197, 94, 0.3);
+}
+
+.drop-cancel-btn {
+    background: rgba(148, 163, 184, 0.1);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    color: #94a3b8;
+}
+
+.drop-cancel-btn:hover {
+    background: rgba(148, 163, 184, 0.2);
+}
+
+.drop-display {
+    margin-top: 0.75rem;
+}
+
+.drop-metadata {
+    background: rgba(59, 130, 246, 0.05);
+    border-left: 3px solid rgba(59, 130, 246, 0.5);
+    padding: 0.75rem;
+    border-radius: 0.375rem;
+}
+
+.drop-text {
+    color: #e2e8f0;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+    font-style: italic;
+}
+
+.drop-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.drop-tag {
+    background: rgba(167, 139, 250, 0.2);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    color: #c4b5fd;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.drop-dates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.drop-date {
+    background: rgba(251, 146, 60, 0.2);
+    border: 1px solid rgba(251, 146, 60, 0.3);
+    color: #fdba74;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+}

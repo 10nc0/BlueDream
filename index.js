@@ -20,6 +20,7 @@ const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./te
 const BaileysClientManager = require('./baileys-client-manager');
 const DiscordBotManager = require('./discord-bot-manager');
 const fractalId = require('./utils/fractal-id');
+const MetadataExtractor = require('./metadata-extractor');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
@@ -3686,6 +3687,135 @@ app.get('/api/bridges/:id/stats', requireAuth, async (req, res) => {
         res.json(result.rows[0]);
     } catch (error) {
         console.error('❌ Error in /api/bridges/:id/stats:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============ DROPS API - Personal Cloud OS ============
+// Initialize metadata extractor (zero-cost regex extraction)
+const metadataExtractor = new MetadataExtractor();
+
+// Create a drop (link metadata to Discord message)
+app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
+    try {
+        const { bridge_id, discord_message_id, metadata_text } = req.body;
+        const client = req.dbClient || pool;
+        
+        if (!bridge_id || !discord_message_id || !metadata_text) {
+            return res.status(400).json({ 
+                error: 'Missing required fields: bridge_id, discord_message_id, metadata_text' 
+            });
+        }
+        
+        // Verify bridge belongs to user's tenant
+        const bridgeResult = await client.query(
+            'SELECT id FROM bridges WHERE fractal_id = $1',
+            [bridge_id]
+        );
+        
+        if (bridgeResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Bridge not found in your tenant' });
+        }
+        
+        const internalBridgeId = bridgeResult.rows[0].id;
+        
+        // Extract metadata using regex (no AI costs)
+        const extracted = metadataExtractor.extract(metadata_text);
+        
+        // Insert or update drop
+        const dropResult = await client.query(`
+            INSERT INTO drops (bridge_id, discord_message_id, metadata_text, extracted_tags, extracted_dates)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (bridge_id, discord_message_id)
+            DO UPDATE SET
+                metadata_text = $3,
+                extracted_tags = $4,
+                extracted_dates = $5,
+                updated_at = NOW()
+            RETURNING *
+        `, [internalBridgeId, discord_message_id, metadata_text, extracted.tags, extracted.dates]);
+        
+        res.json({ 
+            success: true, 
+            drop: dropResult.rows[0],
+            extracted: extracted
+        });
+    } catch (error) {
+        console.error('❌ Error creating drop:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get all drops for a bridge
+app.get('/api/drops/:bridge_id', requireAuth, setTenantContext, async (req, res) => {
+    try {
+        const { bridge_id } = req.params;
+        const client = req.dbClient || pool;
+        
+        // Verify bridge belongs to user's tenant
+        const bridgeResult = await client.query(
+            'SELECT id FROM bridges WHERE fractal_id = $1',
+            [bridge_id]
+        );
+        
+        if (bridgeResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Bridge not found in your tenant' });
+        }
+        
+        const internalBridgeId = bridgeResult.rows[0].id;
+        
+        // Fetch all drops for this bridge
+        const dropsResult = await client.query(
+            'SELECT * FROM drops WHERE bridge_id = $1 ORDER BY created_at DESC',
+            [internalBridgeId]
+        );
+        
+        res.json({ drops: dropsResult.rows });
+    } catch (error) {
+        console.error('❌ Error fetching drops:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Search drops using PostgreSQL full-text search
+app.get('/api/drops/search/:bridge_id', requireAuth, setTenantContext, async (req, res) => {
+    try {
+        const { bridge_id } = req.params;
+        const { query } = req.query;
+        const client = req.dbClient || pool;
+        
+        if (!query) {
+            return res.status(400).json({ error: 'Query parameter required' });
+        }
+        
+        // Verify bridge belongs to user's tenant
+        const bridgeResult = await client.query(
+            'SELECT id FROM bridges WHERE fractal_id = $1',
+            [bridge_id]
+        );
+        
+        if (bridgeResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Bridge not found in your tenant' });
+        }
+        
+        const internalBridgeId = bridgeResult.rows[0].id;
+        
+        // PostgreSQL full-text search (zero-cost, blazing fast)
+        const searchResult = await client.query(`
+            SELECT *, ts_rank(search_vector, plainto_tsquery('english', $1)) as rank
+            FROM drops
+            WHERE bridge_id = $2 AND search_vector @@ plainto_tsquery('english', $1)
+            ORDER BY rank DESC, created_at DESC
+            LIMIT 100
+        `, [query, internalBridgeId]);
+        
+        res.json({ 
+            query: query,
+            results: searchResult.rows,
+            count: searchResult.rows.length
+        });
+    } catch (error) {
+        console.error('❌ Error searching drops:', error);
         res.status(500).json({ error: error.message });
     }
 });
