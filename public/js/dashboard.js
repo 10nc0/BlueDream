@@ -534,8 +534,8 @@
             console.log(`🔘 Thumbs zone HTML length: ${html.length} chars`);
             
             // Start φ-breath cycle on mobile
-            if (isMobile()) {
-                setBreathCycle(BASE_BREATH); // Start in calm state (4s breath)
+            if (isMobile() && breathInitialized) {
+                setBreathCycle(PHI_BREATH.BASE_DURATION); // Start in calm state (4s breath)
             }
         }
 
