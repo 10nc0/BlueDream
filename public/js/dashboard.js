@@ -814,15 +814,9 @@
                             </label>
                             <div class="message-drop-section" style="flex: 1;" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">
                                 <div class="drop-display hidden"></div>
-                                <button class="drop-link-btn" data-action="link-metadata" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">
-                                    🏷️ Link Metadata
-                                </button>
-                                <div class="drop-input-container hidden">
+                                <div class="drop-input-container">
                                     <input type="text" class="drop-input" placeholder="#FromDad Christmas 2021" data-message-id="${msg.id}">
-                                    <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                                        <button class="drop-save-btn" data-action="save-drop" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">Save</button>
-                                        <button class="drop-cancel-btn" data-action="cancel-drop" data-message-id="${msg.id}">Cancel</button>
-                                    </div>
+                                    <button class="drop-save-btn" data-action="save-drop" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" style="margin-top: 0.5rem;">Save</button>
                                 </div>
                             </div>
                         </div>
@@ -3873,11 +3867,8 @@ async function saveDrop(bridgeId, messageId, metadataText, section) {
         
         const data = await response.json();
         
-        // Clear input but keep it visible for adding more tags
-        section.querySelector('.drop-input-container').classList.add('hidden');
+        // Clear input and display the drop (will show all tags as bubbles) - pass fractal_id
         section.querySelector('.drop-input').value = '';
-        
-        // Display the drop (will show all tags as bubbles) - pass fractal_id
         displayDrop(section, data.drop, data.extracted, bridgeId);
         
     } catch (error) {
@@ -3980,10 +3971,6 @@ function displayDrop(section, drop, extracted, fractalBridgeId) {
         </div>
     `;
     display.classList.remove('hidden');
-    
-    // KEEP the input visible to allow adding more tags
-    const linkBtn = section.querySelector('.drop-link-btn');
-    if (linkBtn) linkBtn.classList.remove('hidden'); // Show button to add more tags
 }
 
 // Hydrate drops for all messages in a bridge
@@ -4167,20 +4154,6 @@ document.addEventListener('click', function(e) {
     }
     
     // ============ DROPS - Personal Cloud OS ============
-    // Link metadata button
-    if (target.hasAttribute('data-action') && target.getAttribute('data-action') === 'link-metadata') {
-        e.preventDefault();
-        const messageId = target.getAttribute('data-message-id');
-        const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"]`);
-        if (section) {
-            // Hide button, show input
-            target.classList.add('hidden');
-            section.querySelector('.drop-input-container').classList.remove('hidden');
-            section.querySelector('.drop-input').focus();
-        }
-        return;
-    }
-    
     // Save drop button
     if (target.hasAttribute('data-action') && target.getAttribute('data-action') === 'save-drop') {
         e.preventDefault();
@@ -4192,19 +4165,6 @@ document.addEventListener('click', function(e) {
         
         if (metadataText && bridgeId) {
             saveDrop(bridgeId, messageId, metadataText, section);
-        }
-        return;
-    }
-    
-    // Cancel drop button
-    if (target.hasAttribute('data-action') && target.getAttribute('data-action') === 'cancel-drop') {
-        e.preventDefault();
-        const messageId = target.getAttribute('data-message-id');
-        const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"]`);
-        if (section) {
-            // Hide input, show button, clear input
-            section.querySelector('.drop-input-container').classList.add('hidden');
-            section.querySelector('.drop-input').value = '';
         }
         return;
     }
