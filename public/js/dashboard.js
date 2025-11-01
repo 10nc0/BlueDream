@@ -162,24 +162,34 @@
             }
         }
         
-        // Logout function
+        // Logout function (Safari/iOS compatible)
         async function logout() {
             try {
                 await authFetch('/api/auth/logout', { method: 'POST' });
-                
-                // SECURITY: Clear all cached data to prevent cross-session data leakage
-                messageCache = {};
-                allMessages = {};
-                bridges = [];
-                filteredBridges = [];
-                
-                // Clear JWT tokens from localStorage
+            } catch (error) {
+                console.error('Logout API error:', error);
+            }
+            
+            // SECURITY: Clear all cached data to prevent cross-session data leakage
+            messageCache = {};
+            allMessages = {};
+            bridges = [];
+            filteredBridges = [];
+            
+            // Clear JWT tokens from localStorage (Safari-safe)
+            try {
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('refreshToken');
-                window.location.href = '/login.html';
-            } catch (error) {
-                console.error('Logout error:', error);
+                localStorage.clear(); // Clear all localStorage for Safari
+                sessionStorage.clear(); // Clear sessionStorage too
+            } catch (e) {
+                console.log('Storage clear error (Safari private mode?):', e);
             }
+            
+            // Force redirect after short delay for Safari
+            setTimeout(() => {
+                window.location.replace('/login.html'); // Use replace instead of href
+            }, 100);
         }
         
         // Tag Management Functions for Bubble UI
@@ -454,7 +464,6 @@
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" data-generate-qr="${bridge.fractal_id}" title="Generate QR" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🔗</button>` : ''}
-                        <button class="btn-icon" data-export-bridge="${bridge.fractal_id}" title="Export Data (ZIP)" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">📦</button>
                         ${!isDevPanelView ? `<button class="btn-icon" data-edit-bridge="${bridge.fractal_id}" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-delete-bridge="${bridge.fractal_id}" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
                     </div>
@@ -465,6 +474,10 @@
                     <div style="display: flex; flex-direction: column; height: calc(100vh - 220px); margin-top: 0.5rem;">
                         <!-- Compact search toolbar -->
                         <div style="display: flex; gap: 0.5rem; padding: 0.5rem; background: rgba(30, 41, 59, 0.4); border-radius: 6px; margin-bottom: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.625rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">
+                                <input type="checkbox" id="select-all-${bridge.fractal_id}" data-select-all="${bridge.fractal_id}" style="cursor: pointer;">
+                                All
+                            </label>
                             <input type="text" id="msg-search-${bridge.fractal_id}" placeholder="🔍 Search..." 
                                 style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem; flex: 1;" 
                                 data-filter-messages="${bridge.fractal_id}">
@@ -474,6 +487,7 @@
                                 <option value="success">✓</option>
                                 <option value="failed">✗</option>
                             </select>
+                            <button id="export-selected-${bridge.fractal_id}" data-export-bridge="${bridge.fractal_id}" style="padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">📦 Export (0)</button>
                         </div>
                         <!-- Search indicator (if active) -->
                         <div id="search-indicator-${bridge.fractal_id}" style="display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between; margin-bottom: 0.5rem;">
@@ -747,6 +761,7 @@
                 
                 return `
                 <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml(searchableText)}" data-status="${msg.discord_status}">
+                    <input type="checkbox" class="message-export-checkbox" data-message-id="${msg.id}" style="margin-right: 0.5rem; cursor: pointer;">
                     <div class="discord-avatar">
                         ${msg.sender_photo_url ? 
                             `<img src="${escapeHtml(msg.sender_photo_url)}" alt="${escapeHtml(msg.sender_name || 'User')}" class="avatar-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
