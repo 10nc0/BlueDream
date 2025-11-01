@@ -337,7 +337,10 @@
                     </div>
                     <small class="form-help">Optional - add tags to organize your bridges</small>
                 </div>
-                <button type="submit" class="submit-btn">Save Bot</button>
+                <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                    <button type="button" class="btn" style="flex: 1; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); color: #94a3b8;" onclick="document.getElementById('botModal').classList.remove('active')">Cancel</button>
+                    <button type="submit" class="submit-btn" style="flex: 2;">Save Bridge</button>
+                </div>
             </form>
         </div>
     </div>

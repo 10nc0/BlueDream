@@ -2527,17 +2527,35 @@
             // Filter out empty webhooks
             const validWebhooks = botWebhooks.filter(w => w.url && w.url.trim());
             
-            // Prepare output credentials with webhooks
-            const outputCredentials = {
-                webhooks: validWebhooks.map(w => ({ name: w.name, url: w.url }))
-            };
-            
-            // If no webhooks provided, add a placeholder entry
-            if (validWebhooks.length === 0 && outputPlatform === 'Discord') {
-                outputCredentials.webhooks = [{ 
-                    name: 'Main Channel', 
-                    url: '' 
-                }];
+            // CRITICAL FIX: When editing, preserve existing output_credentials structure
+            let outputCredentials;
+            if (editingBridgeId) {
+                // Find the existing bridge to preserve its Ledger thread (output_01)
+                const existingBridge = bridges.find(b => b.fractal_id === editingBridgeId);
+                if (existingBridge && existingBridge.output_credentials) {
+                    // Preserve existing structure, only update user webhooks
+                    outputCredentials = {
+                        ...existingBridge.output_credentials,
+                        webhooks: validWebhooks.map(w => ({ name: w.name, url: w.url }))
+                    };
+                } else {
+                    outputCredentials = {
+                        webhooks: validWebhooks.map(w => ({ name: w.name, url: w.url }))
+                    };
+                }
+            } else {
+                // New bridge: just webhooks
+                outputCredentials = {
+                    webhooks: validWebhooks.map(w => ({ name: w.name, url: w.url }))
+                };
+                
+                // If no webhooks provided, add a placeholder entry
+                if (validWebhooks.length === 0 && outputPlatform === 'discord') {
+                    outputCredentials.webhooks = [{ 
+                        name: 'Main Channel', 
+                        url: '' 
+                    }];
+                }
             }
             
             const botData = {
@@ -2564,7 +2582,8 @@
                 if (response.ok) {
                     closeBotModal();
                     loadBridges();
-                    alert('✅ Bot created successfully! Click the ▶️ button to start WhatsApp.');
+                    const message = editingBridgeId ? '✅ Bridge updated successfully!' : '✅ Bot created successfully! Click the ▶️ button to start WhatsApp.';
+                    alert(message);
                 } else {
                     const errorData = await response.json().catch(() => ({}));
                     alert(`Failed to save bot: ${errorData.error || response.statusText}`);
