@@ -2713,7 +2713,7 @@ body::before {
     transform: none !important; /* JS NEVER touches this - CSS variables only */
 }
 
-/* CORE - the ☯️ symbol with eternal spin */
+/* CORE - the ☯️ symbol with eternal spin + breathe (LAYERED) */
 .singularity-btn .core {
     position: absolute;
     inset: 0;
@@ -2726,7 +2726,10 @@ body::before {
     border-radius: 50%;
     z-index: 2;
     transform-origin: center center;
-    animation: yinyang-breathe-rotate var(--rotation-duration, 8000ms) linear infinite;
+    /* LAYERED ANIMATIONS: rotation + breathing */
+    animation: 
+        yinyang-rotate var(--rotation-duration, 8000ms) linear infinite,
+        core-breathe var(--breath-duration, 4000ms) ease-in-out infinite;
 }
 
 /* CORE GLASS LAYER - liquid iOS frosted effect with breathe */
@@ -2787,17 +2790,27 @@ body::before {
     pointer-events: none;
 }
 
-/* BREATHING KEYFRAMES — ALL IN SYNC */
+/* BREATHING KEYFRAMES — ALL IN SYNC, LAYERED UI SCHEME */
+
+/* Layer 1: Core breathing (scale the whole button) */
+@keyframes core-breathe {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.08); }
+}
+
+/* Layer 2: Glass breathing (subtle inner glow) */
 @keyframes glass-breathe {
     0%, 100% { transform: scale(1); }
     50%      { transform: scale(1.05); }
 }
 
+/* Layer 3: Border rotation (rainbow gradient spin) */
 @keyframes border-rotate {
     from { background-position: 0% 50%; }
     to   { background-position: 200% 50%; }
 }
 
+/* Layer 4: Aura pulse (outer glow expansion + opacity) */
 @keyframes aura-pulse {
     0%, 100% { 
         transform: scale(1);
@@ -2809,13 +2822,14 @@ body::before {
     }
 }
 
+/* Layer 5: Aura rotation (slow rainbow spin) */
 @keyframes aura-rotate {
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
 }
 
-/* φ-BREATH YIN-YANG ROTATION — Continuous rotation, speed controlled by --rotation-duration */
-@keyframes yinyang-breathe-rotate {
+/* φ-BREATH YIN-YANG ROTATION — Eternal spin, speed controlled by --rotation-duration */
+@keyframes yinyang-rotate {
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
 }
