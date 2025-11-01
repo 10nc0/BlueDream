@@ -27,6 +27,7 @@ const PHI_BREATH = (function() {
     let breathStartTime = 0;
     let animationFrameId = null;
     let currentCycleDuration = BASE_DURATION;
+    let lastBreathTimestamp = 0; // Guard to prevent multiple breath events
     
     // Event Listeners
     const listeners = {
@@ -76,8 +77,10 @@ const PHI_BREATH = (function() {
             emit('phaseChange', { phase: currentPhase, scale: φScale, progress });
         }
         
-        // Check for breath cycle completion
-        if (progress < 0.05 && elapsed > 100) {
+        // Check for breath cycle completion (guard prevents multiple events)
+        const breathTimestamp = Math.floor(elapsed / currentCycleDuration);
+        if (breathTimestamp > lastBreathTimestamp && elapsed > 100) {
+            lastBreathTimestamp = breathTimestamp;
             onBreathComplete();
         }
         
@@ -132,6 +135,7 @@ const PHI_BREATH = (function() {
     function exitCreationMode() {
         currentPhase = 'idle';
         breathStartTime = performance.now(); // Reset breath cycle
+        lastBreathTimestamp = 0; // Reset guard
         emit('creation', { state: 'end' });
         console.log('😌 Exited CREATION MODE - returning to φ-breath');
     }
