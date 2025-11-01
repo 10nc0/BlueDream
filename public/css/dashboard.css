@@ -499,10 +499,10 @@ body::before {
   }
 }
 
-/* Tablet (iPad): 768-1023px viewport - Fixed sidebar width (row layout starts here) */
+/* Tablet (iPad): 768-1023px viewport - Adjustable sidebar width (row layout starts here) */
 @media (min-width: 768px) and (max-width: 1023px) {
   :root {
-    --sidebar-width: 240px;
+    --sidebar-width: 220px; /* Reduced default for more message space */
   }
   
   .bridge-sidebar {
@@ -510,14 +510,47 @@ body::before {
   }
 }
 
-/* Desktop (Mac): ≥1024px viewport - Fixed sidebar width (row layout) */
+/* Desktop (Mac): ≥1024px viewport - Adjustable sidebar width (row layout) */
 @media (min-width: 1024px) {
   :root {
-    --sidebar-width: 280px;
+    --sidebar-width: 240px; /* Reduced from 280px for more message space */
   }
   
   .bridge-sidebar {
     width: var(--sidebar-width);
+  }
+}
+
+/* Draggable Resizer (only on tablet/desktop) */
+.sidebar-resizer {
+  display: none; /* Hidden on mobile */
+  width: 4px;
+  background: transparent;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  transition: background 0.2s ease;
+  user-select: none;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.resizing {
+  background: linear-gradient(135deg, #22d3ee 0%, #ec4899 50%, #a855f7 100%);
+}
+
+.sidebar-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
+  cursor: col-resize;
+}
+
+@media (min-width: 768px) {
+  .sidebar-resizer {
+    display: block;
   }
 }
 

@@ -4219,3 +4219,85 @@ document.addEventListener('input', function(e) {
         return;
     }
 });
+
+// ============================================================================
+// SIDEBAR RESIZER - Draggable width adjustment
+// ============================================================================
+(function initSidebarResizer() {
+    const resizer = document.getElementById('sidebarResizer');
+    const sidebar = document.getElementById('bridgeSidebar');
+    
+    if (!resizer || !sidebar) return;
+    
+    // Min/max constraints
+    const MIN_WIDTH = 180;
+    const MAX_WIDTH = 400;
+    const STORAGE_KEY = 'nyanbook_sidebar_width';
+    
+    // Load saved width from localStorage
+    const savedWidth = localStorage.getItem(STORAGE_KEY);
+    if (savedWidth) {
+        const width = parseInt(savedWidth);
+        if (width >= MIN_WIDTH && width <= MAX_WIDTH) {
+            document.documentElement.style.setProperty('--sidebar-width', `${width}px`);
+        }
+    }
+    
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+    
+    function startResize(e) {
+        // Only allow resize on tablet/desktop
+        if (window.innerWidth < 768) return;
+        
+        isResizing = true;
+        startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+        startWidth = sidebar.offsetWidth;
+        
+        resizer.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        
+        e.preventDefault();
+    }
+    
+    function resize(e) {
+        if (!isResizing) return;
+        
+        const currentX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+        const diff = currentX - startX;
+        let newWidth = startWidth + diff;
+        
+        // Apply constraints
+        newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, newWidth));
+        
+        // Update CSS custom property
+        document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
+        
+        e.preventDefault();
+    }
+    
+    function stopResize() {
+        if (!isResizing) return;
+        
+        isResizing = false;
+        resizer.classList.remove('resizing');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        
+        // Save to localStorage
+        const currentWidth = sidebar.offsetWidth;
+        localStorage.setItem(STORAGE_KEY, currentWidth.toString());
+    }
+    
+    // Mouse events
+    resizer.addEventListener('mousedown', startResize);
+    document.addEventListener('mousemove', resize);
+    document.addEventListener('mouseup', stopResize);
+    
+    // Touch events for iPad
+    resizer.addEventListener('touchstart', startResize);
+    document.addEventListener('touchmove', resize);
+    document.addEventListener('touchend', stopResize);
+})();
