@@ -35,7 +35,12 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 
 **Mobile Mode (width < 768px AND portrait orientation):**
 - **Automatic Mode Detection**: JavaScript detects viewport size and orientation, applying mobile-specific layout without resizers
-- **Compact Header**: 60×60px cat animation, smaller date/time font (0.65rem), maximized vertical space for messages (70% of screen)
+- **Harmonious Header Layout**: Clean 3-column grid design `[Cat] - [Your Nyanbook~ + Date/Time] - [Logout]`
+  - Cat: 75×75px constant size (left column)
+  - Title: "Your Nyanbook~" with date/time below (center column, auto-aligned)
+  - Logout: Compact button (right column)
+  - Height: 70px for balanced proportions
+  - Date/time dynamically repositioned to center via JavaScript
 - **Floating Thumbs Zone**: Bottom-right pill bar with 48×48px buttons in standardized layout:
   - Position 1 (rightmost): Create Bridge (✍🏻, cyan border, closest to thumb)
   - Position 2: Audit (🧿, purple border, ward off evil, action & closure)

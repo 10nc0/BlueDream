@@ -137,32 +137,30 @@
         };
 
         /**
-         * Apply mobile mode: Floating thumbs zone + compact header
+         * Apply mobile mode: Harmonious header layout
+         * [Cat] - [Your Nyanbook~ + Date/Time] - [Logout]
          */
         function applyMobileMode() {
             console.log('📱 Switching to MOBILE mode');
             document.body.classList.add('mobile-mode');
             document.body.classList.remove('desktop-mode');
             
-            // Scale header elements
+            // Cat: 75x75px constant size
             const catCanvas = document.getElementById('hopCanvas');
-            const catContainer = document.getElementById('catContainer');
-            const dateTimeDefault = document.getElementById('dateTimeDefault');
-            const dateTimeCompact = document.getElementById('dateTimeCompact');
-            
             if (catCanvas) {
-                catCanvas.width = 60;
-                catCanvas.height = 60;
-                catCanvas.style.width = '60px';
-                catCanvas.style.height = '60px';
+                catCanvas.width = 75;
+                catCanvas.height = 75;
+                catCanvas.style.width = '75px';
+                catCanvas.style.height = '75px';
             }
             
-            if (dateTimeDefault) {
-                dateTimeDefault.style.fontSize = '0.65rem';
-            }
+            // Move date/time to center title section
+            const dateTimeCompact = document.getElementById('dateTimeCompact');
+            const titleSection = document.querySelector('.header > div > div:nth-child(2)');
             
-            if (dateTimeCompact) {
-                dateTimeCompact.style.fontSize = '0.65rem';
+            if (dateTimeCompact && titleSection && !titleSection.contains(dateTimeCompact)) {
+                // Move dateTimeCompact from right section to center title section
+                titleSection.appendChild(dateTimeCompact);
             }
             
             // Hide resizers on mobile
@@ -187,12 +185,8 @@
             document.body.classList.add('desktop-mode');
             document.body.classList.remove('mobile-mode');
             
-            // Restore header elements
+            // Restore cat to 100x100
             const catCanvas = document.getElementById('hopCanvas');
-            const catContainer = document.getElementById('catContainer');
-            const dateTimeDefault = document.getElementById('dateTimeDefault');
-            const dateTimeCompact = document.getElementById('dateTimeCompact');
-            
             if (catCanvas) {
                 catCanvas.width = 100;
                 catCanvas.height = 100;
@@ -200,12 +194,13 @@
                 catCanvas.style.height = '100px';
             }
             
-            if (dateTimeDefault) {
-                dateTimeDefault.style.fontSize = '0.7rem';
-            }
+            // Restore date/time to right section (original position)
+            const dateTimeCompact = document.getElementById('dateTimeCompact');
+            const rightSection = document.querySelector('.header > div > div:last-child');
             
-            if (dateTimeCompact) {
-                dateTimeCompact.style.fontSize = '0.7rem';
+            if (dateTimeCompact && rightSection && !rightSection.contains(dateTimeCompact)) {
+                // Move dateTimeCompact back to right section (before user info)
+                rightSection.insertBefore(dateTimeCompact, rightSection.firstChild);
             }
             
             // Show resizers on desktop
