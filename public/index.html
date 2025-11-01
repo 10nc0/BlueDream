@@ -102,12 +102,14 @@
         <div id="bridgesTab" class="tab-content active" style="display: flex; height: 100%; padding: 0;">
             <!-- Simplified Sidebar: Search & Bridges Only -->
             <nav class="bridge-sidebar" id="bridgeSidebar" style="border-right: 1px solid rgba(148, 163, 184, 0.1); display: flex; flex-direction: column; overflow: hidden;">
-                <!-- Search & Create Section -->
-                <div style="padding: 0.625rem 0.75rem; border-bottom: 1px solid rgba(148, 163, 184, 0.1); flex-shrink: 0;">
-                    <!-- Search -->
-                    <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..." style="width: 100%; margin-bottom: 0.5rem; padding: 0.375rem 0.625rem; background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 6px; color: #e2e8f0; font-size: 0.8125rem; transition: all 0.2s;">
+                <!-- Search & Action Buttons -->
+                <div style="padding: 0.625rem 0.75rem; border-bottom: 1px solid rgba(148, 163, 184, 0.1); flex-shrink: 0; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <!-- Search Box -->
+                    <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search..." style="width: 100%; padding: 0.375rem 0.625rem; background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 6px; color: #e2e8f0; font-size: 0.8125rem; transition: all 0.2s;">
                     <!-- Create Bridge Button -->
-                    <button class="create-bot-btn" style="width: 100%; padding: 0.5rem 0.75rem; background: linear-gradient(135deg, rgba(88, 101, 242, 0.15) 0%, rgba(88, 101, 242, 0.25) 100%); color: #818cf8; border: 1px solid rgba(88, 101, 242, 0.3); border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.8125rem; transition: all 0.2s; backdrop-filter: blur(8px);">+ Create</button>
+                    <button class="create-bot-btn" style="width: 100%; padding: 0.5rem 0.75rem; background: linear-gradient(135deg, rgba(88, 101, 242, 0.15) 0%, rgba(88, 101, 242, 0.25) 100%); color: #818cf8; border: 1px solid rgba(88, 101, 242, 0.3); border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.8125rem; transition: all 0.2s; backdrop-filter: blur(8px);">Create Bridge 🚀</button>
+                    <!-- Audit Type Button -->
+                    <button class="audit-type-btn" style="width: 100%; padding: 0.5rem 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(168, 85, 247, 0.25) 100%); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.8125rem; transition: all 0.2s; backdrop-filter: blur(8px);">Audit Type 🧿</button>
                 </div>
                 
                 <!-- Bridge List (scrollable) -->

@@ -3644,6 +3644,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const createBotBtn = document.querySelector('.create-bot-btn');
     if (createBotBtn) createBotBtn.addEventListener('click', openCreatePopup);
     
+    const auditTypeBtn = document.querySelector('.audit-type-btn');
+    if (auditTypeBtn) auditTypeBtn.addEventListener('click', () => {
+        showToast('🧿 Agent Layer coming soon! (Check/Remind/Alert/Reward/Execute)', 'info');
+    });
+    
     const revokeAllBtn = document.querySelector('[onclick*="revokeAllSessions"]');
     if (revokeAllBtn) {
         revokeAllBtn.removeAttribute('onclick');
