@@ -313,10 +313,16 @@
         // Now powered by centralized φ-breath module
         const φ = 1.618033988749895;
         
-        let thumbsExpanded = false;
+        // THUMBS-ZONE STATE (battle-tested controller)
+        let isExpanded = false;      // Single source of truth - readable everywhere
+        let expandLock = false;      // Guarantees one animation at a time
         let thumbsIdleTimer = null;
         let breathInitialized = false;
-        let isAnimating = false; // Throttle flag to prevent tap flooding
+        
+        // Animation timing constants
+        const EXPAND_DELAY = 50;     // ms between each egg (expand)
+        const COLLAPSE_DELAY = 40;   // ms between each egg (collapse)
+        const ANIMATION_MS = 400;    // matches CSS transition duration
         
         // Initialize φ-breath system (mobile only)
         function initPhiBreath() {
@@ -340,8 +346,8 @@
                 const φScale = data.φScale;
                 
                 // FIX: Check current state dynamically (not closure-captured value!)
-                // Read from DOM/global scope instead of relying on closure
-                const currentlyExpanded = window.thumbsExpanded || false;
+                // Read from global isExpanded state (battle-tested single source of truth)
+                const currentlyExpanded = isExpanded;
                 
                 // Calculate rotation duration based on state
                 let rotationDuration;
@@ -408,106 +414,153 @@
             return ((angle % 360) + 360) % 360;
         }
         
+        /**
+         * COLLAPSE - Battle-tested with lock and stagger
+         */
         function collapseToSingularity() {
+            if (expandLock || !isExpanded) return;
+            expandLock = true;
+            isExpanded = false;
+            
             console.log('🔄 COLLAPSE eggs');
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
             const singularityBtn = document.querySelector('.singularity-btn');
             
             // Clear any existing auto-collapse timer
-            if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
+            if (thumbsIdleTimer) {
+                clearTimeout(thumbsIdleTimer);
+                thumbsIdleTimer = null;
+            }
             
-            // DEFAULT IDLE: Set SLOW rotation IMMEDIATELY
-            thumbsExpanded = false;
-            window.thumbsExpanded = false;
-            
+            // Set SLOW rotation IMMEDIATELY
             if (singularityBtn) {
-                // SLOW: 2 × BASE_DURATION = 8000ms base (φ-oscillation adds on top)
-                const slowBase = 2 * PHI_BREATH.BASE_DURATION;
+                const slowBase = breathInitialized ? 2 * PHI_BREATH.BASE_DURATION : 8000;
                 singularityBtn.style.setProperty('--rotation-duration', `${slowBase}ms`);
                 console.log(`🐌 SLOW spin activated: ${slowBase}ms`);
             }
             
-            // Exit creation mode for φ-breath system
+            // Exit creation mode for φ-breath system (mobile only)
             if (isMobile() && breathInitialized) {
                 console.log('😌 Exited CREATION MODE');
                 PHI_BREATH.exitCreationMode();
             }
             
             if (layer01) {
-                // Add .collapsing BEFORE removing .show
                 console.log('⬅️ Eggs fusing (φ-inverse fusion)');
-                
-                layer01.classList.add('collapsing');
-                void layer01.offsetWidth; // Force reflow
                 layer01.classList.remove('show');
+                layer01.classList.add('collapsing');
                 
-                console.log('🎬 Fusion animation triggered - eggs animating');
+                // Stagger collapse delays (reverse order)
+                const eggs = [...layer01.querySelectorAll('.thumb-btn')].reverse();
+                eggs.forEach((egg, i) => {
+                    egg.style.transitionDelay = `${i * COLLAPSE_DELAY}ms`;
+                });
                 
-                // Wait for fusion animation to complete
+                // Clean up after animation completes
+                const totalDuration = ANIMATION_MS + eggs.length * COLLAPSE_DELAY;
                 setTimeout(() => {
-                    console.log('✅ Collapse complete');
-                    layer01.setAttribute('hidden', '');
                     layer01.classList.remove('collapsing');
-                }, 800); // 300ms (longest button delay) + 400ms (fusion) + 100ms buffer
+                    layer01.setAttribute('hidden', '');
+                    expandLock = false;
+                    console.log('✅ Collapse complete');
+                }, totalDuration);
+            } else {
+                expandLock = false;
             }
             
-            // Return to calm breath (constant φ^0 = 4000ms)
-            console.log('😌 Returning to calm φ-breath');
+            // Return to calm breath
             if (breathInitialized) {
                 setBreathCycle(PHI_BREATH.BASE_DURATION);
             }
         }
         
+        /**
+         * EXPAND - Battle-tested with lock and stagger
+         */
         function expandFromSingularity() {
+            if (expandLock || isExpanded) return;
+            expandLock = true;
+            isExpanded = true;
+            
             console.log('🌌 EXPAND eggs');
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
             const singularityBtn = document.querySelector('.singularity-btn');
             
             // Clear any existing auto-collapse timer
-            if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
+            if (thumbsIdleTimer) {
+                clearTimeout(thumbsIdleTimer);
+                thumbsIdleTimer = null;
+            }
             
-            // ☯️ FIRST CONDITION (STRONGEST): Set FAST rotation IMMEDIATELY
-            thumbsExpanded = true;
-            window.thumbsExpanded = true;
-            
+            // Set FAST rotation IMMEDIATELY
             if (singularityBtn) {
-                // FAST: 0.5 × BASE_DURATION = 2000ms base (φ-oscillation adds on top)
-                const fastBase = 0.5 * PHI_BREATH.BASE_DURATION;
+                const fastBase = breathInitialized ? 0.5 * PHI_BREATH.BASE_DURATION : 2000;
                 singularityBtn.style.setProperty('--rotation-duration', `${fastBase}ms`);
                 console.log(`⚡ FAST spin activated: ${fastBase}ms`);
             }
             
-            // Enter creation mode for φ-breath system
+            // Enter creation mode for φ-breath system (mobile only)
             if (isMobile() && breathInitialized) {
                 console.log('🌀 Entered CREATION MODE');
                 PHI_BREATH.enterCreationMode();
             }
             
             if (layer01) {
-                // Remove hidden and show eggs
                 console.log('🥚 Showing eggs layer');
                 layer01.removeAttribute('hidden');
                 layer01.classList.remove('collapsing');
+                layer01.classList.add('show');
+                
+                // Stagger expand delays (sequential order)
+                const eggs = layer01.querySelectorAll('.thumb-btn');
+                eggs.forEach((egg, i) => {
+                    egg.style.transitionDelay = `${i * EXPAND_DELAY}ms`;
+                });
+                
+                console.log('✨ Eggs appearing sequentially');
+                
+                // Release lock after animation completes
+                const totalDuration = ANIMATION_MS + eggs.length * EXPAND_DELAY;
                 setTimeout(() => {
-                    layer01.classList.add('show');
-                    console.log('✨ Eggs appearing sequentially');
-                }, 10);
+                    expandLock = false;
+                }, totalDuration);
+            } else {
+                expandLock = false;
             }
             
-            // Use constant φ-breath duration (4000ms base)
-            const breathDuration = breathInitialized ? PHI_BREATH.BASE_DURATION : 4000;
-            console.log(`🌌 φ-breath cycle: ${breathDuration}ms (constant)`);
-            
             // Set breath animation
+            const breathDuration = breathInitialized ? PHI_BREATH.BASE_DURATION : 4000;
+            console.log(`🌌 φ-breath cycle: ${breathDuration}ms`);
             setBreathCycle(breathDuration);
             
-            // Auto-collapse after φ-breath (unless manually interrupted)
-            thumbsIdleTimer = setTimeout(() => {
-                console.log('⏰ φ-breath complete, auto-collapsing');
-                if (thumbsExpanded && isMobile()) {
-                    collapseToSingularity();
-                }
-            }, breathDuration);
+            // Auto-collapse after φ-breath (mobile only)
+            if (isMobile()) {
+                thumbsIdleTimer = setTimeout(() => {
+                    console.log('⏰ φ-breath complete, auto-collapsing');
+                    if (isExpanded) {
+                        collapseToSingularity();
+                    }
+                }, breathDuration);
+            }
+        }
+        
+        /**
+         * TOGGLE - Throttled wrapper (100ms debounce)
+         */
+        let lastToggleTime = 0;
+        function toggleExpand() {
+            const now = Date.now();
+            if (now - lastToggleTime < 100) {
+                console.log('⏸️ Toggle throttled (100ms debounce)');
+                return;
+            }
+            lastToggleTime = now;
+            
+            if (isExpanded) {
+                collapseToSingularity();
+            } else {
+                expandFromSingularity();
+            }
         }
         
         /**
@@ -4728,32 +4781,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const action = thumbBtn.dataset.action;
             const bridgeId = thumbBtn.dataset.bridgeId;
             
-            // ☯️ SINGULARITY BUTTON - Expand or interrupt
+            // ☯️ SINGULARITY BUTTON - Toggle expand/collapse (mobile & desktop)
             if (action === 'singularity') {
-                if (isMobile()) {
-                    // THROTTLE: Prevent tap flooding (event queue saturation)
-                    if (isAnimating) {
-                        console.log('⏸️ Tap throttled - animation in progress');
-                        return;
-                    }
-                    
-                    isAnimating = true;
-                    console.log('🌌 Singularity clicked');
-                    
-                    // If expanded, interrupt and collapse immediately
-                    if (thumbsExpanded) {
-                        console.log('⚡ Interrupting φ-breath, collapsing now');
-                        collapseToSingularity();
-                    } else {
-                        expandFromSingularity();
-                    }
-                    
-                    // Release throttle after animation completes
-                    setTimeout(() => {
-                        isAnimating = false;
-                        console.log('✅ Throttle released');
-                    }, 600); // Match fusion animation duration
-                }
+                console.log('🌌 Singularity clicked');
+                toggleExpand();
                 return;
             }
             
