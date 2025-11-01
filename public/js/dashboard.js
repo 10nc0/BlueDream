@@ -441,19 +441,33 @@
                 if (this.speed === newSpeed || this.locked) return;
                 
                 this.locked = true;
+                const oldSpeed = this.speed; // Capture BEFORE updating for accurate logging
                 
-                // Preserve continuity: recalculate startTime from current progress
+                // 1. PRESERVE ROTATION CONTINUITY
                 const currentProgress = this.getProgress();
                 const newCycle = this.cycles[newSpeed];
                 this.startTime = performance.now() - (currentProgress * newCycle);
                 
+                // 2. UPDATE SPEED
                 this.speed = newSpeed;
                 this.genesisCounter++;
                 
-                console.log(`%c✨ GENESIS #${this.genesisCounter}: ${this.speed} → ${newSpeed} | progress=${(currentProgress * 100).toFixed(1)}%`, 
+                // 3. QUANTUM PURGE: Reset ALL substrate layers (breathe, pulse, radiate)
+                nuclearPurge();
+                
+                // 4. SYNC CSS VARIABLES: Update breathe duration to match rotation speed
+                const singularityBtn = document.querySelector('.singularity-btn');
+                if (singularityBtn) {
+                    // Match breathe timing to rotation timing
+                    const breathDuration = newSpeed === 'FAST' ? 2000 : 4000;
+                    singularityBtn.style.setProperty('--breath-duration', `${breathDuration}ms`);
+                }
+                
+                // 5. LOG GENESIS (with correct old → new)
+                console.log(`%c✨ GENESIS #${this.genesisCounter}: ${oldSpeed} → ${newSpeed} | progress=${(currentProgress * 100).toFixed(1)}%`, 
                     'color: #ec4899; font-weight: bold;');
                 
-                // Unlock after transition
+                // Unlock after purge + sync completes
                 setTimeout(() => { this.locked = false; }, 100);
             }
         };
