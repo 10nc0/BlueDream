@@ -21,7 +21,6 @@ const BaileysClientManager = require('./baileys-client-manager');
 const DiscordBotManager = require('./discord-bot-manager');
 const fractalId = require('./utils/fractal-id');
 const MetadataExtractor = require('./metadata-extractor');
-const catPulseBlockchain = require('./server/cat-pulse-blockchain');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
@@ -2869,18 +2868,6 @@ app.get('/api/stats', requireAuth, async (req, res) => {
     }
 });
 
-// CAT PULSE BLOCKCHAIN: Universal root timestamp
-// Public endpoint - no auth required (system-wide block height)
-app.get('/api/cat-pulse', (req, res) => {
-    try {
-        const blockInfo = catPulseBlockchain.getBlockInfo();
-        res.json(blockInfo);
-    } catch (error) {
-        console.error('❌ Error in /api/cat-pulse:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
 // Bridge management endpoints
 // CRITICAL: Complete horizontal tenant isolation with EXPLICIT SCHEMA INDEXING
 // Uses dynamic schema names via variable placeholders (fractalized architecture)
@@ -4834,9 +4821,6 @@ app.listen(PORT, '0.0.0.0', async () => {
     
     await initializeDatabase();
     console.log('✅ Multi-tenant WhatsApp Bridge ready');
-    
-    // Start Cat Pulse Blockchain (universal root timestamp)
-    catPulseBlockchain.start();
     
     // Auto-restore WhatsApp sessions for 24/7 uptime
     await autoRestoreWhatsAppSessions();
