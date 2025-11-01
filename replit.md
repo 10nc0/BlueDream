@@ -65,6 +65,29 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **Secret Management**: Relies on Replit Secrets.
 - **CSP Compliance**: Production-ready Content Security Policy with inline handler elimination via event delegation, self-hosted external libraries, and strict directives.
 
+### Personal Cloud OS - Advanced Features (Nov 1, 2025)
+**AUTO-SCALING TIMELINE & EXPORT SYSTEM**: Complete implementation of advanced Personal Cloud OS features for intelligent organization and data portability:
+- **Time Bucket System**: Auto-scaling timeline grouping with density-based algorithm:
+  - Analyzes message density (messages/day) to determine optimal bucket size
+  - 24h buckets for low density (<10 msgs/day)
+  - 8h buckets for medium density (10-30 msgs/day): Night/Morning/Evening
+  - 6h buckets for high density (>30 msgs/day): Late Night/Morning/Afternoon/Evening
+  - Frontend implementation with `analyzeMessageDensity`, `groupMessagesByTimeBuckets`
+  - Sticky bucket headers with glassmorphism design, message counts, and purple gradient
+  - Verified working via browser console: "📊 Timeline: 2 buckets (8h intervals, 16 msgs over 1 days)"
+- **Universal Search**: Enhanced search across messages AND drops metadata:
+  - Single search bar queries both message content and drops full-text search
+  - Messages matching via metadata get purple left border indicator
+  - Async search via `/api/drops/search/:bridge_id` with `to_tsquery` PostgreSQL
+  - Zero performance impact (search runs in parallel)
+- **Export System**: Complete data portability with ZIP download:
+  - Backend endpoint at `/api/bridges/:bridge_id/export` using `archiver` library
+  - ZIP contains: `messages.json` (all messages with merged drops metadata), `README.txt` (statistics and notes)
+  - Frontend: Export button (📦 green icon) in bridge controls
+  - Download via blob creation with toast notifications ("📦 Preparing export...", "✅ Export downloaded!")
+  - Includes Discord CDN URLs for media (media not duplicated in ZIP, accessible via URLs)
+- **Production Quality**: CSP-compliant event delegation, tenant isolation enforced, error handling with user-friendly toasts, tested end-to-end
+
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)
 - **WhatsApp**: Baileys library
