@@ -1826,14 +1826,12 @@
         
         // Edit Bridge Modal
         function showEditBridgeModal(bridge) {
-            showToast('✏️ Edit bridge feature coming soon', 'info');
+            editBridge(bridge.fractal_id);
         }
         
         // Delete Bridge Confirmation
         function showDeleteBridgeConfirmation(bridge) {
-            if (confirm(`⚠️ Are you sure you want to delete "${bridge.name}"?\n\nThis action cannot be undone. All bridge settings will be removed.`)) {
-                showToast('🗑️ Delete bridge feature coming soon', 'info');
-            }
+            confirmDeleteBridge(bridge.fractal_id);
         }
         
         // Bridge Fan Modal (Mobile: Show all bridges + utility actions)
