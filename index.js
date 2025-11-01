@@ -3821,9 +3821,11 @@ app.get('/api/drops/search/:bridge_id', requireAuth, setTenantContext, async (re
 });
 
 // Export bridge data (messages + drops metadata) as ZIP
-app.get('/api/bridges/:bridge_id/export', requireAuth, setTenantContext, async (req, res) => {
+// Supports both GET (all messages) and POST (selected message IDs)
+const exportBridgeHandler = async (req, res) => {
     const archiver = require('archiver');
     const { bridge_id } = req.params;
+    const selectedMessageIds = req.body?.messageIds || null; // POST: selected IDs, GET: null (all)
     
     try {
         const client = req.dbClient || pool;
@@ -3848,7 +3850,7 @@ app.get('/api/bridges/:bridge_id/export', requireAuth, setTenantContext, async (
             if (threadId) {
                 const channel = await discordClient.channels.fetch(threadId);
                 const fetchedMessages = await channel.messages.fetch({ limit: 100 });
-                messages = fetchedMessages.map(m => ({
+                let allMessages = fetchedMessages.map(m => ({
                     id: m.id,
                     content: m.content,
                     author: m.author.username,
@@ -3864,6 +3866,14 @@ app.get('/api/bridges/:bridge_id/export', requireAuth, setTenantContext, async (
                         size: a.size
                     }))
                 }));
+                
+                // Filter to selected messages if POST request with messageIds
+                if (selectedMessageIds && selectedMessageIds.length > 0) {
+                    const selectedSet = new Set(selectedMessageIds);
+                    messages = allMessages.filter(m => selectedSet.has(m.id));
+                } else {
+                    messages = allMessages;
+                }
             }
         } catch (err) {
             console.log('Note: Could not fetch Discord messages:', err.message);
@@ -3939,7 +3949,11 @@ Media files are not included but accessible via Discord CDN URLs in messages.jso
             res.status(500).json({ error: error.message });
         }
     }
-});
+};
+
+// Register both GET (all messages) and POST (selected messages) routes
+app.get('/api/bridges/:bridge_id/export', requireAuth, setTenantContext, exportBridgeHandler);
+app.post('/api/bridges/:bridge_id/export', requireAuth, setTenantContext, exportBridgeHandler);
 
 // REMOVED: Duplicate QR endpoint - using the multi-instance version above (line ~2741)
 

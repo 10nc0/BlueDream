@@ -24,6 +24,9 @@
         let users = [];
         let sessions = [];
         
+        // Per-message export: Track selected message IDs per bridge
+        let selectedMessages = {}; // { bridgeId: Set([msgId1, msgId2, ...]) }
+        
         // Platform roadmap for future features
         const roadmapGlossary = {
             platforms: {
@@ -487,7 +490,7 @@
                                 <option value="success">✓</option>
                                 <option value="failed">✗</option>
                             </select>
-                            <button id="export-selected-${bridge.fractal_id}" data-export-bridge="${bridge.fractal_id}" style="padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">📦 Export (0)</button>
+                            <button id="export-selected-${bridge.fractal_id}" data-export-bridge="${bridge.fractal_id}" disabled style="padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;">📦 Export</button>
                         </div>
                         <!-- Search indicator (if active) -->
                         <div id="search-indicator-${bridge.fractal_id}" style="display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between; margin-bottom: 0.5rem;">
@@ -924,6 +927,9 @@
                     <table class="message-table" id="msg-table-${bridgeId}">
                         <thead>
                             <tr>
+                                <th style="text-align: center; width: 50px;">
+                                    <input type="checkbox" id="select-all-${bridgeId}" title="Select all messages">
+                                </th>
                                 <th data-bridge-id="${bridgeId}" data-sort-column="timestamp" style="min-width: 200px;">
                                     Timestamp<span class="sort-icon">↕</span>
                                 </th>
@@ -940,6 +946,9 @@
                         <tbody>
                             ${messages.map((msg, index) => `
                                 <tr data-timestamp="${msg.timestamp}" data-contact="${escapeHtml(msg.sender_contact || '')}" data-message="${escapeHtml(msg.message_content)}" data-status="${msg.discord_status}" data-msg-id="${msg.id}">
+                                    <td style="text-align: center;">
+                                        <input type="checkbox" class="message-checkbox" data-msg-id="${msg.id}" data-bridge-id="${bridgeId}">
+                                    </td>
                                     <td class="timestamp-col">${formatTimestampWithTZ(msg.timestamp)}</td>
                                     <td class="contact-col">
                                         <div style="font-weight: 600;">${escapeHtml(msg.sender_name || 'Unknown')}</div>
@@ -2135,10 +2144,23 @@
                     return;
                 }
                 
-                showToast('📦 Preparing export...', 'info');
+                // Get selected message IDs for this bridge
+                const selectedIds = selectedMessages[fractalId] 
+                    ? Array.from(selectedMessages[fractalId]) 
+                    : [];
                 
-                // Create a temporary link and trigger download
-                const response = await authFetch(`/api/bridges/${fractalId}/export`);
+                if (selectedIds.length === 0) {
+                    showToast('❌ Please select messages to export', 'error');
+                    return;
+                }
+                
+                showToast(`📦 Preparing export of ${selectedIds.length} message(s)...`, 'info');
+                
+                // Send selected message IDs to backend
+                const response = await authFetch(`/api/bridges/${fractalId}/export`, {
+                    method: 'POST',
+                    body: JSON.stringify({ messageIds: selectedIds })
+                });
                 
                 if (!response.ok) {
                     const error = await response.json();
@@ -2163,6 +2185,24 @@
             } catch (error) {
                 console.error('Error exporting bridge data:', error);
                 showToast('❌ Export failed', 'error');
+            }
+        }
+        
+        // Update export button state based on selected messages
+        function updateExportButtonState(bridgeId) {
+            const exportBtn = document.querySelector(`[data-export-bridge="${bridgeId}"]`);
+            if (!exportBtn) return;
+            
+            const count = selectedMessages[bridgeId] ? selectedMessages[bridgeId].size : 0;
+            
+            if (count > 0) {
+                exportBtn.textContent = `📦 Export (${count})`;
+                exportBtn.disabled = false;
+                exportBtn.style.opacity = '1';
+            } else {
+                exportBtn.textContent = '📦 Export';
+                exportBtn.disabled = true;
+                exportBtn.style.opacity = '0.5';
             }
         }
         
@@ -3698,6 +3738,51 @@ document.addEventListener('DOMContentLoaded', function() {
         step3CompleteBtn.removeAttribute('onclick');
         step3CompleteBtn.addEventListener('click', onboardingStep3Complete);
     }
+    
+    // Per-message export: Handle checkbox changes with event delegation
+    document.addEventListener('change', function(e) {
+        // Individual message checkbox
+        if (e.target.classList.contains('message-checkbox')) {
+            const msgId = e.target.dataset.msgId;
+            const bridgeId = e.target.dataset.bridgeId;
+            
+            if (!selectedMessages[bridgeId]) {
+                selectedMessages[bridgeId] = new Set();
+            }
+            
+            if (e.target.checked) {
+                selectedMessages[bridgeId].add(msgId);
+            } else {
+                selectedMessages[bridgeId].delete(msgId);
+            }
+            
+            updateExportButtonState(bridgeId);
+        }
+        
+        // Select all checkbox
+        if (e.target.id && e.target.id.startsWith('select-all-')) {
+            const bridgeId = e.target.id.replace('select-all-', '');
+            const checkboxes = document.querySelectorAll(`.message-checkbox[data-bridge-id="${bridgeId}"]`);
+            
+            if (!selectedMessages[bridgeId]) {
+                selectedMessages[bridgeId] = new Set();
+            }
+            
+            if (e.target.checked) {
+                checkboxes.forEach(cb => {
+                    cb.checked = true;
+                    selectedMessages[bridgeId].add(cb.dataset.msgId);
+                });
+            } else {
+                checkboxes.forEach(cb => {
+                    cb.checked = false;
+                });
+                selectedMessages[bridgeId].clear();
+            }
+            
+            updateExportButtonState(bridgeId);
+        }
+    });
 });
 
 // ============ DROPS API - Personal Cloud OS ============
