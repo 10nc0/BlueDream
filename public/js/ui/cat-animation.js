@@ -47,26 +47,31 @@ function initHopAnimation() {
     let catX = CAT_CONFIG.CANVAS_WIDTH / 2;
     let catY = CAT_CONFIG.CANVAS_HEIGHT / 2;
     
-    // Track mouse/touch position globally
-    document.addEventListener('mousemove', (e) => {
-        mouseX = e.clientX;
-        mouseY = e.clientY;
-    });
+    // Detect if mobile mode (portrait on small screen)
+    const isMobileMode = () => window.innerWidth < 768 && window.innerHeight > window.innerWidth;
     
-    // Touch support for mobile devices (iPhone/iPad)
-    document.addEventListener('touchmove', (e) => {
-        if (e.touches.length > 0) {
-            mouseX = e.touches[0].clientX;
-            mouseY = e.touches[0].clientY;
-        }
-    });
-    
-    document.addEventListener('touchstart', (e) => {
-        if (e.touches.length > 0) {
-            mouseX = e.touches[0].clientX;
-            mouseY = e.touches[0].clientY;
-        }
-    });
+    // Track mouse position globally (DISABLED on mobile for edge-snapping)
+    if (!isMobileMode()) {
+        document.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+        
+        // Touch support for iPad in landscape (desktop mode)
+        document.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 0) {
+                mouseX = e.touches[0].clientX;
+                mouseY = e.touches[0].clientY;
+            }
+        });
+        
+        document.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 0) {
+                mouseX = e.touches[0].clientX;
+                mouseY = e.touches[0].clientY;
+            }
+        });
+    }
     
     function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, fleeing = false) {
         ctx.clearRect(0, 0, CAT_CONFIG.CANVAS_WIDTH, CAT_CONFIG.CANVAS_HEIGHT);
@@ -132,27 +137,30 @@ function initHopAnimation() {
     }
     
     function animate() {
-        // Get canvas position relative to viewport
-        const rect = canvas.getBoundingClientRect();
-        const canvasCenterX = rect.left + rect.width / 2;
-        const canvasCenterY = rect.top + rect.height / 2;
-        
-        // Calculate distance from mouse to canvas center
-        const dx = mouseX - canvasCenterX;
-        const dy = mouseY - canvasCenterY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        // Cat behavior: flee if cursor is close (within FLEE_DISTANCE), otherwise neutral
+        // Mobile mode: NO mouse interaction, cat stays locked at top-left
         let offsetX = 0;
         let offsetY = 0;
         let fleeing = false;
         
-        if (distance < CAT_CONFIG.FLEE_DISTANCE) {
-            // Flee away from cursor
-            fleeing = true;
-            const fleeStrength = CAT_CONFIG.FLEE_STRENGTH * (1 - distance / CAT_CONFIG.FLEE_DISTANCE);
-            offsetX = -(dx / distance) * fleeStrength;
-            offsetY = -(dy / distance) * fleeStrength;
+        if (!isMobileMode()) {
+            // Desktop mode: Enable mouse flee behavior
+            const rect = canvas.getBoundingClientRect();
+            const canvasCenterX = rect.left + rect.width / 2;
+            const canvasCenterY = rect.top + rect.height / 2;
+            
+            // Calculate distance from mouse to canvas center
+            const dx = mouseX - canvasCenterX;
+            const dy = mouseY - canvasCenterY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Cat behavior: flee if cursor is close (within FLEE_DISTANCE), otherwise neutral
+            if (distance < CAT_CONFIG.FLEE_DISTANCE) {
+                // Flee away from cursor
+                fleeing = true;
+                const fleeStrength = CAT_CONFIG.FLEE_STRENGTH * (1 - distance / CAT_CONFIG.FLEE_DISTANCE);
+                offsetX = -(dx / distance) * fleeStrength;
+                offsetY = -(dy / distance) * fleeStrength;
+            }
         }
         
         // Alternate time color with cat animation (black vs white)
