@@ -147,7 +147,7 @@
                         const nextIndex = currentIndex < activeBridges.length - 1 ? currentIndex + 1 : 0;
                         const nextBridge = activeBridges[nextIndex];
                         if (nextBridge) {
-                            loadMessages(nextBridge.fractal_id, 'user');
+                            selectBridge(nextBridge.fractal_id);
                         }
                     }
                 }
@@ -873,7 +873,7 @@
                         
                         const nextBridge = activeBridges[nextIndex];
                         if (nextBridge) {
-                            loadMessages(nextBridge.fractal_id, 'user');
+                            selectBridge(nextBridge.fractal_id);
                             showToast(`📱 ${nextBridge.name}`, 'info');
                         }
                     }
@@ -2316,7 +2316,7 @@
                     if (bridgeId) {
                         // Bridge navigation
                         console.log('📱 Switching to bridge:', bridgeId);
-                        loadMessages(bridgeId, 'user');
+                        selectBridge(bridgeId);
                     } else if (ACTION_REGISTRY[action]) {
                         // Registry-based actions (unified with desktop/mobile)
                         console.log('⚡ Executing action:', action);
@@ -4949,7 +4949,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Custom actions (toggle-bridge, bridge-actions, fan, next)
             if (action === 'toggle-bridge' && bridgeId) {
-                loadMessages(bridgeId, 'user');
+                selectBridge(bridgeId);
             } else if (action === 'bridge-actions') {
                 showBridgeActionsMenu();
             } else if (action === 'fan') {
@@ -4966,7 +4966,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const nextIndex = currentIndex < activeBridges.length - 1 ? currentIndex + 1 : 0;
                     const nextBridge = activeBridges[nextIndex];
                     if (nextBridge) {
-                        loadMessages(nextBridge.fractal_id, 'user');
+                        selectBridge(nextBridge.fractal_id);
                         showToast(`→ ${nextBridge.name}`, 'info');
                     }
                 }
