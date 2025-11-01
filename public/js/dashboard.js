@@ -4211,12 +4211,22 @@ document.addEventListener('click', function(e) {
     // Remove tag button (× on tag bubble)
     if (target.hasAttribute('data-action') && target.getAttribute('data-action') === 'remove-tag') {
         e.preventDefault();
+        
+        console.log('🔍 Tag remove button clicked!');
+        console.log('Target element:', target);
+        console.log('Target HTML:', target.outerHTML);
+        console.log('All datasets:', target.dataset);
+        
         const tag = target.getAttribute('data-tag');
         const messageId = target.getAttribute('data-message-id');
         const bridgeId = target.getAttribute('data-bridge-id');
         
+        console.log('Extracted attributes:', { tag, messageId, bridgeId });
+        
         if (tag && messageId && bridgeId) {
             removeTag(bridgeId, messageId, tag);
+        } else {
+            console.error('❌ Missing attributes for tag removal!', { tag, messageId, bridgeId });
         }
         return;
     }
