@@ -488,7 +488,7 @@ body::before {
   background: var(--color-surface);
   backdrop-filter: blur(10px);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   padding: 0.3125rem;
   flex-shrink: 0;
   overflow-y: auto;
@@ -527,7 +527,7 @@ body::before {
 /* Draggable Resizer (only on tablet/desktop) */
 .sidebar-resizer {
   display: none; /* Hidden on mobile */
-  width: 4px;
+  width: 1px;
   background: transparent;
   cursor: col-resize;
   flex-shrink: 0;
@@ -539,6 +539,7 @@ body::before {
 .sidebar-resizer:hover,
 .sidebar-resizer.resizing {
   background: linear-gradient(135deg, #22d3ee 0%, #ec4899 50%, #a855f7 100%);
+  width: 2px;
 }
 
 .sidebar-resizer::before {
@@ -656,7 +657,7 @@ body::before {
   background: var(--color-surface);
   backdrop-filter: blur(10px);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   padding: 0.375rem;
   overflow-y: auto;
   display: flex;
