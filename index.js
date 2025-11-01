@@ -3751,11 +3751,12 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
             extracted = metadataExtractor.extract(combinedText);
             console.log('🏷️ UPDATE - Extracted from combinedText:', { combinedText, extracted });
             
+            // Convert JavaScript arrays to PostgreSQL arrays using ARRAY[]::text[]
             dropResult = await client.query(`
                 UPDATE drops
                 SET metadata_text = $1,
-                    extracted_tags = $2,
-                    extracted_dates = $3,
+                    extracted_tags = $2::text[],
+                    extracted_dates = $3::text[],
                     updated_at = NOW()
                 WHERE bridge_id = $4 AND discord_message_id = $5
                 RETURNING *
@@ -3765,10 +3766,10 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
             extracted = metadataExtractor.extract(metadata_text);
             console.log('🏷️ INSERT - Extracted from metadata_text:', { metadata_text, extracted });
             
-            // Insert new drop
+            // Convert JavaScript arrays to PostgreSQL arrays using ARRAY[]::text[]
             dropResult = await client.query(`
                 INSERT INTO drops (bridge_id, discord_message_id, metadata_text, extracted_tags, extracted_dates)
-                VALUES ($1, $2, $3, $4, $5)
+                VALUES ($1, $2, $3, $4::text[], $5::text[])
                 RETURNING *
             `, [internalBridgeId, discord_message_id, metadata_text, extracted.tags, extracted.dates]);
         }
@@ -3861,10 +3862,18 @@ app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => 
             RETURNING *
         `, [tag, internalBridgeId, discord_message_id]);
         
+        console.log('🗑️ Tag removal result:', {
+            rowsAffected: dropResult.rows.length,
+            updatedTags: dropResult.rows[0]?.extracted_tags,
+            messageId: discord_message_id
+        });
+        
         if (dropResult.rows.length === 0) {
+            console.log('❌ Drop not found for deletion');
             return res.status(404).json({ error: 'Drop not found' });
         }
         
+        console.log('✅ Tag removed successfully');
         res.json({ 
             success: true, 
             drop: dropResult.rows[0]
