@@ -56,16 +56,16 @@
             },
             audit: {
                 id: 'audit',
-                label: '☯️ Agent Actions',
+                label: '☯️ Audit',
                 icon: '☯️',
                 mobileIcon: '☯️',
-                desktopLabel: '☯️ Agent Actions',
-                tooltip: 'Check • Remind • Alert • Reward • Execute',
+                desktopLabel: '☯️ Audit',
+                tooltip: 'Audit action & closure',
                 priority: 2,
                 showInMobile: true,
                 showInDesktop: true,
                 requireAuth: true,
-                handler: () => showToast('☯️ Agent features coming soon! Check • Remind • Alert • Reward • Execute', 'info')
+                handler: () => showToast('☯️ Audit features coming soon!', 'info')
             },
             search: {
                 id: 'search',
@@ -1218,7 +1218,7 @@
                                 📎
                             </a>
                         ` : ''}
-                        <button class="agent-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="☯️ Check • Remind • Alert • Reward • Execute" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                        <button class="agent-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="☯️ Audit action & closure" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                             ☯️
                         </button>
                         <button class="tag-add-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
@@ -4251,7 +4251,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     const auditTypeBtn = document.querySelector('.audit-type-btn');
     if (auditTypeBtn) auditTypeBtn.addEventListener('click', () => {
-        showToast('🧿 Agent Layer coming soon! (Check/Remind/Alert/Reward/Execute)', 'info');
+        showToast('☯️ Audit features coming soon!', 'info');
     });
     
     const revokeAllBtn = document.querySelector('[onclick*="revokeAllSessions"]');
@@ -4850,12 +4850,12 @@ document.addEventListener('click', function(e) {
     }
     
     // ============ DROPS - Personal Cloud OS ============
-    // Agent button - Check • Remind • Alert • Reward • Execute v2.0
+    // Audit button - action & closure
     if (target.classList.contains('agent-btn')) {
         e.preventDefault();
         const messageId = target.getAttribute('data-message-id');
         const bridgeId = target.getAttribute('data-bridge-id');
-        alert('☯️ Agent Layer v2.0\n\nCheck • Remind • Alert • Reward • Execute\n\nComing soon! This will enable intelligent automation for your messages.');
+        alert('☯️ Audit\n\nAction & closure features coming soon!');
         return;
     }
     
