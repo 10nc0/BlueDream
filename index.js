@@ -1796,7 +1796,7 @@ app.post('/api/auth/signup', async (req, res) => {
             isGenesisAdmin = isGenesis;
             
             if (isGenesis) {
-                console.log(`[${getTimestamp()}] 🌟 GENESIS ADMIN #01 created - Email: ${email}, Tenant: ${tenantId}, TenantUser: ${tenantUserId} (Dev with God view)`);
+                console.log(`[${getTimestamp()}] 🌟 GENESIS ADMIN #01 created - Email: ${email}, Tenant: ${tenantId}, TenantUser: ${tenantUserId}`);
             } else {
                 console.log(`[${getTimestamp()}] ✅ Admin #0${tenantId} created - Email: ${email}, Tenant: ${tenantId}, TenantUser: ${tenantUserId} (Fractalized)`);
             }
@@ -3023,7 +3023,7 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
             return res.status(500).json({ error: 'Tenant context not found' });
         }
         
-        // Get user info from tenant-scoped table (include is_genesis_admin for God View)
+        // Get user info from tenant-scoped table
         const userResult = await pool.query(
             `SELECT id, email, tenant_id, is_genesis_admin FROM ${tenantSchema}.users WHERE id = $1`,
             [req.userId]
@@ -3039,17 +3039,12 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
         
         console.log(`📊 Loading bridges for ${user.email} (user_id=${req.userId}) from ${tenantSchema}`);
         
-        // GOD VIEW ARCHITECTURE: Dev users (admin_id='01') see ALL bridges across ALL tenants
-        // Regular users see only their own bridges (asset ownership)
+        // Bridges query with role-based access
         let bridges = [];
+        const hasExtendedAccess = req.userRole === 'dev' && user.is_genesis_admin;
         
-        // Check if user is dev with genesis admin privileges
-        const isDevGodView = req.userRole === 'dev' && user.is_genesis_admin;
-        
-        if (isDevGodView) {
-            // GOD VIEW: Query ALL tenant schemas for bridges
-            console.log(`🔱 Dev God View activated for ${user.email} - fetching bridges from ALL tenants`);
-            
+        if (hasExtendedAccess) {
+            // Query all tenant schemas
             const allSchemas = await getAllTenantSchemas(pool);
             
             for (const schema of allSchemas) {
@@ -3066,9 +3061,9 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
                 }
             }
             
-            console.log(`✅ God View: Found ${bridges.length} active bridges across ${allSchemas.length} tenants`);
+            console.log(`✅ Found ${bridges.length} active bridges across ${allSchemas.length} schemas`);
         } else {
-            // REGULAR USER VIEW: Only see bridges from their own tenant (asset ownership)
+            // Standard tenant-scoped query
             const result = await pool.query(`
                 SELECT b.*
                 FROM ${tenantSchema}.bridges b
