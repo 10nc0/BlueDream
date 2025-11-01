@@ -2190,19 +2190,27 @@
         
         // Update export button state based on selected messages
         function updateExportButtonState(bridgeId) {
+            console.log(`🔄 updateExportButtonState called for bridge: ${bridgeId}`);
             const exportBtn = document.querySelector(`[data-export-bridge="${bridgeId}"]`);
-            if (!exportBtn) return;
+            console.log(`🔍 Export button found:`, exportBtn ? 'YES' : 'NO');
+            if (!exportBtn) {
+                console.warn(`⚠️ Export button not found for bridge: ${bridgeId}`);
+                return;
+            }
             
             const count = selectedMessages[bridgeId] ? selectedMessages[bridgeId].size : 0;
+            console.log(`📊 Selected count for ${bridgeId}: ${count}`);
             
             if (count > 0) {
                 exportBtn.textContent = `📦 Export (${count})`;
                 exportBtn.disabled = false;
                 exportBtn.style.opacity = '1';
+                console.log(`✅ Export button enabled with ${count} messages`);
             } else {
                 exportBtn.textContent = '📦 Export';
                 exportBtn.disabled = true;
                 exportBtn.style.opacity = '0.5';
+                console.log(`🔒 Export button disabled (no messages selected)`);
             }
         }
         
@@ -3748,11 +3756,18 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('change', function(e) {
         // Individual message checkbox (Discord style)
         if (e.target.classList.contains('message-export-checkbox') || e.target.classList.contains('message-checkbox')) {
+            console.log('📋 Checkbox clicked! Element:', e.target);
+            console.log('📋 Classes:', e.target.className);
+            console.log('📋 Datasets:', e.target.dataset);
+            
             const msgId = e.target.dataset.messageId || e.target.dataset.msgId;
             const bridgeId = e.target.dataset.bridgeId;
             
+            console.log('📋 Extracted msgId:', msgId);
+            console.log('📋 Extracted bridgeId:', bridgeId);
+            
             if (!msgId || !bridgeId) {
-                console.warn('Missing msgId or bridgeId:', e.target);
+                console.warn('⚠️ Missing msgId or bridgeId:', { msgId, bridgeId, element: e.target });
                 return;
             }
             
@@ -3762,12 +3777,13 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (e.target.checked) {
                 selectedMessages[bridgeId].add(msgId);
-                console.log(`✓ Selected message ${msgId} in bridge ${bridgeId}`);
+                console.log(`✓ Selected message ${msgId} in bridge ${bridgeId} (total: ${selectedMessages[bridgeId].size})`);
             } else {
                 selectedMessages[bridgeId].delete(msgId);
-                console.log(`✗ Deselected message ${msgId} in bridge ${bridgeId}`);
+                console.log(`✗ Deselected message ${msgId} in bridge ${bridgeId} (total: ${selectedMessages[bridgeId].size})`);
             }
             
+            console.log('📋 Calling updateExportButtonState for bridge:', bridgeId);
             updateExportButtonState(bridgeId);
         }
         

@@ -852,6 +852,7 @@ body::before {
   padding: 0.375rem 0.5rem;
   border-radius: var(--radius-sm);
   margin-bottom: 0.1875rem;
+  position: relative;
   transition: background 0.15s ease;
 }
 
