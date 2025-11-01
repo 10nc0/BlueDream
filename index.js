@@ -1980,6 +1980,8 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
         const userId = req.userId;
         const sessionId = req.sessionID;
         
+        console.log(`🔓 Logout request from user ${userId}, session ${sessionId}`);
+        
         // Get tenant schema (from requireAuth middleware or construct from tenantId)
         const tenantSchema = req.tenantSchema || `tenant_${req.tenantId}`;
         
@@ -1990,27 +1992,35 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
             // Mark session as inactive (cookie-based logout)
             if (sessionId) {
                 await pool.query(`
-                    UPDATE active_sessions 
+                    UPDATE ${tenantSchema}.active_sessions 
                     SET is_active = FALSE
                     WHERE user_id = $1 AND session_id = $2
                 `, [userId, sessionId]);
             }
         }
         
-        // Log logout before destroying session
+        // CRITICAL: Destroy server-side session
+        req.session.destroy((err) => {
+            if (err) {
+                console.error('❌ Session destroy error:', err);
+            }
+        });
+        
+        // CRITICAL: Clear session cookie (Safari/iPhone compatible)
+        res.clearCookie('connect.sid', {
+            path: '/',
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+        });
+        
+        console.log('✅ User logged out successfully');
+        
+        // Log logout
         await logAudit(pool, req, 'LOGOUT', 'USER', userId?.toString() || 'unknown', null, {});
         
-        // Destroy session if it exists
-        if (req.session) {
-            req.session.destroy((err) => {
-                if (err) {
-                    return res.status(500).json({ error: 'Logout failed' });
-                }
-                res.json({ success: true });
-            });
-        } else {
-            res.json({ success: true });
-        }
+        // Send success response
+        res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

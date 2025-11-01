@@ -679,6 +679,8 @@
         
         // Logout function (Safari/iOS compatible)
         async function logout() {
+            console.log('🔓 Logging out...');
+            
             try {
                 await authFetch('/api/auth/logout', { method: 'POST' });
             } catch (error) {
@@ -697,11 +699,19 @@
                 localStorage.removeItem('refreshToken');
                 localStorage.clear(); // Clear all localStorage for Safari
                 sessionStorage.clear(); // Clear sessionStorage too
+                console.log('✅ Cleared localStorage and sessionStorage');
             } catch (e) {
-                console.log('Storage clear error (Safari private mode?):', e);
+                console.log('⚠️ Storage clear error (Safari private mode?):', e);
             }
             
+            // CRITICAL: Delete ALL cookies (Safari/iPhone compatible)
+            document.cookie.split(";").forEach(function(c) { 
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+            });
+            console.log('✅ Cleared all cookies');
+            
             // Force redirect after short delay for Safari
+            console.log('🔄 Redirecting to login page...');
             setTimeout(() => {
                 window.location.replace('/login.html'); // Use replace instead of href
             }, 100);
