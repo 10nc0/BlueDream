@@ -7,9 +7,10 @@
    DESIGN TOKENS (CSS Custom Properties)
    =================================================================== */
 :root {
-  /* Colors */
-  --color-bg-primary: #1e3a5f;
-  --color-bg-secondary: #2d5a7b;
+  /* Colors - Calm Cyber Gradient */
+  --color-bg-primary: #0f172a;   /* Deep slate */
+  --color-bg-secondary: #1e293b; /* Soft navy */
+  --color-bg-tertiary: #334155;  /* Muted steel */
   --color-surface: rgba(30, 41, 59, 0.6);
   --color-surface-hover: rgba(30, 41, 59, 0.8);
   --color-overlay: rgba(0, 0, 0, 0.7);
@@ -98,12 +99,28 @@ html, body {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-  background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-secondary) 100%);
+  background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-secondary) 50%, var(--color-bg-tertiary) 100%);
+  background-attachment: fixed;
   color: var(--color-text-primary);
   font-size: var(--text-base);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  position: relative;
+}
+
+/* Subtle noise texture for depth */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><filter id="n"><feTurbulence type="fractals" baseFrequency="0.9" numOctaves="4" /><feColorMatrix values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0.03 0"/></filter><rect width="100" height="100" filter="url(%23n)" opacity="0.04"/></svg>');
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.6;
 }
 
 /* ===================================================================
