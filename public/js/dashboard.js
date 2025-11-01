@@ -2606,10 +2606,24 @@
                 });
 
                 if (response.ok) {
+                    const updatedBridge = await response.json();
                     closeBotModal();
-                    loadBridges();
-                    const message = editingBridgeId ? '✅ Bridge updated successfully!' : '✅ Bot created successfully! Click the ▶️ button to start WhatsApp.';
-                    alert(message);
+                    
+                    if (editingBridgeId) {
+                        // OPTIMIZATION: For edits, update local state without full refresh
+                        // This prevents unnecessary bridge reinitiation and screen flicker
+                        const index = bridges.findIndex(b => b.fractal_id === editingBridgeId);
+                        if (index !== -1) {
+                            bridges[index] = updatedBridge;
+                            filteredBridges = bridges;
+                            renderBridges(true); // Skip detail re-render to preserve state
+                        }
+                        alert('✅ Bridge updated successfully!');
+                    } else {
+                        // For new bridges, do full refresh to initialize WhatsApp client
+                        loadBridges();
+                        alert('✅ Bot created successfully! Click the ▶️ button to start WhatsApp.');
+                    }
                 } else {
                     const errorData = await response.json().catch(() => ({}));
                     
