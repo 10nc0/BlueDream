@@ -7,32 +7,49 @@
 .cat-animation-component {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    align-items: center;      /* Center horizontally */
+    justify-content: center;  /* Center vertically */
     gap: 0;
     flex-shrink: 0;
+    margin: 0 auto;           /* Center the container itself */
 }
 
 .character-canvas {
-    width: 100%;
-    height: 100%;
     image-rendering: pixelated;
     display: block;
+    margin: 0 auto;           /* Center canvas */
 }
 
 .cat-datetime-default {
     text-align: center;
     color: #94a3b8;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     white-space: nowrap;
     line-height: 1;
-    margin-top: -8px;
+    margin-top: 0.25rem;
 }
 
-/* Mobile Mode Overrides */
+/* Auth Pages: Always centered at 125×125px */
+.login-container .cat-animation-component,
+.signup-container .cat-animation-component,
+.forgot-container .cat-animation-component {
+    width: 125px !important;
+    height: 125px !important;
+    margin: 0 auto 1rem auto; /* Center with bottom margin */
+}
+
+.login-container .character-canvas,
+.signup-container .character-canvas,
+.forgot-container .character-canvas {
+    width: 125px !important;
+    height: 125px !important;
+}
+
+/* Dashboard (index.html) - Mobile Mode */
 body.mobile-mode .cat-animation-component {
     width: 75px !important;
     height: 75px !important;
+    margin: 0 !important; /* Let dashboard CSS handle positioning */
 }
 
 body.mobile-mode .character-canvas {
@@ -44,13 +61,14 @@ body.mobile-mode .cat-datetime-default {
     font-size: 0.6rem !important;
 }
 
-/* Desktop Mode (default) */
+/* Dashboard (index.html) - Desktop Mode */
 body.desktop-mode .cat-animation-component {
-    width: 100px;
-    height: 100px;
+    width: 100px !important;
+    height: 100px !important;
+    margin: 0 !important; /* Let dashboard CSS handle positioning */
 }
 
 body.desktop-mode .character-canvas {
-    width: 100px;
-    height: 100px;
+    width: 100px !important;
+    height: 100px !important;
 }

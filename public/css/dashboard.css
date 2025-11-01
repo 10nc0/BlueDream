@@ -2745,14 +2745,14 @@ body.mobile-mode .header > div {
     padding-right: 0.5rem !important; /* Only right padding for logout */
 }
 
-/* 1. Cat (Left Column) - Snap to top and left edges */
+/* 1. Cat (Left Column) - 20px buffer from edges */
 body.mobile-mode #catContainer {
     flex-shrink: 0 !important;
     gap: 0 !important;
-    align-self: flex-start !important; /* Snap to top */
-    align-items: flex-start !important; /* Snap to left */
-    justify-content: flex-start !important; /* Snap to left */
-    margin: 0 !important;
+    align-self: flex-start !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    margin: 20px 0 0 20px !important; /* 20px buffer from top and left */
     padding: 0 !important;
     width: 75px !important;
     height: 75px !important;

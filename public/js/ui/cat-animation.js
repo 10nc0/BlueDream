@@ -18,9 +18,11 @@ const CAT_CONFIG = Object.freeze({
     JUMP_FRAME_INTERVAL: 15,
     JUMP_HEIGHT: 2,
     
-    // Interaction settings
-    FLEE_DISTANCE: 200,
-    FLEE_STRENGTH: 15,
+    // Interaction settings (responsive wiggle)
+    FLEE_DISTANCE: 150,      // Reduced from 200 for subtler interaction
+    FLEE_STRENGTH: 8,        // Reduced from 15 for considerate wiggle room
+    MOBILE_FLEE_DISTANCE: 0, // No interaction on mobile
+    MOBILE_FLEE_STRENGTH: 0,
     
     // Colors
     COLORS: {
@@ -53,28 +55,26 @@ function initHopAnimation() {
     // Detect if mobile mode (portrait on small screen)
     const isMobileMode = () => window.innerWidth < 768 && window.innerHeight > window.innerWidth;
     
-    // Track mouse position globally (DISABLED on mobile for edge-snapping)
-    if (!isMobileMode()) {
-        document.addEventListener('mousemove', (e) => {
-            mouseX = e.clientX;
-            mouseY = e.clientY;
-        });
-        
-        // Touch support for iPad in landscape (desktop mode)
-        document.addEventListener('touchmove', (e) => {
-            if (e.touches.length > 0) {
-                mouseX = e.touches[0].clientX;
-                mouseY = e.touches[0].clientY;
-            }
-        });
-        
-        document.addEventListener('touchstart', (e) => {
-            if (e.touches.length > 0) {
-                mouseX = e.touches[0].clientX;
-                mouseY = e.touches[0].clientY;
-            }
-        });
-    }
+    // Track mouse position globally (ALWAYS enabled for responsive wiggle)
+    document.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+    });
+    
+    // Touch support for iPad and mobile devices
+    document.addEventListener('touchmove', (e) => {
+        if (e.touches.length > 0) {
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+        }
+    });
+    
+    document.addEventListener('touchstart', (e) => {
+        if (e.touches.length > 0) {
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+        }
+    });
     
     function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, fleeing = false) {
         ctx.clearRect(0, 0, CAT_CONFIG.CANVAS_WIDTH, CAT_CONFIG.CANVAS_HEIGHT);
@@ -145,13 +145,16 @@ function initHopAnimation() {
     }
     
     function animate() {
-        // Mobile mode: NO mouse interaction, cat stays locked at top-left
+        // Responsive wiggle: Adjust based on mode
+        const fleeDistance = isMobileMode() ? CAT_CONFIG.MOBILE_FLEE_DISTANCE : CAT_CONFIG.FLEE_DISTANCE;
+        const fleeStrength = isMobileMode() ? CAT_CONFIG.MOBILE_FLEE_STRENGTH : CAT_CONFIG.FLEE_STRENGTH;
+        
         let offsetX = 0;
         let offsetY = 0;
         let fleeing = false;
         
-        if (!isMobileMode()) {
-            // Desktop mode: Enable mouse flee behavior
+        // Calculate mouse interaction (desktop only if mobile settings are 0)
+        if (fleeDistance > 0) {
             const rect = canvas.getBoundingClientRect();
             const canvasCenterX = rect.left + rect.width / 2;
             const canvasCenterY = rect.top + rect.height / 2;
@@ -162,12 +165,12 @@ function initHopAnimation() {
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             // Cat behavior: flee if cursor is close (within FLEE_DISTANCE), otherwise neutral
-            if (distance < CAT_CONFIG.FLEE_DISTANCE) {
-                // Flee away from cursor
+            if (distance < fleeDistance) {
+                // Flee away from cursor with subtle wiggle
                 fleeing = true;
-                const fleeStrength = CAT_CONFIG.FLEE_STRENGTH * (1 - distance / CAT_CONFIG.FLEE_DISTANCE);
-                offsetX = -(dx / distance) * fleeStrength;
-                offsetY = -(dy / distance) * fleeStrength;
+                const strength = fleeStrength * (1 - distance / fleeDistance);
+                offsetX = -(dx / distance) * strength;
+                offsetY = -(dy / distance) * strength;
             }
         }
         
