@@ -98,6 +98,9 @@ html, body {
   padding: 0;
   height: 100vh;
   overflow: hidden;
+  overflow-x: hidden; /* LOCK horizontal scroll */
+  width: 100%;
+  max-width: 100vw;
 }
 
 body {
@@ -2705,7 +2708,9 @@ body::before {
 /* Mobile Mode Overrides */
 body.mobile-mode {
     /* Ensure message view takes up most screen */
-    --header-height: 55px; /* Compact header on mobile */
+    --header-height: 70px; /* Taller header to fit cat properly */
+    overflow-x: hidden !important;
+    max-width: 100vw;
 }
 
 body.mobile-mode .bridge-sidebar {
@@ -2724,16 +2729,40 @@ body.mobile-mode #headerResizer {
 body.mobile-mode .header {
     height: var(--header-height);
     min-height: var(--header-height);
+    padding: 0.5rem 0.75rem;
+    overflow: visible; /* Allow elements to be visible */
 }
 
 body.mobile-mode #hopCanvas {
-    width: 60px !important;
-    height: 60px !important;
+    width: 80px !important;
+    height: 80px !important; /* Keep cat proportional, not flat */
+}
+
+body.mobile-mode #catContainer {
+    gap: 0.25rem !important;
 }
 
 body.mobile-mode #dateTimeDefault,
 body.mobile-mode #dateTimeCompact {
     font-size: 0.65rem !important;
+}
+
+/* Hide title and subheading on mobile portrait to save space */
+body.mobile-mode .header > div > div:nth-child(2) {
+    display: none !important;
+}
+
+/* Ensure user info and logout stay visible */
+body.mobile-mode .header > div > div:last-child {
+    display: flex !important;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+body.mobile-mode .logout-btn {
+    font-size: 0.75rem !important;
+    padding: 0.25rem 0.5rem !important;
+    white-space: nowrap;
 }
 
 /* Desktop Mode: Default behavior */
@@ -2871,6 +2900,22 @@ body.desktop-mode .thumbs-zone {
 
 /* Mobile Touch Targets (min 48px for Apple HIG compliance) */
 @media (max-width: 767px) and (orientation: portrait) {
+    /* LOCK horizontal scroll completely */
+    html, body {
+        overflow-x: hidden !important;
+        max-width: 100vw !important;
+        position: relative;
+    }
+    
+    .container,
+    .header,
+    .bridge-detail,
+    .discord-messages-container,
+    .bridge-sidebar {
+        overflow-x: hidden !important;
+        max-width: 100vw !important;
+    }
+    
     /* Ensure all interactive elements meet 48px minimum */
     button,
     .bridge-card,
