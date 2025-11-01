@@ -464,6 +464,9 @@
          * NUCLEAR PURGE - Bidirectional genesis reset (φ∞ = 1)
          * Runs on BOTH slow→fast AND fast→slow transitions
          * "As above, so below" - no baggage in either direction
+         * 
+         * CRITICAL: Purges SPEED state only, NOT rotation angle
+         * The eternal goose spins forever - rotation is continuous
          */
         function nuclearPurge() {
             const singularityBtn = document.querySelector('.singularity-btn');
@@ -473,22 +476,31 @@
             const symbolEl = coreEl?.querySelector('.symbol');
             const auraEl = singularityBtn.querySelector('.aura');
             
-            // 1. PAUSE ALL
-            singularityBtn.classList.add('purging');
-            
-            // 2. RADIAL TRUTH: Reset to rotate(0deg)
-            // This ensures clean genesis point for next animation cycle
+            // 1. CAPTURE CURRENT ROTATION (preserve continuity)
+            let currentAngle = 0;
             if (symbolEl) {
-                symbolEl.style.transform = 'rotate(0deg)';
+                currentAngle = getCurrentRotation(symbolEl);
+                console.log(`🔄 Preserving rotation angle: ${Math.round(currentAngle)}°`);
             }
             
+            // 2. PAUSE ALL ANIMATIONS
+            singularityBtn.classList.add('purging');
+            
             // 3. KILL ANIMATIONS (flush GPU state)
-            [singularityBtn, coreEl, symbolEl, auraEl].forEach(el => {
+            // NOTE: Do NOT reset transform - preserve rotation angle
+            [singularityBtn, coreEl, auraEl].forEach(el => {
                 if (el) {
                     el.style.animation = 'none';
                     el.style.transition = 'none';
                 }
             });
+            
+            // Kill symbol animation but preserve transform
+            if (symbolEl) {
+                symbolEl.style.animation = 'none';
+                symbolEl.style.transition = 'none';
+                // Keep rotation at current angle during purge
+            }
             
             // 4. FLUSH GPU (force reflow)
             void singularityBtn.offsetWidth;
@@ -506,17 +518,25 @@
                 // Remove purging class
                 singularityBtn.classList.remove('purging');
                 
-                // Restore CSS animations (let CSS take over from radial truth)
-                [singularityBtn, coreEl, symbolEl, auraEl].forEach(el => {
+                // Restore CSS animations WITHOUT resetting transform
+                [singularityBtn, coreEl, auraEl].forEach(el => {
                     if (el) {
                         el.style.animation = '';
                         el.style.transition = '';
-                        el.style.transform = ''; // Remove inline, let CSS animate from 0°
                     }
                 });
                 
-                // Force reflow → fresh start
+                // Restore symbol animation but keep rotation continuous
+                if (symbolEl) {
+                    symbolEl.style.animation = '';
+                    symbolEl.style.transition = '';
+                    // Do NOT clear transform - let CSS continue from current angle
+                }
+                
+                // Force reflow → fresh start (but angle preserved)
                 void singularityBtn.offsetWidth;
+                
+                console.log(`✨ Speed purged, rotation continues from ${Math.round(currentAngle)}°`);
             }, 50);
         }
         
