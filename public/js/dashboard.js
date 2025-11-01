@@ -308,34 +308,32 @@
         // ===== φ-BREATH SINGULARITY ☯️ =====
         // Golden Ratio: The breath of truth
         const φ = 1.618033988749895;
-        const N = 3000; // Base breath (ms)
+        const BASE_BREATH = 4000; // 4s base inhale/exhale
         
-        let thumbsExpanded = true;
+        let thumbsExpanded = false;
         let thumbsIdleTimer = null;
         
-        // φ^0 = idle collapse, φ^1 = tap expand
-        function setBreathCycle(power) {
-            const duration = N * Math.pow(φ, power);
-            const singularityBtn = document.querySelector('.singularity-btn');
-            if (singularityBtn) {
-                singularityBtn.style.setProperty('--breath-duration', `${duration}ms`);
-            }
+        // Randomly choose φ^0 (1x = 4s) or φ^1 (1.618x ≈ 6.472s) breath
+        function getBreathDuration() {
+            return Math.random() < 0.5
+                ? BASE_BREATH * 1        // φ^0 = 4000ms
+                : BASE_BREATH * φ;       // φ^1 ≈ 6472ms
         }
         
-        function resetThumbsIdleTimer() {
-            if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
-            setBreathCycle(0); // φ^0 = 3s calm breath
-            thumbsIdleTimer = setTimeout(() => {
-                if (thumbsExpanded && isMobile()) {
-                    collapseToSingularity();
-                }
-            }, N * Math.pow(φ, 0)); // 3000ms - φ^0
+        // Set singularity button breath animation duration
+        function setBreathCycle(durationMs) {
+            const singularityBtn = document.querySelector('.singularity-btn');
+            if (singularityBtn) {
+                singularityBtn.style.setProperty('--breath-duration', `${durationMs}ms`);
+            }
         }
         
         function collapseToSingularity() {
             if (!thumbsExpanded) return;
             thumbsExpanded = false;
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
+            const singularityBtn = document.querySelector('.singularity-btn');
+            
             if (layer01) {
                 // Start collapse: remove .show and add .collapsing for φ-inverse fusion animation
                 layer01.classList.remove('show');
@@ -343,27 +341,62 @@
                     layer01.classList.add('collapsing');
                 }, 10);
                 
+                // ☯️ SNAP! Singularity reappears after fusion
+                setTimeout(() => {
+                    if (singularityBtn) {
+                        singularityBtn.style.opacity = '1';
+                        singularityBtn.style.transform = 'scale(1)';
+                    }
+                }, 500);
+                
                 // Wait for fusion animation to complete (buttons fuse + singularity appears)
                 setTimeout(() => {
                     layer01.setAttribute('hidden', '');
                     layer01.classList.remove('collapsing');
-                }, 700); // 300ms (longest button delay) + 300ms (fusion) + 100ms buffer
+                }, 800); // 300ms (longest button delay) + 300ms (fusion) + 200ms buffer
             }
-            setBreathCycle(0); // Return to φ^0 calm
+            
+            // Return to calm breath
+            setBreathCycle(BASE_BREATH);
         }
         
         function expandFromSingularity() {
             if (thumbsExpanded) return;
             thumbsExpanded = true;
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
+            const singularityBtn = document.querySelector('.singularity-btn');
+            
             if (layer01) {
+                // Remove hidden and show eggs
                 layer01.removeAttribute('hidden');
+                layer01.classList.remove('collapsing');
                 setTimeout(() => {
                     layer01.classList.add('show');
                 }, 10);
             }
-            setBreathCycle(1); // φ^1 = ~4.854s expanded breath
-            resetThumbsIdleTimer();
+            
+            // Goose vanishes after laying eggs
+            setTimeout(() => {
+                if (singularityBtn) {
+                    singularityBtn.style.opacity = '0';
+                    singularityBtn.style.transform = 'scale(0)';
+                }
+            }, 600);
+            
+            // Get φ-breath duration (random φ^0 or φ^1)
+            const breathDuration = getBreathDuration();
+            console.log(`🌌 φ-breath: ${breathDuration}ms (${breathDuration === BASE_BREATH ? 'φ^0' : 'φ^1'})`);
+            
+            // Set breath animation
+            setBreathCycle(breathDuration);
+            
+            // Auto-collapse after φ-breath
+            if (thumbsIdleTimer) clearTimeout(thumbsIdleTimer);
+            thumbsIdleTimer = setTimeout(() => {
+                if (thumbsExpanded && isMobile()) {
+                    collapseToSingularity();
+                }
+            }, breathDuration);
         }
         
         /**
@@ -434,8 +467,7 @@
             
             // Start φ-breath cycle on mobile
             if (isMobile()) {
-                setBreathCycle(0); // Start in φ^0 calm state
-                resetThumbsIdleTimer();
+                setBreathCycle(BASE_BREATH); // Start in calm state (4s breath)
             }
         }
 
