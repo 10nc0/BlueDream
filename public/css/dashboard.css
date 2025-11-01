@@ -2499,7 +2499,7 @@ body::before {
 .time-bucket-header {
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: 1100; /* Highest layer - above thumbs zone (1000) and singularity button (1001) */
     background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
     backdrop-filter: blur(8px);
     border-bottom: 1px solid rgba(167, 139, 250, 0.2);
