@@ -287,7 +287,7 @@
             }
             
             thumbsZone.style.display = 'flex';
-            // Render basic buttons immediately (Create, Audit, Search)
+            // Render basic buttons immediately (Create, Audit, Search on desktop only)
             renderThumbsZone();
             console.log('🔘 Thumbs zone initialized with basic buttons');
         }
@@ -296,7 +296,7 @@
          * Render thumbs zone buttons (simplified)
          * Position 1 (rightmost): Create (✍🏻) - ONLY button for genesis form
          * Position 2: Audit (🧿) - always visible
-         * Position 3: Search (🔍) - always visible  
+         * Position 3: Search (🔍) - desktop only (hidden on mobile - search fields are parallel to export)
          * Position 4: Bridge Info (📋) - ONLY shows if bridges > 0
          * Position 5: Bridge Card (🔗) - Only if 4+ bridges
          * Position n: Next (→) - if 2+ bridges
@@ -321,8 +321,10 @@
             // Position 2: Audit button (always visible)
             html += `<button data-action="audit" aria-label="View audit log">🧿</button>`;
             
-            // Position 3: Search button (always visible)
-            html += `<button data-action="search" aria-label="Search messages">🔍</button>`;
+            // Position 3: Search button (desktop only - hidden on mobile)
+            if (currentMode === 'desktop') {
+                html += `<button data-action="search" aria-label="Search messages">🔍</button>`;
+            }
             
             // Position 4: Bridge Actions (ONLY if current bridge exists)
             // Shows stacked menu with bridge actions: ℹ️ 🔗 ✏️ 🗑️
