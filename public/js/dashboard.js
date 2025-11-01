@@ -2291,29 +2291,23 @@
                 
                 // Add event listeners
                 bridgeFanModal = document.getElementById('bridgeFanModal');
+                
+                // Close on backdrop click
                 bridgeFanModal.addEventListener('click', function(e) {
                     if (e.target === this) closeBridgeFanModal();
                 });
+                
+                // Close button
                 const closeBtn = bridgeFanModal.querySelector('.bridge-fan-close');
                 if (closeBtn) closeBtn.addEventListener('click', closeBridgeFanModal);
-            }
-            
-            // Render bridge list
-            const fanList = document.getElementById('bridgeFanList');
-            const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
-            
-            fanList.innerHTML = activeBridges.map((bridge, index) => `
-                <div class="bridge-fan-item" data-bridge-id="${bridge.fractal_id}">
-                    <span class="bridge-fan-item-name">${index + 1}. ${escapeHtml(bridge.name)}</span>
-                    <span class="bridge-fan-item-arrow">→</span>
-                </div>
-            `).join('');
-            
-            // UNIFIED: Add click handlers to all fan items (bridges + utility actions)
-            bridgeFanModal.querySelectorAll('.bridge-fan-item').forEach(item => {
-                item.addEventListener('click', function() {
-                    const bridgeId = this.dataset.bridgeId;
-                    const action = this.dataset.action;
+                
+                // UNIFIED EVENT DELEGATION: Handle clicks on bridge cards and action items
+                bridgeFanModal.addEventListener('click', function(e) {
+                    const item = e.target.closest('.bridge-fan-item');
+                    if (!item) return;
+                    
+                    const bridgeId = item.dataset.bridgeId;
+                    const action = item.dataset.action;
                     
                     console.log('🔘 Bridge card clicked:', { bridgeId, action });
                     
@@ -2329,7 +2323,18 @@
                         executeAction(action);
                     }
                 });
-            });
+            }
+            
+            // Render bridge list
+            const fanList = document.getElementById('bridgeFanList');
+            const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
+            
+            fanList.innerHTML = activeBridges.map((bridge, index) => `
+                <div class="bridge-fan-item" data-bridge-id="${bridge.fractal_id}">
+                    <span class="bridge-fan-item-name">${index + 1}. ${escapeHtml(bridge.name)}</span>
+                    <span class="bridge-fan-item-arrow">→</span>
+                </div>
+            `).join('');
             
             bridgeFanModal.classList.add('active');
         }
