@@ -2830,10 +2830,10 @@ body.mobile-mode .singularity-btn.creation-spinning {
     to   { transform: rotate(calc(var(--rotation-offset, 0deg) + 360deg)); }
 }
 
-/* CREATION SPIN — Fast spinning during expanded state */
+/* CREATION SPIN — Fast spinning during expanded state (1 rotation per cycle, 4x faster) */
 @keyframes creation-spin {
     from { transform: rotate(var(--rotation-offset, 0deg)) scale(1); }
-    to   { transform: rotate(calc(var(--rotation-offset, 0deg) + 1080deg)) scale(1); } /* 3 full rotations */
+    to   { transform: rotate(calc(var(--rotation-offset, 0deg) + 360deg)) scale(1); } /* 1 rotation */
 }
 
 /* Layer 01 buttons container - The eggs laid by the goose */
