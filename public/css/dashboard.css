@@ -2686,112 +2686,128 @@ body::before {
 }
 
 /* ===================================================================
-   ☯️ SINGULARITY BUTTON - Liquid Glass iOS with φ-Breath
-   Pure glassmorphism with pulsating rainbow border
+   ☯️ SINGULARITY BUTTON — LIQUID GLASS (FIXED)
+   3 Layers: (a) Core Glass, (b) Button Border, (c) Rainbow Aura
+   All breathe in sync. No square. No lag.
    =================================================================== */
+
 .singularity-btn {
-    width: 56px !important;
-    height: 56px !important;
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
-    
-    /* Liquid Glass Background - iOS frosted effect */
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    color: #1e293b !important;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    overflow: visible;
+    z-index: 1001;
+    transform-origin: center center;
+    transition: opacity 0.3s ease;
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+}
+
+/* (a) CORE GLASS — Liquid iOS frosted effect */
+.singularity-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
     background: linear-gradient(
         135deg,
         rgba(255, 255, 255, 0.95) 0%,
         rgba(255, 255, 255, 0.85) 50%,
         rgba(255, 255, 255, 0.95) 100%
-    ) !important;
-    
-    /* Enhanced glassmorphism */
+    );
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    
-    /* Pulsating Rainbow Border - The Breath */
-    border: 3px solid transparent !important;
-    background-clip: padding-box;
-    position: relative;
-    
-    font-size: 1.8rem !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    
-    /* Soft shadow for depth */
     box-shadow: 
         0 8px 32px rgba(0, 0, 0, 0.12),
         0 2px 8px rgba(0, 0, 0, 0.08),
         inset 0 1px 0 rgba(255, 255, 255, 0.8);
-    
-    transition: opacity 0.3s ease, transform 0.3s ease;
-    z-index: 1001;
-    transform-origin: center center;
-    flex-shrink: 0;
-    overflow: visible;
+    animation: glass-breathe var(--breath-duration, 3000ms) ease-in-out infinite;
+    z-index: -2;
 }
 
-/* Pulsating Rainbow Border - Animated gradient ring */
-.singularity-btn::before {
+/* (b) BUTTON BORDER — Breathing rainbow edge */
+.singularity-btn::after {
     content: '';
     position: absolute;
-    inset: -3px; /* Border thickness */
+    inset: -3px;
     border-radius: 50%;
-    padding: 3px;
-    background: linear-gradient(
-        45deg,
-        #ec4899,  /* Pink */
-        #a855f7,  /* Purple */
-        #22d3ee,  /* Cyan */
-        #10b981,  /* Green */
-        #f59e0b,  /* Amber */
-        #ef4444,  /* Red */
-        #ec4899   /* Pink again for smooth loop */
-    );
-    background-size: 300% 300%;
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    border: 3px solid transparent;
+    background: linear-gradient(45deg, #22d3ee, #a855f7, #ec4899, #f59e0b, #22d3ee) border-box;
+    background-size: 200% 200%;
+    -webkit-mask: 
+        linear-gradient(#fff 0 0) padding-box, 
+        linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     animation: 
-        rainbow-rotate 4s linear infinite,
-        border-breathe var(--breath-duration, 3000ms) ease-in-out infinite;
+        border-breathe var(--breath-duration, 3000ms) ease-in-out infinite,
+        border-rotate 6s linear infinite;
     z-index: -1;
 }
 
-/* Dark ☯️ symbol for contrast against white glass */
-.singularity-btn {
-    color: #1e293b !important;
-    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+/* (c) RAINBOW AURA — Pulsating halo */
+.singularity-btn .aura {
+    position: absolute;
+    inset: -12px;
+    border-radius: 50%;
+    background: conic-gradient(
+        from 0deg,
+        #ec4899, #a855f7, #22d3ee, #10b981, #f59e0b, #ef4444, #ec4899
+    );
+    filter: blur(12px);
+    opacity: 0.6;
+    animation: 
+        aura-pulse var(--breath-duration, 3000ms) ease-in-out infinite,
+        aura-rotate 8s linear infinite;
+    z-index: -3;
+    pointer-events: none;
 }
 
-/* Rainbow gradient rotation */
-@keyframes rainbow-rotate {
-    0% {
-        background-position: 0% 50%;
-    }
-    50% {
-        background-position: 100% 50%;
-    }
-    100% {
-        background-position: 0% 50%;
-    }
+/* BREATHING KEYFRAMES — ALL IN SYNC */
+@keyframes glass-breathe {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.05); }
 }
 
-/* Border breathing - pulsating glow intensity */
 @keyframes border-breathe {
-    0%, 100% {
-        filter: 
-            drop-shadow(0 0 8px rgba(34, 211, 238, 0.4))
-            drop-shadow(0 0 16px rgba(168, 85, 247, 0.3))
-            brightness(1);
+    0%, 100% { 
         transform: scale(1);
+        filter: brightness(1) drop-shadow(0 0 8px rgba(34, 211, 238, 0.4));
     }
-    50% {
-        filter: 
-            drop-shadow(0 0 16px rgba(34, 211, 238, 0.7))
-            drop-shadow(0 0 32px rgba(168, 85, 247, 0.6))
-            drop-shadow(0 0 48px rgba(236, 72, 153, 0.4))
-            brightness(1.2);
-        transform: scale(1.05);
+    50% { 
+        transform: scale(1.08);
+        filter: brightness(1.3) drop-shadow(0 0 20px rgba(168, 85, 247, 0.7));
     }
+}
+
+@keyframes border-rotate {
+    from { background-position: 0% 50%; }
+    to   { background-position: 200% 50%; }
+}
+
+@keyframes aura-pulse {
+    0%, 100% { 
+        transform: scale(1);
+        opacity: 0.5;
+    }
+    50% { 
+        transform: scale(1.15);
+        opacity: 0.8;
+    }
+}
+
+@keyframes aura-rotate {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
 }
 
 /* Layer 01 buttons container - The eggs laid by the goose */

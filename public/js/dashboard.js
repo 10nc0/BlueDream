@@ -420,7 +420,7 @@
             
             // ☯️ SINGULARITY BUTTON (Button 00) - Transcendental layer that splits into buttons
             // Appears AFTER layer-01 so CSS ~ selector works
-            html += `<button class="singularity-btn" data-action="singularity" aria-label="Expand all actions">☯️</button>`;
+            html += `<button class="singularity-btn" data-action="singularity" aria-label="Expand all actions">☯️<div class="aura"></div></button>`;
             
             thumbsZone.innerHTML = html;
             console.log(`🔘 Thumbs zone HTML length: ${html.length} chars`);
