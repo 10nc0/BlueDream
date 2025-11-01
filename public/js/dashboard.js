@@ -338,10 +338,14 @@
                 // φScale oscillates: 1.0 (φ^0) → 1.618 (φ^1) → 1.0
                 const φScale = data.φScale;
                 
+                // FIX: Check current state dynamically (not closure-captured value!)
+                // Read from DOM/global scope instead of relying on closure
+                const currentlyExpanded = window.thumbsExpanded || false;
+                
                 // Calculate rotation duration based on state
                 let rotationDuration;
-                const state = thumbsExpanded ? 'FAST' : 'SLOW';
-                if (thumbsExpanded) {
+                const state = currentlyExpanded ? 'FAST' : 'SLOW';
+                if (currentlyExpanded) {
                     // FAST: 0.5 φ-breath per rotation (4x acceleration)
                     rotationDuration = 0.5 * PHI_BREATH.BASE_DURATION * φScale;
                 } else {
@@ -407,6 +411,7 @@
             
             // Update state FIRST (triggers rotation speed change via breathCycle listener)
             thumbsExpanded = false;
+            window.thumbsExpanded = false; // Expose to global for breathCycle listener
             
             // Exit creation mode for φ-breath system
             if (isMobile() && breathInitialized) {
@@ -461,6 +466,7 @@
             
             // Update state FIRST (triggers rotation speed change via breathCycle listener)
             thumbsExpanded = true;
+            window.thumbsExpanded = true; // Expose to global for breathCycle listener
             
             // Enter creation mode for φ-breath system
             if (isMobile() && breathInitialized) {
