@@ -766,19 +766,20 @@
                 <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml(searchableText)}" data-status="${msg.discord_status}" style="position: relative;">
                     <div style="position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 8px; z-index: 10;">
                         ${msg.media_url ? `
-                            <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 4px; color: #c084fc; text-decoration: none; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0;">
+                            <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; text-decoration: none; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; line-height: 1;">
                                 📎
                             </a>
                         ` : ''}
-                        <button class="agent-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Agent • Check • Remind • Alert • Reward • Execute v2.0" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 4px; color: #34d399; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; border-width: 1px;">
+                        <button class="agent-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Agent • Check • Remind • Alert • Reward • Execute v2.0" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                             🤖
                         </button>
-                        <button class="tag-add-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 4px; color: #c084fc; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; border-width: 1px;">
+                        <button class="tag-add-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                             🏷️
                         </button>
-                        <div style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                            <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" style="width: 16px; height: 16px; cursor: pointer; accent-color: #a855f7; margin: 0; padding: 0;">
-                        </div>
+                        <label class="custom-checkbox-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Select for export" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; cursor: pointer; margin: 0; padding: 0; flex-shrink: 0; transition: all 0.2s; line-height: 1;">
+                            <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" style="position: absolute; opacity: 0; width: 0; height: 0;">
+                            <span class="checkbox-icon" style="font-size: 0.875rem; line-height: 1;">☐</span>
+                        </label>
                     </div>
                     <div class="discord-avatar">
                         ${msg.sender_photo_url ? 
@@ -4335,8 +4336,27 @@ document.addEventListener('click', function(e) {
         const messageId = target.getAttribute('data-message-id');
         const bridgeId = target.getAttribute('data-bridge-id');
         
+        console.log('🗑️ Date remove button clicked:', { date, messageId, bridgeId });
+        
         if (date && messageId && bridgeId) {
             removeDate(bridgeId, messageId, date);
+        } else {
+            console.error('❌ Missing attributes for date removal!', { date, messageId, bridgeId });
+        }
+        return;
+    }
+    
+    // Custom checkbox styling - toggle checked state visually
+    if (target.closest('.custom-checkbox-btn')) {
+        const label = target.closest('.custom-checkbox-btn');
+        const checkbox = label.querySelector('input[type="checkbox"]');
+        const icon = label.querySelector('.checkbox-icon');
+        
+        if (checkbox && icon) {
+            // Toggle will happen automatically, we just update the icon
+            setTimeout(() => {
+                icon.textContent = checkbox.checked ? '☑' : '☐';
+            }, 0);
         }
         return;
     }

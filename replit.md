@@ -75,6 +75,12 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 
 ### Personal Cloud OS - Advanced Features (Nov 1, 2025)
 **AUTO-SCALING TIMELINE & EXPORT SYSTEM**: Complete implementation of advanced Personal Cloud OS features for intelligent organization and data portability:
+- **Message Controls (Top-Right)**: Pixel-perfect 4-button control group with unified silver styling:
+  - 📎 Attachment Download (24×24px, only shown when media exists)
+  - 🤖 Agent Button (24×24px, placeholder for Check • Remind • Alert • Reward • Execute v2.0)
+  - 🏷️ Tag Add Button (24×24px, opens modal for adding tags/dates)
+  - ☐/☑ Export Checkbox (24×24px, custom-styled label with hidden native checkbox for perfect alignment)
+  - All controls: Identical silver background (`rgba(148, 163, 184, 0.2)`), 8px gap, `line-height: 1` for vertical centering
 - **Time Bucket System**: Auto-scaling timeline grouping with density-based algorithm:
   - Analyzes message density (messages/day) to determine optimal bucket size
   - 24h buckets for low density (<10 msgs/day)
