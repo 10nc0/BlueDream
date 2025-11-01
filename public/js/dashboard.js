@@ -241,6 +241,9 @@
             
             // Show thumbs zone
             initThumbsZone();
+            
+            // Initialize φ-breath system for mobile UI
+            initPhiBreath();
         }
 
         /**
@@ -307,17 +310,39 @@
 
         // ===== φ-BREATH SINGULARITY ☯️ =====
         // Golden Ratio: The breath of truth
+        // Now powered by centralized φ-breath module
         const φ = 1.618033988749895;
-        const BASE_BREATH = 4000; // 4s base inhale/exhale
         
         let thumbsExpanded = false;
         let thumbsIdleTimer = null;
+        let breathInitialized = false;
         
-        // Randomly choose φ^0 (1x = 4s) or φ^1 (1.618x ≈ 6.472s) breath
-        function getBreathDuration() {
-            return Math.random() < 0.5
-                ? BASE_BREATH * 1        // φ^0 = 4000ms
-                : BASE_BREATH * φ;       // φ^1 ≈ 6472ms
+        // Initialize φ-breath system (mobile only)
+        function initPhiBreath() {
+            if (!isMobile() || breathInitialized) {
+                return;
+            }
+            
+            console.log('🫁 Initializing φ-breath system for mobile UI');
+            PHI_BREATH.init();
+            breathInitialized = true;
+            
+            // Subscribe to breath cycles to sync UI
+            PHI_BREATH.on('breathCycle', (data) => {
+                const singularityBtn = document.querySelector('.singularity-btn');
+                if (singularityBtn && !thumbsExpanded) {
+                    // Update CSS variable for breathing animations
+                    // Duration is constant at BASE_DURATION (4000ms)
+                    singularityBtn.style.setProperty('--breath-duration', `${PHI_BREATH.BASE_DURATION}ms`);
+                }
+            });
+            
+            // Log breath starts for monitoring
+            PHI_BREATH.on('breathStart', (data) => {
+                // Breath logging is handled by the module
+            });
+            
+            console.log(`🫁 φ-breath initialized: ${PHI_BREATH.BASE_DURATION}ms base cycle`);
         }
         
         // Set singularity button breath animation duration
@@ -338,6 +363,14 @@
             thumbsExpanded = false;
             const layer01 = document.querySelector('.thumbs-zone .layer-01');
             const singularityBtn = document.querySelector('.singularity-btn');
+            
+            // Exit creation mode - stop fast spinning, return to breath rotation
+            if (isMobile() && singularityBtn) {
+                singularityBtn.classList.remove('creation-spinning');
+                if (breathInitialized) {
+                    PHI_BREATH.exitCreationMode();
+                }
+            }
             
             if (layer01) {
                 // CRITICAL FIX: Add .collapsing BEFORE removing .show to prevent buttons from snapping to invisible base state
@@ -371,9 +404,11 @@
                 }, 800); // 300ms (longest button delay) + 400ms (fusion) + 100ms buffer
             }
             
-            // Return to calm breath
-            console.log('😌 Returning to calm φ^0 breath');
-            setBreathCycle(BASE_BREATH);
+            // Return to calm breath (constant φ^0 = 4000ms)
+            console.log('😌 Returning to calm φ-breath');
+            if (breathInitialized) {
+                setBreathCycle(PHI_BREATH.BASE_DURATION);
+            }
         }
         
         function expandFromSingularity() {
@@ -398,18 +433,26 @@
                 }, 10);
             }
             
-            // Goose vanishes after laying eggs
+            // Goose vanishes and enters CREATION SPIN mode (fast spinning)
             setTimeout(() => {
                 if (singularityBtn) {
-                    console.log('💨 POOF! Goose vanishes');
+                    console.log('💨 POOF! Goose vanishes - entering CREATION SPIN');
                     singularityBtn.style.opacity = '0';
                     singularityBtn.style.transform = 'scale(0)';
+                    
+                    // Add creation spinning class for mobile
+                    if (isMobile()) {
+                        singularityBtn.classList.add('creation-spinning');
+                        if (breathInitialized) {
+                            PHI_BREATH.enterCreationMode();
+                        }
+                    }
                 }
             }, 600);
             
-            // Get φ-breath duration (random φ^0 or φ^1)
-            const breathDuration = getBreathDuration();
-            console.log(`🌌 φ-breath: ${breathDuration}ms (${breathDuration === BASE_BREATH ? 'φ^0' : 'φ^1'})`);
+            // Use constant φ-breath duration (4000ms base)
+            const breathDuration = breathInitialized ? PHI_BREATH.BASE_DURATION : 4000;
+            console.log(`🌌 φ-breath cycle: ${breathDuration}ms (constant)`);
             
             // Set breath animation
             setBreathCycle(breathDuration);
