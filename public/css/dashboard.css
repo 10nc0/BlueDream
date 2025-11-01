@@ -2640,9 +2640,9 @@ body::before {
     bottom: 16px;
     right: 16px;
     display: none; /* Hidden by default, shown in mobile mode */
-    flex-direction: column; /* Stack vertically to prevent layout shifts */
-    align-items: flex-end; /* Align to right */
-    gap: 0;
+    flex-direction: row; /* Single horizontal row - goose laying eggs */
+    align-items: center;
+    gap: 12px;
     max-width: calc(100vw - 32px); /* Prevent overflow beyond screen edges */
     z-index: 1000;
     pointer-events: none; /* Allow clicks through container */
@@ -2730,62 +2730,65 @@ body::before {
     }
 }
 
-/* Layer 01 buttons container - The expanded reality */
+/* Layer 01 buttons container - The eggs laid by the goose */
 .thumbs-zone .layer-01 {
     display: flex;
     flex-direction: row-reverse; /* Right to left: → 🔗 🧿 ✍🏻 */
-    flex-wrap: wrap;
+    flex-wrap: nowrap; /* Single row - no wrapping */
     gap: 12px;
-    margin-bottom: 12px;
+    order: 1; /* Eggs appear before the goose */
 }
 
 .thumbs-zone .layer-01[hidden] {
     display: none;
 }
 
-/* Individual button birth animation - staggered from right to left */
+/* Individual egg birth animation - laid from right to left */
 .thumbs-zone .layer-01 button {
     opacity: 0;
-    transform: scale(0) translateX(20px);
-    transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+    transform: scale(0);
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); /* Bounce easing */
 }
 
-/* When .show class is added, buttons appear sequentially */
+/* When .show class is added, eggs appear sequentially */
 .thumbs-zone .layer-01.show button {
     opacity: 1;
-    transform: scale(1) translateX(0);
+    transform: scale(1);
 }
 
-/* Staggered delays - right to left fruiting */
-.thumbs-zone .layer-01.show button:nth-child(1) { animation-delay: 0ms; transition-delay: 0ms; }     /* ✍🏻 first (rightmost) */
-.thumbs-zone .layer-01.show button:nth-child(2) { animation-delay: 100ms; transition-delay: 100ms; } /* 🧿 second */
-.thumbs-zone .layer-01.show button:nth-child(3) { animation-delay: 200ms; transition-delay: 200ms; } /* 🔍 third */
-.thumbs-zone .layer-01.show button:nth-child(4) { animation-delay: 300ms; transition-delay: 300ms; } /* 🔗 fourth */
-.thumbs-zone .layer-01.show button:nth-child(5) { animation-delay: 400ms; transition-delay: 400ms; } /* → fifth */
+/* Staggered delays - goose lays eggs right to left */
+.thumbs-zone .layer-01.show button:nth-child(1) { transition-delay: 0ms; }     /* ✍🏻 first egg (rightmost) */
+.thumbs-zone .layer-01.show button:nth-child(2) { transition-delay: 100ms; }   /* 🧿 second egg */
+.thumbs-zone .layer-01.show button:nth-child(3) { transition-delay: 200ms; }   /* 🔍 third egg */
+.thumbs-zone .layer-01.show button:nth-child(4) { transition-delay: 300ms; }   /* 🔗 fourth egg */
+.thumbs-zone .layer-01.show button:nth-child(5) { transition-delay: 400ms; }   /* → fifth egg */
+.thumbs-zone .layer-01.show button:nth-child(6) { transition-delay: 500ms; }   /* sixth egg if exists */
+.thumbs-zone .layer-01.show button:nth-child(7) { transition-delay: 600ms; }   /* seventh egg if exists */
 
-/* Singularity visibility - stays visible during fruiting, then disappears */
+/* Singularity (The Goose) - stays visible while laying eggs, then poofs */
 .thumbs-zone .singularity-btn {
     opacity: 1;
     transform: scale(1);
-    transition: opacity 0.3s ease 0.5s, transform 0.3s ease 0.5s; /* Delay 500ms - after all buttons appear */
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    order: 2; /* Goose appears after the eggs */
 }
 
-/* When layer-01 is expanded, singularity disappears AFTER fruiting completes */
+/* When layer-01 is expanded, goose poofs AFTER laying all eggs */
 .thumbs-zone .layer-01.show ~ .singularity-btn,
 .thumbs-zone:has(.layer-01.show) .singularity-btn {
     opacity: 0;
     transform: scale(0);
     pointer-events: none;
-    transition-delay: 0.5s; /* Wait for all buttons to fruit */
+    transition-delay: 0.6s; /* Wait for all eggs to be laid (600ms) */
 }
 
-/* Singularity reappears immediately when collapsed */
+/* Goose reappears immediately when collapsed */
 .thumbs-zone .layer-01[hidden] ~ .singularity-btn,
 .thumbs-zone:has(.layer-01[hidden]) .singularity-btn {
     opacity: 1;
     transform: scale(1);
     pointer-events: auto;
-    transition-delay: 0s; /* No delay on reappearance */
+    transition-delay: 0s; /* Instant return */
 }
 
 /* Legacy class support */
