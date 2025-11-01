@@ -324,12 +324,20 @@
             // Position 3: Search button (always visible)
             html += `<button data-action="search" aria-label="Search messages">🔍</button>`;
             
-            // Position 4: Bridge Info (ONLY if bridges exist)
+            // Position 4: Bridge Info (ONLY if current bridge has webhook0n)
+            // ARCHITECTURAL: We show button 4 if the bridge has output_0n_url (user webhook)
+            // The UI reads from webhook01 (hidden cat) but displays webhook0n info
             if (hasBridges) {
                 const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
                 const currentBridge = activeBridges.find(b => b.fractal_id === currentBridgeId) || activeBridges[0];
-                console.log(`🔘 Adding button 4 for bridge: ${currentBridge.name} (${currentBridge.fractal_id})`);
-                html += `<button data-action="bridgeinfo" data-bridge-id="${currentBridge.fractal_id}" aria-label="${escapeHtml(currentBridge.name)}">📋</button>`;
+                
+                // Show button 4 only if bridge has user webhook (output_0n_url)
+                if (currentBridge.output_0n_url) {
+                    console.log(`🔘 Adding button 4 for bridge: ${currentBridge.name} (has webhook0n)`);
+                    html += `<button data-action="bridgeinfo" data-bridge-id="${currentBridge.fractal_id}" aria-label="${escapeHtml(currentBridge.name)}">📋</button>`;
+                } else {
+                    console.log(`🔘 NO button 4 - bridge has no webhook0n (output_0n_url is null)`);
+                }
             } else {
                 console.log(`🔘 NO button 4 - no bridges found`);
             }
@@ -1597,7 +1605,8 @@
             document.getElementById('mediaModalContent').innerHTML = '';
         }
 
-        // Bridge Info Modal (Mobile: Show current bridge name + actions)
+        // Bridge Info Modal (Read-only: Show webhook0n data only)
+        // ARCHITECTURAL: Display user's webhook (output_0n) info, hide the silent cat (webhook01)
         function showBridgeInfoModal() {
             // Get current bridge
             const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
@@ -1614,15 +1623,15 @@
                 return;
             }
             
-            // Create modal
+            // Create modal (genesis form style, but read-only)
             let bridgeInfoModal = document.getElementById('bridgeInfoModal');
             if (!bridgeInfoModal) {
                 const modalHtml = `
-                    <div id="bridgeInfoModal" class="bridge-fan-modal">
-                        <div class="bridge-fan-content">
+                    <div id="bridgeInfoModal" class="bridge-fan-modal" style="z-index: 10000;">
+                        <div class="bridge-fan-content" style="max-width: 500px; padding: 2rem;">
                             <button class="bridge-fan-close" id="bridgeInfoClose">×</button>
-                            <h3 id="bridgeInfoName">🌉 Bridge</h3>
-                            <div class="bridge-fan-list" id="bridgeInfoActions"></div>
+                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #a855f7, #ec4899, #f59e0b, #10b981, #3b82f6, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">📋 Bridge Information</h3>
+                            <div id="bridgeInfoContent"></div>
                         </div>
                     </div>
                 `;
@@ -1636,66 +1645,65 @@
                 document.getElementById('bridgeInfoClose').addEventListener('click', closeBridgeInfoModal);
             }
             
-            // Update modal content
-            document.getElementById('bridgeInfoName').textContent = `🌉 ${currentBridge.name}`;
+            // Build read-only info display (only webhook0n data, NOT webhook01)
+            const webhookUrl = currentBridge.output_0n_url || 'Not configured';
+            const status = currentBridge.status || 'unknown';
+            const statusColor = status === 'active' ? '#10b981' : status === 'inactive' ? '#94a3b8' : '#ef4444';
+            const platform = currentBridge.input_platform || 'Unknown';
+            const tags = currentBridge.tags || [];
             
-            // Build action buttons
-            const platform = currentBridge.input_platform?.toLowerCase() || 'unknown';
-            const isWhatsApp = platform === 'whatsapp';
-            
-            const actions = [
-                { icon: 'ℹ️', label: 'Configuration', action: 'toggle-config', id: currentBridge.fractal_id },
-                ...(isWhatsApp ? [{ icon: '🔗', label: 'Generate QR', action: 'generate-qr', id: currentBridge.fractal_id }] : []),
-                { icon: '✏️', label: 'Edit Bridge', action: 'edit-bridge', id: currentBridge.fractal_id },
-                { icon: '🗑️', label: 'Delete Bridge', action: 'delete-bridge', id: currentBridge.fractal_id, danger: true }
-            ];
-            
-            document.getElementById('bridgeInfoActions').innerHTML = actions.map(action => `
-                <div class="bridge-fan-item ${action.danger ? 'danger' : ''}" data-bridge-action="${action.action}" data-bridge-id="${action.id}">
-                    <span class="bridge-fan-item-name">${action.icon} ${action.label}</span>
-                    <span class="bridge-fan-item-arrow">→</span>
+            const infoHtml = `
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Bridge Name</label>
+                        <div style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0;">
+                            ${escapeHtml(currentBridge.name)}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Platform</label>
+                        <div style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; text-transform: capitalize;">
+                            ${escapeHtml(platform)}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Your Discord Webhook</label>
+                        <div style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; word-break: break-all; font-size: 0.875rem;">
+                            ${webhookUrl === 'Not configured' ? '<span style="color: #94a3b8;">Not configured</span>' : escapeHtml(webhookUrl)}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Status</label>
+                        <div style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: ${statusColor}; text-transform: capitalize; font-weight: 500;">
+                            ${escapeHtml(status)}
+                        </div>
+                    </div>
+                    
+                    ${tags.length > 0 ? `
+                    <div class="form-group">
+                        <label class="form-label">Tags</label>
+                        <div style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                            ${tags.map(tag => `<span style="padding: 0.25rem 0.75rem; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; color: #c084fc; font-size: 0.875rem;">${escapeHtml(tag)}</span>`).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    <div style="margin-top: 1rem; padding: 1rem; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; font-size: 0.875rem; color: #93c5fd;">
+                        <strong>ℹ️ Note:</strong> This information shows your configured Discord webhook. Messages are stored permanently in Discord threads.
+                    </div>
                 </div>
-            `).join('');
+            `;
             
-            // Add click handlers with direct action execution
-            bridgeInfoModal.querySelectorAll('.bridge-fan-item').forEach(item => {
-                item.addEventListener('click', function() {
-                    const actionType = this.dataset.bridgeAction;
-                    const bridgeId = this.dataset.bridgeId;
-                    
-                    closeBridgeInfoModal();
-                    
-                    // Execute actions directly (don't rely on hidden desktop buttons)
-                    setTimeout(() => {
-                        if (actionType === 'toggle-config') {
-                            // Show bridge configuration/info in modal
-                            const configPanel = document.getElementById(`config-panel-${bridgeId}`);
-                            if (configPanel) {
-                                configPanel.style.display = configPanel.style.display === 'none' ? 'block' : 'none';
-                                // Scroll to view it
-                                configPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                            }
-                        } else if (actionType === 'generate-qr') {
-                            // Generate QR for WhatsApp relink
-                            generateNewQR(bridgeId);
-                        } else if (actionType === 'edit-bridge') {
-                            // Edit bridge details
-                            editBridge(bridgeId);
-                        } else if (actionType === 'delete-bridge') {
-                            // Delete bridge with confirmation
-                            confirmDeleteBridge(bridgeId);
-                        }
-                    }, 100);
-                });
-            });
-            
-            // Show modal
-            bridgeInfoModal.classList.add('active');
+            document.getElementById('bridgeInfoContent').innerHTML = infoHtml;
+            bridgeInfoModal.style.display = 'flex';
         }
         
         function closeBridgeInfoModal() {
             const modal = document.getElementById('bridgeInfoModal');
-            if (modal) modal.classList.remove('active');
+            if (modal) modal.style.display = 'none';
         }
         
         // Bridge Fan Modal (Mobile: Show all bridges + utility actions)
