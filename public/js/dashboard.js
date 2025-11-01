@@ -305,6 +305,11 @@
             const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
             const hasBridges = activeBridges.length > 0;
             
+            console.log(`🔘 Rendering thumbs zone: ${activeBridges.length} bridges, hasBridges=${hasBridges}`);
+            if (activeBridges.length > 0) {
+                console.log(`🔘 Bridges:`, activeBridges.map(b => b.name));
+            }
+            
             let html = '';
             
             // Position 1: Create button (ONLY way to genesis form)
@@ -320,7 +325,10 @@
             if (hasBridges) {
                 const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
                 const currentBridge = activeBridges.find(b => b.fractal_id === currentBridgeId) || activeBridges[0];
+                console.log(`🔘 Adding button 4 for bridge: ${currentBridge.name} (${currentBridge.fractal_id})`);
                 html += `<button data-action="bridgeinfo" data-bridge-id="${currentBridge.fractal_id}" aria-label="${escapeHtml(currentBridge.name)}">📋</button>`;
+            } else {
+                console.log(`🔘 NO button 4 - no bridges found`);
             }
             
             // Position 5: Bridge Card (ONLY if 4+ bridges)
@@ -334,6 +342,7 @@
             }
             
             thumbsZone.innerHTML = html;
+            console.log(`🔘 Thumbs zone HTML length: ${html.length} chars`);
         }
 
         /**
