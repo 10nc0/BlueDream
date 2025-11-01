@@ -7,7 +7,7 @@ class TenantManager {
     async initializeCoreSchema() {
         const client = await this.pool.connect();
         try {
-            // Core schema initialization logic
+            // Core schema initialization - safe to run multiple times
             await client.query(`
                 CREATE TABLE IF NOT EXISTS core.invite_tokens (
                     id SERIAL PRIMARY KEY,
@@ -18,7 +18,10 @@ class TenantManager {
                     consumed_at TIMESTAMP,
                     consumed_by TEXT
                 )
-            `);
+            `).catch(err => {
+                // Ignore duplicate table errors on restart
+                if (err.code !== '23505') throw err;
+            });
             
             await client.query(`
                 CREATE TABLE IF NOT EXISTS core.tenant_creation_log (
@@ -27,7 +30,10 @@ class TenantManager {
                     ip TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT NOW()
                 )
-            `);
+            `).catch(err => {
+                // Ignore duplicate table errors on restart
+                if (err.code !== '23505') throw err;
+            });
         } finally {
             client.release();
         }
