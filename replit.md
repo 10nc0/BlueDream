@@ -41,9 +41,15 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
   - Positions 2-4: Up to 3 direct bridge buttons (💬, 2, 3) for instant navigation
   - Position n (leftmost): Fan button (+N) when 4+ bridges exist, opens modal with all bridges
 - **Bridge Fan Modal**: Full-screen glassmorphism modal showing numbered bridge list + utility actions (Search 🔍, Agent 🤖)
-- **Touch Interactions**: 
-  - Tap media attachment → full-screen zoom preview with close button
-  - Swipe left/right → navigate between bridges (when multiple exist)
+- **Touch Interactions (iPhone-Optimized, φ12)**:
+  - **Tap-to-Zoom**: Media images open in full-screen modal with 44×44px close button (Apple HIG compliant)
+  - **Swipe Navigation**: Left/right horizontal swipe (>100px, <500ms) switches bridges with vertical scroll detection to prevent conflicts
+  - **Auto-Hide Thumbs Zone**: Smooth hide/show on scroll (translateY + opacity transitions)
+  - **48px Touch Targets**: All interactive elements meet Apple's minimum touch target size
+  - **Smart Text Selection**: Disabled globally except for inputs/message content to prevent accidental selection
+  - **Tap Feedback**: Scale transform (0.97) on active state for visual confirmation
+  - **Momentum Scrolling**: `-webkit-overflow-scrolling: touch` for native feel
+  - **Purple Tap Highlight**: Custom `-webkit-tap-highlight-color` for brand consistency
 - **Responsive Orientation**: Landscape rotation (even on mobile devices) switches to desktop mode with full sidebar and resizers
 - **CSP-Compliant**: All touch/click handlers use event delegation on document, zero inline handlers
 

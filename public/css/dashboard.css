@@ -2814,3 +2814,106 @@ body.desktop-mode .thumbs-zone {
     background: rgba(148, 163, 184, 0.3);
     color: #e2e8f0;
 }
+
+/* ===================================================================
+   TOUCH INTERACTIONS (iPhone-Optimized)
+   φ12: Touch is truth. Built for fingers.
+   =================================================================== */
+
+/* Animations for modals */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+}
+
+/* Mobile Touch Targets (min 48px for Apple HIG compliance) */
+@media (max-width: 767px) and (orientation: portrait) {
+    /* Ensure all interactive elements meet 48px minimum */
+    button,
+    .bridge-card,
+    .thumbs-btn,
+    .message-control-btn {
+        min-height: 48px;
+        touch-action: manipulation;
+    }
+    
+    /* Message images optimized for tap */
+    .discord-media-preview img,
+    .message img {
+        border-radius: 12px;
+        margin: 8px 0;
+        max-width: 100%;
+        cursor: zoom-in;
+        -webkit-tap-highlight-color: rgba(168, 85, 247, 0.3);
+    }
+    
+    /* Disable text selection on touch (except inputs) */
+    * {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+    }
+    
+    input,
+    textarea,
+    .message-content,
+    .message-text {
+        -webkit-user-select: text;
+        user-select: text;
+    }
+    
+    /* Thumbs zone smooth transitions */
+    #thumbsZone {
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                    opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    /* Enhanced tap feedback */
+    button:active,
+    .bridge-card:active {
+        transform: scale(0.97);
+        transition: transform 0.1s ease;
+    }
+    
+    /* Prevent bounce on scroll */
+    body {
+        overscroll-behavior-y: contain;
+    }
+    
+    /* Full-screen media modal close button */
+    .media-close-btn {
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+    }
+}
+
+/* Touch improvements for all devices */
+.discord-media-preview img,
+.message img {
+    -webkit-user-drag: none;
+    user-select: none;
+}
+
+/* Smooth momentum scrolling */
+.discord-messages-container,
+#bridgeListContainer {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}

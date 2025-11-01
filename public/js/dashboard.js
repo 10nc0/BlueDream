@@ -325,81 +325,163 @@
         }
 
         /**
-         * Initialize touch interactions for mobile
+         * Initialize touch interactions for mobile (iPhone-optimized)
+         * φ12: Touch is truth. Built for fingers.
          */
         function initTouchInteractions() {
-            // Tap-to-zoom media images
+            // TAP-TO-ZOOM: Media images
             document.addEventListener('click', function(e) {
-                const img = e.target.closest('.message img');
+                const img = e.target.closest('.discord-media-preview img, .message img');
                 if (img && isMobile()) {
-                    // Open media in modal for full-screen view
-                    const messageId = img.closest('.message')?.dataset.messageId;
-                    if (messageId && allMessages[messageId]) {
-                        openMediaModal(allMessages[messageId]);
-                    }
+                    e.preventDefault();
+                    openFullScreenMedia(img.src);
                 }
             });
             
-            // Swipe navigation for bridges
+            // SWIPE NAVIGATION: Left/right to switch bridges
             let touchStartX = 0;
             let touchStartY = 0;
             let touchStartTime = 0;
+            let isScrolling = false;
             
-            document.addEventListener('touchstart', function(e) {
-                // Only enable swipe in mobile mode
-                if (!isMobile()) return;
-                
-                // Don't interfere with scrollable areas or modals
-                if (e.target.closest('.bridge-sidebar, .modal, .thumbs-zone')) return;
-                
-                touchStartX = e.touches[0].clientX;
-                touchStartY = e.touches[0].clientY;
-                touchStartTime = Date.now();
-            }, { passive: true });
+            const messageContainer = document.getElementById('bridgeDetail');
             
-            document.addEventListener('touchend', function(e) {
-                if (!isMobile()) return;
-                if (e.target.closest('.bridge-sidebar, .modal, .thumbs-zone')) return;
+            if (messageContainer) {
+                messageContainer.addEventListener('touchstart', function(e) {
+                    if (!isMobile()) return;
+                    if (e.target.closest('.modal, .thumbs-zone, input, textarea, button')) return;
+                    
+                    const touch = e.touches[0];
+                    touchStartX = touch.clientX;
+                    touchStartY = touch.clientY;
+                    touchStartTime = Date.now();
+                    isScrolling = false;
+                }, { passive: true });
                 
-                const touchEndX = e.changedTouches[0].clientX;
-                const touchEndY = e.changedTouches[0].clientY;
-                const touchEndTime = Date.now();
+                messageContainer.addEventListener('touchmove', function(e) {
+                    if (!touchStartX || !touchStartY) return;
+                    
+                    const touch = e.touches[0];
+                    const deltaX = Math.abs(touch.clientX - touchStartX);
+                    const deltaY = Math.abs(touch.clientY - touchStartY);
+                    
+                    // Detect vertical scroll vs horizontal swipe
+                    if (deltaY > deltaX) {
+                        isScrolling = true;
+                    }
+                }, { passive: true });
                 
-                const deltaX = touchEndX - touchStartX;
-                const deltaY = touchEndY - touchStartY;
-                const deltaTime = touchEndTime - touchStartTime;
-                
-                // Only trigger if horizontal swipe is dominant
-                if (Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-                    // Swipe must be > 100px and < 500ms for quick swipe
-                    if (Math.abs(deltaX) > 100 && deltaTime < 500) {
+                messageContainer.addEventListener('touchend', function(e) {
+                    if (!isMobile() || isScrolling) return;
+                    if (!touchStartX || e.target.closest('.modal, .thumbs-zone')) return;
+                    
+                    const touch = e.changedTouches[0];
+                    const deltaX = touch.clientX - touchStartX;
+                    const deltaY = touch.clientY - touchStartY;
+                    const deltaTime = Date.now() - touchStartTime;
+                    
+                    // Horizontal swipe must be dominant and quick
+                    if (Math.abs(deltaX) > Math.abs(deltaY) * 1.5 && 
+                        Math.abs(deltaX) > 100 && 
+                        deltaTime < 500) {
+                        
                         const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
                         if (activeBridges.length <= 1) return;
                         
-                        // Find current bridge index
-                        const currentBridgeId = document.querySelector('.discord-messages')?.id?.replace('discord-messages-', '');
+                        const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
                         const currentIndex = activeBridges.findIndex(b => b.fractal_id === currentBridgeId);
                         
                         if (currentIndex === -1) return;
                         
-                        // Swipe right = previous bridge, swipe left = next bridge
+                        // Swipe RIGHT = PREVIOUS, Swipe LEFT = NEXT
                         let nextIndex;
                         if (deltaX > 0) {
-                            // Swipe right - go to previous
                             nextIndex = currentIndex > 0 ? currentIndex - 1 : activeBridges.length - 1;
                         } else {
-                            // Swipe left - go to next
                             nextIndex = currentIndex < activeBridges.length - 1 ? currentIndex + 1 : 0;
                         }
                         
                         const nextBridge = activeBridges[nextIndex];
                         if (nextBridge) {
                             loadMessages(nextBridge.fractal_id, 'user');
-                            showToast(`📱 Switched to ${nextBridge.name}`, 'info');
+                            showToast(`📱 ${nextBridge.name}`, 'info');
                         }
                     }
+                    
+                    // Reset
+                    touchStartX = 0;
+                    touchStartY = 0;
+                    isScrolling = false;
+                }, { passive: true });
+            }
+            
+            // AUTO-HIDE THUMBS ZONE on scroll
+            let lastScrollY = 0;
+            let scrollTimeout;
+            
+            window.addEventListener('scroll', function() {
+                if (!isMobile()) return;
+                
+                const thumbsZone = document.getElementById('thumbsZone');
+                if (!thumbsZone) return;
+                
+                const currentScrollY = window.scrollY;
+                
+                clearTimeout(scrollTimeout);
+                
+                // Hide on scroll down, show on scroll up
+                if (currentScrollY > lastScrollY && currentScrollY > 100) {
+                    thumbsZone.style.transform = 'translateY(100px)';
+                    thumbsZone.style.opacity = '0';
+                } else {
+                    thumbsZone.style.transform = 'translateY(0)';
+                    thumbsZone.style.opacity = '1';
                 }
+                
+                lastScrollY = currentScrollY;
+                
+                // Show again after scroll stops
+                scrollTimeout = setTimeout(() => {
+                    thumbsZone.style.transform = 'translateY(0)';
+                    thumbsZone.style.opacity = '1';
+                }, 150);
             }, { passive: true });
+        }
+        
+        /**
+         * Full-screen media modal (iPhone-optimized)
+         */
+        function openFullScreenMedia(src) {
+            const modal = document.createElement('div');
+            modal.id = 'fullScreenMediaModal';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: #000;
+                z-index: 10000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                animation: fadeIn 0.2s ease;
+            `;
+            
+            modal.innerHTML = `
+                <img src="${escapeHtml(src)}" style="max-width: 95vw; max-height: 95vh; border-radius: 12px; object-fit: contain;">
+                <button class="media-close-btn" style="position: absolute; top: 20px; right: 20px; width: 44px; height: 44px; background: rgba(0,0,0,0.7); color: white; border: none; border-radius: 50%; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px);">×</button>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // Close on background tap or button
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal || e.target.classList.contains('media-close-btn')) {
+                    modal.style.animation = 'fadeOut 0.2s ease';
+                    setTimeout(() => modal.remove(), 200);
+                }
+            });
         }
 
         // HTML sanitization to prevent XSS attacks
