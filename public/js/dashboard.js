@@ -324,20 +324,14 @@
             // Position 3: Search button (always visible)
             html += `<button data-action="search" aria-label="Search messages">🔍</button>`;
             
-            // Position 4: Bridge Info (ONLY if current bridge has webhook0n)
-            // ARCHITECTURAL: We show button 4 if the bridge has output_0n_url (user webhook)
-            // The UI reads from webhook01 (hidden cat) but displays webhook0n info
+            // Position 4: Bridge Actions (ONLY if current bridge exists)
+            // Shows stacked menu with bridge actions: ℹ️ 🔗 ✏️ 🗑️
             if (hasBridges) {
                 const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
                 const currentBridge = activeBridges.find(b => b.fractal_id === currentBridgeId) || activeBridges[0];
                 
-                // Show button 4 only if bridge has user webhook (output_0n_url)
-                if (currentBridge.output_0n_url) {
-                    console.log(`🔘 Adding button 4 for bridge: ${currentBridge.name} (has webhook0n)`);
-                    html += `<button data-action="bridgeinfo" data-bridge-id="${currentBridge.fractal_id}" aria-label="${escapeHtml(currentBridge.name)}">📋</button>`;
-                } else {
-                    console.log(`🔘 NO button 4 - bridge has no webhook0n (output_0n_url is null)`);
-                }
+                console.log(`🔘 Adding button 4 (🔗) for bridge: ${currentBridge.name}`);
+                html += `<button data-action="bridge-actions" data-bridge-id="${currentBridge.fractal_id}" aria-label="Bridge actions">🔗</button>`;
             } else {
                 console.log(`🔘 NO button 4 - no bridges found`);
             }
@@ -810,15 +804,22 @@
         async function loadBridges() {
             try {
                 const response = await authFetch('/api/bridges');
+                if (!response.ok) {
+                    console.error('❌ Bridge fetch failed:', response.status, response.statusText);
+                    return;
+                }
                 const data = await response.json();
+                console.log('📦 Bridges response:', data);
                 bridges = data.bridges || data || [];
+                console.log(`✅ Loaded ${bridges.length} bridges`);
                 filteredBridges = bridges;
                 renderBridges();
                 updatePlatformFilter();
                 // Update thumbs zone if in mobile mode
                 if (isMobile()) renderThumbsZone();
             } catch (error) {
-                console.error('Error loading bridges:', error);
+                console.error('❌ Error loading bridges:', error.message || error);
+                console.error('Stack:', error.stack);
             }
         }
 
@@ -1646,9 +1647,8 @@
                 document.getElementById('actionsMenuClose').addEventListener('click', closeBridgeActionsMenu);
             }
             
-            // Build stacked action buttons
+            // Build stacked action buttons (4 options)
             const actions = [
-                { icon: '🗒️', label: 'Add Metadata', action: 'metadata', color: '#a855f7' },
                 { icon: 'ℹ️', label: 'Bridge Info', action: 'info', color: '#3b82f6' },
                 { icon: '🔗', label: 'View All Bridges', action: 'fan', color: '#10b981' },
                 { icon: '✏️', label: 'Edit Bridge', action: 'edit', color: '#f59e0b' },
@@ -1689,10 +1689,6 @@
                     closeBridgeActionsMenu();
                     
                     switch(action) {
-                        case 'metadata':
-                            // Open metadata creation modal
-                            showMetadataModal();
-                            break;
                         case 'info':
                             showBridgeInfoModal();
                             break;
@@ -2211,8 +2207,9 @@
         }
 
         function updatePlatformFilter() {
-            const platforms = [...new Set(bridges.map(bridge => bridge.input_platform))];
             const filter = document.getElementById('platformFilter');
+            if (!filter) return; // Desktop-only feature, skip in mobile mode
+            const platforms = [...new Set(bridges.map(bridge => bridge.input_platform))];
             filter.innerHTML = '<option value="">All Platforms</option>' + 
                 platforms.map(p => `<option value="${p}">${p}</option>`).join('');
         }
@@ -4430,10 +4427,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            // Custom actions (toggle-bridge, bridgeinfo, fan, next)
+            // Custom actions (toggle-bridge, bridge-actions, fan, next)
             if (action === 'toggle-bridge' && bridgeId) {
                 loadMessages(bridgeId, 'user');
-            } else if (action === 'bridgeinfo') {
+            } else if (action === 'bridge-actions') {
                 showBridgeActionsMenu();
             } else if (action === 'fan') {
                 showBridgeFanModal();
