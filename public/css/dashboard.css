@@ -2772,14 +2772,14 @@ body::before {
     pointer-events: none;
 }
 
-/* IDLE ROTATION — Mobile Only: Slow rotation (8000ms = 1 full rotation) */
+/* IDLE ROTATION — Mobile Only: Slow rotation (2 φ-breath = 8000ms per 1x rotation) */
 body.mobile-mode .singularity-btn:not(.creation-spinning) {
     animation: yinyang-breathe-rotate 8000ms linear infinite !important;
 }
 
-/* CREATION SPIN — Mobile Only: Fast spinning when expanded (1250ms = 3 full rotations) */
+/* EXPANDED ROTATION — Mobile Only: Fast rotation (0.5 φ-breath = 2000ms per 1x rotation, 4x acceleration) */
 body.mobile-mode .singularity-btn.creation-spinning {
-    animation: creation-spin 1250ms linear infinite !important;
+    animation: creation-spin 2000ms linear infinite !important;
 }
 
 /* BREATHING KEYFRAMES — ALL IN SYNC */
