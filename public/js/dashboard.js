@@ -770,6 +770,9 @@
                                 📎
                             </a>
                         ` : ''}
+                        <button class="agent-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Agent • Check • Remind • Alert • Reward • Execute v2.0" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 4px; color: #34d399; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; border-width: 1px;">
+                            🤖
+                        </button>
                         <button class="tag-add-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 4px; color: #c084fc; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; border-width: 1px;">
                             🏷️
                         </button>
@@ -3851,6 +3854,8 @@ document.addEventListener('DOMContentLoaded', function() {
 // Save a drop (link metadata to Discord message) - APPENDS to existing tags
 async function saveDrop(bridgeId, messageId, metadataText, section) {
     try {
+        console.log('💾 Saving drop:', { bridgeId, messageId, metadataText });
+        
         const response = await fetch('/api/drops', {
             method: 'POST',
             headers: {
@@ -3864,19 +3869,25 @@ async function saveDrop(bridgeId, messageId, metadataText, section) {
             })
         });
         
+        console.log('📡 Response status:', response.status, response.statusText);
+        
         if (!response.ok) {
-            throw new Error('Failed to save drop');
+            const errorData = await response.json().catch(() => ({}));
+            console.error('❌ Save failed:', errorData);
+            throw new Error(errorData.error || 'Failed to save drop');
         }
         
         const data = await response.json();
+        console.log('✅ Drop saved successfully:', data);
         
-        // Clear input and display the drop (will show all tags as bubbles) - pass fractal_id
-        section.querySelector('.drop-input').value = '';
-        displayDrop(section, data.drop, data.extracted, bridgeId);
+        // Display the drop (will show all tags as bubbles) - pass fractal_id
+        if (section && data.drop) {
+            displayDrop(section, data.drop, data.extracted, bridgeId);
+        }
         
     } catch (error) {
-        console.error('Error saving drop:', error);
-        alert('Failed to save metadata. Please try again.');
+        console.error('❌ Error saving drop:', error);
+        alert('Failed to save metadata: ' + (error.message || 'Please try again.'));
     }
 }
 
@@ -4260,6 +4271,15 @@ document.addEventListener('click', function(e) {
     }
     
     // ============ DROPS - Personal Cloud OS ============
+    // Agent button - Check • Remind • Alert • Reward • Execute v2.0
+    if (target.classList.contains('agent-btn')) {
+        e.preventDefault();
+        const messageId = target.getAttribute('data-message-id');
+        const bridgeId = target.getAttribute('data-bridge-id');
+        alert('🤖 Agent Layer v2.0\n\nCheck • Remind • Alert • Reward • Execute\n\nComing soon! This will enable intelligent automation for your messages.');
+        return;
+    }
+    
     // Tag add button - open modal dialog
     if (target.classList.contains('tag-add-btn')) {
         e.preventDefault();
