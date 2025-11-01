@@ -2741,9 +2741,9 @@ body.mobile-mode .header > div {
     display: grid !important;
     grid-template-columns: 75px 1fr auto; /* Fixed cat width - Title - Logout */
     gap: 0.25rem !important; /* Minimal gap */
-    align-items: center;
+    align-items: center !important; /* Vertically center all columns */
     height: 100%;
-    padding-right: 0.5rem !important; /* Only right padding for logout */
+    padding: 0 0.5rem 0 0 !important; /* Only right padding for logout */
 }
 
 /* 1. Cat (Left Column) - 10px buffer from edges */
@@ -2833,6 +2833,11 @@ body.mobile-mode .logout-btn {
 /* Mobile Mode: Hide Bridge Header for maximum message space */
 body.mobile-mode .bridge-detail > div:first-child {
     display: none !important; /* Hide bridge header (name + controls) on mobile */
+}
+
+/* Mobile Mode: Hide Export Button (clipping off screen) */
+body.mobile-mode button[data-export-bridge] {
+    display: none !important; /* Hide export button on mobile */
 }
 
 /* Desktop Mode: Default behavior */

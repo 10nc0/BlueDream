@@ -45,9 +45,10 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
 - **Automatic Mode Detection**: JavaScript detects viewport size and orientation, applying mobile-specific layout without resizers
 - **Harmonious Header Layout**: Clean 3-column grid design `[Cat] - [Your Nyanbook~ + Date/Time] - [Logout]`
   - Cat: 75×75px constant size with 10px buffer from edges (left column)
-  - Title: "Your Nyanbook~" with date/time below (center column, auto-aligned)
-  - Logout: Compact button with tight padding 0.25rem×0.5rem (right column)
+  - Title: "Your Nyanbook~" with date/time below (center column, vertically centered)
+  - Logout: Compact button with tight padding 0.25rem×0.5rem (right column, vertically centered)
   - Height: 70px for balanced proportions
+  - All content vertically centered via `align-items: center` on grid container
   - Date/time dynamically repositioned to center via JavaScript
   - Touch-responsive cat animation with gentle wiggle (120px range, 6px strength)
 - **Floating Thumbs Zone**: Bottom-right pill bar with 48×48px buttons in standardized layout:
@@ -60,6 +61,7 @@ The dashboard is a Single Page Application (SPA) with an Apple glassmorphism des
   - **Standardized Styling**: White text (#ffffff) on deep void background (rgba(15,23,42,0.85)) with accent-colored borders
   - **Touch Optimized**: 48×48px circular buttons, scale(0.92) on :active for tap feedback
   - **No Bridge Header**: Bridge card header hidden on mobile for maximum message space (all actions moved to 📋 button)
+  - **No Export Button**: Export button hidden on mobile (prevents clipping, desktop-only feature)
 - **Bridge Fan Modal**: Full-screen glassmorphism modal showing numbered bridge list + utility actions (Search 🔍, Audit 🧿)
 - **Touch Interactions (iPhone-Optimized, φ12)**:
   - **Tap-to-Zoom**: Media images open in full-screen modal with 44×44px close button (Apple HIG compliant)
