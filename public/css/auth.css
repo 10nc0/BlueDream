@@ -40,7 +40,7 @@ body {
     .signup-container,
     .login-container,
     .forgot-container {
-        padding: 1.5rem;
+        padding: 1.25rem 1.5rem; /* Slightly less top padding for cat space */
         border-radius: 0.75rem;
     }
     
@@ -49,8 +49,12 @@ body {
         border-radius: 0.618rem;
     }
     
+    .logo {
+        margin-bottom: 1.5rem; /* Less space since cat has more margin */
+    }
+    
     .logo h1 {
-        font-size: 2rem;
+        font-size: 1.75rem; /* Slightly smaller on mobile */
     }
     
     .logo p {
