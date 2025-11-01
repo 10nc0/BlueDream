@@ -764,7 +764,6 @@
                 
                 return `
                 <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml(searchableText)}" data-status="${msg.discord_status}" style="position: relative;">
-                    <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-msg-id="${msg.id}" data-bridge-id="${bridgeId}" style="position: absolute; top: 0.5rem; right: 0.5rem; width: 18px; height: 18px; cursor: pointer; z-index: 10; accent-color: #a855f7;">
                     <div class="discord-avatar">
                         ${msg.sender_photo_url ? 
                             `<img src="${escapeHtml(msg.sender_photo_url)}" alt="${escapeHtml(msg.sender_name || 'User')}" class="avatar-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
@@ -2188,6 +2187,44 @@
             }
         }
         
+        // Dynamically create export checkboxes for messages
+        // This separates checkbox state (manipulable) from Discord message IDs (read-only)
+        function createExportCheckboxes(bridgeId, messages) {
+            console.log(`📋 Creating ${messages.length} export checkboxes for bridge ${bridgeId}`);
+            
+            messages.forEach(msg => {
+                const messageEl = document.querySelector(`[data-msg-id="${msg.id}"]`);
+                if (!messageEl) {
+                    console.warn(`⚠️ Message element not found for ID: ${msg.id}`);
+                    return;
+                }
+                
+                // Remove any existing checkbox (in case of re-render)
+                const existingCheckbox = messageEl.querySelector('.message-export-checkbox');
+                if (existingCheckbox) {
+                    existingCheckbox.remove();
+                }
+                
+                // Create checkbox element dynamically
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'message-export-checkbox message-checkbox';
+                checkbox.dataset.messageId = msg.id;
+                checkbox.dataset.msgId = msg.id;
+                checkbox.dataset.bridgeId = bridgeId;
+                checkbox.style.cssText = 'position: absolute; top: 0.5rem; right: 0.5rem; width: 18px; height: 18px; cursor: pointer; z-index: 100; accent-color: #a855f7;';
+                
+                // Restore checked state if previously selected
+                if (selectedMessages[bridgeId]?.has(msg.id)) {
+                    checkbox.checked = true;
+                }
+                
+                messageEl.appendChild(checkbox);
+            });
+            
+            console.log(`✅ Created checkboxes for ${messages.length} messages`);
+        }
+        
         // Update export button state based on selected messages
         function updateExportButtonState(bridgeId) {
             console.log(`🔄 updateExportButtonState called for bridge: ${bridgeId}`);
@@ -2364,6 +2401,10 @@
                     console.log(`📝 Generated HTML length: ${html.length} chars`);
                     container.innerHTML = html;
                     console.log(`✅ Rendered ${data.messages?.length || 0} messages to container`);
+                    
+                    // Dynamically create export checkboxes AFTER HTML render
+                    // This ensures they're truly interactive and separate from read-only message structure
+                    createExportCheckboxes(bridgeId, data.messages);
                     
                     // Hydrate drops (Personal Cloud OS metadata)
                     hydrateDropsForBridge(bridgeId);

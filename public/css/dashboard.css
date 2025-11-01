@@ -860,6 +860,21 @@ body::before {
   background: rgba(148, 163, 184, 0.05);
 }
 
+/* Export checkboxes - ensure always clickable */
+.message-export-checkbox,
+.message-checkbox {
+  position: absolute !important;
+  top: 0.5rem !important;
+  right: 0.5rem !important;
+  width: 18px !important;
+  height: 18px !important;
+  cursor: pointer !important;
+  z-index: 100 !important;
+  accent-color: #a855f7 !important;
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+
 .discord-avatar {
   width: 32px;
   height: 32px;
