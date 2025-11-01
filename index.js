@@ -980,7 +980,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                             mediaClient.release();
                         }
                         
-                        // Smart attachment description based on MIME type
+                        // Smart attachment description based on MIME type (for logging only)
                         let attachmentEmoji = '📎';
                         let attachmentType = mediaCategory.toUpperCase();
                         if (media.mimetype.includes('pdf')) {
@@ -1000,11 +1000,7 @@ async function createTenantAwareMessageHandler(message, bridgeId, tenantSchema) 
                             attachmentType = 'Sticker';
                         }
                         
-                        embed.fields.push({
-                            name: `${attachmentEmoji} Attachment`,
-                            value: `${attachmentType} (${media.mimetype})`,
-                            inline: false
-                        });
+                        // NOTE: Attachment field removed - 📎 button provides download via media_buffer metadata
                         
                         // DUAL-OUTPUT ARCHITECTURE: Route to correct outputs (channel OR thread)
                         const output01 = bridge.output_credentials?.output_01;
