@@ -21,6 +21,7 @@ const BaileysClientManager = require('./baileys-client-manager');
 const DiscordBotManager = require('./discord-bot-manager');
 const fractalId = require('./utils/fractal-id');
 const MetadataExtractor = require('./metadata-extractor');
+const genesisCounter = require('./server/genesis-counter');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
@@ -4821,6 +4822,9 @@ app.listen(PORT, '0.0.0.0', async () => {
     
     await initializeDatabase();
     console.log('✅ Multi-tenant WhatsApp Bridge ready');
+    
+    // Start genesis counter (noisy constant for future security)
+    genesisCounter.start();
     
     // Auto-restore WhatsApp sessions for 24/7 uptime
     await autoRestoreWhatsAppSessions();
