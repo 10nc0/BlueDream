@@ -2812,7 +2812,8 @@ body.mobile-mode #dateTimeCompact {
 /* 3. Logout Section (Right Column) - Hide user info, show logout only */
 body.mobile-mode .header > div > div:last-child {
     display: flex !important;
-    align-items: center;
+    align-items: center !important; /* Center items inside flexbox */
+    align-self: center !important; /* Center flexbox within grid cell */
     justify-content: flex-end;
     gap: 0 !important;
     flex-shrink: 0;
