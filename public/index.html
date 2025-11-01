@@ -296,28 +296,28 @@
                     <input type="text" class="form-input" id="botName" placeholder="e.g., My WhatsApp Bridge" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Platform</label>
+                    <label class="form-label">Input Platform (Where messages come from)</label>
                     <select class="form-select" id="botPlatform" required>
-                        <option value="WhatsApp">WhatsApp</option>
-                        <option value="Telegram">Telegram</option>
-                        <option value="Discord">Discord</option>
-                        <option value="Slack">Slack</option>
+                        <option value="whatsapp">WhatsApp</option>
+                        <option value="telegram">Telegram</option>
+                        <option value="discord">Discord</option>
+                        <option value="slack">Slack</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Destination Platform</label>
+                    <label class="form-label">Output Platform (Where messages go to)</label>
                     <select class="form-select" id="botDestinationPlatform" required>
-                        <option value="Discord">Discord</option>
-                        <option value="Slack">Slack</option>
-                        <option value="Telegram">Telegram</option>
+                        <option value="discord">Discord</option>
+                        <option value="slack">Slack</option>
+                        <option value="telegram">Telegram</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Webhook Outputs (1-to-Many)</label>
+                    <label class="form-label">Your Discord Webhook (Output)</label>
                     <div id="webhooksList" style="margin-bottom: 0.5rem;">
                         <!-- Webhook items will be added here -->
                     </div>
-                    <button type="button" class="btn" style="width: 100%; background: rgba(59, 130, 246, 0.1); border: 1px dashed rgba(59, 130, 246, 0.3); color: #60a5fa;">+ Add Webhook Output</button>
+                    <button type="button" class="btn" id="addWebhookBtn" style="width: 100%; background: rgba(59, 130, 246, 0.1); border: 1px dashed rgba(59, 130, 246, 0.3); color: #60a5fa;">+ Add Webhook Output</button>
                 </div>
                 <div class="form-group">
                     <label class="form-label">
@@ -328,10 +328,14 @@
                     <small class="form-help">Leave blank if you don't want to set a specific contact</small>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Tags</label>
+                    <label class="form-label">
+                        Tags
+                        <span class="optional-badge">Optional</span>
+                    </label>
                     <div class="tag-input-container" id="tagContainer">
                         <input type="text" class="tag-input" id="botTagsInput" placeholder="Type and press Enter...">
                     </div>
+                    <small class="form-help">Optional - add tags to organize your bridges</small>
                 </div>
                 <button type="submit" class="submit-btn">Save Bot</button>
             </form>
