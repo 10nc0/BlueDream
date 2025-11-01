@@ -290,24 +290,24 @@
         }
 
         /**
-         * Render thumbs zone buttons (n-5-4-3-2-1 layout)
-         * NEW LAYOUT: → 🔗/📋 🔍/Search 🧿/Audit 📋/BridgeInfo ✍🏻/Create
-         * Position 1 (rightmost): Create (always)
-         * Position 2: Audit (always)
-         * Position 3: Search (always)
-         * Position 4: Bridge Info (ALWAYS - shows QR/Edit/Delete for current bridge)
-         * Position 5: Bridge Card (if bridges exist) OR Create (if empty)
-         * Position n: Next (→) if multiple bridges
+         * Render thumbs zone buttons (simplified)
+         * Position 1 (rightmost): Create (✍🏻) - ONLY button for genesis form
+         * Position 2: Audit (🧿) - always visible
+         * Position 3: Search (🔍) - always visible  
+         * Position 4: Bridge Info (📋) - ONLY shows if bridges > 0
+         * Position 5: Bridge Card (🔗) - Only if 4+ bridges
+         * Position n: Next (→) - if 2+ bridges
          */
         function renderThumbsZone() {
             const thumbsZone = document.getElementById('thumbsZone');
             if (!thumbsZone) return;
             
             const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
+            const hasBridges = activeBridges.length > 0;
             
             let html = '';
             
-            // Position 1: Create button (always visible, rightmost for thumb access)
+            // Position 1: Create button (ONLY way to genesis form)
             html += `<button data-action="create" aria-label="Create new bridge">✍🏻</button>`;
             
             // Position 2: Audit button (always visible)
@@ -316,23 +316,19 @@
             // Position 3: Search button (always visible)
             html += `<button data-action="search" aria-label="Search messages">🔍</button>`;
             
-            // Position 4: Bridge Info button (ALWAYS show with current bridge - QR relink!)
-            if (activeBridges.length > 0) {
+            // Position 4: Bridge Info (ONLY if bridges exist)
+            if (hasBridges) {
                 const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
                 const currentBridge = activeBridges.find(b => b.fractal_id === currentBridgeId) || activeBridges[0];
                 html += `<button data-action="bridgeinfo" data-bridge-id="${currentBridge.fractal_id}" aria-label="${escapeHtml(currentBridge.name)}">📋</button>`;
             }
             
-            // Position 5: Bridge Card OR Create fallback
-            if (activeBridges.length === 0) {
-                // No bridges: Pull up Create Bridge form (same as button 1)
-                html += `<button data-action="create" aria-label="Create new bridge">🔗</button>`;
-            } else if (activeBridges.length >= 4) {
-                // 4+ bridges: Show Fan modal (access all bridges)
+            // Position 5: Bridge Card (ONLY if 4+ bridges)
+            if (activeBridges.length >= 4) {
                 html += `<button data-action="fan" aria-label="All bridges (${activeBridges.length} total)">🔗</button>`;
             }
             
-            // Position n: Navigation button (→) if multiple bridges exist
+            // Position n: Next (ONLY if 2+ bridges)
             if (activeBridges.length > 1) {
                 html += `<button data-action="next" aria-label="Next bridge">→</button>`;
             }
