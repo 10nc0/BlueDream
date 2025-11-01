@@ -2732,32 +2732,41 @@ body.mobile-mode #headerResizer {
 body.mobile-mode .header {
     height: var(--header-height);
     min-height: var(--header-height);
-    padding: 0 0.5rem 0 0 !important; /* No left padding, cat snaps to edge */
-    overflow: hidden;
+    padding: 0 !important; /* ZERO padding on all sides */
+    overflow: visible !important; /* Don't clip cat */
 }
 
 body.mobile-mode .header > div {
     display: grid !important;
-    grid-template-columns: auto 1fr auto; /* Cat - Title - Logout */
-    gap: 0.5rem !important;
+    grid-template-columns: 75px 1fr auto; /* Fixed cat width - Title - Logout */
+    gap: 0.25rem !important; /* Minimal gap */
     align-items: center;
     height: 100%;
+    padding-right: 0.5rem !important; /* Only right padding for logout */
 }
 
 /* 1. Cat (Left Column) - Snap to top and left edges */
 body.mobile-mode #catContainer {
-    flex-shrink: 0;
+    flex-shrink: 0 !important;
     gap: 0 !important;
     align-self: flex-start !important; /* Snap to top */
+    align-items: flex-start !important; /* Snap to left */
+    justify-content: flex-start !important; /* Snap to left */
     margin: 0 !important;
     padding: 0 !important;
+    width: 75px !important;
+    height: 75px !important;
 }
 
 body.mobile-mode #hopCanvas {
     width: 75px !important;
     height: 75px !important;
     margin: 0 !important;
+    padding: 0 !important;
     display: block !important;
+    position: relative !important;
+    left: 0 !important;
+    top: 0 !important;
 }
 
 body.mobile-mode #dateTimeDefault {
