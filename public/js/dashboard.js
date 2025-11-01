@@ -2065,10 +2065,11 @@
                 document.getElementById('actionsMenuClose').addEventListener('click', closeBridgeActionsMenu);
             }
             
-            // Build stacked action buttons (4 options)
+            // Build stacked action buttons (5 options)
             const actions = [
                 { icon: 'ℹ️', label: 'Bridge Info', action: 'info', color: '#3b82f6' },
                 { icon: '🔗', label: 'View All Bridges', action: 'fan', color: '#10b981' },
+                { icon: '🔄', label: 'Regenerate QR', action: 'regenerate-qr', color: '#a855f7' },
                 { icon: '✏️', label: 'Edit Bridge', action: 'edit', color: '#f59e0b' },
                 { icon: '🗑️', label: 'Delete Bridge', action: 'delete', color: '#ef4444' }
             ];
@@ -2113,6 +2114,9 @@
                         case 'fan':
                             showBridgeFanModal();
                             break;
+                        case 'regenerate-qr':
+                            regenerateQRCode(currentBridge);
+                            break;
                         case 'edit':
                             showEditBridgeModal(currentBridge);
                             break;
@@ -2129,6 +2133,23 @@
         function closeBridgeActionsMenu() {
             const menu = document.getElementById('bridgeActionsMenu');
             if (menu) menu.style.display = 'none';
+        }
+        
+        // Regenerate QR Code (UI endpoint to close hanging loop)
+        async function regenerateQRCode(bridge) {
+            if (!bridge) {
+                showToast('⚠️ No bridge selected', 'error');
+                return;
+            }
+            
+            // Only applicable for WhatsApp bridges
+            if (bridge.input_platform !== 'whatsapp') {
+                showToast('⚠️ QR codes are only for WhatsApp bridges', 'error');
+                return;
+            }
+            
+            // Call existing QR generation logic
+            await generateNewQR(bridge.fractal_id);
         }
         
         // Bridge Info Modal (Read-only: Show webhook0n data only)
