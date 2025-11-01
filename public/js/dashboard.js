@@ -634,9 +634,9 @@
             html += `</div>`; // Close layer-01
             
             // ☯️ SINGULARITY BUTTON (Button 00) - Transcendental layer that splits into buttons
-            // v1.1: Zero-conflict architecture - core and aura are isolated children
+            // v1.2: GHOST LAYER architecture - separate breathing (core) from spinning (symbol)
             // Appears AFTER layer-01 so CSS ~ selector works
-            html += `<button class="singularity-btn" data-action="singularity" aria-label="Expand all actions"><span class="core">☯️</span><span class="aura"></span></button>`;
+            html += `<button class="singularity-btn" data-action="singularity" aria-label="Expand all actions"><span class="core"><span class="symbol">☯️</span></span><span class="aura"></span></button>`;
             
             thumbsZone.innerHTML = html;
             console.log(`🔘 Thumbs zone HTML length: ${html.length} chars`);
