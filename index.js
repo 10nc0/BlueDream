@@ -672,134 +672,6 @@ async function sendToUserOutput(payload, options = {}, bridge = null) {
     }
 }
 
-// DEPRECATED: Old function kept for backwards compatibility (will be removed)
-async function sendToAllWebhooks(payload, options = {}, messageDbId = null, mediaData = null, bridgeId = null, tenantSchema = null, tenantClient = null) {
-    try {
-        if (!bridgeId || !tenantSchema || !tenantClient) {
-            console.error('❌ sendToAllWebhooks called without required parameters (bridgeId, tenantSchema, tenantClient)');
-            return;
-        }
-        
-        // CRITICAL FIX: Use tenantClient instead of pool for tenant-scoped queries
-        const bridgeResult = await tenantClient.query(`
-            SELECT output_credentials FROM bridges WHERE id = $1 LIMIT 1
-        `, [bridgeId]);
-        
-        if (bridgeResult.rows.length === 0) {
-            console.error(`❌ No bridge configuration found for bridge ${bridgeId} in ${tenantSchema}`);
-            return;
-        }
-        
-        const webhooks = bridgeResult.rows[0].output_credentials?.webhooks || [];
-        const threadName = bridgeResult.rows[0].output_credentials?.thread_name;
-        let threadId = bridgeResult.rows[0].output_credentials?.thread_id;
-        
-        // Identify Ledger webhook for internal monitoring
-        const NYANBOOK_WEBHOOK_NAME = 'Nyanbook Ledger';
-        
-        // Fallback to legacy webhook_url if webhooks array is empty
-        if (webhooks.length === 0 && bridgeResult.rows[0].output_credentials?.webhook_url) {
-            webhooks.push({
-                name: 'Main Channel',
-                url: bridgeResult.rows[0].output_credentials.webhook_url
-            });
-        }
-        
-        if (webhooks.length === 0) {
-            throw new Error('No Discord webhook configured. Add webhook URL in bridge settings.');
-        }
-        
-        // Prepare payload for Discord thread
-        const enhancedPayload = {
-            ...payload,
-            ...(threadName && !threadId && { thread_name: threadName })
-        };
-        
-        // Send to all webhooks
-        let successCount = 0;
-        let failures = [];
-        
-        for (const webhook of webhooks) {
-            if (!webhook.url) continue;
-            
-            // Check if this is the Ledger webhook
-            const isNyanbookLedger = webhook.name === NYANBOOK_WEBHOOK_NAME;
-            
-            try {
-                // Build Discord webhook URL with proper query parameters
-                const url = new URL(webhook.url);
-                
-                // Add wait=true to get Discord response (needed to capture thread_id)
-                url.searchParams.set('wait', 'true');
-                
-                // Add thread_id if available (for persistent thread targeting)
-                if (threadId) {
-                    url.searchParams.set('thread_id', threadId);
-                }
-                
-                const webhookUrl = url.toString();
-                let response;
-                
-                // For media messages, create fresh FormData for each webhook (streams are single-use)
-                if (options.isMedia && options.mediaBuffer) {
-                    const FormData = require('form-data');
-                    const form = new FormData();
-                    
-                    // Create a new buffer for each webhook to avoid stream consumption issues
-                    const freshBuffer = Buffer.from(options.mediaBuffer);
-                    
-                    form.append('file', freshBuffer, {
-                        filename: options.filename,
-                        contentType: options.mimetype
-                    });
-                    
-                    form.append('payload_json', JSON.stringify(enhancedPayload));
-                    
-                    response = await axios.post(webhookUrl, form, {
-                        headers: form.getHeaders()
-                    });
-                } else {
-                    // For text-only messages, send JSON payload directly
-                    response = await axios.post(webhookUrl, enhancedPayload);
-                }
-                
-                // Capture thread_id from Ledger webhook response
-                if (isNyanbookLedger && !threadId && response.data && response.data.channel_id && threadName) {
-                    threadId = response.data.channel_id;
-                    console.log(`  🔒 Ledger thread captured: ${threadId} (bridge ${bridgeId})`);
-                    
-                    // Update bridge output_credentials with thread_id from Nyanbook Ledger only
-                    await tenantClient.query(`
-                        UPDATE bridges 
-                        SET output_credentials = jsonb_set(output_credentials, '{thread_id}', to_jsonb($1::text))
-                        WHERE id = $2
-                    `, [threadId, bridgeId]);
-                }
-                
-                successCount++;
-                console.log(`  ✅ Sent to Discord: ${webhook.name || webhook.url.substring(0, 50)}`);
-            } catch (error) {
-                const errorMsg = `Failed to send to ${webhook.name || 'Discord'}: ${error.message}`;
-                failures.push(errorMsg);
-                console.error(`  ❌ ${errorMsg}`);
-            }
-        }
-        
-        // Update message status based on results
-        if (messageDbId) {
-            // DEAD CODE REMOVED: updateMessageStatus calls
-            // Messages tracked in Discord only, no PostgreSQL status updates needed
-        }
-        
-        console.log(`📤 Sent to ${successCount}/${webhooks.length} Discord webhooks`);
-        
-    } catch (error) {
-        console.error('❌ Error sending to Discord:', error.message);
-        // DEAD CODE REMOVED: updateMessageStatus call
-        throw error;
-    }
-}
-
 async function saveMessage(client, message, bridgeId = 1) {
     // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
     // This function is kept for backward compatibility but does nothing
@@ -1224,7 +1096,7 @@ function cleanupLegacySession() {
 cleanupLegacySession();
 
 // OLD initializeWhatsAppClient() function removed - replaced with per-bridge management
-// See bot-level API endpoints below: POST /api/bots/:id/start, DELETE /api/bots/:id/stop, etc.
+// See bridge-level API endpoints below: POST /api/bridges/:id/start, DELETE /api/bridges/:id/stop, etc.
 // Each bridge now has its own independent WhatsApp session managed by WhatsAppClientManager
 
 // ============ SESSION TRACKING SYSTEM ============
@@ -2008,67 +1880,6 @@ app.delete('/api/invites/:id', requireAuth, async (req, res) => {
 });
 
 // Phone OTP auth removed - use email-based auth (/api/auth/register/public, /api/auth/login) for multi-tenant architecture
-
-// Register new user (admin only) - DEPRECATED: Use /api/admin/users/invite instead
-app.post('/api/auth/register', requireRole('admin'), async (req, res) => {
-    const { email, phone, password, role } = req.body;
-    
-    try {
-        // Use tenant schema from requireAuth middleware
-        const tenantSchema = req.tenantSchema;
-        if (!tenantSchema) {
-            return res.status(500).json({ error: 'Tenant context not found' });
-        }
-        
-        // SECURITY: Role hierarchy validation - prevent privilege escalation
-        // Get the creator's role from tenant-scoped users table
-        const creatorResult = await pool.query(`SELECT role FROM ${tenantSchema}.users WHERE id = $1`, [req.userId]);
-        const creatorRole = creatorResult.rows[0]?.role;
-        
-        // Role creation rules:
-        // - dev can create: dev, admin, read-only, write-only
-        // - admin can create: read-only, write-only (NOT dev, NOT admin)
-        // - read-only/write-only: blocked by requireRole middleware
-        if (creatorRole === 'admin' && (role === 'dev' || role === 'admin')) {
-            return res.status(403).json({ 
-                error: 'Admins can only create read-only or write-only users. Contact a dev user to create admin accounts.',
-                allowed_roles: ['read-only', 'write-only']
-            });
-        }
-        
-        // Validate role is one of the allowed values
-        const validRoles = ['dev', 'admin', 'read-only', 'write-only'];
-        if (!validRoles.includes(role)) {
-            return res.status(400).json({ error: 'Invalid role specified' });
-        }
-        
-        const passwordHash = password ? await bcrypt.hash(password, 10) : null;
-        
-        // Insert into tenant-scoped users table
-        const result = await pool.query(`
-            INSERT INTO ${tenantSchema}.users (email, phone, password_hash, role, tenant_id)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, email, phone, role
-        `, [email || null, phone || null, passwordHash, role || 'read-only', req.tenantId]);
-        
-        const newUser = result.rows[0];
-        
-        // Log user creation
-        await logAudit(pool, req, 'CREATE_USER', 'USER', newUser.id.toString(), newUser.email || newUser.phone, {
-            role: newUser.role,
-            created_with: email ? 'email' : 'phone',
-            created_by_role: creatorRole
-        }, tenantSchema);
-        
-        res.json({ success: true, user: newUser });
-    } catch (error) {
-        if (error.code === '23505') { // Unique violation
-            res.status(400).json({ error: 'Email or phone already exists' });
-        } else {
-            res.status(500).json({ error: error.message });
-        }
-    }
-});
 
 // Token Refresh - Get new access token using refresh token
 app.post('/api/auth/refresh', async (req, res) => {
@@ -2955,22 +2766,6 @@ app.get('/api/status', requireAuth, async (req, res) => {
         console.error('❌ Error in /api/status:', error);
         res.status(500).json({ error: error.message });
     }
-});
-
-// DEPRECATED: Use /api/bots/:id/qr instead (kept for backward compatibility)
-app.get('/api/qr', requireAuth, (req, res) => {
-    res.status(410).json({ 
-        error: 'This endpoint is deprecated. Use /api/bots/:id/qr for bot-specific QR codes.',
-        migration: 'Each bridge now has its own WhatsApp session. Start a bridge with POST /api/bots/:id/start and get its QR with GET /api/bots/:id/qr'
-    });
-});
-
-// DEPRECATED: Use /api/bots/:id/relink instead (kept for backward compatibility)
-app.post('/api/relink', requireRole('admin', 'write-only'), async (req, res) => {
-    res.status(410).json({ 
-        error: 'This endpoint is deprecated. Use /api/bots/:id/relink for bot-specific relinking.',
-        migration: 'Each bridge now has its own WhatsApp session. Relink a specific bridge with POST /api/bots/:id/relink'
-    });
 });
 
 // DISCORD-FIRST: Messages stored in Discord threads, not PostgreSQL
