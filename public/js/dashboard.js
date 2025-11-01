@@ -343,12 +343,6 @@
                 // CRITICAL FIX: Add .collapsing BEFORE removing .show to prevent buttons from snapping to invisible base state
                 console.log('⬅️ Buttons fusing left to right (φ-inverse fusion)');
                 
-                // Stop spinning ☯️
-                if (singularityBtn) {
-                    singularityBtn.classList.remove('spinning');
-                    console.log('🛑 ☯️ stops spinning');
-                }
-                
                 // Step 1: Add .collapsing class first
                 layer01.classList.add('collapsing');
                 
@@ -402,12 +396,6 @@
                     layer01.classList.add('show');
                     console.log('✨ Eggs appearing sequentially');
                 }, 10);
-            }
-            
-            // Start spinning ☯️
-            if (singularityBtn) {
-                singularityBtn.classList.add('spinning');
-                console.log('🌀 ☯️ starts spinning');
             }
             
             // Goose vanishes after laying eggs
@@ -497,7 +485,7 @@
             
             // ☯️ SINGULARITY BUTTON (Button 00) - Transcendental layer that splits into buttons
             // Appears AFTER layer-01 so CSS ~ selector works
-            html += `<button class="singularity-btn" data-action="singularity" aria-label="Expand all actions"><span class="yin-yang">☯️</span><div class="aura"></div></button>`;
+            html += `<button class="singularity-btn" data-action="singularity" aria-label="Expand all actions">☯️<div class="aura"></div></button>`;
             
             thumbsZone.innerHTML = html;
             console.log(`🔘 Thumbs zone HTML length: ${html.length} chars`);
