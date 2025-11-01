@@ -2625,3 +2625,192 @@ body::before {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);
 }
+
+/* ===================================================================
+   MOBILE UI - FLOATING THUMBS ZONE
+   =================================================================== */
+
+/* Thumbs Zone: Bottom-right floating pill navigation */
+.thumbs-zone {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    display: none; /* Hidden by default, shown in mobile mode */
+    flex-direction: row-reverse; /* Right-to-left: n-4-3-2-1 */
+    gap: 12px;
+    z-index: 1000;
+    pointer-events: none; /* Allow clicks through container */
+}
+
+.thumbs-zone * {
+    pointer-events: auto; /* Re-enable clicks on buttons */
+}
+
+.thumb-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    backdrop-filter: blur(10px);
+    color: #e2e8f0;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.thumb-btn:hover,
+.thumb-btn:active {
+    background: rgba(30, 41, 59, 1);
+    border-color: rgba(168, 85, 247, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(168, 85, 247, 0.3);
+}
+
+.thumb-btn:active {
+    transform: translateY(0);
+}
+
+/* Mobile Mode Overrides */
+body.mobile-mode {
+    /* Ensure message view takes up most screen */
+    --header-height: 55px; /* Compact header on mobile */
+}
+
+body.mobile-mode .bridge-sidebar {
+    display: none !important; /* Hide sidebar, moved to thumbs zone */
+}
+
+body.mobile-mode .thumbs-zone {
+    display: flex !important; /* Show thumbs zone */
+}
+
+body.mobile-mode #sidebarResizer,
+body.mobile-mode #headerResizer {
+    display: none !important; /* Disable resizers on mobile */
+}
+
+body.mobile-mode .header {
+    height: var(--header-height);
+    min-height: var(--header-height);
+}
+
+body.mobile-mode #hopCanvas {
+    width: 60px !important;
+    height: 60px !important;
+}
+
+body.mobile-mode #dateTimeDefault,
+body.mobile-mode #dateTimeCompact {
+    font-size: 0.65rem !important;
+}
+
+/* Desktop Mode: Default behavior */
+body.desktop-mode .thumbs-zone {
+    display: none !important; /* Hide thumbs zone on desktop */
+}
+
+/* No need to override sidebar display - CSS default handles it */
+
+/* Bridge Fan Modal (for 6+ bridges on mobile) */
+.bridge-fan-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    z-index: 1001;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.bridge-fan-modal.active {
+    display: flex;
+}
+
+.bridge-fan-content {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    border-radius: 16px;
+    padding: 1.5rem;
+    max-width: 90%;
+    max-height: 70vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.bridge-fan-content h3 {
+    color: #e2e8f0;
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.bridge-fan-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.bridge-fan-item {
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.bridge-fan-item:hover,
+.bridge-fan-item:active {
+    background: rgba(30, 41, 59, 0.8);
+    border-color: rgba(168, 85, 247, 0.5);
+    transform: translateX(-4px);
+}
+
+.bridge-fan-item-name {
+    color: #e2e8f0;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.bridge-fan-item-arrow {
+    color: #94a3b8;
+    font-size: 1.25rem;
+}
+
+.bridge-fan-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(148, 163, 184, 0.2);
+    border: none;
+    color: #94a3b8;
+    font-size: 1.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.bridge-fan-close:hover {
+    background: rgba(148, 163, 184, 0.3);
+    color: #e2e8f0;
+}

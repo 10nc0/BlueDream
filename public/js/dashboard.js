@@ -34,6 +34,281 @@
             }
         };
 
+        // ===================================================================
+        // MOBILE DETECTION & MODE SWITCHING
+        // ===================================================================
+        
+        /**
+         * Mobile Detection: Portrait orientation on small screens
+         * - Portrait: width < 768 && height > width → Mobile mode
+         * - Landscape (iPhone rotated): Desktop mode with resizers
+         */
+        const isMobile = () => {
+            return window.innerWidth < 768 && window.innerHeight > window.innerWidth;
+        };
+
+        /**
+         * Apply mobile mode: Floating thumbs zone + compact header
+         */
+        function applyMobileMode() {
+            console.log('📱 Switching to MOBILE mode');
+            document.body.classList.add('mobile-mode');
+            document.body.classList.remove('desktop-mode');
+            
+            // Scale header elements
+            const catCanvas = document.getElementById('hopCanvas');
+            const catContainer = document.getElementById('catContainer');
+            const dateTimeDefault = document.getElementById('dateTimeDefault');
+            const dateTimeCompact = document.getElementById('dateTimeCompact');
+            
+            if (catCanvas) {
+                catCanvas.width = 60;
+                catCanvas.height = 60;
+                catCanvas.style.width = '60px';
+                catCanvas.style.height = '60px';
+            }
+            
+            if (dateTimeDefault) {
+                dateTimeDefault.style.fontSize = '0.65rem';
+            }
+            
+            if (dateTimeCompact) {
+                dateTimeCompact.style.fontSize = '0.65rem';
+            }
+            
+            // Hide resizers on mobile
+            const sidebarResizer = document.getElementById('sidebarResizer');
+            const headerResizer = document.getElementById('headerResizer');
+            if (sidebarResizer) sidebarResizer.style.display = 'none';
+            if (headerResizer) headerResizer.style.display = 'none';
+            
+            // Hide sidebar (moves to thumbs zone)
+            const bridgeSidebar = document.querySelector('.bridge-sidebar');
+            if (bridgeSidebar) bridgeSidebar.style.display = 'none';
+            
+            // Show thumbs zone
+            initThumbsZone();
+        }
+
+        /**
+         * Apply desktop mode: Sidebar + resizers
+         */
+        function applyDesktopMode() {
+            console.log('💻 Switching to DESKTOP mode');
+            document.body.classList.add('desktop-mode');
+            document.body.classList.remove('mobile-mode');
+            
+            // Restore header elements
+            const catCanvas = document.getElementById('hopCanvas');
+            const catContainer = document.getElementById('catContainer');
+            const dateTimeDefault = document.getElementById('dateTimeDefault');
+            const dateTimeCompact = document.getElementById('dateTimeCompact');
+            
+            if (catCanvas) {
+                catCanvas.width = 100;
+                catCanvas.height = 100;
+                catCanvas.style.width = '100px';
+                catCanvas.style.height = '100px';
+            }
+            
+            if (dateTimeDefault) {
+                dateTimeDefault.style.fontSize = '0.7rem';
+            }
+            
+            if (dateTimeCompact) {
+                dateTimeCompact.style.fontSize = '0.7rem';
+            }
+            
+            // Show resizers on desktop
+            const sidebarResizer = document.getElementById('sidebarResizer');
+            const headerResizer = document.getElementById('headerResizer');
+            if (sidebarResizer) sidebarResizer.style.display = 'block';
+            if (headerResizer) headerResizer.style.display = 'block';
+            
+            // Restore sidebar (remove inline style override to let CSS take over)
+            const bridgeSidebar = document.querySelector('.bridge-sidebar');
+            if (bridgeSidebar) bridgeSidebar.style.display = '';
+            
+            // Hide thumbs zone
+            const thumbsZone = document.getElementById('thumbsZone');
+            if (thumbsZone) thumbsZone.style.display = 'none';
+        }
+
+        /**
+         * Initialize thumbs zone (bottom-right floating pills)
+         */
+        function initThumbsZone() {
+            let thumbsZone = document.getElementById('thumbsZone');
+            
+            if (!thumbsZone) {
+                // Create thumbs zone if it doesn't exist
+                thumbsZone = document.createElement('div');
+                thumbsZone.id = 'thumbsZone';
+                thumbsZone.className = 'thumbs-zone';
+                document.body.appendChild(thumbsZone);
+            }
+            
+            thumbsZone.style.display = 'flex';
+            renderThumbsZone();
+        }
+
+        /**
+         * Render thumbs zone buttons (n-4-3-2-1 layout)
+         * Priority: Show up to 5 bridges, then fan collapse. Utility buttons in fan modal.
+         */
+        function renderThumbsZone() {
+            const thumbsZone = document.getElementById('thumbsZone');
+            if (!thumbsZone) return;
+            
+            const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
+            const maxVisibleBridges = 5;
+            
+            let html = '';
+            
+            // Button 1: Create bridge (closest to thumb, always visible)
+            html += '<button class="thumb-btn" data-action="create" aria-label="Create Bridge">🌉</button>';
+            
+            // Buttons 2-5: Show up to 4 bridges (or fan if > 5 bridges)
+            if (activeBridges.length === 0) {
+                // No bridges - show utility buttons
+                html += '<button class="thumb-btn" data-action="audit" aria-label="Audit">🤖</button>';
+                html += '<button class="thumb-btn" data-action="search" aria-label="Search">🔍</button>';
+            } else if (activeBridges.length <= 4) {
+                // Show all bridges (1-4)
+                activeBridges.forEach((bridge, index) => {
+                    const icon = index === 0 ? '💬' : `${index + 1}`;
+                    html += `<button class="thumb-btn" data-action="toggle-bridge" data-bridge-id="${bridge.fractal_id}" aria-label="${escapeHtml(bridge.name)}">${icon}</button>`;
+                });
+            } else {
+                // Show first 3 bridges + fan button for remaining bridges
+                for (let i = 0; i < 3; i++) {
+                    const bridge = activeBridges[i];
+                    const icon = i === 0 ? '💬' : `${i + 1}`;
+                    html += `<button class="thumb-btn" data-action="toggle-bridge" data-bridge-id="${bridge.fractal_id}" aria-label="${escapeHtml(bridge.name)}">${icon}</button>`;
+                }
+                
+                // Fan button for remaining bridges
+                const remainingCount = activeBridges.length - 3;
+                html += `<button class="thumb-btn" data-action="fan" aria-label="More bridges">+${remainingCount}</button>`;
+            }
+            
+            thumbsZone.innerHTML = html;
+        }
+
+        /**
+         * Detect mode on load and orientation change
+         */
+        function initMobileDetection() {
+            // Apply initial mode
+            if (isMobile()) {
+                applyMobileMode();
+            } else {
+                applyDesktopMode();
+            }
+            
+            // Listen for orientation/resize changes
+            let resizeTimeout;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    if (isMobile()) {
+                        applyMobileMode();
+                    } else {
+                        applyDesktopMode();
+                    }
+                }, 150);
+            });
+            
+            // Also listen for orientation change event
+            window.addEventListener('orientationchange', () => {
+                setTimeout(() => {
+                    if (isMobile()) {
+                        applyMobileMode();
+                    } else {
+                        applyDesktopMode();
+                    }
+                }, 200);
+            });
+        }
+
+        /**
+         * Initialize touch interactions for mobile
+         */
+        function initTouchInteractions() {
+            // Tap-to-zoom media images
+            document.addEventListener('click', function(e) {
+                const img = e.target.closest('.message img');
+                if (img && isMobile()) {
+                    // Open media in modal for full-screen view
+                    const messageId = img.closest('.message')?.dataset.messageId;
+                    if (messageId && allMessages[messageId]) {
+                        openMediaModal(allMessages[messageId]);
+                    }
+                }
+            });
+            
+            // Swipe navigation for bridges
+            let touchStartX = 0;
+            let touchStartY = 0;
+            let touchStartTime = 0;
+            
+            document.addEventListener('touchstart', function(e) {
+                // Only enable swipe in mobile mode
+                if (!isMobile()) return;
+                
+                // Don't interfere with scrollable areas or modals
+                if (e.target.closest('.bridge-sidebar, .modal, .thumbs-zone')) return;
+                
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+                touchStartTime = Date.now();
+            }, { passive: true });
+            
+            document.addEventListener('touchend', function(e) {
+                if (!isMobile()) return;
+                if (e.target.closest('.bridge-sidebar, .modal, .thumbs-zone')) return;
+                
+                const touchEndX = e.changedTouches[0].clientX;
+                const touchEndY = e.changedTouches[0].clientY;
+                const touchEndTime = Date.now();
+                
+                const deltaX = touchEndX - touchStartX;
+                const deltaY = touchEndY - touchStartY;
+                const deltaTime = touchEndTime - touchStartTime;
+                
+                // Only trigger if horizontal swipe is dominant
+                if (Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+                    // Swipe must be > 100px and < 500ms for quick swipe
+                    if (Math.abs(deltaX) > 100 && deltaTime < 500) {
+                        const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
+                        if (activeBridges.length <= 1) return;
+                        
+                        // Find current bridge index
+                        const currentBridgeId = document.querySelector('.discord-messages')?.id?.replace('discord-messages-', '');
+                        const currentIndex = activeBridges.findIndex(b => b.fractal_id === currentBridgeId);
+                        
+                        if (currentIndex === -1) return;
+                        
+                        // Swipe right = previous bridge, swipe left = next bridge
+                        let nextIndex;
+                        if (deltaX > 0) {
+                            // Swipe right - go to previous
+                            nextIndex = currentIndex > 0 ? currentIndex - 1 : activeBridges.length - 1;
+                        } else {
+                            // Swipe left - go to next
+                            nextIndex = currentIndex < activeBridges.length - 1 ? currentIndex + 1 : 0;
+                        }
+                        
+                        const nextBridge = activeBridges[nextIndex];
+                        if (nextBridge) {
+                            loadMessages(nextBridge.fractal_id, 'user');
+                            showToast(`📱 Switched to ${nextBridge.name}`, 'info');
+                        }
+                    }
+                }
+            }, { passive: true });
+        }
+
         // HTML sanitization to prevent XSS attacks
         function escapeHtml(unsafe) {
             if (!unsafe) return '';
@@ -296,6 +571,8 @@
                 filteredBridges = bridges;
                 renderBridges();
                 updatePlatformFilter();
+                // Update thumbs zone if in mobile mode
+                if (isMobile()) renderThumbsZone();
             } catch (error) {
                 console.error('Error loading bridges:', error);
             }
@@ -1089,6 +1366,86 @@
             document.getElementById('mediaModalContent').innerHTML = '';
         }
 
+        // Bridge Fan Modal (Mobile: Show all bridges + utility actions)
+        function showBridgeFanModal() {
+            let bridgeFanModal = document.getElementById('bridgeFanModal');
+            if (!bridgeFanModal) {
+                // Create modal if it doesn't exist
+                const modalHtml = `
+                    <div id="bridgeFanModal" class="bridge-fan-modal">
+                        <div class="bridge-fan-content">
+                            <button class="bridge-fan-close">×</button>
+                            <h3>🌉 All Bridges</h3>
+                            <div class="bridge-fan-list" id="bridgeFanList"></div>
+                            <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.2);">
+                                <div class="bridge-fan-item" data-action="search" style="opacity: 0.9;">
+                                    <span class="bridge-fan-item-name">🔍 Search Messages</span>
+                                    <span class="bridge-fan-item-arrow">→</span>
+                                </div>
+                                <div class="bridge-fan-item" data-action="audit" style="opacity: 0.9;">
+                                    <span class="bridge-fan-item-name">🤖 Agent Actions</span>
+                                    <span class="bridge-fan-item-arrow">→</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                
+                // Add event listeners
+                bridgeFanModal = document.getElementById('bridgeFanModal');
+                bridgeFanModal.addEventListener('click', function(e) {
+                    if (e.target === this) closeBridgeFanModal();
+                });
+                const closeBtn = bridgeFanModal.querySelector('.bridge-fan-close');
+                if (closeBtn) closeBtn.addEventListener('click', closeBridgeFanModal);
+            }
+            
+            // Render bridge list
+            const fanList = document.getElementById('bridgeFanList');
+            const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
+            
+            fanList.innerHTML = activeBridges.map((bridge, index) => `
+                <div class="bridge-fan-item" data-bridge-id="${bridge.fractal_id}">
+                    <span class="bridge-fan-item-name">${index + 1}. ${escapeHtml(bridge.name)}</span>
+                    <span class="bridge-fan-item-arrow">→</span>
+                </div>
+            `).join('');
+            
+            // Add click handlers to all fan items (bridges + utility actions)
+            bridgeFanModal.querySelectorAll('.bridge-fan-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    const bridgeId = this.dataset.bridgeId;
+                    const action = this.dataset.action;
+                    
+                    if (bridgeId) {
+                        // Bridge navigation
+                        loadMessages(bridgeId, 'user');
+                        closeBridgeFanModal();
+                    } else if (action === 'search') {
+                        // Open search
+                        const searchInput = document.getElementById('bridgeSearchInput');
+                        if (searchInput) {
+                            closeBridgeFanModal();
+                            searchInput.focus();
+                            searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    } else if (action === 'audit') {
+                        // Placeholder for future agent layer
+                        closeBridgeFanModal();
+                        showToast('🤖 Agent features coming soon!', 'info');
+                    }
+                });
+            });
+            
+            bridgeFanModal.classList.add('active');
+        }
+        
+        function closeBridgeFanModal() {
+            const bridgeFanModal = document.getElementById('bridgeFanModal');
+            if (bridgeFanModal) bridgeFanModal.classList.remove('active');
+        }
+
         // Universal search state - shared across all search boxes
         // Natural Language Date Parser with Excel format support
         function parseNaturalLanguageDate(query) {
@@ -1393,6 +1750,8 @@
             });
             
             renderBridges();
+            // Update thumbs zone if in mobile mode
+            if (isMobile()) renderThumbsZone();
         }
 
         function updatePlatformFilter() {
@@ -3592,6 +3951,49 @@
 // ===== EVENT LISTENER BINDINGS (CSP-Safe) =====
 // All event handlers bound here instead of inline onclick/onsubmit attributes
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize mobile detection and mode switching
+    initMobileDetection();
+    
+    // Initialize touch interactions (tap-to-zoom, swipe navigation)
+    initTouchInteractions();
+    
+    // Thumbs zone event delegation (CSP-compliant)
+    document.addEventListener('click', function(e) {
+        const thumbBtn = e.target.closest('.thumb-btn');
+        if (!thumbBtn) return;
+        
+        const action = thumbBtn.dataset.action;
+        const bridgeId = thumbBtn.dataset.bridgeId;
+        
+        switch(action) {
+            case 'create':
+                openCreateBridgeModal();
+                break;
+            case 'audit':
+                // Placeholder for future agent layer (Check • Remind • Alert • Reward • Execute)
+                showToast('🤖 Agent features coming soon!', 'info');
+                break;
+            case 'search':
+                // Open search modal or focus search input
+                const searchInput = document.getElementById('bridgeSearchInput');
+                if (searchInput) {
+                    searchInput.focus();
+                    // On mobile, may need to scroll search into view
+                    searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+                break;
+            case 'toggle-bridge':
+                if (bridgeId) {
+                    loadMessages(bridgeId, 'user');
+                }
+                break;
+            case 'fan':
+                // Expand bridge list modal
+                showBridgeFanModal();
+                break;
+        }
+    });
+    
     // Logout button
     const logoutBtn = document.querySelector('.logout-btn');
     if (logoutBtn) logoutBtn.addEventListener('click', logout);
