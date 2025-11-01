@@ -36,6 +36,9 @@
             </div>
         </div>
     </div>
+    
+    <!-- Draggable Header Resizer -->
+    <div class="header-resizer" id="headerResizer"></div>
 
     <!-- Media Preview Modal -->
     <div id="mediaModal" class="media-modal">
@@ -97,7 +100,7 @@
         </div>
     </div>
 
-    <div class="container" style="padding: 0; max-width: 100%; height: calc(100vh - 60px);">
+    <div class="container" style="padding: 0; max-width: 100%; height: calc(100vh - var(--header-height));">
         <!-- Single column WhatsApp-style layout -->
         <div id="bridgesTab" class="tab-content active" style="display: flex; height: 100%; padding: 0;">
             <!-- Simplified Sidebar: Search & Bridges Only -->

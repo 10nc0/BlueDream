@@ -4301,3 +4301,82 @@ document.addEventListener('input', function(e) {
     document.addEventListener('touchmove', resize);
     document.addEventListener('touchend', stopResize);
 })();
+
+// ============================================================================
+// HEADER RESIZER - Draggable height adjustment
+// ============================================================================
+(function initHeaderResizer() {
+    const resizer = document.getElementById('headerResizer');
+    const header = document.querySelector('.header');
+    
+    if (!resizer || !header) return;
+    
+    // Min/max constraints for header height
+    const MIN_HEIGHT = 40;
+    const MAX_HEIGHT = 120;
+    const STORAGE_KEY = 'nyanbook_header_height';
+    
+    // Load saved height from localStorage
+    const savedHeight = localStorage.getItem(STORAGE_KEY);
+    if (savedHeight) {
+        const height = parseInt(savedHeight);
+        if (height >= MIN_HEIGHT && height <= MAX_HEIGHT) {
+            document.documentElement.style.setProperty('--header-height', `${height}px`);
+        }
+    }
+    
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+    
+    function startResize(e) {
+        isResizing = true;
+        startY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+        startHeight = header.offsetHeight;
+        
+        resizer.classList.add('resizing');
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+        
+        e.preventDefault();
+    }
+    
+    function resize(e) {
+        if (!isResizing) return;
+        
+        const currentY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+        const diff = currentY - startY;
+        let newHeight = startHeight + diff;
+        
+        // Apply constraints
+        newHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, newHeight));
+        
+        // Update CSS custom property
+        document.documentElement.style.setProperty('--header-height', `${newHeight}px`);
+        
+        e.preventDefault();
+    }
+    
+    function stopResize() {
+        if (!isResizing) return;
+        
+        isResizing = false;
+        resizer.classList.remove('resizing');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        
+        // Save to localStorage
+        const currentHeight = header.offsetHeight;
+        localStorage.setItem(STORAGE_KEY, currentHeight.toString());
+    }
+    
+    // Mouse events
+    resizer.addEventListener('mousedown', startResize);
+    document.addEventListener('mousemove', resize);
+    document.addEventListener('mouseup', stopResize);
+    
+    // Touch events for iPad
+    resizer.addEventListener('touchstart', startResize);
+    document.addEventListener('touchmove', resize);
+    document.addEventListener('touchend', stopResize);
+})();
