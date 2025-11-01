@@ -301,6 +301,9 @@ let whatsappManager = null;
 // Discord Bot Manager for automatic thread creation per bridge
 let discordBotManager = null;
 
+// Trinity: Toth bot for read-only message fetching
+let tothBot = null;
+
 async function initializeDatabase() {
     try {
         await tenantManager.initializeCoreSchema();
@@ -4273,8 +4276,8 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
             });
         }
         
-        // Fetch messages from Discord using bot
-        if (!discordBotManager.client || !discordBotManager.ready) {
+        // Fetch messages from Discord using Toth (read-only bot)
+        if (!tothBot || !tothBot.client || !tothBot.ready) {
             return res.json({ 
                 messages: [], 
                 total: 0,
@@ -4286,7 +4289,7 @@ app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, 
         try {
             // Fetch from Ledger thread (output_01 is always a thread)
             const threadId = outputData.thread_id;
-            const thread = await discordBotManager.client.channels.fetch(threadId);
+            const thread = await tothBot.client.channels.fetch(threadId);
             
             if (!thread) {
                 return res.json({ 
@@ -4823,7 +4826,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     // TRINITY ARCHITECTURE: Hermes (φ - Creator) + Toth (0 - Mirror)
     // Security: Principle of least privilege - each bot has minimal permissions
     discordBotManager = new HermesBot();
-    const tothBot = new TothBot();
+    tothBot = new TothBot();
     
     console.log('🌈 Initializing Trinity architecture...');
     try {
