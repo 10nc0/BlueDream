@@ -6,15 +6,15 @@
 
 const CAT_CONFIG = Object.freeze({
     // Canvas dimensions (fixed, immutable)
-    CANVAS_WIDTH: 125,
-    CANVAS_HEIGHT: 125,
+    CANVAS_WIDTH: 100,
+    CANVAS_HEIGHT: 100,
     CANVAS_ID: 'hopCanvas',
     
     // Animation settings
-    SCALE: 3.5,
+    SCALE: 2.8,
     ANIMATION_SPEED: 60,
     JUMP_FRAME_INTERVAL: 15,
-    JUMP_HEIGHT: 3,
+    JUMP_HEIGHT: 2,
     
     // Interaction settings
     FLEE_DISTANCE: 200,
