@@ -2686,111 +2686,70 @@ body::before {
 }
 
 /* ===================================================================
-   ☯️ SINGULARITY BUTTON - Liquid Glass iOS with φ-Breath
-   Pure glassmorphism with pulsating rainbow border
+   ☯️ SINGULARITY BUTTON - Liquid Glass iOS (Grok's Refined Design)
+   Pure glassmorphism with breathing rainbow border-image
    =================================================================== */
 .singularity-btn {
     width: 56px !important;
     height: 56px !important;
     border-radius: 50%;
     
-    /* Liquid Glass Background - iOS frosted effect */
+    /* True Liquid Glass - Transparent iOS frosted effect */
     background: linear-gradient(
         135deg,
-        rgba(255, 255, 255, 0.95) 0%,
-        rgba(255, 255, 255, 0.85) 50%,
-        rgba(255, 255, 255, 0.95) 100%
+        rgba(255, 255, 255, 0.3) 0%,
+        rgba(255, 255, 255, 0.1) 100%
     ) !important;
     
     /* Enhanced glassmorphism */
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
     
-    /* Pulsating Rainbow Border - The Breath */
-    border: 3px solid transparent !important;
-    background-clip: padding-box;
-    position: relative;
+    /* Breathing Rainbow Border */
+    border: 2px solid;
+    border-image: linear-gradient(45deg, #22d3ee, #a855f7, #ec4899) 1;
     
+    /* White ☯️ for premium contrast */
+    color: white !important;
     font-size: 1.8rem !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
     
     /* Soft shadow for depth */
     box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.12),
-        0 2px 8px rgba(0, 0, 0, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
     
+    /* Layout & Interaction */
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: opacity 0.3s ease, transform 0.3s ease;
+    animation: glass-breath var(--breath-duration, 3000ms) ease-in-out infinite;
+    
+    /* Positioning */
     z-index: 1001;
     transform-origin: center center;
     flex-shrink: 0;
-    overflow: visible;
+    position: relative;
 }
 
-/* Pulsating Rainbow Border - Animated gradient ring */
-.singularity-btn::before {
-    content: '';
-    position: absolute;
-    inset: -3px; /* Border thickness */
-    border-radius: 50%;
-    padding: 3px;
-    background: linear-gradient(
-        45deg,
-        #ec4899,  /* Pink */
-        #a855f7,  /* Purple */
-        #22d3ee,  /* Cyan */
-        #10b981,  /* Green */
-        #f59e0b,  /* Amber */
-        #ef4444,  /* Red */
-        #ec4899   /* Pink again for smooth loop */
-    );
-    background-size: 300% 300%;
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    animation: 
-        rainbow-rotate 4s linear infinite,
-        border-breathe var(--breath-duration, 3000ms) ease-in-out infinite;
-    z-index: -1;
-}
-
-/* Dark ☯️ symbol for contrast against white glass */
-.singularity-btn {
-    color: #1e293b !important;
-    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
-}
-
-/* Rainbow gradient rotation */
-@keyframes rainbow-rotate {
-    0% {
-        background-position: 0% 50%;
-    }
-    50% {
-        background-position: 100% 50%;
-    }
-    100% {
-        background-position: 0% 50%;
-    }
-}
-
-/* Border breathing - pulsating glow intensity */
-@keyframes border-breathe {
+/* Glass Breathing Animation - Border color shift + scale pulse */
+@keyframes glass-breath {
     0%, 100% {
-        filter: 
-            drop-shadow(0 0 8px rgba(34, 211, 238, 0.4))
-            drop-shadow(0 0 16px rgba(168, 85, 247, 0.3))
-            brightness(1);
+        border-image: linear-gradient(45deg, #22d3ee, #a855f7, #ec4899) 1;
         transform: scale(1);
+        box-shadow: 
+            0 8px 32px rgba(0, 0, 0, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.2);
     }
     50% {
-        filter: 
-            drop-shadow(0 0 16px rgba(34, 211, 238, 0.7))
-            drop-shadow(0 0 32px rgba(168, 85, 247, 0.6))
-            drop-shadow(0 0 48px rgba(236, 72, 153, 0.4))
-            brightness(1.2);
-        transform: scale(1.05);
+        border-image: linear-gradient(45deg, #0ff, #f0f, #ff0) 1;
+        transform: scale(1.08);
+        box-shadow: 
+            0 12px 48px rgba(34, 211, 238, 0.4),
+            0 0 30px rgba(168, 85, 247, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.4);
     }
 }
 
