@@ -3741,10 +3741,15 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Per-message export: Handle checkbox changes with event delegation
     document.addEventListener('change', function(e) {
-        // Individual message checkbox
-        if (e.target.classList.contains('message-checkbox')) {
-            const msgId = e.target.dataset.msgId;
+        // Individual message checkbox (Discord style)
+        if (e.target.classList.contains('message-export-checkbox') || e.target.classList.contains('message-checkbox')) {
+            const msgId = e.target.dataset.messageId || e.target.dataset.msgId;
             const bridgeId = e.target.dataset.bridgeId;
+            
+            if (!msgId || !bridgeId) {
+                console.warn('Missing msgId or bridgeId:', e.target);
+                return;
+            }
             
             if (!selectedMessages[bridgeId]) {
                 selectedMessages[bridgeId] = new Set();
@@ -3752,8 +3757,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (e.target.checked) {
                 selectedMessages[bridgeId].add(msgId);
+                console.log(`✓ Selected message ${msgId} in bridge ${bridgeId}`);
             } else {
                 selectedMessages[bridgeId].delete(msgId);
+                console.log(`✗ Deselected message ${msgId} in bridge ${bridgeId}`);
             }
             
             updateExportButtonState(bridgeId);
@@ -3762,7 +3769,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Select all checkbox
         if (e.target.id && e.target.id.startsWith('select-all-')) {
             const bridgeId = e.target.id.replace('select-all-', '');
-            const checkboxes = document.querySelectorAll(`.message-checkbox[data-bridge-id="${bridgeId}"]`);
+            const checkboxes = document.querySelectorAll(`.message-export-checkbox[data-bridge-id="${bridgeId}"], .message-checkbox[data-bridge-id="${bridgeId}"]`);
+            
+            console.log(`Select all for bridge ${bridgeId}: found ${checkboxes.length} checkboxes`);
             
             if (!selectedMessages[bridgeId]) {
                 selectedMessages[bridgeId] = new Set();
@@ -3771,13 +3780,18 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.target.checked) {
                 checkboxes.forEach(cb => {
                     cb.checked = true;
-                    selectedMessages[bridgeId].add(cb.dataset.msgId);
+                    const msgId = cb.dataset.messageId || cb.dataset.msgId;
+                    if (msgId) {
+                        selectedMessages[bridgeId].add(msgId);
+                    }
                 });
+                console.log(`✓ Selected ${checkboxes.length} messages in bridge ${bridgeId}`);
             } else {
                 checkboxes.forEach(cb => {
                     cb.checked = false;
                 });
                 selectedMessages[bridgeId].clear();
+                console.log(`✗ Cleared all selections in bridge ${bridgeId}`);
             }
             
             updateExportButtonState(bridgeId);
