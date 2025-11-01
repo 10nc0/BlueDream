@@ -4380,3 +4380,63 @@ document.addEventListener('input', function(e) {
     document.addEventListener('touchmove', resize);
     document.addEventListener('touchend', stopResize);
 })();
+
+// ============================================================================
+// ADAPTIVE DATE/TIME POSITIONING - Responsive to header height
+// ============================================================================
+(function initAdaptiveDateTimePosition() {
+    const dateTimeDefault = document.getElementById('dateTimeDefault');
+    const dateTimeCompact = document.getElementById('dateTimeCompact');
+    const currentTime = document.getElementById('currentTime');
+    const currentTimeCompact = document.getElementById('currentTimeCompact');
+    const header = document.querySelector('.header');
+    
+    if (!dateTimeDefault || !dateTimeCompact || !header) return;
+    
+    // Threshold: below 65px, switch to compact mode
+    const COMPACT_THRESHOLD = 65;
+    
+    function updateDateTimePosition() {
+        const headerHeight = header.offsetHeight;
+        
+        if (headerHeight < COMPACT_THRESHOLD) {
+            // Compact mode: hide default, show compact
+            dateTimeDefault.style.display = 'none';
+            dateTimeCompact.style.display = 'block';
+        } else {
+            // Default mode: show default, hide compact
+            dateTimeDefault.style.display = 'block';
+            dateTimeCompact.style.display = 'none';
+        }
+    }
+    
+    // Sync time updates to both elements
+    function syncTimeDisplay() {
+        if (currentTime && currentTimeCompact) {
+            currentTimeCompact.textContent = currentTime.textContent;
+        }
+    }
+    
+    // Update position on load
+    updateDateTimePosition();
+    
+    // Watch for header height changes (triggered by resizer)
+    const observer = new MutationObserver(() => {
+        updateDateTimePosition();
+    });
+    
+    // Observe style changes on document root (--header-height changes)
+    observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['style']
+    });
+    
+    // Also check periodically to catch any missed updates
+    setInterval(() => {
+        updateDateTimePosition();
+        syncTimeDisplay();
+    }, 500);
+    
+    // Sync time displays immediately
+    syncTimeDisplay();
+})();
