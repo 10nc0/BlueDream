@@ -2919,7 +2919,7 @@ app.get('/api/bridges', requireAuth, async (req, res) => {
         
         // SECURITY: Strip raw IDs for non-dev users (IDOR protection)
         const sanitized = sanitizeForRole(bridgesWithFractalIds, user.role);
-        res.json(sanitized);
+        res.json({ bridges: sanitized });
     } catch (error) {
         console.error(`❌ Error in /api/bridges for user ${req.userId}:`, error);
         console.error('Stack trace:', error.stack);

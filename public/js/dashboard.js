@@ -1605,6 +1605,116 @@
             document.getElementById('mediaModalContent').innerHTML = '';
         }
 
+        // Bridge Actions Menu - Stacked options for button 4
+        function showBridgeActionsMenu() {
+            // Get current bridge
+            const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
+            if (!currentBridgeId) {
+                showToast('⚠️ No bridge selected', 'error');
+                return;
+            }
+            
+            const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
+            const currentBridge = activeBridges.find(b => b.fractal_id === currentBridgeId);
+            
+            if (!currentBridge) {
+                showToast('⚠️ Bridge not found', 'error');
+                return;
+            }
+            
+            // Create stacked action menu
+            let actionsMenu = document.getElementById('bridgeActionsMenu');
+            if (!actionsMenu) {
+                const menuHtml = `
+                    <div id="bridgeActionsMenu" class="bridge-fan-modal" style="z-index: 10000;">
+                        <div class="bridge-fan-content" style="max-width: 350px; padding: 1.5rem;">
+                            <button class="bridge-fan-close" id="actionsMenuClose">×</button>
+                            <h3 style="margin-bottom: 1rem; font-size: 1.25rem; background: linear-gradient(135deg, #a855f7, #ec4899, #f59e0b, #10b981, #3b82f6, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Bridge Actions</h3>
+                            <div id="bridgeActionsContent"></div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', menuHtml);
+                actionsMenu = document.getElementById('bridgeActionsMenu');
+                
+                // Add event listeners
+                actionsMenu.addEventListener('click', function(e) {
+                    if (e.target === this) closeBridgeActionsMenu();
+                });
+                document.getElementById('actionsMenuClose').addEventListener('click', closeBridgeActionsMenu);
+            }
+            
+            // Build stacked action buttons
+            const actions = [
+                { icon: '🗒️', label: 'Add Metadata', action: 'metadata', color: '#a855f7' },
+                { icon: 'ℹ️', label: 'Bridge Info', action: 'info', color: '#3b82f6' },
+                { icon: '🔗', label: 'View All Bridges', action: 'fan', color: '#10b981' },
+                { icon: '✏️', label: 'Edit Bridge', action: 'edit', color: '#f59e0b' },
+                { icon: '🗑️', label: 'Delete Bridge', action: 'delete', color: '#ef4444' }
+            ];
+            
+            const actionsHtml = `
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    ${actions.map(action => `
+                        <button class="bridge-action-btn" data-action="${action.action}" style="
+                            width: 100%;
+                            padding: 1rem;
+                            background: rgba(15, 23, 42, 0.6);
+                            border: 1px solid rgba(148, 163, 184, 0.2);
+                            border-radius: 12px;
+                            color: #e2e8f0;
+                            font-size: 1rem;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            gap: 0.75rem;
+                            transition: all 0.2s ease;
+                        " onmouseover="this.style.background='rgba(${action.color === '#a855f7' ? '168, 85, 247' : action.color === '#3b82f6' ? '59, 130, 246' : action.color === '#10b981' ? '16, 185, 129' : action.color === '#f59e0b' ? '245, 158, 11' : '239, 68, 68'}, 0.15)'; this.style.borderColor='${action.color}';" onmouseout="this.style.background='rgba(15, 23, 42, 0.6)'; this.style.borderColor='rgba(148, 163, 184, 0.2)';">
+                            <span style="font-size: 1.5rem;">${action.icon}</span>
+                            <span style="flex: 1; text-align: left;">${action.label}</span>
+                            <span style="opacity: 0.5;">→</span>
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+            
+            document.getElementById('bridgeActionsContent').innerHTML = actionsHtml;
+            
+            // Add click handlers to action buttons
+            actionsMenu.querySelectorAll('.bridge-action-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const action = this.dataset.action;
+                    closeBridgeActionsMenu();
+                    
+                    switch(action) {
+                        case 'metadata':
+                            // Open metadata creation modal
+                            showMetadataModal();
+                            break;
+                        case 'info':
+                            showBridgeInfoModal();
+                            break;
+                        case 'fan':
+                            showBridgeFanModal();
+                            break;
+                        case 'edit':
+                            showEditBridgeModal(currentBridge);
+                            break;
+                        case 'delete':
+                            showDeleteBridgeConfirmation(currentBridge);
+                            break;
+                    }
+                });
+            });
+            
+            actionsMenu.style.display = 'flex';
+        }
+        
+        function closeBridgeActionsMenu() {
+            const menu = document.getElementById('bridgeActionsMenu');
+            if (menu) menu.style.display = 'none';
+        }
+        
         // Bridge Info Modal (Read-only: Show webhook0n data only)
         // ARCHITECTURAL: Display user's webhook (output_0n) info, hide the silent cat (webhook01)
         function showBridgeInfoModal() {
@@ -1630,7 +1740,7 @@
                     <div id="bridgeInfoModal" class="bridge-fan-modal" style="z-index: 10000;">
                         <div class="bridge-fan-content" style="max-width: 500px; padding: 2rem;">
                             <button class="bridge-fan-close" id="bridgeInfoClose">×</button>
-                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #a855f7, #ec4899, #f59e0b, #10b981, #3b82f6, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">📋 Bridge Information</h3>
+                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #a855f7, #ec4899, #f59e0b, #10b981, #3b82f6, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">ℹ️ Bridge Information</h3>
                             <div id="bridgeInfoContent"></div>
                         </div>
                     </div>
@@ -1704,6 +1814,18 @@
         function closeBridgeInfoModal() {
             const modal = document.getElementById('bridgeInfoModal');
             if (modal) modal.style.display = 'none';
+        }
+        
+        // Edit Bridge Modal
+        function showEditBridgeModal(bridge) {
+            showToast('✏️ Edit bridge feature coming soon', 'info');
+        }
+        
+        // Delete Bridge Confirmation
+        function showDeleteBridgeConfirmation(bridge) {
+            if (confirm(`⚠️ Are you sure you want to delete "${bridge.name}"?\n\nThis action cannot be undone. All bridge settings will be removed.`)) {
+                showToast('🗑️ Delete bridge feature coming soon', 'info');
+            }
         }
         
         // Bridge Fan Modal (Mobile: Show all bridges + utility actions)
@@ -4310,7 +4432,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (action === 'toggle-bridge' && bridgeId) {
                 loadMessages(bridgeId, 'user');
             } else if (action === 'bridgeinfo') {
-                showBridgeInfoModal();
+                showBridgeActionsMenu();
             } else if (action === 'fan') {
                 showBridgeFanModal();
             } else if (action === 'next') {
