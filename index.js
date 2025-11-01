@@ -546,6 +546,9 @@ async function sendToLedger(payload, options = {}, bridge = null) {
     } catch (error) {
         console.error(`  ❌ Output #01 failed: ${error.message}`);
         console.error(`  🔍 URL attempted: ${ledgerUrl?.substring(0, 50)}...`);
+        if (error.response?.data) {
+            console.error(`  🔍 Discord error response:`, JSON.stringify(error.response.data, null, 2));
+        }
         return null;
     }
 }
@@ -627,6 +630,9 @@ async function sendToUserOutput(payload, options = {}, bridge = null) {
         return true;
     } catch (error) {
         console.error(`  ❌ Output #0n failed: ${error.message}`);
+        if (error.response?.data) {
+            console.error(`  🔍 Discord error response:`, JSON.stringify(error.response.data, null, 2));
+        }
         return false;
     }
 }
