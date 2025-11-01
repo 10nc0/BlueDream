@@ -273,7 +273,7 @@
 
         /**
          * Initialize thumbs zone (bottom-right floating pills)
-         * Note: Does NOT render buttons - that happens after bridges load in loadBridges()
+         * Renders basic buttons immediately, adds button 4 when bridges load
          */
         function initThumbsZone() {
             let thumbsZone = document.getElementById('thumbsZone');
@@ -287,8 +287,9 @@
             }
             
             thumbsZone.style.display = 'flex';
-            // Don't render here - wait for bridges to load in loadBridges()
-            console.log('🔘 Thumbs zone initialized (waiting for bridges to load)');
+            // Render basic buttons immediately (Create, Audit, Search)
+            renderThumbsZone();
+            console.log('🔘 Thumbs zone initialized with basic buttons');
         }
 
         /**
