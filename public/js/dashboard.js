@@ -4041,7 +4041,15 @@ document.addEventListener('click', function(e) {
     }
     
     // Media preview - handle any element with data-message-id (images, videos, attachments)
-    if (target.hasAttribute('data-message-id') && !target.closest('video')) {
+    // EXCLUDE interactive form elements (checkboxes, text inputs, buttons)
+    const isInteractiveElement = target.tagName === 'INPUT' || 
+                                   target.tagName === 'TEXTAREA' || 
+                                   target.tagName === 'BUTTON' || 
+                                   target.tagName === 'LABEL' ||
+                                   target.closest('label') ||
+                                   target.closest('button');
+    
+    if (target.hasAttribute('data-message-id') && !target.closest('video') && !isInteractiveElement) {
         e.preventDefault();
         const msgId = parseInt(target.getAttribute('data-message-id'));
         if (msgId) showMediaPreview(msgId);
