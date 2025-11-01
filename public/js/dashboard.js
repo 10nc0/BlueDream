@@ -454,6 +454,7 @@
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" data-generate-qr="${bridge.fractal_id}" title="Generate QR" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🔗</button>` : ''}
+                        <button class="btn-icon" data-export-bridge="${bridge.fractal_id}" title="Export Data (ZIP)" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">📦</button>
                         ${!isDevPanelView ? `<button class="btn-icon" data-edit-bridge="${bridge.fractal_id}" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-delete-bridge="${bridge.fractal_id}" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
                     </div>
@@ -813,20 +814,48 @@
             return html;
         }
 
-        // Filter Discord messages
-        function filterDiscordMessages(bridgeId) {
+        // Universal Search - searches both message content AND drops metadata
+        async function filterDiscordMessages(bridgeId) {
             const searchText = document.getElementById(`msg-search-${bridgeId}`)?.value || '';
             const statusFilter = document.getElementById(`status-filter-${bridgeId}`)?.value || 'all';
             const messages = document.querySelectorAll(`#discord-messages-${bridgeId} .discord-message`);
             
+            let dropsMatches = new Set();
+            
+            // If there's a search query, also search drops metadata
+            if (searchText.trim()) {
+                try {
+                    const response = await authFetch(`/api/drops/search/${bridgeId}?q=${encodeURIComponent(searchText)}`);
+                    if (response.ok) {
+                        const drops = await response.json();
+                        // Add all matching message IDs to the set
+                        drops.forEach(drop => dropsMatches.add(drop.discord_message_id));
+                        console.log(`🔍 Found ${drops.length} drops matching "${searchText}"`);
+                    }
+                } catch (err) {
+                    console.log('Drop search skipped:', err.message);
+                }
+            }
+            
             messages.forEach(msg => {
                 const msgText = msg.getAttribute('data-search-text') || '';
                 const msgStatus = msg.getAttribute('data-status') || '';
+                const msgId = msg.getAttribute('data-msg-id') || '';
                 
-                const matchesSearch = window.searchState.performSearch(searchText, msgText);
+                // Match if: (message content matches OR drops metadata matches) AND status matches
+                const matchesMessageContent = window.searchState.performSearch(searchText, msgText);
+                const matchesDrops = dropsMatches.has(msgId);
+                const matchesSearch = matchesMessageContent || matchesDrops;
                 const matchesStatus = statusFilter === 'all' || msgStatus === statusFilter;
                 
                 msg.style.display = (matchesSearch && matchesStatus) ? 'flex' : 'none';
+                
+                // Highlight messages that matched via drops
+                if (matchesDrops && !matchesMessageContent) {
+                    msg.style.borderLeft = '3px solid rgba(167, 139, 250, 0.6)';
+                } else {
+                    msg.style.borderLeft = '';
+                }
             });
         }
 
@@ -2079,6 +2108,46 @@
             } catch (error) {
                 console.error('Error deleting bot:', error);
                 showToast('❌ Error deleting bridge', 'error');
+            }
+        }
+        
+        // Export bridge data (messages + drops) as ZIP
+        async function exportBridgeData(fractalId) {
+            try {
+                const bridge = bridges.find(b => b.fractal_id === fractalId);
+                if (!bridge) {
+                    showToast('❌ Bridge not found', 'error');
+                    return;
+                }
+                
+                showToast('📦 Preparing export...', 'info');
+                
+                // Create a temporary link and trigger download
+                const response = await authFetch(`/api/bridges/${fractalId}/export`);
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    showToast(`❌ Export failed: ${error.error || 'Unknown error'}`, 'error');
+                    return;
+                }
+                
+                // Get the blob and create download link
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `${(bridge.name || 'bridge').replace(/[^a-z0-9]/gi, '_')}_export.zip`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showToast('✅ Export downloaded successfully!', 'success');
+                
+            } catch (error) {
+                console.error('Error exporting bridge data:', error);
+                showToast('❌ Export failed', 'error');
             }
         }
         
@@ -3770,6 +3839,14 @@ document.addEventListener('click', function(e) {
         e.preventDefault();
         const fractalId = target.getAttribute('data-delete-bridge');
         if (fractalId) confirmDeleteBridge(fractalId);
+        return;
+    }
+    
+    // Export bridge data button
+    if (target.hasAttribute('data-export-bridge')) {
+        e.preventDefault();
+        const fractalId = target.getAttribute('data-export-bridge');
+        if (fractalId) exportBridgeData(fractalId);
         return;
     }
     

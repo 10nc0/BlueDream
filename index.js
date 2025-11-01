@@ -3820,6 +3820,127 @@ app.get('/api/drops/search/:bridge_id', requireAuth, setTenantContext, async (re
     }
 });
 
+// Export bridge data (messages + drops metadata) as ZIP
+app.get('/api/bridges/:bridge_id/export', requireAuth, setTenantContext, async (req, res) => {
+    const archiver = require('archiver');
+    const { bridge_id } = req.params;
+    
+    try {
+        const client = req.dbClient || pool;
+        
+        // Verify bridge access
+        const bridgeResult = await client.query(
+            'SELECT id, name, output_credentials FROM bridges WHERE fractal_id = $1',
+            [bridge_id]
+        );
+        
+        if (bridgeResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Bridge not found in your tenant' });
+        }
+        
+        const bridge = bridgeResult.rows[0];
+        const outputCreds = bridge.output_credentials;
+        
+        // Fetch messages from Discord (output_01 - Ledger)
+        let messages = [];
+        try {
+            const threadId = outputCreds?.output_01?.thread_id;
+            if (threadId) {
+                const channel = await discordClient.channels.fetch(threadId);
+                const fetchedMessages = await channel.messages.fetch({ limit: 100 });
+                messages = fetchedMessages.map(m => ({
+                    id: m.id,
+                    content: m.content,
+                    author: m.author.username,
+                    timestamp: m.createdAt.toISOString(),
+                    embeds: m.embeds.map(e => ({
+                        title: e.title,
+                        description: e.description,
+                        fields: e.fields
+                    })),
+                    attachments: m.attachments.map(a => ({
+                        url: a.url,
+                        filename: a.name,
+                        size: a.size
+                    }))
+                }));
+            }
+        } catch (err) {
+            console.log('Note: Could not fetch Discord messages:', err.message);
+        }
+        
+        // Fetch drops from PostgreSQL
+        const dropsResult = await client.query(
+            'SELECT * FROM drops WHERE bridge_id = $1 ORDER BY created_at DESC',
+            [bridge.id]
+        );
+        
+        // Merge drops with messages
+        const dropsMap = new Map();
+        dropsResult.rows.forEach(drop => {
+            dropsMap.set(drop.discord_message_id, drop);
+        });
+        
+        const enrichedMessages = messages.map(msg => ({
+            ...msg,
+            metadata: dropsMap.get(msg.id) || null
+        }));
+        
+        // Create export data
+        const exportData = {
+            bridge: {
+                id: bridge_id,
+                name: bridge.name,
+                exported_at: new Date().toISOString()
+            },
+            messages: enrichedMessages,
+            drops: dropsResult.rows,
+            statistics: {
+                total_messages: messages.length,
+                total_drops: dropsResult.rows.length,
+                messages_with_metadata: enrichedMessages.filter(m => m.metadata).length
+            }
+        };
+        
+        // Create ZIP archive
+        const archive = archiver('zip', { zlib: { level: 9 } });
+        
+        res.attachment(`${bridge.name.replace(/[^a-z0-9]/gi, '_')}_export.zip`);
+        res.setHeader('Content-Type', 'application/zip');
+        
+        archive.pipe(res);
+        
+        // Add messages.json to ZIP
+        archive.append(JSON.stringify(exportData, null, 2), { name: 'messages.json' });
+        
+        // Add README
+        const readme = `# Your Nyanbook Export
+        
+Bridge: ${bridge.name}
+Exported: ${new Date().toISOString()}
+
+This archive contains:
+- messages.json: All messages with drops metadata
+  - ${messages.length} messages total
+  - ${dropsResult.rows.length} metadata drops
+  - ${enrichedMessages.filter(m => m.metadata).length} messages with metadata
+
+Media files are not included but accessible via Discord CDN URLs in messages.json.
+`;
+        archive.append(readme, { name: 'README.txt' });
+        
+        await archive.finalize();
+        
+        console.log(`📦 Export created for bridge ${bridge_id}: ${messages.length} messages, ${dropsResult.rows.length} drops`);
+        
+    } catch (error) {
+        console.error('❌ Error creating export:', error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+});
+
 // REMOVED: Duplicate QR endpoint - using the multi-instance version above (line ~2741)
 
 // DISCORD-FIRST: Media stored in Discord threads, not PostgreSQL  
