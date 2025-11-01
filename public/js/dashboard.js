@@ -2527,19 +2527,17 @@
             // Filter out empty webhooks
             const validWebhooks = botWebhooks.filter(w => w.url && w.url.trim());
             
-            // SECURITY: Check if webhook URL is changing (requires password)
-            let webhookChanged = false;
+            // SECURITY: Check if webhook URL is changing (requires password ONLY when editing)
             let password = null;
             
             if (editingBridgeId) {
+                // Only for EDIT operations - not for new bridge creation
                 const existingBridge = bridges.find(b => b.fractal_id === editingBridgeId);
                 const existingWebhookUrl = existingBridge?.output_0n_url;
                 const newWebhookUrl = validWebhooks[0]?.url;
                 
+                // If webhook URL is changing, require password
                 if (newWebhookUrl && newWebhookUrl !== existingWebhookUrl) {
-                    webhookChanged = true;
-                    
-                    // Prompt for password
                     password = prompt('🔐 Password Required\n\nYou are changing the webhook URL. Please enter your password to confirm this security-sensitive change:');
                     
                     if (!password) {
@@ -2548,6 +2546,7 @@
                     }
                 }
             }
+            // No password required for new bridge creation (genesis)
             
             // CRITICAL FIX: When editing, preserve existing output_credentials structure
             let outputCredentials;
