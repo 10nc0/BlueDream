@@ -214,6 +214,69 @@ class TenantManager {
                 WHERE delivered_to_ledger = false OR delivered_to_user = false
             `);
 
+            // DROPS: Personal Cloud OS - Conversational metadata for messages
+            // Purpose: Store freeform tags/captions for Discord messages (no AI, pure regex extraction)
+            // Architecture: Links to Discord message IDs (messages stored in Discord threads, not PostgreSQL)
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.drops (
+                    id SERIAL PRIMARY KEY,
+                    bridge_id INTEGER NOT NULL REFERENCES ${schemaName}.bridges(id) ON DELETE CASCADE,
+                    discord_message_id TEXT NOT NULL,
+                    metadata_text TEXT,
+                    extracted_tags TEXT[] DEFAULT '{}',
+                    extracted_dates TEXT[] DEFAULT '{}',
+                    search_vector TSVECTOR,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(bridge_id, discord_message_id)
+                )
+            `);
+
+            // Full-text search index for instant lookups
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_drops_search_vector 
+                ON ${schemaName}.drops USING GIN(search_vector)
+            `);
+
+            // Fast lookups by bridge and message
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_drops_bridge 
+                ON ${schemaName}.drops(bridge_id)
+            `);
+
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_drops_message 
+                ON ${schemaName}.drops(discord_message_id)
+            `);
+
+            // Fast tag-based queries
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_drops_tags 
+                ON ${schemaName}.drops USING GIN(extracted_tags)
+            `);
+
+            // Auto-update search_vector trigger for zero-cost full-text search
+            await client.query(`
+                CREATE OR REPLACE FUNCTION ${schemaName}.update_drops_search_vector()
+                RETURNS TRIGGER AS $$
+                BEGIN
+                    NEW.search_vector := to_tsvector('english', 
+                        COALESCE(NEW.metadata_text, '') || ' ' || 
+                        COALESCE(array_to_string(NEW.extracted_tags, ' '), '') || ' ' ||
+                        COALESCE(array_to_string(NEW.extracted_dates, ' '), '')
+                    );
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql;
+            `);
+
+            await client.query(`
+                DROP TRIGGER IF EXISTS drops_search_vector_update ON ${schemaName}.drops;
+                CREATE TRIGGER drops_search_vector_update
+                BEFORE INSERT OR UPDATE ON ${schemaName}.drops
+                FOR EACH ROW
+                EXECUTE FUNCTION ${schemaName}.update_drops_search_vector();
+            `);
 
             await client.query(`
                 CREATE INDEX IF NOT EXISTS idx_bridges_fractal_id 
