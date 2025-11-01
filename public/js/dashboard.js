@@ -2315,13 +2315,17 @@
                     const bridgeId = this.dataset.bridgeId;
                     const action = this.dataset.action;
                     
+                    console.log('🔘 Bridge card clicked:', { bridgeId, action });
+                    
                     closeBridgeFanModal();
                     
                     if (bridgeId) {
                         // Bridge navigation
+                        console.log('📱 Switching to bridge:', bridgeId);
                         loadMessages(bridgeId, 'user');
                     } else if (ACTION_REGISTRY[action]) {
                         // Registry-based actions (unified with desktop/mobile)
+                        console.log('⚡ Executing action:', action);
                         executeAction(action);
                     }
                 });
