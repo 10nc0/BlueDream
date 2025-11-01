@@ -325,24 +325,15 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
         embed.type = 'application/pdf';
         embed.style.cssText = 'width: 100%; height: 600px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);';
         
-        const downloadBtn = document.createElement('a');
-        downloadBtn.href = mediaUrl;
-        downloadBtn.download = '';
-        downloadBtn.innerHTML = '📥 Download PDF';
-        downloadBtn.style.cssText = 'display: inline-block; margin-top: 0.5rem; padding: 0.5rem 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 6px; text-decoration: none; font-size: 0.9rem; transition: transform 0.2s;';
-        downloadBtn.onmouseover = () => downloadBtn.style.transform = 'translateY(-2px)';
-        downloadBtn.onmouseout = () => downloadBtn.style.transform = 'translateY(0)';
-        
         pdfContainer.appendChild(embed);
-        pdfContainer.appendChild(downloadBtn);
         
         containerEl.innerHTML = '';
         containerEl.appendChild(pdfContainer);
         
     } else if (isOfficeDoc) {
-        // Office documents - show styled download button
+        // Office documents - show file type indicator
         const docContainer = document.createElement('div');
-        docContainer.style.cssText = 'padding: 1rem; background: rgba(47, 49, 54, 0.6); border-radius: 8px; margin: 0.5rem 0;';
+        docContainer.style.cssText = 'padding: 0.75rem; background: rgba(47, 49, 54, 0.4); border-radius: 6px; margin: 0.5rem 0; border-left: 3px solid rgba(168, 85, 247, 0.6);';
         
         let icon = '📄';
         let label = 'Document';
@@ -357,44 +348,24 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
             label = 'PowerPoint Presentation';
         }
         
-        const downloadBtn = document.createElement('a');
-        downloadBtn.href = mediaUrl;
-        downloadBtn.download = '';
-        downloadBtn.innerHTML = `${icon} Download ${label}`;
-        downloadBtn.style.cssText = 'display: inline-block; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 6px; text-decoration: none; font-size: 1rem; transition: transform 0.2s, box-shadow 0.2s;';
-        downloadBtn.onmouseover = () => {
-            downloadBtn.style.transform = 'translateY(-2px)';
-            downloadBtn.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
-        };
-        downloadBtn.onmouseout = () => {
-            downloadBtn.style.transform = 'translateY(0)';
-            downloadBtn.style.boxShadow = 'none';
-        };
+        const infoText = document.createElement('div');
+        infoText.innerHTML = `${icon} ${label} <span style="color: #94a3b8; font-size: 0.75rem;">(Use attachment icon to download)</span>`;
+        infoText.style.cssText = 'color: #e2e8f0; font-size: 0.875rem;';
         
-        docContainer.appendChild(downloadBtn);
+        docContainer.appendChild(infoText);
         containerEl.innerHTML = '';
         containerEl.appendChild(docContainer);
         
     } else {
-        // Other files - styled download button
+        // Other files - show file type indicator
         const fileContainer = document.createElement('div');
-        fileContainer.style.cssText = 'padding: 1rem; background: rgba(47, 49, 54, 0.6); border-radius: 8px; margin: 0.5rem 0;';
+        fileContainer.style.cssText = 'padding: 0.75rem; background: rgba(47, 49, 54, 0.4); border-radius: 6px; margin: 0.5rem 0; border-left: 3px solid rgba(168, 85, 247, 0.6);';
         
-        const downloadBtn = document.createElement('a');
-        downloadBtn.href = mediaUrl;
-        downloadBtn.download = '';
-        downloadBtn.innerHTML = `📎 Download File (${mediaType || 'unknown type'})`;
-        downloadBtn.style.cssText = 'display: inline-block; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 6px; text-decoration: none; font-size: 1rem; transition: transform 0.2s, box-shadow 0.2s;';
-        downloadBtn.onmouseover = () => {
-            downloadBtn.style.transform = 'translateY(-2px)';
-            downloadBtn.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
-        };
-        downloadBtn.onmouseout = () => {
-            downloadBtn.style.transform = 'translateY(0)';
-            downloadBtn.style.boxShadow = 'none';
-        };
+        const infoText = document.createElement('div');
+        infoText.innerHTML = `📎 File (${mediaType || 'unknown type'}) <span style="color: #94a3b8; font-size: 0.75rem;">(Use attachment icon to download)</span>`;
+        infoText.style.cssText = 'color: #e2e8f0; font-size: 0.875rem;';
         
-        fileContainer.appendChild(downloadBtn);
+        fileContainer.appendChild(infoText);
         containerEl.innerHTML = '';
         containerEl.appendChild(fileContainer);
     }

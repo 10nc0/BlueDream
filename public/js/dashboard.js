@@ -808,6 +808,11 @@
                             </div>
                         ` : ''}
                         <div style="display: flex; gap: 0.75rem; align-items: flex-start; margin-top: 0.5rem;">
+                            ${msg.media_url ? `
+                                <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" class="attachment-download-btn" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 4px; color: #c084fc; text-decoration: none; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0;">
+                                    📎
+                                </a>
+                            ` : ''}
                             <label style="display: flex; align-items: center; gap: 0.375rem; cursor: pointer;">
                                 <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" style="width: 16px; height: 16px; cursor: pointer; accent-color: #a855f7;">
                                 <span style="font-size: 0.75rem; color: #94a3b8;">Export</span>
