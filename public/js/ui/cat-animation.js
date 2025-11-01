@@ -80,6 +80,11 @@ function initHopAnimation() {
         const isJump = Math.floor(frameNum / CAT_CONFIG.JUMP_FRAME_INTERVAL) % 2 === 0;
         const yOffset = isJump ? -CAT_CONFIG.JUMP_HEIGHT * scale : 0;
         
+        // Mobile: Snap to top-left (subtract minimum coordinates)
+        // Desktop: Center in canvas (original coordinates)
+        const snapX = isMobileMode() ? -12 * scale : 0; // Shift left by 12*scale
+        const snapY = isMobileMode() ? -12 * scale : 0; // Shift up by 12*scale (ear position)
+        
         // Flip cat if fleeing (running away)
         if (fleeing) {
             ctx.save();
@@ -91,44 +96,44 @@ function initHopAnimation() {
         ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
         
         // Body (main)
-        ctx.fillRect(14 * scale + offsetX, 22 * scale + yOffset + offsetY, 12 * scale, 8 * scale);
+        ctx.fillRect(14 * scale + offsetX + snapX, 22 * scale + yOffset + offsetY + snapY, 12 * scale, 8 * scale);
         
         // Head
-        ctx.fillRect(15 * scale + offsetX, 15 * scale + yOffset + offsetY, 10 * scale, 7 * scale);
+        ctx.fillRect(15 * scale + offsetX + snapX, 15 * scale + yOffset + offsetY + snapY, 10 * scale, 7 * scale);
         
-        // Ears (pointy cat ears)
-        ctx.fillRect(15 * scale + offsetX, 12 * scale + yOffset + offsetY, 3 * scale, 3 * scale);
-        ctx.fillRect(22 * scale + offsetX, 12 * scale + yOffset + offsetY, 3 * scale, 3 * scale);
+        // Ears (pointy cat ears) - These are the TOP-MOST pixels
+        ctx.fillRect(15 * scale + offsetX + snapX, 12 * scale + yOffset + offsetY + snapY, 3 * scale, 3 * scale);
+        ctx.fillRect(22 * scale + offsetX + snapX, 12 * scale + yOffset + offsetY + snapY, 3 * scale, 3 * scale);
         
         // Tail (curved up)
-        ctx.fillRect(25 * scale + offsetX, 23 * scale + yOffset + offsetY, 2 * scale, 4 * scale);
-        ctx.fillRect(26 * scale + offsetX, 20 * scale + yOffset + offsetY, 2 * scale, 3 * scale);
+        ctx.fillRect(25 * scale + offsetX + snapX, 23 * scale + yOffset + offsetY + snapY, 2 * scale, 4 * scale);
+        ctx.fillRect(26 * scale + offsetX + snapX, 20 * scale + yOffset + offsetY + snapY, 2 * scale, 3 * scale);
         
         // Eyes (green glow)
         ctx.fillStyle = CAT_CONFIG.COLORS.EYES;
-        ctx.fillRect(17 * scale + offsetX, 17 * scale + yOffset + offsetY, 2 * scale, 2 * scale);
-        ctx.fillRect(21 * scale + offsetX, 17 * scale + yOffset + offsetY, 2 * scale, 2 * scale);
+        ctx.fillRect(17 * scale + offsetX + snapX, 17 * scale + yOffset + offsetY + snapY, 2 * scale, 2 * scale);
+        ctx.fillRect(21 * scale + offsetX + snapX, 17 * scale + yOffset + offsetY + snapY, 2 * scale, 2 * scale);
         
         // Nose (pink)
         ctx.fillStyle = CAT_CONFIG.COLORS.NOSE;
-        ctx.fillRect(19 * scale + offsetX, 20 * scale + yOffset + offsetY, 2 * scale, 1 * scale);
+        ctx.fillRect(19 * scale + offsetX + snapX, 20 * scale + yOffset + offsetY + snapY, 2 * scale, 1 * scale);
         
-        // Whiskers (white)
+        // Whiskers (white) - These are the LEFT-MOST pixels
         ctx.fillStyle = CAT_CONFIG.COLORS.WHISKERS;
         if (!isJump) {
             // Left whiskers
-            ctx.fillRect(12 * scale + offsetX, 19 * scale + offsetY, 2 * scale, 1 * scale);
-            ctx.fillRect(12 * scale + offsetX, 21 * scale + offsetY, 2 * scale, 1 * scale);
+            ctx.fillRect(12 * scale + offsetX + snapX, 19 * scale + offsetY + snapY, 2 * scale, 1 * scale);
+            ctx.fillRect(12 * scale + offsetX + snapX, 21 * scale + offsetY + snapY, 2 * scale, 1 * scale);
             // Right whiskers
-            ctx.fillRect(26 * scale + offsetX, 19 * scale + offsetY, 2 * scale, 1 * scale);
-            ctx.fillRect(26 * scale + offsetX, 21 * scale + offsetY, 2 * scale, 1 * scale);
+            ctx.fillRect(26 * scale + offsetX + snapX, 19 * scale + offsetY + snapY, 2 * scale, 1 * scale);
+            ctx.fillRect(26 * scale + offsetX + snapX, 21 * scale + offsetY + snapY, 2 * scale, 1 * scale);
         }
         
         // Feet/paws
         ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
         if (!isJump) {
-            ctx.fillRect(15 * scale + offsetX, 30 * scale + offsetY, 3 * scale, 2 * scale);
-            ctx.fillRect(22 * scale + offsetX, 30 * scale + offsetY, 3 * scale, 2 * scale);
+            ctx.fillRect(15 * scale + offsetX + snapX, 30 * scale + offsetY + snapY, 3 * scale, 2 * scale);
+            ctx.fillRect(22 * scale + offsetX + snapX, 30 * scale + offsetY + snapY, 3 * scale, 2 * scale);
         }
         
         if (fleeing) {
