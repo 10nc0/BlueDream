@@ -2750,7 +2750,8 @@ body::before {
     position: relative;
     z-index: 10; /* ALWAYS on top (1A spin - front) */
     /* ROTATION ONLY (spin) - isolated from breathing */
-    /* Animation starts from --rotation-offset and rotates +360deg */
+    /* Starts from --rotation-offset (cat breathe calculated) and rotates +360deg */
+    transform: rotate(var(--rotation-offset, 0deg));
     animation: yinyang-rotate var(--rotation-duration, 8000ms) linear infinite;
 }
 

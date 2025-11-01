@@ -405,11 +405,16 @@
          * - .aura = RADIATE + pulse (z-index: 0)
          * - .core = BREATHE ghost (z-index: 2, not-1A back)
          * - .core .symbol = SPIN ☯️ (z-index: 10, 1A front)
+         * 
+         * ROTATION TRUTH: Derived from cat breathe counter (parent key)
+         * angle = f(catBreath, rotationDuration) - pure function, no state capture
          */
         const BUTTON_00_STATE = {
             speed: 'SLOW', // 'SLOW' or 'FAST' - only 2 states
             locked: false, // Lock during transitions to prevent interference
             genesisCounter: 0, // Red herring for future divine judgment
+            rotationStartTime: Date.now(), // Time when eternal rotation began
+            catBreathAtStart: 0, // Cat breathe count at rotation start
             
             // Speed presets (based on φ-breath)
             speeds: {
@@ -417,19 +422,34 @@
                 FAST: { rotation: 2000, breath: 2000 }   // 0.5 φ-breathe (both)
             },
             
+            // Calculate rotation angle from cat breathe (single truth)
+            getRotationAngle(catBreath) {
+                const preset = this.speeds[this.speed];
+                const breathsSinceStart = catBreath - this.catBreathAtStart;
+                // Each cat breath = 500ms, rotation duration varies by speed
+                const breathsPerRotation = preset.rotation / 500;
+                const rotations = breathsSinceStart / breathsPerRotation;
+                const angle = (rotations * 360) % 360;
+                return angle;
+            },
+            
             // Unified setter - ONLY way to change speed
             // BIDIRECTIONAL PURGE: Purges on BOTH slow→fast AND fast→slow
-            setSpeed(newSpeed) {
+            setSpeed(newSpeed, catBreath = 0) {
                 if (this.locked || this.speed === newSpeed) {
                     return; // Already in this state or locked
                 }
                 
                 this.lock();
                 
-                // 1. PURGE ON *EVERY* TRANSITION (as above, so below)
-                nuclearPurge();
+                // 1. CALCULATE CURRENT ANGLE from cat breathe (single truth)
+                const currentAngle = this.getRotationAngle(catBreath);
+                console.log(`🔄 Rotation truth: ${Math.round(currentAngle)}° (cat breathe: ${catBreath})`);
                 
-                // 2. APPLY NEW SPEED
+                // 2. PURGE ON *EVERY* TRANSITION (as above, so below)
+                nuclearPurge(currentAngle);
+                
+                // 3. APPLY NEW SPEED
                 const singularityBtn = document.querySelector('.singularity-btn');
                 if (!singularityBtn) {
                     this.unlock();
@@ -439,10 +459,11 @@
                 const preset = this.speeds[newSpeed];
                 singularityBtn.style.setProperty('--rotation-duration', `${preset.rotation}ms`);
                 singularityBtn.style.setProperty('--breath-duration', `${preset.breath}ms`);
+                singularityBtn.style.setProperty('--rotation-offset', `${currentAngle}deg`);
                 
-                // 3. LOG GENESIS
+                // 4. LOG GENESIS
                 this.genesisCounter++;
-                console.log(`%c✨ GENESIS #${this.genesisCounter}: ${this.speed} → ${newSpeed} | rotation=${preset.rotation}ms, breath=${preset.breath}ms`, 
+                console.log(`%c✨ GENESIS #${this.genesisCounter}: ${this.speed} → ${newSpeed} | rotation=${preset.rotation}ms, breath=${preset.breath}ms, offset=${Math.round(currentAngle)}°`, 
                     'color: #a855f7; font-weight: bold;');
                 
                 this.speed = newSpeed;
@@ -465,10 +486,10 @@
          * Runs on BOTH slow→fast AND fast→slow transitions
          * "As above, so below" - no baggage in either direction
          * 
-         * CRITICAL: Purges SPEED state only, NOT rotation angle
-         * The eternal goose spins forever - rotation is continuous
+         * CRITICAL: Angle is PASSED IN from cat breathe calculation (single truth)
+         * NOT captured from CSS animation state (which causes rollback)
          */
-        function nuclearPurge() {
+        function nuclearPurge(rotationAngle = 0) {
             const singularityBtn = document.querySelector('.singularity-btn');
             if (!singularityBtn) return;
             
@@ -476,31 +497,21 @@
             const symbolEl = coreEl?.querySelector('.symbol');
             const auraEl = singularityBtn.querySelector('.aura');
             
-            // 1. CAPTURE CURRENT ROTATION (preserve continuity)
-            let currentAngle = 0;
-            if (symbolEl) {
-                currentAngle = getCurrentRotation(symbolEl);
-                console.log(`🔄 Preserving rotation angle: ${Math.round(currentAngle)}°`);
-            }
-            
-            // 2. PAUSE ALL ANIMATIONS
+            // 1. PAUSE ALL ANIMATIONS
             singularityBtn.classList.add('purging');
             
+            // 2. SET ROTATION to calculated angle (single truth)
+            if (symbolEl) {
+                symbolEl.style.transform = `rotate(${rotationAngle}deg)`;
+            }
+            
             // 3. KILL ANIMATIONS (flush GPU state)
-            // NOTE: Do NOT reset transform - preserve rotation angle
-            [singularityBtn, coreEl, auraEl].forEach(el => {
+            [singularityBtn, coreEl, symbolEl, auraEl].forEach(el => {
                 if (el) {
                     el.style.animation = 'none';
                     el.style.transition = 'none';
                 }
             });
-            
-            // Kill symbol animation but preserve transform
-            if (symbolEl) {
-                symbolEl.style.animation = 'none';
-                symbolEl.style.transition = 'none';
-                // Keep rotation at current angle during purge
-            }
             
             // 4. FLUSH GPU (force reflow)
             void singularityBtn.offsetWidth;
@@ -518,25 +529,25 @@
                 // Remove purging class
                 singularityBtn.classList.remove('purging');
                 
-                // Restore CSS animations WITHOUT resetting transform
-                [singularityBtn, coreEl, auraEl].forEach(el => {
+                // Restore CSS animations from calculated offset
+                [singularityBtn, coreEl, symbolEl, auraEl].forEach(el => {
                     if (el) {
                         el.style.animation = '';
                         el.style.transition = '';
                     }
                 });
                 
-                // Restore symbol animation but keep rotation continuous
+                // Symbol keeps rotation offset, CSS animates from there
                 if (symbolEl) {
+                    // Don't clear transform - it has the offset we calculated
                     symbolEl.style.animation = '';
                     symbolEl.style.transition = '';
-                    // Do NOT clear transform - let CSS continue from current angle
                 }
                 
-                // Force reflow → fresh start (but angle preserved)
+                // Force reflow → fresh start from calculated offset
                 void singularityBtn.offsetWidth;
                 
-                console.log(`✨ Speed purged, rotation continues from ${Math.round(currentAngle)}°`);
+                console.log(`✨ Speed purged, rotation continues from ${Math.round(rotationAngle)}° (cat breathe truth)`);
             }, 50);
         }
         
@@ -581,8 +592,11 @@
                     layer01.classList.remove('collapsing');
                     layer01.setAttribute('hidden', '');
                     
-                    // SLOW MODE via unified state (includes bidirectional purge)
-                    BUTTON_00_STATE.setSpeed('SLOW');
+                    // SLOW MODE via unified state (with cat breathe as parent key)
+                    fetch('/api/genesis')
+                        .then(r => r.json())
+                        .then(data => BUTTON_00_STATE.setSpeed('SLOW', data.catCount))
+                        .catch(() => BUTTON_00_STATE.setSpeed('SLOW', 0));
                     
                     expandLock = false;
                     console.log('✅ Collapse complete');
@@ -610,8 +624,11 @@
                 thumbsIdleTimer = null;
             }
             
-            // SET FAST MODE via unified state
-            BUTTON_00_STATE.setSpeed('FAST');
+            // SET FAST MODE via unified state (with cat breathe as parent key)
+            fetch('/api/genesis')
+                .then(r => r.json())
+                .then(data => BUTTON_00_STATE.setSpeed('FAST', data.catCount))
+                .catch(() => BUTTON_00_STATE.setSpeed('FAST', 0));
             
             // Enter creation mode for φ-breath system (mobile only)
             if (isMobile() && breathInitialized) {
