@@ -321,10 +321,8 @@
             // Position 2: Audit button (always visible)
             html += `<button data-action="audit" aria-label="View audit log">🧿</button>`;
             
-            // Position 3: Search button (desktop only - hidden on mobile)
-            if (currentMode === 'desktop') {
-                html += `<button data-action="search" aria-label="Search messages">🔍</button>`;
-            }
+            // Position 3: Search button (hidden on mobile via CSS)
+            html += `<button data-action="search" class="desktop-only" aria-label="Search messages">🔍</button>`;
             
             // Position 4: Bridge Actions (ONLY if current bridge exists)
             // Shows stacked menu with bridge actions: ℹ️ 🔗 ✏️ 🗑️

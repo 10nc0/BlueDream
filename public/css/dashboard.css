@@ -2726,6 +2726,11 @@ body.mobile-mode .thumbs-zone {
     display: flex !important;
 }
 
+/* Hide desktop-only buttons on mobile */
+body.mobile-mode .desktop-only {
+    display: none !important;
+}
+
 body.mobile-mode #sidebarResizer,
 body.mobile-mode #headerResizer {
     display: none !important;
