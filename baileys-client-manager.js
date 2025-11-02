@@ -22,8 +22,30 @@ class BaileysClientManager {
     /**
      * Generate composite key for tenant-aware bridge tracking
      */
-    getCompositeKey(tenantSchema, bridgeId) {
-        return `${tenantSchema}:${bridgeId}`;
+    getCompositeKey(tenantSchema, bridgeId, isShadow = false) {
+        const baseKey = `${tenantSchema}:${bridgeId}`;
+        return isShadow ? `${baseKey}:shadow` : baseKey;
+    }
+    
+    /**
+     * Check if a composite key represents a shadow session
+     */
+    isShadowSession(compositeKey) {
+        return compositeKey.endsWith(':shadow');
+    }
+    
+    /**
+     * Get primary key from shadow key
+     */
+    getPrimaryKey(compositeKey) {
+        return compositeKey.replace(':shadow', '');
+    }
+    
+    /**
+     * Get shadow key from primary key
+     */
+    getShadowKey(compositeKey) {
+        return `${compositeKey}:shadow`;
     }
 
     /**
@@ -186,6 +208,12 @@ class BaileysClientManager {
 
                 for (const msg of messages) {
                     try {
+                        // CRITICAL: Skip if this is a shadow session (safety check)
+                        if (this.isShadowSession(compositeKey)) {
+                            console.warn(`⚠️  Ignoring message on shadow session: ${compositeKey}`);
+                            continue;
+                        }
+                        
                         // Skip if message is from self or broadcast
                         if (msg.key.fromMe || msg.key.remoteJid === 'status@broadcast') continue;
 
@@ -214,6 +242,227 @@ class BaileysClientManager {
             await this.updateBotStatus(bridgeId, tenantSchema, 'error', null, null, error.message);
             throw error;
         }
+    }
+
+    /**
+     * Create shadow session for zero-downtime reconnection
+     * Primary session stays active, shadow gets new QR code
+     */
+    async createShadowSession(bridgeId, tenantSchema, onMessage) {
+        const shadowKey = this.getCompositeKey(tenantSchema, bridgeId, true);
+        console.log(`👻 Creating shadow session: ${shadowKey}`);
+        
+        // Check if shadow already exists
+        if (this.clients.has(shadowKey)) {
+            console.log(`⚠️  Shadow session already exists for ${shadowKey}`);
+            return this.clients.get(shadowKey);
+        }
+        
+        try {
+            // Create TEMPORARY session directory for shadow
+            const sessionClientId = `${tenantSchema}_bridge_${bridgeId}_shadow`;
+            const persistentPath = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
+            const sessionPath = path.join(persistentPath, `session-${sessionClientId}`);
+            
+            // Clean existing shadow session data (force fresh QR)
+            if (fs.existsSync(sessionPath)) {
+                fs.rmSync(sessionPath, { recursive: true, force: true });
+            }
+            fs.mkdirSync(sessionPath, { recursive: true });
+            console.log(`📁 Created shadow session directory: ${sessionPath}`);
+            
+            // Load auth state (will be empty for fresh shadow)
+            const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+            const { version } = await fetchLatestBaileysVersion();
+            
+            // Create shadow socket
+            const sock = makeWASocket({
+                version,
+                logger: this.logger,
+                printQRInTerminal: false,
+                auth: state,
+                browser: ['Nyanbook Bridge (Reconnecting)', 'Chrome', '110.0.0'],
+                syncFullHistory: false,
+            });
+            
+            // Store shadow client state
+            const clientState = {
+                sock,
+                status: 'initializing',
+                qrCode: null,
+                phoneNumber: null,
+                tenantSchema,
+                bridgeId,
+                compositeKey: shadowKey,
+                createdAt: Date.now(),
+                reconnectAttempts: 0,
+                isShadow: true,
+                shadowTimeout: null  // Will hold cleanup timeout
+            };
+            this.clients.set(shadowKey, clientState);
+            
+            // Save credentials on update
+            sock.ev.on('creds.update', saveCreds);
+            
+            // CONNECTION UPDATES: Monitor shadow session
+            sock.ev.on('connection.update', async (update) => {
+                const { connection, lastDisconnect, qr } = update;
+                
+                // QR CODE GENERATION
+                if (qr) {
+                    console.log(`📱 Shadow QR generated for ${shadowKey}`);
+                    clientState.qrCode = qr;
+                    clientState.status = 'qr_ready';
+                }
+                
+                // CONNECTION ESTABLISHED - SWAP TIME!
+                if (connection === 'open') {
+                    console.log(`✅ Shadow session authenticated for ${shadowKey}`);
+                    const phoneNumber = sock.user?.id?.split(':')[0] || 'unknown';
+                    clientState.status = 'connected';
+                    clientState.phoneNumber = `+${phoneNumber}`;
+                    clientState.qrCode = null;
+                    
+                    // ATOMIC SWAP: Replace primary with shadow
+                    console.log(`🔄 Swapping shadow to primary for bridge ${bridgeId}...`);
+                    await this.swapShadowToPrimary(bridgeId, tenantSchema);
+                }
+                
+                // CONNECTION CLOSED
+                if (connection === 'close') {
+                    const statusCode = lastDisconnect?.error?.output?.statusCode;
+                    console.log(`🔌 Shadow ${shadowKey} disconnected: ${statusCode}`);
+                    
+                    // Clean up shadow if it fails
+                    await this.destroyShadowSession(bridgeId, tenantSchema);
+                }
+            });
+            
+            // NO MESSAGE HANDLING FOR SHADOW - Messages only go to primary!
+            
+            // Auto-cleanup: Destroy shadow after 5 minutes if not authenticated
+            clientState.shadowTimeout = setTimeout(async () => {
+                if (clientState.status !== 'connected') {
+                    console.log(`⏰ Shadow session timeout: ${shadowKey}`);
+                    await this.destroyShadowSession(bridgeId, tenantSchema);
+                }
+            }, 5 * 60 * 1000); // 5 minutes
+            
+            console.log(`👻 Shadow session created, will timeout in 5 minutes if not used`);
+            return clientState;
+        } catch (error) {
+            console.error(`❌ Failed to create shadow session for bridge ${bridgeId}:`, error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Destroy shadow session only (cleanup)
+     */
+    async destroyShadowSession(bridgeId, tenantSchema) {
+        const shadowKey = this.getCompositeKey(tenantSchema, bridgeId, true);
+        console.log(`🗑️  Destroying shadow session: ${shadowKey}`);
+        
+        const clientState = this.clients.get(shadowKey);
+        if (clientState) {
+            // Clear timeout
+            if (clientState.shadowTimeout) {
+                clearTimeout(clientState.shadowTimeout);
+            }
+            
+            try {
+                clientState.intentionalStop = true;
+                await clientState.sock.end();
+            } catch (error) {
+                // Ignore errors during shadow cleanup
+            }
+            
+            this.clients.delete(shadowKey);
+        }
+        
+        // Delete shadow session directory
+        const sessionClientId = `${tenantSchema}_bridge_${bridgeId}_shadow`;
+        const persistentPath = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
+        const sessionPath = path.join(persistentPath, `session-${sessionClientId}`);
+        
+        if (fs.existsSync(sessionPath)) {
+            fs.rmSync(sessionPath, { recursive: true, force: true });
+            console.log(`🗑️  Shadow session directory deleted: ${sessionPath}`);
+        }
+    }
+    
+    /**
+     * Atomic swap: Replace primary with shadow (zero-downtime reconnection)
+     * CRITICAL: Does NOT modify database output_credentials - only swaps in-memory client
+     */
+    async swapShadowToPrimary(bridgeId, tenantSchema) {
+        const primaryKey = this.getCompositeKey(tenantSchema, bridgeId, false);
+        const shadowKey = this.getCompositeKey(tenantSchema, bridgeId, true);
+        
+        const shadowState = this.clients.get(shadowKey);
+        if (!shadowState || shadowState.status !== 'connected') {
+            console.error(`❌ Cannot swap: Shadow session not authenticated`);
+            return false;
+        }
+        
+        console.log(`🔄 ATOMIC SWAP: ${shadowKey} → ${primaryKey}`);
+        
+        // Step 1: Destroy old primary (if exists)
+        const oldPrimary = this.clients.get(primaryKey);
+        if (oldPrimary) {
+            console.log(`  📤 Stopping old primary session...`);
+            try {
+                oldPrimary.intentionalStop = true;
+                await oldPrimary.sock.end();
+            } catch (error) {
+                console.error(`  ⚠️  Error stopping old primary:`, error.message);
+            }
+            this.clients.delete(primaryKey);
+            
+            // Delete old primary session directory
+            const oldSessionId = `${tenantSchema}_bridge_${bridgeId}`;
+            const persistentPath = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
+            const oldSessionPath = path.join(persistentPath, `session-${oldSessionId}`);
+            if (fs.existsSync(oldSessionPath)) {
+                fs.rmSync(oldSessionPath, { recursive: true, force: true });
+            }
+        }
+        
+        // Step 2: Promote shadow to primary
+        console.log(`  📥 Promoting shadow to primary...`);
+        
+        // Clear shadow timeout
+        if (shadowState.shadowTimeout) {
+            clearTimeout(shadowState.shadowTimeout);
+        }
+        
+        // Update composite key
+        shadowState.compositeKey = primaryKey;
+        shadowState.isShadow = false;
+        delete shadowState.shadowTimeout;
+        
+        // Move shadow client to primary key
+        this.clients.set(primaryKey, shadowState);
+        this.clients.delete(shadowKey);
+        
+        // Step 3: Rename shadow session directory to primary
+        const shadowSessionId = `${tenantSchema}_bridge_${bridgeId}_shadow`;
+        const primarySessionId = `${tenantSchema}_bridge_${bridgeId}`;
+        const persistentPath = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
+        const shadowPath = path.join(persistentPath, `session-${shadowSessionId}`);
+        const primaryPath = path.join(persistentPath, `session-${primarySessionId}`);
+        
+        if (fs.existsSync(shadowPath)) {
+            fs.renameSync(shadowPath, primaryPath);
+            console.log(`  📂 Renamed session directory: ${shadowSessionId} → ${primarySessionId}`);
+        }
+        
+        // Step 4: Update database status (ONLY status, NOT output_credentials!)
+        await this.updateBotStatus(bridgeId, tenantSchema, 'connected', null, shadowState.phoneNumber);
+        
+        console.log(`✅ Swap complete: Shadow promoted to primary (${shadowState.phoneNumber})`);
+        console.log(`  🔒 Output threads/webhooks unchanged (preserved)`);
+        return true;
     }
 
     /**

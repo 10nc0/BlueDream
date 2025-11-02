@@ -3132,11 +3132,115 @@
             }
         }
         
+        // Show relink confirmation modal
+        function showRelinkConfirmation(bridgeName) {
+            return new Promise((resolve) => {
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.7);
+                    backdrop-filter: blur(8px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                    padding: 1rem;
+                `;
+                
+                modal.innerHTML = `
+                    <div style="
+                        background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
+                        border: 1px solid rgba(148, 163, 184, 0.2);
+                        border-radius: 16px;
+                        padding: 2rem;
+                        max-width: 500px;
+                        width: 100%;
+                        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+                    ">
+                        <div style="text-align: center; margin-bottom: 1.5rem;">
+                            <div style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
+                            <h2 style="margin: 0; color: #e2e8f0; font-size: 1.5rem; font-weight: 600;">Reconnect WhatsApp?</h2>
+                        </div>
+                        
+                        <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
+                            <p style="margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
+                                <strong style="color: #60a5fa;">Bridge:</strong> ${bridgeName}
+                            </p>
+                            <p style="margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
+                                ✅ <strong>Your current bridge stays active</strong> until new login succeeds
+                            </p>
+                            <p style="margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
+                                ✅ <strong>Discord threads remain unchanged</strong> - message history preserved
+                            </p>
+                            <p style="margin: 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
+                                🔄 <strong>Only WhatsApp connection</strong> will be refreshed with new QR
+                            </p>
+                        </div>
+                        
+                        <div style="display: flex; gap: 0.75rem;">
+                            <button id="cancelRelink" style="
+                                flex: 1;
+                                padding: 0.875rem 1.5rem;
+                                background: rgba(71, 85, 105, 0.3);
+                                border: 1px solid rgba(148, 163, 184, 0.3);
+                                border-radius: 8px;
+                                color: #94a3b8;
+                                font-weight: 600;
+                                cursor: pointer;
+                                font-size: 1rem;
+                                transition: all 0.2s;
+                            " onmouseover="this.style.background='rgba(71, 85, 105, 0.4)'" onmouseout="this.style.background='rgba(71, 85, 105, 0.3)'">
+                                Cancel
+                            </button>
+                            <button id="confirmRelink" style="
+                                flex: 1;
+                                padding: 0.875rem 1.5rem;
+                                background: rgba(59, 130, 246, 0.2);
+                                border: 1px solid rgba(59, 130, 246, 0.4);
+                                border-radius: 8px;
+                                color: #60a5fa;
+                                font-weight: 600;
+                                cursor: pointer;
+                                font-size: 1rem;
+                                transition: all 0.2s;
+                            " onmouseover="this.style.background='rgba(59, 130, 246, 0.3)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.2)'">
+                                🔗 Generate QR
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                
+                const closeModal = (confirmed) => {
+                    modal.remove();
+                    resolve(confirmed);
+                };
+                
+                modal.querySelector('#confirmRelink').addEventListener('click', () => closeModal(true));
+                modal.querySelector('#cancelRelink').addEventListener('click', () => closeModal(false));
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) closeModal(false);
+                });
+            });
+        }
+        
         // Generate new QR - wrapper for unified function
         async function generateNewQR(bridgeId) {
             // Get bridge name from bridges list
             const bridge = bridges.find(b => b.fractal_id === bridgeId);
             const bridgeName = bridge?.name || 'Bridge';
+            
+            // Show confirmation modal first
+            const confirmed = await showRelinkConfirmation(bridgeName);
+            if (!confirmed) {
+                console.log('User cancelled QR regeneration');
+                return;
+            }
             
             // Relink first to get fresh QR
             try {

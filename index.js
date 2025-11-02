@@ -3604,6 +3604,23 @@ app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
         const internalId = bridgeResult.rows[0].id;
         const bridgeName = bridgeResult.rows[0].name;
         
+        // PRIORITY: Check shadow session first (zero-downtime reconnection)
+        const shadowKey = whatsappManager.getCompositeKey(userTenantSchema, internalId, true);
+        const shadowState = whatsappManager.clients.get(shadowKey);
+        
+        if (shadowState && shadowState.qrCode) {
+            console.log(`📱 Returning shadow QR for bridge ${id} (zero-downtime relink in progress)`);
+            return res.json({
+                qr: await QRCode.toDataURL(shadowState.qrCode),
+                status: shadowState.status,
+                phoneNumber: shadowState.phoneNumber,
+                bridgeName,
+                hasQR: true,
+                isShadow: true
+            });
+        }
+        
+        // Fallback: Check primary session (normal flow)
         // Get WhatsApp client state using dynamic indexing (tenant:bridge)
         const clientState = whatsappManager.getClient(internalId, userTenantSchema);
         const qrCode = whatsappManager.getQRCode(internalId, userTenantSchema);
@@ -3636,12 +3653,12 @@ app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
     }
 });
 
-// Relink WhatsApp session for a bridge (destroy and create new QR)
+// Relink WhatsApp session for a bridge (zero-downtime using shadow session)
 app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     const { id } = req.params; // fractal_id
     
     try {
-        console.log(`🔄 Starting relink for bridge ${id}...`);
+        console.log(`🔄 Starting zero-downtime relink for bridge ${id}...`);
         
         const client = req.dbClient || pool;
         const tenantSchema = req.tenantContext.tenantSchema;
@@ -3660,28 +3677,31 @@ app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('
         const internalId = bridgeResult.rows[0].id;
         console.log(`🔍 Bridge ${id} (internal ${internalId}) belongs to ${tenantSchema} (relink)`);
         
-        const clientState = await whatsappManager.relinkClient(
+        // Create shadow session (primary stays active!)
+        const shadowState = await whatsappManager.createShadowSession(
             internalId, 
             tenantSchema, 
             createTenantAwareMessageHandler
         );
         
-        console.log(`✅ Relink initiated for bridge ${id}, status: ${clientState.status}`);
+        console.log(`✅ Shadow session created for bridge ${id}, status: ${shadowState.status}`);
+        console.log(`  🔒 Primary session remains active, Discord threads unchanged`);
         
         res.json({ 
             success: true, 
-            message: 'WhatsApp session relinking... New QR code will be available shortly.',
-            status: clientState.status,
-            bridgeId: id
+            message: 'Shadow session created. Your current bridge stays active. Scan QR to complete reconnection.',
+            status: shadowState.status,
+            bridgeId: id,
+            isShadow: true
         });
     } catch (error) {
-        console.error(`❌ Error relinking WhatsApp for bridge ${id}:`, error);
+        console.error(`❌ Error creating shadow session for bridge ${id}:`, error);
         console.error('Stack trace:', error.stack);
         
         // Ensure JSON response even on error
         if (!res.headersSent) {
             res.status(500).json({ 
-                error: error.message || 'Unknown error occurred during relink',
+                error: error.message || 'Unknown error occurred during shadow session creation',
                 bridgeId: id
             });
         }
