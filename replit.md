@@ -4,13 +4,15 @@
 "Your Nyanbook" is a multi-tenant SaaS messaging book designed to forward messages from WhatsApp to Discord. It operates as a secure, multi-user application with robust authentication and permanent message retention via Discord threads. Each user has isolated data storage for privacy and security.
 
 ## Recent Changes
-**November 2, 2025** - CRITICAL FIX: Completed tenant schema initialization for infinite N+1 scalability. TenantManager now creates complete database schemas with all required columns for new tenants. Fixed schema mismatches across three tables:
+**November 2, 2025** - CRITICAL FIX: Completed tenant schema initialization for infinite N+1 scalability. TenantManager now creates complete database schemas with all required columns for new tenants. Fixed schema mismatches across four tables:
 - `refresh_tokens`: Added `token_hash` (not `token`), `device_info`, `ip_address`, `revoked_at`, `is_revoked` to match auth-service.js
 - `audit_logs`: Renamed columns to match logAudit function (`actor_user_id`, `action_type`, `target_type`, `target_id`)
 - `active_sessions`: Added `device_type`, `browser`, `os`, `location`, `login_time`, `is_active` for session tracking
 - `media_buffer`: Fixed critical schema mismatch - added `filename`, `sender_name`, `delivered_to_ledger`, `delivered_to_user`, `delivery_attempts`, changed `media_data` from TEXT to BYTEA for binary storage
 
-Migrated existing tenants (9, 10, 11, 12, 13) to match new schema. Removed legacy migration code from index.js that conflicted with TenantManager. Logout flow hardened with non-fatal error handling and correct cookie name (`book.sid`). Session destruction now guaranteed regardless of schema state. System ready for production N+1 tenant creation.
+**MEDIA ATTACHMENT BUG FIX**: Removed `SET LOCAL search_path` from media INSERT transaction (line 846) that was causing multiple images to get duplicate IDs. Now using schema-qualified queries (`${tenantSchema}.media_buffer`) to ensure atomic uniqueness. This fixes the issue where only 1 of 3 images would appear as Discord attachments.
+
+Migrated existing tenants (9, 10, 11, 12, 13) to match new schema. Removed legacy migration code from index.js that conflicted with TenantManager. Logout flow hardened with non-fatal error handling and correct cookie name (`book.sid`). Session destruction now guaranteed regardless of schema state. System ready for production N+1 tenant creation and reliable media forwarding.
 
 **November 2, 2025** - Breakthrough UX improvement: Made personal webhooks (output_0n) completely optional to eliminate #1 onboarding friction. Users can now create books in 5 seconds (name → instant QR → scan → done) without knowing what a webhook is. Webhooks moved to Edit tab as optional power-user feature. Removed all "Discord" terminology from user-facing text, replaced with platform-agnostic "Webhook URL" that works with Discord, Slack, or any webhook service. Backend already supported optional output_0n perfectly; frontend updated to match with simplified Create modal and progressive disclosure in Edit modal.
 

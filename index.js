@@ -839,13 +839,13 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
                         
                         // ATOMIC COMMIT: Save media to buffer BEFORE webhook delivery
                         // This ensures retry safety - if webhook fails, media is still in DB
+                        // CRITICAL: Use schema-qualified queries instead of SET LOCAL search_path
                         const mediaClient = await pool.connect();
                         let mediaBufferId = null;
                         try {
                             await mediaClient.query('BEGIN');
-                            await mediaClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
                             const result = await mediaClient.query(`
-                                INSERT INTO media_buffer (
+                                INSERT INTO ${tenantSchema}.media_buffer (
                                     book_id, media_data, media_type, filename, sender_name
                                 ) VALUES ($1, $2, $3, $4, $5)
                                 RETURNING id
@@ -4399,6 +4399,21 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                 })
                 .map(msg => {
                     const attachment = msg.attachments.size > 0 ? msg.attachments.first() : null;
+                    
+                    // DEBUG: Log attachment details for media messages
+                    if (msg.attachments.size > 0) {
+                        console.log(`  🖼️  Message ${msg.id} has ${msg.attachments.size} attachment(s):`, 
+                            Array.from(msg.attachments.values()).map(a => ({
+                                filename: a.name,
+                                url: a.url.substring(0, 80),
+                                contentType: a.contentType,
+                                size: a.size
+                            }))
+                        );
+                    } else {
+                        console.log(`  📝 Message ${msg.id} has NO attachments (embeds: ${msg.embeds.length})`);
+                    }
+                    
                     return {
                         id: msg.id,
                         sender_name: msg.author.username,
