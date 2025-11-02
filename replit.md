@@ -4,6 +4,8 @@
 "Your Nyanbook" is a multi-tenant SaaS messaging book designed to forward messages from WhatsApp to Discord. It operates as a secure, multi-user application with robust authentication and permanent message retention via Discord threads. Each user has isolated data storage for privacy and security.
 
 ## Recent Changes
+**November 2, 2025** - GENESIS PRODUCTION MIGRATION COMPLETE: Successfully migrated ep-bold-flower production database (17 tenant schemas) from `bridge_id` → `book_id` columns across `media_buffer` and `message_analytics` tables. Enhanced migration script to handle both table renames AND column renames with intelligent detection (checks for existing `bridge_id` columns to avoid re-running on already-migrated schemas). Fixed auto-heal, health check, and media purge routines to gracefully skip empty tenant schemas (tenant_7, tenant_8) instead of throwing errors. Genesis production (phi_dao@pm.me) now fully operational with 6 books, 50+ messages, and working media attachments.
+
 **November 2, 2025** - DATABASE MIGRATION TOOL: Created `migrate-bridges-to-books.js` to safely migrate production databases from legacy `bridges` table naming to `books`. Script features auto-discovery of all tenant schemas, dry-run preview mode, idempotent operation (skips already-migrated schemas), and comprehensive logging. Required for Genesis production deployment after terminology refactor.
 
 **November 2, 2025** - REAL-TIME UPDATES: Implemented smart polling and jump-to-message navigation for seamless message viewing:

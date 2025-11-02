@@ -4989,6 +4989,19 @@ app.listen(PORT, '0.0.0.0', async () => {
             let totalChecked = 0;
             
             for (const { schema_name } of schemas.rows) {
+                // Check if books table exists (skip empty tenant schemas)
+                const tableCheck = await pool.query(`
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = $1 
+                        AND table_name = 'books'
+                    ) as exists
+                `, [schema_name]);
+                
+                if (!tableCheck.rows[0].exists) {
+                    continue; // Skip empty tenant schema
+                }
+                
                 // Get all non-archived books in this tenant
                 const books = await pool.query(`
                     SELECT id, name, output_01_url, output_0n_url, output_credentials 
@@ -5099,6 +5112,19 @@ app.listen(PORT, '0.0.0.0', async () => {
             let totalRestarted = 0;
             
             for (const { schema_name } of schemas.rows) {
+                // Check if books table exists (skip empty tenant schemas)
+                const tableCheck = await pool.query(`
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = $1 
+                        AND table_name = 'books'
+                    ) as exists
+                `, [schema_name]);
+                
+                if (!tableCheck.rows[0].exists) {
+                    continue; // Skip empty tenant schema
+                }
+                
                 // Get all non-archived books that should be connected
                 const books = await pool.query(`
                     SELECT id, fractal_id, name, status 
@@ -5188,6 +5214,19 @@ app.listen(PORT, '0.0.0.0', async () => {
             let totalPurged = 0;
             
             for (const { schema_name } of schemas.rows) {
+                // Check if media_buffer table exists (skip empty tenant schemas)
+                const tableCheck = await pool.query(`
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = $1 
+                        AND table_name = 'media_buffer'
+                    ) as exists
+                `, [schema_name]);
+                
+                if (!tableCheck.rows[0].exists) {
+                    continue; // Skip empty tenant schema
+                }
+                
                 const result = await pool.query(`
                     DELETE FROM ${schema_name}.media_buffer 
                     WHERE created_at < NOW() - INTERVAL '3 days'

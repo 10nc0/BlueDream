@@ -55,7 +55,7 @@ async function migrateBridgesToBooks() {
                 const bridgesExists = hasBridges.rows[0].exists;
                 const booksExists = hasBooks.rows[0].exists;
 
-                // Check if bridge_id columns still exist (incomplete migration)
+                // Check if bridge_id columns still exist in ANY table (incomplete migration)
                 const hasBridgeIdInMedia = await pool.query(`
                     SELECT EXISTS (
                         SELECT FROM information_schema.columns 
@@ -65,7 +65,16 @@ async function migrateBridgesToBooks() {
                     ) as exists
                 `, [schema]);
                 
-                const needsColumnMigration = hasBridgeIdInMedia.rows[0].exists;
+                const hasBridgeIdInAnalytics = await pool.query(`
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.columns 
+                        WHERE table_schema = $1 
+                        AND table_name = 'message_analytics'
+                        AND column_name = 'bridge_id'
+                    ) as exists
+                `, [schema]);
+                
+                const needsColumnMigration = hasBridgeIdInMedia.rows[0].exists || hasBridgeIdInAnalytics.rows[0].exists;
 
                 if (booksExists && !needsColumnMigration) {
                     console.log(`⏭️  ${schema}: Already migrated (books table and columns updated)`);
