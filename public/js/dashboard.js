@@ -2722,8 +2722,25 @@
                         });
                         
                         if (!createRes.ok) {
-                            const error = await createRes.json();
-                            throw new Error(error.error || 'Failed to create book');
+                            // Handle token expiration gracefully
+                            if (createRes.status === 401) {
+                                alert('⏱️ Your session has expired. Please login again.');
+                                window.location.href = '/login.html';
+                                return;
+                            }
+                            
+                            // Try to parse error as JSON, fallback to text
+                            let errorMessage = 'Failed to create book';
+                            try {
+                                const error = await createRes.json();
+                                errorMessage = error.error || errorMessage;
+                            } catch {
+                                // If JSON parsing fails, get text (might be HTML error page)
+                                const text = await createRes.text();
+                                console.error('Non-JSON error response:', text.substring(0, 200));
+                                errorMessage = 'Server error - please try logging in again';
+                            }
+                            throw new Error(errorMessage);
                         }
                         
                         const book = await createRes.json();
