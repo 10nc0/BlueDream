@@ -717,6 +717,7 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
         const bookSettingsClient = await pool.connect();
         let includeGroupMessages = false;
         try {
+            await bookSettingsClient.query('BEGIN');
             await bookSettingsClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
             const settingsResult = await bookSettingsClient.query(
                 `SELECT include_group_messages FROM books WHERE id = $1`,
@@ -725,6 +726,10 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
             if (settingsResult.rows.length > 0) {
                 includeGroupMessages = settingsResult.rows[0].include_group_messages || false;
             }
+            await bookSettingsClient.query('COMMIT');
+        } catch (err) {
+            await bookSettingsClient.query('ROLLBACK');
+            throw err;
         } finally {
             bookSettingsClient.release();
         }
