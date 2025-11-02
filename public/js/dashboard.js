@@ -700,18 +700,7 @@
                 expandLock = false;
             }
             
-            // φ-breath listener will handle FAST breathing updates automatically
-            
-            // Auto-collapse after φ-breath (mobile only)
-            const breathDuration = breathInitialized ? PHI_BREATH.BASE_DURATION : 4000;
-            if (isMobile()) {
-                thumbsIdleTimer = setTimeout(() => {
-                    console.log('⏰ φ-breath complete, auto-collapsing');
-                    if (isExpanded) {
-                        collapseToSingularity();
-                    }
-                }, breathDuration);
-            }
+            // Breathing speed controlled by PHI_BREATH (FAST on expand, returns to IDLE after timeout)
         }
         
         /**

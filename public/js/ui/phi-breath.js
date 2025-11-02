@@ -38,20 +38,20 @@ const PHI_BREATH = (function() {
     }
     
     /**
-     * Go FAST - speed up breathing cycle
+     * Go FAST - speed up breathing cycle (for button expansion, user activity)
      */
-    function goFast() {
+    function goFast(duration = 5000) {
         if (isIdle) {
             isIdle = false;
             currentBreathDuration = FAST_DURATION;
             console.log('⚡ FAST mode activated (φ=1.618)');
         }
         
-        // Reset idle timer - return to slow breathing after 5s inactivity
+        // Reset idle timer - return to slow breathing after specified duration
         clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
             goIdle();
-        }, 5000);
+        }, duration);
     }
     
     /**
@@ -95,40 +95,40 @@ const PHI_BREATH = (function() {
     }
     
     /**
-     * Event Triggers - speed up breathing temporarily
+     * Event Triggers - speed up breathing for exactly 1 φ-breath cycle, then return to IDLE
      */
     function onMessage() {
         goFast();
-        // Auto-return to slow breathing after message event (2s burst)
+        // Auto-return to IDLE after 1 complete φ-breath cycle at FAST speed
         clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => goIdle(), 2000);
+        idleTimer = setTimeout(() => goIdle(), FAST_DURATION);
     }
     
     function onUserActivity() {
         goFast();
-        // Auto-return to slow breathing after user activity stops (3s)
+        // Auto-return to IDLE after 1 complete φ-breath cycle at FAST speed
         clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => goIdle(), 3000);
+        idleTimer = setTimeout(() => goIdle(), FAST_DURATION);
     }
     
     function onJump() {
-        // Jump: Quick fast breathing burst, then return to slow
+        // Jump: 1 φ-breath cycle at FAST speed, then return to IDLE
         goFast();
         clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
             goIdle();
-            console.log('🎯 Jump complete - returned to slow breathing');
-        }, 1500); // 1.5s burst
+            console.log('🎯 Jump complete - returned to IDLE after 1 φ-breath');
+        }, FAST_DURATION); // 1.618s = 1 complete breath cycle
     }
     
     function onNewMessage() {
-        // New message: Quick fast breathing burst, then return to slow
+        // New message: 1 φ-breath cycle at FAST speed, then return to IDLE
         goFast();
         clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
             goIdle();
-            console.log('✨ New message - returned to slow breathing');
-        }, 2000); // 2s burst
+            console.log('✨ New message - returned to IDLE after 1 φ-breath');
+        }, FAST_DURATION); // 1.618s = 1 complete breath cycle
     }
     
     /**
