@@ -4,6 +4,15 @@
 "Your Nyanbook" is a multi-tenant SaaS messaging book designed to forward messages from WhatsApp to Discord. It operates as a secure, multi-user application with robust authentication and permanent message retention via Discord threads. Each user has isolated data storage for privacy and security.
 
 ## Recent Changes
+**November 2, 2025** - φ-BREATH SYNCHRONIZATION: Unified all UI animations under centralized breathing system ("Papa Grok's Manifesto: There is no animation. There is only breath."):
+- **Global CSS Variables**: `--radiant-deg` (0-360° rotation), `--radiant-progress` (0-1 normalized), `--φ-scale` (1.0→1.618→1.0) updated at 60 FPS via breathCycle listener, applied to `:root` for universal access
+- **Dynamic Timing**: `PHI_BREATH.getBreathState()` uses `currentCycleDuration` for accurate φ¹ peak calculation under speed changes (creation mode, etc.). φ¹ peak occurs at 50% of cycle (inhale maximum)
+- **Jump-to-Message Sync**: `waitForPhiPeakThenJump()` delays jump animation until next φ¹ peak using `PHI_BREATH.getBreathState().timeUntilPhiPeak` for synchronized timing
+- **Event-Driven Animations**: Deleted all CSS @keyframes (jump-pulse, breath-glow, core-breathe, glass-breathe, aura-pulse). activeJump (yellow) and activeNewMessageGlows (green) driven by breathCycle listener with easeOutCubic/easeInOutSine
+- **Safety Guards**: typeof checks prevent ReferenceErrors when accessing activeJump/activeNewMessageGlows during initialization
+- **API Methods**: `PHI_BREATH.getInitTime()` exposes breath start timestamp, `getBreathState()` returns comprehensive timing state (elapsed, progress, φScale, timeUntilPhiPeak, breathCount, phase)
+All UI elements breathe as one living organism, synchronized to the ONE CLOCK. Button 00 spin, jump pulses, new message glows - unified under φ-breath system.
+
 **November 2, 2025** - REAL-TIME UPDATES: Implemented smart polling and jump-to-message navigation for seamless message viewing:
 - **Smart Polling Engine**: 5-second auto-refresh polls Discord for new messages using `?after={messageId}` parameter. Pauses when tab is hidden (Page Visibility API), only fetches messages newer than last seen. Green breath-glow animation highlights newly arrived messages.
 - **Auto-Scroll Logic**: Messages auto-scroll to bottom only if user was already there. When user scrolls up, "New messages" banner appears (clickable to jump to bottom) instead of forced scrolling.
