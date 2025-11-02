@@ -141,7 +141,6 @@ class BaileysClientManager {
                 // CONNECTION CLOSED
                 if (connection === 'close') {
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
-                    const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                     const reason = statusCode || 'unknown';
                     
                     console.log(`🔌 ${compositeKey} disconnected: ${reason}`);
@@ -154,16 +153,24 @@ class BaileysClientManager {
 
                     // SMART RECONNECT LOGIC
                     let shouldDestroy = false;
+                    let shouldReconnect = false;
 
                     if (clientState.intentionalStop) {
                         shouldDestroy = true;
+                        shouldReconnect = false;
                         console.log(`🗑️  Intentional stop for ${compositeKey} - destroying client`);
                     } else if (reason === DisconnectReason.loggedOut && !isNewSession) {
                         shouldDestroy = true;
+                        shouldReconnect = false;
                         console.log(`🗑️  User logout detected for ${compositeKey} - destroying client`);
                     } else if (reason === DisconnectReason.loggedOut && isNewSession) {
                         shouldDestroy = false;
+                        shouldReconnect = true;  // FIX: Anti-spam kicks SHOULD reconnect
                         console.log(`🔄 Anti-spam kick detected for ${compositeKey} (session age: ${Math.round(sessionAge/1000)}s) - will auto-reconnect`);
+                    } else if (reason !== DisconnectReason.loggedOut) {
+                        // Other disconnections (network errors, etc.)
+                        shouldDestroy = false;
+                        shouldReconnect = true;
                     }
 
                     if (shouldDestroy) {
@@ -186,8 +193,10 @@ class BaileysClientManager {
                         clientState.reconnectAttempts = currentAttempts + 1;
                         
                         console.log(`🔄 Temporary disconnect for ${compositeKey} - will auto-reconnect in ${reconnectDelay/1000}s (attempt ${clientState.reconnectAttempts}/5)`);
+                        console.log(`⏰ Scheduling reconnect setTimeout for ${compositeKey} - delay: ${reconnectDelay}ms, bookId: ${bookId}, schema: ${tenantSchema}`);
                         
                         setTimeout(async () => {
+                            console.log(`⏰ setTimeout FIRED for ${compositeKey} - starting reconnection...`);
                             try {
                                 console.log(`🔄 Auto-reconnecting ${compositeKey} (attempt ${clientState.reconnectAttempts}/5)...`);
                                 await this.updateBotStatus(bookId, tenantSchema, 'reconnecting', null, null, `Auto-reconnect attempt ${clientState.reconnectAttempts}/5`);
