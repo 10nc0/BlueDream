@@ -1927,59 +1927,76 @@ app.post('/api/auth/refresh', async (req, res) => {
 
 // Logout (requires authentication)
 app.post('/api/auth/logout', requireAuth, async (req, res) => {
+    const userId = req.userId;
+    const sessionId = req.sessionID;
+    const tenantSchema = req.tenantSchema || `tenant_${req.tenantId}`;
+    
+    console.log(`🔓 Logout request from user ${userId}, session ${sessionId}, tenant ${tenantSchema}`);
+    
     try {
-        const userId = req.userId;
-        const sessionId = req.sessionID;
-        
-        console.log(`🔓 Logout request from user ${userId}, session ${sessionId}`);
-        
-        // Get tenant schema (from requireAuth middleware or construct from tenantId)
-        const tenantSchema = req.tenantSchema || `tenant_${req.tenantId}`;
-        
-        // Revoke all refresh tokens for this user in tenant-scoped database (JWT logout)
+        // Step 1: Revoke all refresh tokens for this user
         if (userId && tenantSchema) {
+            console.log(`🔐 Revoking tokens for user ${userId} in ${tenantSchema}...`);
             await authService.revokeAllUserTokens(pool, tenantSchema, userId);
+            console.log(`✅ Tokens revoked`);
             
-            // Mark session as inactive (cookie-based logout)
+            // Step 2: Mark session as inactive in tenant active_sessions
             if (sessionId) {
+                console.log(`📋 Marking session ${sessionId} as inactive in ${tenantSchema}.active_sessions...`);
                 await pool.query(`
                     UPDATE ${tenantSchema}.active_sessions 
                     SET is_active = FALSE
                     WHERE user_id = $1 AND session_id = $2
                 `, [userId, sessionId]);
+                console.log(`✅ Session marked inactive`);
             }
         }
         
-        // CRITICAL: Destroy server-side session (MUST wait for completion)
+        // Step 3: Destroy PostgreSQL session (connect-pg-simple store)
+        console.log(`💣 Destroying PostgreSQL session ${sessionId}...`);
         await new Promise((resolve, reject) => {
+            if (!req.session) {
+                console.log(`⚠️ No session object found on request`);
+                return resolve();
+            }
+            
             req.session.destroy((err) => {
                 if (err) {
                     console.error('❌ Session destroy error:', err);
                     reject(err);
                 } else {
+                    console.log(`✅ PostgreSQL session destroyed`);
                     resolve();
                 }
             });
         });
         
-        // CRITICAL: Clear session cookie with CORRECT NAME (Safari/iPhone compatible)
-        // Cookie name is 'book.sid' from session config (line 175)
+        // Step 4: Clear session cookie
+        console.log(`🍪 Clearing book.sid cookie...`);
         res.clearCookie('book.sid', {
             path: '/',
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: 'none', // Must match session config
-            partitioned: true // Must match session config for Safari CHIPS
+            sameSite: 'none',
+            partitioned: true
         });
+        console.log(`✅ Cookie cleared`);
+        
+        // Step 5: Log logout audit (capture context before session destroyed)
+        try {
+            await logAudit(pool, req, 'LOGOUT', 'USER', userId?.toString() || 'unknown', null, {});
+            console.log(`✅ Audit logged`);
+        } catch (auditError) {
+            console.error('⚠️ Audit logging failed (non-fatal):', auditError);
+        }
         
         console.log('✅ User logged out successfully');
         
-        // Log logout
-        await logAudit(pool, req, 'LOGOUT', 'USER', userId?.toString() || 'unknown', null, {});
-        
-        // Send success response AFTER session is fully destroyed
+        // Send success response
         res.json({ success: true });
     } catch (error) {
+        console.error('❌ LOGOUT ERROR:', error);
+        console.error('Stack:', error.stack);
         res.status(500).json({ error: error.message });
     }
 });
