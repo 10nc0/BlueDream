@@ -1934,21 +1934,31 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
     console.log(`🔓 Logout request from user ${userId}, session ${sessionId}, tenant ${tenantSchema}`);
     
     try {
-        // Step 1: Revoke all refresh tokens for this user
+        // Step 1: Revoke all refresh tokens for this user (non-fatal if table missing)
         if (userId && tenantSchema) {
-            console.log(`🔐 Revoking tokens for user ${userId} in ${tenantSchema}...`);
-            await authService.revokeAllUserTokens(pool, tenantSchema, userId);
-            console.log(`✅ Tokens revoked`);
+            try {
+                console.log(`🔐 Revoking tokens for user ${userId} in ${tenantSchema}...`);
+                await authService.revokeAllUserTokens(pool, tenantSchema, userId);
+                console.log(`✅ Tokens revoked`);
+            } catch (tokenError) {
+                console.warn(`⚠️ Token revocation failed (non-fatal):`, tokenError.message);
+                // Continue logout even if token revocation fails
+            }
             
-            // Step 2: Mark session as inactive in tenant active_sessions
+            // Step 2: Mark session as inactive in tenant active_sessions (non-fatal if table missing)
             if (sessionId) {
-                console.log(`📋 Marking session ${sessionId} as inactive in ${tenantSchema}.active_sessions...`);
-                await pool.query(`
-                    UPDATE ${tenantSchema}.active_sessions 
-                    SET is_active = FALSE
-                    WHERE user_id = $1 AND session_id = $2
-                `, [userId, sessionId]);
-                console.log(`✅ Session marked inactive`);
+                try {
+                    console.log(`📋 Marking session ${sessionId} as inactive in ${tenantSchema}.active_sessions...`);
+                    await pool.query(`
+                        UPDATE ${tenantSchema}.active_sessions 
+                        SET is_active = FALSE
+                        WHERE user_id = $1 AND session_id = $2
+                    `, [userId, sessionId]);
+                    console.log(`✅ Session marked inactive`);
+                } catch (sessionError) {
+                    console.warn(`⚠️ Session marking failed (non-fatal):`, sessionError.message);
+                    // Continue logout even if session marking fails
+                }
             }
         }
         
