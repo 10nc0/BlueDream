@@ -148,16 +148,27 @@ class BaileysClientManager {
                         this.clients.delete(compositeKey);
                         this.messageHandlers.delete(compositeKey);
                     } else if (shouldReconnect) {
-                        // AUTO-RECONNECT
-                        console.log(`🔄 Temporary disconnect for ${compositeKey} - will auto-reconnect in 10s`);
+                        // AUTO-RECONNECT with exponential backoff
+                        // Max 5 attempts before giving up (10s, 20s, 40s, 60s, 60s)
+                        const currentAttempts = clientState.reconnectAttempts || 0;
                         
-                        const reconnectDelay = clientState.reconnectAttempts ? Math.min(60000, 10000 * Math.pow(2, clientState.reconnectAttempts)) : 10000;
-                        clientState.reconnectAttempts = (clientState.reconnectAttempts || 0) + 1;
+                        if (currentAttempts >= 5) {
+                            console.log(`❌ ${compositeKey} exceeded max reconnect attempts (5), giving up`);
+                            await this.updateBotStatus(bridgeId, tenantSchema, 'disconnected', null, null, 'Max reconnect attempts exceeded');
+                            this.clients.delete(compositeKey);
+                            this.messageHandlers.delete(compositeKey);
+                            return;
+                        }
+                        
+                        const reconnectDelay = Math.min(60000, 10000 * Math.pow(2, currentAttempts));
+                        clientState.reconnectAttempts = currentAttempts + 1;
+                        
+                        console.log(`🔄 Temporary disconnect for ${compositeKey} - will auto-reconnect in ${reconnectDelay/1000}s (attempt ${clientState.reconnectAttempts}/5)`);
                         
                         setTimeout(async () => {
                             try {
-                                console.log(`🔄 Auto-reconnecting ${compositeKey} (attempt ${clientState.reconnectAttempts})...`);
-                                await this.updateBotStatus(bridgeId, tenantSchema, 'reconnecting', null, null, `Auto-reconnect attempt ${clientState.reconnectAttempts}`);
+                                console.log(`🔄 Auto-reconnecting ${compositeKey} (attempt ${clientState.reconnectAttempts}/5)...`);
+                                await this.updateBotStatus(bridgeId, tenantSchema, 'reconnecting', null, null, `Auto-reconnect attempt ${clientState.reconnectAttempts}/5`);
                                 
                                 const messageHandler = this.messageHandlers.get(compositeKey);
                                 await this.initializeClient(bridgeId, tenantSchema, messageHandler);
@@ -177,6 +188,9 @@ class BaileysClientManager {
                     try {
                         // Skip if message is from self or broadcast
                         if (msg.key.fromMe || msg.key.remoteJid === 'status@broadcast') continue;
+
+                        // Update activity timestamp for health monitoring
+                        clientState.lastActivity = Date.now();
 
                         if (onMessage) {
                             // Wrap Baileys message with adapter to make it compatible with whatsapp-web.js format
@@ -334,8 +348,75 @@ class BaileysClientManager {
             status: state.status,
             phoneNumber: state.phoneNumber,
             tenantSchema: state.tenantSchema,
-            hasQR: state.qrCode !== null
+            hasQR: state.qrCode !== null,
+            createdAt: state.createdAt,
+            lastActivity: state.lastActivity || state.createdAt
         }));
+    }
+
+    /**
+     * Check if a connection is truly alive (not just marked "connected")
+     * Returns: 'alive' | 'stale' | 'disconnected' | 'not_found'
+     */
+    checkConnectionHealth(bridgeId, tenantSchema) {
+        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+        const clientState = this.clients.get(compositeKey);
+        
+        if (!clientState) {
+            return { status: 'not_found', reason: 'Client not in memory' };
+        }
+        
+        // Check if socket exists and is open
+        const sock = clientState.sock;
+        if (!sock || !sock.ws || sock.ws.readyState !== 1) {
+            return { 
+                status: 'stale', 
+                reason: 'Socket not open',
+                readyState: sock?.ws?.readyState,
+                clientStatus: clientState.status
+            };
+        }
+        
+        // Check if marked as disconnected
+        if (clientState.status === 'disconnected' || clientState.status === 'error') {
+            return { 
+                status: 'disconnected', 
+                reason: `Status is ${clientState.status}`
+            };
+        }
+        
+        // Check connection age (connections older than 24 hours might be stale)
+        const connectionAge = Date.now() - (clientState.createdAt || Date.now());
+        const lastActivity = clientState.lastActivity || clientState.createdAt || Date.now();
+        const timeSinceActivity = Date.now() - lastActivity;
+        
+        // If no activity for > 12 hours, mark as potentially stale
+        if (timeSinceActivity > 12 * 60 * 60 * 1000) {
+            return {
+                status: 'stale',
+                reason: 'No activity for >12 hours',
+                connectionAge,
+                timeSinceActivity
+            };
+        }
+        
+        return { 
+            status: 'alive', 
+            reason: 'Socket open and active',
+            connectionAge,
+            timeSinceActivity
+        };
+    }
+
+    /**
+     * Update last activity timestamp when messages are received
+     */
+    updateActivity(bridgeId, tenantSchema) {
+        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+        const clientState = this.clients.get(compositeKey);
+        if (clientState) {
+            clientState.lastActivity = Date.now();
+        }
     }
 
     /**

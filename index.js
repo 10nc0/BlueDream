@@ -4971,6 +4971,99 @@ app.listen(PORT, '0.0.0.0', async () => {
     await autoRestoreWhatsAppSessions();
     console.log('📱 All bridges with saved sessions are now active');
     
+    // PROACTIVE HEALTH CHECK SYSTEM
+    // Detects and auto-restarts stale WhatsApp connections every 10 minutes
+    // Prevents "last active 12 hours ago" silent disconnections
+    async function checkBridgeHealth() {
+        try {
+            console.log('🏥 Running proactive health check on all bridges...');
+            
+            // Get all tenant schemas
+            const schemas = await pool.query(`
+                SELECT schema_name 
+                FROM information_schema.schemata 
+                WHERE schema_name LIKE 'tenant_%'
+                ORDER BY schema_name
+            `);
+            
+            let totalChecked = 0;
+            let totalAlive = 0;
+            let totalStale = 0;
+            let totalRestarted = 0;
+            
+            for (const { schema_name } of schemas.rows) {
+                // Get all non-archived bridges that should be connected
+                const bridges = await pool.query(`
+                    SELECT id, fractal_id, name, status 
+                    FROM ${schema_name}.bridges 
+                    WHERE archived = false 
+                    AND status IN ('connected', 'reconnecting')
+                `);
+                
+                for (const bridge of bridges.rows) {
+                    totalChecked++;
+                    
+                    // DYNAMIC INDEXING: Parse fractal_id to extract tenant info
+                    const parsed = fractalId.parse(bridge.fractal_id);
+                    if (!parsed) {
+                        console.warn(`  ⚠️  Invalid fractal_id: ${bridge.fractal_id}`);
+                        continue;
+                    }
+                    
+                    // Check if connection is truly alive (using legacy id for now, will refactor manager)
+                    const health = whatsappManager.checkConnectionHealth(bridge.id, schema_name);
+                    
+                    if (health.status === 'alive') {
+                        totalAlive++;
+                        const ageHours = Math.round(health.timeSinceActivity / (1000 * 60 * 60));
+                        console.log(`  ✅ ${bridge.name} (${schema_name}): ALIVE (${ageHours}h since activity)`);
+                    } else if (health.status === 'stale') {
+                        totalStale++;
+                        console.log(`  ⚠️  ${bridge.name} (${schema_name}): STALE - ${health.reason}`);
+                        console.log(`     Auto-restarting connection...`);
+                        
+                        try {
+                            // Auto-restart the stale connection
+                            const messageHandler = whatsappManager.messageHandlers.get(
+                                whatsappManager.getCompositeKey(schema_name, bridge.id)
+                            );
+                            
+                            // Stop and reinitialize
+                            await whatsappManager.stopClient(bridge.id, schema_name);
+                            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s
+                            await whatsappManager.initializeClient(bridge.id, schema_name, messageHandler);
+                            
+                            totalRestarted++;
+                            console.log(`     ✅ Restarted ${bridge.name}`);
+                            
+                            // Log audit trail
+                            await logAudit(pool, { userId: 0, userEmail: 'system' }, 
+                                'HEALTH_CHECK_RESTART', 'BRIDGE', bridge.fractal_id, 
+                                `Auto-restarted stale connection: ${health.reason}`, 
+                                { health, bridge_name: bridge.name }, schema_name);
+                        } catch (restartError) {
+                            console.error(`     ❌ Failed to restart ${bridge.name}:`, restartError.message);
+                        }
+                    } else if (health.status === 'not_found') {
+                        console.log(`  ℹ️  ${bridge.name} (${schema_name}): Not in memory (needs manual start)`);
+                    }
+                }
+            }
+            
+            console.log(`🏥 Health check complete: ${totalAlive} alive, ${totalStale} stale (${totalRestarted} restarted), ${totalChecked} total`);
+        } catch (error) {
+            console.error('❌ Health check failed:', error.message);
+        }
+    }
+    
+    // Run health check every 10 minutes
+    setInterval(checkBridgeHealth, 10 * 60 * 1000);
+    console.log('🏥 Proactive health checks scheduled (every 10 minutes)');
+    
+    // Run first health check after 5 minutes (give bridges time to stabilize)
+    setTimeout(checkBridgeHealth, 5 * 60 * 1000);
+    console.log('⏰ First health check in 5 minutes');
+    
     // 3-DAY MEDIA PURGE: Clean up old media from buffer
     // Nyanbook Ledger has permanent copy, so buffer only needed for retry safety
     async function purgeOldMedia() {
