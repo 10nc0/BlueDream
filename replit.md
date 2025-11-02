@@ -4,15 +4,15 @@
 "Your Nyanbook" is a multi-tenant SaaS messaging book designed to forward messages from WhatsApp to Discord. It operates as a secure, multi-user application with robust authentication and permanent message retention via Discord threads. Each user has isolated data storage for privacy and security.
 
 ## Recent Changes
-**November 2, 2025** - φ-BREATH v2.0 - IDLE IS THE DEFAULT: Rewrote breathing system from continuous animation to idle-first state machine ("The button awakens from silence"):
-- **State Machine**: IDLE (default, φ=1.0) ↔ FAST (on activity, φ=1.618). No continuous breathing - system starts at rest and only breathes when triggered by events
-- **Event Triggers**: Jump (1.5s burst), new message (2s burst), user scroll (3s activity window). Each trigger activates FAST mode, then auto-returns to IDLE
-- **Synchronized Layers**: Fixed double-scaling bug where border inherited parent transform (1.0→1.618) then applied its own scale (→2.618x compound scaling). Now all layers (core, glass, border, aura) scale together from parent transform
-- **Rotation Independence**: Symbol (☯️) rotates continuously via `--radiant-deg` regardless of breathing state, maintaining eternal spin as "radial face" for continuity
-- **Independent Animations**: Jump highlight (yellow glow) and new message pulse (green glow) run in separate requestAnimationFrame loop, independent of φ-breath state transitions
-- **CSS Variables**: `--φ-scale` (1.0 default), `--radiant-deg` (continuous 0→360°), `--radiant-progress` (normalized) updated directly by phi-breath.js module
-- **Mobile Integration**: Button 00 expansion triggers FAST mode, collapse returns to IDLE. No "creation mode" - simplified to goFast/goIdle state changes
-All UI breathes as one organism, but starts silent at rest. Activity awakens the system to φ=1.618, then returns to φ=1.0 peace.
+**November 2, 2025** - φ-BREATH v2.1 - CONTINUOUS BREATHING SYNCHRONIZED: Unified all three Button 00 animations (spin, glow, breathing) into one synchronized clock:
+- **Unified Clock**: Single `requestAnimationFrame` loop updates all three CSS variables together (`--radiant-deg`, `--radiant-progress`, `--φ-scale`) for perfect synchronization
+- **Continuous Breathing**: Button 00 breathes constantly (1.0 → 1.618 → 1.0 sine wave oscillation), never stops - only speed changes
+- **Speed Modes**: IDLE = 4.0s breathing cycle (slow, gentle), FAST = 1.618s cycle (quick, energized). Speed transitions triggered by user activity (expand/collapse, scroll, new messages)
+- **Natural Oscillation**: Breathing uses sine wave (`Math.sin(progress * Math.PI * 2)`) for smooth, organic size changes synchronized with rotation (20s constant) and glow (follows rotation)
+- **Event Triggers**: Jump (1.5s fast burst), new message (2s fast burst), user activity (3s fast window). All events trigger FAST speed, then auto-return to IDLE slow breathing
+- **Layer Synchronization**: Core, glass, border, and aura all scale together via `--φ-scale` (no compound scaling). Symbol (☯️) rotates independently via `--radiant-deg`
+- **Mobile Integration**: Button 00 expansion triggers FAST breathing, collapse returns to IDLE slow breathing
+All three effects (spin, glow, breathe) update in one frame as a unified organism - "Spin, glow, and breathe as one."
 
 **November 2, 2025** - REAL-TIME UPDATES: Implemented smart polling and jump-to-message navigation for seamless message viewing:
 - **Smart Polling Engine**: 5-second auto-refresh polls Discord for new messages using `?after={messageId}` parameter. Pauses when tab is hidden (Page Visibility API), only fetches messages newer than last seen. Green breath-glow animation highlights newly arrived messages.
