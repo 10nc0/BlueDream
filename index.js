@@ -3653,12 +3653,14 @@ app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
     }
 });
 
-// Relink WhatsApp session for a bridge (zero-downtime using shadow session)
+// Relink WhatsApp session for a bridge (simple QR regeneration)
+// WARNING: Brief downtime during reconnection - messages sent during this period may be lost
 app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     const { id } = req.params; // fractal_id
     
     try {
-        console.log(`🔄 Starting zero-downtime relink for bridge ${id}...`);
+        console.log(`🔄 Starting QR regeneration for bridge ${id}...`);
+        console.warn(`  ⚠️  Bridge will be briefly offline during reconnection`);
         
         const client = req.dbClient || pool;
         const tenantSchema = req.tenantContext.tenantSchema;
@@ -3677,31 +3679,35 @@ app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('
         const internalId = bridgeResult.rows[0].id;
         console.log(`🔍 Bridge ${id} (internal ${internalId}) belongs to ${tenantSchema} (relink)`);
         
-        // Create shadow session (primary stays active!)
-        const shadowState = await whatsappManager.createShadowSession(
+        // Simple approach: Destroy existing session and reinitialize
+        console.log(`  🗑️  Destroying existing session...`);
+        await whatsappManager.destroyClient(internalId, tenantSchema);
+        
+        console.log(`  🔄 Reinitializing client with fresh QR...`);
+        const clientState = await whatsappManager.initializeClient(
             internalId, 
             tenantSchema, 
             createTenantAwareMessageHandler
         );
         
-        console.log(`✅ Shadow session created for bridge ${id}, status: ${shadowState.status}`);
-        console.log(`  🔒 Primary session remains active, Discord threads unchanged`);
+        console.log(`✅ Fresh QR generated for bridge ${id}, status: ${clientState.status}`);
+        console.log(`  ⏳ Scan QR to reconnect (brief downtime during reconnection)`);
         
         res.json({ 
             success: true, 
-            message: 'Shadow session created. Your current bridge stays active. Scan QR to complete reconnection.',
-            status: shadowState.status,
+            message: 'Fresh QR code generated. Your bridge is briefly offline - scan QR to reconnect.',
+            status: clientState.status,
             bridgeId: id,
-            isShadow: true
+            warning: 'Messages sent during reconnection may be lost'
         });
     } catch (error) {
-        console.error(`❌ Error creating shadow session for bridge ${id}:`, error);
+        console.error(`❌ Error regenerating QR for bridge ${id}:`, error);
         console.error('Stack trace:', error.stack);
         
         // Ensure JSON response even on error
         if (!res.headersSent) {
             res.status(500).json({ 
-                error: error.message || 'Unknown error occurred during shadow session creation',
+                error: error.message || 'Unknown error occurred during QR regeneration',
                 bridgeId: id
             });
         }
