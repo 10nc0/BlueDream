@@ -51,6 +51,8 @@ function initHopAnimation() {
     let mouseY = -1000;
     let catX = CAT_CONFIG.CANVAS_WIDTH / 2;
     let catY = CAT_CONFIG.CANVAS_HEIGHT / 2;
+    let lastTouchTime = 0;
+    const TOUCH_COOLDOWN = 100; // ms - prevent ghost/rapid-fire taps
     
     // Detect if mobile mode (portrait on small screen)
     const isMobileMode = () => window.innerWidth < 768 && window.innerHeight > window.innerWidth;
@@ -62,18 +64,35 @@ function initHopAnimation() {
     });
     
     // Touch support for iPad and mobile devices
-    document.addEventListener('touchmove', (e) => {
+    // Only track touches on the cat canvas itself (prevent form field interference)
+    let isTouchingCat = false;
+    
+    canvas.addEventListener('touchstart', (e) => {
+        const now = Date.now();
+        // Ignore rapid-fire or ghost taps (cached touch events)
+        if (now - lastTouchTime < TOUCH_COOLDOWN) return;
+        lastTouchTime = now;
+        
+        isTouchingCat = true;
         if (e.touches.length > 0) {
             mouseX = e.touches[0].clientX;
             mouseY = e.touches[0].clientY;
         }
     });
     
-    document.addEventListener('touchstart', (e) => {
-        if (e.touches.length > 0) {
+    document.addEventListener('touchmove', (e) => {
+        // Only update position if actively touching the cat
+        if (isTouchingCat && e.touches.length > 0) {
             mouseX = e.touches[0].clientX;
             mouseY = e.touches[0].clientY;
         }
+    });
+    
+    // Reset mouse position on touchend to prevent ghost tap persistence
+    document.addEventListener('touchend', () => {
+        isTouchingCat = false;
+        mouseX = -1000;
+        mouseY = -1000;
     });
     
     function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, fleeing = false) {
