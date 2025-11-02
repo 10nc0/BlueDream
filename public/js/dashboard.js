@@ -2673,7 +2673,7 @@
         // SECURITY: bookId MUST be fractal_id to maintain tenant isolation
         function getMessageSearchText(bookId) {
             // SECURITY: Validate fractal_id format before cache access
-            if (!bookId || !/^(dev|prod)_bridge_t\d+_[a-f0-9]+$/.test(bookId)) {
+            if (!bookId || !/^(dev|prod)_(bridge|book)_t\d+_[a-f0-9]+$/.test(bookId)) {
                 console.error('🚨 SECURITY: Attempted cache access with invalid book ID');
                 return '';
             }
@@ -3879,8 +3879,8 @@
         async function loadBookMessages(bookId, page = 1) {
             try {
                 // SECURITY: Validate bookId is a fractal_id (tenant-scoped, non-enumerable)
-                // Format: dev_bridge_t{N}_{HASH}, prod_bridge_t{N}_{HASH}, or book_t{N}_{HASH}
-                if (!bookId || !/^((dev|prod)_bridge_t\d+_[a-f0-9]+|book_t\d+_[a-f0-9]+)$/.test(bookId)) {
+                // Format: dev_bridge_t{N}_{HASH}, dev_book_t{N}_{HASH}, prod_bridge_t{N}_{HASH}, or prod_book_t{N}_{HASH}
+                if (!bookId || !/^(dev|prod)_(bridge|book)_t\d+_[a-f0-9]+$/.test(bookId)) {
                     console.error('🚨 SECURITY: Invalid book ID format:', bookId);
                     throw new Error('Invalid book ID');
                 }
