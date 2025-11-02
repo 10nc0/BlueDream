@@ -2755,11 +2755,8 @@
                         // Reload bridges to show the new one
                         await loadBridges();
                         
-                        // UNIFIED FLOW: Use shadow session for both Create Bridge and Generate QR
-                        // This ensures no storage bloat from abandoned bridges
-                        console.log('🚀 Using unified shadow QR flow for new bridge...');
-                        
-                        // Auto-trigger QR generation using unified flow (no warning for first bridge)
+                        // Auto-trigger QR generation for new bridge (no warning shown for inactive bridges)
+                        console.log('🚀 Generating QR for new bridge...');
                         await generateNewQR(bridge.fractal_id);
                         
                     } catch (err) {
