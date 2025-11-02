@@ -4148,18 +4148,11 @@
                     if (newMessages.length > 0) {
                         console.log(`🔄 Polling: ${newMessages.length} new message(s)`);
                         
-                        // Append new messages with breath-glow animation
+                        // Append new messages
                         for (const msg of newMessages) {
                             const existing = document.querySelector(`.discord-message[data-msg-id="${msg.id}"]`);
                             if (!existing) {
                                 await insertContextMessages([msg], msg.id, bookId);
-                                
-                                // Add breath-glow to new message
-                                const newEl = document.querySelector(`.discord-message[data-msg-id="${msg.id}"]`);
-                                if (newEl) {
-                                    newEl.classList.add('new-message-glow');
-                                    setTimeout(() => newEl.classList.remove('new-message-glow'), 1500);
-                                }
                             }
                         }
                         
