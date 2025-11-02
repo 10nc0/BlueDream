@@ -1213,8 +1213,8 @@ async function logAudit(client, req, actionType, targetType, targetId, targetEma
             targetType,
             targetId,
             JSON.stringify(details),
-            req.ip || req.connection?.remoteAddress || 'unknown',
-            req.get('user-agent') || 'unknown'
+            req.ip || req.connection?.remoteAddress || 'system',
+            (req.get && typeof req.get === 'function') ? req.get('user-agent') : 'system'
         ]);
     } catch (error) {
         console.error('Audit logging failed:', error);
