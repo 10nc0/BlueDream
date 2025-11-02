@@ -1950,11 +1950,16 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
             }
         }
         
-        // CRITICAL: Destroy server-side session
-        req.session.destroy((err) => {
-            if (err) {
-                console.error('❌ Session destroy error:', err);
-            }
+        // CRITICAL: Destroy server-side session (MUST wait for completion)
+        await new Promise((resolve, reject) => {
+            req.session.destroy((err) => {
+                if (err) {
+                    console.error('❌ Session destroy error:', err);
+                    reject(err);
+                } else {
+                    resolve();
+                }
+            });
         });
         
         // CRITICAL: Clear session cookie (Safari/iPhone compatible)
@@ -1970,7 +1975,7 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
         // Log logout
         await logAudit(pool, req, 'LOGOUT', 'USER', userId?.toString() || 'unknown', null, {});
         
-        // Send success response
+        // Send success response AFTER session is fully destroyed
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
