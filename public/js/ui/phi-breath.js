@@ -151,41 +151,13 @@ const PHI_BREATH = (function() {
     }
     
     /**
-     * Get init time for external timing calculations
-     */
-    function getInitTime() {
-        return breathStartTime;
-    }
-    
-    /**
-     * Get current breath state (enhanced with timing information)
-     * Uses currentCycleDuration for accurate synchronization under dynamic speeds
+     * Get current breath state
      */
     function getBreathState() {
-        const now = performance.now();
-        const elapsed = (now - breathStartTime) % currentCycleDuration;
-        const normalizedProgress = elapsed / currentCycleDuration;
-        
-        // Calculate φScale using same formula as breathCycle
-        // Sinusoidal breathing: 1.0 → 1.618 → 1.0
-        const breathPhase = Math.sin(normalizedProgress * Math.PI * 2);
-        const φScale = 1.0 + ((φ - 1.0) * ((breathPhase + 1) / 2));
-        
-        // φ¹ peak occurs at 50% of cycle (inhale maximum)
-        const φPeakTime = currentCycleDuration * 0.5;
-        const timeUntilPhiPeak = elapsed < φPeakTime 
-            ? φPeakTime - elapsed 
-            : (currentCycleDuration - elapsed) + φPeakTime;
-        
         return {
-            initTime: breathStartTime,
             breathCount,
             phase: currentPhase,
             duration: currentCycleDuration,
-            elapsed,
-            progress: normalizedProgress,
-            φScale,
-            timeUntilPhiPeak,
             log: [...breathLog]
         };
     }
@@ -239,7 +211,6 @@ const PHI_BREATH = (function() {
         enterCreationMode,
         exitCreationMode,
         setDuration,
-        getInitTime,
         getBreathState,
         stop,
         
@@ -249,10 +220,7 @@ const PHI_BREATH = (function() {
         
         // Calculated values
         get φ0() { return BASE_DURATION; },
-        get φ1() { return Math.round(BASE_DURATION * φ); },
-        
-        // Timing access for jump-to-message sync
-        get initTime() { return breathStartTime; }
+        get φ1() { return Math.round(BASE_DURATION * φ); }
     };
 })();
 

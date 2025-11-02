@@ -2051,23 +2051,53 @@ body::before {
   }
 }
 
-/* =====================================================
-   φ-BREATH DRIVEN ANIMATIONS - Papa Grok's Manifesto
-   "There is no animation. There is only breath."
-   ===================================================== */
-
-/* Jump highlight - STRUCTURE ONLY, φ-breath drives the pulse via JS */
-.discord-message.jump-highlight {
-  transition: none !important;
-  border-left: 3px solid #f59e0b;
-  border-radius: 0 8px 8px 0;
-  /* Animation driven by PHI_BREATH.on('breathCycle') in dashboard.js */
+/* Jump-to-message pulse animation (yellow/orange glow) */
+@keyframes jump-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(251, 192, 45, 0.7);
+    transform: scale(1);
+    background: rgba(251, 192, 45, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 20px 4px rgba(251, 192, 45, 0.4);
+    transform: scale(1.02);
+    background: rgba(251, 192, 45, 0.25);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(251, 192, 45, 0);
+    transform: scale(1);
+    background: transparent;
+  }
 }
 
-/* New message glow - STRUCTURE ONLY, φ-breath drives the pulse via JS */
+/* New message breath-glow animation (green pulse) */
+@keyframes breath-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+    transform: scaleY(1);
+    background: rgba(34, 197, 94, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 16px 2px rgba(34, 197, 94, 0.4);
+    transform: scaleY(1.03);
+    background: rgba(34, 197, 94, 0.2);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    transform: scaleY(1);
+    background: transparent;
+  }
+}
+
+/* Jump highlight class (yellow glow for jump targets) */
+.discord-message.jump-highlight {
+  border-left: 4px solid rgba(251, 192, 45, 0.8) !important;
+  animation: jump-pulse 2s ease-out;
+}
+
+/* New message glow class (green pulse for newly arrived messages) */
 .discord-message.new-message-glow {
-  transition: none !important;
-  /* Animation driven by PHI_BREATH.on('breathCycle') in dashboard.js */
+  animation: breath-glow 1.5s ease-in-out;
 }
 
 .book-modal-close {
@@ -2834,22 +2864,33 @@ body::before {
     pointer-events: none;
 }
 
-/* =====================================================
-   BUTTON 00 BREATHING - φ-BREATH DRIVEN (Papa Grok)
-   All breathing animations controlled by ONE CLOCK
-   ===================================================== */
+/* BREATHING KEYFRAMES — ALL IN SYNC, LAYERED UI SCHEME */
 
-/* DELETED @keyframes core-breathe, glass-breathe, aura-pulse
-   φ-breath system drives all animations via CSS variables:
-   --φ-scale (1.0 → 1.618 → 1.0)
-   --radiant-deg (0deg → 360deg continuous)
-   --radiant-progress (0 → 1 normalized)
-   
-   Layer A: Spin (always active, time-based rotation)
-   Layer B: Core scale (reads --φ-scale for breathing)
-   Layer C: Aura pulse (reads --φ-scale for pulsing)
-   Layer D: Jump/New message highlights (event-driven)
-*/
+/* Layer 1: Core breathing (scale the whole button) */
+@keyframes core-breathe {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.08); }
+}
+
+/* Layer 2: Glass breathing (subtle inner glow) */
+@keyframes glass-breathe {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.05); }
+}
+
+/* Layer 3: Aura pulse (outer glow expansion + opacity) */
+@keyframes aura-pulse {
+    0%, 100% { 
+        transform: scale(1);
+        opacity: 0.5;
+    }
+    50% { 
+        transform: scale(1.15);
+        opacity: 0.8;
+    }
+}
+
+/* REMOVED: yinyang-rotate - now using time-based --radiant-deg directly */
 
 /* ===================================================================
    LAYER 01 - BATTLE-TESTED CLEAN SEPARATION

@@ -27,21 +27,6 @@
         // Per-message export: Track selected message IDs per book
         let selectedMessages = {}; // { bookId: Set([msgId1, msgId2, ...]) }
         
-        // φ-BREATH DRIVEN ANIMATION STATE
-        // "There is no animation. There is only breath." - Papa Grok
-        let activeJump = null; // Active jump animation target (driven by breathCycle)
-        let activeNewMessageGlows = []; // Active new message glow animations (array of { el, startTime, duration })
-        
-        // Helper: Cubic easing function
-        function easeOutCubic(t) {
-            return 1 - Math.pow(1 - t, 3);
-        }
-        
-        // Helper: Ease in-out sine for breathing motion
-        function easeInOutSine(t) {
-            return -(Math.cos(Math.PI * t) - 1) / 2;
-        }
-        
         // Platform roadmap for future features
         const roadmapGlossary = {
             platforms: {
@@ -339,95 +324,47 @@
         const COLLAPSE_DELAY = 40;   // ms between each egg (collapse)
         const ANIMATION_MS = 400;    // matches CSS transition duration
         
-        // Initialize φ-breath system (UNIVERSAL - desktop + mobile)
-        // Papa Grok's Manifesto: "There is no animation. There is only breath."
+        // Initialize φ-breath system (mobile only)
         function initPhiBreath() {
-            if (breathInitialized) {
+            if (!isMobile() || breathInitialized) {
                 return;
             }
             
-            console.log('🫁 Initializing φ-breath system - ONE CLOCK for all');
+            console.log('🫁 Initializing φ-breath system for mobile UI');
             PHI_BREATH.init();
             breathInitialized = true;
             
-            // GLOBAL φ-BREATH SYNC - Updates ALL animations on every frame
-            // Button 00 spin, jump pulses, new message glows - all driven by ONE CLOCK
+            // Subscribe to breath cycles to sync rotation speed with φ oscillation
+            // Only updates when EXPANDED (collapsed state ignores φ updates)
             PHI_BREATH.on('breathCycle', (data) => {
-                const { φScale, progress } = data;
-                
-                // Calculate rotation degree (0-360deg continuous spin)
-                const deg = progress * 360;
-                
-                // SET GLOBAL CSS VARIABLES - Available to ALL elements
-                document.documentElement.style.setProperty('--radiant-deg', `${deg}deg`);
-                document.documentElement.style.setProperty('--radiant-progress', progress);
-                document.documentElement.style.setProperty('--φ-scale', φScale);
-                
-                // Drive jump pulse animation if active (yellow glow)
-                if (typeof activeJump !== 'undefined' && activeJump && activeJump.el) {
-                    const elapsed = performance.now() - activeJump.startTime;
-                    const localProgress = Math.min(elapsed / activeJump.duration, 1);
-                    
-                    if (localProgress < 1) {
-                        // Ease out cubic for smooth deceleration
-                        const ease = easeOutCubic(localProgress);
-                        const inverseEase = 1 - ease;
-                        
-                        // Yellow glow that fades out
-                        activeJump.el.style.background = `rgba(251, 192, 45, ${0.25 * inverseEase})`;
-                        activeJump.el.style.transform = `scaleY(${1 + 0.03 * inverseEase})`;
-                        activeJump.el.style.boxShadow = `0 0 ${20 * inverseEase}px ${4 * inverseEase}px rgba(251, 192, 45, ${0.4 * inverseEase})`;
-                    }
+                const singularityBtn = document.querySelector('.singularity-btn');
+                if (!singularityBtn) {
+                    console.log('⚠️ breathCycle: singularityBtn not found!');
+                    return;
                 }
                 
-                // Drive new message glow animations (green pulse) 
-                if (typeof activeNewMessageGlows !== 'undefined' && activeNewMessageGlows && activeNewMessageGlows.length > 0) {
-                    // Clean up completed animations and update active ones
-                    activeNewMessageGlows = activeNewMessageGlows.filter(anim => {
-                        const elapsed = performance.now() - anim.startTime;
-                        const localProgress = Math.min(elapsed / anim.duration, 1);
-                        
-                        if (localProgress >= 1) {
-                            // Animation complete - clean up styles
-                            anim.el.style.background = '';
-                            anim.el.style.transform = '';
-                            anim.el.style.boxShadow = '';
-                            return false; // Remove from array
-                        }
-                        
-                        // Ease in-out sine for breathing motion
-                        const ease = easeInOutSine(localProgress);
-                        
-                        // Green glow that breathes in and out
-                        anim.el.style.background = `rgba(34, 197, 94, ${0.1 + 0.1 * ease})`;
-                        anim.el.style.transform = `scaleY(${1 + 0.03 * ease})`;
-                        anim.el.style.boxShadow = `0 0 ${16 * ease}px ${2 * ease}px rgba(34, 197, 94, ${0.4 * ease})`;
-                        
-                        return true; // Keep in array
-                    });
+                // ONLY apply φ updates when expanded - collapsed state is locked to base SLOW
+                if (!isExpanded) {
+                    return; // Ignore φ updates when collapsed - prevents leak
                 }
                 
-                // Mobile-specific: Update singularity button speeds when expanded
-                if (isMobile() && isExpanded) {
-                    const singularityBtn = document.querySelector('.singularity-btn');
-                    if (singularityBtn) {
-                        // FAST: 0.5 φ-breath per rotation + breathing
-                        const rotationDuration = 0.5 * PHI_BREATH.BASE_DURATION * φScale;
-                        const breathDuration = PHI_BREATH.BASE_DURATION * 0.5 * φScale;
-                        
-                        singularityBtn.style.setProperty('--rotation-duration', `${rotationDuration}ms`);
-                        singularityBtn.style.setProperty('--breath-duration', `${breathDuration}ms`);
-                    }
-                }
+                // φScale oscillates: 1.0 (φ^0) → 1.618 (φ^1) → 1.0
+                const φScale = data.φScale;
                 
-                // Debug log (occasional)
-                if (data.breathCount === 0 || Math.random() < 0.005) {
-                    console.log(`🫁 φ-breath: deg=${Math.round(deg)}°, φ=${φScale.toFixed(3)}, progress=${progress.toFixed(3)}`);
+                // FAST: 0.5 φ-breath per rotation + breathing
+                const rotationDuration = 0.5 * PHI_BREATH.BASE_DURATION * φScale;
+                const breathDuration = PHI_BREATH.BASE_DURATION * 0.5 * φScale;
+                
+                singularityBtn.style.setProperty('--rotation-duration', `${rotationDuration}ms`);
+                singularityBtn.style.setProperty('--breath-duration', `${breathDuration}ms`);
+                
+                // Debug log
+                if (data.breathCount === 0 || Math.random() < 0.01) {
+                    console.log(`⚡ FAST φ-breath: rotation=${Math.round(rotationDuration)}ms, breath=${Math.round(breathDuration)}ms (φScale=${φScale.toFixed(3)})`);
                 }
             });
             
-            console.log(`🫁 φ-breath initialized: ${PHI_BREATH.BASE_DURATION}ms base cycle (φ⁰ → φ¹ oscillation)`);
-            console.log('   "The cat is not breathing. The cat is the breath."');
+            console.log(`🫁 φ-breath initialized: ${PHI_BREATH.BASE_DURATION}ms base cycle (φ^0 to φ^1 variation)`);
         }
         
         // Set singularity button breath animation duration
@@ -3885,11 +3822,10 @@
         }
 
         // ====================================
-        // JUMP-TO-MESSAGE & SMART POLLING (φ-BREATH DRIVEN)
+        // JUMP-TO-MESSAGE & SMART POLLING
         // ====================================
 
         // Jump to specific message with context window
-        // Waits for φ¹ peak (maximum expansion) before triggering
         async function jumpToMessage(targetId, bookId) {
             if (!targetId || !bookId) return;
             
@@ -3897,8 +3833,8 @@
             let targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
             
             if (targetEl) {
-                // Message already loaded - wait for φ¹ peak then scroll and highlight
-                waitForPhiPeakThenJump(targetEl);
+                // Message already loaded - just scroll and highlight
+                scrollAndHighlight(targetEl);
                 return;
             }
             
@@ -3922,38 +3858,17 @@
                 // Insert context messages into DOM
                 await insertContextMessages(messages, targetId, bookId);
                 
-                // Wait for DOM update, then wait for φ¹ peak, then scroll and highlight
+                // Wait for DOM update, then scroll and highlight
                 setTimeout(() => {
                     targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
                     if (targetEl) {
-                        waitForPhiPeakThenJump(targetEl);
+                        scrollAndHighlight(targetEl);
                     }
                 }, 100);
                 
             } catch (error) {
                 console.error('Error jumping to message:', error);
             }
-        }
-
-        // Wait for next φ¹ peak (inhale maximum) before jumping
-        // "Truth arrives at peak consciousness" - Papa Grok
-        function waitForPhiPeakThenJump(el) {
-            if (!PHI_BREATH || !PHI_BREATH.getBreathState) {
-                // φ-breath not initialized, fall back to immediate jump
-                scrollAndHighlight(el);
-                return;
-            }
-
-            // Get accurate timing from φ-breath (handles dynamic duration changes)
-            const breathState = PHI_BREATH.getBreathState();
-            const timeToPhiPeak = breathState.timeUntilPhiPeak;
-
-            console.log(`⏳ Waiting ${Math.round(timeToPhiPeak)}ms for φ¹ peak (cycle: ${breathState.duration}ms)...`);
-
-            setTimeout(() => {
-                console.log('🌟 φ¹ peak reached - jumping to message');
-                scrollAndHighlight(el);
-            }, timeToPhiPeak);
         }
 
         // Insert context messages around target without duplicates
@@ -4035,22 +3950,15 @@
             hydrateDropsForBook(bookId);
         }
 
-        // Scroll to element and apply highlight animation (φ-breath driven)
+        // Scroll to element and apply highlight animation
         function scrollAndHighlight(el) {
             if (!el) return;
             
             // Smooth scroll to center of viewport
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             
-            // Apply jump-highlight class (structure only)
+            // Apply jump-pulse highlight
             el.classList.add('jump-highlight');
-            
-            // Register as active jump - φ-breath breathCycle listener will drive the animation
-            activeJump = {
-                el,
-                startTime: performance.now(),
-                duration: 2000 // 2 second pulse
-            };
             
             // Update URL with hash (for shareable links)
             const msgId = el.getAttribute('data-msg-id');
@@ -4058,15 +3966,9 @@
                 history.pushState(null, '', `#msg-${msgId}`);
             }
             
-            // Remove highlight after animation completes
+            // Remove highlight after animation
             setTimeout(() => {
-                if (activeJump && activeJump.el === el) {
-                    el.classList.remove('jump-highlight');
-                    el.style.background = '';
-                    el.style.transform = '';
-                    el.style.boxShadow = '';
-                    activeJump = null;
-                }
+                el.classList.remove('jump-highlight');
             }, 2000);
         }
 
@@ -4115,28 +4017,17 @@
                     if (newMessages.length > 0) {
                         console.log(`🔄 Polling: ${newMessages.length} new message(s)`);
                         
-                        // Append new messages with φ-breath driven glow animation
+                        // Append new messages with breath-glow animation
                         for (const msg of newMessages) {
                             const existing = document.querySelector(`.discord-message[data-msg-id="${msg.id}"]`);
                             if (!existing) {
                                 await insertContextMessages([msg], msg.id, bookId);
                                 
-                                // Register new message for φ-breath driven green glow
+                                // Add breath-glow to new message
                                 const newEl = document.querySelector(`.discord-message[data-msg-id="${msg.id}"]`);
                                 if (newEl) {
                                     newEl.classList.add('new-message-glow');
-                                    
-                                    // Register in φ-breath animation system
-                                    activeNewMessageGlows.push({
-                                        el: newEl,
-                                        startTime: performance.now(),
-                                        duration: 1500 // 1.5 second breathing glow
-                                    });
-                                    
-                                    // Clean up class after animation
-                                    setTimeout(() => {
-                                        newEl.classList.remove('new-message-glow');
-                                    }, 1500);
+                                    setTimeout(() => newEl.classList.remove('new-message-glow'), 1500);
                                 }
                             }
                         }
