@@ -1414,16 +1414,14 @@
                     </div>
                 </div>
 
-                ${!book.output_credentials?.output_01?.thread_id || (!book.output_0n_url && !book.output_credentials?.output_0n?.webhook_url && !book.output_credentials?.output_0n?.thread_id) ? `
-                    <!-- WARNING: Missing thread configuration -->
+                ${!book.output_credentials?.output_01?.thread_id ? `
+                    <!-- WARNING: Missing Ledger thread (critical) -->
                     <div style="margin: 0.75rem; padding: 0.75rem 1rem; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px; display: flex; align-items: center; gap: 0.75rem;">
                         <div style="font-size: 1.5rem;">⚠️</div>
                         <div style="flex: 1;">
                             <div style="color: #fbbf24; font-weight: 600; font-size: 0.875rem; margin-bottom: 0.25rem;">Setup Incomplete</div>
                             <div style="color: #cbd5e1; font-size: 0.8125rem;">
-                                ${!book.output_credentials?.output_01?.thread_id ? 'Discord thread not created. ' : ''}
-                                ${!book.output_0n_url && !book.output_credentials?.output_0n?.webhook_url && !book.output_credentials?.output_0n?.thread_id ? 'User webhook not configured. ' : ''}
-                                ${platform === 'whatsapp' ? 'Click "Generate QR" to complete setup.' : 'Edit this book to configure outputs.'}
+                                Discord thread not created. ${platform === 'whatsapp' ? 'Click "Generate QR" to complete setup.' : 'Edit this book to configure outputs.'}
                             </div>
                         </div>
                         ${platform === 'whatsapp' ? `
@@ -1434,7 +1432,7 @@
                     </div>
                 ` : ''}
 
-                ${currentUser?.role === 'dev' && book.output_credentials?.output_01?.thread_id ? `
+                ${book.output_credentials?.output_01?.thread_id ? `
                     <!-- MESSAGES: Snap to bottom - fills all available space -->
                     <div style="display: flex; flex-direction: column; flex: 1; margin-top: 0.5rem; min-height: 0;">
                         <!-- Compact search toolbar -->
