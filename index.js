@@ -2880,7 +2880,7 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         const userRole = req.tenantContext?.userRole || 'read-only';
         const tenantId = req.tenantContext?.tenantId;
         const isGenesisAdmin = req.tenantContext?.isGenesisAdmin || false;
-        const { name, inputPlatform, userOutputUrl, contactInfo, tags } = req.body;
+        const { name, inputPlatform, userOutputUrl, contactInfo, tags, includeGroupMessages } = req.body;
         
         if (!tenantId) {
             return res.status(400).json({ error: 'Tenant context required' });
@@ -2912,9 +2912,9 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         };
         
         const result = await client.query(
-            `INSERT INTO books (name, input_platform, output_platform, input_credentials, output_credentials, output_01_url, output_0n_url, contact_info, tags, status, archived, created_by_admin_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-            [name, inputPlatform, 'discord', {}, outputCredentials, output01Url, output0nUrl, contactInfo || null, tags || [], 'inactive', false, createdByAdminId]
+            `INSERT INTO books (name, input_platform, output_platform, input_credentials, output_credentials, output_01_url, output_0n_url, contact_info, tags, status, archived, include_group_messages, created_by_admin_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+            [name, inputPlatform, 'discord', {}, outputCredentials, output01Url, output0nUrl, contactInfo || null, tags || [], 'inactive', false, includeGroupMessages || false, createdByAdminId]
         );
         
         const book = result.rows[0];
@@ -3025,7 +3025,7 @@ app.put('/api/books/:id', requireAuth, setTenantContext, requireRole('admin', 'w
         const tenantSchema = req.tenantContext.tenantSchema;
         const userId = req.userId;
         const { id } = req.params; // fractal_id
-        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status, userOutputUrl, password } = req.body;
+        const { name, inputPlatform, outputPlatform, inputCredentials, outputCredentials, contactInfo, tags, status, userOutputUrl, includeGroupMessages, password } = req.body;
         
         // SECURITY: Prevent user webhook from being same as Ledger webhook (privacy breach)
         if (userOutputUrl && userOutputUrl === NYANBOOK_LEDGER_WEBHOOK) {
@@ -3118,6 +3118,10 @@ app.put('/api/books/:id', requireAuth, setTenantContext, requireRole('admin', 'w
         if (userOutputUrl !== undefined) {
             updates.push(`output_0n_url = $${paramCount++}`);
             values.push(userOutputUrl);
+        }
+        if (includeGroupMessages !== undefined) {
+            updates.push(`include_group_messages = $${paramCount++}`);
+            values.push(includeGroupMessages);
         }
         
         updates.push(`updated_at = NOW()`);
