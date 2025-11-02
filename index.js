@@ -699,6 +699,22 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
     let messageDbId = null;
     
     try {
+        // Fetch book settings first to check include_group_messages
+        const bookSettingsClient = await pool.connect();
+        let includeGroupMessages = false;
+        try {
+            await bookSettingsClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
+            const settingsResult = await bookSettingsClient.query(
+                `SELECT include_group_messages FROM books WHERE id = $1`,
+                [bookId]
+            );
+            if (settingsResult.rows.length > 0) {
+                includeGroupMessages = settingsResult.rows[0].include_group_messages || false;
+            }
+        } finally {
+            bookSettingsClient.release();
+        }
+        
         // Get tenant-scoped database client
         const tenantClient = await pool.connect();
         try {
@@ -709,8 +725,8 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
             const contact = await message.getContact();
             
             // NYANBOOK = PERSONAL DIARY: Forward ALL non-group messages (including messages from self)
-            // Only filter: Group messages (to prevent spam)
-            const shouldForward = !chat.isGroup;
+            // GROUP MESSAGES: Only forward if book has include_group_messages enabled
+            const shouldForward = !chat.isGroup || includeGroupMessages;
             if (!shouldForward) {
                 await tenantClient.query('ROLLBACK');
                 tenantClient.release();
