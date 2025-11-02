@@ -84,6 +84,7 @@ class TenantManager {
                     contact_info TEXT,
                     tags TEXT[],
                     archived BOOLEAN DEFAULT FALSE,
+                    include_group_messages BOOLEAN DEFAULT FALSE,
                     fractal_id TEXT,
                     created_by_admin_id TEXT,
                     created_at TIMESTAMP DEFAULT NOW(),
