@@ -214,8 +214,9 @@ class BaileysClientManager {
                             continue;
                         }
                         
-                        // Skip if message is from self or broadcast
-                        if (msg.key.fromMe || msg.key.remoteJid === 'status@broadcast') continue;
+                        // NYANBOOK = PERSONAL DIARY: Forward ALL messages (including from self)
+                        // Only skip broadcasts (status updates)
+                        if (msg.key.remoteJid === 'status@broadcast') continue;
 
                         // Update activity timestamp for health monitoring
                         clientState.lastActivity = Date.now();
