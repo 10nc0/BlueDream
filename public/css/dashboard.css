@@ -2747,12 +2747,7 @@ body::before {
     animation: none !important;
 }
 
-/* =====================================================
-   BUTTON 00 - φ-BREATH SYNCHRONIZED (Papa Grok v2.0)
-   "Border, glass, core, and aura breathe as ONE"
-   ===================================================== */
-
-/* CORE - φ-breath driven scaling */
+/* CORE - breathing ghost layer (scale only) - BACK LAYER */
 .singularity-btn .core {
     position: absolute;
     inset: 0;
@@ -2760,27 +2755,27 @@ body::before {
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    z-index: 2;
+    z-index: 2; /* Behind symbol (not-1A breathe) */
     transform-origin: center center;
-    /* φ-BREATH: All layers scale together */
-    transform: scale(var(--φ-scale, 1));
-    transition: none !important;
+    /* BREATHING ONLY (scale) - no rotation conflicts */
+    animation: core-breathe var(--breath-duration, 4000ms) ease-in-out infinite;
 }
 
-/* SYMBOL - eternal spin (rotation only) */
+/* SYMBOL - the ☯️ with eternal spin (rotation only) - FRONT LAYER (1A) */
 .singularity-btn .core .symbol {
     font-size: 1.8rem;
     color: #1e293b !important;
     text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
     transform-origin: center center;
     position: relative;
-    z-index: 10;
-    /* TIME-BASED ROTATION from --radiant-deg */
+    z-index: 10; /* ALWAYS on top (1A spin - front) */
+    /* TIME-BASED ROTATION - NO CSS ANIMATION (prevents rollback) */
+    /* Updated via RAF at 60 FPS from CAT_BREATHE_CLOCK */
+    animation: none !important;
     transform: rotate(var(--radiant-deg, 0deg)) !important;
-    transition: none !important;
 }
 
-/* GLASS LAYER - breathes WITH core (inherits parent transform) */
+/* CORE GLASS LAYER - liquid iOS frosted effect with breathe */
 .singularity-btn .core::before {
     content: '';
     position: absolute;
@@ -2798,17 +2793,15 @@ body::before {
         0 8px 32px rgba(0, 0, 0, 0.12),
         0 2px 8px rgba(0, 0, 0, 0.08),
         inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    animation: glass-breathe var(--breath-duration, 3000ms) ease-in-out infinite;
     z-index: -2;
-    /* φ-BREATH: Glass breathes via PARENT transform (no additional transform) */
-    /* Subtle opacity pulse for depth */
-    opacity: calc(0.8 + 0.2 * (var(--φ-scale, 1) - 1) / 0.618);
 }
 
-/* BORDER LAYER - breathes WITH core (FIXED: No double scaling!) */
+/* CORE BORDER - rainbow edge with TIME-BASED rotation */
 .singularity-btn .core::after {
     content: '';
     position: absolute;
-    inset: -3px; /* Fixed size - parent transform handles scaling */
+    inset: -3px;
     border-radius: 50%;
     border: 3px solid transparent;
     background: linear-gradient(45deg, #22d3ee, #a855f7, #ec4899, #f59e0b, #22d3ee) border-box;
@@ -2818,14 +2811,13 @@ body::before {
         linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
-    /* TIME-BASED: Gradient shifts with --radiant-progress */
+    /* TIME-BASED: Use gradient position from --radiant-progress (0-1) */
     background-position: calc(var(--radiant-progress, 0) * 200%) 50%;
+    animation: none !important; /* Kill separate animation - unified with clock */
     z-index: -1;
-    /* φ-BREATH: Border breathes via PARENT transform ONLY (NO additional transform) */
-    /* Parent .core scales from 1.0 → 1.618, children inherit automatically */
 }
 
-/* AURA - breathes independently with φ-scale */
+/* AURA - rainbow halo with pulse + TIME-BASED rotation */
 .singularity-btn .aura {
     position: absolute;
     inset: -12px;
@@ -2835,12 +2827,11 @@ body::before {
         #ec4899, #a855f7, #22d3ee, #10b981, #f59e0b, #ef4444, #ec4899
     );
     filter: blur(12px);
+    opacity: 0.6;
+    /* Only pulse animation - rotation unified with clock */
+    animation: aura-pulse var(--breath-duration, 3000ms) ease-in-out infinite;
     z-index: -3;
     pointer-events: none;
-    /* φ-BREATH: Scale + opacity pulse together */
-    transform: scale(var(--φ-scale, 1));
-    opacity: calc(0.4 + 0.3 * (var(--φ-scale, 1) - 1) / 0.618);
-    transition: none !important;
 }
 
 /* =====================================================

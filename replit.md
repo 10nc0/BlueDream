@@ -4,18 +4,6 @@
 "Your Nyanbook" is a multi-tenant SaaS messaging book designed to forward messages from WhatsApp to Discord. It operates as a secure, multi-user application with robust authentication and permanent message retention via Discord threads. Each user has isolated data storage for privacy and security.
 
 ## Recent Changes
-**November 2, 2025** - φ-BREATH v2.1 - CONTINUOUS BREATHING SYNCHRONIZED: Unified all three Button 00 animations (spin, glow, breathing) into one synchronized clock with three distinct concepts:
-- **φ-Breath Clock**: Timing mechanism that runs continuously, updating CSS variables at 60 FPS in single `requestAnimationFrame` loop
-- **Button 00 Size Breathing**: Always-on oscillation (1.0 → 1.618 → 1.0 sine wave) that never stops, only speed changes. IDLE = 4.0s cycle (slow), FAST = 1.618s cycle (quick)
-- **Event Animations**: Special visual effects (yellow jump pulse, green message glow) triggered only by user events (new messages, jumps), NOT on startup
-- **Unified Clock**: Single loop updates three CSS variables together: `--radiant-deg` (rotation, 20s constant), `--radiant-progress` (glow, follows rotation), `--φ-scale` (breathing size)
-- **Natural Oscillation**: Breathing uses sine wave for smooth, organic size changes. Math: `scale = 1.0 + (0.618 * 0.5) * (sin(t) + 1)` yields 1.0 to 1.618 range
-- **Event Timing**: All events (jump, new message, user activity) trigger FAST for exactly 1 φ-breath cycle (1.618s), then auto-return to IDLE slow breathing
-- **Startup Behavior**: Button 00 begins in IDLE mode (slow gentle breathing) with NO event animations. Browser cache cleared to prevent stale behavior
-- **Layer Synchronization**: Core, glass, border, and aura all scale together via `--φ-scale` (no compound scaling). Symbol (☯️) rotates independently via `--radiant-deg`
-- **Mobile Integration**: Button 00 expansion triggers FAST breathing for 5s, collapse returns to IDLE slow breathing
-All three effects (spin, glow, breathe) update in one frame as a unified organism - "Spin, glow, and breathe as one."
-
 **November 2, 2025** - REAL-TIME UPDATES: Implemented smart polling and jump-to-message navigation for seamless message viewing:
 - **Smart Polling Engine**: 5-second auto-refresh polls Discord for new messages using `?after={messageId}` parameter. Pauses when tab is hidden (Page Visibility API), only fetches messages newer than last seen. Green breath-glow animation highlights newly arrived messages.
 - **Auto-Scroll Logic**: Messages auto-scroll to bottom only if user was already there. When user scrolls up, "New messages" banner appears (clickable to jump to bottom) instead of forced scrolling.

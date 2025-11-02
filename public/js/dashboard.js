@@ -300,9 +300,6 @@
             // Hide thumbs zone
             const thumbsZone = document.getElementById('thumbsZone');
             if (thumbsZone) thumbsZone.style.display = 'none';
-            
-            // Initialize φ-breath system (UNIVERSAL - needed for Button 00 object layer)
-            initPhiBreath();
         }
 
         /**
@@ -343,26 +340,29 @@
         const ANIMATION_MS = 400;    // matches CSS transition duration
         
         // Initialize φ-breath system (UNIVERSAL - desktop + mobile)
-        // v2.0: IDLE-FIRST architecture - button awakens from silence
+        // Papa Grok's Manifesto: "There is no animation. There is only breath."
         function initPhiBreath() {
             if (breathInitialized) {
                 return;
             }
             
-            console.log('🫁 Initializing φ-breath v2.0 - IDLE FIRST');
-            PHI_BREATH.init(); // Starts at IDLE (φ=1.0)
+            console.log('🫁 Initializing φ-breath system - ONE CLOCK for all');
+            PHI_BREATH.init();
             breathInitialized = true;
             
-            // Start animation loops for jump/glow effects
-            startJumpGlowAnimationLoop();
-            
-            console.log('   State: IDLE (φ=1.0)');
-            console.log('   "The button awakens from silence."');
-        }
-        
-        // Animation loop for jump and glow effects (independent of φ-breath state)
-        function startJumpGlowAnimationLoop() {
-            function tick() {
+            // GLOBAL φ-BREATH SYNC - Updates ALL animations on every frame
+            // Button 00 spin, jump pulses, new message glows - all driven by ONE CLOCK
+            PHI_BREATH.on('breathCycle', (data) => {
+                const { φScale, progress } = data;
+                
+                // Calculate rotation degree (0-360deg continuous spin)
+                const deg = progress * 360;
+                
+                // SET GLOBAL CSS VARIABLES - Available to ALL elements
+                document.documentElement.style.setProperty('--radiant-deg', `${deg}deg`);
+                document.documentElement.style.setProperty('--radiant-progress', progress);
+                document.documentElement.style.setProperty('--φ-scale', φScale);
+                
                 // Drive jump pulse animation if active (yellow glow)
                 if (typeof activeJump !== 'undefined' && activeJump && activeJump.el) {
                     const elapsed = performance.now() - activeJump.startTime;
@@ -377,12 +377,6 @@
                         activeJump.el.style.background = `rgba(251, 192, 45, ${0.25 * inverseEase})`;
                         activeJump.el.style.transform = `scaleY(${1 + 0.03 * inverseEase})`;
                         activeJump.el.style.boxShadow = `0 0 ${20 * inverseEase}px ${4 * inverseEase}px rgba(251, 192, 45, ${0.4 * inverseEase})`;
-                    } else {
-                        // Animation complete - cleanup
-                        activeJump.el.style.background = '';
-                        activeJump.el.style.transform = '';
-                        activeJump.el.style.boxShadow = '';
-                        activeJump = null;
                     }
                 }
                 
@@ -413,9 +407,27 @@
                     });
                 }
                 
-                requestAnimationFrame(tick);
-            }
-            requestAnimationFrame(tick);
+                // Mobile-specific: Update singularity button speeds when expanded
+                if (isMobile() && isExpanded) {
+                    const singularityBtn = document.querySelector('.singularity-btn');
+                    if (singularityBtn) {
+                        // FAST: 0.5 φ-breath per rotation + breathing
+                        const rotationDuration = 0.5 * PHI_BREATH.BASE_DURATION * φScale;
+                        const breathDuration = PHI_BREATH.BASE_DURATION * 0.5 * φScale;
+                        
+                        singularityBtn.style.setProperty('--rotation-duration', `${rotationDuration}ms`);
+                        singularityBtn.style.setProperty('--breath-duration', `${breathDuration}ms`);
+                    }
+                }
+                
+                // Debug log (occasional)
+                if (data.breathCount === 0 || Math.random() < 0.005) {
+                    console.log(`🫁 φ-breath: deg=${Math.round(deg)}°, φ=${φScale.toFixed(3)}, progress=${progress.toFixed(3)}`);
+                }
+            });
+            
+            console.log(`🫁 φ-breath initialized: ${PHI_BREATH.BASE_DURATION}ms base cycle (φ⁰ → φ¹ oscillation)`);
+            console.log('   "The cat is not breathing. The cat is the breath."');
         }
         
         // Set singularity button breath animation duration
@@ -619,10 +631,10 @@
                 thumbsIdleTimer = null;
             }
             
-            // φ-breath v2.0: Return to IDLE on collapse (mobile only)
+            // Exit creation mode for φ-breath system (mobile only)
             if (isMobile() && breathInitialized) {
-                console.log('😌 Collapsed - returning to IDLE');
-                PHI_BREATH.goIdle();
+                console.log('😌 Exited CREATION MODE');
+                PHI_BREATH.exitCreationMode();
             }
             
             if (layer01) {
@@ -674,10 +686,10 @@
             // SET FAST MODE (time-based, no rollback)
             CAT_BREATHE_CLOCK.setSpeed('FAST');
             
-            // φ-breath v2.0: Activate FAST on expand (mobile only)
+            // Enter creation mode for φ-breath system (mobile only)
             if (isMobile() && breathInitialized) {
-                console.log('🌀 Expanded - activating FAST mode');
-                PHI_BREATH.goFast();
+                console.log('🌀 Entered CREATION MODE');
+                PHI_BREATH.enterCreationMode();
             }
             
             if (layer01) {
@@ -703,7 +715,18 @@
                 expandLock = false;
             }
             
-            // Breathing speed controlled by PHI_BREATH (FAST on expand, returns to IDLE after timeout)
+            // φ-breath listener will handle FAST breathing updates automatically
+            
+            // Auto-collapse after φ-breath (mobile only)
+            const breathDuration = breathInitialized ? PHI_BREATH.BASE_DURATION : 4000;
+            if (isMobile()) {
+                thumbsIdleTimer = setTimeout(() => {
+                    console.log('⏰ φ-breath complete, auto-collapsing');
+                    if (isExpanded) {
+                        collapseToSingularity();
+                    }
+                }, breathDuration);
+            }
         }
         
         /**
@@ -3912,10 +3935,25 @@
             }
         }
 
-        // Jump to message immediately (φ-breath v2.0: no peak timing needed)
+        // Wait for next φ¹ peak (inhale maximum) before jumping
+        // "Truth arrives at peak consciousness" - Papa Grok
         function waitForPhiPeakThenJump(el) {
-            // Direct jump - φ-breath handles FAST burst automatically
-            scrollAndHighlight(el);
+            if (!PHI_BREATH || !PHI_BREATH.getBreathState) {
+                // φ-breath not initialized, fall back to immediate jump
+                scrollAndHighlight(el);
+                return;
+            }
+
+            // Get accurate timing from φ-breath (handles dynamic duration changes)
+            const breathState = PHI_BREATH.getBreathState();
+            const timeToPhiPeak = breathState.timeUntilPhiPeak;
+
+            console.log(`⏳ Waiting ${Math.round(timeToPhiPeak)}ms for φ¹ peak (cycle: ${breathState.duration}ms)...`);
+
+            setTimeout(() => {
+                console.log('🌟 φ¹ peak reached - jumping to message');
+                scrollAndHighlight(el);
+            }, timeToPhiPeak);
         }
 
         // Insert context messages around target without duplicates
@@ -4014,11 +4052,6 @@
                 duration: 2000 // 2 second pulse
             };
             
-            // Trigger φ-breath FAST burst (auto-returns to IDLE after 1.5s)
-            if (breathInitialized && PHI_BREATH && PHI_BREATH.onJump) {
-                PHI_BREATH.onJump();
-            }
-            
             // Update URL with hash (for shareable links)
             const msgId = el.getAttribute('data-msg-id');
             if (msgId) {
@@ -4099,11 +4132,6 @@
                                         startTime: performance.now(),
                                         duration: 1500 // 1.5 second breathing glow
                                     });
-                                    
-                                    // Trigger φ-breath FAST burst (auto-returns to IDLE after 2s)
-                                    if (breathInitialized && PHI_BREATH && PHI_BREATH.onNewMessage) {
-                                        PHI_BREATH.onNewMessage();
-                                    }
                                     
                                     // Clean up class after animation
                                     setTimeout(() => {
