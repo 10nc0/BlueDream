@@ -42,15 +42,25 @@ class TenantManager {
     async createTenant(userId) {
         const client = await this.pool.connect();
         try {
-            const result = await client.query(`
-                SELECT COALESCE(MAX(CAST(REPLACE(schema_name, 'tenant_', '') AS INTEGER)), 0) + 1 as next_id
-                FROM information_schema.schemata
-                WHERE schema_name LIKE 'tenant_%'
-            `);
+            // FIRST PRINCIPLES: Register tenant in catalog FIRST to get authoritative tenant_id
+            // This ensures foreign key constraints are satisfied when other tables reference tenant_id
+            const catalogResult = await client.query(`
+                INSERT INTO core.tenant_catalog (tenant_schema, genesis_user_id, status)
+                VALUES ('pending', $1, 'active')
+                RETURNING id
+            `, [userId]);
             
-            const tenantId = result.rows[0].next_id;
+            const tenantId = catalogResult.rows[0].id;
             const schemaName = `tenant_${tenantId}`;
             
+            // Update catalog with actual schema name
+            await client.query(`
+                UPDATE core.tenant_catalog
+                SET tenant_schema = $1
+                WHERE id = $2
+            `, [schemaName, tenantId]);
+            
+            // Create the actual tenant schema
             await client.query(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
             
             // Create tenant tables
