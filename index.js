@@ -1962,12 +1962,14 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
             });
         });
         
-        // CRITICAL: Clear session cookie (Safari/iPhone compatible)
-        res.clearCookie('connect.sid', {
+        // CRITICAL: Clear session cookie with CORRECT NAME (Safari/iPhone compatible)
+        // Cookie name is 'book.sid' from session config (line 175)
+        res.clearCookie('book.sid', {
             path: '/',
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+            sameSite: 'none', // Must match session config
+            partitioned: true // Must match session config for Safari CHIPS
         });
         
         console.log('✅ User logged out successfully');
