@@ -3,6 +3,9 @@
 ## Overview
 "Your Nyanbook" is a multi-tenant SaaS messaging book designed to forward messages from WhatsApp to Discord. It operates as a secure, multi-user application with robust authentication and permanent message retention via Discord threads. Each user has isolated data storage for privacy and security.
 
+## Recent Changes
+**November 2, 2025** - Complete terminology refactor from "bridge" to "book" across the entire codebase to align with product branding and user mental model (messages are recorded in a notebook/book, not bridged). This includes database schema (`bridges` → `books` table), all backend functions, frontend UI, CSS classes, and user-facing text. Preserved existing fractal_ids (dev_bridge_t1_...) as immutable database data.
+
 ## User Preferences
 - **Design**: Apple glassmorphism aesthetic with Discord-style message layout
 - **Privacy**: Messages sent TO book only (not group monitoring)
