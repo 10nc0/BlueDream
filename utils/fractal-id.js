@@ -16,10 +16,11 @@ const SALT = FRACTAL_SALT || 'dev-only-weak-salt-DO-NOT-USE-IN-PRODUCTION';
  * Generate a fractalized ID for a resource
  * Format: {type}_t{tenantId}_{hash} or dev_{type}_t{tenantId}_{hash} for dev admins
  * Examples: 
- *   - bridge_t3_a1b2c3d4e5 (regular admin)
- *   - dev_bridge_t1_a1b2c3d4e5 (dev admin with admin_id='01')
+ *   - book_t3_a1b2c3d4e5 (regular admin)
+ *   - dev_book_t1_a1b2c3d4e5 (dev admin with admin_id='01')
+ *   - bridge_t3_a1b2c3d4e5 (legacy bridge type, backward compatible)
  * 
- * @param {string} type - Resource type ('bridge', 'msg')
+ * @param {string} type - Resource type ('book', 'bridge', 'msg')
  * @param {number} tenantId - Tenant ID
  * @param {number} dbId - Database internal ID
  * @param {string|null} createdByAdminId - Admin ID ('01' for dev, null for regular)
@@ -49,14 +50,15 @@ function parse(fractalId) {
     }
     
     // Match both regular and dev-prefixed IDs
-    // Examples: bridge_t1_abc123 or dev_bridge_t1_abc123
-    const match = fractalId.match(/^(?:(dev)_)?(bridge|msg)_t(\d+)_([a-f0-9]+)$/);
+    // Examples: bridge_t1_abc123, book_t1_abc123, or dev_book_t1_abc123
+    const match = fractalId.match(/^(?:(dev)_)?(bridge|book|msg)_t(\d+)_([a-f0-9]+)$/);
     if (!match) {
         return null;
     }
     
     return {
-        isDevBridge: match[1] === 'dev',
+        isDevBridge: match[1] === 'dev',  // Legacy compatibility
+        envPrefix: match[1],  // 'dev' or undefined
         type: match[2],
         tenantId: parseInt(match[3]),
         hash: match[4]

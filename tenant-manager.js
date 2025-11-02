@@ -115,18 +115,18 @@ class TenantManager {
                 ON ${schemaName}.drops USING gin(search_vector)
             `);
             
-            // Create sessions table for session management
+            // Create sessions table for session management (express-session uses 'expires' not 'expire')
             await client.query(`
                 CREATE TABLE IF NOT EXISTS ${schemaName}.sessions (
                     sid TEXT PRIMARY KEY,
                     sess JSONB NOT NULL,
-                    expire TIMESTAMP NOT NULL
+                    expires TIMESTAMP NOT NULL
                 )
             `);
             
             await client.query(`
                 CREATE INDEX IF NOT EXISTS sessions_expire_idx 
-                ON ${schemaName}.sessions (expire)
+                ON ${schemaName}.sessions (expires)
             `);
             
             // Create refresh_tokens table for JWT refresh tokens (auth-service.js)
