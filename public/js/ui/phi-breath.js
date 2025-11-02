@@ -1,17 +1,10 @@
 /**
- * φ-BREATH SYSTEM — Centralized Golden Ratio Breathing
+ * φ-BREATH v2.0 — IDLE FIRST
+ * "The button awakens from silence"
  * 
- * The universal breath that pulses through all animations.
- * Like a cat's heartbeat, all related animations sync to this constant.
- * 
- * Breath Cycle: φ^0 (1.0x) → φ^1 (1.618x) full inhale-exhale
- * Duration: 4000ms base (can be scaled)
- * 
- * This module:
- * - Manages the constant breathing cycle
- * - Logs each breath (like a heartbeat monitor)
- * - Provides events for animations to sync with
- * - Centralizes time so all animations breathe together
+ * State Machine:
+ * IDLE (default, φ=1.0) ↔ FAST (on activity, φ=1.618)
+ * + Independent EVENT triggers (jump, new message)
  */
 
 const PHI_BREATH = (function() {
@@ -19,241 +12,209 @@ const PHI_BREATH = (function() {
     
     // Golden Ratio Constants
     const φ = 1.618033988749895;
-    const BASE_DURATION = 4000; // 4s base cycle
+    const BASE_DURATION = 4000; // 4s cycle duration
     
-    // Breathing State
-    let breathCount = 0;
-    let currentPhase = 'idle'; // 'idle', 'inhale', 'exhale', 'creation'
-    let breathStartTime = 0;
+    // State
+    let isIdle = true;
+    let currentScale = 1.0;
+    let targetScale = 1.0;
     let animationFrameId = null;
-    let currentCycleDuration = BASE_DURATION;
-    let lastBreathTimestamp = 0; // Guard to prevent multiple breath events
-    let isBreathing = false; // TRUE IDLE: Start with no breathing
+    let idleTimer = null;
     
-    // Event Listeners
-    const listeners = {
-        breathStart: [],
-        breathCycle: [],
-        phaseChange: [],
-        creation: []
-    };
-    
-    // Breath Log (last 10 breaths for monitoring)
-    const breathLog = [];
-    const MAX_LOG_SIZE = 10;
+    // Rotation (independent, always spinning)
+    let rotationDegrees = 0;
+    let rotationStartTime = 0;
     
     /**
-     * Initialize the breathing system
+     * Initialize - Start IDLE (φ = 1.0)
      */
     function init() {
-        console.log('🫁 φ-Breath System initialized');
-        console.log(`   Base Duration: ${BASE_DURATION}ms`);
-        console.log(`   φ^0 (Exhale): 1.0x = ${BASE_DURATION}ms`);
-        console.log(`   φ^1 (Inhale): ${φ.toFixed(3)}x = ${Math.round(BASE_DURATION * φ)}ms`);
+        console.log('🫁 φ-Breath System v2.0 initialized');
+        console.log('   State: IDLE (default)');
+        console.log('   φ⁰ (Idle): 1.0');
+        console.log('   φ¹ (Fast): 1.618');
+        console.log('   "The button awakens from silence."');
         
-        breathStartTime = performance.now();
-        startBreathingCycle();
+        rotationStartTime = performance.now();
+        startIdle();
+        startRotationLoop();
     }
     
     /**
-     * Start the continuous breathing cycle
+     * Start IDLE state (φ = 1.0)
      */
-    function startBreathingCycle() {
-        const currentTime = performance.now();
-        const elapsed = currentTime - breathStartTime;
-        const progress = (elapsed % currentCycleDuration) / currentCycleDuration;
-        
-        // Calculate current breath phase (sinusoidal breathing)
-        // 0.0 → 0.5: Inhale (φ^0 → φ^1)
-        // 0.5 → 1.0: Exhale (φ^1 → φ^0)
-        const breathPhase = Math.sin(progress * Math.PI * 2);
-        
-        // Map to φ scale: 1.0 → 1.618 → 1.0
-        const φScale = 1.0 + ((φ - 1.0) * ((breathPhase + 1) / 2));
-        
-        // Determine phase
-        const newPhase = progress < 0.5 ? 'inhale' : 'exhale';
-        if (newPhase !== currentPhase && currentPhase !== 'creation') {
-            currentPhase = newPhase;
-            emit('phaseChange', { phase: currentPhase, scale: φScale, progress });
+    function startIdle() {
+        isIdle = true;
+        targetScale = 1.0;
+        animateTo(targetScale, 2000); // 2s smooth return to idle
+    }
+    
+    /**
+     * Go FAST (φ = 1.618) - triggered by activity
+     */
+    function goFast() {
+        if (isIdle) {
+            isIdle = false;
+            targetScale = 1.618;
+            animateTo(targetScale, 600); // 600ms quick expansion
+            console.log('⚡ FAST mode activated (φ=1.618)');
         }
         
-        // Check for breath cycle completion (guard prevents multiple events)
-        const breathTimestamp = Math.floor(elapsed / currentCycleDuration);
-        if (breathTimestamp > lastBreathTimestamp && elapsed > 100) {
-            lastBreathTimestamp = breathTimestamp;
-            onBreathComplete();
-        }
-        
-        // Emit continuous breath cycle event
-        emit('breathCycle', {
-            φScale,
-            progress,
-            phase: currentPhase,
-            breathCount,
-            elapsed
-        });
-        
-        animationFrameId = requestAnimationFrame(startBreathingCycle);
+        // Reset idle timer - return to idle after 5s inactivity
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+            goIdle();
+        }, 5000);
     }
     
     /**
-     * Handle breath cycle completion
+     * Return to IDLE (φ = 1.0)
      */
-    function onBreathComplete() {
-        breathCount++;
-        
-        const breathData = {
-            count: breathCount,
-            timestamp: new Date().toISOString(),
-            duration: currentCycleDuration,
-            phase: currentPhase
-        };
-        
-        // Log the breath
-        breathLog.push(breathData);
-        if (breathLog.length > MAX_LOG_SIZE) {
-            breathLog.shift();
-        }
-        
-        // φ-breath counter increments with each breath
-        // Genesis counter (server-side) increments in parallel as red herring
-        console.log(`🫁 Breath #${breathCount} | ${currentPhase} | ${currentCycleDuration}ms | ${new Date().toLocaleTimeString()}`);
-        
-        emit('breathStart', breathData);
-    }
-    
-    /**
-     * Enter "creation spin" mode (fast spinning during expansion)
-     */
-    function enterCreationMode() {
-        currentPhase = 'creation';
-        emit('creation', { state: 'start' });
-        console.log('🌀 Entered CREATION MODE - fast spinning');
-    }
-    
-    /**
-     * Exit "creation spin" mode (return to normal breathing)
-     */
-    function exitCreationMode() {
-        currentPhase = 'idle';
-        breathStartTime = performance.now(); // Reset breath cycle
-        lastBreathTimestamp = 0; // Reset guard
-        emit('creation', { state: 'end' });
-        console.log('😌 Exited CREATION MODE - returning to φ-breath');
-    }
-    
-    /**
-     * Set breath cycle duration
-     */
-    function setDuration(durationMs) {
-        currentCycleDuration = durationMs;
-        console.log(`🫁 Breath duration set to ${durationMs}ms`);
-    }
-    
-    /**
-     * Get init time for external timing calculations
-     */
-    function getInitTime() {
-        return breathStartTime;
-    }
-    
-    /**
-     * Get current breath state (enhanced with timing information)
-     * Uses currentCycleDuration for accurate synchronization under dynamic speeds
-     */
-    function getBreathState() {
-        const now = performance.now();
-        const elapsed = (now - breathStartTime) % currentCycleDuration;
-        const normalizedProgress = elapsed / currentCycleDuration;
-        
-        // Calculate φScale using same formula as breathCycle
-        // Sinusoidal breathing: 1.0 → 1.618 → 1.0
-        const breathPhase = Math.sin(normalizedProgress * Math.PI * 2);
-        const φScale = 1.0 + ((φ - 1.0) * ((breathPhase + 1) / 2));
-        
-        // φ¹ peak occurs at 50% of cycle (inhale maximum)
-        const φPeakTime = currentCycleDuration * 0.5;
-        const timeUntilPhiPeak = elapsed < φPeakTime 
-            ? φPeakTime - elapsed 
-            : (currentCycleDuration - elapsed) + φPeakTime;
-        
-        return {
-            initTime: breathStartTime,
-            breathCount,
-            phase: currentPhase,
-            duration: currentCycleDuration,
-            elapsed,
-            progress: normalizedProgress,
-            φScale,
-            timeUntilPhiPeak,
-            log: [...breathLog]
-        };
-    }
-    
-    /**
-     * Event system - Subscribe to breath events
-     */
-    function on(eventName, callback) {
-        if (listeners[eventName]) {
-            listeners[eventName].push(callback);
+    function goIdle() {
+        if (!isIdle) {
+            isIdle = true;
+            targetScale = 1.0;
+            animateTo(targetScale, 2000); // 2s smooth contraction
+            console.log('😌 IDLE mode - returning to rest (φ=1.0)');
         }
     }
     
     /**
-     * Event system - Unsubscribe from breath events
+     * Animate to target scale with easing
      */
-    function off(eventName, callback) {
-        if (listeners[eventName]) {
-            const index = listeners[eventName].indexOf(callback);
-            if (index > -1) {
-                listeners[eventName].splice(index, 1);
+    function animateTo(target, duration) {
+        const start = performance.now();
+        const initial = currentScale;
+        
+        const tick = (now) => {
+            const progress = Math.min((now - start) / duration, 1);
+            
+            // easeInOutQuad
+            const ease = progress < 0.5
+                ? 2 * progress * progress
+                : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+            
+            currentScale = initial + (target - initial) * ease;
+            updateCSS();
+            
+            if (progress < 1) {
+                animationFrameId = requestAnimationFrame(tick);
+            } else {
+                currentScale = target;
+                updateCSS();
             }
-        }
+        };
+        
+        requestAnimationFrame(tick);
     }
     
     /**
-     * Event system - Emit events
+     * Rotation loop (independent, always running)
      */
-    function emit(eventName, data) {
-        if (listeners[eventName]) {
-            listeners[eventName].forEach(callback => callback(data));
+    function startRotationLoop() {
+        function tick(now) {
+            const elapsed = now - rotationStartTime;
+            rotationDegrees = (elapsed / 20000) * 360; // 20s per rotation
+            
+            document.documentElement.style.setProperty('--radiant-deg', `${rotationDegrees % 360}deg`);
+            document.documentElement.style.setProperty('--radiant-progress', (rotationDegrees % 360) / 360);
+            
+            requestAnimationFrame(tick);
         }
+        requestAnimationFrame(tick);
     }
     
     /**
-     * Stop the breathing cycle (cleanup)
+     * Update CSS variables
+     */
+    function updateCSS() {
+        const scale = currentScale.toFixed(4);
+        const progress = ((currentScale - 1.0) / 0.618).toFixed(4);
+        
+        document.documentElement.style.setProperty('--φ-scale', scale);
+        document.documentElement.style.setProperty('--φ-progress', progress);
+    }
+    
+    /**
+     * Event Triggers
+     */
+    function onMessage() {
+        goFast();
+        // Auto-return to IDLE after message event (2s burst)
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => goIdle(), 2000);
+    }
+    
+    function onUserActivity() {
+        goFast();
+        // Auto-return to IDLE after user activity stops (3s)
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => goIdle(), 3000);
+    }
+    
+    function onJump() {
+        // Jump: Quick FAST burst, then return to IDLE
+        goFast();
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+            goIdle();
+            console.log('🎯 Jump complete - returned to IDLE');
+        }, 1500); // 1.5s burst
+    }
+    
+    function onNewMessage() {
+        // New message glow: Quick FAST burst, then return to IDLE
+        goFast();
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+            goIdle();
+            console.log('✨ Glow complete - returned to IDLE');
+        }, 2000); // 2s burst
+    }
+    
+    /**
+     * Stop animations (cleanup)
      */
     function stop() {
         if (animationFrameId) {
             cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
         }
+        clearTimeout(idleTimer);
         console.log('🫁 φ-Breath System stopped');
+    }
+    
+    /**
+     * Get current state
+     */
+    function getState() {
+        return {
+            isIdle,
+            currentScale,
+            targetScale,
+            rotationDegrees: rotationDegrees % 360
+        };
     }
     
     // Public API
     return {
         init,
-        on,
-        off,
-        enterCreationMode,
-        exitCreationMode,
-        setDuration,
-        getInitTime,
-        getBreathState,
+        goFast,
+        goIdle,
+        onMessage,
+        onUserActivity,
+        onJump,
+        onNewMessage,
+        getState,
         stop,
         
         // Constants
         φ,
         BASE_DURATION,
         
-        // Calculated values
-        get φ0() { return BASE_DURATION; },
-        get φ1() { return Math.round(BASE_DURATION * φ); },
-        
-        // Timing access for jump-to-message sync
-        get initTime() { return breathStartTime; }
+        // Getters
+        get isIdle() { return isIdle; },
+        get currentScale() { return currentScale; }
     };
 })();
 

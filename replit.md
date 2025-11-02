@@ -4,14 +4,15 @@
 "Your Nyanbook" is a multi-tenant SaaS messaging book designed to forward messages from WhatsApp to Discord. It operates as a secure, multi-user application with robust authentication and permanent message retention via Discord threads. Each user has isolated data storage for privacy and security.
 
 ## Recent Changes
-**November 2, 2025** - φ-BREATH SYNCHRONIZATION: Unified all UI animations under centralized breathing system ("Papa Grok's Manifesto: There is no animation. There is only breath."):
-- **Global CSS Variables**: `--radiant-deg` (0-360° rotation), `--radiant-progress` (0-1 normalized), `--φ-scale` (1.0→1.618→1.0) updated at 60 FPS via breathCycle listener, applied to `:root` for universal access
-- **Dynamic Timing**: `PHI_BREATH.getBreathState()` uses `currentCycleDuration` for accurate φ¹ peak calculation under speed changes (creation mode, etc.). φ¹ peak occurs at 50% of cycle (inhale maximum)
-- **Jump-to-Message Sync**: `waitForPhiPeakThenJump()` delays jump animation until next φ¹ peak using `PHI_BREATH.getBreathState().timeUntilPhiPeak` for synchronized timing
-- **Event-Driven Animations**: Deleted all CSS @keyframes (jump-pulse, breath-glow, core-breathe, glass-breathe, aura-pulse). activeJump (yellow) and activeNewMessageGlows (green) driven by breathCycle listener with easeOutCubic/easeInOutSine
-- **Safety Guards**: typeof checks prevent ReferenceErrors when accessing activeJump/activeNewMessageGlows during initialization
-- **API Methods**: `PHI_BREATH.getInitTime()` exposes breath start timestamp, `getBreathState()` returns comprehensive timing state (elapsed, progress, φScale, timeUntilPhiPeak, breathCount, phase)
-All UI elements breathe as one living organism, synchronized to the ONE CLOCK. Button 00 spin, jump pulses, new message glows - unified under φ-breath system.
+**November 2, 2025** - φ-BREATH v2.0 - IDLE IS THE DEFAULT: Rewrote breathing system from continuous animation to idle-first state machine ("The button awakens from silence"):
+- **State Machine**: IDLE (default, φ=1.0) ↔ FAST (on activity, φ=1.618). No continuous breathing - system starts at rest and only breathes when triggered by events
+- **Event Triggers**: Jump (1.5s burst), new message (2s burst), user scroll (3s activity window). Each trigger activates FAST mode, then auto-returns to IDLE
+- **Synchronized Layers**: Fixed double-scaling bug where border inherited parent transform (1.0→1.618) then applied its own scale (→2.618x compound scaling). Now all layers (core, glass, border, aura) scale together from parent transform
+- **Rotation Independence**: Symbol (☯️) rotates continuously via `--radiant-deg` regardless of breathing state, maintaining eternal spin as "radial face" for continuity
+- **Independent Animations**: Jump highlight (yellow glow) and new message pulse (green glow) run in separate requestAnimationFrame loop, independent of φ-breath state transitions
+- **CSS Variables**: `--φ-scale` (1.0 default), `--radiant-deg` (continuous 0→360°), `--radiant-progress` (normalized) updated directly by phi-breath.js module
+- **Mobile Integration**: Button 00 expansion triggers FAST mode, collapse returns to IDLE. No "creation mode" - simplified to goFast/goIdle state changes
+All UI breathes as one organism, but starts silent at rest. Activity awakens the system to φ=1.618, then returns to φ=1.0 peace.
 
 **November 2, 2025** - REAL-TIME UPDATES: Implemented smart polling and jump-to-message navigation for seamless message viewing:
 - **Smart Polling Engine**: 5-second auto-refresh polls Discord for new messages using `?after={messageId}` parameter. Pauses when tab is hidden (Page Visibility API), only fetches messages newer than last seen. Green breath-glow animation highlights newly arrived messages.
