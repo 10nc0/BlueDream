@@ -2830,6 +2830,7 @@
                     
                     const bookName = document.getElementById('book-name-input').value;
                     const platform = document.getElementById('book-platform-input').value;
+                    const includeGroupMessages = document.getElementById('book-include-groups-input').checked;
                     
                     const submitBtn = bookForm.querySelector('button[type="submit"]');
                     const originalText = submitBtn.textContent;
@@ -2852,7 +2853,8 @@
                             },
                             body: JSON.stringify({
                                 name: bookName,
-                                inputPlatform: platform
+                                inputPlatform: platform,
+                                includeGroupMessages: includeGroupMessages
                             })
                         });
                         
