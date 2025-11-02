@@ -60,6 +60,8 @@ class TenantManager {
                     email TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL,
                     role TEXT NOT NULL DEFAULT 'admin',
+                    tenant_id INTEGER NOT NULL,
+                    is_genesis_admin BOOLEAN DEFAULT FALSE,
                     created_at TIMESTAMP DEFAULT NOW()
                 )
             `);
