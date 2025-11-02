@@ -2237,10 +2237,6 @@
                         </div>
                     </div>
                     ` : ''}
-                    
-                    <div style="margin-top: 1rem; padding: 1rem; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; font-size: 0.875rem; color: #93c5fd;">
-                        <strong>ℹ️ Note:</strong> This information shows your configured Discord webhook. Messages are stored permanently in Discord threads.
-                    </div>
                 </div>
             `;
             
