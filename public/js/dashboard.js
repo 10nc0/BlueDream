@@ -1668,8 +1668,10 @@
             
             // Render messages grouped by time buckets
             const html = buckets.map(bucket => {
+                // Store first message ID for jump-to functionality
+                const firstMsgId = bucket.messages[0]?.id || '';
                 const bucketHeader = `
-                    <div class="time-bucket-header">
+                    <div class="time-bucket-header" data-first-msg-id="${firstMsgId}" data-book-id="${bookId}" style="cursor: pointer;">
                         <span class="bucket-label">${bucket.label}</span>
                         <span class="bucket-count">${bucket.messages.length} message${bucket.messages.length !== 1 ? 's' : ''}</span>
                     </div>
@@ -1715,6 +1717,7 @@
                             <span class="discord-username">${escapeHtml(msg.sender_name || 'Unknown')}</span>
                             <span class="discord-timestamp">${formatDiscordTime(msg.timestamp)}</span>
                             <span class="discord-status-badge status-${msg.discord_status}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
+                            <button class="jump-to-msg-btn" data-msg-id="${msg.id}" data-book-id="${bookId}" title="Jump to this message (shareable link)" style="display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 4px; color: #60a5fa; font-size: 0.75rem; cursor: pointer; margin-left: 6px; padding: 0; transition: all 0.2s;">🔗</button>
                         </div>
                         <div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>
                         <div class="message-drop-section" data-message-id="${msg.id}" data-book-id="${bookId}">
@@ -1765,6 +1768,7 @@
             const searchText = document.getElementById(`msg-search-${bookId}`)?.value || '';
             const statusFilter = document.getElementById(`status-filter-${bookId}`)?.value || 'all';
             const messages = document.querySelectorAll(`#discord-messages-${bookId} .discord-message`);
+            const bucketHeaders = document.querySelectorAll(`#discord-messages-${bookId} .time-bucket-header`);
             
             let dropsMatches = new Set();
             
@@ -1783,6 +1787,8 @@
                 }
             }
             
+            // Filter messages and collect matching ones
+            let totalMatches = 0;
             messages.forEach(msg => {
                 const msgText = msg.getAttribute('data-search-text') || '';
                 const msgStatus = msg.getAttribute('data-status') || '';
@@ -1794,7 +1800,9 @@
                 const matchesSearch = matchesMessageContent || matchesDrops;
                 const matchesStatus = statusFilter === 'all' || msgStatus === statusFilter;
                 
-                msg.style.display = (matchesSearch && matchesStatus) ? 'flex' : 'none';
+                const isVisible = matchesSearch && matchesStatus;
+                msg.style.display = isVisible ? 'flex' : 'none';
+                if (isVisible) totalMatches++;
                 
                 // Highlight messages that matched via drops
                 if (matchesDrops && !matchesMessageContent) {
@@ -1803,6 +1811,53 @@
                     msg.style.borderLeft = '';
                 }
             });
+            
+            // Update bucket headers with match counts when searching
+            if (searchText.trim() || statusFilter !== 'all') {
+                bucketHeaders.forEach(header => {
+                    // Find all messages in this bucket
+                    let currentEl = header.nextElementSibling;
+                    let matchCount = 0;
+                    
+                    while (currentEl && !currentEl.classList.contains('time-bucket-header')) {
+                        if (currentEl.classList.contains('discord-message') && currentEl.style.display !== 'none') {
+                            matchCount++;
+                        }
+                        currentEl = currentEl.nextElementSibling;
+                    }
+                    
+                    // Update bucket count display
+                    const countEl = header.querySelector('.bucket-count');
+                    if (countEl && matchCount > 0) {
+                        countEl.textContent = `${matchCount} match${matchCount !== 1 ? 'es' : ''}`;
+                        countEl.style.background = 'rgba(59, 130, 246, 0.2)';
+                        countEl.style.color = '#60a5fa';
+                        header.style.display = 'flex';
+                    } else if (countEl) {
+                        header.style.display = matchCount > 0 ? 'flex' : 'none';
+                    }
+                });
+            } else {
+                // Reset bucket headers when not searching
+                bucketHeaders.forEach(header => {
+                    header.style.display = 'flex';
+                    const countEl = header.querySelector('.bucket-count');
+                    if (countEl) {
+                        // Restore original count (count all messages in bucket)
+                        let currentEl = header.nextElementSibling;
+                        let totalCount = 0;
+                        while (currentEl && !currentEl.classList.contains('time-bucket-header')) {
+                            if (currentEl.classList.contains('discord-message')) {
+                                totalCount++;
+                            }
+                            currentEl = currentEl.nextElementSibling;
+                        }
+                        countEl.textContent = `${totalCount} message${totalCount !== 1 ? 's' : ''}`;
+                        countEl.style.background = 'rgba(15, 23, 42, 0.3)';
+                        countEl.style.color = '#94a3b8';
+                    }
+                });
+            }
         }
 
         // SEAMLESS SEARCH: Clear book search filter and hide indicator
@@ -6081,6 +6136,49 @@ document.addEventListener('click', function(e) {
         const messageId = target.getAttribute('data-message-id');
         const bookId = target.getAttribute('data-book-id');
         showTagInputDialog(messageId, bookId);
+        return;
+    }
+    
+    // Jump to message button - scroll and highlight with URL update
+    if (target.classList.contains('jump-to-msg-btn')) {
+        e.preventDefault();
+        const messageId = target.getAttribute('data-msg-id');
+        const bookId = target.getAttribute('data-book-id');
+        if (messageId && bookId) {
+            jumpToMessage(messageId, bookId);
+        }
+        return;
+    }
+    
+    // Timeline bucket header - jump to first visible message in bucket
+    if (target.closest('.time-bucket-header')) {
+        e.preventDefault();
+        const bucketHeader = target.closest('.time-bucket-header');
+        const bookId = bucketHeader.getAttribute('data-book-id');
+        
+        if (bookId) {
+            // Find first visible message after this bucket header
+            let currentEl = bucketHeader.nextElementSibling;
+            let firstVisibleMsgId = null;
+            
+            while (currentEl && !currentEl.classList.contains('time-bucket-header')) {
+                if (currentEl.classList.contains('discord-message') && currentEl.style.display !== 'none') {
+                    firstVisibleMsgId = currentEl.getAttribute('data-msg-id');
+                    break;
+                }
+                currentEl = currentEl.nextElementSibling;
+            }
+            
+            if (firstVisibleMsgId) {
+                jumpToMessage(firstVisibleMsgId, bookId);
+            } else {
+                // Fallback to data attribute if no visible messages found
+                const firstMsgId = bucketHeader.getAttribute('data-first-msg-id');
+                if (firstMsgId) {
+                    jumpToMessage(firstMsgId, bookId);
+                }
+            }
+        }
         return;
     }
     

@@ -2557,8 +2557,13 @@ body::before {
     margin: 0.5rem 0 0.25rem 0;
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    border-radius: 0.375rem;
+    transition: all 0.2s ease;
+}
+
+.time-bucket-header:hover {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+    border-bottom-color: rgba(167, 139, 250, 0.4);
+    transform: translateY(-1px);
 }
 
 .bucket-label {
@@ -2596,6 +2601,14 @@ body::before {
     border-color: rgba(168, 85, 247, 0.5) !important;
     transform: translateY(-1px);
     box-shadow: 0 2px 6px rgba(168, 85, 247, 0.2);
+}
+
+/* ============ JUMP TO MESSAGE BUTTON ============ */
+.jump-to-msg-btn:hover {
+    background: rgba(59, 130, 246, 0.3) !important;
+    border-color: rgba(59, 130, 246, 0.5) !important;
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
 /* Tag input dialog (modal overlay) */
