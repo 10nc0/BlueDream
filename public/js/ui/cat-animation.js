@@ -110,11 +110,12 @@ function initHopAnimation() {
         const yOffset = isJump ? -CAT_CONFIG.JUMP_HEIGHT * scale : 0;
         
         // Center the cat in the canvas (above time & date)
-        // Calculate center position based on cat's bounding box
-        const catWidth = 16 * scale; // 12*scale (whiskers left) to 28*scale (tail right) = 16*scale width
-        const catHeight = 20 * scale; // 12*scale (ears top) to 32*scale (feet bottom) = 20*scale height
-        const centerX = (CANVAS_WIDTH - catWidth) / 2;
-        const centerY = (CANVAS_HEIGHT - catHeight) / 2;
+        // Cat coordinate system: X spans 12→28 (width=16), Y spans 12→32 (height=20)
+        // Cat's center point in coordinate space: (20, 22)
+        const catCenterX = 20; // (12 + 28) / 2
+        const catCenterY = 22; // (12 + 32) / 2
+        const centerX = (CANVAS_WIDTH / 2) - (catCenterX * scale);
+        const centerY = (CANVAS_HEIGHT / 2) - (catCenterY * scale);
         
         // Flip cat if fleeing (running away)
         if (fleeing) {
