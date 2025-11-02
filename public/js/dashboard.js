@@ -1717,7 +1717,7 @@
                             <span class="discord-username">${escapeHtml(msg.sender_name || 'Unknown')}</span>
                             <span class="discord-timestamp">${formatDiscordTime(msg.timestamp)}</span>
                             <span class="discord-status-badge status-${msg.discord_status}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
-                            <button class="jump-to-msg-btn" data-msg-id="${msg.id}" data-book-id="${bookId}" title="Jump to this message (shareable link)" style="display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 4px; color: #60a5fa; font-size: 0.75rem; cursor: pointer; margin-left: 6px; padding: 0; transition: all 0.2s;">🔗</button>
+                            <button class="jump-to-msg-btn" data-msg-id="${msg.id}" data-book-id="${bookId}">Jump</button>
                         </div>
                         <div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>
                         <div class="message-drop-section" data-message-id="${msg.id}" data-book-id="${bookId}">
@@ -1761,6 +1761,14 @@
             }).join('');
             
             return html;
+        }
+
+        // Highlight search terms in text
+        function highlightText(text, query) {
+            if (!query || !text) return escapeHtml(text);
+            const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`(${escapedQuery})`, 'gi');
+            return escapeHtml(text).replace(regex, '<mark>$1</mark>');
         }
 
         // Universal Search - searches both message content AND drops metadata
@@ -1812,16 +1820,26 @@
                 }
             });
             
-            // Update bucket headers with match counts when searching
+            // Update bucket headers with match counts and preview bubbles when searching
             if (searchText.trim() || statusFilter !== 'all') {
                 bucketHeaders.forEach(header => {
                     // Find all messages in this bucket
                     let currentEl = header.nextElementSibling;
                     let matchCount = 0;
+                    const matchingMessages = [];
+                    
+                    // Skip existing preview container
+                    if (currentEl && currentEl.classList.contains('search-preview-container')) {
+                        currentEl = currentEl.nextElementSibling;
+                    }
                     
                     while (currentEl && !currentEl.classList.contains('time-bucket-header')) {
                         if (currentEl.classList.contains('discord-message') && currentEl.style.display !== 'none') {
                             matchCount++;
+                            matchingMessages.push(currentEl);
+                            currentEl.classList.add('search-match');
+                        } else if (currentEl.classList.contains('discord-message')) {
+                            currentEl.classList.remove('search-match');
                         }
                         currentEl = currentEl.nextElementSibling;
                     }
@@ -1836,16 +1854,74 @@
                     } else if (countEl) {
                         header.style.display = matchCount > 0 ? 'flex' : 'none';
                     }
+                    
+                    // Create preview bubbles for search results (show first 3 matches)
+                    if (searchText.trim() && matchCount > 0) {
+                        let previewHTML = '';
+                        const previewLimit = 3;
+                        
+                        for (let i = 0; i < Math.min(previewLimit, matchingMessages.length); i++) {
+                            const msg = matchingMessages[i];
+                            const username = msg.querySelector('.discord-username')?.textContent || 'Unknown';
+                            const textEl = msg.querySelector('.discord-text');
+                            const content = textEl?.textContent || '(No text content)';
+                            const msgId = msg.getAttribute('data-msg-id');
+                            
+                            previewHTML += `
+                                <div class="search-preview-bubble" data-target-id="${msgId}">
+                                    <strong>${escapeHtml(username)}:</strong> 
+                                    <span class="preview-text">${highlightText(content, searchText)}</span>
+                                    <span class="preview-jump">Jump</span>
+                                </div>`;
+                        }
+                        
+                        if (matchCount > previewLimit) {
+                            previewHTML += `<div class="more-matches">...and ${matchCount - previewLimit} more</div>`;
+                        }
+                        
+                        // Insert or update preview container
+                        let existingPreview = header.nextElementSibling;
+                        if (existingPreview && existingPreview.classList.contains('search-preview-container')) {
+                            existingPreview.innerHTML = previewHTML;
+                        } else {
+                            const previewContainer = document.createElement('div');
+                            previewContainer.className = 'search-preview-container';
+                            previewContainer.innerHTML = previewHTML;
+                            header.after(previewContainer);
+                        }
+                    } else {
+                        // Remove preview container if exists
+                        const existingPreview = header.nextElementSibling;
+                        if (existingPreview && existingPreview.classList.contains('search-preview-container')) {
+                            existingPreview.remove();
+                        }
+                    }
                 });
             } else {
-                // Reset bucket headers when not searching
+                // Reset bucket headers and remove previews when not searching
                 bucketHeaders.forEach(header => {
                     header.style.display = 'flex';
+                    
+                    // Remove preview container FIRST (before iterating)
+                    const existingPreview = header.nextElementSibling;
+                    if (existingPreview && existingPreview.classList.contains('search-preview-container')) {
+                        existingPreview.remove();
+                    }
+                    
+                    // Remove search-match class from all messages
+                    let currentEl = header.nextElementSibling;
+                    while (currentEl && !currentEl.classList.contains('time-bucket-header')) {
+                        if (currentEl.classList.contains('discord-message')) {
+                            currentEl.classList.remove('search-match');
+                        }
+                        currentEl = currentEl.nextElementSibling;
+                    }
+                    
                     const countEl = header.querySelector('.bucket-count');
                     if (countEl) {
                         // Restore original count (count all messages in bucket)
-                        let currentEl = header.nextElementSibling;
                         let totalCount = 0;
+                        currentEl = header.nextElementSibling;
                         while (currentEl && !currentEl.classList.contains('time-bucket-header')) {
                             if (currentEl.classList.contains('discord-message')) {
                                 totalCount++;
@@ -6150,6 +6226,20 @@ document.addEventListener('click', function(e) {
         return;
     }
     
+    // Search preview bubble click - jump to target message
+    if (target.closest('.search-preview-bubble') || target.classList.contains('preview-jump')) {
+        e.preventDefault();
+        const bubble = target.closest('.search-preview-bubble');
+        if (bubble) {
+            const targetId = bubble.getAttribute('data-target-id');
+            const bookId = selectedBookFractalId;
+            if (targetId && bookId) {
+                jumpToMessage(targetId, bookId);
+            }
+        }
+        return;
+    }
+    
     // Timeline bucket header - jump to first visible message in bucket
     if (target.closest('.time-bucket-header')) {
         e.preventDefault();
@@ -6160,6 +6250,11 @@ document.addEventListener('click', function(e) {
             // Find first visible message after this bucket header
             let currentEl = bucketHeader.nextElementSibling;
             let firstVisibleMsgId = null;
+            
+            // Skip preview container
+            if (currentEl && currentEl.classList.contains('search-preview-container')) {
+                currentEl = currentEl.nextElementSibling;
+            }
             
             while (currentEl && !currentEl.classList.contains('time-bucket-header')) {
                 if (currentEl.classList.contains('discord-message') && currentEl.style.display !== 'none') {
