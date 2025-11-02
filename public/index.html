@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>X to Discord Note | Your Nyanbook~</title>
+    <title>WhatsApp Messaging Book | Your Nyanbook~</title>
     <link rel="stylesheet" href="/css/dashboard.css?v=20251101-2">
     <link rel="stylesheet" href="/css/components/tooltips.css?v=20251101-2">
     <link rel="stylesheet" href="/css/components/analytics.css?v=20251101-2">
@@ -27,7 +27,7 @@
             <!-- Title Section - centered vertically with cat -->
             <div style="flex-shrink: 0; display: flex; flex-direction: column; justify-content: center;">
                 <div style="background: linear-gradient(135deg, #22d3ee 0%, #ec4899 50%, #a855f7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-size: 1.5rem; font-weight: 700; text-shadow: 0 0 20px rgba(34, 211, 238, 0.3); letter-spacing: 0.5px; white-space: nowrap; line-height: 1.2;">Your Nyanbook~</div>
-                <div style="font-size: 0.875rem; color: #cbd5e1; font-weight: 500; margin-top: 0.125rem; white-space: nowrap; line-height: 1.2;">X to Discord Note with Search Indexing</div>
+                <div style="font-size: 0.875rem; color: #cbd5e1; font-weight: 500; margin-top: 0.125rem; white-space: nowrap; line-height: 1.2;">Your Personal Messaging Book with Search</div>
             </div>
             
             <!-- User Info Section (right-aligned) - centered vertically -->
@@ -62,12 +62,12 @@
             <!-- Form Section -->
             <div id="book-form-section">
                 <h2 style="color: #f1f5f9; margin-bottom: 0.5rem; font-size: 1.75rem;">🌈 Create New Book</h2>
-                <p style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 1.5rem;">QR appears instantly - no waiting for library</p>
+                <p style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 1.5rem;">Scan. Write. Own. — No Discord required.</p>
                 
                 <form id="book-create-form">
                     <div class="book-form-group">
                         <label>Book Name</label>
-                        <input type="text" id="book-name-input" placeholder="e.g., Webhook HW" required>
+                        <input type="text" id="book-name-input" placeholder="e.g., Family Chat, Work Notes" required>
                     </div>
                     
                     <div class="book-form-group">
@@ -78,13 +78,7 @@
                         </select>
                     </div>
                     
-                    <div class="book-form-group">
-                        <label>Your Discord Webhook URL</label>
-                        <input type="url" id="book-output-input" placeholder="https://discord.com/api/webhooks/..." required>
-                        <small style="color: #64748b; font-size: 0.75rem;">Required - this is where you'll receive your messages</small>
-                    </div>
-                    
-                    <button type="submit" class="book-submit-btn">✨ Generate QR & Activate</button>
+                    <button type="submit" class="book-submit-btn">✨ Generate QR Code</button>
                 </form>
             </div>
 
@@ -228,7 +222,7 @@
                         <span style="font-size: 1.5rem;">⏱️</span>
                         <span>Takes just 2 minutes!</span>
                     </div>
-                    <p style="color: #94a3b8; font-size: 0.875rem; margin: 0;">Connect WhatsApp to Discord in 3 simple steps</p>
+                    <p style="color: #94a3b8; font-size: 0.875rem; margin: 0;">Start recording your messages in 3 simple steps</p>
                 </div>
 
                 <!-- Step 1: Scan QR Code -->
@@ -245,15 +239,15 @@
                     </div>
                 </div>
 
-                <!-- Step 2: Link Discord -->
+                <!-- Step 2: Optional Webhook -->
                 <div class="wizard-step">
                     <div style="display: flex; align-items: start; gap: 1rem; margin-bottom: 1rem;">
                         <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">2</div>
                         <div style="flex: 1;">
-                            <h3 style="color: white; font-size: 1.125rem; margin-bottom: 0.5rem;">🔗 Add Discord Webhook URL</h3>
-                            <p style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.75rem;">In Discord: Server Settings → Integrations → Webhooks → New Webhook → Copy URL</p>
+                            <h3 style="color: white; font-size: 1.125rem; margin-bottom: 0.5rem;">✏️ Enter Book Name</h3>
+                            <p style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.75rem;">Give your book a memorable name like "Family Chat" or "Work Notes"</p>
                             <div style="background: rgba(255, 255, 255, 0.05); border-radius: 0.5rem; padding: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1);">
-                                <code style="color: #f59e0b; font-size: 0.75rem;">⚡ Paste the webhook URL in the book form</code>
+                                <code style="color: #f59e0b; font-size: 0.75rem;">⚡ QR appears instantly after entering name</code>
                             </div>
                         </div>
                     </div>
@@ -265,7 +259,7 @@
                         <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">3</div>
                         <div style="flex: 1;">
                             <h3 style="color: white; font-size: 1.125rem; margin-bottom: 0.5rem;">✅ You're Done!</h3>
-                            <p style="color: #94a3b8; font-size: 0.875rem; margin: 0;">Messages sent to your WhatsApp will automatically forward to Discord. Test it by sending yourself a message!</p>
+                            <p style="color: #94a3b8; font-size: 0.875rem; margin: 0;">Messages sent to this book are recorded in your Nyanbook Ledger. Add a webhook later in Edit to mirror messages to your own channel!</p>
                         </div>
                     </div>
                 </div>
@@ -313,11 +307,15 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Your Discord Webhook (Output)</label>
+                    <label class="form-label">
+                        Personal Webhook URL
+                        <span class="optional-badge">Optional</span>
+                    </label>
+                    <small class="form-help" style="display: block; margin-bottom: 0.5rem;">Add your own webhook to mirror messages to your channel (works with Discord, Slack, etc.)</small>
                     <div id="webhooksList" style="margin-bottom: 0.5rem;">
                         <!-- Webhook items will be added here -->
                     </div>
-                    <button type="button" class="btn" id="addWebhookBtn" style="width: 100%; background: rgba(59, 130, 246, 0.1); border: 1px dashed rgba(59, 130, 246, 0.3); color: #60a5fa;">+ Add Webhook Output</button>
+                    <button type="button" class="btn" id="addWebhookBtn" style="width: 100%; background: rgba(59, 130, 246, 0.1); border: 1px dashed rgba(59, 130, 246, 0.3); color: #60a5fa;">+ Add Personal Webhook</button>
                 </div>
                 <div class="form-group">
                     <label class="form-label">
@@ -495,12 +493,12 @@
             </div>
             
             <div class="onboarding-step" id="onboarding-step-3" style="display: none;">
-                <h3 style="color: #e2e8f0; margin-bottom: 1rem;">🎯 Discord Webhook URL</h3>
+                <h3 style="color: #e2e8f0; margin-bottom: 1rem;">🎯 Webhook URL <span style="color: #94a3b8; font-size: 0.85rem; font-weight: normal;">(Optional)</span></h3>
                 <div class="form-group">
-                    <label class="form-label">Webhook URL</label>
-                    <input type="url" class="form-input" id="onboarding-webhook-url" placeholder="https://discord.com/api/webhooks/..." required>
+                    <label class="form-label">Personal Webhook URL</label>
+                    <input type="url" class="form-input" id="onboarding-webhook-url" placeholder="https://discord.com/api/webhooks/... or https://hooks.slack.com/...">
                     <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #94a3b8;">
-                        Create webhook: Server Settings → Integrations → Webhooks → New Webhook
+                        Skip this to use Nyanbook Ledger only. Add later in Edit to mirror messages to your channel.
                     </div>
                 </div>
                 <div id="onboarding-validation-status" style="margin-top: 0.5rem; min-height: 1.5rem;"></div>

@@ -2695,7 +2695,6 @@
                     
                     const bookName = document.getElementById('book-name-input').value;
                     const platform = document.getElementById('book-platform-input').value;
-                    const userOutput = document.getElementById('book-output-input').value;
                     
                     const submitBtn = bookForm.querySelector('button[type="submit"]');
                     const originalText = submitBtn.textContent;
@@ -2708,7 +2707,7 @@
                             throw new Error('Not authenticated. Please login first.');
                         }
                         
-                        // 1. CREATE BOOK
+                        // 1. CREATE BOOK (webhook optional - add later in Edit tab)
                         console.log('📝 Creating book:', bookName);
                         const createRes = await fetch('/api/books', {
                             method: 'POST',
@@ -2718,8 +2717,7 @@
                             },
                             body: JSON.stringify({
                                 name: bookName,
-                                inputPlatform: platform,
-                                userOutputUrl: userOutput || null
+                                inputPlatform: platform
                             })
                         });
                         
@@ -2869,7 +2867,7 @@
             const banner = document.createElement('div');
             banner.className = 'setup-banner';
             banner.style.cssText = 'background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.875rem;';
-            banner.innerHTML = '<strong>🎯 Step 1:</strong> Fill in the platform details below → <strong>Step 2:</strong> QR code will appear after saving → <strong>Step 3:</strong> Add your Discord webhook';
+            banner.innerHTML = '<strong>🎯 Step 1:</strong> Fill in the book name → <strong>Step 2:</strong> QR code appears instantly → <strong>Step 3:</strong> Optional: Add webhook later in Edit';
             form.insertBefore(banner, form.firstChild);
         }
 
@@ -2946,6 +2944,16 @@
                 tags: botTags,
                 status: 'active'
             };
+            
+            // Add userOutputUrl from first webhook (for output_0n_url column)
+            // This ensures webhooks are properly saved when editing books
+            if (validWebhooks.length > 0) {
+                botData.userOutputUrl = validWebhooks[0].url;
+            } else if (editingBookId) {
+                // When editing and no webhooks provided, explicitly set to null to clear
+                botData.userOutputUrl = null;
+            }
+            // For new books without webhooks, don't send userOutputUrl (undefined = optional)
             
             // Add password if webhook is changing
             if (password) {
