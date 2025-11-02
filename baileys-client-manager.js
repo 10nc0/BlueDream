@@ -193,9 +193,22 @@ class BaileysClientManager {
                                 await this.updateBotStatus(bookId, tenantSchema, 'reconnecting', null, null, `Auto-reconnect attempt ${clientState.reconnectAttempts}/5`);
                                 
                                 const messageHandler = this.messageHandlers.get(compositeKey);
-                                await this.initializeClient(bookId, tenantSchema, messageHandler);
+                                const reconnectedState = await this.initializeClient(bookId, tenantSchema, messageHandler);
+                                
+                                // SUCCESS LOGGING
+                                if (reconnectedState) {
+                                    console.log(`✅ Auto-reconnect SUCCESS for ${compositeKey} - Status: ${reconnectedState.status}, Phone: ${reconnectedState.phoneNumber || 'pending'}`);
+                                    console.log(`📊 ${compositeKey} reconnect stats: Attempt ${clientState.reconnectAttempts}/5, Total reconnects: ${clientState.reconnectAttempts}`);
+                                } else {
+                                    console.warn(`⚠️  Auto-reconnect returned no state for ${compositeKey} - may need QR scan`);
+                                }
                             } catch (reconnectError) {
-                                console.error(`❌ Auto-reconnect failed for ${compositeKey}:`, reconnectError.message);
+                                console.error(`❌ Auto-reconnect FAILED for ${compositeKey} (attempt ${clientState.reconnectAttempts}/5):`, reconnectError.message);
+                                console.error(`🔍 Error details:`, {
+                                    name: reconnectError.name,
+                                    code: reconnectError.code,
+                                    stack: reconnectError.stack?.split('\n')[0]
+                                });
                             }
                         }, reconnectDelay);
                     }
