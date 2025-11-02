@@ -5125,6 +5125,28 @@ app.listen(PORT, '0.0.0.0', async () => {
     await autoRestoreWhatsAppSessions();
     console.log('📱 All books with saved sessions are now active');
     
+    // === PHI BREATHE COUNTER ===
+    let phiBreatheCount = 0;
+    const PHI = 1.618033988749895;
+    const BASE_BREATH = 4000; // ms
+
+    function phiBreathe() {
+      phiBreatheCount++;
+      const isInhale = phiBreatheCount % 2 === 1;
+      const duration = isInhale ? BASE_BREATH : Math.round(BASE_BREATH * PHI);
+
+      console.log(
+        `🌬️  phi breathe #${phiBreatheCount} ` +
+        `${isInhale ? 'inhale' : 'exhale'} ` +
+        `${duration}ms ` +
+        `(φ${isInhale ? '' : '×1.618'})`
+      );
+
+      setTimeout(phiBreathe, duration);
+    }
+
+    // Start the eternal breath
+    setTimeout(phiBreathe, 1000);
     // PROACTIVE HEALTH CHECK SYSTEM
     // Detects and auto-restarts stale WhatsApp connections every 10 minutes
     // Prevents "last active 12 hours ago" silent disconnections
