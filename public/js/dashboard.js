@@ -2953,6 +2953,7 @@
             document.getElementById('botPlatform').value = book.input_platform;
             document.getElementById('botDestinationPlatform').value = book.output_platform;
             document.getElementById('botContact').value = book.contact_info || '';
+            document.getElementById('botIncludeGroupMessages').checked = book.include_group_messages || false;
             botTags = book.tags || [];
             
             // Load webhooks from output_01_url and output_0n_url
@@ -3032,6 +3033,7 @@
             const inputPlatform = document.getElementById('botPlatform').value;
             const outputPlatform = document.getElementById('botDestinationPlatform').value;
             const contact = document.getElementById('botContact').value;
+            const includeGroupMessages = document.getElementById('botIncludeGroupMessages').checked;
             
             // Filter out empty webhooks
             const validWebhooks = botWebhooks.filter(w => w.url && w.url.trim());
@@ -3096,6 +3098,7 @@
                 outputCredentials: outputCredentials,
                 contactInfo: contact,
                 tags: botTags,
+                includeGroupMessages: includeGroupMessages,
                 status: 'active'
             };
             
