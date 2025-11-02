@@ -7,9 +7,7 @@
 // Can be used anywhere by including cat-animation.html component.
 
 const CAT_CONFIG = Object.freeze({
-    // Canvas dimensions (fixed, immutable)
-    CANVAS_WIDTH: 100,
-    CANVAS_HEIGHT: 100,
+    // Canvas ID (dimensions read dynamically from actual canvas element)
     CANVAS_ID: 'hopCanvas',
     
     // Animation settings
@@ -46,79 +44,82 @@ function initHopAnimation() {
     console.log('🐱 Initializing transcendental cat animation...');
     
     const ctx = canvas.getContext('2d');
+    // Read actual canvas dimensions dynamically (supports 100x100, 125x125, etc.)
+    const CANVAS_WIDTH = canvas.width;
+    const CANVAS_HEIGHT = canvas.height;
+    
     let frame = 0;
     let mouseX = -1000;
     let mouseY = -1000;
-    let catX = CAT_CONFIG.CANVAS_WIDTH / 2;
-    let catY = CAT_CONFIG.CANVAS_HEIGHT / 2;
+    let catX = CANVAS_WIDTH / 2;
+    let catY = CANVAS_HEIGHT / 2;
     let lastTouchTime = 0;
+    let lastInteractionTime = 0;
     const TOUCH_COOLDOWN = 100; // ms - prevent ghost/rapid-fire taps
+    const IDLE_RESET_TIME = 2000; // ms - reset to center after 2s of no interaction
     
     // Detect if mobile mode (portrait on small screen)
     const isMobileMode = () => window.innerWidth < 768 && window.innerHeight > window.innerWidth;
     
-    // Detect if on login/signup/forgot-password pages (non-interactive mode)
-    const isAuthPage = window.location.pathname.includes('/login') || 
-                       window.location.pathname.includes('/signup') ||
-                       window.location.pathname.includes('/forgot-password');
+    // Track mouse position globally for cursor-based wiggle (area tracking)
+    document.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+        lastInteractionTime = Date.now();
+    });
     
-    // Only enable interaction on dashboard/authenticated pages
-    if (!isAuthPage) {
-        // Track mouse position globally (ALWAYS enabled for responsive wiggle)
-        document.addEventListener('mousemove', (e) => {
-            mouseX = e.clientX;
-            mouseY = e.clientY;
-        });
+    // Touch support for tap-based wiggle (instance tracking)
+    // Scoped to canvas only to prevent form field interference
+    let isTouchingCat = false;
+    
+    canvas.addEventListener('touchstart', (e) => {
+        const now = Date.now();
+        // Ignore rapid-fire or ghost taps (cached touch events)
+        if (now - lastTouchTime < TOUCH_COOLDOWN) return;
+        lastTouchTime = now;
+        lastInteractionTime = now;
         
-        // Touch support for iPad and mobile devices
-        // Only track touches on the cat canvas itself (prevent form field interference)
-        let isTouchingCat = false;
-        
-        canvas.addEventListener('touchstart', (e) => {
-            const now = Date.now();
-            // Ignore rapid-fire or ghost taps (cached touch events)
-            if (now - lastTouchTime < TOUCH_COOLDOWN) return;
-            lastTouchTime = now;
-            
-            isTouchingCat = true;
-            if (e.touches.length > 0) {
-                mouseX = e.touches[0].clientX;
-                mouseY = e.touches[0].clientY;
-            }
-        });
-        
-        document.addEventListener('touchmove', (e) => {
-            // Only update position if actively touching the cat
-            if (isTouchingCat && e.touches.length > 0) {
-                mouseX = e.touches[0].clientX;
-                mouseY = e.touches[0].clientY;
-            }
-        });
-        
-        // Reset mouse position on touchend to prevent ghost tap persistence
-        document.addEventListener('touchend', () => {
-            isTouchingCat = false;
-            mouseX = -1000;
-            mouseY = -1000;
-        });
-    }
+        isTouchingCat = true;
+        if (e.touches.length > 0) {
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+        }
+    });
+    
+    document.addEventListener('touchmove', (e) => {
+        // Only update position if actively touching the cat
+        if (isTouchingCat && e.touches.length > 0) {
+            mouseX = e.touches[0].clientX;
+            mouseY = e.touches[0].clientY;
+            lastInteractionTime = Date.now();
+        }
+    });
+    
+    // Reset mouse position on touchend to prevent ghost tap persistence
+    document.addEventListener('touchend', () => {
+        isTouchingCat = false;
+        mouseX = -1000;
+        mouseY = -1000;
+    });
     
     function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, fleeing = false) {
-        ctx.clearRect(0, 0, CAT_CONFIG.CANVAS_WIDTH, CAT_CONFIG.CANVAS_HEIGHT);
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         
         const scale = CAT_CONFIG.SCALE;
         const isJump = Math.floor(frameNum / CAT_CONFIG.JUMP_FRAME_INTERVAL) % 2 === 0;
         const yOffset = isJump ? -CAT_CONFIG.JUMP_HEIGHT * scale : 0;
         
-        // Mobile: Snap to top-left (subtract minimum coordinates)
-        // Desktop: Center in canvas (original coordinates)
-        const snapX = isMobileMode() ? -12 * scale : 0; // Shift left by 12*scale
-        const snapY = isMobileMode() ? -12 * scale : 0; // Shift up by 12*scale (ear position)
+        // Center the cat in the canvas (above time & date)
+        // Calculate center position based on cat's bounding box
+        const catWidth = 16 * scale; // 12*scale (whiskers left) to 28*scale (tail right) = 16*scale width
+        const catHeight = 20 * scale; // 12*scale (ears top) to 32*scale (feet bottom) = 20*scale height
+        const centerX = (CANVAS_WIDTH - catWidth) / 2;
+        const centerY = (CANVAS_HEIGHT - catHeight) / 2;
         
         // Flip cat if fleeing (running away)
         if (fleeing) {
             ctx.save();
-            ctx.translate(CAT_CONFIG.CANVAS_WIDTH, 0);
+            ctx.translate(CANVAS_WIDTH, 0);
             ctx.scale(-1, 1);
         }
         
@@ -126,44 +127,44 @@ function initHopAnimation() {
         ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
         
         // Body (main)
-        ctx.fillRect(14 * scale + offsetX + snapX, 22 * scale + yOffset + offsetY + snapY, 12 * scale, 8 * scale);
+        ctx.fillRect(14 * scale + offsetX + centerX, 22 * scale + yOffset + offsetY + centerY, 12 * scale, 8 * scale);
         
         // Head
-        ctx.fillRect(15 * scale + offsetX + snapX, 15 * scale + yOffset + offsetY + snapY, 10 * scale, 7 * scale);
+        ctx.fillRect(15 * scale + offsetX + centerX, 15 * scale + yOffset + offsetY + centerY, 10 * scale, 7 * scale);
         
         // Ears (pointy cat ears) - These are the TOP-MOST pixels
-        ctx.fillRect(15 * scale + offsetX + snapX, 12 * scale + yOffset + offsetY + snapY, 3 * scale, 3 * scale);
-        ctx.fillRect(22 * scale + offsetX + snapX, 12 * scale + yOffset + offsetY + snapY, 3 * scale, 3 * scale);
+        ctx.fillRect(15 * scale + offsetX + centerX, 12 * scale + yOffset + offsetY + centerY, 3 * scale, 3 * scale);
+        ctx.fillRect(22 * scale + offsetX + centerX, 12 * scale + yOffset + offsetY + centerY, 3 * scale, 3 * scale);
         
         // Tail (curved up)
-        ctx.fillRect(25 * scale + offsetX + snapX, 23 * scale + yOffset + offsetY + snapY, 2 * scale, 4 * scale);
-        ctx.fillRect(26 * scale + offsetX + snapX, 20 * scale + yOffset + offsetY + snapY, 2 * scale, 3 * scale);
+        ctx.fillRect(25 * scale + offsetX + centerX, 23 * scale + yOffset + offsetY + centerY, 2 * scale, 4 * scale);
+        ctx.fillRect(26 * scale + offsetX + centerX, 20 * scale + yOffset + offsetY + centerY, 2 * scale, 3 * scale);
         
         // Eyes (green glow)
         ctx.fillStyle = CAT_CONFIG.COLORS.EYES;
-        ctx.fillRect(17 * scale + offsetX + snapX, 17 * scale + yOffset + offsetY + snapY, 2 * scale, 2 * scale);
-        ctx.fillRect(21 * scale + offsetX + snapX, 17 * scale + yOffset + offsetY + snapY, 2 * scale, 2 * scale);
+        ctx.fillRect(17 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 2 * scale, 2 * scale);
+        ctx.fillRect(21 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 2 * scale, 2 * scale);
         
         // Nose (pink)
         ctx.fillStyle = CAT_CONFIG.COLORS.NOSE;
-        ctx.fillRect(19 * scale + offsetX + snapX, 20 * scale + yOffset + offsetY + snapY, 2 * scale, 1 * scale);
+        ctx.fillRect(19 * scale + offsetX + centerX, 20 * scale + yOffset + offsetY + centerY, 2 * scale, 1 * scale);
         
         // Whiskers (white) - These are the LEFT-MOST pixels
         ctx.fillStyle = CAT_CONFIG.COLORS.WHISKERS;
         if (!isJump) {
             // Left whiskers
-            ctx.fillRect(12 * scale + offsetX + snapX, 19 * scale + offsetY + snapY, 2 * scale, 1 * scale);
-            ctx.fillRect(12 * scale + offsetX + snapX, 21 * scale + offsetY + snapY, 2 * scale, 1 * scale);
+            ctx.fillRect(12 * scale + offsetX + centerX, 19 * scale + offsetY + centerY, 2 * scale, 1 * scale);
+            ctx.fillRect(12 * scale + offsetX + centerX, 21 * scale + offsetY + centerY, 2 * scale, 1 * scale);
             // Right whiskers
-            ctx.fillRect(26 * scale + offsetX + snapX, 19 * scale + offsetY + snapY, 2 * scale, 1 * scale);
-            ctx.fillRect(26 * scale + offsetX + snapX, 21 * scale + offsetY + snapY, 2 * scale, 1 * scale);
+            ctx.fillRect(26 * scale + offsetX + centerX, 19 * scale + offsetY + centerY, 2 * scale, 1 * scale);
+            ctx.fillRect(26 * scale + offsetX + centerX, 21 * scale + offsetY + centerY, 2 * scale, 1 * scale);
         }
         
         // Feet/paws
         ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
         if (!isJump) {
-            ctx.fillRect(15 * scale + offsetX + snapX, 30 * scale + offsetY + snapY, 3 * scale, 2 * scale);
-            ctx.fillRect(22 * scale + offsetX + snapX, 30 * scale + offsetY + snapY, 3 * scale, 2 * scale);
+            ctx.fillRect(15 * scale + offsetX + centerX, 30 * scale + offsetY + centerY, 3 * scale, 2 * scale);
+            ctx.fillRect(22 * scale + offsetX + centerX, 30 * scale + offsetY + centerY, 3 * scale, 2 * scale);
         }
         
         if (fleeing) {
@@ -180,8 +181,18 @@ function initHopAnimation() {
         let offsetY = 0;
         let fleeing = false;
         
-        // Calculate mouse interaction (desktop only if mobile settings are 0)
-        if (fleeDistance > 0) {
+        // Check if cat should reset to center (idle timeout)
+        const timeSinceInteraction = Date.now() - lastInteractionTime;
+        const isIdle = timeSinceInteraction > IDLE_RESET_TIME;
+        
+        // If idle, smoothly reset cursor position to far away (resets cat to center)
+        if (isIdle && (mouseX !== -1000 || mouseY !== -1000)) {
+            mouseX = -1000;
+            mouseY = -1000;
+        }
+        
+        // Calculate mouse interaction (cursor area tracking for desktop, tap instance tracking for mobile)
+        if (fleeDistance > 0 && !isIdle) {
             const rect = canvas.getBoundingClientRect();
             const canvasCenterX = rect.left + rect.width / 2;
             const canvasCenterY = rect.top + rect.height / 2;
