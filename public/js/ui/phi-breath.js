@@ -28,6 +28,7 @@ const PHI_BREATH = (function() {
     let animationFrameId = null;
     let currentCycleDuration = BASE_DURATION;
     let lastBreathTimestamp = 0; // Guard to prevent multiple breath events
+    let isBreathing = false; // TRUE IDLE: Start with no breathing
     
     // Event Listeners
     const listeners = {
