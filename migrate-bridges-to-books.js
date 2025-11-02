@@ -55,33 +55,59 @@ async function migrateBridgesToBooks() {
                 const bridgesExists = hasBridges.rows[0].exists;
                 const booksExists = hasBooks.rows[0].exists;
 
-                if (booksExists) {
-                    console.log(`⏭️  ${schema}: Already migrated (books table exists)`);
-                    results.push({ schema, status: 'skipped', reason: 'books table already exists' });
+                // Check if bridge_id columns still exist (incomplete migration)
+                const hasBridgeIdInMedia = await pool.query(`
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.columns 
+                        WHERE table_schema = $1 
+                        AND table_name = 'media_buffer'
+                        AND column_name = 'bridge_id'
+                    ) as exists
+                `, [schema]);
+                
+                const needsColumnMigration = hasBridgeIdInMedia.rows[0].exists;
+
+                if (booksExists && !needsColumnMigration) {
+                    console.log(`⏭️  ${schema}: Already migrated (books table and columns updated)`);
+                    results.push({ schema, status: 'skipped', reason: 'fully migrated' });
                     totalSkipped++;
                     continue;
                 }
 
-                if (!bridgesExists) {
-                    console.log(`⏭️  ${schema}: No bridges table found (fresh schema)`);
-                    results.push({ schema, status: 'skipped', reason: 'no bridges table' });
+                if (!bridgesExists && !booksExists) {
+                    console.log(`⏭️  ${schema}: No bridges or books table found (fresh schema)`);
+                    results.push({ schema, status: 'skipped', reason: 'no tables' });
                     totalSkipped++;
                     continue;
                 }
 
-                const countResult = await pool.query(`SELECT COUNT(*) as count FROM ${schema}.bridges`);
-                const bridgeCount = parseInt(countResult.rows[0].count);
+                let bridgeCount = 0;
+                if (bridgesExists) {
+                    const countResult = await pool.query(`SELECT COUNT(*) as count FROM ${schema}.bridges`);
+                    bridgeCount = parseInt(countResult.rows[0].count);
+                } else if (booksExists) {
+                    const countResult = await pool.query(`SELECT COUNT(*) as count FROM ${schema}.books`);
+                    bridgeCount = parseInt(countResult.rows[0].count);
+                }
 
                 if (DRY_RUN) {
-                    console.log(`🔍 ${schema}: Would rename bridges → books (${bridgeCount} records)`);
+                    if (bridgesExists) {
+                        console.log(`🔍 ${schema}: Would rename bridges → books (${bridgeCount} records)`);
+                    } else {
+                        console.log(`🔍 ${schema}: Would update column names (${bridgeCount} records)`);
+                    }
                     console.log(`   └─ Would rename media_buffer.bridge_id → book_id`);
                     console.log(`   └─ Would rename message_analytics.bridge_id → book_id (if exists)`);
                     results.push({ schema, status: 'preview', count: bridgeCount });
                     totalMigrated++;
                 } else {
-                    // Step 1: Rename table
-                    await pool.query(`ALTER TABLE ${schema}.bridges RENAME TO books`);
-                    console.log(`✅ ${schema}: Renamed bridges → books (${bridgeCount} records)`);
+                    // Step 1: Rename table if needed
+                    if (bridgesExists) {
+                        await pool.query(`ALTER TABLE ${schema}.bridges RENAME TO books`);
+                        console.log(`✅ ${schema}: Renamed bridges → books (${bridgeCount} records)`);
+                    } else {
+                        console.log(`✅ ${schema}: Updating column names (${bridgeCount} records)`);
+                    }
                     
                     // Step 2: Rename bridge_id → book_id in media_buffer
                     const hasMediaBuffer = await pool.query(`
