@@ -4626,7 +4626,7 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
         console.log(`📊 Analytics request from ${req.userEmail} (tenant: ${tenantSchema}, book: ${book_id || 'all'})`);
         
         // Build WHERE clause for book filter
-        const bridgeFilter = book_id ? `AND book_id = ${parseInt(book_id)}` : '';
+        const bookFilter = book_id ? `AND book_id = ${parseInt(book_id)}` : '';
         
         // TENANT-AWARE: Get daily aggregates from tenant schema
         const result = await pool.query(`
@@ -4637,7 +4637,7 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
                 SUM(rate_limit_events) as rate_limit_events,
                 AVG(avg_response_time_ms) as avg_response_time_ms
             FROM ${tenantSchema}.message_analytics
-            WHERE date >= CURRENT_DATE - $1::integer ${bridgeFilter}
+            WHERE date >= CURRENT_DATE - $1::integer ${bookFilter}
             GROUP BY date
             ORDER BY date ASC
         `, [days]);
@@ -4648,25 +4648,25 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
                 COUNT(*) as total_messages,
                 COUNT(*) FILTER (WHERE discord_status = 'failed') as failed_messages
             FROM ${tenantSchema}.messages
-            WHERE timestamp >= CURRENT_DATE - $1::integer ${bridgeFilter}
+            WHERE timestamp >= CURRENT_DATE - $1::integer ${bookFilter}
         `, [days]);
         
         // TENANT-AWARE: Get rate limit events from tenant schema
         const rateLimitResult = await pool.query(`
             SELECT SUM(rate_limit_events) as rate_limit_events
             FROM ${tenantSchema}.message_analytics
-            WHERE date >= CURRENT_DATE - $1::integer ${bridgeFilter}
+            WHERE date >= CURRENT_DATE - $1::integer ${bookFilter}
         `, [days]);
         
         // Get book info if filtering by specific book
-        let bridgeInfo = null;
+        let bookInfo = null;
         if (book_id) {
             const bookResult = await pool.query(`
                 SELECT id, name, input_platform, output_platform
                 FROM ${tenantSchema}.books
                 WHERE id = $1
             `, [book_id]);
-            bridgeInfo = bookResult.rows[0] || null;
+            bookInfo = bookResult.rows[0] || null;
         }
         
         console.log(`✅ Analytics data loaded: ${summaryResult.rows[0]?.total_messages || 0} total messages`);
@@ -4678,7 +4678,7 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
                 failed_messages: parseInt(summaryResult.rows[0]?.failed_messages || 0),
                 rate_limit_events: parseInt(rateLimitResult.rows[0]?.rate_limit_events || 0)
             },
-            book: bridgeInfo
+            book: bookInfo
         });
     } catch (error) {
         console.error(`❌ Analytics error for user ${req.userId}:`, error);
@@ -4742,7 +4742,7 @@ async function autoRestoreWhatsAppSessions() {
                 for (const book of books.rows) {
                     // Check if this book has a saved Baileys session
                     // Baileys stores auth in a directory with JSON files (creds.json, etc.)
-                    const sessionClientId = `${schema_name}_bridge_${book.id}`;
+                    const sessionClientId = `${schema_name}_book_${book.id}`;
                     // CRITICAL: Use persistent Baileys storage path with "session-" prefix
                     const sessionPath = path.join(BAILEYS_DATA_PATH, `session-${sessionClientId}`);
                     
@@ -5121,7 +5121,7 @@ app.listen(PORT, '0.0.0.0', async () => {
                             await logAudit(pool, { userId: 0, userEmail: 'system' }, 
                                 'HEALTH_CHECK_RESTART', 'BOOK', book.fractal_id, 
                                 `Auto-restarted stale connection: ${health.reason}`, 
-                                { health, bridge_name: book.name }, schema_name);
+                                { health, book_name: book.name }, schema_name);
                         } catch (restartError) {
                             console.error(`     ❌ Failed to restart ${book.name}:`, restartError.message);
                         }
