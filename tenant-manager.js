@@ -129,25 +129,29 @@ class TenantManager {
                 ON ${schemaName}.sessions (expire)
             `);
             
-            // Create refresh_tokens table for JWT refresh tokens
+            // Create refresh_tokens table for JWT refresh tokens (auth-service.js)
             await client.query(`
                 CREATE TABLE IF NOT EXISTS ${schemaName}.refresh_tokens (
                     id SERIAL PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
-                    token TEXT NOT NULL UNIQUE,
+                    user_id INTEGER NOT NULL REFERENCES ${schemaName}.users(id) ON DELETE CASCADE,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    device_info TEXT,
+                    ip_address TEXT,
                     expires_at TIMESTAMP NOT NULL,
-                    created_at TIMESTAMP DEFAULT NOW()
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    revoked_at TIMESTAMP,
+                    is_revoked BOOLEAN DEFAULT FALSE
                 )
             `);
             
-            // Create audit_logs table for security tracking
+            // Create audit_logs table for security tracking (logAudit function)
             await client.query(`
                 CREATE TABLE IF NOT EXISTS ${schemaName}.audit_logs (
                     id SERIAL PRIMARY KEY,
-                    user_id INTEGER,
-                    action TEXT NOT NULL,
-                    resource_type TEXT,
-                    resource_id TEXT,
+                    actor_user_id INTEGER,
+                    action_type TEXT NOT NULL,
+                    target_type TEXT,
+                    target_id TEXT,
                     details JSONB,
                     ip_address TEXT,
                     user_agent TEXT,
@@ -156,8 +160,8 @@ class TenantManager {
             `);
             
             await client.query(`
-                CREATE INDEX IF NOT EXISTS audit_logs_user_idx 
-                ON ${schemaName}.audit_logs (user_id, created_at DESC)
+                CREATE INDEX IF NOT EXISTS audit_logs_actor_idx 
+                ON ${schemaName}.audit_logs (actor_user_id, created_at DESC)
             `);
             
             // Create media_buffer table for temporary media storage
@@ -178,17 +182,28 @@ class TenantManager {
                 ON ${schemaName}.media_buffer (book_id, delivered, created_at)
             `);
             
-            // Create active_sessions table for session tracking
+            // Create active_sessions table for session tracking (createSessionRecord function)
             await client.query(`
                 CREATE TABLE IF NOT EXISTS ${schemaName}.active_sessions (
                     id SERIAL PRIMARY KEY,
-                    user_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL REFERENCES ${schemaName}.users(id) ON DELETE CASCADE,
                     session_id TEXT NOT NULL UNIQUE,
                     ip_address TEXT,
                     user_agent TEXT,
+                    device_type TEXT,
+                    browser TEXT,
+                    os TEXT,
+                    location TEXT,
+                    login_time TIMESTAMP DEFAULT NOW(),
                     last_activity TIMESTAMP DEFAULT NOW(),
+                    is_active BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMP DEFAULT NOW()
                 )
+            `);
+            
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS active_sessions_user_idx 
+                ON ${schemaName}.active_sessions (user_id, is_active, last_activity DESC)
             `);
             
             // Create message_analytics table for message statistics
