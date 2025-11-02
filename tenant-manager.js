@@ -122,13 +122,13 @@ class TenantManager {
     }
 
     async checkSybilRisk(email, ip) {
-        // Simplified sybil check
-        return { risk: false };
+        // Simplified sybil check - allow all signups
+        return { allowed: true };
     }
 
     async checkRateLimit(type, key, value) {
-        // Simplified rate limit check
-        return { limited: false };
+        // Simplified rate limit check - allow all requests
+        return { allowed: true };
     }
 
     async recordTenantCreation(email, ip) {
