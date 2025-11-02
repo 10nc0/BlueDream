@@ -20,6 +20,163 @@ class BaileysClientManager {
     }
 
     /**
+     * GROK PROTOCOL v2 — SESSION CORRUPTION DETECTION
+     * Validates Baileys auth state before use - auto-deletes poisoned sessions
+     * Prevents "Unsupported state or unable to authenticate data" crashes
+     */
+    async safeLoadAuthState(sessionPath, compositeKey) {
+        const credsPath = path.join(sessionPath, 'creds.json');
+        
+        // Helper: Validate Buffer data with minimum byte length
+        const isValidBuffer = (obj, minBytes = 32) => {
+            if (!obj) return false;
+            
+            // Direct Buffer object
+            if (Buffer.isBuffer(obj)) {
+                return obj.length >= minBytes;
+            }
+            
+            // Serialized Buffer {type: 'Buffer', data: [...]}
+            if (obj.type === 'Buffer' && Array.isArray(obj.data)) {
+                return obj.data.length >= minBytes;
+            }
+            
+            // Base64 or hex string - decode and check actual byte length
+            if (typeof obj === 'string' && obj.length > 0) {
+                try {
+                    // Try base64 decode
+                    const decoded = Buffer.from(obj, 'base64');
+                    if (decoded.length >= minBytes) return true;
+                    
+                    // Try hex decode
+                    const hexDecoded = Buffer.from(obj, 'hex');
+                    return hexDecoded.length >= minBytes;
+                } catch {
+                    return false; // Failed to decode - corrupted
+                }
+            }
+            
+            return false;
+        };
+        
+        // Helper: Validate key pair structure
+        const isValidKeyPair = (key) => {
+            return key && isValidBuffer(key.private) && isValidBuffer(key.public);
+        };
+        
+        try {
+            // 1. Ensure directory exists
+            if (!fs.existsSync(sessionPath)) {
+                console.log(`📁 Session path ${sessionPath} missing — creating fresh`);
+                fs.mkdirSync(sessionPath, { recursive: true });
+                return await useMultiFileAuthState(sessionPath);
+            }
+            
+            // 2. Load creds.json with error handling
+            if (!fs.existsSync(credsPath)) {
+                console.log(`📄 No creds.json found — fresh session for ${compositeKey}`);
+                return await useMultiFileAuthState(sessionPath);
+            }
+            
+            let parsedCreds = null;
+            try {
+                const credsData = fs.readFileSync(credsPath, 'utf8');
+                parsedCreds = JSON.parse(credsData);
+            } catch (parseError) {
+                // Filesystem or JSON parse error
+                if (parseError.code) {
+                    // Filesystem error - preserve session
+                    console.error(`❌ Filesystem error reading ${compositeKey} (${parseError.code}): ${parseError.message}`);
+                    console.error(`   Session preserved - fix filesystem issue and retry`);
+                    throw parseError;
+                } else {
+                    // JSON parse error - corruption
+                    console.warn(`⚠️  JSON corruption in ${compositeKey} creds.json — purging`);
+                    fs.rmSync(sessionPath, { recursive: true, force: true });
+                    fs.mkdirSync(sessionPath, { recursive: true });
+                    console.log(`✨ Session purged — fresh QR required`);
+                    return await useMultiFileAuthState(sessionPath);
+                }
+            }
+            
+            // 3. GROK VALIDATION — STRUCTURAL INTEGRITY
+            const validationResults = [];
+            
+            // Check me identity
+            const validMe = parsedCreds.me && 
+                           parsedCreds.me.id && 
+                           parsedCreds.me.name;
+            validationResults.push(`Me: ${validMe ? 'OK' : 'BAD'}`);
+            
+            // Check registration ID
+            const validReg = typeof parsedCreds.registrationId === 'number' && 
+                            parsedCreds.registrationId > 0;
+            validationResults.push(`Reg: ${validReg ? 'OK' : 'BAD'}`);
+            
+            // Check noiseKey
+            const validNoise = isValidKeyPair(parsedCreds.noiseKey);
+            validationResults.push(`Noise: ${validNoise ? 'OK' : 'BAD'}`);
+            
+            // Check signedIdentityKey
+            const validSignedId = isValidKeyPair(parsedCreds.signedIdentityKey);
+            validationResults.push(`SignedID: ${validSignedId ? 'OK' : 'BAD'}`);
+            
+            // Check signedPreKey
+            const validSignedPre = parsedCreds.signedPreKey && 
+                                  isValidKeyPair(parsedCreds.signedPreKey.keyPair) &&
+                                  isValidBuffer(parsedCreds.signedPreKey.signature);
+            validationResults.push(`SignedPre: ${validSignedPre ? 'OK' : 'BAD'}`);
+            
+            // Check advSecretKey
+            const validAdv = isValidBuffer(parsedCreds.advSecretKey);
+            validationResults.push(`Adv: ${validAdv ? 'OK' : 'BAD'}`);
+            
+            // Check account signatures (including device signatures)
+            const validAccount = parsedCreds.account && 
+                                isValidBuffer(parsedCreds.account.details) &&
+                                isValidBuffer(parsedCreds.account.accountSignature) &&
+                                isValidBuffer(parsedCreds.account.accountSignatureKey) &&
+                                isValidBuffer(parsedCreds.account.deviceSignature) &&
+                                isValidBuffer(parsedCreds.account.deviceSignatureKey);
+            validationResults.push(`Account: ${validAccount ? 'OK' : 'BAD'}`);
+            
+            // Check platform
+            const validPlatform = parsedCreds.platform && 
+                                 typeof parsedCreds.platform === 'string';
+            validationResults.push(`Platform: ${validPlatform ? 'OK' : 'BAD'}`);
+            
+            // 4. CORRUPTION DETECTED — NUKE & RESTART
+            const allValid = validMe && validReg && validNoise && validSignedId && 
+                           validSignedPre && validAdv && validAccount && validPlatform;
+            
+            if (!allValid) {
+                console.warn(`⚠️  CORRUPTION DETECTED in ${compositeKey} — purging`);
+                console.warn(`   Validation: ${validationResults.join(' | ')}`);
+                console.warn(`   Session path: ${sessionPath}`);
+                
+                fs.rmSync(sessionPath, { recursive: true, force: true });
+                fs.mkdirSync(sessionPath, { recursive: true });
+                console.log(`✨ Session purged — fresh QR required`);
+                return await useMultiFileAuthState(sessionPath);
+            }
+            
+            // 5. ALL CLEAR — LOAD CLEAN STATE
+            console.log(`✅ Session ${compositeKey} validated — loading clean state`);
+            return await useMultiFileAuthState(sessionPath);
+            
+        } catch (error) {
+            // Final fallback for unexpected errors
+            console.error(`❌ FATAL: Failed to validate session ${compositeKey}:`, error.message);
+            try {
+                fs.rmSync(sessionPath, { recursive: true, force: true });
+            } catch {}
+            fs.mkdirSync(sessionPath, { recursive: true });
+            console.log(`🔄 Session reset after fatal error — fresh QR required`);
+            return await useMultiFileAuthState(sessionPath);
+        }
+    }
+
+    /**
      * Generate composite key for tenant-aware book tracking
      */
     getCompositeKey(tenantSchema, bookId, isShadow = false) {
@@ -76,8 +233,8 @@ class BaileysClientManager {
                 console.log(`📁 Created Baileys session directory: ${sessionPath}`);
             }
 
-            // Load auth state from multi-file storage
-            const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+            // Load auth state with corruption detection (Grok Protocol)
+            const { state, saveCreds } = await this.safeLoadAuthState(sessionPath, compositeKey);
             
             // Fetch latest Baileys version
             const { version } = await fetchLatestBaileysVersion();
@@ -324,8 +481,8 @@ class BaileysClientManager {
             fs.mkdirSync(sessionPath, { recursive: true });
             console.log(`📁 Created shadow session directory: ${sessionPath}`);
             
-            // Load auth state (will be empty for fresh shadow)
-            const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+            // Load auth state with corruption detection (will be empty for fresh shadow)
+            const { state, saveCreds } = await this.safeLoadAuthState(sessionPath, shadowKey);
             const { version } = await fetchLatestBaileysVersion();
             
             // Create shadow socket
