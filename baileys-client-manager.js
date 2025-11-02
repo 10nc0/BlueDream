@@ -103,7 +103,9 @@ class BaileysClientManager {
                 bookId,
                 compositeKey,
                 createdAt: Date.now(),
-                reconnectAttempts: 0
+                reconnectAttempts: 0,
+                failedReconnectCount: 0,  // Track consecutive failed reconnects
+                lastReconnectTime: null
             };
             this.clients.set(compositeKey, clientState);
 
@@ -133,6 +135,8 @@ class BaileysClientManager {
                     clientState.phoneNumber = `+${phoneNumber}`;
                     clientState.qrCode = null;
                     clientState.reconnectAttempts = 0;
+                    clientState.failedReconnectCount = 0;  // Reset on successful connection
+                    clientState.lastReconnectTime = null;
                     
                     await this.updateBotStatus(bookId, tenantSchema, 'connected', null, `+${phoneNumber}`);
                     console.log(`📱 ${compositeKey} connected with number: +${phoneNumber}`);
@@ -144,6 +148,26 @@ class BaileysClientManager {
                     const reason = statusCode || 'unknown';
                     
                     console.log(`🔌 ${compositeKey} disconnected: ${reason}`);
+                    
+                    // DETECT FAILED RECONNECT: If we just reconnected and immediately disconnected
+                    const timeSinceReconnect = clientState.lastReconnectTime ? (Date.now() - clientState.lastReconnectTime) : Infinity;
+                    const isFailedReconnect = timeSinceReconnect < 15000; // Failed if disconnect within 15 seconds of reconnect
+                    
+                    if (isFailedReconnect) {
+                        clientState.failedReconnectCount = (clientState.failedReconnectCount || 0) + 1;
+                        console.log(`❌ Reconnect failed for ${compositeKey} (${clientState.failedReconnectCount}/3 consecutive failures)`);
+                        
+                        // STOP AFTER 3 CONSECUTIVE FAILURES
+                        if (clientState.failedReconnectCount >= 3) {
+                            console.error(`🛑 ${compositeKey} exceeded 3 consecutive reconnect failures - marking as needs_qr`);
+                            clientState.status = 'needs_qr';
+                            await this.updateBotStatus(bookId, tenantSchema, 'needs_qr', null, null, 'Reconnection failed - scan QR code');
+                            this.clients.delete(compositeKey);
+                            this.messageHandlers.delete(compositeKey);
+                            return;
+                        }
+                    }
+                    
                     clientState.status = 'disconnected';
                     await this.updateBotStatus(bookId, tenantSchema, 'disconnected', null, null, `Reason: ${reason}`);
 
@@ -201,11 +225,17 @@ class BaileysClientManager {
                                 console.log(`🔄 Auto-reconnecting ${compositeKey} (attempt ${clientState.reconnectAttempts}/5)...`);
                                 await this.updateBotStatus(bookId, tenantSchema, 'reconnecting', null, null, `Auto-reconnect attempt ${clientState.reconnectAttempts}/5`);
                                 
+                                // PRESERVE failure tracking values across initializeClient (which creates new state)
+                                const reconnectTime = Date.now();
+                                const savedFailedCount = clientState.failedReconnectCount || 0;
+                                
                                 const messageHandler = this.messageHandlers.get(compositeKey);
                                 const reconnectedState = await this.initializeClient(bookId, tenantSchema, messageHandler);
                                 
-                                // SUCCESS LOGGING
+                                // RESTORE failure tracking to new clientState
                                 if (reconnectedState) {
+                                    reconnectedState.failedReconnectCount = savedFailedCount;
+                                    reconnectedState.lastReconnectTime = reconnectTime;
                                     console.log(`✅ Auto-reconnect SUCCESS for ${compositeKey} - Status: ${reconnectedState.status}, Phone: ${reconnectedState.phoneNumber || 'pending'}`);
                                     console.log(`📊 ${compositeKey} reconnect stats: Attempt ${clientState.reconnectAttempts}/5, Total reconnects: ${clientState.reconnectAttempts}`);
                                 } else {
