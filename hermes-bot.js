@@ -179,7 +179,7 @@ class HermesBot {
         }
     }
 
-    async createDualThreadsForBridge(webhook01Url, webhook0nUrl, bridgeName, tenantId, bridgeId, threadModeUser = true) {
+    async createDualThreadsForBridge(webhook01Url, webhook0nUrl, bridgeName, tenantId, bridgeId, threadModeUser = true, existingCredentials = null) {
         console.log(`🧵 Hermes creating dual outputs for: ${bridgeName} (t${tenantId}-b${bridgeId})`);
         
         const results = {
@@ -188,8 +188,12 @@ class HermesBot {
             errors: []
         };
 
-        // OUTPUT #01: Nyanbook Ledger (ALWAYS THREAD)
-        if (webhook01Url) {
+        // IDEMPOTENT: Check if output_01 thread already exists
+        if (existingCredentials?.output_01?.thread_id) {
+            console.log(`  ℹ️  output_01 thread already exists: ${existingCredentials.output_01.thread_id} (skipping creation)`);
+            results.output_01 = existingCredentials.output_01;
+        } else if (webhook01Url) {
+            // OUTPUT #01: Nyanbook Ledger (ALWAYS THREAD)
             try {
                 const threadInfo = await this.createThreadForBridge(
                     webhook01Url,
@@ -210,8 +214,12 @@ class HermesBot {
             }
         }
 
-        // OUTPUT #0n: User Discord (webhook-only)
-        if (webhook0nUrl) {
+        // IDEMPOTENT: Check if output_0n already configured (webhook OR thread)
+        if (existingCredentials?.output_0n?.webhook_url || existingCredentials?.output_0n?.thread_id) {
+            console.log(`  ℹ️  output_0n already configured (skipping)`);
+            results.output_0n = existingCredentials.output_0n;
+        } else if (webhook0nUrl) {
+            // OUTPUT #0n: User Discord (webhook-only)
             results.output_0n = {
                 type: 'webhook',
                 webhook_url: webhook0nUrl

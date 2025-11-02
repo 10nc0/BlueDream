@@ -3688,7 +3688,7 @@ app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('
     }
 });
 
-// Get WhatsApp session status for a bot
+// Get comprehensive health status for a bridge
 app.get('/api/bridges/:id/status', requireAuth, setTenantContext, async (req, res) => {
     try {
         const { id } = req.params; // This is fractal_id
@@ -3697,7 +3697,7 @@ app.get('/api/bridges/:id/status', requireAuth, setTenantContext, async (req, re
         
         // SECURITY: Verify bridge belongs to user's tenant using fractal_id
         const bridgeResult = await client.query(
-            `SELECT id, fractal_id FROM bridges WHERE fractal_id = $1`,
+            `SELECT id, fractal_id, output_credentials FROM bridges WHERE fractal_id = $1`,
             [id]
         );
         
@@ -3705,26 +3705,48 @@ app.get('/api/bridges/:id/status', requireAuth, setTenantContext, async (req, re
             console.warn(`⚠️  User ${req.userId} attempted to access bridge ${id} outside their tenant`);
             return res.json({ 
                 status: 'inactive', 
-                message: 'Bridge not found in your tenant'
+                message: 'Bridge not found in your tenant',
+                threads: { output_01: false, output_0n: false },
+                whatsapp: 'not_found',
+                hermes: hermesBot ? hermesBot.isReady() : false
             });
         }
         
         const internalId = bridgeResult.rows[0].id;
+        const outputCredentials = bridgeResult.rows[0].output_credentials || {};
         
-        // Get status using composite key (tenant:bridge)
+        // Check thread health
+        const threadHealth = {
+            output_01: !!(outputCredentials.output_01?.thread_id),
+            output_0n: !!(outputCredentials.output_0n?.webhook_url || outputCredentials.output_0n?.thread_id),
+            output_01_thread_id: outputCredentials.output_01?.thread_id || null,
+            output_0n_type: outputCredentials.output_0n?.type || null
+        };
+        
+        // Get WhatsApp connection status
         const clientState = whatsappManager.getClient(internalId, tenantSchema);
+        const whatsappStatus = clientState ? clientState.status : 'inactive';
+        const whatsappHealth = whatsappManager.checkConnectionHealth(internalId, tenantSchema);
         
-        if (!clientState) {
-            return res.json({ 
-                status: 'inactive', 
-                message: 'No WhatsApp session for this bridge'
-            });
-        }
+        // Overall health assessment
+        const healthy = threadHealth.output_01 && 
+                       threadHealth.output_0n && 
+                       (whatsappStatus === 'connected' || whatsappStatus === 'qr_ready') &&
+                       hermesBot && hermesBot.isReady();
         
         res.json({ 
-            status: clientState.status,
-            phoneNumber: clientState.phoneNumber,
-            hasQR: clientState.qrCode !== null,
+            healthy,
+            status: whatsappStatus,
+            phoneNumber: clientState?.phoneNumber || null,
+            hasQR: Boolean(clientState?.qrCode),
+            threads: threadHealth,
+            whatsapp: {
+                status: whatsappStatus,
+                health: whatsappHealth.status,
+                phoneNumber: clientState?.phoneNumber || null,
+                lastActivity: clientState?.lastActivity || null
+            },
+            hermes: hermesBot ? hermesBot.isReady() : false,
             bridgeId: id // Return fractal_id to frontend
         });
     } catch (error) {
@@ -4904,12 +4926,15 @@ app.listen(PORT, '0.0.0.0', async () => {
                             // Extract tenant_id from schema name (tenant_1 -> 1)
                             const tenantId = parseInt(schema_name.replace('tenant_', ''));
                             
+                            // IDEMPOTENT: Pass existing credentials to avoid duplicate thread creation
                             const dualThreads = await hermesBot.createDualThreadsForBridge(
                                 bridge.output_01_url,
                                 bridge.output_0n_url,
                                 bridge.name,
                                 tenantId,
-                                bridge.id
+                                bridge.id,
+                                true, // threadModeUser
+                                outputCreds // existing credentials
                             );
                             
                             // Build output_credentials with typed destinations

@@ -1414,6 +1414,26 @@
                     </div>
                 </div>
 
+                ${!bridge.output_credentials?.output_01?.thread_id || (!bridge.output_credentials?.output_0n?.webhook_url && !bridge.output_credentials?.output_0n?.thread_id) ? `
+                    <!-- WARNING: Missing thread configuration -->
+                    <div style="margin: 0.75rem; padding: 0.75rem 1rem; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px; display: flex; align-items: center; gap: 0.75rem;">
+                        <div style="font-size: 1.5rem;">⚠️</div>
+                        <div style="flex: 1;">
+                            <div style="color: #fbbf24; font-weight: 600; font-size: 0.875rem; margin-bottom: 0.25rem;">Setup Incomplete</div>
+                            <div style="color: #cbd5e1; font-size: 0.8125rem;">
+                                ${!bridge.output_credentials?.output_01?.thread_id ? 'Discord thread not created. ' : ''}
+                                ${!bridge.output_credentials?.output_0n?.webhook_url && !bridge.output_credentials?.output_0n?.thread_id ? 'User webhook not configured. ' : ''}
+                                ${platform === 'whatsapp' ? 'Click "Generate QR" to complete setup.' : 'Edit this bridge to configure outputs.'}
+                            </div>
+                        </div>
+                        ${platform === 'whatsapp' ? `
+                            <button data-generate-qr="${bridge.fractal_id}" style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap;">
+                                🔗 Generate QR
+                            </button>
+                        ` : ''}
+                    </div>
+                ` : ''}
+
                 ${currentUser?.role === 'dev' && bridge.output_credentials?.output_01?.thread_id ? `
                     <!-- MESSAGES: Snap to bottom - fills all available space -->
                     <div style="display: flex; flex-direction: column; flex: 1; margin-top: 0.5rem; min-height: 0;">
