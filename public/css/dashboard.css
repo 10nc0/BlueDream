@@ -1,5 +1,5 @@
 /* ===================================================================
-   NYAN BRIDGE - RESPONSIVE DASHBOARD STYLES
+   NYAN BOOK - RESPONSIVE DASHBOARD STYLES
    Mobile-First Design with Design Tokens
    =================================================================== */
 
@@ -61,7 +61,7 @@
    * Tablet (768-1023px): 240px sidebar (~31% of 768px iPad width, row layout)
    * Desktop (≥1024px): 280px sidebar (~19% of 1440px MacBook width, row layout)
    * Message area: flex: 1 fills remaining space automatically in row layout
-   * Breakpoints aligned with .bridge-layout flex-direction: row at 768px
+   * Breakpoints aligned with .book-layout flex-direction: row at 768px
    */
   --sidebar-width: 240px; /* Default for tablet/desktop */
   
@@ -470,10 +470,10 @@ body::before {
 }
 
 /* ===================================================================
-   DISCORD-STYLE BRIDGE LAYOUT (Mobile First)
+   DISCORD-STYLE BOOK LAYOUT (Mobile First)
    Outside-in approach: Container snaps to edges, content fills space
    =================================================================== */
-.bridge-layout {
+.book-layout {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -481,13 +481,13 @@ body::before {
 }
 
 @media (min-width: 768px) {
-  .bridge-layout {
+  .book-layout {
     flex-direction: row;
     gap: 0.25rem;
   }
 }
 
-.bridge-sidebar {
+.book-sidebar {
   background: var(--color-surface);
   backdrop-filter: blur(10px);
   border: 1px solid var(--color-border);
@@ -500,7 +500,7 @@ body::before {
 
 /* Mobile (iPhone X): Full width on small screens (column layout) */
 @media (max-width: 767px) {
-  .bridge-sidebar {
+  .book-sidebar {
     width: 100%;
   }
 }
@@ -511,7 +511,7 @@ body::before {
     --sidebar-width: 220px; /* Reduced default for more message space */
   }
   
-  .bridge-sidebar {
+  .book-sidebar {
     width: var(--sidebar-width);
   }
 }
@@ -522,7 +522,7 @@ body::before {
     --sidebar-width: 240px; /* Reduced from 280px for more message space */
   }
   
-  .bridge-sidebar {
+  .book-sidebar {
     width: var(--sidebar-width);
   }
 }
@@ -590,7 +590,7 @@ body::before {
   cursor: row-resize;
 }
 
-.bridge-category {
+.book-category {
   margin-bottom: 0.5rem;
 }
 
@@ -654,7 +654,7 @@ body::before {
   font-weight: 600;
 }
 
-.bridge-detail {
+.book-detail {
   flex: 1 1 auto;
   min-width: 0;
   background: var(--color-surface);
@@ -2001,9 +2001,9 @@ body::before {
 }
 
 /* ===================================================================
-   CREATE BRIDGE MODAL (QR-FIRST ARCHITECTURE)
+   CREATE BOOK MODAL (QR-FIRST ARCHITECTURE)
    =================================================================== */
-.bridge-modal {
+.book-modal {
   display: none;
   position: fixed;
   top: 0;
@@ -2019,12 +2019,12 @@ body::before {
   transition: opacity 0.3s ease;
 }
 
-.bridge-modal.active {
+.book-modal.active {
   display: flex;
   opacity: 1;
 }
 
-.bridge-modal-content {
+.book-modal-content {
   background: rgba(30, 41, 59, 0.95);
   backdrop-filter: blur(20px);
   padding: 2rem;
@@ -2050,7 +2050,7 @@ body::before {
   }
 }
 
-.bridge-modal-close {
+.book-modal-close {
   position: absolute;
   top: 1rem;
   right: 1rem;
@@ -2068,16 +2068,16 @@ body::before {
   transition: all 0.2s;
 }
 
-.bridge-modal-close:hover {
+.book-modal-close:hover {
   background: rgba(239, 68, 68, 0.3);
   transform: scale(1.1);
 }
 
-.bridge-form-group {
+.book-form-group {
   margin-bottom: 1rem;
 }
 
-.bridge-form-group label {
+.book-form-group label {
   display: block;
   color: #cbd5e1;
   font-size: 0.875rem;
@@ -2085,8 +2085,8 @@ body::before {
   font-weight: 500;
 }
 
-.bridge-form-group input,
-.bridge-form-group select {
+.book-form-group input,
+.book-form-group select {
   width: 100%;
   padding: 0.75rem;
   background: rgba(15, 23, 42, 0.6);
@@ -2097,14 +2097,14 @@ body::before {
   transition: all 0.2s;
 }
 
-.bridge-form-group input:focus,
-.bridge-form-group select:focus {
+.book-form-group input:focus,
+.book-form-group select:focus {
   outline: none;
   border-color: #3b82f6;
   background: rgba(15, 23, 42, 0.8);
 }
 
-.bridge-submit-btn {
+.book-submit-btn {
   width: 100%;
   padding: 0.875rem;
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
@@ -2118,17 +2118,17 @@ body::before {
   margin-top: 0.5rem;
 }
 
-.bridge-submit-btn:hover:not(:disabled) {
+.book-submit-btn:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
 }
 
-.bridge-submit-btn:disabled {
+.book-submit-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.bridge-qr-status {
+.book-qr-status {
   display: inline-block;
   padding: 0.5rem 1rem;
   background: rgba(59, 130, 246, 0.2);
@@ -2139,7 +2139,7 @@ body::before {
   margin: 1rem 0;
 }
 
-.bridge-loading {
+.book-loading {
   display: inline-block;
   width: 16px;
   height: 16px;
@@ -2155,7 +2155,7 @@ body::before {
   to { transform: rotate(360deg); }
 }
 
-.bridge-copy-btn {
+.book-copy-btn {
   font-size: 0.7rem;
   padding: 0.25rem 0.5rem;
   margin-left: 0.5rem;
@@ -2167,7 +2167,7 @@ body::before {
   transition: all 0.2s;
 }
 
-.bridge-copy-btn:hover {
+.book-copy-btn:hover {
   background: rgba(167, 139, 250, 0.3);
   transform: scale(1.05);
 }
@@ -2674,8 +2674,8 @@ body::before {
 .thumbs-zone .thumb-btn[data-action="create"]        { border-color: #22d3ee; } /* Cyan */
 .thumbs-zone .thumb-btn[data-action="audit"]         { border-color: #a855f7; } /* Purple */
 .thumbs-zone .thumb-btn[data-action="search"]        { border-color: #60a5fa; } /* Blue */
-.thumbs-zone .thumb-btn[data-action="bridge-actions"]{ border-color: #10b981; } /* Green */
-.thumbs-zone .thumb-btn[data-action="fan"]           { border-color: #94a3b8; } /* Slate */
+.thumbs-zone .thumb-btn[data-action="book-actions"]{ border-color: #10b981; } /* Green */
+.thumbs-zone .thumb-btn[data-action="fan"]           { border-color: #94a5fa; } /* Slate */
 .thumbs-zone .thumb-btn[data-action="next"]          { border-color: #ec4899; } /* Pink */
 
 /* Active state (tap feedback) */
@@ -2923,7 +2923,7 @@ body.mobile-mode {
     max-width: 100vw;
 }
 
-body.mobile-mode .bridge-sidebar {
+body.mobile-mode .book-sidebar {
     display: none !important;
 }
 
@@ -3043,20 +3043,20 @@ body.mobile-mode .logout-btn {
     border-radius: 4px;                 /* Smaller border radius */
 }
 
-/* Mobile Mode: Hide Bridge Header for maximum message space */
-body.mobile-mode .bridge-detail > div:first-child {
-    display: none !important; /* Hide bridge header (name + controls) on mobile */
+/* Mobile Mode: Hide Book Header for maximum message space */
+body.mobile-mode .book-detail > div:first-child {
+    display: none !important; /* Hide book header (name + controls) on mobile */
 }
 
 /* Mobile Mode: Compact Toolbar - 40% height reduction, squeeze search */
-body.mobile-mode .bridge-detail > div > div:first-child {
+body.mobile-mode .book-detail > div > div:first-child {
     padding: 0.3rem !important; /* Reduced from 0.5rem (40% reduction) */
     gap: 0.3rem !important; /* Reduced gap */
     overflow: visible !important; /* No scrolling */
 }
 
 /* Mobile Mode: Squeeze search box (minimal width) */
-body.mobile-mode .bridge-detail > div > div:first-child input[type="text"] {
+body.mobile-mode .book-detail > div > div:first-child input[type="text"] {
     flex: 0 1 80px !important; /* Squeezed to 80px instead of flex: 1 */
     min-width: 80px !important;
     padding: 0.25rem 0.5rem !important; /* Reduced padding */
@@ -3064,16 +3064,16 @@ body.mobile-mode .bridge-detail > div > div:first-child input[type="text"] {
 }
 
 /* Mobile Mode: Compact all toolbar items */
-body.mobile-mode .bridge-detail > div > div:first-child label,
-body.mobile-mode .bridge-detail > div > div:first-child select,
-body.mobile-mode .bridge-detail > div > div:first-child button {
+body.mobile-mode .book-detail > div > div:first-child label,
+body.mobile-mode .book-detail > div > div:first-child select,
+body.mobile-mode .book-detail > div > div:first-child button {
     padding: 0.25rem 0.4rem !important; /* Reduced padding (40% less) */
     font-size: 0.7rem !important; /* Smaller text */
     white-space: nowrap !important;
 }
 
 /* Mobile Mode: Extra compact export button */
-body.mobile-mode button[data-export-bridge] {
+body.mobile-mode button[data-export-book] {
     padding: 0.25rem 0.5rem !important;
     font-size: 0.7rem !important;
 }
@@ -3085,8 +3085,8 @@ body.desktop-mode .thumbs-zone {
 
 /* No need to override sidebar display - CSS default handles it */
 
-/* Bridge Fan Modal (for 6+ bridges on mobile) */
-.bridge-fan-modal {
+/* Book Fan Modal (for 6+ books on mobile) */
+.book-fan-modal {
     position: fixed;
     top: 0;
     left: 0;
@@ -3100,11 +3100,11 @@ body.desktop-mode .thumbs-zone {
     justify-content: center;
 }
 
-.bridge-fan-modal.active {
+.book-fan-modal.active {
     display: flex;
 }
 
-.bridge-fan-content {
+.book-fan-content {
     background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
     border: 1px solid rgba(168, 85, 247, 0.3);
     border-radius: 16px;
@@ -3115,7 +3115,7 @@ body.desktop-mode .thumbs-zone {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
-.bridge-fan-content h3 {
+.book-fan-content h3 {
     color: #e2e8f0;
     font-size: 1.25rem;
     margin-bottom: 1rem;
@@ -3124,13 +3124,13 @@ body.desktop-mode .thumbs-zone {
     gap: 0.5rem;
 }
 
-.bridge-fan-list {
+.book-fan-list {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
 }
 
-.bridge-fan-item {
+.book-fan-item {
     background: rgba(30, 41, 59, 0.6);
     border: 1px solid rgba(148, 163, 184, 0.2);
     border-radius: 8px;
@@ -3142,25 +3142,25 @@ body.desktop-mode .thumbs-zone {
     transition: all 0.2s ease;
 }
 
-.bridge-fan-item:hover,
-.bridge-fan-item:active {
+.book-fan-item:hover,
+.book-fan-item:active {
     background: rgba(30, 41, 59, 0.8);
     border-color: rgba(168, 85, 247, 0.5);
     transform: translateX(-4px);
 }
 
-.bridge-fan-item-name {
+.book-fan-item-name {
     color: #e2e8f0;
     font-weight: 500;
     font-size: 0.9rem;
 }
 
-.bridge-fan-item-arrow {
+.book-fan-item-arrow {
     color: #94a3b8;
     font-size: 1.25rem;
 }
 
-.bridge-fan-close {
+.book-fan-close {
     position: absolute;
     top: 1rem;
     right: 1rem;
@@ -3178,18 +3178,18 @@ body.desktop-mode .thumbs-zone {
     transition: all 0.2s;
 }
 
-.bridge-fan-close:hover {
+.book-fan-close:hover {
     background: rgba(148, 163, 184, 0.3);
     color: #e2e8f0;
 }
 
-/* Bridge Info Modal: Danger action styling */
-.bridge-fan-item.danger {
+/* Book Info Modal: Danger action styling */
+.book-fan-item.danger {
     border-left: 2px solid rgba(239, 68, 68, 0.5);
 }
 
-.bridge-fan-item.danger:hover,
-.bridge-fan-item.danger:active {
+.book-fan-item.danger:hover,
+.book-fan-item.danger:active {
     background: rgba(239, 68, 68, 0.15);
     border-color: rgba(239, 68, 68, 0.7);
 }
@@ -3233,16 +3233,16 @@ body.desktop-mode .thumbs-zone {
     
     .container,
     .header,
-    .bridge-detail,
+    .book-detail,
     .discord-messages-container,
-    .bridge-sidebar {
+    .book-sidebar {
         overflow-x: hidden !important;
         max-width: 100vw !important;
     }
     
     /* Ensure all interactive elements meet 48px minimum */
     button,
-    .bridge-card,
+    .book-card,
     .thumbs-btn,
     .message-control-btn {
         min-height: 48px;
@@ -3282,7 +3282,7 @@ body.desktop-mode .thumbs-zone {
     
     /* Enhanced tap feedback */
     button:active,
-    .bridge-card:active {
+    .book-card:active {
         transform: scale(0.97);
         transition: transform 0.1s ease;
     }
@@ -3308,7 +3308,7 @@ body.desktop-mode .thumbs-zone {
 
 /* Smooth momentum scrolling */
 .discord-messages-container,
-#bridgeListContainer {
+#bookListContainer {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
 }

@@ -1,31 +1,31 @@
         console.log('🚀 Main script loading...');
-        let bridges = [];
-        let filteredBridges = [];
-        let editingBridgeId = null;
+        let books = [];
+        let filteredBooks = [];
+        let editingBookId = null;
         let expandedBots = new Set();
         
-        // SECURITY: Message cache is TENANT-ISOLATED via fractalized bridge IDs
-        // Keys MUST be fractal_id (dev_bridge_tX_HASH or prod_bridge_tX_HASH)
+        // SECURITY: Message cache is TENANT-ISOLATED via fractalized book IDs
+        // Keys MUST be fractal_id (dev_book_tX_HASH or prod_book_tX_HASH)
         // This ensures zero cross-tenant data leakage in multi-tenant SaaS
         let messageCache = {}; 
         
         let allMessages = {}; // Store all messages by ID for media viewing
         let currentUser = null;
         
-        // SEAMLESS SEARCH: Store bridge search query for auto-filtering messages
-        // When user searches in bridge library and clicks a 💬 bridge, 
+        // SEAMLESS SEARCH: Store book search query for auto-filtering messages
+        // When user searches in book library and clicks a 💬 book, 
         // this context auto-filters messages without double search
-        let bridgeSearchContext = {
+        let bookSearchContext = {
             query: '',
-            bridgeId: null
+            bookId: null
         };
         let botTags = []; // Store tags as array
         let botWebhooks = []; // Store webhook outputs for 1-to-many feature
         let users = [];
         let sessions = [];
         
-        // Per-message export: Track selected message IDs per bridge
-        let selectedMessages = {}; // { bridgeId: Set([msgId1, msgId2, ...]) }
+        // Per-message export: Track selected message IDs per book
+        let selectedMessages = {}; // { bookId: Set([msgId1, msgId2, ...]) }
         
         // Platform roadmap for future features
         const roadmapGlossary = {
@@ -56,29 +56,29 @@
             },
             create: {
                 id: 'create',
-                label: '✍🏻 Create Bridge',
+                label: '✍🏻 Create Book',
                 icon: '✍🏻',
                 mobileIcon: '✍🏻',
-                desktopLabel: '✍🏻 Create Bridge',
-                tooltip: 'Create a new bridge',
+                desktopLabel: '✍🏻 Create Book',
+                tooltip: 'Create a new book',
                 priority: 1, // Lower = higher priority in mobile layout
                 showInMobile: true,
                 showInDesktop: true,
                 requireAuth: true,
                 handler: () => openCreatePopup()
             },
-            bridgeinfo: {
-                id: 'bridgeinfo',
-                label: '📋 Bridge Info',
+            bookinfo: {
+                id: 'bookinfo',
+                label: '📋 Book Info',
                 icon: '📋',
                 mobileIcon: '📋',
-                desktopLabel: '📋 Bridge Info',
-                tooltip: 'Bridge name and actions',
+                desktopLabel: '📋 Book Info',
+                tooltip: 'Book name and actions',
                 priority: 2, // Position 4 in thumbs zone (4-3-2-1)
                 showInMobile: true,
                 showInDesktop: false,
                 requireAuth: true,
-                handler: () => showBridgeInfoModal()
+                handler: () => showBookInfoModal()
             },
             audit: {
                 id: 'audit',
@@ -98,7 +98,7 @@
                 label: '🔍 Search',
                 icon: '🔍',
                 mobileIcon: '🔍',
-                desktopLabel: 'Search bridges...',
+                desktopLabel: 'Search books...',
                 tooltip: 'Search messages',
                 priority: 3,
                 showInMobile: false, // Only in fan modal on mobile
@@ -114,40 +114,40 @@
             },
             fan: {
                 id: 'fan',
-                label: '🔗 All Bridges',
+                label: '🔗 All Books',
                 icon: '🔗',
                 mobileIcon: '🔗',
-                desktopLabel: '🔗 All Bridges',
-                tooltip: 'View all bridges',
+                desktopLabel: '🔗 All Books',
+                tooltip: 'View all books',
                 priority: 5,
                 showInMobile: true,
                 showInDesktop: false,
                 requireAuth: true,
-                handler: () => showBridgeFanModal()
+                handler: () => showBookFanModal()
             },
             next: {
                 id: 'next',
                 label: '→ Next',
                 icon: '→',
                 mobileIcon: '→',
-                desktopLabel: '→ Next Bridge',
-                tooltip: 'Navigate to next bridge',
+                desktopLabel: '→ Next Book',
+                tooltip: 'Navigate to next book',
                 priority: 6,
                 showInMobile: true,
                 showInDesktop: false,
                 requireAuth: true,
                 handler: () => {
-                    const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
-                    if (activeBridges.length <= 1) return;
+                    const activeBooks = filteredBooks.length > 0 ? filteredBooks : books;
+                    if (activeBooks.length <= 1) return;
                     
-                    const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
-                    const currentIndex = activeBridges.findIndex(b => b.fractal_id === currentBridgeId);
+                    const currentBookId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
+                    const currentIndex = activeBooks.findIndex(b => b.fractal_id === currentBookId);
                     
                     if (currentIndex !== -1) {
-                        const nextIndex = currentIndex < activeBridges.length - 1 ? currentIndex + 1 : 0;
-                        const nextBridge = activeBridges[nextIndex];
-                        if (nextBridge) {
-                            selectBridge(nextBridge.fractal_id);
+                        const nextIndex = currentIndex < activeBooks.length - 1 ? currentIndex + 1 : 0;
+                        const nextBook = activeBooks[nextIndex];
+                        if (nextBook) {
+                            selectBook(nextBook.fractal_id);
                         }
                     }
                 }
@@ -236,8 +236,8 @@
             if (headerResizer) headerResizer.style.display = 'none';
             
             // Hide sidebar (moves to thumbs zone)
-            const bridgeSidebar = document.querySelector('.bridge-sidebar');
-            if (bridgeSidebar) bridgeSidebar.style.display = 'none';
+            const bookSidebar = document.querySelector('.book-sidebar');
+            if (bookSidebar) bookSidebar.style.display = 'none';
             
             // Show thumbs zone
             initThumbsZone();
@@ -279,8 +279,8 @@
             if (headerResizer) headerResizer.style.display = 'block';
             
             // Restore sidebar (remove inline style override to let CSS take over)
-            const bridgeSidebar = document.querySelector('.bridge-sidebar');
-            if (bridgeSidebar) bridgeSidebar.style.display = '';
+            const bookSidebar = document.querySelector('.book-sidebar');
+            if (bookSidebar) bookSidebar.style.display = '';
             
             // Hide thumbs zone
             const thumbsZone = document.getElementById('thumbsZone');
@@ -289,7 +289,7 @@
 
         /**
          * Initialize thumbs zone (bottom-right floating pills)
-         * Renders basic buttons immediately, adds button 4 when bridges load
+         * Renders basic buttons immediately, adds button 4 when books load
          */
         function initThumbsZone() {
             let thumbsZone = document.getElementById('thumbsZone');
@@ -690,20 +690,20 @@
          * Position 1 (rightmost): Create (✍🏻) - ONLY button for genesis form
          * Position 2: Audit (🧿) - always visible
          * Position 3: Search (🔍) - desktop only (hidden on mobile - search fields are parallel to export)
-         * Position 4: Bridge Info (📋) - ONLY shows if bridges > 0
-         * Position 5: Bridge Card (🔗) - Only if 4+ bridges
-         * Position n: Next (→) - if 2+ bridges
+         * Position 4: Book Info (📋) - ONLY shows if books > 0
+         * Position 5: Book Card (🔗) - Only if 4+ books
+         * Position n: Next (→) - if 2+ books
          */
         function renderThumbsZone() {
             const thumbsZone = document.getElementById('thumbsZone');
             if (!thumbsZone) return;
             
-            const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
-            const hasBridges = activeBridges.length > 0;
+            const activeBooks = filteredBooks.length > 0 ? filteredBooks : books;
+            const hasBooks = activeBooks.length > 0;
             
-            console.log(`🔘 Rendering thumbs zone: ${activeBridges.length} bridges, hasBridges=${hasBridges}`);
-            if (activeBridges.length > 0) {
-                console.log(`🔘 Bridges:`, activeBridges.map(b => b.name));
+            console.log(`🔘 Rendering thumbs zone: ${activeBooks.length} books, hasBooks=${hasBooks}`);
+            if (activeBooks.length > 0) {
+                console.log(`🔘 Books:`, activeBooks.map(b => b.name));
             }
             
             let html = '';
@@ -712,7 +712,7 @@
             html += `<div class="layer-01" hidden>`;
             
             // Position 1: Create button (ONLY way to genesis form)
-            html += `<button class="thumb-btn" data-action="create" aria-label="Create new bridge">✍🏻</button>`;
+            html += `<button class="thumb-btn" data-action="create" aria-label="Create new book">✍🏻</button>`;
             
             // Position 2: Audit button (always visible)
             html += `<button class="thumb-btn" data-action="audit" aria-label="View audit log">🧿</button>`;
@@ -720,26 +720,26 @@
             // Position 3: Search button (hidden on mobile via CSS)
             html += `<button class="thumb-btn desktop-only" data-action="search" aria-label="Search messages">🔍</button>`;
             
-            // Position 4: Bridge Actions (ONLY if current bridge exists)
-            // Shows stacked menu with bridge actions: ℹ️ 🔗 ✏️ 🗑️
-            if (hasBridges) {
-                const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
-                const currentBridge = activeBridges.find(b => b.fractal_id === currentBridgeId) || activeBridges[0];
+            // Position 4: Book Actions (ONLY if current book exists)
+            // Shows stacked menu with book actions: ℹ️ 🔗 ✏️ 🗑️
+            if (hasBooks) {
+                const currentBookId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
+                const currentBook = activeBooks.find(b => b.fractal_id === currentBookId) || activeBooks[0];
                 
-                console.log(`🔘 Adding button 4 (🔗) for bridge: ${currentBridge.name}`);
-                html += `<button class="thumb-btn" data-action="bridge-actions" data-bridge-id="${currentBridge.fractal_id}" aria-label="Bridge actions">🔗</button>`;
+                console.log(`🔘 Adding button 4 (🔗) for book: ${currentBook.name}`);
+                html += `<button class="thumb-btn" data-action="book-actions" data-book-id="${currentBook.fractal_id}" aria-label="Book actions">🔗</button>`;
             } else {
-                console.log(`🔘 NO button 4 - no bridges found`);
+                console.log(`🔘 NO button 4 - no books found`);
             }
             
-            // Position 5: Bridge Card (ONLY if 4+ bridges)
-            if (activeBridges.length >= 4) {
-                html += `<button class="thumb-btn" data-action="fan" aria-label="All bridges (${activeBridges.length} total)">🔗</button>`;
+            // Position 5: Book Card (ONLY if 4+ books)
+            if (activeBooks.length >= 4) {
+                html += `<button class="thumb-btn" data-action="fan" aria-label="All books (${activeBooks.length} total)">🔗</button>`;
             }
             
-            // Position n: Next (ONLY if 2+ bridges)
-            if (activeBridges.length > 1) {
-                html += `<button class="thumb-btn" data-action="next" aria-label="Next bridge">→</button>`;
+            // Position n: Next (ONLY if 2+ books)
+            if (activeBooks.length > 1) {
+                html += `<button class="thumb-btn" data-action="next" aria-label="Next book">→</button>`;
             }
             
             html += `</div>`; // Close layer-01
@@ -808,13 +808,13 @@
                 }
             });
             
-            // SWIPE NAVIGATION: Left/right to switch bridges
+            // SWIPE NAVIGATION: Left/right to switch books
             let touchStartX = 0;
             let touchStartY = 0;
             let touchStartTime = 0;
             let isScrolling = false;
             
-            const messageContainer = document.getElementById('bridgeDetail');
+            const messageContainer = document.getElementById('bookDetail');
             
             if (messageContainer) {
                 messageContainer.addEventListener('touchstart', function(e) {
@@ -855,26 +855,26 @@
                         Math.abs(deltaX) > 100 && 
                         deltaTime < 500) {
                         
-                        const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
-                        if (activeBridges.length <= 1) return;
+                        const activeBooks = filteredBooks.length > 0 ? filteredBooks : books;
+                        if (activeBooks.length <= 1) return;
                         
-                        const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
-                        const currentIndex = activeBridges.findIndex(b => b.fractal_id === currentBridgeId);
+                        const currentBookId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
+                        const currentIndex = activeBooks.findIndex(b => b.fractal_id === currentBookId);
                         
                         if (currentIndex === -1) return;
                         
                         // Swipe RIGHT = PREVIOUS, Swipe LEFT = NEXT
                         let nextIndex;
                         if (deltaX > 0) {
-                            nextIndex = currentIndex > 0 ? currentIndex - 1 : activeBridges.length - 1;
+                            nextIndex = currentIndex > 0 ? currentIndex - 1 : activeBooks.length - 1;
                         } else {
-                            nextIndex = currentIndex < activeBridges.length - 1 ? currentIndex + 1 : 0;
+                            nextIndex = currentIndex < activeBooks.length - 1 ? currentIndex + 1 : 0;
                         }
                         
-                        const nextBridge = activeBridges[nextIndex];
-                        if (nextBridge) {
-                            selectBridge(nextBridge.fractal_id);
-                            showToast(`📱 ${nextBridge.name}`, 'info');
+                        const nextBook = activeBooks[nextIndex];
+                        if (nextBook) {
+                            selectBook(nextBook.fractal_id);
+                            showToast(`📱 ${nextBook.name}`, 'info');
                         }
                     }
                     
@@ -1098,8 +1098,8 @@
             // SECURITY: Clear all cached data to prevent cross-session data leakage
             messageCache = {};
             allMessages = {};
-            bridges = [];
-            filteredBridges = [];
+            books = [];
+            filteredBooks = [];
             
             // Clear JWT tokens from localStorage (Safari-safe)
             try {
@@ -1218,122 +1218,122 @@
             `).join('');
         }
 
-        // Bridge CRUD Functions
-        async function loadBridges() {
+        // Book CRUD Functions
+        async function loadBooks() {
             try {
-                const response = await authFetch('/api/bridges');
+                const response = await authFetch('/api/books');
                 if (!response.ok) {
-                    console.error('❌ Bridge fetch failed:', response.status, response.statusText);
+                    console.error('❌ Book fetch failed:', response.status, response.statusText);
                     return;
                 }
                 const data = await response.json();
-                console.log('📦 Bridges response:', data);
-                bridges = data.bridges || data || [];
-                console.log(`✅ Loaded ${bridges.length} bridges`);
-                filteredBridges = bridges;
-                renderBridges();
+                console.log('📦 Books response:', data);
+                books = data.books || data || [];
+                console.log(`✅ Loaded ${books.length} books`);
+                filteredBooks = books;
+                renderBooks();
                 updatePlatformFilter();
                 // Update thumbs zone if in mobile mode
                 if (isMobile()) renderThumbsZone();
             } catch (error) {
-                console.error('❌ Error loading bridges:', error.message || error);
+                console.error('❌ Error loading books:', error.message || error);
                 console.error('Stack:', error.stack);
             }
         }
 
-        // Auto-refresh bridge counts every 10 seconds to keep message counts updated
+        // Auto-refresh book counts every 10 seconds to keep message counts updated
         // Use skipDetailRender=true to avoid destroying loaded media
         setInterval(() => {
-            if (document.getElementById('bridgesTab')?.classList.contains('active')) {
-                loadBridgesQuietly();
+            if (document.getElementById('booksTab')?.classList.contains('active')) {
+                loadBooksQuietly();
             }
         }, 10000);
         
-        // Quiet refresh that updates bridge counts without re-rendering detail panel
-        async function loadBridgesQuietly() {
+        // Quiet refresh that updates book counts without re-rendering detail panel
+        async function loadBooksQuietly() {
             try {
-                const response = await authFetch('/api/bridges');
+                const response = await authFetch('/api/books');
                 const data = await response.json();
-                bridges = data.bridges || data || [];
-                filteredBridges = bridges;
-                renderBridges(true); // Skip detail render to preserve loaded media
+                books = data.books || data || [];
+                filteredBooks = books;
+                renderBooks(true); // Skip detail render to preserve loaded media
             } catch (error) {
-                console.error('Error loading bridges:', error);
+                console.error('Error loading books:', error);
             }
         }
 
-        let selectedBridgeFractalId = null;
+        let selectedBookFractalId = null;
 
-        function renderBridges(skipDetailRender = false) {
-            const sidebar = document.getElementById('bridgeListContainer');
-            const detail = document.getElementById('bridgeDetail');
+        function renderBooks(skipDetailRender = false) {
+            const sidebar = document.getElementById('bookListContainer');
+            const detail = document.getElementById('bookDetail');
             
-            if (filteredBridges.length === 0) {
-                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.875rem;">No bridges found</p>';
-                detail.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Create your first bridge to get started!</p>';
+            if (filteredBooks.length === 0) {
+                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.875rem;">No books found</p>';
+                detail.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Create your first book to get started!</p>';
                 return;
             }
             
-            // Auto-select first bridge if none selected (use fractalized ID)
-            const wasAutoSelected = !selectedBridgeFractalId || !filteredBridges.find(b => b.fractal_id === selectedBridgeFractalId);
+            // Auto-select first book if none selected (use fractalized ID)
+            const wasAutoSelected = !selectedBookFractalId || !filteredBooks.find(b => b.fractal_id === selectedBookFractalId);
             if (wasAutoSelected) {
-                selectedBridgeFractalId = filteredBridges[0].fractal_id;
+                selectedBookFractalId = filteredBooks[0].fractal_id;
             }
             
             // Clean WhatsApp-style list (no platform grouping)
-            sidebar.innerHTML = filteredBridges.map(bridge => `
-                <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: none; background: ${bridge.fractal_id === selectedBridgeFractalId ? 'rgba(88, 101, 242, 0.1)' : 'transparent'}; border-left: 2px solid ${bridge.fractal_id === selectedBridgeFractalId ? '#818cf8' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.15s; margin: 0.125rem 0;">
+            sidebar.innerHTML = filteredBooks.map(book => `
+                <button class="channel-item ${book.fractal_id === selectedBookFractalId ? 'active' : ''}" data-fractal-id="${book.fractal_id}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: none; background: ${book.fractal_id === selectedBookFractalId ? 'rgba(88, 101, 242, 0.1)' : 'transparent'}; border-left: 2px solid ${book.fractal_id === selectedBookFractalId ? '#818cf8' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.15s; margin: 0.125rem 0;">
                     <div style="flex: 1; min-width: 0;">
-                        <div style="color: ${bridge.fractal_id === selectedBridgeFractalId ? '#e2e8f0' : '#cbd5e1'}; font-weight: ${bridge.fractal_id === selectedBridgeFractalId ? '600' : '500'}; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bridge.name || `${bridge.input_platform} → Discord`}</div>
-                        ${bridge.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.125rem;">${bridge.message_count}</div>` : ''}
+                        <div style="color: ${book.fractal_id === selectedBookFractalId ? '#e2e8f0' : '#cbd5e1'}; font-weight: ${book.fractal_id === selectedBookFractalId ? '600' : '500'}; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${book.name || `${book.input_platform} → Discord`}</div>
+                        ${book.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.125rem;">${book.message_count}</div>` : ''}
                     </div>
-                    ${bridge._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem;">💬</span>` : ''}
+                    ${book._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem;">💬</span>` : ''}
                 </button>
             `).join('');
             
             // Only render detail panel if not skipping (avoids destroying loaded media during auto-refresh)
             if (!skipDetailRender) {
-                renderBridgeDetail();
+                renderBookDetail();
                 
-                // Always load messages for selected bridge to ensure they appear
-                loadBridgeMessages(selectedBridgeFractalId, 1);
+                // Always load messages for selected book to ensure they appear
+                loadBookMessages(selectedBookFractalId, 1);
             }
         }
 
-        async function selectBridge(fractalId) {
+        async function selectBook(fractalId) {
             // Store fractalized ID (opaque, non-enumerable)
-            selectedBridgeFractalId = fractalId;
+            selectedBookFractalId = fractalId;
             
-            // SEAMLESS SEARCH: Store search context if this bridge has message match
-            const selectedBridge = filteredBridges.find(b => b.fractal_id === fractalId);
-            if (selectedBridge && selectedBridge._matchType === 'message' && selectedBridge._searchQuery) {
-                bridgeSearchContext = {
-                    query: selectedBridge._searchQuery,
-                    bridgeId: fractalId
+            // SEAMLESS SEARCH: Store search context if this book has message match
+            const selectedBook = filteredBooks.find(b => b.fractal_id === fractalId);
+            if (selectedBook && selectedBook._matchType === 'message' && selectedBook._searchQuery) {
+                bookSearchContext = {
+                    query: selectedBook._searchQuery,
+                    bookId: fractalId
                 };
             } else {
                 // Clear context if not a message match
-                bridgeSearchContext = { query: '', bridgeId: null };
+                bookSearchContext = { query: '', bookId: null };
             }
             
             // Re-render sidebar to update active state
-            const sidebar = document.getElementById('bridgeListContainer');
+            const sidebar = document.getElementById('bookListContainer');
             
-            sidebar.innerHTML = filteredBridges.map(bridge => `
-                <button class="channel-item ${bridge.fractal_id === selectedBridgeFractalId ? 'active' : ''}" data-fractal-id="${bridge.fractal_id}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: none; background: ${bridge.fractal_id === selectedBridgeFractalId ? 'rgba(88, 101, 242, 0.1)' : 'transparent'}; border-left: 2px solid ${bridge.fractal_id === selectedBridgeFractalId ? '#818cf8' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.15s; margin: 0.125rem 0;">
+            sidebar.innerHTML = filteredBooks.map(book => `
+                <button class="channel-item ${book.fractal_id === selectedBookFractalId ? 'active' : ''}" data-fractal-id="${book.fractal_id}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: none; background: ${book.fractal_id === selectedBookFractalId ? 'rgba(88, 101, 242, 0.1)' : 'transparent'}; border-left: 2px solid ${book.fractal_id === selectedBookFractalId ? '#818cf8' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.15s; margin: 0.125rem 0;">
                     <div style="flex: 1; min-width: 0;">
-                        <div style="color: ${bridge.fractal_id === selectedBridgeFractalId ? '#e2e8f0' : '#cbd5e1'}; font-weight: ${bridge.fractal_id === selectedBridgeFractalId ? '600' : '500'}; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bridge.name || `${bridge.input_platform} → Discord`}</div>
-                        ${bridge.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.125rem;">${bridge.message_count}</div>` : ''}
+                        <div style="color: ${book.fractal_id === selectedBookFractalId ? '#e2e8f0' : '#cbd5e1'}; font-weight: ${book.fractal_id === selectedBookFractalId ? '600' : '500'}; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${book.name || `${book.input_platform} → Discord`}</div>
+                        ${book.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.125rem;">${book.message_count}</div>` : ''}
                     </div>
-                    ${bridge._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem;">💬</span>` : ''}
+                    ${book._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem;">💬</span>` : ''}
                 </button>
             `).join('');
             
-            // Render detail panel for selected bridge
-            await renderBridgeDetail();
+            // Render detail panel for selected book
+            await renderBookDetail();
             
-            // Always load messages for newly selected bridge
-            await loadBridgeMessages(selectedBridgeFractalId, 1);
+            // Always load messages for newly selected book
+            await loadBookMessages(selectedBookFractalId, 1);
         }
 
         // Helper functions for badge styling
@@ -1351,20 +1351,20 @@
             return 'success-low';
         }
 
-        async function renderBridgeDetail() {
-            const bridge = filteredBridges.find(b => b.fractal_id === selectedBridgeFractalId);
-            if (!bridge) return;
+        async function renderBookDetail() {
+            const book = filteredBooks.find(b => b.fractal_id === selectedBookFractalId);
+            if (!book) return;
             
             // Get status colors based on thresholds
-            const failedClass = getStatusColor(bridge.failed_count || 0);
-            const successClass = getSuccessBadgeClass(bridge.forwarded_count || 0);
+            const failedClass = getStatusColor(book.failed_count || 0);
+            const successClass = getSuccessBadgeClass(book.forwarded_count || 0);
             
             // Fetch WhatsApp status if this is a WhatsApp bot
             let whatsappStatus = null;
-            const platform = (bridge.input_platform || bridge.platform || '').toLowerCase();
+            const platform = (book.input_platform || book.platform || '').toLowerCase();
             if (platform === 'whatsapp') {
                 try {
-                    const statusResponse = await authFetch(`/api/bridges/${bridge.fractal_id}/status`);
+                    const statusResponse = await authFetch(`/api/books/${book.fractal_id}/status`);
                     if (statusResponse.ok) {
                         whatsappStatus = await statusResponse.json();
                     }
@@ -1395,72 +1395,72 @@
                 if (!whatsappStatus) return '';
                 
                 // Button 1: Generate new QR (starts WhatsApp + shows QR modal)
-                return `<button class="btn-icon" data-generate-qr="${bridge.fractal_id}" title="Generate New QR Code" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">🔗</button>`;
+                return `<button class="btn-icon" data-generate-qr="${book.fractal_id}" title="Generate New QR Code" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">🔗</button>`;
             };
             
-            const detail = document.getElementById('bridgeDetail');
+            const detail = document.getElementById('bookDetail');
             detail.innerHTML = `
                 <!-- Minimal header bar -->
                 <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(148, 163, 184, 0.1);">
                     <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;">
-                        <div style="color: #e2e8f0; font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${bridge.name || `${platform} → Discord`}</div>
+                        <div style="color: #e2e8f0; font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${book.name || `${platform} → Discord`}</div>
                         ${platform === 'whatsapp' && whatsappStatus ? `<span style="background: ${whatsappStatus === 'ready' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(251, 191, 36, 0.2)'}; color: ${whatsappStatus === 'ready' ? '#10b981' : '#fbbf24'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${whatsappStatus === 'ready' ? '✅' : '⏳'}</span>` : ''}
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <button class="btn-icon" data-show-bridge-info="${bridge.fractal_id}" title="Bridge Information" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">ℹ️</button>
-                        ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" data-generate-qr="${bridge.fractal_id}" title="Generate QR" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🔗</button>` : ''}
-                        ${!isDevPanelView ? `<button class="btn-icon" data-edit-bridge="${bridge.fractal_id}" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
-                        ${!isDevPanelView ? `<button class="btn-icon" data-delete-bridge="${bridge.fractal_id}" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
+                        <button class="btn-icon" data-show-book-info="${book.fractal_id}" title="Book Information" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">ℹ️</button>
+                        ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" data-generate-qr="${book.fractal_id}" title="Generate QR" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🔗</button>` : ''}
+                        ${!isDevPanelView ? `<button class="btn-icon" data-edit-book="${book.fractal_id}" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
+                        ${!isDevPanelView ? `<button class="btn-icon" data-delete-book="${book.fractal_id}" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
                     </div>
                 </div>
 
-                ${!bridge.output_credentials?.output_01?.thread_id || (!bridge.output_0n_url && !bridge.output_credentials?.output_0n?.webhook_url && !bridge.output_credentials?.output_0n?.thread_id) ? `
+                ${!book.output_credentials?.output_01?.thread_id || (!book.output_0n_url && !book.output_credentials?.output_0n?.webhook_url && !book.output_credentials?.output_0n?.thread_id) ? `
                     <!-- WARNING: Missing thread configuration -->
                     <div style="margin: 0.75rem; padding: 0.75rem 1rem; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px; display: flex; align-items: center; gap: 0.75rem;">
                         <div style="font-size: 1.5rem;">⚠️</div>
                         <div style="flex: 1;">
                             <div style="color: #fbbf24; font-weight: 600; font-size: 0.875rem; margin-bottom: 0.25rem;">Setup Incomplete</div>
                             <div style="color: #cbd5e1; font-size: 0.8125rem;">
-                                ${!bridge.output_credentials?.output_01?.thread_id ? 'Discord thread not created. ' : ''}
-                                ${!bridge.output_0n_url && !bridge.output_credentials?.output_0n?.webhook_url && !bridge.output_credentials?.output_0n?.thread_id ? 'User webhook not configured. ' : ''}
-                                ${platform === 'whatsapp' ? 'Click "Generate QR" to complete setup.' : 'Edit this bridge to configure outputs.'}
+                                ${!book.output_credentials?.output_01?.thread_id ? 'Discord thread not created. ' : ''}
+                                ${!book.output_0n_url && !book.output_credentials?.output_0n?.webhook_url && !book.output_credentials?.output_0n?.thread_id ? 'User webhook not configured. ' : ''}
+                                ${platform === 'whatsapp' ? 'Click "Generate QR" to complete setup.' : 'Edit this book to configure outputs.'}
                             </div>
                         </div>
                         ${platform === 'whatsapp' ? `
-                            <button data-generate-qr="${bridge.fractal_id}" style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap;">
+                            <button data-generate-qr="${book.fractal_id}" style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap;">
                                 🔗 Generate QR
                             </button>
                         ` : ''}
                     </div>
                 ` : ''}
 
-                ${currentUser?.role === 'dev' && bridge.output_credentials?.output_01?.thread_id ? `
+                ${currentUser?.role === 'dev' && book.output_credentials?.output_01?.thread_id ? `
                     <!-- MESSAGES: Snap to bottom - fills all available space -->
                     <div style="display: flex; flex-direction: column; flex: 1; margin-top: 0.5rem; min-height: 0;">
                         <!-- Compact search toolbar -->
                         <div style="display: flex; gap: 0.5rem; padding: 0.5rem; background: rgba(30, 41, 59, 0.4); border-radius: 6px; margin-bottom: 0.5rem; flex-shrink: 0;">
                             <label style="display: flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.625rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">
-                                <input type="checkbox" id="select-all-${bridge.fractal_id}" data-select-all="${bridge.fractal_id}" style="cursor: pointer;">
+                                <input type="checkbox" id="select-all-${book.fractal_id}" data-select-all="${book.fractal_id}" style="cursor: pointer;">
                                 All
                             </label>
-                            <input type="text" id="msg-search-${bridge.fractal_id}" placeholder="🔍 Search..." 
+                            <input type="text" id="msg-search-${book.fractal_id}" placeholder="🔍 Search..." 
                                 style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem; flex: 1;" 
-                                data-filter-messages="${bridge.fractal_id}">
-                            <select id="status-filter-${bridge.fractal_id}" data-status-filter="${bridge.fractal_id}"
+                                data-filter-messages="${book.fractal_id}">
+                            <select id="status-filter-${book.fractal_id}" data-status-filter="${book.fractal_id}"
                                 style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem;">
                                 <option value="all">All</option>
                                 <option value="success">✓</option>
                                 <option value="failed">✗</option>
                             </select>
-                            <button id="export-selected-${bridge.fractal_id}" data-export-bridge="${bridge.fractal_id}" disabled style="padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;">📦 Export</button>
+                            <button id="export-selected-${book.fractal_id}" data-export-book="${book.fractal_id}" disabled style="padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;">📦 Export</button>
                         </div>
                         <!-- Search indicator (if active) -->
-                        <div id="search-indicator-${bridge.fractal_id}" style="display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between; margin-bottom: 0.5rem; flex-shrink: 0;">
-                            <span>🔍 Filtered from bridge search</span>
-                            <button data-clear-filter="${bridge.fractal_id}" style="background: none; border: none; color: #22c55e; cursor: pointer; font-size: 1.25rem; padding: 0; line-height: 1; font-weight: bold;" title="Clear filter">×</button>
+                        <div id="search-indicator-${book.fractal_id}" style="display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between; margin-bottom: 0.5rem; flex-shrink: 0;">
+                            <span>🔍 Filtered from book search</span>
+                            <button data-clear-filter="${book.fractal_id}" style="background: none; border: none; color: #22c55e; cursor: pointer; font-size: 1.25rem; padding: 0; line-height: 1; font-weight: bold;" title="Clear filter">×</button>
                         </div>
                         <!-- Messages: Fill remaining space, snap to bottom -->
-                        <div id="discord-messages-${bridge.fractal_id}" class="discord-messages-container" style="flex: 1; overflow-y: auto; background: rgba(30, 41, 59, 0.3); border-radius: 6px; padding: 0.75rem; min-height: 0;">
+                        <div id="discord-messages-${book.fractal_id}" class="discord-messages-container" style="flex: 1; overflow-y: auto; background: rgba(30, 41, 59, 0.3); border-radius: 6px; padding: 0.75rem; min-height: 0;">
                             <div class="no-messages">Loading messages...</div>
                         </div>
                     </div>
@@ -1646,7 +1646,7 @@
         }
 
         // Render Discord-style messages
-        function renderDiscordMessages(data, bridgeId) {
+        function renderDiscordMessages(data, bookId) {
             const messages = Array.isArray(data) ? data : data?.messages;
             
             console.log('🎨 Rendering messages:', messages?.length, 'messages');
@@ -1691,14 +1691,14 @@
                                 📎
                             </a>
                         ` : ''}
-                        <button class="agent-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="🧿 Audit action & closure" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                        <button class="agent-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="🧿 Audit action & closure" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                             🧿
                         </button>
-                        <button class="tag-add-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                        <button class="tag-add-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                             🏷️
                         </button>
-                        <label class="custom-checkbox-btn" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" title="Select for export" style="position: relative; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; cursor: pointer; margin: 0; padding: 0; flex-shrink: 0; transition: all 0.2s; line-height: 1;">
-                            <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-bridge-id="${bridgeId}" style="display: none;">
+                        <label class="custom-checkbox-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="Select for export" style="position: relative; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; cursor: pointer; margin: 0; padding: 0; flex-shrink: 0; transition: all 0.2s; line-height: 1;">
+                            <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-book-id="${bookId}" style="display: none;">
                             <span class="checkbox-icon" style="font-size: 0.875rem; line-height: 1; pointer-events: none;">☐</span>
                         </label>
                     </div>
@@ -1716,7 +1716,7 @@
                             <span class="discord-status-badge status-${msg.discord_status}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
                         </div>
                         <div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>
-                        <div class="message-drop-section" data-message-id="${msg.id}" data-bridge-id="${bridgeId}">
+                        <div class="message-drop-section" data-message-id="${msg.id}" data-book-id="${bookId}">
                             <div class="drop-display hidden"></div>
                         </div>
                         ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
@@ -1760,17 +1760,17 @@
         }
 
         // Universal Search - searches both message content AND drops metadata
-        async function filterDiscordMessages(bridgeId) {
-            const searchText = document.getElementById(`msg-search-${bridgeId}`)?.value || '';
-            const statusFilter = document.getElementById(`status-filter-${bridgeId}`)?.value || 'all';
-            const messages = document.querySelectorAll(`#discord-messages-${bridgeId} .discord-message`);
+        async function filterDiscordMessages(bookId) {
+            const searchText = document.getElementById(`msg-search-${bookId}`)?.value || '';
+            const statusFilter = document.getElementById(`status-filter-${bookId}`)?.value || 'all';
+            const messages = document.querySelectorAll(`#discord-messages-${bookId} .discord-message`);
             
             let dropsMatches = new Set();
             
             // If there's a search query, also search drops metadata
             if (searchText.trim()) {
                 try {
-                    const response = await authFetch(`/api/drops/search/${bridgeId}?q=${encodeURIComponent(searchText)}`);
+                    const response = await authFetch(`/api/drops/search/${bookId}?q=${encodeURIComponent(searchText)}`);
                     if (response.ok) {
                         const drops = await response.json();
                         // Add all matching message IDs to the set
@@ -1804,28 +1804,28 @@
             });
         }
 
-        // SEAMLESS SEARCH: Clear bridge search filter and hide indicator
-        function clearBridgeSearchFilter(bridgeId) {
+        // SEAMLESS SEARCH: Clear book search filter and hide indicator
+        function clearBookSearchFilter(bookId) {
             // Clear the search box
-            const searchBox = document.getElementById(`msg-search-${bridgeId}`);
+            const searchBox = document.getElementById(`msg-search-${bookId}`);
             if (searchBox) {
                 searchBox.value = '';
             }
             
             // Hide the indicator
-            const indicator = document.getElementById(`search-indicator-${bridgeId}`);
+            const indicator = document.getElementById(`search-indicator-${bookId}`);
             if (indicator) {
                 indicator.style.display = 'none';
             }
             
             // Clear the search context
-            bridgeSearchContext = { query: '', bridgeId: null };
+            bookSearchContext = { query: '', bookId: null };
             
             // Re-filter to show all messages
-            filterDiscordMessages(bridgeId);
+            filterDiscordMessages(bookId);
         }
 
-        function renderMessages(data, bridgeId) {
+        function renderMessages(data, bookId) {
             // Handle both array format and object format
             const messages = Array.isArray(data) ? data : data?.messages;
             const page = data?.page || 1;
@@ -1840,8 +1840,8 @@
                 <div class="message-table-container">
                     <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
                         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                            <input type="text" id="msg-filter-${bridgeId}" placeholder="🔍 Filter messages..." style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;" data-filter-table="${bridgeId}">
-                            <select id="status-filter-${bridgeId}" data-status-filter="${bridgeId}" style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;">
+                            <input type="text" id="msg-filter-${bookId}" placeholder="🔍 Filter messages..." style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;" data-filter-table="${bookId}">
+                            <select id="status-filter-${bookId}" data-status-filter="${bookId}" style="padding: 0.5rem; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0;">
                                 <option value="all">All Status</option>
                                 <option value="success">Success</option>
                                 <option value="failed">Failed</option>
@@ -1851,19 +1851,19 @@
                         <span style="color: #94a3b8; font-size: 0.875rem;">Total: ${total} messages</span>
                     </div>
 
-                    <table class="message-table" id="msg-table-${bridgeId}">
+                    <table class="message-table" id="msg-table-${bookId}">
                         <thead>
                             <tr>
                                 <th style="text-align: center; width: 50px;">
-                                    <input type="checkbox" id="select-all-${bridgeId}" title="Select all messages">
+                                    <input type="checkbox" id="select-all-${bookId}" title="Select all messages">
                                 </th>
-                                <th data-bridge-id="${bridgeId}" data-sort-column="timestamp" style="min-width: 200px;">
+                                <th data-book-id="${bookId}" data-sort-column="timestamp" style="min-width: 200px;">
                                     Timestamp<span class="sort-icon">↕</span>
                                 </th>
-                                <th data-bridge-id="${bridgeId}" data-sort-column="contact" style="min-width: 180px;">
+                                <th data-book-id="${bookId}" data-sort-column="contact" style="min-width: 180px;">
                                     Contact / Phone<span class="sort-icon">↕</span>
                                 </th>
-                                <th data-bridge-id="${bridgeId}" data-sort-column="message">
+                                <th data-book-id="${bookId}" data-sort-column="message">
                                     Message<span class="sort-icon">↕</span>
                                 </th>
                                 <th style="text-align: center; width: 100px;">Status</th>
@@ -1874,7 +1874,7 @@
                             ${messages.map((msg, index) => `
                                 <tr data-timestamp="${msg.timestamp}" data-contact="${escapeHtml(msg.sender_contact || '')}" data-message="${escapeHtml(msg.message_content)}" data-status="${msg.discord_status}" data-msg-id="${msg.id}">
                                     <td style="text-align: center;">
-                                        <input type="checkbox" class="message-checkbox" data-msg-id="${msg.id}" data-bridge-id="${bridgeId}">
+                                        <input type="checkbox" class="message-checkbox" data-msg-id="${msg.id}" data-book-id="${bookId}">
                                     </td>
                                     <td class="timestamp-col">${formatTimestampWithTZ(msg.timestamp)}</td>
                                     <td class="contact-col">
@@ -1901,9 +1901,9 @@
 
                     ${totalPages > 1 ? `
                         <div style="margin-top: 1rem; display: flex; justify-content: center; gap: 0.5rem; align-items: center;">
-                            <button class="btn" ${page <= 1 ? 'disabled' : ''} data-bridge-id="${bridgeId}" data-load-page="${page - 1}" style="padding: 0.375rem 0.75rem;">← Prev</button>
+                            <button class="btn" ${page <= 1 ? 'disabled' : ''} data-book-id="${bookId}" data-load-page="${page - 1}" style="padding: 0.375rem 0.75rem;">← Prev</button>
                             <span style="color: #94a3b8; font-size: 0.875rem;">Page ${page} / ${totalPages}</span>
-                            <button class="btn" ${page >= totalPages ? 'disabled' : ''} data-bridge-id="${bridgeId}" data-load-page="${page + 1}" style="padding: 0.375rem 0.75rem;">Next →</button>
+                            <button class="btn" ${page >= totalPages ? 'disabled' : ''} data-book-id="${bookId}" data-load-page="${page + 1}" style="padding: 0.375rem 0.75rem;">Next →</button>
                         </div>
                     ` : ''}
                 </div>
@@ -1912,16 +1912,16 @@
 
         // Sort messages table by column
         let messageSortState = {};
-        function sortMessagesTable(bridgeId, column) {
-            if (!messageSortState[bridgeId]) messageSortState[bridgeId] = {};
-            const table = document.getElementById(`msg-table-${bridgeId}`);
+        function sortMessagesTable(bookId, column) {
+            if (!messageSortState[bookId]) messageSortState[bookId] = {};
+            const table = document.getElementById(`msg-table-${bookId}`);
             const tbody = table.querySelector('tbody');
             const rows = Array.from(tbody.querySelectorAll('tr'));
             
             // Toggle sort direction
-            const currentDir = messageSortState[bridgeId][column] || 'asc';
+            const currentDir = messageSortState[bookId][column] || 'asc';
             const newDir = currentDir === 'asc' ? 'desc' : 'asc';
-            messageSortState[bridgeId] = { [column]: newDir };
+            messageSortState[bookId] = { [column]: newDir };
             
             rows.sort((a, b) => {
                 let aVal, bVal;
@@ -1952,10 +1952,10 @@
         }
 
         // Filter messages table using universal search
-        function filterMessagesTable(bridgeId) {
-            const textFilter = document.getElementById(`msg-filter-${bridgeId}`).value;
-            const statusFilter = document.getElementById(`status-filter-${bridgeId}`).value;
-            const table = document.getElementById(`msg-table-${bridgeId}`);
+        function filterMessagesTable(bookId) {
+            const textFilter = document.getElementById(`msg-filter-${bookId}`).value;
+            const statusFilter = document.getElementById(`status-filter-${bookId}`).value;
+            const table = document.getElementById(`msg-table-${bookId}`);
             const rows = table.querySelectorAll('tbody tr');
             
             rows.forEach(row => {
@@ -2010,58 +2010,58 @@
             document.getElementById('mediaModalContent').innerHTML = '';
         }
 
-        // Bridge Actions Menu - Stacked options for button 4
-        function showBridgeActionsMenu() {
-            // Get current bridge
-            const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
-            if (!currentBridgeId) {
-                showToast('⚠️ No bridge selected', 'error');
+        // Book Actions Menu - Stacked options for button 4
+        function showBookActionsMenu() {
+            // Get current book
+            const currentBookId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
+            if (!currentBookId) {
+                showToast('⚠️ No book selected', 'error');
                 return;
             }
             
-            const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
-            const currentBridge = activeBridges.find(b => b.fractal_id === currentBridgeId);
+            const activeBooks = filteredBooks.length > 0 ? filteredBooks : books;
+            const currentBook = activeBooks.find(b => b.fractal_id === currentBookId);
             
-            if (!currentBridge) {
-                showToast('⚠️ Bridge not found', 'error');
+            if (!currentBook) {
+                showToast('⚠️ Book not found', 'error');
                 return;
             }
             
             // Create stacked action menu
-            let actionsMenu = document.getElementById('bridgeActionsMenu');
+            let actionsMenu = document.getElementById('bookActionsMenu');
             if (!actionsMenu) {
                 const menuHtml = `
-                    <div id="bridgeActionsMenu" class="bridge-fan-modal" style="z-index: 10000;">
-                        <div class="bridge-fan-content" style="max-width: 350px; padding: 1.5rem;">
-                            <button class="bridge-fan-close" id="actionsMenuClose">×</button>
-                            <h3 style="margin-bottom: 1rem; font-size: 1.25rem; background: linear-gradient(135deg, #a855f7, #ec4899, #f59e0b, #10b981, #3b82f6, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Bridge Actions</h3>
-                            <div id="bridgeActionsContent"></div>
+                    <div id="bookActionsMenu" class="book-fan-modal" style="z-index: 10000;">
+                        <div class="book-fan-content" style="max-width: 350px; padding: 1.5rem;">
+                            <button class="book-fan-close" id="actionsMenuClose">×</button>
+                            <h3 style="margin-bottom: 1rem; font-size: 1.25rem; background: linear-gradient(135deg, #a855f7, #ec4899, #f59e0b, #10b981, #3b82f6, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Book Actions</h3>
+                            <div id="bookActionsContent"></div>
                         </div>
                     </div>
                 `;
                 document.body.insertAdjacentHTML('beforeend', menuHtml);
-                actionsMenu = document.getElementById('bridgeActionsMenu');
+                actionsMenu = document.getElementById('bookActionsMenu');
                 
                 // Add event listeners
                 actionsMenu.addEventListener('click', function(e) {
-                    if (e.target === this) closeBridgeActionsMenu();
+                    if (e.target === this) closeBookActionsMenu();
                 });
-                document.getElementById('actionsMenuClose').addEventListener('click', closeBridgeActionsMenu);
+                document.getElementById('actionsMenuClose').addEventListener('click', closeBookActionsMenu);
             }
             
             // Build stacked action buttons (5 options)
             const actions = [
-                { icon: 'ℹ️', label: 'Bridge Info', action: 'info', color: '#3b82f6' },
-                { icon: '🔗', label: 'View All Bridges', action: 'fan', color: '#10b981' },
+                { icon: 'ℹ️', label: 'Book Info', action: 'info', color: '#3b82f6' },
+                { icon: '🔗', label: 'View All Books', action: 'fan', color: '#10b981' },
                 { icon: '🔄', label: 'Regenerate QR', action: 'regenerate-qr', color: '#a855f7' },
-                { icon: '✏️', label: 'Edit Bridge', action: 'edit', color: '#f59e0b' },
-                { icon: '🗑️', label: 'Delete Bridge', action: 'delete', color: '#ef4444' }
+                { icon: '✏️', label: 'Edit Book', action: 'edit', color: '#f59e0b' },
+                { icon: '🗑️', label: 'Delete Book', action: 'delete', color: '#ef4444' }
             ];
             
             const actionsHtml = `
                 <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                     ${actions.map(action => `
-                        <button class="bridge-action-btn" data-action="${action.action}" style="
+                        <button class="book-action-btn" data-action="${action.action}" style="
                             width: 100%;
                             padding: 1rem;
                             background: rgba(15, 23, 42, 0.6);
@@ -2083,29 +2083,29 @@
                 </div>
             `;
             
-            document.getElementById('bridgeActionsContent').innerHTML = actionsHtml;
+            document.getElementById('bookActionsContent').innerHTML = actionsHtml;
             
             // Add click handlers to action buttons
-            actionsMenu.querySelectorAll('.bridge-action-btn').forEach(btn => {
+            actionsMenu.querySelectorAll('.book-action-btn').forEach(btn => {
                 btn.addEventListener('click', function() {
                     const action = this.dataset.action;
-                    closeBridgeActionsMenu();
+                    closeBookActionsMenu();
                     
                     switch(action) {
                         case 'info':
-                            showBridgeInfoModal();
+                            showBookInfoModal();
                             break;
                         case 'fan':
-                            showBridgeFanModal();
+                            showBookFanModal();
                             break;
                         case 'regenerate-qr':
-                            regenerateQRCode(currentBridge);
+                            regenerateQRCode(currentBook);
                             break;
                         case 'edit':
-                            showEditBridgeModal(currentBridge);
+                            showEditBookModal(currentBook);
                             break;
                         case 'delete':
-                            showDeleteBridgeConfirmation(currentBridge);
+                            showDeleteBookConfirmation(currentBook);
                             break;
                     }
                 });
@@ -2114,81 +2114,81 @@
             actionsMenu.style.display = 'flex';
         }
         
-        function closeBridgeActionsMenu() {
-            const menu = document.getElementById('bridgeActionsMenu');
+        function closeBookActionsMenu() {
+            const menu = document.getElementById('bookActionsMenu');
             if (menu) menu.style.display = 'none';
         }
         
         // Regenerate QR Code (UI endpoint to close hanging loop)
-        async function regenerateQRCode(bridge) {
-            if (!bridge) {
-                showToast('⚠️ No bridge selected', 'error');
+        async function regenerateQRCode(book) {
+            if (!book) {
+                showToast('⚠️ No book selected', 'error');
                 return;
             }
             
-            // Only applicable for WhatsApp bridges
-            if (bridge.input_platform !== 'whatsapp') {
-                showToast('⚠️ QR codes are only for WhatsApp bridges', 'error');
+            // Only applicable for WhatsApp books
+            if (book.input_platform !== 'whatsapp') {
+                showToast('⚠️ QR codes are only for WhatsApp books', 'error');
                 return;
             }
             
             // Call existing QR generation logic
-            await generateNewQR(bridge.fractal_id);
+            await generateNewQR(book.fractal_id);
         }
         
-        // Bridge Info Modal (Read-only: Show webhook0n data only)
+        // Book Info Modal (Read-only: Show webhook0n data only)
         // ARCHITECTURAL: Display user's webhook (output_0n) info, hide the silent cat (webhook01)
-        function showBridgeInfoModal() {
-            // Get current bridge
-            const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
-            if (!currentBridgeId) {
-                showToast('⚠️ No bridge selected', 'error');
+        function showBookInfoModal() {
+            // Get current book
+            const currentBookId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
+            if (!currentBookId) {
+                showToast('⚠️ No book selected', 'error');
                 return;
             }
             
-            const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
-            const currentBridge = activeBridges.find(b => b.fractal_id === currentBridgeId);
+            const activeBooks = filteredBooks.length > 0 ? filteredBooks : books;
+            const currentBook = activeBooks.find(b => b.fractal_id === currentBookId);
             
-            if (!currentBridge) {
-                showToast('⚠️ Bridge not found', 'error');
+            if (!currentBook) {
+                showToast('⚠️ Book not found', 'error');
                 return;
             }
             
             // Create modal (genesis form style, but read-only)
-            let bridgeInfoModal = document.getElementById('bridgeInfoModal');
-            if (!bridgeInfoModal) {
+            let bookInfoModal = document.getElementById('bookInfoModal');
+            if (!bookInfoModal) {
                 const modalHtml = `
-                    <div id="bridgeInfoModal" class="bridge-fan-modal" style="z-index: 10000;">
-                        <div class="bridge-fan-content" style="max-width: 500px; padding: 2rem;">
-                            <button class="bridge-fan-close" id="bridgeInfoClose">×</button>
-                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #a855f7, #ec4899, #f59e0b, #10b981, #3b82f6, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">ℹ️ Bridge Information</h3>
-                            <div id="bridgeInfoContent"></div>
+                    <div id="bookInfoModal" class="book-fan-modal" style="z-index: 10000;">
+                        <div class="book-fan-content" style="max-width: 500px; padding: 2rem;">
+                            <button class="book-fan-close" id="bookInfoClose">×</button>
+                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #a855f7, #ec4899, #f59e0b, #10b981, #3b82f6, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">ℹ️ Book Information</h3>
+                            <div id="bookInfoContent"></div>
                         </div>
                     </div>
                 `;
                 document.body.insertAdjacentHTML('beforeend', modalHtml);
-                bridgeInfoModal = document.getElementById('bridgeInfoModal');
+                bookInfoModal = document.getElementById('bookInfoModal');
                 
                 // Add event listeners
-                bridgeInfoModal.addEventListener('click', function(e) {
-                    if (e.target === this) closeBridgeInfoModal();
+                bookInfoModal.addEventListener('click', function(e) {
+                    if (e.target === this) closeBookInfoModal();
                 });
-                document.getElementById('bridgeInfoClose').addEventListener('click', closeBridgeInfoModal);
+                document.getElementById('bookInfoClose').addEventListener('click', closeBookInfoModal);
             }
             
             // Build read-only info display (only webhook0n data, NOT webhook01)
-            const webhookUrl = currentBridge.output_0n_url || 'Not configured';
-            const status = currentBridge.status || 'unknown';
+            const webhookUrl = currentBook.output_0n_url || 'Not configured';
+            const status = currentBook.status || 'unknown';
             const statusColor = status === 'active' ? '#10b981' : status === 'inactive' ? '#94a3b8' : '#ef4444';
-            const platform = currentBridge.input_platform || 'Unknown';
-            const tags = currentBridge.tags || [];
+            const platform = currentBook.input_platform || 'Unknown';
+            const tags = currentBook.tags || [];
             
             const infoHtml = `
                 <div style="display: flex; flex-direction: column; gap: 1rem;">
                     <div class="form-group">
-                        <label class="form-label">Bridge Name</label>
+                        <label class="form-label">Book Name</label>
                         <div style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0;">
-                            ${escapeHtml(currentBridge.name)}
+                            ${escapeHtml(currentBook.name)}
                         </div>
                     </div>
                     
@@ -2224,43 +2224,43 @@
                 </div>
             `;
             
-            document.getElementById('bridgeInfoContent').innerHTML = infoHtml;
-            bridgeInfoModal.style.display = 'flex';
+            document.getElementById('bookInfoContent').innerHTML = infoHtml;
+            bookInfoModal.style.display = 'flex';
         }
         
-        function closeBridgeInfoModal() {
-            const modal = document.getElementById('bridgeInfoModal');
+        function closeBookInfoModal() {
+            const modal = document.getElementById('bookInfoModal');
             if (modal) modal.style.display = 'none';
         }
         
-        // Edit Bridge Modal
-        function showEditBridgeModal(bridge) {
-            editBridge(bridge.fractal_id);
+        // Edit Book Modal
+        function showEditBookModal(book) {
+            editBook(book.fractal_id);
         }
         
-        // Delete Bridge Confirmation
-        function showDeleteBridgeConfirmation(bridge) {
-            confirmDeleteBridge(bridge.fractal_id);
+        // Delete Book Confirmation
+        function showDeleteBookConfirmation(book) {
+            confirmDeleteBook(book.fractal_id);
         }
         
-        // Bridge Fan Modal (Mobile: Show all bridges + utility actions)
-        function showBridgeFanModal() {
-            let bridgeFanModal = document.getElementById('bridgeFanModal');
-            if (!bridgeFanModal) {
+        // Book Fan Modal (Mobile: Show all books + utility actions)
+        function showBookFanModal() {
+            let bookFanModal = document.getElementById('bookFanModal');
+            if (!bookFanModal) {
                 // Create modal if it doesn't exist
                 const modalHtml = `
-                    <div id="bridgeFanModal" class="bridge-fan-modal">
-                        <div class="bridge-fan-content">
-                            <button class="bridge-fan-close">×</button>
-                            <h3>🌉 All Bridges</h3>
-                            <div class="bridge-fan-list" id="bridgeFanList"></div>
+                    <div id="bookFanModal" class="book-fan-modal">
+                        <div class="book-fan-content">
+                            <button class="book-fan-close">×</button>
+                            <h3>🌉 All Books</h3>
+                            <div class="book-fan-list" id="bookFanList"></div>
                             <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(148, 163, 184, 0.2);">
                                 ${Object.values(ACTION_REGISTRY)
                                     .filter(action => ['search', 'audit'].includes(action.id))
                                     .map(action => `
-                                        <div class="bridge-fan-item" data-action="${action.id}" style="opacity: 0.9;">
-                                            <span class="bridge-fan-item-name">${action.icon} ${action.tooltip}</span>
-                                            <span class="bridge-fan-item-arrow">→</span>
+                                        <div class="book-fan-item" data-action="${action.id}" style="opacity: 0.9;">
+                                            <span class="book-fan-item-name">${action.icon} ${action.tooltip}</span>
+                                            <span class="book-fan-item-arrow">→</span>
                                         </div>
                                     `).join('')}
                             </div>
@@ -2270,33 +2270,33 @@
                 document.body.insertAdjacentHTML('beforeend', modalHtml);
                 
                 // Add event listeners
-                bridgeFanModal = document.getElementById('bridgeFanModal');
+                bookFanModal = document.getElementById('bookFanModal');
                 
                 // Close on backdrop click
-                bridgeFanModal.addEventListener('click', function(e) {
-                    if (e.target === this) closeBridgeFanModal();
+                bookFanModal.addEventListener('click', function(e) {
+                    if (e.target === this) closeBookFanModal();
                 });
                 
                 // Close button
-                const closeBtn = bridgeFanModal.querySelector('.bridge-fan-close');
-                if (closeBtn) closeBtn.addEventListener('click', closeBridgeFanModal);
+                const closeBtn = bookFanModal.querySelector('.book-fan-close');
+                if (closeBtn) closeBtn.addEventListener('click', closeBookFanModal);
                 
-                // UNIFIED EVENT DELEGATION: Handle clicks on bridge cards and action items
-                bridgeFanModal.addEventListener('click', function(e) {
-                    const item = e.target.closest('.bridge-fan-item');
+                // UNIFIED EVENT DELEGATION: Handle clicks on book cards and action items
+                bookFanModal.addEventListener('click', function(e) {
+                    const item = e.target.closest('.book-fan-item');
                     if (!item) return;
                     
-                    const bridgeId = item.dataset.bridgeId;
+                    const bookId = item.dataset.bookId;
                     const action = item.dataset.action;
                     
-                    console.log('🔘 Bridge card clicked:', { bridgeId, action });
+                    console.log('🔘 Book card clicked:', { bookId, action });
                     
-                    closeBridgeFanModal();
+                    closeBookFanModal();
                     
-                    if (bridgeId) {
-                        // Bridge navigation
-                        console.log('📱 Switching to bridge:', bridgeId);
-                        selectBridge(bridgeId);
+                    if (bookId) {
+                        // Book navigation
+                        console.log('📱 Switching to book:', bookId);
+                        selectBook(bookId);
                     } else if (ACTION_REGISTRY[action]) {
                         // Registry-based actions (unified with desktop/mobile)
                         console.log('⚡ Executing action:', action);
@@ -2305,23 +2305,23 @@
                 });
             }
             
-            // Render bridge list
-            const fanList = document.getElementById('bridgeFanList');
-            const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
+            // Render book list
+            const fanList = document.getElementById('bookFanList');
+            const activeBooks = filteredBooks.length > 0 ? filteredBooks : books;
             
-            fanList.innerHTML = activeBridges.map((bridge, index) => `
-                <div class="bridge-fan-item" data-bridge-id="${bridge.fractal_id}">
-                    <span class="bridge-fan-item-name">${index + 1}. ${escapeHtml(bridge.name)}</span>
-                    <span class="bridge-fan-item-arrow">→</span>
+            fanList.innerHTML = activeBooks.map((book, index) => `
+                <div class="book-fan-item" data-book-id="${book.fractal_id}">
+                    <span class="book-fan-item-name">${index + 1}. ${escapeHtml(book.name)}</span>
+                    <span class="book-fan-item-arrow">→</span>
                 </div>
             `).join('');
             
-            bridgeFanModal.classList.add('active');
+            bookFanModal.classList.add('active');
         }
         
-        function closeBridgeFanModal() {
-            const bridgeFanModal = document.getElementById('bridgeFanModal');
-            if (bridgeFanModal) bridgeFanModal.classList.remove('active');
+        function closeBookFanModal() {
+            const bookFanModal = document.getElementById('bookFanModal');
+            if (bookFanModal) bookFanModal.classList.remove('active');
         }
 
         // Universal search state - shared across all search boxes
@@ -2537,16 +2537,16 @@
             }, 300); // 300ms debounce
         }
 
-        // UNIVERSAL SEARCH: Extract searchable text from bridge's cached messages
-        // SECURITY: bridgeId MUST be fractal_id to maintain tenant isolation
-        function getMessageSearchText(bridgeId) {
+        // UNIVERSAL SEARCH: Extract searchable text from book's cached messages
+        // SECURITY: bookId MUST be fractal_id to maintain tenant isolation
+        function getMessageSearchText(bookId) {
             // SECURITY: Validate fractal_id format before cache access
-            if (!bridgeId || !/^(dev|prod)_bridge_t\d+_[a-f0-9]+$/.test(bridgeId)) {
-                console.error('🚨 SECURITY: Attempted cache access with invalid bridge ID');
+            if (!bookId || !/^(dev|prod)_bridge_t\d+_[a-f0-9]+$/.test(bookId)) {
+                console.error('🚨 SECURITY: Attempted cache access with invalid book ID');
                 return '';
             }
             
-            const messages = messageCache[bridgeId];
+            const messages = messageCache[bookId];
             if (!messages || !Array.isArray(messages)) return '';
             
             // Extract all searchable content from messages (matching Discord message search)
@@ -2582,31 +2582,31 @@
                 window.searchState.dateContext = null;
             }
             
-            filteredBridges = bridges.filter(bridge => {
+            filteredBooks = books.filter(book => {
                 // Search match using universal search function
                 let matchesSearch = true;
                 let matchType = null; // Track where match came from
                 
                 if (searchTerm && !naturalDateRange) {
                     // Only filter by text if NOT a pure date search
-                    // COMPREHENSIVE: Search ALL bridge fields (matching Discord message search strength)
-                    const bridgeMetadata = [
-                        bridge.bridge_name || bridge.name || '',        // ✅ Bridge title
-                        bridge.input_platform || '',                    // ✅ Input platform
-                        bridge.output_platform || '',                   // ✅ Output platform
-                        bridge.contact_info || '',                      // ✅ Contact info
-                        bridge.status || '',                            // ✅ Status
-                        bridge.created_at ? new Date(bridge.created_at).toLocaleString() : '', // ✅ Creation date
-                        ...(bridge.tags || [])                          // ✅ Tags
+                    // COMPREHENSIVE: Search ALL book fields (matching Discord message search strength)
+                    const bookMetadata = [
+                        book.bridge_name || book.name || '',        // ✅ Book title
+                        book.input_platform || '',                    // ✅ Input platform
+                        book.output_platform || '',                   // ✅ Output platform
+                        book.contact_info || '',                      // ✅ Contact info
+                        book.status || '',                            // ✅ Status
+                        book.created_at ? new Date(book.created_at).toLocaleString() : '', // ✅ Creation date
+                        ...(book.tags || [])                          // ✅ Tags
                     ].join(' ').toLowerCase();
                     
-                    // UNIVERSAL SEARCH: Check bridge metadata first
-                    const matchesMetadata = window.searchState.performSearch(searchTerm, bridgeMetadata);
+                    // UNIVERSAL SEARCH: Check book metadata first
+                    const matchesMetadata = window.searchState.performSearch(searchTerm, bookMetadata);
                     
                     // UNIVERSAL SEARCH: Check cached messages if metadata doesn't match
                     let matchesMessages = false;
-                    if (!matchesMetadata && messageCache[bridge.fractal_id]) {
-                        const messageText = getMessageSearchText(bridge.fractal_id);
+                    if (!matchesMetadata && messageCache[book.fractal_id]) {
+                        const messageText = getMessageSearchText(book.fractal_id);
                         matchesMessages = window.searchState.performSearch(searchTerm, messageText);
                     }
                     
@@ -2614,20 +2614,20 @@
                     
                     // Store match type for visual indicator
                     if (matchesMessages) {
-                        bridge._matchType = 'message';
-                        // SEAMLESS SEARCH: Store query for auto-filtering when bridge is opened
-                        bridge._searchQuery = searchTerm;
+                        book._matchType = 'message';
+                        // SEAMLESS SEARCH: Store query for auto-filtering when book is opened
+                        book._searchQuery = searchTerm;
                     } else if (matchesMetadata) {
-                        bridge._matchType = 'metadata';
+                        book._matchType = 'metadata';
                     }
                 }
                 
-                const matchesPlatform = !platformFilter || bridge.input_platform === platformFilter;
+                const matchesPlatform = !platformFilter || book.input_platform === platformFilter;
                 
                 return matchesSearch && matchesPlatform;
             });
             
-            renderBridges();
+            renderBooks();
             // Update thumbs zone if in mobile mode
             if (isMobile()) renderThumbsZone();
         }
@@ -2635,39 +2635,39 @@
         function updatePlatformFilter() {
             const filter = document.getElementById('platformFilter');
             if (!filter) return; // Desktop-only feature, skip in mobile mode
-            const platforms = [...new Set(bridges.map(bridge => bridge.input_platform))];
+            const platforms = [...new Set(books.map(book => book.input_platform))];
             filter.innerHTML = '<option value="">All Platforms</option>' + 
                 platforms.map(p => `<option value="${p}">${p}</option>`).join('');
         }
 
         // QR-FIRST ARCHITECTURE: Open in-page modal (no popup window friction)
-        let currentBridgeFractalId = null;
-        let bridgeStatusPollInterval = null;
+        let currentBookFractalId = null;
+        let bookStatusPollInterval = null;
         
         function openCreatePopup() {
             // Reset modal state
-            document.getElementById('bridge-form-section').style.display = 'block';
-            document.getElementById('bridge-qr-section').style.display = 'none';
-            document.getElementById('bridge-create-form').reset();
-            currentBridgeFractalId = null;
+            document.getElementById('book-form-section').style.display = 'block';
+            document.getElementById('book-qr-section').style.display = 'none';
+            document.getElementById('book-create-form').reset();
+            currentBookFractalId = null;
             
             // Show modal
-            document.getElementById('createBridgeModal').classList.add('active');
+            document.getElementById('createBookModal').classList.add('active');
         }
         
-        function closeCreateBridgeModal() {
-            document.getElementById('createBridgeModal').classList.remove('active');
-            if (bridgeStatusPollInterval) {
-                clearInterval(bridgeStatusPollInterval);
-                bridgeStatusPollInterval = null;
+        function closeCreateBookModal() {
+            document.getElementById('createBookModal').classList.remove('active');
+            if (bookStatusPollInterval) {
+                clearInterval(bookStatusPollInterval);
+                bookStatusPollInterval = null;
             }
-            // Reload bridges to show any newly created bridges
-            loadBridges();
+            // Reload books to show any newly created books
+            loadBooks();
         }
         
-        function copyBridgeFractalId() {
-            if (currentBridgeFractalId) {
-                navigator.clipboard.writeText(currentBridgeFractalId).then(() => {
+        function copyBookFractalId() {
+            if (currentBookFractalId) {
+                navigator.clipboard.writeText(currentBookFractalId).then(() => {
                     const btn = event.target;
                     const originalText = btn.textContent;
                     btn.textContent = '✓ Copied!';
@@ -2686,21 +2686,21 @@
             }
         }
         
-        // Handle bridge creation form submission
+        // Handle book creation form submission
         document.addEventListener('DOMContentLoaded', function() {
-            const bridgeForm = document.getElementById('bridge-create-form');
-            if (bridgeForm) {
-                bridgeForm.addEventListener('submit', async (e) => {
+            const bookForm = document.getElementById('book-create-form');
+            if (bookForm) {
+                bookForm.addEventListener('submit', async (e) => {
                     e.preventDefault();
                     
-                    const bridgeName = document.getElementById('bridge-name-input').value;
-                    const platform = document.getElementById('bridge-platform-input').value;
-                    const userOutput = document.getElementById('bridge-output-input').value;
+                    const bookName = document.getElementById('book-name-input').value;
+                    const platform = document.getElementById('book-platform-input').value;
+                    const userOutput = document.getElementById('book-output-input').value;
                     
-                    const submitBtn = bridgeForm.querySelector('button[type="submit"]');
+                    const submitBtn = bookForm.querySelector('button[type="submit"]');
                     const originalText = submitBtn.textContent;
                     submitBtn.disabled = true;
-                    submitBtn.innerHTML = '<span class="bridge-loading"></span> Creating bridge...';
+                    submitBtn.innerHTML = '<span class="book-loading"></span> Creating book...';
                     
                     try {
                         const token = localStorage.getItem('accessToken');
@@ -2708,16 +2708,16 @@
                             throw new Error('Not authenticated. Please login first.');
                         }
                         
-                        // 1. CREATE BRIDGE
-                        console.log('📝 Creating bridge:', bridgeName);
-                        const createRes = await fetch('/api/bridges', {
+                        // 1. CREATE BOOK
+                        console.log('📝 Creating book:', bookName);
+                        const createRes = await fetch('/api/books', {
                             method: 'POST',
                             headers: { 
                                 'Content-Type': 'application/json',
                                 'Authorization': `Bearer ${token}`
                             },
                             body: JSON.stringify({
-                                name: bridgeName,
+                                name: bookName,
                                 inputPlatform: platform,
                                 userOutputUrl: userOutput || null
                             })
@@ -2725,39 +2725,39 @@
                         
                         if (!createRes.ok) {
                             const error = await createRes.json();
-                            throw new Error(error.error || 'Failed to create bridge');
+                            throw new Error(error.error || 'Failed to create book');
                         }
                         
-                        const bridge = await createRes.json();
-                        console.log('✅ Bridge created:', bridge);
+                        const book = await createRes.json();
+                        console.log('✅ Book created:', book);
                         
-                        if (!bridge.fractal_id) {
+                        if (!book.fractal_id) {
                             throw new Error('No fractal_id returned from server');
                         }
                         
                         // Store fractal_id globally and in localStorage for recovery
-                        currentBridgeFractalId = bridge.fractal_id;
-                        const recentBridges = JSON.parse(localStorage.getItem('recentBridges') || '[]');
-                        recentBridges.unshift({
-                            fractal_id: bridge.fractal_id,
-                            name: bridgeName,
+                        currentBookFractalId = book.fractal_id;
+                        const recentBooks = JSON.parse(localStorage.getItem('recentBooks') || '[]');
+                        recentBooks.unshift({
+                            fractal_id: book.fractal_id,
+                            name: bookName,
                             created_at: new Date().toISOString()
                         });
-                        localStorage.setItem('recentBridges', JSON.stringify(recentBridges.slice(0, 10)));
+                        localStorage.setItem('recentBooks', JSON.stringify(recentBooks.slice(0, 10)));
                         
                         // Reset submit button
                         submitBtn.disabled = false;
                         submitBtn.textContent = originalText;
                         
                         // Close create modal
-                        closeCreateBridgeModal();
+                        closeCreateBookModal();
                         
-                        // Reload bridges to show the new one
-                        await loadBridges();
+                        // Reload books to show the new one
+                        await loadBooks();
                         
-                        // Auto-trigger QR generation for new bridge (no warning shown for inactive bridges)
-                        console.log('🚀 Generating QR for new bridge...');
-                        await generateNewQR(bridge.fractal_id);
+                        // Auto-trigger QR generation for new book (no warning shown for inactive books)
+                        console.log('🚀 Generating QR for new book...');
+                        await generateNewQR(book.fractal_id);
                         
                     } catch (err) {
                         console.error('❌ Error:', err);
@@ -2772,13 +2772,13 @@
         // LEGACY: Keep for backward compatibility
         function openCreateBotModal() {
             // Show quick-start wizard for new users
-            if (bridges.length === 0 || !localStorage.getItem('skipQuickStart')) {
+            if (books.length === 0 || !localStorage.getItem('skipQuickStart')) {
                 openQuickStartWizard();
                 return;
             }
             
-            editingBridgeId = null;
-            document.getElementById('modalTitle').textContent = 'Create New Bridge';
+            editingBookId = null;
+            document.getElementById('modalTitle').textContent = 'Create New Book';
             document.getElementById('botForm').reset();
             botTags = [];
             botWebhooks = [];
@@ -2787,29 +2787,29 @@
             document.getElementById('botModal').classList.add('active');
         }
 
-        function editBridge(fractalId) {
-            // Find bridge by fractal_id (hash string like "dev_bridge_t9_54ab7617ffeb")
-            const bridge = bridges.find(b => b.fractal_id === fractalId);
-            if (!bridge) {
-                console.error('Bridge not found:', fractalId, 'Available bridges:', bridges.map(b => b.fractal_id));
+        function editBook(fractalId) {
+            // Find book by fractal_id (hash string like "dev_bridge_t9_54ab7617ffeb")
+            const book = books.find(b => b.fractal_id === fractalId);
+            if (!book) {
+                console.error('Book not found:', fractalId, 'Available books:', books.map(b => b.fractal_id));
                 return;
             }
             
-            editingBridgeId = fractalId;
-            document.getElementById('modalTitle').textContent = 'Edit Bridge';
-            document.getElementById('botName').value = bridge.name || '';
-            document.getElementById('botPlatform').value = bridge.input_platform;
-            document.getElementById('botDestinationPlatform').value = bridge.output_platform;
-            document.getElementById('botContact').value = bridge.contact_info || '';
-            botTags = bridge.tags || [];
+            editingBookId = fractalId;
+            document.getElementById('modalTitle').textContent = 'Edit Book';
+            document.getElementById('botName').value = book.name || '';
+            document.getElementById('botPlatform').value = book.input_platform;
+            document.getElementById('botDestinationPlatform').value = book.output_platform;
+            document.getElementById('botContact').value = book.contact_info || '';
+            botTags = book.tags || [];
             
             // Load webhooks from output_01_url and output_0n_url
             botWebhooks = [];
-            if (bridge.output_0n_url) {
+            if (book.output_0n_url) {
                 botWebhooks.push({
                     id: Date.now(),
                     name: 'User Discord',
-                    url: bridge.output_0n_url
+                    url: book.output_0n_url
                 });
             }
             
@@ -2821,7 +2821,7 @@
         function closeBotModal() {
             document.getElementById('botModal').classList.remove('active');
             document.getElementById('botName').value = '';
-            editingBridgeId = null;
+            editingBookId = null;
             botTags = [];
             botWebhooks = [];
         }
@@ -2839,8 +2839,8 @@
             localStorage.setItem('skipQuickStart', 'true');
             closeQuickStartWizard();
             // Open regular create modal
-            editingBridgeId = null;
-            document.getElementById('modalTitle').textContent = 'Create New Bridge';
+            editingBookId = null;
+            document.getElementById('modalTitle').textContent = 'Create New Book';
             document.getElementById('botForm').reset();
             botTags = [];
             botWebhooks = [];
@@ -2849,11 +2849,11 @@
             document.getElementById('botModal').classList.add('active');
         }
 
-        function startBridgeSetup() {
+        function startBookSetup() {
             closeQuickStartWizard();
             // Open regular create modal with a hint banner
-            editingBridgeId = null;
-            document.getElementById('modalTitle').textContent = 'Create New Bridge';
+            editingBookId = null;
+            document.getElementById('modalTitle').textContent = 'Create New Book';
             document.getElementById('botForm').reset();
             botTags = [];
             botWebhooks = [];
@@ -2876,7 +2876,7 @@
         async function saveBotClicked(event) {
             event.preventDefault();
             
-            const bridgeName = document.getElementById('botName').value;
+            const bookName = document.getElementById('botName').value;
             const inputPlatform = document.getElementById('botPlatform').value;
             const outputPlatform = document.getElementById('botDestinationPlatform').value;
             const contact = document.getElementById('botContact').value;
@@ -2887,10 +2887,10 @@
             // SECURITY: Check if webhook URL is changing (requires password ONLY when editing)
             let password = null;
             
-            if (editingBridgeId) {
-                // Only for EDIT operations - not for new bridge creation
-                const existingBridge = bridges.find(b => b.fractal_id === editingBridgeId);
-                const existingWebhookUrl = existingBridge?.output_0n_url;
+            if (editingBookId) {
+                // Only for EDIT operations - not for new book creation
+                const existingBook = books.find(b => b.fractal_id === editingBookId);
+                const existingWebhookUrl = existingBook?.output_0n_url;
                 const newWebhookUrl = validWebhooks[0]?.url;
                 
                 // If webhook URL is changing, require password
@@ -2903,17 +2903,17 @@
                     }
                 }
             }
-            // No password required for new bridge creation (genesis)
+            // No password required for new book creation (genesis)
             
             // CRITICAL FIX: When editing, preserve existing output_credentials structure
             let outputCredentials;
-            if (editingBridgeId) {
-                // Find the existing bridge to preserve its Ledger thread (output_01)
-                const existingBridge = bridges.find(b => b.fractal_id === editingBridgeId);
-                if (existingBridge && existingBridge.output_credentials) {
+            if (editingBookId) {
+                // Find the existing book to preserve its Ledger thread (output_01)
+                const existingBook = books.find(b => b.fractal_id === editingBookId);
+                if (existingBook && existingBook.output_credentials) {
                     // Preserve existing structure, only update user webhooks
                     outputCredentials = {
-                        ...existingBridge.output_credentials,
+                        ...existingBook.output_credentials,
                         webhooks: validWebhooks.map(w => ({ name: w.name, url: w.url }))
                     };
                 } else {
@@ -2922,7 +2922,7 @@
                     };
                 }
             } else {
-                // New bridge: just webhooks
+                // New book: just webhooks
                 outputCredentials = {
                     webhooks: validWebhooks.map(w => ({ name: w.name, url: w.url }))
                 };
@@ -2937,7 +2937,7 @@
             }
             
             const botData = {
-                name: bridgeName || `${inputPlatform} → ${outputPlatform} Bridge`,
+                name: bookName || `${inputPlatform} → ${outputPlatform} Book`,
                 inputPlatform: inputPlatform,
                 outputPlatform: outputPlatform,
                 inputCredentials: {},
@@ -2953,8 +2953,8 @@
             }
 
             try {
-                const url = editingBridgeId ? `/api/bridges/${editingBridgeId}` : '/api/bridges';
-                const method = editingBridgeId ? 'PUT' : 'POST';
+                const url = editingBookId ? `/api/books/${editingBookId}` : '/api/books';
+                const method = editingBookId ? 'PUT' : 'POST';
                 
                 const response = await authFetch(url, {
                     method,
@@ -2963,22 +2963,22 @@
                 });
 
                 if (response.ok) {
-                    const updatedBridge = await response.json();
+                    const updatedBook = await response.json();
                     closeBotModal();
                     
-                    if (editingBridgeId) {
+                    if (editingBookId) {
                         // OPTIMIZATION: For edits, update local state without full refresh
-                        // This prevents unnecessary bridge reinitiation and screen flicker
-                        const index = bridges.findIndex(b => b.fractal_id === editingBridgeId);
+                        // This prevents unnecessary book reinitiation and screen flicker
+                        const index = books.findIndex(b => b.fractal_id === editingBookId);
                         if (index !== -1) {
-                            bridges[index] = updatedBridge;
-                            filteredBridges = bridges;
-                            renderBridges(true); // Skip detail re-render to preserve state
+                            books[index] = updatedBook;
+                            filteredBooks = books;
+                            renderBooks(true); // Skip detail re-render to preserve state
                         }
-                        alert('✅ Bridge updated successfully!');
+                        alert('✅ Book updated successfully!');
                     } else {
-                        // For new bridges, do full refresh to initialize WhatsApp client
-                        loadBridges();
+                        // For new books, do full refresh to initialize WhatsApp client
+                        loadBooks();
                         alert('✅ Bot created successfully! Click the ▶️ button to start WhatsApp.');
                     }
                 } else {
@@ -3001,8 +3001,8 @@
 
 
         // UNIFIED QR DISPLAY: Single function for both create & relink flows
-        async function showQRAndWaitForConnection(bridgeId, bridgeName) {
-            console.log(`🔄 Showing QR for bridge: ${bridgeName} (${bridgeId})`);
+        async function showQRAndWaitForConnection(bookId, bookName) {
+            console.log(`🔄 Showing QR for book: ${bookName} (${bookId})`);
             
             // Open modal immediately with loading state
             const modal = document.getElementById('qrModal');
@@ -3028,7 +3028,7 @@
                 const pollQR = async () => {
                     attempts++;
                     
-                    const qrResponse = await authFetch(`/api/bridges/${bridgeId}/qr`);
+                    const qrResponse = await authFetch(`/api/books/${bookId}/qr`);
                     if (!qrResponse.ok) {
                         showQRError('Server Error', 'Failed to fetch QR code. Please try again.');
                         return;
@@ -3043,15 +3043,15 @@
                         qrImage.src = data.qr;
                         qrImage.style.display = 'block';
                         instructions.style.display = 'block';
-                        modalTitle.textContent = `📱 Scan QR Code: ${bridgeName}`;
+                        modalTitle.textContent = `📱 Scan QR Code: ${bookName}`;
                         
                         // Start watching for connection (unified watcher for all states)
-                        startQRWatcher(bridgeId);
+                        startQRWatcher(bookId);
                     } else if (data.status === 'connected' || data.status === 'ready' || data.status === 'active') {
                         showQRError('✅ Already Connected!', 'Your WhatsApp is already connected.', true);
                         setTimeout(() => {
                             closeQRModal();
-                            renderBridges();
+                            renderBooks();
                         }, 2000);
                     } else if (attempts < maxAttempts) {
                         // Keep polling
@@ -3072,7 +3072,7 @@
         }
         
         // Show relink confirmation modal
-        function showRelinkConfirmation(bridgeName) {
+        function showRelinkConfirmation(bookName) {
             return new Promise((resolve) => {
                 const modal = document.createElement('div');
                 modal.style.cssText = `
@@ -3107,10 +3107,10 @@
                         
                         <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
                             <p style="margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
-                                <strong style="color: #fca5a5;">Bridge:</strong> ${bridgeName}
+                                <strong style="color: #fca5a5;">Book:</strong> ${bookName}
                             </p>
                             <p style="margin: 0 0 0.75rem 0; color: #fca5a5; font-size: 0.95rem; line-height: 1.6;">
-                                ⚠️ <strong>Your bridge will be temporarily disconnected</strong>
+                                ⚠️ <strong>Your book will be temporarily disconnected</strong>
                             </p>
                             <p style="margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
                                 📉 <strong>Messages sent during reconnection may be lost</strong>
@@ -3169,31 +3169,31 @@
         }
         
         // Generate new QR - wrapper for unified function
-        async function generateNewQR(bridgeId) {
-            // Get bridge name from bridges list
-            const bridge = bridges.find(b => b.fractal_id === bridgeId);
-            const bridgeName = bridge?.name || 'Bridge';
+        async function generateNewQR(bookId) {
+            // Get book name from books list
+            const book = books.find(b => b.fractal_id === bookId);
+            const bookName = book?.name || 'Book';
             
             // UNIFIED FLOW: Only show warning when REPLACING an active inpipe connection
             // Warning logic:
-            // ✅ Show warning: Bridge is currently CONNECTED (replacing active WhatsApp session)
-            // ❌ Skip warning: New bridge or never-connected bridge (no active inpipe to replace)
-            const isConnected = bridge?.status === 'connected' || bridge?.status === 'active';
+            // ✅ Show warning: Book is currently CONNECTED (replacing active WhatsApp session)
+            // ❌ Skip warning: New book or never-connected book (no active inpipe to replace)
+            const isConnected = book?.status === 'connected' || book?.status === 'active';
             
             // Show confirmation modal ONLY if replacing an active connection
             if (isConnected) {
-                const confirmed = await showRelinkConfirmation(bridgeName);
+                const confirmed = await showRelinkConfirmation(bookName);
                 if (!confirmed) {
                     console.log('User cancelled QR regeneration (active connection preserved)');
                     return;
                 }
             } else {
-                console.log(`🚀 Skipping warning - bridge not yet connected (no active inpipe to replace)`);
+                console.log(`🚀 Skipping warning - book not yet connected (no active inpipe to replace)`);
             }
             
             // Relink first to get fresh QR
             try {
-                const relinkResponse = await authFetch(`/api/bridges/${bridgeId}/relink`, {
+                const relinkResponse = await authFetch(`/api/books/${bookId}/relink`, {
                     method: 'POST'
                 });
                 
@@ -3214,7 +3214,7 @@
                     await new Promise(resolve => setTimeout(resolve, 500));
                     attempts++;
                     
-                    const statusCheck = await authFetch(`/api/bridges/${bridgeId}/qr`);
+                    const statusCheck = await authFetch(`/api/books/${bookId}/qr`);
                     if (statusCheck.ok) {
                         const data = await statusCheck.json();
                         
@@ -3235,7 +3235,7 @@
                 }
                 
                 // Show unified QR modal
-                showQRAndWaitForConnection(bridgeId, bridgeName);
+                showQRAndWaitForConnection(bookId, bookName);
             } catch (error) {
                 console.error('Error relinking:', error);
                 alert(`Error: ${error.message}`);
@@ -3267,7 +3267,7 @@
         let qrWatcherInterval = null;
         
         // Watch for QR code disappearance (means user successfully scanned)
-        function startQRWatcher(bridgeId) {
+        function startQRWatcher(bookId) {
             // Clear any existing watcher
             if (qrWatcherInterval) {
                 clearInterval(qrWatcherInterval);
@@ -3281,7 +3281,7 @@
                 
                 try {
                     // Check if QR still exists
-                    const qrResponse = await authFetch(`/api/bridges/${bridgeId}/qr`);
+                    const qrResponse = await authFetch(`/api/books/${bookId}/qr`);
                     if (!qrResponse.ok) {
                         console.log('Failed to fetch QR during watch');
                         return;
@@ -3311,7 +3311,7 @@
                         
                         setTimeout(() => {
                             closeQRModal();
-                            renderBridges();
+                            renderBooks();
                         }, 1500);
                     } else if (attempts >= maxAttempts) {
                         // Timeout
@@ -3335,10 +3335,10 @@
         }
 
         // Start WhatsApp session for a bot
-        async function startWhatsApp(bridgeId) {
+        async function startWhatsApp(bookId) {
             try {
-                console.log('Starting WhatsApp for bridge:', bridgeId);
-                const response = await authFetch(`/api/bridges/${bridgeId}/start`, {
+                console.log('Starting WhatsApp for book:', bookId);
+                const response = await authFetch(`/api/books/${bookId}/start`, {
                     method: 'POST'
                 });
                 
@@ -3348,7 +3348,7 @@
                     
                     // Auto-refresh after 3 seconds to update status
                     setTimeout(() => {
-                        renderBridges();
+                        renderBooks();
                     }, 3000);
                 } else {
                     const error = await response.json();
@@ -3360,21 +3360,21 @@
             }
         }
 
-        // Stop WhatsApp session for a bridge (preserves session)
-        async function stopWhatsApp(bridgeId) {
+        // Stop WhatsApp session for a book (preserves session)
+        async function stopWhatsApp(bookId) {
             if (!confirm('Stop WhatsApp session? You can restart it later without scanning a new QR code.')) {
                 return;
             }
             
             try {
-                console.log('Stopping WhatsApp for bridge:', bridgeId);
-                const response = await authFetch(`/api/bridges/${bridgeId}/stop`, {
+                console.log('Stopping WhatsApp for book:', bookId);
+                const response = await authFetch(`/api/books/${bookId}/stop`, {
                     method: 'DELETE'
                 });
                 
                 if (response.ok) {
                     alert('✅ WhatsApp session stopped (session preserved)');
-                    renderBridges();
+                    renderBooks();
                 } else {
                     const error = await response.json();
                     alert(`Failed to stop WhatsApp: ${error.error || 'Unknown error'}`);
@@ -3386,14 +3386,14 @@
         }
 
         // Relink WhatsApp (get fresh QR code)
-        async function relinkWhatsApp(bridgeId) {
+        async function relinkWhatsApp(bookId) {
             if (!confirm('Relink WhatsApp? This will generate a new QR code and you\'ll need to scan it again.')) {
                 return;
             }
             
             try {
-                console.log('Relinking WhatsApp for bridge:', bridgeId);
-                const response = await authFetch(`/api/bridges/${bridgeId}/relink`, {
+                console.log('Relinking WhatsApp for book:', bookId);
+                const response = await authFetch(`/api/books/${bookId}/relink`, {
                     method: 'POST'
                 });
                 
@@ -3403,7 +3403,7 @@
                     
                     // Auto-refresh after 2 seconds
                     setTimeout(() => {
-                        renderBridges();
+                        renderBooks();
                     }, 2000);
                 } else {
                     const error = await response.json();
@@ -3415,79 +3415,79 @@
             }
         }
 
-        async function confirmDeleteBridge(fractalId) {
-            // Find bridge by fractal_id (hash string)
-            const bridge = bridges.find(b => b.fractal_id === fractalId);
-            if (!bridge) {
-                console.error(`Bridge ${fractalId} not found in bridges array`);
+        async function confirmDeleteBook(fractalId) {
+            // Find book by fractal_id (hash string)
+            const book = books.find(b => b.fractal_id === fractalId);
+            if (!book) {
+                console.error(`Book ${fractalId} not found in books array`);
                 return;
             }
             
-            if (!confirm(`Are you sure you want to delete "${bridge.name || bridge.input_platform + ' → ' + bridge.output_platform}" bridge?\n\nAll messages will be preserved in Discord.`)) {
+            if (!confirm(`Are you sure you want to delete "${book.name || book.input_platform + ' → ' + book.output_platform}" book?\n\nAll messages will be preserved in Discord.`)) {
                 return;
             }
             
             try {
-                const response = await authFetch(`/api/bridges/${fractalId}`, {
+                const response = await authFetch(`/api/books/${fractalId}`, {
                     method: 'DELETE'
                 });
                 
                 if (response.ok) {
-                    // Animate bridge card deletion with liquid glass effect
-                    const bridgeCard = document.querySelector(`.channel-item[data-bridge-id="${fractalId}"]`);
-                    if (bridgeCard) {
+                    // Animate book card deletion with liquid glass effect
+                    const bookCard = document.querySelector(`.channel-item[data-book-id="${fractalId}"]`);
+                    if (bookCard) {
                         // Apply liquid glass delete animation
-                        bridgeCard.style.transition = 'all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)';
-                        bridgeCard.style.transform = 'scale(0.95)';
-                        bridgeCard.style.opacity = '0.7';
-                        bridgeCard.style.filter = 'blur(4px)';
+                        bookCard.style.transition = 'all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)';
+                        bookCard.style.transform = 'scale(0.95)';
+                        bookCard.style.opacity = '0.7';
+                        bookCard.style.filter = 'blur(4px)';
                         
                         // Second phase: shrink and fade out with glass effect
                         setTimeout(() => {
-                            bridgeCard.style.transform = 'scale(0.85) translateX(-30px)';
-                            bridgeCard.style.opacity = '0';
-                            bridgeCard.style.filter = 'blur(15px)';
-                            bridgeCard.style.maxHeight = '0';
-                            bridgeCard.style.marginBottom = '0';
-                            bridgeCard.style.paddingTop = '0';
-                            bridgeCard.style.paddingBottom = '0';
-                            bridgeCard.style.overflow = 'hidden';
+                            bookCard.style.transform = 'scale(0.85) translateX(-30px)';
+                            bookCard.style.opacity = '0';
+                            bookCard.style.filter = 'blur(15px)';
+                            bookCard.style.maxHeight = '0';
+                            bookCard.style.marginBottom = '0';
+                            bookCard.style.paddingTop = '0';
+                            bookCard.style.paddingBottom = '0';
+                            bookCard.style.overflow = 'hidden';
                         }, 150);
                         
                         // Remove from DOM and update state after animation
                         setTimeout(() => {
-                            bridgeCard.remove();
+                            bookCard.remove();
                             
                             // CRITICAL: Immediately remove from arrays to prevent loop-back
-                            bridges = bridges.filter(b => b.fractal_id !== fractalId);
-                            filteredBridges = filteredBridges.filter(b => b.fractal_id !== fractalId);
+                            books = books.filter(b => b.fractal_id !== fractalId);
+                            filteredBooks = filteredBooks.filter(b => b.fractal_id !== fractalId);
                             
-                            // Clear selection and detail view if deleted bridge was selected
-                            if (selectedBridgeId === fractalId) {
-                                selectedBridgeId = null;
-                                const detail = document.getElementById('bridgeDetail');
+                            // Clear selection and detail view if deleted book was selected
+                            if (selectedBookId === fractalId) {
+                                selectedBookId = null;
+                                const detail = document.getElementById('bookDetail');
                                 if (detail) {
-                                    detail.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Select a bridge to view messages</p>';
+                                    detail.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Select a book to view messages</p>';
                                 }
                             }
                             
-                            // Update bridge count in Bridges tab
-                            updateBridgeCount();
+                            // Update book count in Books tab
+                            updateBookCount();
                             
                             // Show success toast
-                            showToast('✅ Bridge deleted successfully', 'success');
+                            showToast('✅ Book deleted successfully', 'success');
                             
-                            // If no bridges left, show empty state
-                            if (bridges.length === 0) {
-                                const sidebar = document.getElementById('bridgeListContainer');
-                                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.875rem;">No bridges found</p>';
+                            // If no books left, show empty state
+                            if (books.length === 0) {
+                                const sidebar = document.getElementById('bookListContainer');
+                                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.875rem;">No books found</p>';
                             }
                         }, 750);
                     } else {
                         // Fallback: reload if card not found
-                        selectedBridgeId = null;
-                        loadBridges();
-                        showToast('✅ Bridge deleted successfully', 'success');
+                        selectedBookId = null;
+                        loadBooks();
+                        showToast('✅ Book deleted successfully', 'success');
                     }
                 } else {
                     const error = await response.json();
@@ -3495,27 +3495,27 @@
                 }
             } catch (error) {
                 console.error('Error deleting bot:', error);
-                showToast('❌ Error deleting bridge', 'error');
+                showToast('❌ Error deleting book', 'error');
             }
         }
         
-        // Export bridge data (messages + drops) as ZIP
-        async function exportBridgeData(fractalId) {
+        // Export book data (messages + drops) as ZIP
+        async function exportBookData(fractalId) {
             try {
-                const bridge = bridges.find(b => b.fractal_id === fractalId);
-                if (!bridge) {
-                    showToast('❌ Bridge not found', 'error');
+                const book = books.find(b => b.fractal_id === fractalId);
+                if (!book) {
+                    showToast('❌ Book not found', 'error');
                     return;
                 }
                 
-                // Get selected message IDs for this bridge
+                // Get selected message IDs for this book
                 const selectedIds = selectedMessages[fractalId] 
                     ? Array.from(selectedMessages[fractalId]) 
                     : [];
                 
                 console.log('📦 EXPORT FLOW START');
-                console.log('📦 Bridge ID:', fractalId);
-                console.log('📦 Bridge Name:', bridge.name);
+                console.log('📦 Book ID:', fractalId);
+                console.log('📦 Book Name:', book.name);
                 console.log('📦 Selected IDs:', selectedIds);
                 console.log('📦 Selected Count:', selectedIds.length);
                 
@@ -3526,11 +3526,11 @@
                 
                 showToast(`📦 Preparing export of ${selectedIds.length} message(s)...`, 'info');
                 
-                console.log('📦 Sending POST request to /api/bridges/' + fractalId + '/export');
+                console.log('📦 Sending POST request to /api/books/' + fractalId + '/export');
                 console.log('📦 Payload:', { messageIds: selectedIds });
                 
                 // Send selected message IDs to backend
-                const response = await authFetch(`/api/bridges/${fractalId}/export`, {
+                const response = await authFetch(`/api/books/${fractalId}/export`, {
                     method: 'POST',
                     body: JSON.stringify({ messageIds: selectedIds })
                 });
@@ -3547,7 +3547,7 @@
                 const a = document.createElement('a');
                 a.style.display = 'none';
                 a.href = url;
-                a.download = `${(bridge.name || 'bridge').replace(/[^a-z0-9]/gi, '_')}_export.zip`;
+                a.download = `${(book.name || 'book').replace(/[^a-z0-9]/gi, '_')}_export.zip`;
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(url);
@@ -3556,16 +3556,16 @@
                 showToast('✅ Export downloaded successfully!', 'success');
                 
             } catch (error) {
-                console.error('Error exporting bridge data:', error);
+                console.error('Error exporting book data:', error);
                 showToast('❌ Export failed', 'error');
             }
         }
         
         // Restore checkbox checked states after rendering
-        function restoreCheckboxStates(bridgeId) {
-            if (!selectedMessages[bridgeId]) return;
+        function restoreCheckboxStates(bookId) {
+            if (!selectedMessages[bookId]) return;
             
-            selectedMessages[bridgeId].forEach(msgId => {
+            selectedMessages[bookId].forEach(msgId => {
                 const checkbox = document.querySelector(`input.message-export-checkbox[data-message-id="${msgId}"]`);
                 if (checkbox) {
                     checkbox.checked = true;
@@ -3574,17 +3574,17 @@
         }
         
         // Update export button state based on selected messages
-        function updateExportButtonState(bridgeId) {
-            console.log(`🔄 updateExportButtonState called for bridge: ${bridgeId}`);
-            const exportBtn = document.querySelector(`[data-export-bridge="${bridgeId}"]`);
+        function updateExportButtonState(bookId) {
+            console.log(`🔄 updateExportButtonState called for book: ${bookId}`);
+            const exportBtn = document.querySelector(`[data-export-book="${bookId}"]`);
             console.log(`🔍 Export button found:`, exportBtn ? 'YES' : 'NO');
             if (!exportBtn) {
-                console.warn(`⚠️ Export button not found for bridge: ${bridgeId}`);
+                console.warn(`⚠️ Export button not found for book: ${bookId}`);
                 return;
             }
             
-            const count = selectedMessages[bridgeId] ? selectedMessages[bridgeId].size : 0;
-            console.log(`📊 Selected count for ${bridgeId}: ${count}`);
+            const count = selectedMessages[bookId] ? selectedMessages[bookId].size : 0;
+            console.log(`📊 Selected count for ${bookId}: ${count}`);
             
             if (count > 0) {
                 exportBtn.textContent = `📦 Export (${count})`;
@@ -3640,13 +3640,13 @@
             }, 3000);
         }
         
-        // Helper to update bridge count badge
-        function updateBridgeCount() {
-            const bridgeButton = document.querySelector('[onclick="showTab(\'bridges\')"]');
-            if (bridgeButton) {
-                const badge = bridgeButton.querySelector('.tab-badge');
+        // Helper to update book count badge
+        function updateBookCount() {
+            const bookButton = document.querySelector('[onclick="showTab(\'books\')"]');
+            if (bookButton) {
+                const badge = bookButton.querySelector('.tab-badge');
                 if (badge) {
-                    badge.textContent = bridges.length;
+                    badge.textContent = books.length;
                 }
             }
         }
@@ -3658,36 +3658,36 @@
             }
         }
 
-        async function toggleMessages(bridgeId) {
-            console.log('Toggle messages for bridge:', bridgeId);
+        async function toggleMessages(bookId) {
+            console.log('Toggle messages for book:', bookId);
             
-            const container = document.getElementById(`messages-${bridgeId}`);
-            const button = document.getElementById(`toggle-btn-${bridgeId}`);
+            const container = document.getElementById(`messages-${bookId}`);
+            const button = document.getElementById(`toggle-btn-${bookId}`);
             
-            if (expandedBots.has(bridgeId)) {
+            if (expandedBots.has(bookId)) {
                 // Collapse
-                expandedBots.delete(bridgeId);
+                expandedBots.delete(bookId);
                 container.style.display = 'none';
                 button.innerHTML = '▼ Show Messages';
             } else {
                 // Expand
-                expandedBots.add(bridgeId);
+                expandedBots.add(bookId);
                 container.style.display = 'block';
                 button.innerHTML = '▲ Hide Messages';
                 
                 // Load messages if not cached
-                if (!messageCache[bridgeId]) {
-                    await loadBridgeMessages(bridgeId, 1);
+                if (!messageCache[bookId]) {
+                    await loadBookMessages(bookId, 1);
                 }
             }
         }
         
         // Toggle between custom message view and Discord embed (DISCORD UI EMBEDDING)
-        function toggleDiscordEmbed(bridgeId) {
-            const messagesContainer = document.getElementById(`discord-messages-${bridgeId}`);
-            const embedContainer = document.getElementById(`discord-embed-${bridgeId}`);
-            const toggleButton = document.getElementById(`discord-toggle-${bridgeId}`);
-            const searchContainer = document.querySelector(`#msg-search-${bridgeId}`)?.parentElement;
+        function toggleDiscordEmbed(bookId) {
+            const messagesContainer = document.getElementById(`discord-messages-${bookId}`);
+            const embedContainer = document.getElementById(`discord-embed-${bookId}`);
+            const toggleButton = document.getElementById(`discord-toggle-${bookId}`);
+            const searchContainer = document.querySelector(`#msg-search-${bookId}`)?.parentElement;
             
             if (embedContainer.style.display === 'none') {
                 // Switch to Discord embed
@@ -3716,18 +3716,18 @@
             }
         }
         
-        async function loadBridgeMessages(bridgeId, page = 1) {
+        async function loadBookMessages(bookId, page = 1) {
             try {
-                // SECURITY: Validate bridgeId is a fractal_id (tenant-scoped, non-enumerable)
+                // SECURITY: Validate bookId is a fractal_id (tenant-scoped, non-enumerable)
                 // Format: dev_bridge_t{N}_{HASH} or prod_bridge_t{N}_{HASH}
-                if (!bridgeId || !/^(dev|prod)_bridge_t\d+_[a-f0-9]+$/.test(bridgeId)) {
-                    console.error('🚨 SECURITY: Invalid bridge ID format:', bridgeId);
-                    throw new Error('Invalid bridge ID');
+                if (!bookId || !/^(dev|prod)_bridge_t\d+_[a-f0-9]+$/.test(bookId)) {
+                    console.error('🚨 SECURITY: Invalid book ID format:', bookId);
+                    throw new Error('Invalid book ID');
                 }
                 
                 // SCHEMA SWITCHEROO: Use currentViewSource to pull from correct webhook
-                console.log(`Loading messages for bridge ${bridgeId} (source: ${currentViewSource})...`);
-                const response = await authFetch(`/api/bridges/${bridgeId}/messages?page=${page}&limit=50&source=${currentViewSource}`);
+                console.log(`Loading messages for book ${bookId} (source: ${currentViewSource})...`);
+                const response = await authFetch(`/api/books/${bookId}/messages?page=${page}&limit=50&source=${currentViewSource}`);
                 
                 if (!response.ok) {
                     console.error(`API returned ${response.status}: ${response.statusText}`);
@@ -3739,53 +3739,53 @@
                 
                 // SECURITY: Cache ONLY with tenant-scoped fractal_id
                 // This ensures complete tenant isolation in message cache
-                messageCache[bridgeId] = data.messages;
+                messageCache[bookId] = data.messages;
                 
                 // Re-render Discord-style messages
-                const container = document.getElementById(`discord-messages-${bridgeId}`);
-                console.log(`🎯 Container lookup: discord-messages-${bridgeId}`, container ? 'FOUND' : 'NOT FOUND');
+                const container = document.getElementById(`discord-messages-${bookId}`);
+                console.log(`🎯 Container lookup: discord-messages-${bookId}`, container ? 'FOUND' : 'NOT FOUND');
                 if (container) {
-                    const html = renderDiscordMessages(data.messages, bridgeId);
+                    const html = renderDiscordMessages(data.messages, bookId);
                     console.log(`📝 Generated HTML length: ${html.length} chars`);
                     container.innerHTML = html;
                     console.log(`✅ Rendered ${data.messages?.length || 0} messages to container`);
                     
                     // Dynamically create export checkboxes AFTER HTML render
                     // This ensures they're truly interactive and separate from read-only message structure
-                    restoreCheckboxStates(bridgeId);
+                    restoreCheckboxStates(bookId);
                     
                     // Hydrate drops (Personal Cloud OS metadata)
-                    hydrateDropsForBridge(bridgeId);
+                    hydrateDropsForBook(bookId);
                     
-                    // SEAMLESS SEARCH: Auto-populate and filter if bridge was opened from message search
-                    if (bridgeSearchContext.query && bridgeSearchContext.bridgeId === bridgeId) {
-                        const searchBox = document.getElementById(`msg-search-${bridgeId}`);
-                        const indicator = document.getElementById(`search-indicator-${bridgeId}`);
+                    // SEAMLESS SEARCH: Auto-populate and filter if book was opened from message search
+                    if (bookSearchContext.query && bookSearchContext.bookId === bookId) {
+                        const searchBox = document.getElementById(`msg-search-${bookId}`);
+                        const indicator = document.getElementById(`search-indicator-${bookId}`);
                         if (searchBox) {
-                            searchBox.value = bridgeSearchContext.query;
+                            searchBox.value = bookSearchContext.query;
                             // Show visual indicator
                             if (indicator) {
                                 indicator.style.display = 'flex';
                             }
                             // Auto-trigger filter with slight delay to ensure messages are in DOM
                             setTimeout(() => {
-                                filterDiscordMessages(bridgeId);
+                                filterDiscordMessages(bookId);
                             }, 50);
                         }
                     }
                     
-                    // Initialize media lazy loading for this bridge's messages
+                    // Initialize media lazy loading for this book's messages
                     setTimeout(() => {
                         if (window.initMediaLazyLoading) {
                             window.initMediaLazyLoading();
                         }
                     }, 100);
                 } else {
-                    console.error(`❌ Container NOT FOUND: discord-messages-${bridgeId}`);
+                    console.error(`❌ Container NOT FOUND: discord-messages-${bookId}`);
                 }
             } catch (error) {
                 console.error('Error loading messages:', error);
-                const container = document.getElementById(`discord-messages-${bridgeId}`);
+                const container = document.getElementById(`discord-messages-${bookId}`);
                 if (container) {
                     container.innerHTML = '<div class="no-messages" style="color: #ef4444;">Error loading messages. Please try refreshing.</div>';
                 }
@@ -4305,7 +4305,7 @@
         }
 
         // SCHEMA SWITCHEROO: Global variable to control which webhook source to use
-        // 'user' = output_0n (user-facing webhook, Bridges tab)
+        // 'user' = output_0n (user-facing webhook, Books tab)
         // 'ledger' = output_01 (permanent ledger, Dev Panel)
         let currentViewSource = 'user';
         let isDevPanelView = false;
@@ -4324,24 +4324,24 @@
                 content.style.display = 'none';
             });
             
-                // SCHEMA SWITCHEROO: Dev Panel reuses Bridges tab DOM completely
+                // SCHEMA SWITCHEROO: Dev Panel reuses Books tab DOM completely
             if (tabName === 'devPanel') {
-                const bridgesTab = document.getElementById('bridgesTab');
-                if (bridgesTab) {
-                    bridgesTab.classList.add('active');
-                    bridgesTab.style.display = 'block';
+                const booksTab = document.getElementById('booksTab');
+                if (booksTab) {
+                    booksTab.classList.add('active');
+                    booksTab.style.display = 'block';
                     
                     // SWITCHEROO: Change header and switch to ledger view (output_01)
-                    const header = bridgesTab.querySelector('.section-header h1');
-                    const subtitle = bridgesTab.querySelector('.section-header .create-bot-btn');
+                    const header = booksTab.querySelector('.section-header h1');
+                    const subtitle = booksTab.querySelector('.section-header .create-bot-btn');
                     if (header) header.textContent = '🔧 Dev Panel - Ledger View (Read-Only)';
-                    if (subtitle) subtitle.style.display = 'none'; // Hide Create Bridge button
+                    if (subtitle) subtitle.style.display = 'none'; // Hide Create Book button
                     
                     currentViewSource = 'ledger';
                     isDevPanelView = true;
                     
-                    // Load system-wide bridges for Dev Panel
-                    loadDevPanelBridges();
+                    // Load system-wide books for Dev Panel
+                    loadDevPanelBooks();
                 }
             } else {
                 // Find and show the correct tab content
@@ -4354,17 +4354,17 @@
                     currentViewSource = 'user';
                     isDevPanelView = false;
                     
-                    // Restore Bridges tab header if switching back
-                    if (tabName === 'bridges') {
+                    // Restore Books tab header if switching back
+                    if (tabName === 'books') {
                         const header = tabContent.querySelector('.section-header h1');
                         const createBtn = tabContent.querySelector('.section-header .create-bot-btn');
-                        if (header) header.textContent = 'Bridge Library';
-                        if (createBtn) createBtn.style.display = 'inline-block'; // Show Create Bridge button
+                        if (header) header.textContent = 'Book Library';
+                        if (createBtn) createBtn.style.display = 'inline-block'; // Show Create Book button
                     }
                     
                     // Load data for the tab
-                    if (tabName === 'bridges') {
-                        loadBridges();
+                    if (tabName === 'books') {
+                        loadBooks();
                     } else if (tabName === 'users') {
                         loadAdminCards();
                     } else if (tabName === 'sessions') {
@@ -4398,7 +4398,7 @@
             }
         }
         
-        // Load Dev Panel (system-wide bridges overview)
+        // Load Dev Panel (system-wide books overview)
         async function loadDevPanelAdmins() {
             console.log('🔧 Loading Dev Panel...');
             
@@ -4408,8 +4408,8 @@
                 adminCardsContainer.style.display = 'none';
             }
             
-            // Just load system-wide bridges
-            loadDevPanelBridges();
+            // Just load system-wide books
+            loadDevPanelBooks();
         }
         
         // Render horizontal admin cards in Dev Panel (system overview)
@@ -4548,44 +4548,44 @@
             return badges[status] || badges['inactive'];
         }
         
-        // DEV PANEL: Show bridge information modal (read-only)
-        function showBridgeInfo(fractalId) {
-            const bridge = bots.find(b => b.fractal_id === fractalId);
-            if (!bridge) return;
+        // DEV PANEL: Show book information modal (read-only)
+        function showBookInfo(fractalId) {
+            const book = bots.find(b => b.fractal_id === fractalId);
+            if (!book) return;
             
-            const tenantNum = String(bridge.tenant_id || 1).padStart(2, '0');
+            const tenantNum = String(book.tenant_id || 1).padStart(2, '0');
             const infoHTML = `
                 <div class="modal-content" style="max-width: 600px;">
                     <div class="modal-header">
-                        <h2 class="modal-title">ℹ️ Bridge Information</h2>
-                        <button class="close-btn" data-close-modal="bridgeInfoModal">×</button>
+                        <h2 class="modal-title">ℹ️ Book Information</h2>
+                        <button class="close-btn" data-close-modal="bookInfoModal">×</button>
                     </div>
                     <div style="padding: 1.5rem;">
                         <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 1.5rem;">
                             <div class="detail-row" style="margin-bottom: 1rem;">
                                 <span class="detail-label">Tenant</span>
-                                <span class="detail-value">Admin #${tenantNum} (${bridge.tenant_owner_email || 'Unknown'})</span>
+                                <span class="detail-value">Admin #${tenantNum} (${book.tenant_owner_email || 'Unknown'})</span>
                             </div>
                             <div class="detail-row" style="margin-bottom: 1rem;">
                                 <span class="detail-label">Fractal ID</span>
-                                <span class="detail-value" style="font-family: monospace; font-size: 0.875rem;">${bridge.fractal_id}</span>
+                                <span class="detail-value" style="font-family: monospace; font-size: 0.875rem;">${book.fractal_id}</span>
                             </div>
                             <div class="detail-row" style="margin-bottom: 1rem;">
                                 <span class="detail-label">Input Platform</span>
-                                <span class="detail-value">${bridge.input_platform || 'whatsapp'}</span>
+                                <span class="detail-value">${book.input_platform || 'whatsapp'}</span>
                             </div>
                             <div class="detail-row" style="margin-bottom: 1rem;">
                                 <span class="detail-label">Output Platform</span>
-                                <span class="detail-value">${bridge.output_platform || 'discord'}</span>
+                                <span class="detail-value">${book.output_platform || 'discord'}</span>
                             </div>
                             <div class="detail-row" style="margin-bottom: 1rem;">
                                 <span class="detail-label">Created</span>
-                                <span class="detail-value">${new Date(bridge.created_at).toLocaleString()}</span>
+                                <span class="detail-value">${new Date(book.created_at).toLocaleString()}</span>
                             </div>
-                            ${bridge.output_0n_url ? `
+                            ${book.output_0n_url ? `
                             <div class="detail-row">
                                 <span class="detail-label">User Webhook (Output #0n)</span>
-                                <span class="detail-value" style="font-size: 0.75rem; word-break: break-all; font-family: monospace;">${bridge.output_0n_url}</span>
+                                <span class="detail-value" style="font-size: 0.75rem; word-break: break-all; font-family: monospace;">${book.output_0n_url}</span>
                             </div>
                             ` : ''}
                         </div>
@@ -4593,10 +4593,10 @@
                 </div>
             `;
             
-            let modal = document.getElementById('bridgeInfoModal');
+            let modal = document.getElementById('bookInfoModal');
             if (!modal) {
                 modal = document.createElement('div');
-                modal.id = 'bridgeInfoModal';
+                modal.id = 'bookInfoModal';
                 modal.className = 'modal';
                 document.body.appendChild(modal);
             }
@@ -4609,62 +4609,62 @@
             if (modal) modal.style.display = 'none';
         }
         
-        // SCHEMA SWITCHEROO: Load system-wide bridges for Dev Panel, then reuse Bridges tab rendering
-        async function loadDevPanelBridges() {
+        // SCHEMA SWITCHEROO: Load system-wide books for Dev Panel, then reuse Books tab rendering
+        async function loadDevPanelBooks() {
             try {
-                console.log('🔧 Dev Panel: Loading system-wide bridges...');
-                const response = await authFetch('/api/dev/bridges');
+                console.log('🔧 Dev Panel: Loading system-wide books...');
+                const response = await authFetch('/api/dev/books');
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
-                const systemBridges = await response.json();
-                console.log(`✅ Dev Panel: Loaded ${systemBridges.length} bridges across all tenants`);
+                const systemBooks = await response.json();
+                console.log(`✅ Dev Panel: Loaded ${systemBooks.length} books across all tenants`);
                 
-                // REUSE: Store in global bots array (same as Bridges tab)
-                bots = systemBridges;
+                // REUSE: Store in global bots array (same as Books tab)
+                bots = systemBooks;
                 
-                // REUSE: Call existing bridge rendering (will use source=ledger automatically)
-                renderBridgesSidebar();
+                // REUSE: Call existing book rendering (will use source=ledger automatically)
+                renderBooksSidebar();
                 
-                // Auto-select first bridge
+                // Auto-select first book
                 if (bots.length > 0 && !selectedBotId) {
                     selectBot(bots[0].fractal_id);
                 }
             } catch (error) {
-                console.error('❌ Dev Panel: Failed to load bridges:', error);
-                const sidebar = document.getElementById('bridgeListContainer');
+                console.error('❌ Dev Panel: Failed to load books:', error);
+                const sidebar = document.getElementById('bookListContainer');
                 if (sidebar) {
                     sidebar.innerHTML = `<div style="padding: 2rem; color: #ef4444; text-align: center;">Error: ${error.message}</div>`;
                 }
             }
         }
         
-        // Render Dev Panel bridges in Discord-style sidebar
-        function renderDevPanelBridgesSidebar() {
-            const sidebar = document.getElementById('devPanelBridgeSidebar');
-            const countEl = document.getElementById('devPanelBridgeCount');
+        // Render Dev Panel books in Discord-style sidebar
+        function renderDevPanelBooksSidebar() {
+            const sidebar = document.getElementById('devPanelBookSidebar');
+            const countEl = document.getElementById('devPanelBookCount');
             
             if (!sidebar) return;
             
             if (countEl) {
-                countEl.textContent = devPanelBridges.length;
+                countEl.textContent = devPanelBooks.length;
             }
             
-            if (devPanelBridges.length === 0) {
-                sidebar.innerHTML = '<div style="padding: 2rem; color: #94a3b8; text-align: center;">No bridges</div>';
+            if (devPanelBooks.length === 0) {
+                sidebar.innerHTML = '<div style="padding: 2rem; color: #94a3b8; text-align: center;">No books</div>';
                 return;
             }
             
             // Group by tenant
             const byTenant = {};
-            devPanelBridges.forEach(bridge => {
-                const tenant = `tenant_${bridge.tenant_id}`;
+            devPanelBooks.forEach(book => {
+                const tenant = `tenant_${book.tenant_id}`;
                 if (!byTenant[tenant]) byTenant[tenant] = [];
-                byTenant[tenant].push(bridge);
+                byTenant[tenant].push(book);
             });
             
             sidebar.innerHTML = Object.keys(byTenant).sort().map(tenant => {
-                const bridges = byTenant[tenant];
+                const books = byTenant[tenant];
                 const tenantNum = tenant.replace('tenant_', '');
                 
                 return `
@@ -4672,19 +4672,19 @@
                         <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem; padding: 0 0.5rem;">
                             Tenant ${tenantNum}
                         </div>
-                        ${bridges.map(bridge => {
-                            const isSelected = bridge.fractal_id === selectedDevBridgeId;
-                            const statusIcon = getStatusBadge(bridge.status).emoji;
+                        ${books.map(book => {
+                            const isSelected = book.fractal_id === selectedDevBookId;
+                            const statusIcon = getStatusBadge(book.status).emoji;
                             
                             return `
                                 <div class="channel-item ${isSelected ? 'active' : ''}" 
-                                     data-bridge-id="${bridge.fractal_id}"
-                                     data-dev-bridge="${bridge.fractal_id}"
+                                     data-book-id="${book.fractal_id}"
+                                     data-dev-book="${book.fractal_id}"
                                      style="padding: 0.75rem; margin: 0.25rem 0; cursor: pointer; border-radius: 8px; background: ${isSelected ? 'rgba(255,255,255,0.1)' : 'transparent'}; transition: all 0.2s;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                                         <span style="font-size: 1rem;">${statusIcon}</span>
                                         <span style="color: ${isSelected ? 'white' : '#cbd5e1'}; font-weight: ${isSelected ? '600' : '400'}; font-size: 0.875rem;">
-                                            ${bridge.name || bridge.input_platform + ' → ' + bridge.output_platform}
+                                            ${book.name || book.input_platform + ' → ' + book.output_platform}
                                         </span>
                                     </div>
                                 </div>
@@ -4695,29 +4695,29 @@
             }).join('');
         }
         
-        // Select and display dev bridge details
-        function selectDevBridge(fractalId) {
-            selectedDevBridgeId = fractalId;
-            const bridge = devPanelBridges.find(b => b.fractal_id === fractalId);
-            if (bridge) {
-                renderDevPanelBridgesSidebar(); // Re-render to update selection
-                renderDevPanelBridgeDetail(bridge);
+        // Select and display dev book details
+        function selectDevBook(fractalId) {
+            selectedDevBookId = fractalId;
+            const book = devPanelBooks.find(b => b.fractal_id === fractalId);
+            if (book) {
+                renderDevPanelBooksSidebar(); // Re-render to update selection
+                renderDevPanelBookDetail(book);
             }
         }
         
-        // Render bridge detail view
-        function renderDevPanelBridgeDetail(bridge) {
-            const detail = document.getElementById('devPanelBridgeDetail');
+        // Render book detail view
+        function renderDevPanelBookDetail(book) {
+            const detail = document.getElementById('devPanelBookDetail');
             if (!detail) return;
             
-            const statusBadge = getStatusBadge(bridge.status);
-            const tenantNum = String(bridge.tenant_id).padStart(2, '0');
+            const statusBadge = getStatusBadge(book.status);
+            const tenantNum = String(book.tenant_id).padStart(2, '0');
             
             detail.innerHTML = `
                 <div style="margin-bottom: 1.5rem;">
                     <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
                         <h2 style="color: white; font-size: 1.5rem; font-weight: 700; margin: 0;">
-                            ${bridge.name || bridge.input_platform + ' → ' + bridge.output_platform}
+                            ${book.name || book.input_platform + ' → ' + book.output_platform}
                         </h2>
                         <span style="background: ${statusBadge.color}; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">
                             ${statusBadge.emoji} ${statusBadge.label}
@@ -4727,40 +4727,40 @@
                     <div style="display: grid; gap: 1rem;">
                         <div class="detail-row">
                             <span class="detail-label">Tenant</span>
-                            <span class="detail-value">Admin #${tenantNum} (${bridge.tenant_owner_email})</span>
+                            <span class="detail-value">Admin #${tenantNum} (${book.tenant_owner_email})</span>
                         </div>
                         
                         <div class="detail-row">
                             <span class="detail-label">Fractal ID</span>
-                            <span class="detail-value" style="font-family: monospace; font-size: 0.875rem;">${bridge.fractal_id}</span>
+                            <span class="detail-value" style="font-family: monospace; font-size: 0.875rem;">${book.fractal_id}</span>
                         </div>
                         
                         <div class="detail-row">
                             <span class="detail-label">Input Platform</span>
-                            <span class="detail-value">${bridge.input_platform}</span>
+                            <span class="detail-value">${book.input_platform}</span>
                         </div>
                         
                         <div class="detail-row">
                             <span class="detail-label">Output Platform</span>
-                            <span class="detail-value">${bridge.output_platform}</span>
+                            <span class="detail-value">${book.output_platform}</span>
                         </div>
                         
-                        ${bridge.contact_info ? `
+                        ${book.contact_info ? `
                         <div class="detail-row">
                             <span class="detail-label">Contact Info</span>
-                            <span class="detail-value">${bridge.contact_info}</span>
+                            <span class="detail-value">${book.contact_info}</span>
                         </div>
                         ` : ''}
                         
                         <div class="detail-row">
                             <span class="detail-label">Created</span>
-                            <span class="detail-value">${new Date(bridge.created_at).toLocaleString()}</span>
+                            <span class="detail-value">${new Date(book.created_at).toLocaleString()}</span>
                         </div>
                         
-                        ${bridge.output_0n_url ? `
+                        ${book.output_0n_url ? `
                         <div class="detail-row">
                             <span class="detail-label">User Webhook (Output #0n)</span>
-                            <span class="detail-value" style="font-size: 0.875rem; word-break: break-all;">${bridge.output_0n_url}</span>
+                            <span class="detail-value" style="font-size: 0.875rem; word-break: break-all;">${book.output_0n_url}</span>
                         </div>
                         ` : ''}
                     </div>
@@ -4822,7 +4822,7 @@
         checkAuth().then(authenticated => {
             console.log('🔐 Auth result:', authenticated);
             if (authenticated) {
-                loadBridges();
+                loadBooks();
                 initHopAnimation();
             } else {
                 console.warn('⚠️ Not authenticated - skipping cat animation');
@@ -4854,9 +4854,9 @@
             const currentTimeEl = document.getElementById('currentTime');
             if (currentTimeEl) currentTimeEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
             
-            // Update bridge count in compact indicators only
-            const bridgeCountEl = document.getElementById('bridgeCountCompact');
-            if (bridgeCountEl) bridgeCountEl.textContent = bridges.length;
+            // Update book count in compact indicators only
+            const bookCountEl = document.getElementById('bookCountCompact');
+            if (bookCountEl) bookCountEl.textContent = books.length;
             
             // Update active sessions in compact indicators only
             if (window.sessions) {
@@ -4888,14 +4888,14 @@
         
         // ===== ONBOARDING HINTS =====
         const hints = {
-            'createBridge': {
+            'createBook': {
                 element: '.create-bot-btn',
                 text: 'Click here to connect two platforms (e.g., WhatsApp → Discord)',
                 shown: false
             },
             'searchMessages': {
                 element: '.discord-search-input',
-                text: 'Search through all messages in this bridge',
+                text: 'Search through all messages in this book',
                 shown: false
             },
             'analytics': {
@@ -4938,8 +4938,8 @@
         
         // Show hints after page loads
         setTimeout(() => {
-            if (bridges.length === 0) {
-                showOnboardingHint('createBridge');
+            if (books.length === 0) {
+                showOnboardingHint('createBook');
             }
         }, 2000);
         
@@ -4965,7 +4965,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Mobile thumbs zone
         if (thumbBtn) {
             const action = thumbBtn.dataset.action;
-            const bridgeId = thumbBtn.dataset.bridgeId;
+            const bookId = thumbBtn.dataset.bookId;
             
             // ☯️ SINGULARITY BUTTON - Toggle expand/collapse (mobile & desktop)
             if (action === 'singularity') {
@@ -4980,27 +4980,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
-            // Custom actions (toggle-bridge, bridge-actions, fan, next)
-            if (action === 'toggle-bridge' && bridgeId) {
-                selectBridge(bridgeId);
-            } else if (action === 'bridge-actions') {
-                showBridgeActionsMenu();
+            // Custom actions (toggle-book, book-actions, fan, next)
+            if (action === 'toggle-book' && bookId) {
+                selectBook(bookId);
+            } else if (action === 'book-actions') {
+                showBookActionsMenu();
             } else if (action === 'fan') {
-                showBridgeFanModal();
+                showBookFanModal();
             } else if (action === 'next') {
-                // Next bridge navigation
-                const activeBridges = filteredBridges.length > 0 ? filteredBridges : bridges;
-                if (activeBridges.length <= 1) return;
+                // Next book navigation
+                const activeBooks = filteredBooks.length > 0 ? filteredBooks : books;
+                if (activeBooks.length <= 1) return;
                 
-                const currentBridgeId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
-                const currentIndex = activeBridges.findIndex(b => b.fractal_id === currentBridgeId);
+                const currentBookId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
+                const currentIndex = activeBooks.findIndex(b => b.fractal_id === currentBookId);
                 
                 if (currentIndex !== -1) {
-                    const nextIndex = currentIndex < activeBridges.length - 1 ? currentIndex + 1 : 0;
-                    const nextBridge = activeBridges[nextIndex];
-                    if (nextBridge) {
-                        selectBridge(nextBridge.fractal_id);
-                        showToast(`→ ${nextBridge.name}`, 'info');
+                    const nextIndex = currentIndex < activeBooks.length - 1 ? currentIndex + 1 : 0;
+                    const nextBook = activeBooks[nextIndex];
+                    if (nextBook) {
+                        selectBook(nextBook.fractal_id);
+                        showToast(`→ ${nextBook.name}`, 'info');
                     }
                 }
             }
@@ -5033,13 +5033,13 @@ document.addEventListener('DOMContentLoaded', function() {
         if (mediaModalClose) mediaModalClose.addEventListener('click', closeMediaModal);
     }
     
-    const createBridgeModal = document.getElementById('createBridgeModal');
-    if (createBridgeModal) {
-        createBridgeModal.addEventListener('click', function(e) {
-            if (e.target === this) closeCreateBridgeModal();
+    const createBookModal = document.getElementById('createBookModal');
+    if (createBookModal) {
+        createBookModal.addEventListener('click', function(e) {
+            if (e.target === this) closeCreateBookModal();
         });
-        const bridgeModalClose = createBridgeModal.querySelector('.bridge-modal-close');
-        if (bridgeModalClose) bridgeModalClose.addEventListener('click', closeCreateBridgeModal);
+        const bookModalClose = createBookModal.querySelector('.book-modal-close');
+        if (bookModalClose) bookModalClose.addEventListener('click', closeCreateBookModal);
     }
     
     const qrModal = document.getElementById('qrModal');
@@ -5100,10 +5100,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const changeEmailForm = document.getElementById('changeEmailForm');
     if (changeEmailForm) changeEmailForm.addEventListener('submit', saveNewEmail);
     
-    const bridgeCreateForm = document.getElementById('bridge-create-form');
-    if (bridgeCreateForm) bridgeCreateForm.addEventListener('submit', function(e) {
+    const bookCreateForm = document.getElementById('book-create-form');
+    if (bookCreateForm) bookCreateForm.addEventListener('submit', function(e) {
         e.preventDefault();
-        // Bridge creation logic is already in dashboard.js
+        // Book creation logic is already in dashboard.js
     });
     
     // Button clicks
@@ -5140,8 +5140,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const sessionSortOrder = document.getElementById('sessionSortOrder');
     if (sessionSortOrder) sessionSortOrder.addEventListener('change', loadSessions);
     
-    const analyticsBridgeFilter = document.getElementById('analyticsBridgeFilter');
-    if (analyticsBridgeFilter) analyticsBridgeFilter.addEventListener('change', loadAnalyticsDashboard);
+    const analyticsBookFilter = document.getElementById('analyticsBookFilter');
+    if (analyticsBookFilter) analyticsBookFilter.addEventListener('change', loadAnalyticsDashboard);
     
     const analyticsTimeRange = document.getElementById('analyticsTimeRange');
     if (analyticsTimeRange) analyticsTimeRange.addEventListener('change', loadAnalyticsDashboard);
@@ -5157,10 +5157,10 @@ document.addEventListener('DOMContentLoaded', function() {
         skipQuickStartBtn.addEventListener('click', skipQuickStart);
     }
     
-    const startBridgeSetupBtn = document.querySelector('[onclick*="startBridgeSetup"]');
-    if (startBridgeSetupBtn) {
-        startBridgeSetupBtn.removeAttribute('onclick');
-        startBridgeSetupBtn.addEventListener('click', startBridgeSetup);
+    const startBookSetupBtn = document.querySelector('[onclick*="startBookSetup"]');
+    if (startBookSetupBtn) {
+        startBookSetupBtn.removeAttribute('onclick');
+        startBookSetupBtn.addEventListener('click', startBookSetup);
     }
     
     const addWebhookBtn = document.querySelector('[onclick*="addWebhookInput"]');
@@ -5169,10 +5169,10 @@ document.addEventListener('DOMContentLoaded', function() {
         addWebhookBtn.addEventListener('click', addWebhookInput);
     }
     
-    const copyFractalIdBtn = document.querySelector('[onclick*="copyBridgeFractalId"]');
+    const copyFractalIdBtn = document.querySelector('[onclick*="copyBookFractalId"]');
     if (copyFractalIdBtn) {
         copyFractalIdBtn.removeAttribute('onclick');
-        copyFractalIdBtn.addEventListener('click', copyBridgeFractalId);
+        copyFractalIdBtn.addEventListener('click', copyBookFractalId);
     }
     
     const advancedSearchBtn = document.querySelector('[onclick*="executeAdvancedSearch"]');
@@ -5219,41 +5219,41 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('📋 Datasets:', e.target.dataset);
             
             const msgId = e.target.dataset.messageId || e.target.dataset.msgId;
-            const bridgeId = e.target.dataset.bridgeId;
+            const bookId = e.target.dataset.bookId;
             
             console.log('📋 Extracted msgId:', msgId);
-            console.log('📋 Extracted bridgeId:', bridgeId);
+            console.log('📋 Extracted bookId:', bookId);
             
-            if (!msgId || !bridgeId) {
-                console.warn('⚠️ Missing msgId or bridgeId:', { msgId, bridgeId, element: e.target });
+            if (!msgId || !bookId) {
+                console.warn('⚠️ Missing msgId or bookId:', { msgId, bookId, element: e.target });
                 return;
             }
             
-            if (!selectedMessages[bridgeId]) {
-                selectedMessages[bridgeId] = new Set();
+            if (!selectedMessages[bookId]) {
+                selectedMessages[bookId] = new Set();
             }
             
             if (e.target.checked) {
-                selectedMessages[bridgeId].add(msgId);
-                console.log(`✓ Selected message ${msgId} in bridge ${bridgeId} (total: ${selectedMessages[bridgeId].size})`);
+                selectedMessages[bookId].add(msgId);
+                console.log(`✓ Selected message ${msgId} in book ${bookId} (total: ${selectedMessages[bookId].size})`);
             } else {
-                selectedMessages[bridgeId].delete(msgId);
-                console.log(`✗ Deselected message ${msgId} in bridge ${bridgeId} (total: ${selectedMessages[bridgeId].size})`);
+                selectedMessages[bookId].delete(msgId);
+                console.log(`✗ Deselected message ${msgId} in book ${bookId} (total: ${selectedMessages[bookId].size})`);
             }
             
-            console.log('📋 Calling updateExportButtonState for bridge:', bridgeId);
-            updateExportButtonState(bridgeId);
+            console.log('📋 Calling updateExportButtonState for book:', bookId);
+            updateExportButtonState(bookId);
         }
         
         // Select all checkbox
         if (e.target.id && e.target.id.startsWith('select-all-')) {
-            const bridgeId = e.target.id.replace('select-all-', '');
-            const checkboxes = document.querySelectorAll(`.message-export-checkbox[data-bridge-id="${bridgeId}"], .message-checkbox[data-bridge-id="${bridgeId}"]`);
+            const bookId = e.target.id.replace('select-all-', '');
+            const checkboxes = document.querySelectorAll(`.message-export-checkbox[data-book-id="${bookId}"], .message-checkbox[data-book-id="${bookId}"]`);
             
-            console.log(`Select all for bridge ${bridgeId}: found ${checkboxes.length} checkboxes`);
+            console.log(`Select all for book ${bookId}: found ${checkboxes.length} checkboxes`);
             
-            if (!selectedMessages[bridgeId]) {
-                selectedMessages[bridgeId] = new Set();
+            if (!selectedMessages[bookId]) {
+                selectedMessages[bookId] = new Set();
             }
             
             if (e.target.checked) {
@@ -5261,29 +5261,29 @@ document.addEventListener('DOMContentLoaded', function() {
                     cb.checked = true;
                     const msgId = cb.dataset.messageId || cb.dataset.msgId;
                     if (msgId) {
-                        selectedMessages[bridgeId].add(msgId);
+                        selectedMessages[bookId].add(msgId);
                     }
                 });
-                console.log(`✓ Selected ${checkboxes.length} messages in bridge ${bridgeId}`);
+                console.log(`✓ Selected ${checkboxes.length} messages in book ${bookId}`);
             } else {
                 checkboxes.forEach(cb => {
                     cb.checked = false;
                 });
-                selectedMessages[bridgeId].clear();
-                console.log(`✗ Cleared all selections in bridge ${bridgeId}`);
+                selectedMessages[bookId].clear();
+                console.log(`✗ Cleared all selections in book ${bookId}`);
             }
             
-            updateExportButtonState(bridgeId);
+            updateExportButtonState(bookId);
         }
     });
 });
 
 // ============ DROPS API - Personal Cloud OS ============
 // Save a drop (link metadata to Discord message) - APPENDS to existing tags
-async function saveDrop(bridgeId, messageId, metadataText, section) {
+async function saveDrop(bookId, messageId, metadataText, section) {
     try {
         const token = localStorage.getItem('accessToken');
-        console.log('💾 Saving drop:', { bridgeId, messageId, metadataText });
+        console.log('💾 Saving drop:', { bookId, messageId, metadataText });
         console.log('🔑 Token check:', token ? `YES (${token.substring(0, 20)}...)` : 'NO - MISSING!');
         
         if (!token) {
@@ -5297,7 +5297,7 @@ async function saveDrop(bridgeId, messageId, metadataText, section) {
                 'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
-                bridge_id: bridgeId,
+                book_id: bookId,
                 discord_message_id: messageId,
                 metadata_text: metadataText
             })
@@ -5322,7 +5322,7 @@ async function saveDrop(bridgeId, messageId, metadataText, section) {
         
         // Display the drop (will show all tags as bubbles) - pass fractal_id
         if (section && data.drop) {
-            displayDrop(section, data.drop, data.extracted, bridgeId);
+            displayDrop(section, data.drop, data.extracted, bookId);
         }
         
     } catch (error) {
@@ -5332,10 +5332,10 @@ async function saveDrop(bridgeId, messageId, metadataText, section) {
 }
 
 // Remove a specific tag from a message's drop
-async function removeTag(bridgeId, messageId, tag) {
+async function removeTag(bookId, messageId, tag) {
     try {
         const token = localStorage.getItem('accessToken');
-        console.log('🗑️ Removing tag:', { bridgeId, messageId, tag });
+        console.log('🗑️ Removing tag:', { bookId, messageId, tag });
         console.log('🔑 Token check:', token ? `YES (${token.substring(0, 20)}...)` : 'NO - MISSING!');
         
         if (!token) {
@@ -5349,7 +5349,7 @@ async function removeTag(bridgeId, messageId, tag) {
                 'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
-                bridge_id: bridgeId,
+                book_id: bookId,
                 discord_message_id: messageId,
                 tag: tag
             })
@@ -5366,9 +5366,9 @@ async function removeTag(bridgeId, messageId, tag) {
         const data = await response.json();
         
         // Re-display the drop with updated tags - MUST pass fractal_id
-        const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-bridge-id="${bridgeId}"]`);
+        const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-book-id="${bookId}"]`);
         if (section && data.drop) {
-            displayDrop(section, data.drop, null, bridgeId); // Pass fractal_id!
+            displayDrop(section, data.drop, null, bookId); // Pass fractal_id!
         }
         
     } catch (error) {
@@ -5378,9 +5378,9 @@ async function removeTag(bridgeId, messageId, tag) {
 }
 
 // Remove a specific date from a message's drop
-async function removeDate(bridgeId, messageId, date) {
+async function removeDate(bookId, messageId, date) {
     try {
-        console.log('🗑️ Removing date:', { bridgeId, messageId, date });
+        console.log('🗑️ Removing date:', { bookId, messageId, date });
         
         const response = await fetch('/api/drops/date', {
             method: 'DELETE',
@@ -5389,7 +5389,7 @@ async function removeDate(bridgeId, messageId, date) {
                 'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
             },
             body: JSON.stringify({
-                bridge_id: bridgeId,
+                book_id: bookId,
                 discord_message_id: messageId,
                 date: date
             })
@@ -5404,9 +5404,9 @@ async function removeDate(bridgeId, messageId, date) {
         const data = await response.json();
         
         // Re-display the drop with updated dates
-        const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-bridge-id="${bridgeId}"]`);
+        const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-book-id="${bookId}"]`);
         if (section && data.drop) {
-            displayDrop(section, data.drop, null, bridgeId);
+            displayDrop(section, data.drop, null, bookId);
         }
         
     } catch (error) {
@@ -5415,10 +5415,10 @@ async function removeDate(bridgeId, messageId, date) {
     }
 }
 
-// Fetch all drops for a bridge
-async function fetchDrops(bridgeId) {
+// Fetch all drops for a book
+async function fetchDrops(bookId) {
     try {
-        const response = await fetch(`/api/drops/${bridgeId}`, {
+        const response = await fetch(`/api/drops/${bookId}`, {
             headers: {
                 'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
             }
@@ -5437,23 +5437,23 @@ async function fetchDrops(bridgeId) {
 }
 
 // Display a drop in the UI with bubble tags (click to delete)
-function displayDrop(section, drop, extracted, fractalBridgeId) {
+function displayDrop(section, drop, extracted, fractalBookId) {
     const display = section.querySelector('.drop-display');
     if (!display) return;
     
     // Get fractal_id from section if not provided
-    const bridgeFractalId = fractalBridgeId || section.getAttribute('data-bridge-id');
+    const bookFractalId = fractalBookId || section.getAttribute('data-book-id');
     
     // Handle both formats: extracted object (from POST response) or direct arrays (from GET response)
     const tags = extracted?.tags || drop.extracted_tags || [];
     const dates = extracted?.dates || drop.extracted_dates || [];
     
-    // Tag bubbles with × delete button (use fractal_id, NOT internal bridge_id)
+    // Tag bubbles with × delete button (use fractal_id, NOT internal book_id)
     const tagsHTML = tags.length > 0 
         ? `<div class="drop-tags">${tags.map(tag => `
             <span class="drop-tag">
                 ${escapeHtml(tag)}
-                <span class="drop-tag-delete" data-action="remove-tag" data-tag="${escapeHtml(tag)}" data-message-id="${drop.discord_message_id}" data-bridge-id="${bridgeFractalId}">×</span>
+                <span class="drop-tag-delete" data-action="remove-tag" data-tag="${escapeHtml(tag)}" data-message-id="${drop.discord_message_id}" data-book-id="${bookFractalId}">×</span>
             </span>
         `).join('')}</div>`
         : '';
@@ -5462,7 +5462,7 @@ function displayDrop(section, drop, extracted, fractalBridgeId) {
         ? `<div class="drop-dates">${dates.map(date => `
             <span class="drop-date">
                 📅 ${escapeHtml(date)}
-                <span class="drop-date-delete" data-action="remove-date" data-date="${escapeHtml(date)}" data-message-id="${drop.discord_message_id}" data-bridge-id="${bridgeFractalId}">×</span>
+                <span class="drop-date-delete" data-action="remove-date" data-date="${escapeHtml(date)}" data-message-id="${drop.discord_message_id}" data-book-id="${bookFractalId}">×</span>
             </span>
         `).join('')}</div>`
         : '';
@@ -5478,7 +5478,7 @@ function displayDrop(section, drop, extracted, fractalBridgeId) {
 }
 
 // Show tag input dialog (modal)
-function showTagInputDialog(messageId, bridgeId) {
+function showTagInputDialog(messageId, bookId) {
     // Create modal overlay
     const modal = document.createElement('div');
     modal.className = 'tag-input-modal';
@@ -5488,7 +5488,7 @@ function showTagInputDialog(messageId, bridgeId) {
             <input type="text" id="tag-input-${messageId}" placeholder="#FromDad Christmas 2021" autocomplete="off">
             <div class="tag-input-dialog-buttons">
                 <button class="cancel-btn" data-action="close-tag-dialog">Cancel</button>
-                <button class="save-btn" data-action="save-tag-dialog" data-message-id="${messageId}" data-bridge-id="${bridgeId}">Save</button>
+                <button class="save-btn" data-action="save-tag-dialog" data-message-id="${messageId}" data-book-id="${bookId}">Save</button>
             </div>
         </div>
     `;
@@ -5511,9 +5511,9 @@ function showTagInputDialog(messageId, bridgeId) {
         if (e.target.hasAttribute('data-action') && e.target.getAttribute('data-action') === 'save-tag-dialog') {
             const metadataText = input.value.trim();
             if (metadataText) {
-                const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-bridge-id="${bridgeId}"]`);
+                const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-book-id="${bookId}"]`);
                 if (section) {
-                    await saveDrop(bridgeId, messageId, metadataText, section);
+                    await saveDrop(bookId, messageId, metadataText, section);
                 }
             }
             modal.remove();
@@ -5526,9 +5526,9 @@ function showTagInputDialog(messageId, bridgeId) {
             e.preventDefault();
             const metadataText = input.value.trim();
             if (metadataText) {
-                const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-bridge-id="${bridgeId}"]`);
+                const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-book-id="${bookId}"]`);
                 if (section) {
-                    await saveDrop(bridgeId, messageId, metadataText, section);
+                    await saveDrop(bookId, messageId, metadataText, section);
                 }
             }
             modal.remove();
@@ -5536,14 +5536,14 @@ function showTagInputDialog(messageId, bridgeId) {
     });
 }
 
-// Hydrate drops for all messages in a bridge
-async function hydrateDropsForBridge(bridgeId) {
-    const drops = await fetchDrops(bridgeId);
+// Hydrate drops for all messages in a book
+async function hydrateDropsForBook(bookId) {
+    const drops = await fetchDrops(bookId);
     
     drops.forEach(drop => {
-        const section = document.querySelector(`.message-drop-section[data-message-id="${drop.discord_message_id}"][data-bridge-id="${bridgeId}"]`);
+        const section = document.querySelector(`.message-drop-section[data-message-id="${drop.discord_message_id}"][data-book-id="${bookId}"]`);
         if (section) {
-            displayDrop(section, drop, null, bridgeId); // Pass fractal_id
+            displayDrop(section, drop, null, bookId); // Pass fractal_id
         }
     });
 }
@@ -5572,20 +5572,20 @@ document.addEventListener('click', function(e) {
         return;
     }
     
-    // Bridge selection
+    // Book selection
     if (target.classList.contains('channel-item') || target.closest('.channel-item')) {
         const item = target.classList.contains('channel-item') ? target : target.closest('.channel-item');
         const fractalId = item.getAttribute('data-fractal-id');
         if (fractalId && !item.classList.contains('active')) {
-            selectBridge(fractalId);
+            selectBook(fractalId);
         }
         return;
     }
     
-    // Show bridge info modal button (unified desktop & mobile)
-    if (target.hasAttribute('data-show-bridge-info')) {
+    // Show book info modal button (unified desktop & mobile)
+    if (target.hasAttribute('data-show-book-info')) {
         e.preventDefault();
-        showBridgeInfoModal();
+        showBookInfoModal();
         return;
     }
     
@@ -5597,44 +5597,44 @@ document.addEventListener('click', function(e) {
         return;
     }
     
-    // Edit bridge button
-    if (target.hasAttribute('data-edit-bridge')) {
+    // Edit book button
+    if (target.hasAttribute('data-edit-book')) {
         e.preventDefault();
-        const fractalId = target.getAttribute('data-edit-bridge');
-        if (fractalId) editBridge(fractalId);
+        const fractalId = target.getAttribute('data-edit-book');
+        if (fractalId) editBook(fractalId);
         return;
     }
     
-    // Delete bridge button
-    if (target.hasAttribute('data-delete-bridge')) {
+    // Delete book button
+    if (target.hasAttribute('data-delete-book')) {
         e.preventDefault();
-        const fractalId = target.getAttribute('data-delete-bridge');
-        if (fractalId) confirmDeleteBridge(fractalId);
+        const fractalId = target.getAttribute('data-delete-book');
+        if (fractalId) confirmDeleteBook(fractalId);
         return;
     }
     
-    // Export bridge data button
-    if (target.hasAttribute('data-export-bridge')) {
+    // Export book data button
+    if (target.hasAttribute('data-export-book')) {
         e.preventDefault();
-        const fractalId = target.getAttribute('data-export-bridge');
-        if (fractalId) exportBridgeData(fractalId);
+        const fractalId = target.getAttribute('data-export-book');
+        if (fractalId) exportBookData(fractalId);
         return;
     }
     
-    // Clear bridge search filter
+    // Clear book search filter
     if (target.hasAttribute('data-clear-filter')) {
         e.preventDefault();
         const fractalId = target.getAttribute('data-clear-filter');
-        if (fractalId) clearBridgeSearchFilter(fractalId);
+        if (fractalId) clearBookSearchFilter(fractalId);
         return;
     }
     
     // Table column sorting
     if (target.closest('th[data-sort-column]')) {
         const th = target.closest('th[data-sort-column]');
-        const bridgeId = th.getAttribute('data-bridge-id');
+        const bookId = th.getAttribute('data-book-id');
         const column = th.getAttribute('data-sort-column');
-        if (bridgeId && column) sortMessagesTable(bridgeId, column);
+        if (bookId && column) sortMessagesTable(bookId, column);
         return;
     }
     
@@ -5681,9 +5681,9 @@ document.addEventListener('click', function(e) {
     // Pagination buttons
     if (target.hasAttribute('data-load-page')) {
         e.preventDefault();
-        const bridgeId = target.getAttribute('data-bridge-id');
+        const bookId = target.getAttribute('data-book-id');
         const page = parseInt(target.getAttribute('data-load-page'));
-        if (bridgeId && page) loadBridgeMessages(bridgeId, page);
+        if (bookId && page) loadBookMessages(bookId, page);
         return;
     }
     
@@ -5709,10 +5709,10 @@ document.addEventListener('click', function(e) {
         return;
     }
     
-    // Dev panel bridge selection
-    if (target.hasAttribute('data-dev-bridge')) {
-        const fractalId = target.getAttribute('data-dev-bridge');
-        if (fractalId) selectDevBridge(fractalId);
+    // Dev panel book selection
+    if (target.hasAttribute('data-dev-book')) {
+        const fractalId = target.getAttribute('data-dev-book');
+        if (fractalId) selectDevBook(fractalId);
         return;
     }
     
@@ -5729,7 +5729,7 @@ document.addEventListener('click', function(e) {
     if (target.classList.contains('agent-btn')) {
         e.preventDefault();
         const messageId = target.getAttribute('data-message-id');
-        const bridgeId = target.getAttribute('data-bridge-id');
+        const bookId = target.getAttribute('data-book-id');
         alert('🧿 Audit\n\nAction & closure features coming soon!');
         return;
     }
@@ -5738,8 +5738,8 @@ document.addEventListener('click', function(e) {
     if (target.classList.contains('tag-add-btn')) {
         e.preventDefault();
         const messageId = target.getAttribute('data-message-id');
-        const bridgeId = target.getAttribute('data-bridge-id');
-        showTagInputDialog(messageId, bridgeId);
+        const bookId = target.getAttribute('data-book-id');
+        showTagInputDialog(messageId, bookId);
         return;
     }
     
@@ -5747,13 +5747,13 @@ document.addEventListener('click', function(e) {
     if (target.hasAttribute('data-action') && target.getAttribute('data-action') === 'save-drop') {
         e.preventDefault();
         const messageId = target.getAttribute('data-message-id');
-        const bridgeId = target.getAttribute('data-bridge-id');
+        const bookId = target.getAttribute('data-book-id');
         const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"]`);
         const input = section?.querySelector('.drop-input');
         const metadataText = input?.value.trim();
         
-        if (metadataText && bridgeId) {
-            saveDrop(bridgeId, messageId, metadataText, section);
+        if (metadataText && bookId) {
+            saveDrop(bookId, messageId, metadataText, section);
         }
         return;
     }
@@ -5769,14 +5769,14 @@ document.addEventListener('click', function(e) {
         
         const tag = target.getAttribute('data-tag');
         const messageId = target.getAttribute('data-message-id');
-        const bridgeId = target.getAttribute('data-bridge-id');
+        const bookId = target.getAttribute('data-book-id');
         
-        console.log('Extracted attributes:', { tag, messageId, bridgeId });
+        console.log('Extracted attributes:', { tag, messageId, bookId });
         
-        if (tag && messageId && bridgeId) {
-            removeTag(bridgeId, messageId, tag);
+        if (tag && messageId && bookId) {
+            removeTag(bookId, messageId, tag);
         } else {
-            console.error('❌ Missing attributes for tag removal!', { tag, messageId, bridgeId });
+            console.error('❌ Missing attributes for tag removal!', { tag, messageId, bookId });
         }
         return;
     }
@@ -5787,14 +5787,14 @@ document.addEventListener('click', function(e) {
         
         const date = target.getAttribute('data-date');
         const messageId = target.getAttribute('data-message-id');
-        const bridgeId = target.getAttribute('data-bridge-id');
+        const bookId = target.getAttribute('data-book-id');
         
-        console.log('🗑️ Date remove button clicked:', { date, messageId, bridgeId });
+        console.log('🗑️ Date remove button clicked:', { date, messageId, bookId });
         
-        if (date && messageId && bridgeId) {
-            removeDate(bridgeId, messageId, date);
+        if (date && messageId && bookId) {
+            removeDate(bookId, messageId, date);
         } else {
-            console.error('❌ Missing attributes for date removal!', { date, messageId, bridgeId });
+            console.error('❌ Missing attributes for date removal!', { date, messageId, bookId });
         }
         return;
     }
@@ -5836,8 +5836,8 @@ document.addEventListener('input', function(e) {
     
     // Message table filter
     if (target.hasAttribute('data-filter-table')) {
-        const bridgeId = target.getAttribute('data-filter-table');
-        if (bridgeId) filterMessagesTable(bridgeId);
+        const bookId = target.getAttribute('data-filter-table');
+        if (bookId) filterMessagesTable(bookId);
         return;
     }
 });
@@ -5847,7 +5847,7 @@ document.addEventListener('input', function(e) {
 // ============================================================================
 (function initSidebarResizer() {
     const resizer = document.getElementById('sidebarResizer');
-    const sidebar = document.getElementById('bridgeSidebar');
+    const sidebar = document.getElementById('bookSidebar');
     
     if (!resizer || !sidebar) return;
     

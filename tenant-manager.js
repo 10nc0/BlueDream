@@ -71,7 +71,7 @@ class TenantManager {
             `);
             
             await client.query(`
-                CREATE TABLE IF NOT EXISTS ${schemaName}.bridges (
+                CREATE TABLE IF NOT EXISTS ${schemaName}.books (
                     id SERIAL PRIMARY KEY,
                     name TEXT NOT NULL,
                     input_platform TEXT NOT NULL,
@@ -94,7 +94,7 @@ class TenantManager {
             await client.query(`
                 CREATE TABLE IF NOT EXISTS ${schemaName}.drops (
                     id SERIAL PRIMARY KEY,
-                    bridge_id INTEGER NOT NULL REFERENCES ${schemaName}.bridges(id) ON DELETE CASCADE,
+                    book_id INTEGER NOT NULL REFERENCES ${schemaName}.books(id) ON DELETE CASCADE,
                     discord_message_id TEXT NOT NULL,
                     metadata_text TEXT NOT NULL,
                     extracted_tags TEXT[] DEFAULT '{}'::text[],
@@ -106,8 +106,8 @@ class TenantManager {
             `);
             
             await client.query(`
-                CREATE UNIQUE INDEX IF NOT EXISTS drops_bridge_message_idx 
-                ON ${schemaName}.drops (bridge_id, discord_message_id)
+                CREATE UNIQUE INDEX IF NOT EXISTS drops_book_message_idx 
+                ON ${schemaName}.drops (book_id, discord_message_id)
             `);
             
             await client.query(`

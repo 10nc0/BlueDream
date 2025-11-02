@@ -459,7 +459,7 @@ function getFileExtension(mimetype) {
 }
 
 // Send to Ledger (Output #01 - internal monitoring thread)
-// WEBHOOK-FIRST: Accepts book object directly, no database queries needed
+// WEBHOOK-FIRST: Accepts bridge object directly, no database queries needed
 // Message chunking for Discord's limits (4096 char embed description)
 const MESSAGE_CHUNK_SIZE = 3800; // Safe margin under 4096 limit
 
@@ -810,36 +810,36 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
             await tenantClient.query('COMMIT');
             tenantClient.release();
             
-            // Fetch book data for output routing (WEBHOOK-FIRST: need webhook URLs)
-            const bookClient = await pool.connect();
-            let book;
+            // Fetch bridge data for output routing (WEBHOOK-FIRST: need webhook URLs)
+            const bridgeClient = await pool.connect();
+            let bridge;
             try {
-                await bookClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
+                await bridgeClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
                 
                 // CRITICAL DEBUG: Verify search_path is set correctly
-                const schemaCheck = await bookClient.query('SELECT current_schema()');
+                const schemaCheck = await bridgeClient.query('SELECT current_schema()');
                 console.log(`🔍 SCHEMA CHECK: Current schema = ${schemaCheck.rows[0].current_schema}, expected = ${tenantSchema}`);
                 
-                const bookResult = await bookClient.query(
-                    `SELECT id, output_01_url, output_0n_url, output_credentials FROM ${tenantSchema}.books WHERE id = $1`,
-                    [bookId]
+                const bridgeResult = await bridgeClient.query(
+                    `SELECT id, output_01_url, output_0n_url, output_credentials FROM ${tenantSchema}.bridges WHERE id = $1`,
+                    [bridgeId]
                 );
-                book = bookResult.rows[0];
+                bridge = bridgeResult.rows[0];
                 
-                console.log(`🔍 DEBUG: Loaded book from DB:`, {
+                console.log(`🔍 DEBUG: Loaded bridge from DB:`, {
                     schema: tenantSchema,
-                    id: book?.id,
-                    output_01_url: book?.output_01_url?.substring(0, 70),
-                    output_0n_url: book?.output_0n_url?.substring(0, 70),
-                    credentials_type: typeof book?.output_credentials
+                    id: bridge?.id,
+                    output_01_url: bridge?.output_01_url?.substring(0, 70),
+                    output_0n_url: bridge?.output_0n_url?.substring(0, 70),
+                    credentials_type: typeof bridge?.output_credentials
                 });
                 
                 // Parse JSON if needed (PostgreSQL returns JSON as string sometimes)
-                if (book && typeof book.output_credentials === 'string') {
-                    book.output_credentials = JSON.parse(book.output_credentials);
+                if (bridge && typeof bridge.output_credentials === 'string') {
+                    bridge.output_credentials = JSON.parse(bridge.output_credentials);
                 }
             } finally {
-                bookClient.release();
+                bridgeClient.release();
             }
             
             // LONG MESSAGE HANDLING: Split + .txt attachment for immutability + portability
@@ -870,12 +870,12 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
                 footer: {
                     text: isLongMessage
                         ? `Long message split into ${messageChunks.length} parts + .txt attachment`
-                        : `WhatsApp Book - Book ${bookId}`
+                        : `WhatsApp Bridge - Bridge ${bridgeId}`
                 }
             };
 
             const discordPayload = {
-                username: 'WhatsApp Book',
+                username: 'WhatsApp Bridge',
                 avatar_url: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg',
                 embeds: [embed]
             };
@@ -903,13 +903,13 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
                             await mediaClient.query(`SET LOCAL search_path TO ${tenantSchema}`);
                             const result = await mediaClient.query(`
                                 INSERT INTO media_buffer (
-                                    book_id, media_data, media_type, filename, sender_name
+                                    bridge_id, media_data, media_type, filename, sender_name
                                 ) VALUES ($1, $2, $3, $4, $5)
                                 RETURNING id
-                            `, [bookId, Buffer.from(base64Data, 'base64'), media.mimetype, filename, senderName]);
+                            `, [bridgeId, Buffer.from(base64Data, 'base64'), media.mimetype, filename, senderName]);
                             mediaBufferId = result.rows[0].id;
                             await mediaClient.query('COMMIT');
-                            console.log(`💾 [Book ${bookId}] Media saved to buffer: ${media.mimetype} (ID: ${mediaBufferId})`);
+                            console.log(`💾 [Bridge ${bridgeId}] Media saved to buffer: ${media.mimetype} (ID: ${mediaBufferId})`);
                         } catch (err) {
                             await mediaClient.query('ROLLBACK');
                             console.error(`❌ Failed to save media to buffer:`, err.message);
@@ -941,8 +941,8 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
                         // NOTE: Attachment field removed - 📎 button provides download via media_buffer metadata
                         
                         // DUAL-OUTPUT ARCHITECTURE: Route to correct outputs (channel OR thread)
-                        const output01 = book.output_credentials?.output_01;
-                        const output0n = book.output_credentials?.output_0n;
+                        const output01 = bridge.output_credentials?.output_01;
+                        const output0n = bridge.output_credentials?.output_0n;
                         
                         console.log(`📍 Routing media to dual outputs: output_01=${output01 ? `${output01.type} (${output01.type === 'thread' ? output01.thread_id : output01.channel_id})` : 'none'}, output_0n=${output0n ? `${output0n.type} (${output0n.type === 'thread' ? output0n.thread_id : output0n.channel_id})` : 'none'}`);
                         
@@ -952,7 +952,7 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
                             mediaBufferId: mediaBufferId,
                             tenantSchema: tenantSchema,
                             output: output01
-                        }, book);
+                        }, bridge);
                         
                         // Path 2: User Webhook (Output #0n) → output_0n
                         await sendToUserOutput(discordPayload, {
@@ -960,13 +960,13 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
                             mediaBufferId: mediaBufferId,
                             tenantSchema: tenantSchema,
                             output: output0n
-                        }, book);
+                        }, bridge);
                         
-                        console.log(`✅ [Book ${bookId}] Forwarded ${attachmentType}: ${filename} from ${senderName}`);
+                        console.log(`✅ [Bridge ${bridgeId}] Forwarded ${attachmentType}: ${filename} from ${senderName}`);
                         return;
                     }
                 } catch (mediaError) {
-                    console.error(`❌ [Book ${bookId}] Error in media flow:`, mediaError.message);
+                    console.error(`❌ [Bridge ${bridgeId}] Error in media flow:`, mediaError.message);
                     return;
                 }
             }
@@ -974,22 +974,22 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
             // DUAL-OUTPUT ARCHITECTURE: Route to correct outputs (channel OR thread)
             // output_01 → Nyanbook Ledger (webhook01) - dev-only visibility
             // output_0n → User Discord (webhook0n) - user-facing visibility
-            const output01 = book.output_credentials?.output_01;
-            const output0n = book.output_credentials?.output_0n;
+            const output01 = bridge.output_credentials?.output_01;
+            const output0n = bridge.output_credentials?.output_0n;
             
             console.log(`📍 Routing message to dual outputs: output_01=${output01 ? `${output01.type} (${output01.type === 'thread' ? output01.thread_id : output01.channel_id})` : 'none'}, output_0n=${output0n ? `${output0n.type} (${output0n.type === 'thread' ? output0n.thread_id : output0n.channel_id})` : 'none'}`);
             
             // LONG MESSAGE HANDLING: Send all chunks sequentially
             if (isLongMessage) {
                 // Send first chunk (already in discordPayload)
-                await sendToLedger(discordPayload, { output: output01 }, book);
-                await sendToUserOutput(discordPayload, { output: output0n }, book);
-                console.log(`📄 [Book ${bookId}] Sent chunk 1/${messageChunks.length}`);
+                await sendToLedger(discordPayload, { output: output01 }, bridge);
+                await sendToUserOutput(discordPayload, { output: output0n }, bridge);
+                console.log(`📄 [Bridge ${bridgeId}] Sent chunk 1/${messageChunks.length}`);
                 
                 // Send remaining chunks
                 for (let i = 1; i < messageChunks.length; i++) {
                     const chunkPayload = {
-                        username: 'WhatsApp Book',
+                        username: 'WhatsApp Bridge',
                         avatar_url: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg',
                         embeds: [{
                             title: `📄 WhatsApp Message from ${senderName} (Part ${i + 1}/${messageChunks.length})`,
@@ -1001,9 +1001,9 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
                         }]
                     };
                     
-                    await sendToLedger(chunkPayload, { output: output01 }, book);
-                    await sendToUserOutput(chunkPayload, { output: output0n }, book);
-                    console.log(`📄 [Book ${bookId}] Sent chunk ${i + 1}/${messageChunks.length}`);
+                    await sendToLedger(chunkPayload, { output: output01 }, bridge);
+                    await sendToUserOutput(chunkPayload, { output: output0n }, bridge);
+                    console.log(`📄 [Bridge ${bridgeId}] Sent chunk ${i + 1}/${messageChunks.length}`);
                 }
                 
                 // Send full .txt attachment for portability
@@ -1012,20 +1012,20 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
                 const FormData = require('form-data');
                 
                 const txtPayload = {
-                    username: 'WhatsApp Book',
+                    username: 'WhatsApp Bridge',
                     avatar_url: 'https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg',
                     embeds: [{
                         title: `📎 Full Message Attachment`,
                         description: `Complete message from ${senderName} (${messageContent.length} chars)`,
                         color: 0x25D366,
                         footer: {
-                            text: `Download for full text • Book ${bookId}`
+                            text: `Download for full text • Bridge ${bridgeId}`
                         }
                     }]
                 };
                 
                 // Send .txt to Ledger
-                const ledgerUrl = book?.output_01_url;
+                const ledgerUrl = bridge?.output_01_url;
                 if (ledgerUrl) {
                     const ledgerForm = new FormData();
                     ledgerForm.append('file', txtBuffer, { filename: txtFilename, contentType: 'text/plain' });
@@ -1043,7 +1043,7 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
                 }
                 
                 // Send .txt to User Output
-                const userUrl = book?.output_0n_url;
+                const userUrl = bridge?.output_0n_url;
                 if (userUrl) {
                     const userForm = new FormData();
                     userForm.append('file', txtBuffer, { filename: txtFilename, contentType: 'text/plain' });
@@ -1060,19 +1060,19 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
                     }
                 }
                 
-                console.log(`✅ [Book ${bookId}] Forwarded long message (${messageChunks.length} chunks + .txt) from ${senderName}`);
+                console.log(`✅ [Bridge ${bridgeId}] Forwarded long message (${messageChunks.length} chunks + .txt) from ${senderName}`);
             } else {
                 // Normal message - send once
-                await sendToLedger(discordPayload, { output: output01 }, book);
-                await sendToUserOutput(discordPayload, { output: output0n }, book);
-                console.log(`✅ [Book ${bookId}] Forwarded message from ${senderName}`);
+                await sendToLedger(discordPayload, { output: output01 }, bridge);
+                await sendToUserOutput(discordPayload, { output: output0n }, bridge);
+                console.log(`✅ [Bridge ${bridgeId}] Forwarded message from ${senderName}`);
             }
         } catch (error) {
             // Transaction already committed/released above, so no ROLLBACK needed
             throw error;
         }
     } catch (error) {
-        console.error(`❌ [Book ${bookId}] Error handling message:`, error.message);
+        console.error(`❌ [Bridge ${bridgeId}] Error handling message:`, error.message);
         // DEAD CODE REMOVED: updateMessageStatus call
         // Messages tracked in Discord only, no PostgreSQL status updates needed
     }
@@ -1080,7 +1080,7 @@ async function createTenantAwareMessageHandler(message, bookId, tenantSchema) {
 
 // ============ MULTI-TENANT WHATSAPP - LEGACY FUNCTION REMOVED ============
 // The old global initializeWhatsAppClient() has been replaced with bot-level management.
-// Each book now gets its own WhatsApp session via the WhatsAppClientManager.
+// Each bridge now gets its own WhatsApp session via the WhatsAppClientManager.
 // See createTenantAwareMessageHandler() above and API endpoints below.
 
 // Legacy compatibility: Remove old session directory if it exists
@@ -1095,9 +1095,9 @@ function cleanupLegacySession() {
 
 cleanupLegacySession();
 
-// OLD initializeWhatsAppClient() function removed - replaced with per-book management
-// See book-level API endpoints below: POST /api/books/:id/start, DELETE /api/books/:id/stop, etc.
-// Each book now has its own independent WhatsApp session managed by WhatsAppClientManager
+// OLD initializeWhatsAppClient() function removed - replaced with per-bridge management
+// See bridge-level API endpoints below: POST /api/bridges/:id/start, DELETE /api/bridges/:id/stop, etc.
+// Each bridge now has its own independent WhatsApp session managed by WhatsAppClientManager
 
 // ============ SESSION TRACKING SYSTEM ============
 
@@ -2310,8 +2310,8 @@ app.post('/api/dev/webhook', requireAuth, requireRole('admin'), async (req, res)
     }
 });
 
-// Get all books across all tenants (dev role only)
-app.get('/api/dev/books', requireAuth, requireRole('dev'), async (req, res) => {
+// Get all bridges across all tenants (dev role only)
+app.get('/api/dev/bridges', requireAuth, requireRole('dev'), async (req, res) => {
     try {
         // Use tenant schema from requireAuth middleware
         const tenantSchema = req.tenantSchema;
@@ -2342,7 +2342,7 @@ app.get('/api/dev/books', requireAuth, requireRole('dev'), async (req, res) => {
             });
         }
         
-        console.log('🔧 Dev Panel: Triple security check passed. Fetching all books across all tenants...');
+        console.log('🔧 Dev Panel: Triple security check passed. Fetching all bridges across all tenants...');
         
         // MULTI-TENANT FIX: Find all tenants via core.user_email_to_tenant, then check each tenant schema
         const tenantsResult = await pool.query(`
@@ -2353,9 +2353,9 @@ app.get('/api/dev/books', requireAuth, requireRole('dev'), async (req, res) => {
             ORDER BY tenant_id ASC
         `);
         
-        const allBooks = [];
+        const allBridges = [];
         
-        // Query each tenant's books
+        // Query each tenant's bridges
         for (const tenant of tenantsResult.rows) {
             const tenantSchema = tenant.tenant_schema;
             
@@ -2370,26 +2370,26 @@ app.get('/api/dev/books', requireAuth, requireRole('dev'), async (req, res) => {
                 const ownerEmail = ownerResult.rows.length > 0 ? ownerResult.rows[0].email : 'unknown';
                 
                 // DISCORD-FIRST: No message counts - Discord threads are sole storage
-                const booksResult = await pool.query(`
+                const bridgesResult = await pool.query(`
                     SELECT 
                         b.*,
                         $1::integer as tenant_id,
                         $2::text as tenant_schema,
                         $3::text as tenant_owner_email
-                    FROM ${tenantSchema}.books b
+                    FROM ${tenantSchema}.bridges b
                     ORDER BY b.archived ASC, b.created_at DESC
                 `, [tenant.tenant_id, tenantSchema, ownerEmail]);
                 
-                allBooks.push(...booksResult.rows);
+                allBridges.push(...bridgesResult.rows);
             } catch (error) {
-                console.warn(`⚠️  Could not fetch books from ${tenantSchema}:`, error.message);
+                console.warn(`⚠️  Could not fetch bridges from ${tenantSchema}:`, error.message);
             }
         }
         
-        console.log(`✅ Dev Panel: Found ${allBooks.length} books across ${tenantsResult.rows.length} tenants`);
-        res.json(allBooks);
+        console.log(`✅ Dev Panel: Found ${allBridges.length} bridges across ${tenantsResult.rows.length} tenants`);
+        res.json(allBridges);
     } catch (error) {
-        console.error('❌ Error in /api/dev/books:', error);
+        console.error('❌ Error in /api/dev/bridges:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -2751,7 +2751,7 @@ app.get('/api/status', requireAuth, async (req, res) => {
     try {
         const allClients = whatsappManager.getAllClients();
         
-        // Aggregate status across all active books
+        // Aggregate status across all active bridges
         const activeCount = allClients.filter(c => c.status === 'ready').length;
         const qrPendingCount = allClients.filter(c => c.status === 'qr_ready').length;
         
@@ -2803,11 +2803,11 @@ app.get('/api/stats', requireAuth, async (req, res) => {
     }
 });
 
-// Book management endpoints
+// Bridge management endpoints
 // CRITICAL: Complete horizontal tenant isolation with EXPLICIT SCHEMA INDEXING
 // Uses dynamic schema names via variable placeholders (fractalized architecture)
-app.get('/api/books', requireAuth, async (req, res) => {
-    console.log(`🔍 /api/books called by user ${req.userId}`);
+app.get('/api/bridges', requireAuth, async (req, res) => {
+    console.log(`🔍 /api/bridges called by user ${req.userId}`);
     
     try {
         // Use tenant schema from requireAuth middleware
@@ -2832,10 +2832,10 @@ app.get('/api/books', requireAuth, async (req, res) => {
         const user = userResult.rows[0];
         const tenantId = user.tenant_id;
         
-        console.log(`📊 Loading books for ${user.email} (user_id=${req.userId}) from ${tenantSchema}`);
+        console.log(`📊 Loading bridges for ${user.email} (user_id=${req.userId}) from ${tenantSchema}`);
         
-        // Books query with role-based access
-        let books = [];
+        // Bridges query with role-based access
+        let bridges = [];
         const hasExtendedAccess = req.userRole === 'dev' && user.is_genesis_admin;
         
         if (hasExtendedAccess) {
@@ -2847,57 +2847,57 @@ app.get('/api/books', requireAuth, async (req, res) => {
                 try {
                     const schemaResult = await pool.query(`
                         SELECT b.*, '${schemaName}'::text as tenant_schema
-                        FROM ${schemaName}.books b
+                        FROM ${schemaName}.bridges b
                         WHERE b.archived = false
                         ORDER BY b.created_at DESC
                     `);
-                    books.push(...schemaResult.rows);
+                    bridges.push(...schemaResult.rows);
                 } catch (error) {
                     console.warn(`⚠️  Could not query schema ${schemaName}:`, error.message);
                 }
             }
             
-            console.log(`✅ Found ${books.length} active books across ${allSchemas.length} schemas`);
+            console.log(`✅ Found ${bridges.length} active bridges across ${allSchemas.length} schemas`);
         } else {
             // Standard tenant-scoped query
             const result = await pool.query(`
                 SELECT b.*
-                FROM ${tenantSchema}.books b
+                FROM ${tenantSchema}.bridges b
                 WHERE b.archived = false
                 ORDER BY b.created_at DESC
             `);
-            books = result.rows;
+            bridges = result.rows;
             
-            console.log(`✅ Found ${books.length} active books in ${tenantSchema} for ${user.email}`);
+            console.log(`✅ Found ${bridges.length} active bridges in ${tenantSchema} for ${user.email}`);
         }
         
         // PHASE 2 TRANSITION: Include both id and fractal_id during migration period
         // TODO: Remove raw id once ALL endpoints and frontend are migrated to fractal_id
-        const booksWithFractalIds = books.map(book => {
+        const bridgesWithFractalIds = bridges.map(bridge => {
             // Generate fractal_id if missing (for backward compatibility)
-            if (!book.fractal_id) {
-                book.fractal_id = fractalId.generate('book', tenantId, book.id, book.created_by_admin_id);
+            if (!bridge.fractal_id) {
+                bridge.fractal_id = fractalId.generate('bridge', tenantId, bridge.id, bridge.created_by_admin_id);
             }
             
             // ARCHITECTURAL SWITCHEROO: Hide the silent cat (webhook01/output_01)
             // Users should never see the Nyanbook Ledger webhook
             // Only expose output_0n (user's webhook) in the UI
-            delete book.output_01_url;
+            delete bridge.output_01_url;
             
-            return book;
+            return bridge;
         });
         
         // SECURITY: Strip raw IDs for non-dev users (IDOR protection)
-        const sanitized = sanitizeForRole(booksWithFractalIds, user.role);
-        res.json({ books: sanitized });
+        const sanitized = sanitizeForRole(bridgesWithFractalIds, user.role);
+        res.json({ bridges: sanitized });
     } catch (error) {
-        console.error(`❌ Error in /api/books for user ${req.userId}:`, error);
+        console.error(`❌ Error in /api/bridges for user ${req.userId}:`, error);
         console.error('Stack trace:', error.stack);
         res.status(500).json({ error: error.message });
     }
 });
 
-app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
+app.post('/api/bridges', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const client = req.dbClient || pool;
         const userRole = req.tenantContext?.userRole || 'read-only';
@@ -2923,11 +2923,11 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
             });
         }
         
-        // Tag dev-created books with admin_id='01' for fractalized ID generation
+        // Tag dev-created bridges with admin_id='01' for fractalized ID generation
         const createdByAdminId = (userRole === 'dev' && isGenesisAdmin) ? '01' : null;
         
         // Generate unique Discord thread name for ledger tracking
-        const threadName = `book-t${tenantId}-${Date.now()}`;
+        const threadName = `bridge-t${tenantId}-${Date.now()}`;
         
         // Store thread metadata in output_credentials
         const outputCredentials = {
@@ -2935,37 +2935,37 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         };
         
         const result = await client.query(
-            `INSERT INTO books (name, input_platform, output_platform, input_credentials, output_credentials, output_01_url, output_0n_url, contact_info, tags, status, archived, created_by_admin_id)
+            `INSERT INTO bridges (name, input_platform, output_platform, input_credentials, output_credentials, output_01_url, output_0n_url, contact_info, tags, status, archived, created_by_admin_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
             [name, inputPlatform, 'discord', {}, outputCredentials, output01Url, output0nUrl, contactInfo || null, tags || [], 'inactive', false, createdByAdminId]
         );
         
-        const book = result.rows[0];
+        const bridge = result.rows[0];
         
         // Generate fractalized ID (opaque, tenant-scoped, non-enumerable)
         // Dev admin (admin_id='01') gets special prefix: dev_bridge_t1_...
-        const generatedFractalId = fractalId.generate('book', tenantId, book.id, book.created_by_admin_id);
+        const generatedFractalId = fractalId.generate('bridge', tenantId, bridge.id, bridge.created_by_admin_id);
         
-        // Update book with fractalized ID
+        // Update bridge with fractalized ID
         await client.query(
-            `UPDATE books SET fractal_id = $1 WHERE id = $2`,
-            [generatedFractalId, book.id]
+            `UPDATE bridges SET fractal_id = $1 WHERE id = $2`,
+            [generatedFractalId, bridge.id]
         );
         
-        book.fractal_id = generatedFractalId;
+        bridge.fractal_id = generatedFractalId;
         
         // AUTO-CREATE DUAL DISCORD THREADS VIA BOT
         // thread_01 → Nyanbook Ledger (webhook01) - dev-only visibility
         // thread_0n → User Discord (webhook0n) - user-facing visibility
         if (hermesBot && hermesBot.isReady()) {
             try {
-                console.log(`🧵 Initiating dual thread creation for book ${book.id}...`);
-                const dualThreads = await hermesBot.createDualThreadsForBook(
+                console.log(`🧵 Initiating dual thread creation for bridge ${bridge.id}...`);
+                const dualThreads = await hermesBot.createDualThreadsForBridge(
                     output01Url,
                     output0nUrl,
                     name,
                     tenantId,
-                    book.id
+                    bridge.id
                 );
                 
                 // Build output_credentials with typed destinations (channel OR thread)
@@ -2989,20 +2989,20 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
                     }
                 }
                 
-                // Log any errors but don't fail book creation
+                // Log any errors but don't fail bridge creation
                 if (dualThreads.errors.length > 0) {
                     console.warn(`⚠️  Output creation errors:`, dualThreads.errors);
                 }
                 
                 await client.query(
-                    `UPDATE books 
+                    `UPDATE bridges 
                      SET output_credentials = output_credentials || $1::jsonb
                      WHERE id = $2`,
-                    [JSON.stringify(outputDestinations), book.id]
+                    [JSON.stringify(outputDestinations), bridge.id]
                 );
                 
-                // Update book object with output credentials
-                book.output_credentials = { ...book.output_credentials, ...outputDestinations };
+                // Update bridge object with output credentials
+                bridge.output_credentials = { ...bridge.output_credentials, ...outputDestinations };
                 
                 // Send initial messages to both outputs (only for threads)
                 if (dualThreads.output_01 && dualThreads.output_01.type === 'thread') {
@@ -3023,25 +3023,25 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
                     }
                 }
                 
-                console.log(`🧵 Dual-thread setup complete for book ${generatedFractalId}`);
+                console.log(`🧵 Dual-thread setup complete for bridge ${generatedFractalId}`);
             } catch (error) {
-                console.error(`⚠️  Failed to create dual threads for book ${generatedFractalId}:`, error.message);
-                console.log(`❌ Book will use webhook-only mode (no Discord thread UI)`);
+                console.error(`⚠️  Failed to create dual threads for bridge ${generatedFractalId}:`, error.message);
+                console.log(`❌ Bridge will use webhook-only mode (no Discord thread UI)`);
             }
         }
         
-        // Return sanitized book data (output_01_url is automatically stripped for non-dev users)
-        const sanitized = sanitizeForRole(book, userRole);
+        // Return sanitized bridge data (output_01_url is automatically stripped for non-dev users)
+        const sanitized = sanitizeForRole(bridge, userRole);
         
-        console.log(`✅ Created book ${generatedFractalId} (Output #01: ${output01Url ? '[LEDGER]' : 'None'}, Output #0n: ${output0nUrl ? '[USER_WEBHOOK]' : 'None'})`);
+        console.log(`✅ Created bridge ${generatedFractalId} (Output #01: ${output01Url ? '[LEDGER]' : 'None'}, Output #0n: ${output0nUrl ? '[USER_WEBHOOK]' : 'None'})`);
         res.json(sanitized);
     } catch (error) {
-        console.error('❌ Error in POST /api/books:', error);
+        console.error('❌ Error in POST /api/bridges:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-app.put('/api/books/:id', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
+app.put('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const client = req.dbClient || pool;
         const userRole = req.tenantContext?.userRole || 'read-only';
@@ -3060,13 +3060,13 @@ app.put('/api/books/:id', requireAuth, setTenantContext, requireRole('admin', 'w
         // SECURITY: Password required when changing webhook0n URL
         if (userOutputUrl !== undefined || (outputCredentials && outputCredentials.webhooks)) {
             // Check if webhook URL is actually changing
-            const currentBook = await client.query(
-                'SELECT output_0n_url, output_credentials FROM books WHERE fractal_id = $1',
+            const currentBridge = await client.query(
+                'SELECT output_0n_url, output_credentials FROM bridges WHERE fractal_id = $1',
                 [id]
             );
             
-            if (currentBook.rows.length > 0) {
-                const existingWebhookUrl = currentBook.rows[0].output_0n_url;
+            if (currentBridge.rows.length > 0) {
+                const existingWebhookUrl = currentBridge.rows[0].output_0n_url;
                 const newWebhookUrl = userOutputUrl || (outputCredentials?.webhooks?.[0]?.url);
                 
                 // If webhook is changing, require password verification
@@ -3096,7 +3096,7 @@ app.put('/api/books/:id', requireAuth, setTenantContext, requireRole('admin', 'w
                         });
                     }
                     
-                    console.log(`🔐 Password verified for webhook change on book ${id} by user ${userId}`);
+                    console.log(`🔐 Password verified for webhook change on bridge ${id} by user ${userId}`);
                 }
             }
         }
@@ -3147,57 +3147,57 @@ app.put('/api/books/:id', requireAuth, setTenantContext, requireRole('admin', 'w
         values.push(id); // fractal_id at end
         
         const result = await client.query(
-            `UPDATE books 
+            `UPDATE bridges 
              SET ${updates.join(', ')}
              WHERE fractal_id = $${paramCount} RETURNING *`,
             values
         );
         
         if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Book not found' });
+            return res.status(404).json({ error: 'Bridge not found' });
         }
         
         const sanitized = sanitizeForRole(result.rows[0], userRole);
         res.json(sanitized);
     } catch (error) {
-        console.error('❌ Error in PUT /api/books/:id:', error);
+        console.error('❌ Error in PUT /api/bridges/:id:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Delete book (soft delete - archives book preserving all data)
-app.delete('/api/books/:id', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
+// Delete bridge (soft delete - archives bridge preserving all data)
+app.delete('/api/bridges/:id', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
     const { id } = req.params; // fractal_id
     
     try {
         const client = req.dbClient || pool;
         const tenantSchema = req.tenantContext.tenantSchema;
         
-        // SECURITY: Verify book belongs to user's tenant using fractal_id
+        // SECURITY: Verify bridge belongs to user's tenant using fractal_id
         // CRITICAL: Get webhook URLs BEFORE archiving so we can delete them
-        const bookResult = await client.query(
-            `SELECT id, fractal_id, output_01_url, output_0n_url FROM books WHERE fractal_id = $1`,
+        const bridgeResult = await client.query(
+            `SELECT id, fractal_id, output_01_url, output_0n_url FROM bridges WHERE fractal_id = $1`,
             [id]
         );
         
-        if (!bookResult.rows.length) {
-            console.warn(`⚠️  User ${req.userId} attempted to delete book ${id} outside their tenant`);
-            return res.status(404).json({ error: 'Book not found' });
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to delete bridge ${id} outside their tenant`);
+            return res.status(404).json({ error: 'Bridge not found' });
         }
         
-        const book = bookResult.rows[0];
-        const internalId = book.id;
-        console.log(`🗄️  Archiving book ${id} (internal ${internalId}) from ${tenantSchema} (soft delete)...`);
+        const bridge = bridgeResult.rows[0];
+        const internalId = bridge.id;
+        console.log(`🗄️  Archiving bridge ${id} (internal ${internalId}) from ${tenantSchema} (soft delete)...`);
         
         // SECURITY: Delete Discord webhooks to prevent ghost messages (NYAN TRUTH)
-        // ONE BOOK = ONE WEBHOOK URL. On delete: DESTROY + DELETE WEBHOOK.
+        // ONE BRIDGE = ONE WEBHOOK URL. On delete: DESTROY + DELETE WEBHOOK.
         const webhooksToDelete = [];
-        if (book.output_0n_url) webhooksToDelete.push({ url: book.output_0n_url, name: 'User Discord' });
+        if (bridge.output_0n_url) webhooksToDelete.push({ url: bridge.output_0n_url, name: 'User Discord' });
         
         for (const webhook of webhooksToDelete) {
             try {
                 await axios.delete(webhook.url);
-                console.log(`🗑️  Discord webhook deleted for book ${id} (${webhook.name})`);
+                console.log(`🗑️  Discord webhook deleted for bridge ${id} (${webhook.name})`);
             } catch (err) {
                 // Webhook might already be deleted or invalid - log but don't fail
                 console.warn(`⚠️  Failed to delete ${webhook.name} webhook (maybe already gone):`, err.message);
@@ -3205,14 +3205,14 @@ app.delete('/api/books/:id', requireAuth, setTenantContext, requireRole('admin')
         }
         
         // NOTE: output_01_url (Nyanbook Ledger) is ETERNAL and shared - never delete it
-        if (book.output_01_url) {
-            console.log(`ℹ️  Preserving output_01_url (Nyanbook Ledger) - eternal webhook, not book-specific`);
+        if (bridge.output_01_url) {
+            console.log(`ℹ️  Preserving output_01_url (Nyanbook Ledger) - eternal webhook, not bridge-specific`);
         }
         
         // SCRIBE OF SCRIBE PRINCIPLE: Discord threads are PERMANENT and IMMUTABLE
         // NEVER delete or archive threads - they are the eternal record
-        if (book.output_credentials?.thread_id) {
-            console.log(`📜 Preserving Discord thread ${book.output_credentials.thread_id} - eternal ledger, never deleted`);
+        if (bridge.output_credentials?.thread_id) {
+            console.log(`📜 Preserving Discord thread ${bridge.output_credentials.thread_id} - eternal ledger, never deleted`);
         }
         
         // Stop WhatsApp client if active (but keep session files for potential restoration)
@@ -3220,80 +3220,80 @@ app.delete('/api/books/:id', requireAuth, setTenantContext, requireRole('admin')
             const whatsappClient = whatsappManager.getClient(internalId, tenantSchema);
             if (whatsappClient) {
                 await whatsappManager.stopClient(internalId, tenantSchema);
-                console.log(`✅ WhatsApp client stopped for book ${id} (session files preserved)`);
+                console.log(`✅ WhatsApp client stopped for bridge ${id} (session files preserved)`);
             }
         } catch (error) {
-            console.warn(`⚠️  Could not stop WhatsApp client for book ${id}:`, error.message);
+            console.warn(`⚠️  Could not stop WhatsApp client for bridge ${id}:`, error.message);
         }
         
         // SOFT DELETE: Set archived=true and status='archived' (preserves all data)
         // Note: updated_at will automatically track when the archive happened
         const result = await client.query(`
-            UPDATE books 
+            UPDATE bridges 
             SET archived = true, status = 'archived', updated_at = NOW() 
             WHERE fractal_id = $1 
             RETURNING *
         `, [id]);
         
         if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Book not found' });
+            return res.status(404).json({ error: 'Bridge not found' });
         }
         
-        console.log(`✅ Book ${id} archived successfully by user ${req.userId}`);
+        console.log(`✅ Bridge ${id} archived successfully by user ${req.userId}`);
         res.json({ 
             success: true, 
-            message: 'Book deleted successfully'
+            message: 'Bridge deleted successfully'
         });
         
         // Log audit AFTER response (don't block transaction commit)
         setImmediate(() => {
             logAudit(pool, req, 'ARCHIVE', 'BOT', id, null, {
-                message: 'Book archived (soft delete) - all messages and session preserved',
+                message: 'Bridge archived (soft delete) - all messages and session preserved',
                 tenant_schema: tenantSchema,
                 updated_at: new Date().toISOString()
             }).catch(err => console.error('Audit log failed:', err.message));
         });
     } catch (error) {
-        console.error(`❌ Error archiving book ${id}:`, error);
+        console.error(`❌ Error archiving bridge ${id}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Archive book (soft delete - keeps all message history)
-app.post('/api/books/:id/archive', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
+// Archive bridge (soft delete - keeps all message history)
+app.post('/api/bridges/:id/archive', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
     try {
         const { id } = req.params;
         
         // Prevent archiving the default active bot
         if (parseInt(id) === 1) {
             return res.status(400).json({ 
-                error: 'Cannot archive the default book (currently active). Create and activate a new book first.' 
+                error: 'Cannot archive the default bridge (currently active). Create and activate a new bridge first.' 
             });
         }
         
-        await pool.query('UPDATE books SET archived = true, status = $1 WHERE id = $2', ['archived', id]);
+        await pool.query('UPDATE bridges SET archived = true, status = $1 WHERE id = $2', ['archived', id]);
         
         logAudit(pool, req, 'ARCHIVE', 'BOT', id, null, {
-            message: 'Book archived - message history preserved'
+            message: 'Bridge archived - message history preserved'
         });
         
-        res.json({ success: true, message: 'Book archived. All message history preserved.' });
+        res.json({ success: true, message: 'Bridge archived. All message history preserved.' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// Unarchive book (restore archived bot)
-app.post('/api/books/:id/unarchive', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
+// Unarchive bridge (restore archived bot)
+app.post('/api/bridges/:id/unarchive', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
     try {
         const { id } = req.params;
-        await pool.query('UPDATE books SET archived = false, status = $1 WHERE id = $2', ['inactive', id]);
+        await pool.query('UPDATE bridges SET archived = false, status = $1 WHERE id = $2', ['inactive', id]);
         
         logAudit(pool, req, 'UNARCHIVE', 'BOT', id, null, {
-            message: 'Book unarchive and restored'
+            message: 'Bridge unarchive and restored'
         });
         
-        res.json({ success: true, message: 'Book restored successfully.' });
+        res.json({ success: true, message: 'Bridge restored successfully.' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -3310,7 +3310,7 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
         // Parse fractal_id to get tenant
         const parsed = fractalId.parse(fractalIdParam);
         if (!parsed || !parsed.tenantId) {
-            return res.status(400).json({ error: 'Invalid book ID format' });
+            return res.status(400).json({ error: 'Invalid bridge ID format' });
         }
         
         const tenantSchema = `tenant_${parsed.tenantId}`;
@@ -3321,24 +3321,24 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
             await client.query('BEGIN');
             await client.query(`SET LOCAL search_path TO ${tenantSchema}`);
             
-            // Find book by fractal_id
-            const bookResult = await client.query(
-                'SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM books WHERE fractal_id = $1',
+            // Find bridge by fractal_id
+            const bridgeResult = await client.query(
+                'SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM bridges WHERE fractal_id = $1',
                 [fractalIdParam]
             );
             
-            if (bookResult.rows.length === 0) {
+            if (bridgeResult.rows.length === 0) {
                 await client.query('ROLLBACK');
                 client.release();
-                return res.status(404).json({ error: 'Book not found' });
+                return res.status(404).json({ error: 'Bridge not found' });
             }
             
-            const book = bookResult.rows[0];
-            const internalId = book.id;
+            const bridge = bridgeResult.rows[0];
+            const internalId = bridge.id;
             
             // Parse JSON if needed (PostgreSQL returns JSON as string sometimes)
-            if (book && typeof book.output_credentials === 'string') {
-                book.output_credentials = JSON.parse(book.output_credentials);
+            if (bridge && typeof bridge.output_credentials === 'string') {
+                bridge.output_credentials = JSON.parse(bridge.output_credentials);
             }
             
             // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
@@ -3362,25 +3362,25 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
             // WEBHOOK-FIRST ARCHITECTURE: Dual-output delivery
             // Output #01: Nyanbook Ledger (eternal, Dev #01 only)
             // Output #0n: User Discord (mutable, Admin #0n only)
-            const threadName = book.output_credentials?.thread_name;
-            const threadId = book.output_credentials?.thread_id;
+            const threadName = bridge.output_credentials?.thread_name;
+            const threadId = bridge.output_credentials?.thread_id;
             
             // Path 1: Nyanbook Ledger (Output #01)
             await sendToLedger(discordPayload, {
                 isMedia: !!media_url,
                 threadName,
                 threadId
-            }, book);
+            }, bridge);
             
             // Path 2: User Webhook (Output #0n)
             await sendToUserOutput(discordPayload, {
                 isMedia: !!media_url
-            }, book);
+            }, bridge);
             
             await client.query('COMMIT');
             client.release();
             
-            console.log(`✅ [Webhook] Forwarded message from ${senderName} to book ${fractalIdParam}`);
+            console.log(`✅ [Webhook] Forwarded message from ${senderName} to bridge ${fractalIdParam}`);
             res.json({ success: true, message: 'Message forwarded to Discord' });
             
         } catch (error) {
@@ -3395,50 +3395,50 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
 });
 
 // ============ BOT-LEVEL WHATSAPP MANAGEMENT ENDPOINTS ============
-// Multi-tenant WhatsApp: Each book gets its own WhatsApp session
+// Multi-tenant WhatsApp: Each bridge gets its own WhatsApp session
 
 // Start WhatsApp session for a bot
-app.post('/api/books/:id/start', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
+app.post('/api/bridges/:id/start', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const { id } = req.params; // fractal_id
         const client = req.dbClient || pool;
         const tenantSchema = req.tenantContext.tenantSchema;
         
-        // SECURITY: Verify book belongs to user's tenant using fractal_id
-        const bookResult = await client.query(
-            `SELECT id, fractal_id FROM books WHERE fractal_id = $1`,
+        // SECURITY: Verify bridge belongs to user's tenant using fractal_id
+        const bridgeResult = await client.query(
+            `SELECT id, fractal_id FROM bridges WHERE fractal_id = $1`,
             [id]
         );
         
-        if (!bookResult.rows.length) {
-            console.warn(`⚠️  User ${req.userId} attempted to start book ${id} outside their tenant`);
-            return res.status(404).json({ error: 'Book not found' });
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to start bridge ${id} outside their tenant`);
+            return res.status(404).json({ error: 'Bridge not found' });
         }
         
-        const internalId = bookResult.rows[0].id;
-        console.log(`🔍 Book ${id} (internal ${internalId}) belongs to ${tenantSchema}`);
+        const internalId = bridgeResult.rows[0].id;
+        console.log(`🔍 Bridge ${id} (internal ${internalId}) belongs to ${tenantSchema}`);
         
         // BUG FIX: Verify Discord threads exist, retry creation if missing
-        // This handles cases where initial thread creation failed during book creation
-        const fullBookResult = await client.query(
-            `SELECT name, output_01_url, output_0n_url, output_credentials FROM books WHERE id = $1`,
+        // This handles cases where initial thread creation failed during bridge creation
+        const fullBridgeResult = await client.query(
+            `SELECT name, output_01_url, output_0n_url, output_credentials FROM bridges WHERE id = $1`,
             [internalId]
         );
         
-        if (fullBookResult.rows.length > 0) {
-            const book = fullBookResult.rows[0];
-            const outputCreds = book.output_credentials || {};
+        if (fullBridgeResult.rows.length > 0) {
+            const bridge = fullBridgeResult.rows[0];
+            const outputCreds = bridge.output_credentials || {};
             
             // Check if Ledger thread (output_01) is missing
             if (!outputCreds.output_01 || !outputCreds.output_01.thread_id) {
-                console.warn(`⚠️  Book ${id} missing Discord threads, retrying creation...`);
+                console.warn(`⚠️  Bridge ${id} missing Discord threads, retrying creation...`);
                 
                 if (hermesBot && hermesBot.isReady()) {
                     try {
-                        const dualThreads = await hermesBot.createDualThreadsForBook(
-                            book.output_01_url,
-                            book.output_0n_url,
-                            book.name,
+                        const dualThreads = await hermesBot.createDualThreadsForBridge(
+                            bridge.output_01_url,
+                            bridge.output_0n_url,
+                            bridge.name,
                             req.tenantContext.tenantId,
                             internalId
                         );
@@ -3458,18 +3458,18 @@ app.post('/api/books/:id/start', requireAuth, setTenantContext, requireRole('adm
                         
                         // Save thread IDs to database
                         await client.query(
-                            `UPDATE books 
+                            `UPDATE bridges 
                              SET output_credentials = output_credentials || $1::jsonb
                              WHERE id = $2`,
                             [JSON.stringify(outputDestinations), internalId]
                         );
                         
-                        console.log(`✅ Thread creation retry successful for book ${id}`);
+                        console.log(`✅ Thread creation retry successful for bridge ${id}`);
                         
                         // Send initial messages to threads
                         if (dualThreads.output_01 && dualThreads.output_01.type === 'thread') {
                             try {
-                                await hermesBot.sendInitialMessage(dualThreads.output_01.thread_id, book.name, book.output_01_url);
+                                await hermesBot.sendInitialMessage(dualThreads.output_01.thread_id, bridge.name, bridge.output_01_url);
                             } catch (msgError) {
                                 console.error(`  ⚠️  Failed to send initial message to output_01:`, msgError.message);
                             }
@@ -3477,20 +3477,20 @@ app.post('/api/books/:id/start', requireAuth, setTenantContext, requireRole('adm
                         
                         if (dualThreads.output_0n && dualThreads.output_0n.type === 'thread') {
                             try {
-                                await hermesBot.sendInitialMessage(dualThreads.output_0n.thread_id, book.name, book.output_0n_url);
+                                await hermesBot.sendInitialMessage(dualThreads.output_0n.thread_id, bridge.name, bridge.output_0n_url);
                             } catch (msgError) {
                                 console.error(`  ⚠️  Failed to send initial message to output_0n:`, msgError.message);
                             }
                         }
                     } catch (threadError) {
-                        console.error(`❌ Thread creation retry failed for book ${id}:`, threadError.message);
-                        console.warn(`⚠️  Book will continue without threads (webhook-only mode)`);
+                        console.error(`❌ Thread creation retry failed for bridge ${id}:`, threadError.message);
+                        console.warn(`⚠️  Bridge will continue without threads (webhook-only mode)`);
                     }
                 } else {
-                    console.warn(`⚠️  Hermes bot not ready, cannot retry thread creation for book ${id}`);
+                    console.warn(`⚠️  Hermes bot not ready, cannot retry thread creation for bridge ${id}`);
                 }
             } else {
-                console.log(`✅ Book ${id} already has Discord threads configured`);
+                console.log(`✅ Bridge ${id} already has Discord threads configured`);
             }
         }
         
@@ -3523,51 +3523,51 @@ app.post('/api/books/:id/start', requireAuth, setTenantContext, requireRole('adm
             message: 'WhatsApp session starting...',
             status: clientState.status,
             qrCode: qrCodeDataUrl, // Include QR code for instant display
-            bookId: id // Return fractal_id to frontend
+            bridgeId: id // Return fractal_id to frontend
         });
     } catch (error) {
-        console.error(`❌ Error starting WhatsApp for book ${req.params.id}:`, error);
+        console.error(`❌ Error starting WhatsApp for bridge ${req.params.id}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Stop WhatsApp session for a book (preserves session)
-app.delete('/api/books/:id/stop', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
+// Stop WhatsApp session for a bridge (preserves session)
+app.delete('/api/bridges/:id/stop', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const { id } = req.params; // fractal_id
         const client = req.dbClient || pool;
         const tenantSchema = req.tenantContext.tenantSchema;
         
-        // SECURITY: Verify book belongs to user's tenant using fractal_id
-        const bookResult = await client.query(
-            `SELECT id, fractal_id FROM books WHERE fractal_id = $1`,
+        // SECURITY: Verify bridge belongs to user's tenant using fractal_id
+        const bridgeResult = await client.query(
+            `SELECT id, fractal_id FROM bridges WHERE fractal_id = $1`,
             [id]
         );
         
-        if (!bookResult.rows.length) {
-            console.warn(`⚠️  User ${req.userId} attempted to stop book ${id} outside their tenant`);
-            return res.status(404).json({ error: 'Book not found' });
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to stop bridge ${id} outside their tenant`);
+            return res.status(404).json({ error: 'Bridge not found' });
         }
         
-        const internalId = bookResult.rows[0].id;
+        const internalId = bridgeResult.rows[0].id;
         await whatsappManager.stopClient(internalId, tenantSchema);
         
         res.json({ 
             success: true, 
             message: 'WhatsApp session stopped (will auto-reconnect on restart)',
-            bookId: id
+            bridgeId: id
         });
     } catch (error) {
-        console.error(`❌ Error stopping WhatsApp for book ${req.params.id}:`, error);
+        console.error(`❌ Error stopping WhatsApp for bridge ${req.params.id}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
 
 // Get QR code for a bot
-app.get('/api/books/:id/qr', requireAuth, async (req, res) => {
+app.get('/api/bridges/:id/qr', requireAuth, async (req, res) => {
     try {
         const { id } = req.params; // fractal_id
-        console.log(`📱 /api/books/:id/qr called for ${id} by user ${req.userId}`);
+        console.log(`📱 /api/bridges/:id/qr called for ${id} by user ${req.userId}`);
         
         // Use tenant schema from requireAuth middleware
         const tenantSchema = req.tenantSchema;
@@ -3576,7 +3576,7 @@ app.get('/api/books/:id/qr', requireAuth, async (req, res) => {
             return res.status(500).json({ error: 'Tenant context not found' });
         }
         
-        // Get user's tenant_id for book indexing
+        // Get user's tenant_id for bridge indexing
         const userResult = await pool.query(
             `SELECT tenant_id FROM ${tenantSchema}.users WHERE id = $1`,
             [req.userId]
@@ -3590,47 +3590,47 @@ app.get('/api/books/:id/qr', requireAuth, async (req, res) => {
         const userTenantId = userResult.rows[0].tenant_id;
         const userTenantSchema = tenantSchema;
         
-        // SECURITY: Verify book belongs to user's tenant using fractal_id
-        const bookResult = await pool.query(
-            `SELECT id, fractal_id, name FROM ${userTenantSchema}.books WHERE fractal_id = $1`,
+        // SECURITY: Verify bridge belongs to user's tenant using fractal_id
+        const bridgeResult = await pool.query(
+            `SELECT id, fractal_id, name FROM ${userTenantSchema}.bridges WHERE fractal_id = $1`,
             [id]
         );
         
-        if (!bookResult.rows.length) {
-            console.warn(`⚠️  User ${req.userId} attempted to access book ${id} outside their tenant`);
-            return res.status(404).json({ error: 'Book not found' });
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to access bridge ${id} outside their tenant`);
+            return res.status(404).json({ error: 'Bridge not found' });
         }
         
-        const internalId = bookResult.rows[0].id;
-        const bookName = bookResult.rows[0].name;
+        const internalId = bridgeResult.rows[0].id;
+        const bridgeName = bridgeResult.rows[0].name;
         
         // PRIORITY: Check shadow session first (zero-downtime reconnection)
         const shadowKey = whatsappManager.getCompositeKey(userTenantSchema, internalId, true);
         const shadowState = whatsappManager.clients.get(shadowKey);
         
         if (shadowState && shadowState.qrCode) {
-            console.log(`📱 Returning shadow QR for book ${id} (zero-downtime relink in progress)`);
+            console.log(`📱 Returning shadow QR for bridge ${id} (zero-downtime relink in progress)`);
             return res.json({
                 qr: await QRCode.toDataURL(shadowState.qrCode),
                 status: shadowState.status,
                 phoneNumber: shadowState.phoneNumber,
-                bookName,
+                bridgeName,
                 hasQR: true,
                 isShadow: true
             });
         }
         
         // Fallback: Check primary session (normal flow)
-        // Get WhatsApp client state using dynamic indexing (tenant:book)
+        // Get WhatsApp client state using dynamic indexing (tenant:bridge)
         const clientState = whatsappManager.getClient(internalId, userTenantSchema);
         const qrCode = whatsappManager.getQRCode(internalId, userTenantSchema);
         
         if (!qrCode && !clientState) {
-            console.log(`  ℹ️  No QR/client for ${userTenantSchema}:${internalId} (${bookName})`);
+            console.log(`  ℹ️  No QR/client for ${userTenantSchema}:${internalId} (${bridgeName})`);
             const response = { 
                 qr: null, 
                 status: 'inactive',
-                message: 'No QR code available. Start the book first.' 
+                message: 'No QR code available. Start the bridge first.' 
             };
             console.log(`  ↳ Returning status: ${response.status}`);
             return res.json(response);
@@ -3642,42 +3642,42 @@ app.get('/api/books/:id/qr', requireAuth, async (req, res) => {
             status: clientState?.status || 'inactive',
             phoneNumber: clientState?.phoneNumber || null,
             hasQR: !!qrCode,
-            bookId: id // Fractal ID (webhook-centric reference)
+            bridgeId: id // Fractal ID (webhook-centric reference)
         };
         
         console.log(`  ✅ QR response for ${userTenantSchema}:${internalId} - status: ${response.status}, hasQR: ${response.hasQR}`);
         res.json(response);
     } catch (error) {
-        console.error(`❌ Error getting QR for book ${req.params.id}:`, error);
+        console.error(`❌ Error getting QR for bridge ${req.params.id}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Relink WhatsApp session for a book (simple QR regeneration)
+// Relink WhatsApp session for a bridge (simple QR regeneration)
 // WARNING: Brief downtime during reconnection - messages sent during this period may be lost
-app.post('/api/books/:id/relink', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
+app.post('/api/bridges/:id/relink', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     const { id } = req.params; // fractal_id
     
     try {
-        console.log(`🔄 Starting QR regeneration for book ${id}...`);
-        console.warn(`  ⚠️  Book will be briefly offline during reconnection`);
+        console.log(`🔄 Starting QR regeneration for bridge ${id}...`);
+        console.warn(`  ⚠️  Bridge will be briefly offline during reconnection`);
         
         const client = req.dbClient || pool;
         const tenantSchema = req.tenantContext.tenantSchema;
         
-        // SECURITY: Verify book belongs to user's tenant using fractal_id
-        const bookResult = await client.query(
-            `SELECT id, fractal_id FROM books WHERE fractal_id = $1`,
+        // SECURITY: Verify bridge belongs to user's tenant using fractal_id
+        const bridgeResult = await client.query(
+            `SELECT id, fractal_id FROM bridges WHERE fractal_id = $1`,
             [id]
         );
         
-        if (!bookResult.rows.length) {
-            console.warn(`⚠️  User ${req.userId} attempted to relink book ${id} outside their tenant`);
-            return res.status(404).json({ error: 'Book not found' });
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to relink bridge ${id} outside their tenant`);
+            return res.status(404).json({ error: 'Bridge not found' });
         }
         
-        const internalId = bookResult.rows[0].id;
-        console.log(`🔍 Book ${id} (internal ${internalId}) belongs to ${tenantSchema} (relink)`);
+        const internalId = bridgeResult.rows[0].id;
+        console.log(`🔍 Bridge ${id} (internal ${internalId}) belongs to ${tenantSchema} (relink)`);
         
         // Simple approach: Destroy existing session and reinitialize
         console.log(`  🗑️  Destroying existing session...`);
@@ -3690,56 +3690,56 @@ app.post('/api/books/:id/relink', requireAuth, setTenantContext, requireRole('ad
             createTenantAwareMessageHandler
         );
         
-        console.log(`✅ Fresh QR generated for book ${id}, status: ${clientState.status}`);
+        console.log(`✅ Fresh QR generated for bridge ${id}, status: ${clientState.status}`);
         console.log(`  ⏳ Scan QR to reconnect (brief downtime during reconnection)`);
         
         res.json({ 
             success: true, 
-            message: 'Fresh QR code generated. Your book is briefly offline - scan QR to reconnect.',
+            message: 'Fresh QR code generated. Your bridge is briefly offline - scan QR to reconnect.',
             status: clientState.status,
-            bookId: id,
+            bridgeId: id,
             warning: 'Messages sent during reconnection may be lost'
         });
     } catch (error) {
-        console.error(`❌ Error regenerating QR for book ${id}:`, error);
+        console.error(`❌ Error regenerating QR for bridge ${id}:`, error);
         console.error('Stack trace:', error.stack);
         
         // Ensure JSON response even on error
         if (!res.headersSent) {
             res.status(500).json({ 
                 error: error.message || 'Unknown error occurred during QR regeneration',
-                bookId: id
+                bridgeId: id
             });
         }
     }
 });
 
-// Get comprehensive health status for a book
-app.get('/api/books/:id/status', requireAuth, setTenantContext, async (req, res) => {
+// Get comprehensive health status for a bridge
+app.get('/api/bridges/:id/status', requireAuth, setTenantContext, async (req, res) => {
     try {
         const { id } = req.params; // This is fractal_id
         const client = req.dbClient || pool;
         const tenantSchema = req.tenantContext.tenantSchema;
         
-        // SECURITY: Verify book belongs to user's tenant using fractal_id
-        const bookResult = await client.query(
-            `SELECT id, fractal_id, output_credentials FROM books WHERE fractal_id = $1`,
+        // SECURITY: Verify bridge belongs to user's tenant using fractal_id
+        const bridgeResult = await client.query(
+            `SELECT id, fractal_id, output_credentials FROM bridges WHERE fractal_id = $1`,
             [id]
         );
         
-        if (!bookResult.rows.length) {
-            console.warn(`⚠️  User ${req.userId} attempted to access book ${id} outside their tenant`);
+        if (!bridgeResult.rows.length) {
+            console.warn(`⚠️  User ${req.userId} attempted to access bridge ${id} outside their tenant`);
             return res.json({ 
                 status: 'inactive', 
-                message: 'Book not found in your tenant',
+                message: 'Bridge not found in your tenant',
                 threads: { output_01: false, output_0n: false },
                 whatsapp: 'not_found',
                 hermes: hermesBot ? hermesBot.isReady() : false
             });
         }
         
-        const internalId = bookResult.rows[0].id;
-        const outputCredentials = bookResult.rows[0].output_credentials || {};
+        const internalId = bridgeResult.rows[0].id;
+        const outputCredentials = bridgeResult.rows[0].output_credentials || {};
         
         // Check thread health
         const threadHealth = {
@@ -3773,16 +3773,16 @@ app.get('/api/books/:id/status', requireAuth, setTenantContext, async (req, res)
                 lastActivity: clientState?.lastActivity || null
             },
             hermes: hermesBot ? hermesBot.isReady() : false,
-            bookId: id // Return fractal_id to frontend
+            bridgeId: id // Return fractal_id to frontend
         });
     } catch (error) {
-        console.error(`❌ Error getting status for book ${req.params.id}:`, error);
+        console.error(`❌ Error getting status for bridge ${req.params.id}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Get archived books (with message history)
-app.get('/api/books/archived', requireAuth, async (req, res) => {
+// Get archived bridges (with message history)
+app.get('/api/bridges/archived', requireAuth, async (req, res) => {
     try {
         // Use tenant schema from requireAuth middleware (already set!)
         const tenantSchema = req.tenantSchema;
@@ -3798,20 +3798,20 @@ app.get('/api/books/archived', requireAuth, async (req, res) => {
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'success') as forwarded_count,
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'failed') as failed_count,
                 COUNT(m.id) FILTER (WHERE m.discord_status = 'pending') as pending_count
-            FROM ${tenantSchema}.books b
-            LEFT JOIN ${tenantSchema}.messages m ON b.id = m.book_id
+            FROM ${tenantSchema}.bridges b
+            LEFT JOIN ${tenantSchema}.messages m ON b.id = m.bridge_id
             WHERE b.archived = true
             GROUP BY b.id
             ORDER BY b.created_at DESC
         `);
         res.json(result.rows);
     } catch (error) {
-        console.error('❌ Error in /api/books/archived:', error);
+        console.error('❌ Error in /api/bridges/archived:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-app.get('/api/books/:id/stats', requireAuth, async (req, res) => {
+app.get('/api/bridges/:id/stats', requireAuth, async (req, res) => {
     try {
         const { id } = req.params;
         
@@ -3828,11 +3828,11 @@ app.get('/api/books/:id/stats', requireAuth, async (req, res) => {
                 COUNT(*) FILTER (WHERE discord_status = 'success') as success,
                 COUNT(*) FILTER (WHERE discord_status = 'failed') as failed,
                 COUNT(*) FILTER (WHERE discord_status = 'pending') as pending
-            FROM ${tenantSchema}.messages WHERE book_id = $1
+            FROM ${tenantSchema}.messages WHERE bridge_id = $1
         `, [id]);
         res.json(result.rows[0]);
     } catch (error) {
-        console.error('❌ Error in /api/books/:id/stats:', error);
+        console.error('❌ Error in /api/bridges/:id/stats:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -3844,31 +3844,31 @@ const metadataExtractor = new MetadataExtractor();
 // Create a drop (link metadata to Discord message)
 app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
     try {
-        const { book_id, discord_message_id, metadata_text } = req.body;
+        const { bridge_id, discord_message_id, metadata_text } = req.body;
         const client = req.dbClient || pool;
         
-        if (!book_id || !discord_message_id || !metadata_text) {
+        if (!bridge_id || !discord_message_id || !metadata_text) {
             return res.status(400).json({ 
-                error: 'Missing required fields: book_id, discord_message_id, metadata_text' 
+                error: 'Missing required fields: bridge_id, discord_message_id, metadata_text' 
             });
         }
         
-        // Verify book belongs to user's tenant
-        const bookResult = await client.query(
-            'SELECT id FROM books WHERE fractal_id = $1',
-            [book_id]
+        // Verify bridge belongs to user's tenant
+        const bridgeResult = await client.query(
+            'SELECT id FROM bridges WHERE fractal_id = $1',
+            [bridge_id]
         );
         
-        if (bookResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Book not found in your tenant' });
+        if (bridgeResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Bridge not found in your tenant' });
         }
         
-        const internalBookId = bookResult.rows[0].id;
+        const internalBridgeId = bridgeResult.rows[0].id;
         
         // Check if drop already exists to APPEND text instead of replacing
         const existingDrop = await client.query(
-            'SELECT * FROM drops WHERE book_id = $1 AND discord_message_id = $2',
-            [internalBookId, discord_message_id]
+            'SELECT * FROM drops WHERE bridge_id = $1 AND discord_message_id = $2',
+            [internalBridgeId, discord_message_id]
         );
         
         let dropResult;
@@ -3889,9 +3889,9 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
                     extracted_tags = $2::text[],
                     extracted_dates = $3::text[],
                     updated_at = NOW()
-                WHERE book_id = $4 AND discord_message_id = $5
+                WHERE bridge_id = $4 AND discord_message_id = $5
                 RETURNING *
-            `, [combinedText, extracted.tags, extracted.dates, internalBookId, discord_message_id]);
+            `, [combinedText, extracted.tags, extracted.dates, internalBridgeId, discord_message_id]);
         } else {
             // Extract metadata from NEW text for first save
             extracted = metadataExtractor.extract(metadata_text);
@@ -3899,10 +3899,10 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
             
             // Convert JavaScript arrays to PostgreSQL arrays using ARRAY[]::text[]
             dropResult = await client.query(`
-                INSERT INTO drops (book_id, discord_message_id, metadata_text, extracted_tags, extracted_dates)
+                INSERT INTO drops (bridge_id, discord_message_id, metadata_text, extracted_tags, extracted_dates)
                 VALUES ($1, $2, $3, $4::text[], $5::text[])
                 RETURNING *
-            `, [internalBookId, discord_message_id, metadata_text, extracted.tags, extracted.dates]);
+            `, [internalBridgeId, discord_message_id, metadata_text, extracted.tags, extracted.dates]);
         }
         
         console.log('✅ Drop saved successfully:', {
@@ -3922,28 +3922,28 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
     }
 });
 
-// Get all drops for a book
-app.get('/api/drops/:book_id', requireAuth, setTenantContext, async (req, res) => {
+// Get all drops for a bridge
+app.get('/api/drops/:bridge_id', requireAuth, setTenantContext, async (req, res) => {
     try {
-        const { book_id } = req.params;
+        const { bridge_id } = req.params;
         const client = req.dbClient || pool;
         
-        // Verify book belongs to user's tenant
-        const bookResult = await client.query(
-            'SELECT id FROM books WHERE fractal_id = $1',
-            [book_id]
+        // Verify bridge belongs to user's tenant
+        const bridgeResult = await client.query(
+            'SELECT id FROM bridges WHERE fractal_id = $1',
+            [bridge_id]
         );
         
-        if (bookResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Book not found in your tenant' });
+        if (bridgeResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Bridge not found in your tenant' });
         }
         
-        const internalBookId = bookResult.rows[0].id;
+        const internalBridgeId = bridgeResult.rows[0].id;
         
-        // Fetch all drops for this book
+        // Fetch all drops for this bridge
         const dropsResult = await client.query(
-            'SELECT * FROM drops WHERE book_id = $1 ORDER BY created_at DESC',
-            [internalBookId]
+            'SELECT * FROM drops WHERE bridge_id = $1 ORDER BY created_at DESC',
+            [internalBridgeId]
         );
         
         res.json({ drops: dropsResult.rows });
@@ -3956,33 +3956,33 @@ app.get('/api/drops/:book_id', requireAuth, setTenantContext, async (req, res) =
 // Delete a specific tag from a message's drop
 app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => {
     try {
-        const { book_id, discord_message_id, tag } = req.body;
+        const { bridge_id, discord_message_id, tag } = req.body;
         const client = req.dbClient || pool;
         
-        console.log('🗑️ DELETE /api/drops/tag request:', { book_id, discord_message_id, tag });
+        console.log('🗑️ DELETE /api/drops/tag request:', { bridge_id, discord_message_id, tag });
         
-        if (!book_id || !discord_message_id || !tag) {
+        if (!bridge_id || !discord_message_id || !tag) {
             console.log('❌ Missing required fields');
             return res.status(400).json({ 
-                error: 'Missing required fields: book_id, discord_message_id, tag' 
+                error: 'Missing required fields: bridge_id, discord_message_id, tag' 
             });
         }
         
-        // Verify book belongs to user's tenant
-        const bookResult = await client.query(
-            'SELECT id FROM books WHERE fractal_id = $1',
-            [book_id]
+        // Verify bridge belongs to user's tenant
+        const bridgeResult = await client.query(
+            'SELECT id FROM bridges WHERE fractal_id = $1',
+            [bridge_id]
         );
         
-        console.log('🔍 Book lookup result:', bookResult.rows);
+        console.log('🔍 Bridge lookup result:', bridgeResult.rows);
         
-        if (bookResult.rows.length === 0) {
-            console.log('❌ Book not found for fractal_id:', book_id);
-            return res.status(404).json({ error: 'Book not found in your tenant' });
+        if (bridgeResult.rows.length === 0) {
+            console.log('❌ Bridge not found for fractal_id:', bridge_id);
+            return res.status(404).json({ error: 'Bridge not found in your tenant' });
         }
         
-        const internalBookId = bookResult.rows[0].id;
-        console.log('✅ Internal book ID:', internalBookId);
+        const internalBridgeId = bridgeResult.rows[0].id;
+        console.log('✅ Internal bridge ID:', internalBridgeId);
         
         // CRITICAL FIX: Remove tag from BOTH extracted_tags array AND metadata_text string
         // This prevents deleted tags from reappearing when new tags are added
@@ -4004,9 +4004,9 @@ app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => 
                     )
                 ),
                 updated_at = NOW()
-            WHERE book_id = $3 AND discord_message_id = $4
+            WHERE bridge_id = $3 AND discord_message_id = $4
             RETURNING *
-        `, [tag, escapedTag, internalBookId, discord_message_id]);
+        `, [tag, escapedTag, internalBridgeId, discord_message_id]);
         
         console.log('🗑️ Tag removal result:', {
             rowsAffected: dropResult.rows.length,
@@ -4033,33 +4033,33 @@ app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => 
 // Delete a specific date from a message's drop
 app.delete('/api/drops/date', requireAuth, setTenantContext, async (req, res) => {
     try {
-        const { book_id, discord_message_id, date } = req.body;
+        const { bridge_id, discord_message_id, date } = req.body;
         const client = req.dbClient || pool;
         
-        console.log('🗑️ DELETE /api/drops/date request:', { book_id, discord_message_id, date });
+        console.log('🗑️ DELETE /api/drops/date request:', { bridge_id, discord_message_id, date });
         
-        if (!book_id || !discord_message_id || !date) {
+        if (!bridge_id || !discord_message_id || !date) {
             console.log('❌ Missing required fields');
             return res.status(400).json({ 
-                error: 'Missing required fields: book_id, discord_message_id, date' 
+                error: 'Missing required fields: bridge_id, discord_message_id, date' 
             });
         }
         
-        // Verify book belongs to user's tenant
-        const bookResult = await client.query(
-            'SELECT id FROM books WHERE fractal_id = $1',
-            [book_id]
+        // Verify bridge belongs to user's tenant
+        const bridgeResult = await client.query(
+            'SELECT id FROM bridges WHERE fractal_id = $1',
+            [bridge_id]
         );
         
-        console.log('🔍 Book lookup result:', bookResult.rows);
+        console.log('🔍 Bridge lookup result:', bridgeResult.rows);
         
-        if (bookResult.rows.length === 0) {
-            console.log('❌ Book not found for fractal_id:', book_id);
-            return res.status(404).json({ error: 'Book not found in your tenant' });
+        if (bridgeResult.rows.length === 0) {
+            console.log('❌ Bridge not found for fractal_id:', bridge_id);
+            return res.status(404).json({ error: 'Bridge not found in your tenant' });
         }
         
-        const internalBookId = bookResult.rows[0].id;
-        console.log('✅ Internal book ID:', internalBookId);
+        const internalBridgeId = bridgeResult.rows[0].id;
+        console.log('✅ Internal bridge ID:', internalBridgeId);
         
         // CRITICAL FIX: Remove date from BOTH extracted_dates array AND metadata_text string
         // This prevents deleted dates from reappearing when new tags are added
@@ -4081,14 +4081,14 @@ app.delete('/api/drops/date', requireAuth, setTenantContext, async (req, res) =>
                     )
                 ),
                 updated_at = NOW()
-            WHERE book_id = $3 AND discord_message_id = $4
+            WHERE bridge_id = $3 AND discord_message_id = $4
             RETURNING *
-        `, [date, escapedDate, internalBookId, discord_message_id]);
+        `, [date, escapedDate, internalBridgeId, discord_message_id]);
         
         console.log('🔍 Drop update result:', dropResult.rows.length > 0 ? 'SUCCESS' : 'NOT FOUND');
         
         if (dropResult.rows.length === 0) {
-            console.log('❌ No drop found for:', { internalBookId, discord_message_id });
+            console.log('❌ No drop found for:', { internalBridgeId, discord_message_id });
             return res.status(404).json({ error: 'Drop not found' });
         }
         
@@ -4104,9 +4104,9 @@ app.delete('/api/drops/date', requireAuth, setTenantContext, async (req, res) =>
 });
 
 // Search drops using PostgreSQL full-text search
-app.get('/api/drops/search/:book_id', requireAuth, setTenantContext, async (req, res) => {
+app.get('/api/drops/search/:bridge_id', requireAuth, setTenantContext, async (req, res) => {
     try {
-        const { book_id } = req.params;
+        const { bridge_id } = req.params;
         const { query } = req.query;
         const client = req.dbClient || pool;
         
@@ -4114,26 +4114,26 @@ app.get('/api/drops/search/:book_id', requireAuth, setTenantContext, async (req,
             return res.status(400).json({ error: 'Query parameter required' });
         }
         
-        // Verify book belongs to user's tenant
-        const bookResult = await client.query(
-            'SELECT id FROM books WHERE fractal_id = $1',
-            [book_id]
+        // Verify bridge belongs to user's tenant
+        const bridgeResult = await client.query(
+            'SELECT id FROM bridges WHERE fractal_id = $1',
+            [bridge_id]
         );
         
-        if (bookResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Book not found in your tenant' });
+        if (bridgeResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Bridge not found in your tenant' });
         }
         
-        const internalBookId = bookResult.rows[0].id;
+        const internalBridgeId = bridgeResult.rows[0].id;
         
         // PostgreSQL full-text search (zero-cost, blazing fast)
         const searchResult = await client.query(`
             SELECT *, ts_rank(search_vector, plainto_tsquery('english', $1)) as rank
             FROM drops
-            WHERE book_id = $2 AND search_vector @@ plainto_tsquery('english', $1)
+            WHERE bridge_id = $2 AND search_vector @@ plainto_tsquery('english', $1)
             ORDER BY rank DESC, created_at DESC
             LIMIT 100
-        `, [query, internalBookId]);
+        `, [query, internalBridgeId]);
         
         res.json({ 
             query: query,
@@ -4146,36 +4146,36 @@ app.get('/api/drops/search/:book_id', requireAuth, setTenantContext, async (req,
     }
 });
 
-// Export book data (messages + drops metadata) as ZIP
+// Export bridge data (messages + drops metadata) as ZIP
 // Supports both GET (all messages) and POST (selected message IDs)
-const exportBookHandler = async (req, res) => {
+const exportBridgeHandler = async (req, res) => {
     const archiver = require('archiver');
-    const { book_id } = req.params;
+    const { bridge_id } = req.params;
     const selectedMessageIds = req.body?.messageIds || null; // POST: selected IDs, GET: null (all)
     
     console.log('📦 ===== EXPORT HANDLER START =====');
     console.log('📦 Method:', req.method);
-    console.log('📦 Book ID:', book_id);
+    console.log('📦 Bridge ID:', bridge_id);
     console.log('📦 Selected Message IDs:', selectedMessageIds);
     console.log('📦 Selected Count:', selectedMessageIds ? selectedMessageIds.length : 0);
     
     try {
         const client = req.dbClient || pool;
         
-        // Verify book access
-        const bookResult = await client.query(
-            'SELECT id, name, output_credentials FROM books WHERE fractal_id = $1',
-            [book_id]
+        // Verify bridge access
+        const bridgeResult = await client.query(
+            'SELECT id, name, output_credentials FROM bridges WHERE fractal_id = $1',
+            [bridge_id]
         );
         
-        if (bookResult.rows.length === 0) {
-            console.log('📦 ERROR: Book not found');
-            return res.status(404).json({ error: 'Book not found in your tenant' });
+        if (bridgeResult.rows.length === 0) {
+            console.log('📦 ERROR: Bridge not found');
+            return res.status(404).json({ error: 'Bridge not found in your tenant' });
         }
         
-        const book = bookResult.rows[0];
-        const outputCreds = book.output_credentials;
-        console.log('📦 Book found:', book.name);
+        const bridge = bridgeResult.rows[0];
+        const outputCreds = bridge.output_credentials;
+        console.log('📦 Bridge found:', bridge.name);
         console.log('📦 Output thread:', outputCreds?.output_01?.thread_id);
         
         // Fetch messages from Discord (output_01 - Ledger)
@@ -4226,8 +4226,8 @@ const exportBookHandler = async (req, res) => {
         
         // Fetch drops from PostgreSQL
         const dropsResult = await client.query(
-            'SELECT * FROM drops WHERE book_id = $1 ORDER BY created_at DESC',
-            [book.id]
+            'SELECT * FROM drops WHERE bridge_id = $1 ORDER BY created_at DESC',
+            [bridge.id]
         );
         
         // Merge drops with messages
@@ -4243,9 +4243,9 @@ const exportBookHandler = async (req, res) => {
         
         // Create export data
         const exportData = {
-            book: {
-                id: book_id,
-                name: book.name,
+            bridge: {
+                id: bridge_id,
+                name: bridge.name,
                 exported_at: new Date().toISOString()
             },
             messages: enrichedMessages,
@@ -4260,7 +4260,7 @@ const exportBookHandler = async (req, res) => {
         // Create ZIP archive
         const archive = archiver('zip', { zlib: { level: 9 } });
         
-        res.attachment(`${book.name.replace(/[^a-z0-9]/gi, '_')}_export.zip`);
+        res.attachment(`${bridge.name.replace(/[^a-z0-9]/gi, '_')}_export.zip`);
         res.setHeader('Content-Type', 'application/zip');
         
         archive.pipe(res);
@@ -4271,7 +4271,7 @@ const exportBookHandler = async (req, res) => {
         // Add README
         const readme = `# Your Nyanbook Export
         
-Book: ${book.name}
+Bridge: ${bridge.name}
 Exported: ${new Date().toISOString()}
 
 This archive contains:
@@ -4286,7 +4286,7 @@ Media files are not included but accessible via Discord CDN URLs in messages.jso
         
         await archive.finalize();
         
-        console.log(`📦 Export created for book ${book_id}: ${messages.length} messages, ${dropsResult.rows.length} drops`);
+        console.log(`📦 Export created for bridge ${bridge_id}: ${messages.length} messages, ${dropsResult.rows.length} drops`);
         
     } catch (error) {
         console.error('❌ Error creating export:', error);
@@ -4297,8 +4297,8 @@ Media files are not included but accessible via Discord CDN URLs in messages.jso
 };
 
 // Register both GET (all messages) and POST (selected messages) routes
-app.get('/api/books/:book_id/export', requireAuth, setTenantContext, exportBookHandler);
-app.post('/api/books/:book_id/export', requireAuth, setTenantContext, exportBookHandler);
+app.get('/api/bridges/:bridge_id/export', requireAuth, setTenantContext, exportBridgeHandler);
+app.post('/api/bridges/:bridge_id/export', requireAuth, setTenantContext, exportBridgeHandler);
 
 // REMOVED: Duplicate QR endpoint - using the multi-instance version above (line ~2741)
 
@@ -4319,9 +4319,9 @@ app.get('/api/messages/:id/media', requireAuth, async (req, res) => {
 });
 
 // UNIFIED DISCORD MESSAGE FETCH: Schema switcheroo for 2 tabs, 2 databases
-// Books Tab (source=user) → output_0n webhook (user choice: channel OR thread)
+// Bridges Tab (source=user) → output_0n webhook (user choice: channel OR thread)
 // Dev Panel (source=ledger) → output_01 webhook (always thread, dev-only, permanent)
-app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, res) => {
+app.get('/api/bridges/:id/messages', requireAuth, setTenantContext, async (req, res) => {
     try {
         const { id } = req.params; // fractal_id
         const client = req.dbClient || pool;
@@ -4342,21 +4342,21 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
             return res.status(400).json({ error: 'Invalid source parameter. Use: user or ledger' });
         }
         
-        // Get book with thread info and creation timestamp
-        const bookResult = await client.query(
-            'SELECT id, name, output_credentials, created_at FROM books WHERE fractal_id = $1',
+        // Get bridge with thread info and creation timestamp
+        const bridgeResult = await client.query(
+            'SELECT id, name, output_credentials, created_at FROM bridges WHERE fractal_id = $1',
             [id]
         );
         
-        if (bookResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Book not found' });
+        if (bridgeResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Bridge not found' });
         }
         
-        const book = bookResult.rows[0];
-        const bookCreatedAt = new Date(book.created_at);
+        const bridge = bridgeResult.rows[0];
+        const bridgeCreatedAt = new Date(bridge.created_at);
         
         // Parse JSON if needed
-        let outputCredentials = book.output_credentials;
+        let outputCredentials = bridge.output_credentials;
         if (typeof outputCredentials === 'string') {
             outputCredentials = JSON.parse(outputCredentials);
         }
@@ -4374,7 +4374,7 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                 messages: [], 
                 total: 0,
                 hasMore: false,
-                note: 'No Ledger thread configured for this book yet. Create the book thread first.'
+                note: 'No Ledger thread configured for this bridge yet. Create the bridge thread first.'
             });
         }
         
@@ -4408,15 +4408,15 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
             
             const discordMessages = await thread.messages.fetch(options);
             
-            console.log(`  🔍 Filtering messages: book created ${bookCreatedAt.toISOString()}, fetched ${discordMessages.size} messages`);
+            console.log(`  🔍 Filtering messages: bridge created ${bridgeCreatedAt.toISOString()}, fetched ${discordMessages.size} messages`);
             
-            // Transform Discord messages to UI format and filter by book creation time
+            // Transform Discord messages to UI format and filter by bridge creation time
             const messages = Array.from(discordMessages.values())
                 .filter(msg => {
-                    // Only show messages created AFTER the book was created
-                    const isAfterCreation = msg.createdAt >= bookCreatedAt;
+                    // Only show messages created AFTER the bridge was created
+                    const isAfterCreation = msg.createdAt >= bridgeCreatedAt;
                     if (!isAfterCreation) {
-                        console.log(`  ⏭️  Skipping legacy message from ${msg.createdAt.toISOString()} (before book creation)`);
+                        console.log(`  ⏭️  Skipping legacy message from ${msg.createdAt.toISOString()} (before bridge creation)`);
                     }
                     return isAfterCreation;
                 })
@@ -4456,12 +4456,12 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
             });
         }
     } catch (error) {
-        console.error('❌ Error in /api/books/:id/messages:', error);
+        console.error('❌ Error in /api/bridges/:id/messages:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// DEPRECATED: Removed duplicate endpoint - use /api/books/:id/messages?source=ledger instead
+// DEPRECATED: Removed duplicate endpoint - use /api/bridges/:id/messages?source=ledger instead
 
 // ===========================
 // ONBOARDING API
@@ -4515,7 +4515,7 @@ app.post('/api/onboarding/status', requireAuth, async (req, res) => {
 
 app.get('/api/messages/search', requireAuth, async (req, res) => {
     const {
-        bookId,
+        bridgeId,
         q,
         dateFrom,
         dateTo,
@@ -4525,8 +4525,8 @@ app.get('/api/messages/search', requireAuth, async (req, res) => {
         regex
     } = req.query;
     
-    if (!bookId) {
-        return res.status(400).json({ error: 'Book ID is required' });
+    if (!bridgeId) {
+        return res.status(400).json({ error: 'Bridge ID is required' });
     }
     
     try {
@@ -4537,8 +4537,8 @@ app.get('/api/messages/search', requireAuth, async (req, res) => {
         }
         
         // TENANT-AWARE: Query from tenant schema
-        let query = `SELECT * FROM ${tenantSchema}.messages WHERE book_id = $1`;
-        const params = [bookId];
+        let query = `SELECT * FROM ${tenantSchema}.messages WHERE bridge_id = $1`;
+        const params = [bridgeId];
         let paramCount = 1;
         
         // Text search
@@ -4614,7 +4614,7 @@ app.get('/api/messages/search', requireAuth, async (req, res) => {
 // ===========================
 
 app.get('/api/analytics/daily', requireAuth, async (req, res) => {
-    const { days = 30, book_id } = req.query;
+    const { days = 30, bridge_id } = req.query;
     
     try {
         // Use tenant schema from requireAuth middleware (already set!)
@@ -4623,10 +4623,10 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
             return res.status(500).json({ error: 'Tenant context not found' });
         }
         
-        console.log(`📊 Analytics request from ${req.userEmail} (tenant: ${tenantSchema}, book: ${book_id || 'all'})`);
+        console.log(`📊 Analytics request from ${req.userEmail} (tenant: ${tenantSchema}, bridge: ${bridge_id || 'all'})`);
         
-        // Build WHERE clause for book filter
-        const bridgeFilter = book_id ? `AND book_id = ${parseInt(book_id)}` : '';
+        // Build WHERE clause for bridge filter
+        const bridgeFilter = bridge_id ? `AND bridge_id = ${parseInt(bridge_id)}` : '';
         
         // TENANT-AWARE: Get daily aggregates from tenant schema
         const result = await pool.query(`
@@ -4658,15 +4658,15 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
             WHERE date >= CURRENT_DATE - $1::integer ${bridgeFilter}
         `, [days]);
         
-        // Get book info if filtering by specific book
+        // Get bridge info if filtering by specific bridge
         let bridgeInfo = null;
-        if (book_id) {
-            const bookResult = await pool.query(`
+        if (bridge_id) {
+            const bridgeResult = await pool.query(`
                 SELECT id, name, input_platform, output_platform
-                FROM ${tenantSchema}.books
+                FROM ${tenantSchema}.bridges
                 WHERE id = $1
-            `, [book_id]);
-            bridgeInfo = bookResult.rows[0] || null;
+            `, [bridge_id]);
+            bridgeInfo = bridgeResult.rows[0] || null;
         }
         
         console.log(`✅ Analytics data loaded: ${summaryResult.rows[0]?.total_messages || 0} total messages`);
@@ -4678,7 +4678,7 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
                 failed_messages: parseInt(summaryResult.rows[0]?.failed_messages || 0),
                 rate_limit_events: parseInt(rateLimitResult.rows[0]?.rate_limit_events || 0)
             },
-            book: bridgeInfo
+            bridge: bridgeInfo
         });
     } catch (error) {
         console.error(`❌ Analytics error for user ${req.userId}:`, error);
@@ -4687,7 +4687,7 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
 });
 
 // Update analytics (called periodically or on message insert)
-async function updateAnalytics(bookId) {
+async function updateAnalytics(bridgeId) {
     try {
         const today = new Date().toISOString().split('T')[0];
         
@@ -4696,24 +4696,24 @@ async function updateAnalytics(bookId) {
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE discord_status = 'failed') as failed
             FROM messages
-            WHERE book_id = $1 AND DATE(timestamp) = $2
-        `, [bookId, today]);
+            WHERE bridge_id = $1 AND DATE(timestamp) = $2
+        `, [bridgeId, today]);
         
         await pool.query(`
-            INSERT INTO message_analytics (date, book_id, total_messages, failed_messages)
+            INSERT INTO message_analytics (date, bridge_id, total_messages, failed_messages)
             VALUES ($1, $2, $3, $4)
-            ON CONFLICT (date, book_id)
+            ON CONFLICT (date, bridge_id)
             DO UPDATE SET
                 total_messages = $3,
                 failed_messages = $4
-        `, [today, bookId, stats.rows[0].total, stats.rows[0].failed]);
+        `, [today, bridgeId, stats.rows[0].total, stats.rows[0].failed]);
     } catch (error) {
         console.error('Failed to update analytics:', error);
     }
 }
 
 
-// Auto-restore all books with saved WhatsApp sessions on server startup
+// Auto-restore all bridges with saved WhatsApp sessions on server startup
 async function autoRestoreWhatsAppSessions() {
     try {
         console.log('🔄 Auto-restoring Baileys WhatsApp sessions from saved data...');
@@ -4730,19 +4730,19 @@ async function autoRestoreWhatsAppSessions() {
         let restoredCount = 0;
         let skippedCount = 0;
         
-        // For each tenant schema, find all books with saved sessions
+        // For each tenant schema, find all bridges with saved sessions
         for (const { schema_name } of schemas.rows) {
             try {
-                const books = await pool.query(`
+                const bridges = await pool.query(`
                     SELECT id, name, status 
-                    FROM ${schema_name}.books 
+                    FROM ${schema_name}.bridges 
                     WHERE status != 'deleted'
                 `);
                 
-                for (const book of books.rows) {
-                    // Check if this book has a saved Baileys session
+                for (const bridge of bridges.rows) {
+                    // Check if this bridge has a saved Baileys session
                     // Baileys stores auth in a directory with JSON files (creds.json, etc.)
-                    const sessionClientId = `${schema_name}_bridge_${book.id}`;
+                    const sessionClientId = `${schema_name}_bridge_${bridge.id}`;
                     // CRITICAL: Use persistent Baileys storage path with "session-" prefix
                     const sessionPath = path.join(BAILEYS_DATA_PATH, `session-${sessionClientId}`);
                     
@@ -4751,28 +4751,28 @@ async function autoRestoreWhatsAppSessions() {
                                       fs.existsSync(path.join(sessionPath, 'creds.json'));
                     
                     if (hasSession) {
-                        console.log(`🔗 Auto-restoring ${schema_name}:${book.id} (${book.name})...`);
+                        console.log(`🔗 Auto-restoring ${schema_name}:${bridge.id} (${bridge.name})...`);
                         
                         try {
                             // Initialize Baileys client with saved session
-                            // Uses composite tenant:book key for tracking
+                            // Uses composite tenant:bridge key for tracking
                             await whatsappManager.initializeClient(
-                                book.id,
+                                bridge.id,
                                 schema_name,
                                 createTenantAwareMessageHandler
                             );
                             restoredCount++;
-                            console.log(`✅ ${schema_name}:${book.id} restored successfully`);
+                            console.log(`✅ ${schema_name}:${bridge.id} restored successfully`);
                             
                             // THROTTLE: Prevent resource explosion from opening 100+ WebSockets at once
                             // Stagger initialization by 500ms to avoid overwhelming system resources
                             await new Promise(resolve => setTimeout(resolve, 500));
                         } catch (error) {
-                            console.error(`⚠️  Failed to restore ${schema_name}:${book.id}:`, error.message);
+                            console.error(`⚠️  Failed to restore ${schema_name}:${bridge.id}:`, error.message);
                             skippedCount++;
                         }
                     } else {
-                        console.log(`⏭️  Skipping ${schema_name}:${book.id} (${book.name}) - no saved session`);
+                        console.log(`⏭️  Skipping ${schema_name}:${bridge.id} (${bridge.name}) - no saved session`);
                         skippedCount++;
                     }
                 }
@@ -4781,7 +4781,7 @@ async function autoRestoreWhatsAppSessions() {
             }
         }
         
-        console.log(`✅ Auto-restore complete: ${restoredCount} books restored, ${skippedCount} skipped`);
+        console.log(`✅ Auto-restore complete: ${restoredCount} bridges restored, ${skippedCount} skipped`);
     } catch (error) {
         console.error('❌ Auto-restore failed:', error.message);
     }
@@ -4823,8 +4823,8 @@ process.on('uncaughtException', (error) => {
 });
 
 // Create Discord thread for output_01 (Nyanbook Ledger) manually
-// Use this to fix books that didn't get threads during creation
-app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (req, res) => {
+// Use this to fix bridges that didn't get threads during creation
+app.post('/api/bridges/:id/create-thread', requireAuth, setTenantContext, async (req, res) => {
     try {
         const { id } = req.params; // fractal_id
         const client = req.dbClient || pool;
@@ -4834,20 +4834,20 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
             return res.status(400).json({ error: 'Tenant context required' });
         }
         
-        // Get book by fractal_id
-        const book = await client.query(
-            `SELECT id, name, output_01_url, output_credentials, tenant_id FROM books WHERE fractal_id = $1`,
+        // Get bridge by fractal_id
+        const bridge = await client.query(
+            `SELECT id, name, output_01_url, output_credentials, tenant_id FROM bridges WHERE fractal_id = $1`,
             [id]
         );
         
-        if (!book.rows.length) {
-            return res.status(404).json({ error: 'Book not found' });
+        if (!bridge.rows.length) {
+            return res.status(404).json({ error: 'Bridge not found' });
         }
         
-        const bookData = book.rows[0];
+        const bridgeData = bridge.rows[0];
         
         // Check if thread already exists
-        let outputCredentials = bookData.output_credentials;
+        let outputCredentials = bridgeData.output_credentials;
         if (typeof outputCredentials === 'string') {
             outputCredentials = JSON.parse(outputCredentials);
         }
@@ -4869,12 +4869,12 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
         }
         
         // Create thread for output_01 (Nyanbook Ledger)
-        console.log(`🧵 Creating output_01 thread for book ${id} (${bookData.name})...`);
-        const threadInfo = await hermesBot.createThreadForBook(
-            bookData.output_01_url,
-            `${bookData.name} [Ledger]`,
-            bookData.tenant_id,
-            bookData.id
+        console.log(`🧵 Creating output_01 thread for bridge ${id} (${bridgeData.name})...`);
+        const threadInfo = await hermesBot.createThreadForBridge(
+            bridgeData.output_01_url,
+            `${bridgeData.name} [Ledger]`,
+            bridgeData.tenant_id,
+            bridgeData.id
         );
         
         // Update output_credentials with output_01 thread info
@@ -4889,7 +4889,7 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
         };
         
         await client.query(
-            `UPDATE books 
+            `UPDATE bridges 
              SET output_credentials = $1::jsonb
              WHERE fractal_id = $2`,
             [JSON.stringify(updatedCredentials), id]
@@ -4898,8 +4898,8 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
         // Send initial activation message to thread
         await hermesBot.sendInitialMessage(
             threadInfo.threadId, 
-            bookData.name, 
-            bookData.output_01_url
+            bridgeData.name, 
+            bridgeData.output_01_url
         );
         
         console.log(`✅ output_01 thread created: ${threadInfo.threadId}`);
@@ -4939,17 +4939,17 @@ app.listen(PORT, '0.0.0.0', async () => {
         console.log('✨ Trinity ready: Hermes (φ) + Toth (0)');
     } catch (error) {
         console.error('❌ Trinity initialization failed:', error.message);
-        console.error('   Book thread creation/reading may be unavailable');
+        console.error('   Bridge thread creation/reading may be unavailable');
     }
     
     await initializeDatabase();
     
-    // AUTO-HEAL: Fix books with missing Discord threads
-    // This catches cases where thread creation failed during book creation
+    // AUTO-HEAL: Fix bridges with missing Discord threads
+    // This catches cases where thread creation failed during bridge creation
     // (e.g., Hermes was offline, Discord API error, permission issues)
     if (hermesBot && hermesBot.isReady()) {
         try {
-            console.log('🔧 Auto-healing: Checking all books for missing Discord threads...');
+            console.log('🔧 Auto-healing: Checking all bridges for missing Discord threads...');
             
             // Get all tenant schemas
             const schemas = await pool.query(`
@@ -4963,32 +4963,32 @@ app.listen(PORT, '0.0.0.0', async () => {
             let totalChecked = 0;
             
             for (const { schema_name } of schemas.rows) {
-                // Get all non-archived books in this tenant
-                const books = await pool.query(`
+                // Get all non-archived bridges in this tenant
+                const bridges = await pool.query(`
                     SELECT id, name, output_01_url, output_0n_url, output_credentials 
-                    FROM ${schema_name}.books 
+                    FROM ${schema_name}.bridges 
                     WHERE archived = false
                 `);
                 
-                for (const book of books.rows) {
+                for (const bridge of bridges.rows) {
                     totalChecked++;
-                    const outputCreds = book.output_credentials || {};
+                    const outputCreds = bridge.output_credentials || {};
                     
                     // Check if Ledger thread (output_01) is missing
                     if (!outputCreds.output_01 || !outputCreds.output_01.thread_id) {
-                        console.log(`  ⚠️  Book "${book.name}" (${schema_name}) missing threads, creating...`);
+                        console.log(`  ⚠️  Bridge "${bridge.name}" (${schema_name}) missing threads, creating...`);
                         
                         try {
                             // Extract tenant_id from schema name (tenant_1 -> 1)
                             const tenantId = parseInt(schema_name.replace('tenant_', ''));
                             
                             // IDEMPOTENT: Pass existing credentials to avoid duplicate thread creation
-                            const dualThreads = await hermesBot.createDualThreadsForBook(
-                                book.output_01_url,
-                                book.output_0n_url,
-                                book.name,
+                            const dualThreads = await hermesBot.createDualThreadsForBridge(
+                                bridge.output_01_url,
+                                bridge.output_0n_url,
+                                bridge.name,
                                 tenantId,
-                                book.id,
+                                bridge.id,
                                 true, // threadModeUser
                                 outputCreds // existing credentials
                             );
@@ -5006,18 +5006,18 @@ app.listen(PORT, '0.0.0.0', async () => {
                             
                             // Save thread IDs to database
                             await pool.query(`
-                                UPDATE ${schema_name}.books 
+                                UPDATE ${schema_name}.bridges 
                                 SET output_credentials = output_credentials || $1::jsonb
                                 WHERE id = $2
-                            `, [JSON.stringify(outputDestinations), book.id]);
+                            `, [JSON.stringify(outputDestinations), bridge.id]);
                             
                             // Send initial messages to threads
                             if (dualThreads.output_01 && dualThreads.output_01.type === 'thread') {
                                 try {
                                     await hermesBot.sendInitialMessage(
                                         dualThreads.output_01.thread_id, 
-                                        book.name, 
-                                        book.output_01_url
+                                        bridge.name, 
+                                        bridge.output_01_url
                                     );
                                 } catch (msgError) {
                                     console.error(`    ⚠️  Failed to send initial message:`, msgError.message);
@@ -5025,22 +5025,22 @@ app.listen(PORT, '0.0.0.0', async () => {
                             }
                             
                             totalHealed++;
-                            console.log(`    ✅ Healed book "${book.name}" (thread: ${dualThreads.output_01?.thread_id})`);
+                            console.log(`    ✅ Healed bridge "${bridge.name}" (thread: ${dualThreads.output_01?.thread_id})`);
                         } catch (healError) {
-                            console.error(`    ❌ Failed to heal book "${book.name}":`, healError.message);
+                            console.error(`    ❌ Failed to heal bridge "${bridge.name}":`, healError.message);
                         }
                     }
                 }
             }
             
-            console.log(`✅ Auto-heal complete: ${totalHealed}/${totalChecked} books healed`);
+            console.log(`✅ Auto-heal complete: ${totalHealed}/${totalChecked} bridges healed`);
         } catch (error) {
             console.error('❌ Auto-heal failed:', error.message);
         }
     } else {
         console.warn('⚠️  Hermes not ready, skipping auto-heal');
     }
-    console.log('✅ Multi-tenant WhatsApp Book ready');
+    console.log('✅ Multi-tenant WhatsApp Bridge ready');
     
     // Start genesis counter (noisy constant for future security)
     // Tier 1: Cat breath (500ms constant)
@@ -5050,14 +5050,14 @@ app.listen(PORT, '0.0.0.0', async () => {
     
     // Auto-restore WhatsApp sessions for 24/7 uptime
     await autoRestoreWhatsAppSessions();
-    console.log('📱 All books with saved sessions are now active');
+    console.log('📱 All bridges with saved sessions are now active');
     
     // PROACTIVE HEALTH CHECK SYSTEM
     // Detects and auto-restarts stale WhatsApp connections every 10 minutes
     // Prevents "last active 12 hours ago" silent disconnections
-    async function checkBookHealth() {
+    async function checkBridgeHealth() {
         try {
-            console.log('🏥 Running proactive health check on all books...');
+            console.log('🏥 Running proactive health check on all bridges...');
             
             // Get all tenant schemas
             const schemas = await pool.query(`
@@ -5073,60 +5073,60 @@ app.listen(PORT, '0.0.0.0', async () => {
             let totalRestarted = 0;
             
             for (const { schema_name } of schemas.rows) {
-                // Get all non-archived books that should be connected
-                const books = await pool.query(`
+                // Get all non-archived bridges that should be connected
+                const bridges = await pool.query(`
                     SELECT id, fractal_id, name, status 
-                    FROM ${schema_name}.books 
+                    FROM ${schema_name}.bridges 
                     WHERE archived = false 
                     AND status IN ('connected', 'reconnecting')
                 `);
                 
-                for (const book of books.rows) {
+                for (const bridge of bridges.rows) {
                     totalChecked++;
                     
                     // DYNAMIC INDEXING: Parse fractal_id to extract tenant info
-                    const parsed = fractalId.parse(book.fractal_id);
+                    const parsed = fractalId.parse(bridge.fractal_id);
                     if (!parsed) {
-                        console.warn(`  ⚠️  Invalid fractal_id: ${book.fractal_id}`);
+                        console.warn(`  ⚠️  Invalid fractal_id: ${bridge.fractal_id}`);
                         continue;
                     }
                     
                     // Check if connection is truly alive (using legacy id for now, will refactor manager)
-                    const health = whatsappManager.checkConnectionHealth(book.id, schema_name);
+                    const health = whatsappManager.checkConnectionHealth(bridge.id, schema_name);
                     
                     if (health.status === 'alive') {
                         totalAlive++;
                         const ageHours = Math.round(health.timeSinceActivity / (1000 * 60 * 60));
-                        console.log(`  ✅ ${book.name} (${schema_name}): ALIVE (${ageHours}h since activity)`);
+                        console.log(`  ✅ ${bridge.name} (${schema_name}): ALIVE (${ageHours}h since activity)`);
                     } else if (health.status === 'stale') {
                         totalStale++;
-                        console.log(`  ⚠️  ${book.name} (${schema_name}): STALE - ${health.reason}`);
+                        console.log(`  ⚠️  ${bridge.name} (${schema_name}): STALE - ${health.reason}`);
                         console.log(`     Auto-restarting connection...`);
                         
                         try {
                             // Auto-restart the stale connection
                             const messageHandler = whatsappManager.messageHandlers.get(
-                                whatsappManager.getCompositeKey(schema_name, book.id)
+                                whatsappManager.getCompositeKey(schema_name, bridge.id)
                             );
                             
                             // Stop and reinitialize
-                            await whatsappManager.stopClient(book.id, schema_name);
+                            await whatsappManager.stopClient(bridge.id, schema_name);
                             await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s
-                            await whatsappManager.initializeClient(book.id, schema_name, messageHandler);
+                            await whatsappManager.initializeClient(bridge.id, schema_name, messageHandler);
                             
                             totalRestarted++;
-                            console.log(`     ✅ Restarted ${book.name}`);
+                            console.log(`     ✅ Restarted ${bridge.name}`);
                             
                             // Log audit trail
                             await logAudit(pool, { userId: 0, userEmail: 'system' }, 
-                                'HEALTH_CHECK_RESTART', 'BOOK', book.fractal_id, 
+                                'HEALTH_CHECK_RESTART', 'BRIDGE', bridge.fractal_id, 
                                 `Auto-restarted stale connection: ${health.reason}`, 
-                                { health, bridge_name: book.name }, schema_name);
+                                { health, bridge_name: bridge.name }, schema_name);
                         } catch (restartError) {
-                            console.error(`     ❌ Failed to restart ${book.name}:`, restartError.message);
+                            console.error(`     ❌ Failed to restart ${bridge.name}:`, restartError.message);
                         }
                     } else if (health.status === 'not_found') {
-                        console.log(`  ℹ️  ${book.name} (${schema_name}): Not in memory (needs manual start)`);
+                        console.log(`  ℹ️  ${bridge.name} (${schema_name}): Not in memory (needs manual start)`);
                     }
                 }
             }
@@ -5138,11 +5138,11 @@ app.listen(PORT, '0.0.0.0', async () => {
     }
     
     // Run health check every 10 minutes
-    setInterval(checkBookHealth, 10 * 60 * 1000);
+    setInterval(checkBridgeHealth, 10 * 60 * 1000);
     console.log('🏥 Proactive health checks scheduled (every 10 minutes)');
     
-    // Run first health check after 5 minutes (give books time to stabilize)
-    setTimeout(checkBookHealth, 5 * 60 * 1000);
+    // Run first health check after 5 minutes (give bridges time to stabilize)
+    setTimeout(checkBridgeHealth, 5 * 60 * 1000);
     console.log('⏰ First health check in 5 minutes');
     
     // 3-DAY MEDIA PURGE: Clean up old media from buffer

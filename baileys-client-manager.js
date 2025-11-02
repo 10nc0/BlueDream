@@ -20,10 +20,10 @@ class BaileysClientManager {
     }
 
     /**
-     * Generate composite key for tenant-aware bridge tracking
+     * Generate composite key for tenant-aware book tracking
      */
-    getCompositeKey(tenantSchema, bridgeId, isShadow = false) {
-        const baseKey = `${tenantSchema}:${bridgeId}`;
+    getCompositeKey(tenantSchema, bookId, isShadow = false) {
+        const baseKey = `${tenantSchema}:${bookId}`;
         return isShadow ? `${baseKey}:shadow` : baseKey;
     }
     
@@ -49,10 +49,10 @@ class BaileysClientManager {
     }
 
     /**
-     * Initialize a WhatsApp client for a specific bridge
+     * Initialize a WhatsApp client for a specific book
      */
-    async initializeClient(bridgeId, tenantSchema, onMessage) {
-        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+    async initializeClient(bookId, tenantSchema, onMessage) {
+        const compositeKey = this.getCompositeKey(tenantSchema, bookId);
         console.log(`🔧 Initializing Baileys client for ${compositeKey}`);
 
         // Check if client already exists
@@ -66,7 +66,7 @@ class BaileysClientManager {
 
         try {
             // Create tenant-scoped session directory
-            const sessionClientId = `${tenantSchema}_bridge_${bridgeId}`;
+            const sessionClientId = `${tenantSchema}_book_${bookId}`;
             const persistentPath = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
             const sessionPath = path.join(persistentPath, `session-${sessionClientId}`);
             
@@ -89,7 +89,7 @@ class BaileysClientManager {
                 printQRInTerminal: false, // We handle QR display ourselves
                 auth: state,
                 // Mobile connection (more reliable than browser)
-                browser: ['Nyanbook Bridge', 'Chrome', '110.0.0'],
+                browser: ['Nyanbook Book', 'Chrome', '110.0.0'],
                 syncFullHistory: false, // Don't sync old messages on connect
             });
 
@@ -100,7 +100,7 @@ class BaileysClientManager {
                 qrCode: null,
                 phoneNumber: null,
                 tenantSchema,
-                bridgeId,
+                bookId,
                 compositeKey,
                 createdAt: Date.now(),
                 reconnectAttempts: 0
@@ -119,7 +119,7 @@ class BaileysClientManager {
                     console.log(`📱 QR Code generated for ${compositeKey}`);
                     clientState.qrCode = qr;
                     clientState.status = 'qr_ready';
-                    await this.updateBotStatus(bridgeId, tenantSchema, 'qr_ready', qr, null);
+                    await this.updateBotStatus(bookId, tenantSchema, 'qr_ready', qr, null);
                 }
 
                 // CONNECTION ESTABLISHED
@@ -134,7 +134,7 @@ class BaileysClientManager {
                     clientState.qrCode = null;
                     clientState.reconnectAttempts = 0;
                     
-                    await this.updateBotStatus(bridgeId, tenantSchema, 'connected', null, `+${phoneNumber}`);
+                    await this.updateBotStatus(bookId, tenantSchema, 'connected', null, `+${phoneNumber}`);
                     console.log(`📱 ${compositeKey} connected with number: +${phoneNumber}`);
                 }
 
@@ -146,7 +146,7 @@ class BaileysClientManager {
                     
                     console.log(`🔌 ${compositeKey} disconnected: ${reason}`);
                     clientState.status = 'disconnected';
-                    await this.updateBotStatus(bridgeId, tenantSchema, 'disconnected', null, null, `Reason: ${reason}`);
+                    await this.updateBotStatus(bookId, tenantSchema, 'disconnected', null, null, `Reason: ${reason}`);
 
                     // Calculate session age
                     const sessionAge = clientState.createdAt ? (Date.now() - clientState.createdAt) : 0;
@@ -176,7 +176,7 @@ class BaileysClientManager {
                         
                         if (currentAttempts >= 5) {
                             console.log(`❌ ${compositeKey} exceeded max reconnect attempts (5), giving up`);
-                            await this.updateBotStatus(bridgeId, tenantSchema, 'disconnected', null, null, 'Max reconnect attempts exceeded');
+                            await this.updateBotStatus(bookId, tenantSchema, 'disconnected', null, null, 'Max reconnect attempts exceeded');
                             this.clients.delete(compositeKey);
                             this.messageHandlers.delete(compositeKey);
                             return;
@@ -190,10 +190,10 @@ class BaileysClientManager {
                         setTimeout(async () => {
                             try {
                                 console.log(`🔄 Auto-reconnecting ${compositeKey} (attempt ${clientState.reconnectAttempts}/5)...`);
-                                await this.updateBotStatus(bridgeId, tenantSchema, 'reconnecting', null, null, `Auto-reconnect attempt ${clientState.reconnectAttempts}/5`);
+                                await this.updateBotStatus(bookId, tenantSchema, 'reconnecting', null, null, `Auto-reconnect attempt ${clientState.reconnectAttempts}/5`);
                                 
                                 const messageHandler = this.messageHandlers.get(compositeKey);
-                                await this.initializeClient(bridgeId, tenantSchema, messageHandler);
+                                await this.initializeClient(bookId, tenantSchema, messageHandler);
                             } catch (reconnectError) {
                                 console.error(`❌ Auto-reconnect failed for ${compositeKey}:`, reconnectError.message);
                             }
@@ -223,7 +223,7 @@ class BaileysClientManager {
                         if (onMessage) {
                             // Wrap Baileys message with adapter to make it compatible with whatsapp-web.js format
                             const adaptedMessage = new BaileysMessageAdapter(msg, sock);
-                            await onMessage(adaptedMessage, bridgeId, tenantSchema);
+                            await onMessage(adaptedMessage, bookId, tenantSchema);
                         }
                     } catch (error) {
                         console.error(`❌ Error handling message for ${compositeKey}:`, error);
@@ -238,8 +238,8 @@ class BaileysClientManager {
 
             return clientState;
         } catch (error) {
-            console.error(`❌ Failed to initialize Baileys client for bridge ${bridgeId}:`, error);
-            await this.updateBotStatus(bridgeId, tenantSchema, 'error', null, null, error.message);
+            console.error(`❌ Failed to initialize Baileys client for book ${bookId}:`, error);
+            await this.updateBotStatus(bookId, tenantSchema, 'error', null, null, error.message);
             throw error;
         }
     }
@@ -248,8 +248,8 @@ class BaileysClientManager {
      * Create shadow session for zero-downtime reconnection
      * Primary session stays active, shadow gets new QR code
      */
-    async createShadowSession(bridgeId, tenantSchema, onMessage) {
-        const shadowKey = this.getCompositeKey(tenantSchema, bridgeId, true);
+    async createShadowSession(bookId, tenantSchema, onMessage) {
+        const shadowKey = this.getCompositeKey(tenantSchema, bookId, true);
         console.log(`👻 Creating shadow session: ${shadowKey}`);
         
         // Check if shadow already exists
@@ -260,7 +260,7 @@ class BaileysClientManager {
         
         try {
             // Create TEMPORARY session directory for shadow
-            const sessionClientId = `${tenantSchema}_bridge_${bridgeId}_shadow`;
+            const sessionClientId = `${tenantSchema}_book_${bookId}_shadow`;
             const persistentPath = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
             const sessionPath = path.join(persistentPath, `session-${sessionClientId}`);
             
@@ -281,7 +281,7 @@ class BaileysClientManager {
                 logger: this.logger,
                 printQRInTerminal: false,
                 auth: state,
-                browser: ['Nyanbook Bridge (Reconnecting)', 'Chrome', '110.0.0'],
+                browser: ['Nyanbook Book (Reconnecting)', 'Chrome', '110.0.0'],
                 syncFullHistory: false,
             });
             
@@ -292,7 +292,7 @@ class BaileysClientManager {
                 qrCode: null,
                 phoneNumber: null,
                 tenantSchema,
-                bridgeId,
+                bookId,
                 compositeKey: shadowKey,
                 createdAt: Date.now(),
                 reconnectAttempts: 0,
@@ -324,8 +324,8 @@ class BaileysClientManager {
                     clientState.qrCode = null;
                     
                     // ATOMIC SWAP: Replace primary with shadow
-                    console.log(`🔄 Swapping shadow to primary for bridge ${bridgeId}...`);
-                    await this.swapShadowToPrimary(bridgeId, tenantSchema);
+                    console.log(`🔄 Swapping shadow to primary for book ${bookId}...`);
+                    await this.swapShadowToPrimary(bookId, tenantSchema);
                 }
                 
                 // CONNECTION CLOSED
@@ -334,7 +334,7 @@ class BaileysClientManager {
                     console.log(`🔌 Shadow ${shadowKey} disconnected: ${statusCode}`);
                     
                     // Clean up shadow if it fails
-                    await this.destroyShadowSession(bridgeId, tenantSchema);
+                    await this.destroyShadowSession(bookId, tenantSchema);
                 }
             });
             
@@ -344,14 +344,14 @@ class BaileysClientManager {
             clientState.shadowTimeout = setTimeout(async () => {
                 if (clientState.status !== 'connected') {
                     console.log(`⏰ Shadow session timeout: ${shadowKey}`);
-                    await this.destroyShadowSession(bridgeId, tenantSchema);
+                    await this.destroyShadowSession(bookId, tenantSchema);
                 }
             }, 5 * 60 * 1000); // 5 minutes
             
             console.log(`👻 Shadow session created, will timeout in 5 minutes if not used`);
             return clientState;
         } catch (error) {
-            console.error(`❌ Failed to create shadow session for bridge ${bridgeId}:`, error);
+            console.error(`❌ Failed to create shadow session for book ${bookId}:`, error);
             throw error;
         }
     }
@@ -359,8 +359,8 @@ class BaileysClientManager {
     /**
      * Destroy shadow session only (cleanup)
      */
-    async destroyShadowSession(bridgeId, tenantSchema) {
-        const shadowKey = this.getCompositeKey(tenantSchema, bridgeId, true);
+    async destroyShadowSession(bookId, tenantSchema) {
+        const shadowKey = this.getCompositeKey(tenantSchema, bookId, true);
         console.log(`🗑️  Destroying shadow session: ${shadowKey}`);
         
         const clientState = this.clients.get(shadowKey);
@@ -381,7 +381,7 @@ class BaileysClientManager {
         }
         
         // Delete shadow session directory
-        const sessionClientId = `${tenantSchema}_bridge_${bridgeId}_shadow`;
+        const sessionClientId = `${tenantSchema}_book_${bookId}_shadow`;
         const persistentPath = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
         const sessionPath = path.join(persistentPath, `session-${sessionClientId}`);
         
@@ -395,9 +395,9 @@ class BaileysClientManager {
      * Atomic swap: Replace primary with shadow (zero-downtime reconnection)
      * CRITICAL: Does NOT modify database output_credentials - only swaps in-memory client
      */
-    async swapShadowToPrimary(bridgeId, tenantSchema) {
-        const primaryKey = this.getCompositeKey(tenantSchema, bridgeId, false);
-        const shadowKey = this.getCompositeKey(tenantSchema, bridgeId, true);
+    async swapShadowToPrimary(bookId, tenantSchema) {
+        const primaryKey = this.getCompositeKey(tenantSchema, bookId, false);
+        const shadowKey = this.getCompositeKey(tenantSchema, bookId, true);
         
         const shadowState = this.clients.get(shadowKey);
         if (!shadowState || shadowState.status !== 'connected') {
@@ -420,7 +420,7 @@ class BaileysClientManager {
             this.clients.delete(primaryKey);
             
             // Delete old primary session directory
-            const oldSessionId = `${tenantSchema}_bridge_${bridgeId}`;
+            const oldSessionId = `${tenantSchema}_book_${bookId}`;
             const persistentPath = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
             const oldSessionPath = path.join(persistentPath, `session-${oldSessionId}`);
             if (fs.existsSync(oldSessionPath)) {
@@ -446,8 +446,8 @@ class BaileysClientManager {
         this.clients.delete(shadowKey);
         
         // Step 3: Rename shadow session directory to primary
-        const shadowSessionId = `${tenantSchema}_bridge_${bridgeId}_shadow`;
-        const primarySessionId = `${tenantSchema}_bridge_${bridgeId}`;
+        const shadowSessionId = `${tenantSchema}_book_${bookId}_shadow`;
+        const primarySessionId = `${tenantSchema}_book_${bookId}`;
         const persistentPath = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
         const shadowPath = path.join(persistentPath, `session-${shadowSessionId}`);
         const primaryPath = path.join(persistentPath, `session-${primarySessionId}`);
@@ -458,7 +458,7 @@ class BaileysClientManager {
         }
         
         // Step 4: Update database status (ONLY status, NOT output_credentials!)
-        await this.updateBotStatus(bridgeId, tenantSchema, 'connected', null, shadowState.phoneNumber);
+        await this.updateBotStatus(bookId, tenantSchema, 'connected', null, shadowState.phoneNumber);
         
         console.log(`✅ Swap complete: Shadow promoted to primary (${shadowState.phoneNumber})`);
         console.log(`  🔒 Output threads/webhooks unchanged (preserved)`);
@@ -466,9 +466,9 @@ class BaileysClientManager {
     }
 
     /**
-     * Update bridge status in database
+     * Update book status in database
      */
-    async updateBotStatus(bridgeId, tenantSchema, status, qrCode, contactInfo, errorMessage) {
+    async updateBotStatus(bookId, tenantSchema, status, qrCode, contactInfo, errorMessage) {
         try {
             const client = await this.pool.connect();
             try {
@@ -476,11 +476,11 @@ class BaileysClientManager {
                 await client.query(`SET LOCAL search_path TO ${tenantSchema}`);
                 
                 await client.query(`
-                    UPDATE bridges 
+                    UPDATE books 
                     SET status = $1, 
                         updated_at = NOW()
                     WHERE id = $2
-                `, [status, bridgeId]);
+                `, [status, bookId]);
                 
                 await client.query('COMMIT');
             } catch (err) {
@@ -490,23 +490,23 @@ class BaileysClientManager {
                 client.release();
             }
         } catch (error) {
-            console.error(`Error updating bridge ${bridgeId} status:`, error);
+            console.error(`Error updating book ${bookId} status:`, error);
         }
     }
 
     /**
      * Get client state
      */
-    getClient(bridgeId, tenantSchema) {
-        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+    getClient(bookId, tenantSchema) {
+        const compositeKey = this.getCompositeKey(tenantSchema, bookId);
         return this.clients.get(compositeKey);
     }
 
     /**
      * Get QR code
      */
-    getQRCode(bridgeId, tenantSchema) {
-        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+    getQRCode(bookId, tenantSchema) {
+        const compositeKey = this.getCompositeKey(tenantSchema, bookId);
         const clientState = this.clients.get(compositeKey);
         return clientState?.qrCode || null;
     }
@@ -514,8 +514,8 @@ class BaileysClientManager {
     /**
      * Stop client (preserve session - graceful shutdown without revoking credentials)
      */
-    async stopClient(bridgeId, tenantSchema) {
-        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+    async stopClient(bookId, tenantSchema) {
+        const compositeKey = this.getCompositeKey(tenantSchema, bookId);
         console.log(`⏸️  Stopping Baileys client for ${compositeKey} (preserving session)`);
         
         const clientState = this.clients.get(compositeKey);
@@ -533,7 +533,7 @@ class BaileysClientManager {
             clientState.sock.end();
             
             this.clients.delete(compositeKey);
-            await this.updateBotStatus(bridgeId, tenantSchema, 'inactive', null, null, null);
+            await this.updateBotStatus(bookId, tenantSchema, 'inactive', null, null, null);
             
             console.log(`✅ Baileys client stopped for ${compositeKey} (session preserved)`);
         } catch (error) {
@@ -545,17 +545,17 @@ class BaileysClientManager {
      * Destroy client and delete session
      * IMPORTANT: Uses sock.logout() (not sock.end()) to intentionally revoke WhatsApp credentials
      * This ensures the session cannot be reused after deletion, which is the desired behavior
-     * when a bridge is permanently removed (unlike stopClient which preserves credentials)
+     * when a book is permanently removed (unlike stopClient which preserves credentials)
      */
-    async destroyClient(bridgeId, tenantSchema) {
-        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+    async destroyClient(bookId, tenantSchema) {
+        const compositeKey = this.getCompositeKey(tenantSchema, bookId);
         console.log(`🗑️  Destroying Baileys client for ${compositeKey}`);
         
         const clientState = this.clients.get(compositeKey);
         if (clientState) {
             try {
                 clientState.intentionalStop = true;
-                // logout() revokes credentials (correct for bridge deletion)
+                // logout() revokes credentials (correct for book deletion)
                 await clientState.sock.logout();
             } catch (error) {
                 // Ignore logout errors
@@ -564,7 +564,7 @@ class BaileysClientManager {
         }
 
         // Delete session directory
-        const sessionClientId = `${tenantSchema}_bridge_${bridgeId}`;
+        const sessionClientId = `${tenantSchema}_book_${bookId}`;
         const persistentPath = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
         const sessionPath = path.join(persistentPath, `session-${sessionClientId}`);
         
@@ -573,18 +573,18 @@ class BaileysClientManager {
             console.log(`🗑️  Session deleted: ${compositeKey}`);
         }
 
-        await this.updateBotStatus(bridgeId, tenantSchema, 'inactive', null, null, null);
+        await this.updateBotStatus(bookId, tenantSchema, 'inactive', null, null, null);
         console.log(`✅ Baileys client destroyed for ${compositeKey}`);
     }
 
     /**
      * Relink client (destroy and reinitialize)
      */
-    async relinkClient(bridgeId, tenantSchema, onMessage) {
-        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+    async relinkClient(bookId, tenantSchema, onMessage) {
+        const compositeKey = this.getCompositeKey(tenantSchema, bookId);
         console.log(`🔄 Relinking Baileys client for ${compositeKey}`);
-        await this.destroyClient(bridgeId, tenantSchema);
-        return await this.initializeClient(bridgeId, tenantSchema, onMessage);
+        await this.destroyClient(bookId, tenantSchema);
+        return await this.initializeClient(bookId, tenantSchema, onMessage);
     }
 
     /**
@@ -593,7 +593,7 @@ class BaileysClientManager {
     getAllClients() {
         return Array.from(this.clients.entries()).map(([compositeKey, state]) => ({
             compositeKey,
-            bridgeId: state.bridgeId,
+            bookId: state.bookId,
             status: state.status,
             phoneNumber: state.phoneNumber,
             tenantSchema: state.tenantSchema,
@@ -607,8 +607,8 @@ class BaileysClientManager {
      * Check if a connection is truly alive (not just marked "connected")
      * Returns: 'alive' | 'stale' | 'disconnected' | 'not_found'
      */
-    checkConnectionHealth(bridgeId, tenantSchema) {
-        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+    checkConnectionHealth(bookId, tenantSchema) {
+        const compositeKey = this.getCompositeKey(tenantSchema, bookId);
         const clientState = this.clients.get(compositeKey);
         
         if (!clientState) {
@@ -660,8 +660,8 @@ class BaileysClientManager {
     /**
      * Update last activity timestamp when messages are received
      */
-    updateActivity(bridgeId, tenantSchema) {
-        const compositeKey = this.getCompositeKey(tenantSchema, bridgeId);
+    updateActivity(bookId, tenantSchema) {
+        const compositeKey = this.getCompositeKey(tenantSchema, bookId);
         const clientState = this.clients.get(compositeKey);
         if (clientState) {
             clientState.lastActivity = Date.now();
@@ -674,7 +674,7 @@ class BaileysClientManager {
     async cleanup() {
         console.log('🧹 Gracefully stopping all Baileys clients...');
         const stopPromises = Array.from(this.clients.entries()).map(([compositeKey, state]) => {
-            return this.stopClient(state.bridgeId, state.tenantSchema);
+            return this.stopClient(state.bookId, state.tenantSchema);
         });
         await Promise.all(stopPromises);
         console.log('✅ All Baileys clients stopped');

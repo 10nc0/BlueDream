@@ -1,46 +1,46 @@
 // Analytics Dashboard System
 let analyticsChart = null;
 let analyticsData = {};
-let analyticsBridges = [];
+let analyticsBooks = [];
 
-// Populate bridge filter dropdown
-async function populateAnalyticsBridgeFilter() {
+// Populate book filter dropdown
+async function populateAnalyticsBookFilter() {
     try {
-        const response = await authFetch('/api/bridges');
+        const response = await authFetch('/api/books');
         if (response.ok) {
-            analyticsBridges = await response.json();
-            const select = document.getElementById('analyticsBridgeFilter');
+            analyticsBooks = await response.json();
+            const select = document.getElementById('analyticsBookFilter');
             
             // Clear and rebuild options
-            select.innerHTML = '<option value="">All Bridges</option>';
+            select.innerHTML = '<option value="">All Books</option>';
             
-            analyticsBridges.forEach(bridge => {
+            analyticsBooks.forEach(book => {
                 const option = document.createElement('option');
-                option.value = bridge.id;
-                option.textContent = `${bridge.name || bridge.input_platform + ' → ' + bridge.output_platform}`;
+                option.value = book.id;
+                option.textContent = `${book.name || book.input_platform + ' → ' + book.output_platform}`;
                 select.appendChild(option);
             });
         }
     } catch (error) {
-        console.error('Failed to load bridges for analytics filter:', error);
+        console.error('Failed to load books for analytics filter:', error);
     }
 }
 
 async function loadAnalyticsDashboard() {
-    // Populate bridge filter on first load
-    if (analyticsBridges.length === 0) {
-        await populateAnalyticsBridgeFilter();
+    // Populate book filter on first load
+    if (analyticsBooks.length === 0) {
+        await populateAnalyticsBookFilter();
     }
     
     try {
         // Get filter values
-        const bridgeId = document.getElementById('analyticsBridgeFilter')?.value || '';
+        const bookId = document.getElementById('analyticsBookFilter')?.value || '';
         const days = document.getElementById('analyticsTimeRange')?.value || '30';
         
         // Build query string
         const params = new URLSearchParams({ days });
-        if (bridgeId) {
-            params.append('bridge_id', bridgeId);
+        if (bookId) {
+            params.append('book_id', bookId);
         }
         
         // Load analytics data
@@ -91,12 +91,12 @@ function renderAnalyticsCharts() {
         return;
     }
     
-    // Show bridge filter info if filtering
-    if (analyticsData.bridge) {
-        const bridgeInfo = document.createElement('div');
-        bridgeInfo.style.cssText = 'background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 1.5rem; color: #60a5fa; font-size: 0.875rem;';
-        bridgeInfo.innerHTML = `📊 Showing analytics for: <strong>${analyticsData.bridge.name || analyticsData.bridge.input_platform + ' → ' + analyticsData.bridge.output_platform}</strong>`;
-        container.appendChild(bridgeInfo);
+    // Show book filter info if filtering
+    if (analyticsData.book) {
+        const bookInfo = document.createElement('div');
+        bookInfo.style.cssText = 'background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 1.5rem; color: #60a5fa; font-size: 0.875rem;';
+        bookInfo.innerHTML = `📊 Showing analytics for: <strong>${analyticsData.book.name || analyticsData.book.input_platform + ' → ' + analyticsData.book.output_platform}</strong>`;
+        container.appendChild(bookInfo);
     }
     
     // Summary Cards

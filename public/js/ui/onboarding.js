@@ -2,7 +2,7 @@
 let onboardingState = {
     step: 1,
     platform: null,
-    bridgeId: null,
+    bookId: null,
     webhookUrl: null
 };
 
@@ -32,7 +32,7 @@ async function saveOnboardingProgress(completed = false) {
 }
 
 function openOnboardingWizard() {
-    onboardingState = { step: 1, platform: null, bridgeId: null, webhookUrl: null };
+    onboardingState = { step: 1, platform: null, bookId: null, webhookUrl: null };
     showOnboardingStep(1);
     document.getElementById('onboardingModal').style.display = 'flex';
 }
@@ -92,9 +92,9 @@ async function onboardingStep1Next() {
     }
     
     if (onboardingState.platform === 'WhatsApp') {
-        // Create bridge and show QR code
+        // Create book and show QR code
         try {
-            const response = await authFetch('/api/bridges', {
+            const response = await authFetch('/api/books', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -105,12 +105,12 @@ async function onboardingStep1Next() {
             });
             
             if (response.ok) {
-                const bridge = await response.json();
-                onboardingState.bridgeId = bridge.id;
+                const book = await response.json();
+                onboardingState.bookId = book.id;
                 showOnboardingStep(2);
                 
                 // Generate QR code
-                const qrResponse = await authFetch(`/api/bridges/${bridge.id}/qr`);
+                const qrResponse = await authFetch(`/api/books/${book.id}/qr`);
                 if (qrResponse.ok) {
                     const qrData = await qrResponse.json();
                     document.getElementById('onboarding-qr').src = qrData.qr;
@@ -140,8 +140,8 @@ async function validateDiscordWebhook(url) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                content: '✅ Nyan Bridge webhook test - connection successful!',
-                username: 'Nyan Bridge'
+                content: '✅ Nyan Book webhook test - connection successful!',
+                username: 'Nyan Book'
             })
         });
         
@@ -182,10 +182,10 @@ async function onboardingStep3Complete() {
     document.getElementById('onboarding-validation-status').innerHTML = 
         '<span style="color: #22c55e;">✅ Webhook validated!</span>';
     
-    // Update bridge with webhook URL
-    if (onboardingState.bridgeId) {
+    // Update book with webhook URL
+    if (onboardingState.bookId) {
         try {
-            await authFetch(`/api/bridges/${onboardingState.bridgeId}`, {
+            await authFetch(`/api/books/${onboardingState.bookId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -201,7 +201,7 @@ async function onboardingStep3Complete() {
     await saveOnboardingProgress(true);
     
     // Show success and close
-    alert('🎉 Onboarding complete! Your bridge is ready.');
+    alert('🎉 Onboarding complete! Your book is ready.');
     closeOnboardingWizard();
-    loadBots(); // Refresh bridge list
+    loadBots(); // Refresh book list
 }

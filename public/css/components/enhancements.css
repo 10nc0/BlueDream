@@ -119,7 +119,7 @@ input::placeholder {
 .session-card,
 .user-card,
 .analytics-card,
-.bridge-category {
+.book-category {
     border: 1px solid rgba(255, 255, 255, 0.15) !important;
     box-shadow: 
         0 4px 16px rgba(0, 0, 0, 0.2),
@@ -385,8 +385,8 @@ body.compact-mode .channel-name {
 }
 
 /* Frosted glass effect on all cards */
-.bridge-sidebar,
-.bridge-detail,
+.book-sidebar,
+.book-detail,
 .tab-content {
     background: rgba(15, 23, 42, 0.4) !important;
     backdrop-filter: blur(20px) saturate(150%) !important;

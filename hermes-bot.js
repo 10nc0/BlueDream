@@ -127,7 +127,7 @@ class HermesBot {
         return false;
     }
 
-    async createThreadForBridge(webhookUrl, bridgeName, tenantId, bridgeId, channelId = null, retryCount = 0) {
+    async createThreadForBook(webhookUrl, bookName, tenantId, bookId, channelId = null, retryCount = 0) {
         if (!this.client || !this.ready) {
             throw new Error('Hermes bot not initialized or not ready');
         }
@@ -140,12 +140,12 @@ class HermesBot {
                 ? await this.client.channels.fetch(channelId)
                 : await this.getChannelFromWebhookUrl(webhookUrl, channelId);
             
-            const threadName = `${bridgeName} (t${tenantId}-b${bridgeId})`;
+            const threadName = `${bookName} (t${tenantId}-b${bookId})`;
             
             const thread = await channel.threads.create({
                 name: threadName,
                 autoArchiveDuration: 10080,
-                reason: `Auto-created thread for bridge: ${bridgeName}`,
+                reason: `Auto-created thread for book: ${bookName}`,
                 type: ChannelType.PublicThread
             });
 
@@ -165,22 +165,22 @@ class HermesBot {
                 channelId: channel.id
             };
         } catch (error) {
-            console.error(`❌ Hermes failed to create thread for ${bridgeName} (attempt ${retryCount + 1}/${maxRetries}):`, error.message);
+            console.error(`❌ Hermes failed to create thread for ${bookName} (attempt ${retryCount + 1}/${maxRetries}):`, error.message);
             
             if (this.isTransientError(error) && retryCount < maxRetries) {
                 const delay = baseDelay * Math.pow(2, retryCount);
                 console.log(`⏳ Retrying thread creation in ${delay}ms...`);
                 
                 await new Promise(resolve => setTimeout(resolve, delay));
-                return this.createThreadForBridge(webhookUrl, bridgeName, tenantId, bridgeId, channelId, retryCount + 1);
+                return this.createThreadForBook(webhookUrl, bookName, tenantId, bookId, channelId, retryCount + 1);
             }
             
             throw error;
         }
     }
 
-    async createDualThreadsForBridge(webhook01Url, webhook0nUrl, bridgeName, tenantId, bridgeId, threadModeUser = true, existingCredentials = null) {
-        console.log(`🧵 Hermes creating dual outputs for: ${bridgeName} (t${tenantId}-b${bridgeId})`);
+    async createDualThreadsForBook(webhook01Url, webhook0nUrl, bookName, tenantId, bookId, threadModeUser = true, existingCredentials = null) {
+        console.log(`🧵 Hermes creating dual outputs for: ${bookName} (t${tenantId}-b${bookId})`);
         
         const results = {
             output_01: null,
@@ -195,11 +195,11 @@ class HermesBot {
         } else if (webhook01Url) {
             // OUTPUT #01: Nyanbook Ledger (ALWAYS THREAD)
             try {
-                const threadInfo = await this.createThreadForBridge(
+                const threadInfo = await this.createThreadForBook(
                     webhook01Url,
-                    `${bridgeName} [Ledger]`,
+                    `${bookName} [Ledger]`,
                     tenantId,
-                    bridgeId
+                    bookId
                 );
                 results.output_01 = {
                     type: 'thread',
