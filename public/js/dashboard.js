@@ -2745,80 +2745,22 @@
                         });
                         localStorage.setItem('recentBridges', JSON.stringify(recentBridges.slice(0, 10)));
                         
-                        // 2. START WHATSAPP SESSION + GET QR
-                        console.log('🚀 Starting WhatsApp session...');
-                        const startRes = await fetch(`/api/bridges/${bridge.fractal_id}/start`, {
-                            method: 'POST',
-                            headers: { 
-                                'Authorization': `Bearer ${token}`
-                            }
-                        });
-                        
-                        if (!startRes.ok) {
-                            const error = await startRes.json();
-                            throw new Error(error.error || 'Failed to start WhatsApp session');
-                        }
-                        
-                        const startData = await startRes.json();
-                        console.log('📱 WhatsApp session started:', startData);
-                        
-                        // 3. SHOW QR CODE IN CREATE BRIDGE MODAL
-                        if (startData.qrCode) {
-                            document.getElementById('bridge-qr-img').src = startData.qrCode;
-                        } else {
-                            // Fallback: fetch QR from separate endpoint (returns JSON)
-                            const qrRes = await fetch(`/api/bridges/${bridge.fractal_id}/qr`, {
-                                headers: { 
-                                    'Authorization': `Bearer ${token}`
-                                }
-                            });
-                            if (qrRes.ok) {
-                                const qrData = await qrRes.json();
-                                if (qrData.qr) {
-                                    document.getElementById('bridge-qr-img').src = qrData.qr;
-                                }
-                            }
-                        }
-                        
-                        document.getElementById('bridge-name-display').textContent = bridgeName;
-                        document.getElementById('bridge-fractal-id').textContent = bridge.fractal_id;
-                        document.getElementById('bridge-form-section').style.display = 'none';
-                        document.getElementById('bridge-qr-section').style.display = 'block';
-                        
-                        // 4. POLL STATUS → AUTO-CLOSE ON SUCCESS
-                        console.log('🔄 Polling for connection status...');
-                        let pollInterval = setInterval(async () => {
-                            try {
-                                const statusRes = await fetch(`/api/bridges/${bridge.fractal_id}/qr`, {
-                                    headers: { 
-                                        'Authorization': `Bearer ${token}`
-                                    }
-                                });
-                                
-                                if (statusRes.ok) {
-                                    const status = await statusRes.json();
-                                    console.log('📊 Status:', status);
-                                    
-                                    // Close modal when WhatsApp connects
-                                    if (status.status === 'ready' || status.status === 'connected' || status.status === 'active' || status.status === 'authenticated') {
-                                        clearInterval(pollInterval);
-                                        document.querySelector('.bridge-qr-status').innerHTML = '✅ Connected! Closing...';
-                                        document.querySelector('.bridge-qr-status').style.background = 'rgba(34, 197, 94, 0.2)';
-                                        document.querySelector('.bridge-qr-status').style.borderColor = 'rgba(34, 197, 94, 0.3)';
-                                        document.querySelector('.bridge-qr-status').style.color = '#22c55e';
-                                        setTimeout(() => {
-                                            closeCreateBridgeModal();
-                                            loadBridges();
-                                        }, 1500);
-                                    }
-                                }
-                            } catch (pollError) {
-                                console.error('Poll error:', pollError);
-                            }
-                        }, 2000);
-                        
+                        // Reset submit button
                         submitBtn.disabled = false;
                         submitBtn.textContent = originalText;
+                        
+                        // Close create modal
+                        closeCreateBridgeModal();
+                        
+                        // Reload bridges to show the new one
+                        await loadBridges();
+                        
+                        // UNIFIED FLOW: Use shadow session for both Create Bridge and Generate QR
+                        // This ensures no storage bloat from abandoned bridges
+                        console.log('🚀 Using unified shadow QR flow for new bridge...');
+                        
+                        // Auto-trigger QR generation using unified flow (no warning for first bridge)
+                        await generateNewQR(bridge.fractal_id);
                         
                     } catch (err) {
                         console.error('❌ Error:', err);
@@ -3235,11 +3177,21 @@
             const bridge = bridges.find(b => b.fractal_id === bridgeId);
             const bridgeName = bridge?.name || 'Bridge';
             
-            // Show confirmation modal first
-            const confirmed = await showRelinkConfirmation(bridgeName);
-            if (!confirmed) {
-                console.log('User cancelled QR regeneration');
-                return;
+            // UNIFIED FLOW: Only show warning when REPLACING an active inpipe connection
+            // Warning logic:
+            // ✅ Show warning: Bridge is currently CONNECTED (replacing active WhatsApp session)
+            // ❌ Skip warning: New bridge or never-connected bridge (no active inpipe to replace)
+            const isConnected = bridge?.status === 'connected' || bridge?.status === 'active';
+            
+            // Show confirmation modal ONLY if replacing an active connection
+            if (isConnected) {
+                const confirmed = await showRelinkConfirmation(bridgeName);
+                if (!confirmed) {
+                    console.log('User cancelled QR regeneration (active connection preserved)');
+                    return;
+                }
+            } else {
+                console.log(`🚀 Skipping warning - bridge not yet connected (no active inpipe to replace)`);
             }
             
             // Relink first to get fresh QR
