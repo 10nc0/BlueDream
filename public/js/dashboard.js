@@ -300,6 +300,9 @@
             // Hide thumbs zone
             const thumbsZone = document.getElementById('thumbsZone');
             if (thumbsZone) thumbsZone.style.display = 'none';
+            
+            // Initialize φ-breath system (UNIVERSAL - needed for Button 00 object layer)
+            initPhiBreath();
         }
 
         /**
