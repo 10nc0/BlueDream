@@ -16,7 +16,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 
 **UI/UX Decisions:**
 - **Adaptive Layout**: Desktop mode offers a resizable sidebar and header with dynamic positioning. Mobile mode features automatic layout detection, harmonized header, and floating action zone for quick access.
-- **Touch Interactions**: Optimized for iPhone with tap-to-zoom for media, swipe navigation, auto-hide elements on scroll, 48px touch targets, and momentum scrolling. Cat animation uses scoped touch events with ghost tap prevention (100ms cooldown) to avoid interference with form fields.
+- **Touch Interactions**: Optimized for iPhone with tap-to-zoom for media, swipe navigation, auto-hide elements on scroll, 48px touch targets, and momentum scrolling. Cat animation is non-interactive on authentication pages (login/signup/forgot-password) to avoid form field interference, with full wiggle interaction enabled on dashboard.
 - **Responsive Components**: Self-contained UI components adapt behavior for mobile/desktop contexts.
 
 **Technical Implementations:**
