@@ -3108,18 +3108,18 @@
                             <h2 style="margin: 0; color: #e2e8f0; font-size: 1.5rem; font-weight: 600;">Reconnect WhatsApp?</h2>
                         </div>
                         
-                        <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
+                        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
                             <p style="margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
-                                <strong style="color: #60a5fa;">Bridge:</strong> ${bridgeName}
+                                <strong style="color: #fca5a5;">Bridge:</strong> ${bridgeName}
+                            </p>
+                            <p style="margin: 0 0 0.75rem 0; color: #fca5a5; font-size: 0.95rem; line-height: 1.6;">
+                                ⚠️ <strong>Your bridge will be temporarily disconnected</strong>
                             </p>
                             <p style="margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
-                                ✅ <strong>Your current bridge stays active</strong> until new login succeeds
-                            </p>
-                            <p style="margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
-                                ✅ <strong>Discord threads remain unchanged</strong> - message history preserved
+                                📉 <strong>Messages sent during reconnection may be lost</strong>
                             </p>
                             <p style="margin: 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
-                                🔄 <strong>Only WhatsApp connection</strong> will be refreshed with new QR
+                                ⏱️ Brief downtime (~30 seconds) while you scan the new QR code
                             </p>
                         </div>
                         
