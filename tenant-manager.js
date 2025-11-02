@@ -91,6 +91,30 @@ class TenantManager {
                 )
             `);
             
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.drops (
+                    id SERIAL PRIMARY KEY,
+                    bridge_id INTEGER NOT NULL REFERENCES ${schemaName}.bridges(id) ON DELETE CASCADE,
+                    discord_message_id TEXT NOT NULL,
+                    metadata_text TEXT NOT NULL,
+                    extracted_tags TEXT[] DEFAULT '{}'::text[],
+                    extracted_dates TEXT[] DEFAULT '{}'::text[],
+                    search_vector tsvector,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            `);
+            
+            await client.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS drops_bridge_message_idx 
+                ON ${schemaName}.drops (bridge_id, discord_message_id)
+            `);
+            
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS drops_search_idx 
+                ON ${schemaName}.drops USING gin(search_vector)
+            `);
+            
             return { tenantId, schemaName };
         } finally {
             client.release();
