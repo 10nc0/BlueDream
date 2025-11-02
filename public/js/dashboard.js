@@ -1202,7 +1202,7 @@
                     <input 
                         type="url" 
                         class="form-input" 
-                        placeholder="Webhook URL" 
+                        placeholder="https://discord.com/api/webhooks/..." 
                         value="${escapeHtml(webhook.url)}"
                         data-webhook-id="${webhook.id}"
                         data-webhook-field="url"
@@ -5633,9 +5633,8 @@ document.addEventListener('DOMContentLoaded', function() {
         startBookSetupBtn.addEventListener('click', startBookSetup);
     }
     
-    const addWebhookBtn = document.querySelector('[onclick*="addWebhookInput"]');
+    const addWebhookBtn = document.getElementById('addWebhookBtn');
     if (addWebhookBtn) {
-        addWebhookBtn.removeAttribute('onclick');
         addWebhookBtn.addEventListener('click', addWebhookInput);
     }
     

@@ -547,6 +547,7 @@ async function sendToLedger(payload, options = {}, book = null) {
 
 // Send to User Output (Output #0n = user's personal Discord, mutable)
 // DUAL-OUTPUT: Routes to output_0n (channel OR thread) for user visibility
+// MULTI-WEBHOOK: Sends to ALL webhooks in output_credentials.webhooks array
 async function sendToUserOutput(payload, options = {}, book = null) {
     if (!book) {
         console.log('  ℹ️  No book context - skipping Output #0n');
@@ -554,69 +555,94 @@ async function sendToUserOutput(payload, options = {}, book = null) {
     }
 
     try {
-        // WEBHOOK-FIRST: Use webhook URL directly from book object
-        const userOutputUrl = book.output_0n_url;
+        // MULTI-WEBHOOK: Get all webhooks from output_credentials.webhooks array
+        const webhooks = book.output_credentials?.webhooks || [];
+        const fallbackUrl = book.output_0n_url; // Backward compatibility
         
-        if (!userOutputUrl || !userOutputUrl.trim()) {
+        // If no webhooks in array, try fallback single URL
+        if (webhooks.length === 0 && (!fallbackUrl || !fallbackUrl.trim())) {
             console.log(`  ℹ️  No Output #0n configured - skipping user Discord`);
             return false;
         }
-
-        const url = new URL(userOutputUrl);
-        url.searchParams.set('wait', 'true');
         
-        // DUAL-OUTPUT: Route to output_0n (channel OR thread)
-        const output = options.output;
-        if (output?.type === 'thread' && output?.thread_id) {
-            url.searchParams.set('thread_id', output.thread_id);
-            console.log(`  📍 Targeting thread_0n: ${output.thread_id}`);
-        } else if (output?.type === 'channel') {
-            console.log(`  📍 Targeting channel_0n: ${output.channel_id}`);
+        // Build webhook list: prioritize webhooks array, fall back to single URL
+        const webhookList = webhooks.length > 0 
+            ? webhooks.filter(w => w.url && w.url.trim())
+            : (fallbackUrl ? [{ name: 'Personal Webhook', url: fallbackUrl }] : []);
+        
+        if (webhookList.length === 0) {
+            console.log(`  ℹ️  No valid webhooks configured - skipping user Discord`);
+            return false;
         }
         
-        // Handle media vs text - read from media_buffer if provided
-        if (options.isMedia && options.mediaBufferId) {
-            // Read media from buffer table (retry-safe storage)
-            // CRITICAL: Use schema-qualified queries instead of SET LOCAL search_path
-            const mediaClient = await pool.connect();
+        console.log(`  📤 Sending to ${webhookList.length} personal webhook(s)...`);
+        
+        // Send to ALL webhooks in parallel
+        const sendPromises = webhookList.map(async (webhook, index) => {
             try {
-                const mediaResult = await mediaClient.query(`
-                    SELECT media_data, media_type, filename 
-                    FROM ${options.tenantSchema}.media_buffer 
-                    WHERE id = $1
-                `, [options.mediaBufferId]);
+                const url = new URL(webhook.url);
+                url.searchParams.set('wait', 'true');
                 
-                if (mediaResult.rows.length === 0) {
-                    throw new Error(`Media buffer ID ${options.mediaBufferId} not found`);
+                // DUAL-OUTPUT: Route to output_0n (channel OR thread)
+                const output = options.output;
+                if (output?.type === 'thread' && output?.thread_id) {
+                    url.searchParams.set('thread_id', output.thread_id);
                 }
                 
-                const { media_data, media_type, filename } = mediaResult.rows[0];
-                const buffer = media_data;
+                // Handle media vs text - read from media_buffer if provided
+                if (options.isMedia && options.mediaBufferId) {
+                    const mediaClient = await pool.connect();
+                    try {
+                        const mediaResult = await mediaClient.query(`
+                            SELECT media_data, media_type, filename 
+                            FROM ${options.tenantSchema}.media_buffer 
+                            WHERE id = $1
+                        `, [options.mediaBufferId]);
+                        
+                        if (mediaResult.rows.length === 0) {
+                            throw new Error(`Media buffer ID ${options.mediaBufferId} not found`);
+                        }
+                        
+                        const { media_data, media_type, filename } = mediaResult.rows[0];
+                        const buffer = media_data;
+                        
+                        const FormData = require('form-data');
+                        const form = new FormData();
+                        form.append('file', buffer, {
+                            filename: filename,
+                            contentType: media_type
+                        });
+                        form.append('payload_json', JSON.stringify(payload));
+                        await axios.post(url.toString(), form, { headers: form.getHeaders() });
+                        
+                        // Mark as delivered only on first webhook (avoid duplicate flags)
+                        if (index === 0) {
+                            await mediaClient.query(`
+                                UPDATE ${options.tenantSchema}.media_buffer 
+                                SET delivered_to_user = true,
+                                    delivery_attempts = delivery_attempts + 1,
+                                    last_delivery_attempt = NOW()
+                                WHERE id = $1
+                            `, [options.mediaBufferId]);
+                        }
+                    } finally {
+                        mediaClient.release();
+                    }
+                } else {
+                    await axios.post(url.toString(), payload);
+                }
                 
-                const FormData = require('form-data');
-                const form = new FormData();
-                form.append('file', buffer, {
-                    filename: filename,
-                    contentType: media_type
-                });
-                form.append('payload_json', JSON.stringify(payload));
-                await axios.post(url.toString(), form, { headers: form.getHeaders() });
-                
-                // Mark as delivered to user output (schema-qualified)
-                await mediaClient.query(`
-                    UPDATE ${options.tenantSchema}.media_buffer 
-                    SET delivered_to_user = true,
-                        delivery_attempts = delivery_attempts + 1,
-                        last_delivery_attempt = NOW()
-                    WHERE id = $1
-                `, [options.mediaBufferId]);
-                
-            } finally {
-                mediaClient.release();
+                console.log(`    ✅ Sent to "${webhook.name || 'Webhook ' + (index + 1)}"`);
+                return true;
+            } catch (error) {
+                console.error(`    ❌ Failed to send to "${webhook.name || 'Webhook ' + (index + 1)}": ${error.message}`);
+                return false;
             }
-        } else {
-            await axios.post(url.toString(), payload);
-        }
+        });
+        
+        const results = await Promise.all(sendPromises);
+        const successCount = results.filter(r => r).length;
+        console.log(`  📊 Sent to ${successCount}/${webhookList.length} webhook(s)`);
 
         console.log(`  ✅ Sent to Output #0n (User Discord)`);
         return true;
@@ -2915,7 +2941,7 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         const userRole = req.tenantContext?.userRole || 'read-only';
         const tenantId = req.tenantContext?.tenantId;
         const isGenesisAdmin = req.tenantContext?.isGenesisAdmin || false;
-        const { name, inputPlatform, userOutputUrl, contactInfo, tags, includeGroupMessages } = req.body;
+        const { name, inputPlatform, userOutputUrl, contactInfo, tags, includeGroupMessages, outputCredentials: userOutputCredentials } = req.body;
         
         if (!tenantId) {
             return res.status(400).json({ error: 'Tenant context required' });
@@ -2941,9 +2967,10 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         // Generate unique Discord thread name for ledger tracking
         const threadName = `book-t${tenantId}-${Date.now()}`;
         
-        // Store thread metadata in output_credentials
+        // Store thread metadata + user webhooks in output_credentials
         const outputCredentials = {
-            thread_name: threadName
+            thread_name: threadName,
+            webhooks: userOutputCredentials?.webhooks || []
         };
         
         const result = await client.query(
@@ -3135,8 +3162,9 @@ app.put('/api/books/:id', requireAuth, setTenantContext, requireRole('admin', 'w
             values.push(inputCredentials);
         }
         if (outputCredentials !== undefined) {
-            updates.push(`output_credentials = $${paramCount++}`);
-            values.push(outputCredentials);
+            // CRITICAL: Merge webhooks into existing output_credentials (preserve thread data)
+            updates.push(`output_credentials = output_credentials || $${paramCount++}::jsonb`);
+            values.push(JSON.stringify({ webhooks: outputCredentials.webhooks || [] }));
         }
         if (contactInfo !== undefined) {
             updates.push(`contact_info = $${paramCount++}`);
