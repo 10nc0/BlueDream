@@ -689,10 +689,9 @@
          * Render thumbs zone buttons (simplified)
          * Position 1 (rightmost): Create (✍🏻) - ONLY button for genesis form
          * Position 2: Audit (🧿) - always visible
-         * Position 3: Logout (🚪) - always visible on mobile/desktop
-         * Position 4: Search (🔍) - desktop only (hidden on mobile - search fields are parallel to export)
-         * Position 5: Book Info (📋) - ONLY shows if books > 0
-         * Position 6: Book Card (🔗) - Only if 4+ books
+         * Position 3: Search (🔍) - desktop only (hidden on mobile - search fields are parallel to export)
+         * Position 4: Book Info (📋) - ONLY shows if books > 0
+         * Position 5: Book Card (🔗) - Only if 4+ books
          * Position n: Next (→) - if 2+ books
          */
         function renderThumbsZone() {
@@ -718,10 +717,7 @@
             // Position 2: Audit button (always visible)
             html += `<button class="thumb-btn" data-action="audit" aria-label="View audit log">🧿</button>`;
             
-            // Position 3: Logout button (always visible on mobile, desktop has header button)
-            html += `<button class="thumb-btn" data-action="logout" aria-label="Logout">🚪</button>`;
-            
-            // Position 4: Search button (hidden on mobile via CSS)
+            // Position 3: Search button (hidden on mobile via CSS)
             html += `<button class="thumb-btn desktop-only" data-action="search" aria-label="Search messages">🔍</button>`;
             
             // Position 4: Book Actions (ONLY if current book exists)
@@ -4988,6 +4984,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const thumbBtn = e.target.closest('.thumb-btn, .thumbs-zone button');
         const createBtn = e.target.closest('.create-bot-btn');
         const auditBtn = e.target.closest('.audit-type-btn');
+        const logoutBtn = e.target.closest('.logout-btn');
+        
+        // Logout button (desktop header & mobile)
+        if (logoutBtn) {
+            logout();
+            return;
+        }
         
         // Mobile thumbs zone
         if (thumbBtn) {
@@ -5045,10 +5048,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
     });
-    
-    // Logout button
-    const logoutBtn = document.querySelector('.logout-btn');
-    if (logoutBtn) logoutBtn.addEventListener('click', logout);
     
     // Modal close buttons and backdrop clicks
     const mediaModal = document.getElementById('mediaModal');
