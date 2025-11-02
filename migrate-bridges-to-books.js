@@ -74,11 +74,45 @@ async function migrateBridgesToBooks() {
 
                 if (DRY_RUN) {
                     console.log(`🔍 ${schema}: Would rename bridges → books (${bridgeCount} records)`);
+                    console.log(`   └─ Would rename media_buffer.bridge_id → book_id`);
+                    console.log(`   └─ Would rename message_analytics.bridge_id → book_id (if exists)`);
                     results.push({ schema, status: 'preview', count: bridgeCount });
                     totalMigrated++;
                 } else {
+                    // Step 1: Rename table
                     await pool.query(`ALTER TABLE ${schema}.bridges RENAME TO books`);
                     console.log(`✅ ${schema}: Renamed bridges → books (${bridgeCount} records)`);
+                    
+                    // Step 2: Rename bridge_id → book_id in media_buffer
+                    const hasMediaBuffer = await pool.query(`
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.columns 
+                            WHERE table_schema = $1 
+                            AND table_name = 'media_buffer'
+                            AND column_name = 'bridge_id'
+                        ) as exists
+                    `, [schema]);
+                    
+                    if (hasMediaBuffer.rows[0].exists) {
+                        await pool.query(`ALTER TABLE ${schema}.media_buffer RENAME COLUMN bridge_id TO book_id`);
+                        console.log(`   └─ Renamed media_buffer.bridge_id → book_id`);
+                    }
+                    
+                    // Step 3: Rename bridge_id → book_id in message_analytics
+                    const hasMessageAnalytics = await pool.query(`
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.columns 
+                            WHERE table_schema = $1 
+                            AND table_name = 'message_analytics'
+                            AND column_name = 'bridge_id'
+                        ) as exists
+                    `, [schema]);
+                    
+                    if (hasMessageAnalytics.rows[0].exists) {
+                        await pool.query(`ALTER TABLE ${schema}.message_analytics RENAME COLUMN bridge_id TO book_id`);
+                        console.log(`   └─ Renamed message_analytics.bridge_id → book_id`);
+                    }
+                    
                     results.push({ schema, status: 'migrated', count: bridgeCount });
                     totalMigrated++;
                 }
