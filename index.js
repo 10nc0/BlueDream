@@ -1364,7 +1364,7 @@ app.get('/api/auth/status', async (req, res) => {
                 if (mappingResult.rows.length > 0) {
                     const { tenant_schema } = mappingResult.rows[0];
                     const result = await pool.query(
-                        `SELECT id, email, role, google_id, is_genesis_admin, tenant_id FROM ${tenant_schema}.users WHERE id = $1`,
+                        `SELECT id, email, role, is_genesis_admin, tenant_id FROM ${tenant_schema}.users WHERE id = $1`,
                         [decoded.userId]
                     );
                     
@@ -1385,7 +1385,7 @@ app.get('/api/auth/status', async (req, res) => {
             if (mappingResult.rows.length > 0) {
                 const { tenant_schema } = mappingResult.rows[0];
                 const result = await pool.query(
-                    `SELECT id, email, role, google_id, is_genesis_admin, tenant_id FROM ${tenant_schema}.users WHERE id = $1`,
+                    `SELECT id, email, role, is_genesis_admin, tenant_id FROM ${tenant_schema}.users WHERE id = $1`,
                     [req.session.userId]
                 );
                 
