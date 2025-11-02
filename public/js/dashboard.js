@@ -3744,8 +3744,8 @@
         async function loadBookMessages(bookId, page = 1) {
             try {
                 // SECURITY: Validate bookId is a fractal_id (tenant-scoped, non-enumerable)
-                // Format: dev_bridge_t{N}_{HASH} or prod_bridge_t{N}_{HASH}
-                if (!bookId || !/^(dev|prod)_bridge_t\d+_[a-f0-9]+$/.test(bookId)) {
+                // Format: dev_bridge_t{N}_{HASH}, prod_bridge_t{N}_{HASH}, or book_t{N}_{HASH}
+                if (!bookId || !/^((dev|prod)_bridge_t\d+_[a-f0-9]+|book_t\d+_[a-f0-9]+)$/.test(bookId)) {
                     console.error('🚨 SECURITY: Invalid book ID format:', bookId);
                     throw new Error('Invalid book ID');
                 }
