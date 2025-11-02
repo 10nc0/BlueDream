@@ -64,10 +64,6 @@ localPort = 37635
 externalPort = 3000
 
 [[ports]]
-localPort = 38863
-externalPort = 8081
-
-[[ports]]
 localPort = 40403
 externalPort = 8008
 
