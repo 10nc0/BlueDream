@@ -63,13 +63,17 @@ const BAILEYS_DATA_PATH = process.env.BAILEYS_DATA_PATH || '/home/runner/workspa
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { rejectUnauthorized: false },
+    ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { 
+        rejectUnauthorized: false,
+        checkServerIdentity: () => undefined // Allow Neon pooler hostname mismatch
+    },
     max: 40, // Increased from 20 to handle concurrent requests from aggressive frontend polling
-    connectionTimeoutMillis: 10000,
+    connectionTimeoutMillis: 60000, // Increased for Neon connection stability
     idleTimeoutMillis: 30000,
     statement_timeout: 30000,
     query_timeout: 30000,
-    idle_in_transaction_session_timeout: 30000 // No longer needed since we removed transactions from middleware
+    idle_in_transaction_session_timeout: 30000,
+    keepAlive: true // Neon requires keepalive
 });
 
 // ENVIRONMENT CHECK: Verify production uses ep-bold-flower, dev uses ep-odd-shadow
