@@ -164,22 +164,26 @@ class TenantManager {
                 ON ${schemaName}.audit_logs (actor_user_id, created_at DESC)
             `);
             
-            // Create media_buffer table for temporary media storage
+            // Create media_buffer table for atomic media storage before Discord delivery
             await client.query(`
                 CREATE TABLE IF NOT EXISTS ${schemaName}.media_buffer (
                     id SERIAL PRIMARY KEY,
                     book_id INTEGER NOT NULL REFERENCES ${schemaName}.books(id) ON DELETE CASCADE,
-                    media_data TEXT NOT NULL,
+                    media_data BYTEA NOT NULL,
                     media_type TEXT NOT NULL,
-                    discord_message_id TEXT,
-                    delivered BOOLEAN DEFAULT FALSE,
-                    created_at TIMESTAMP DEFAULT NOW()
+                    filename TEXT NOT NULL,
+                    sender_name TEXT,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    delivered_to_ledger BOOLEAN DEFAULT false,
+                    delivered_to_user BOOLEAN DEFAULT false,
+                    delivery_attempts INTEGER DEFAULT 0,
+                    last_delivery_attempt TIMESTAMPTZ
                 )
             `);
             
             await client.query(`
                 CREATE INDEX IF NOT EXISTS media_buffer_book_idx 
-                ON ${schemaName}.media_buffer (book_id, delivered, created_at)
+                ON ${schemaName}.media_buffer (book_id, delivered_to_ledger, created_at)
             `);
             
             // Create active_sessions table for session tracking (createSessionRecord function)

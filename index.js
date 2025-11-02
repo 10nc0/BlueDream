@@ -329,65 +329,8 @@ async function initializeDatabase() {
         // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
         // No messages table needed - Discord threads provide permanent storage at zero cost
         
-        // MIGRATION: Add media_buffer table to existing tenant schemas
-        // This ensures retry-safe media delivery for all existing tenants
-        const schemas = await pool.query(`
-            SELECT schema_name 
-            FROM information_schema.schemata 
-            WHERE schema_name LIKE 'tenant_%'
-            ORDER BY schema_name
-        `);
-        
-        for (const { schema_name } of schemas.rows) {
-            await pool.query(`
-                CREATE TABLE IF NOT EXISTS ${schema_name}.media_buffer (
-                    id SERIAL PRIMARY KEY,
-                    book_id INTEGER REFERENCES ${schema_name}.books(id) ON DELETE CASCADE,
-                    media_data BYTEA NOT NULL,
-                    media_type TEXT NOT NULL,
-                    filename TEXT NOT NULL,
-                    sender_name TEXT,
-                    created_at TIMESTAMPTZ DEFAULT NOW(),
-                    delivered_to_ledger BOOLEAN DEFAULT false,
-                    delivered_to_user BOOLEAN DEFAULT false,
-                    delivery_attempts INTEGER DEFAULT 0,
-                    last_delivery_attempt TIMESTAMPTZ
-                )
-            `);
-
-            await pool.query(`
-                CREATE INDEX IF NOT EXISTS idx_media_buffer_created_at 
-                ON ${schema_name}.media_buffer(created_at DESC)
-            `);
-
-            await pool.query(`
-                CREATE INDEX IF NOT EXISTS idx_media_buffer_book 
-                ON ${schema_name}.media_buffer(book_id)
-            `);
-            
-            await pool.query(`
-                CREATE INDEX IF NOT EXISTS idx_media_buffer_pending
-                ON ${schema_name}.media_buffer(delivered_to_ledger, delivered_to_user)
-                WHERE delivered_to_ledger = false OR delivered_to_user = false
-            `);
-            
-            // ALTER existing tables to convert TEXT to BYTEA (safe migration for binary files)
-            await pool.query(`
-                DO $$ 
-                BEGIN
-                    IF EXISTS (
-                        SELECT 1 FROM information_schema.columns 
-                        WHERE table_schema = '${schema_name}' 
-                        AND table_name = 'media_buffer' 
-                        AND column_name = 'media_data' 
-                        AND data_type = 'text'
-                    ) THEN
-                        ALTER TABLE ${schema_name}.media_buffer 
-                        ALTER COLUMN media_data TYPE BYTEA USING decode(media_data, 'base64');
-                    END IF;
-                END $$;
-            `);
-        }
+        // NOTE: All tenant schemas (users, books, media_buffer, etc.) are created by TenantManager
+        // during tenant initialization. No manual migrations needed for N+1 scalability.
         
         console.log('✅ Core schema initialized with security tables');
         console.log('✅ Database initialized successfully');
