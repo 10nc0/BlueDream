@@ -3984,14 +3984,29 @@ app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => 
         const internalBridgeId = bridgeResult.rows[0].id;
         console.log('✅ Internal bridge ID:', internalBridgeId);
         
-        // Remove tag from array using PostgreSQL array functions
+        // CRITICAL FIX: Remove tag from BOTH extracted_tags array AND metadata_text string
+        // This prevents deleted tags from reappearing when new tags are added
+        // Escape regex metacharacters in JavaScript before passing to SQL
+        const escapedTag = tag.replace(/[.+*?[\](){}|\\^$]/g, '\\$&');
+        
         const dropResult = await client.query(`
             UPDATE drops
             SET extracted_tags = array_remove(extracted_tags, $1),
+                metadata_text = TRIM(
+                    REGEXP_REPLACE(
+                        REGEXP_REPLACE(
+                            metadata_text,
+                            '(^|\\s)#?' || $2 || '(\\s|$)',
+                            ' ',
+                            'gi'
+                        ),
+                        '\\s+', ' ', 'g'
+                    )
+                ),
                 updated_at = NOW()
-            WHERE bridge_id = $2 AND discord_message_id = $3
+            WHERE bridge_id = $3 AND discord_message_id = $4
             RETURNING *
-        `, [tag, internalBridgeId, discord_message_id]);
+        `, [tag, escapedTag, internalBridgeId, discord_message_id]);
         
         console.log('🗑️ Tag removal result:', {
             rowsAffected: dropResult.rows.length,
@@ -4046,14 +4061,29 @@ app.delete('/api/drops/date', requireAuth, setTenantContext, async (req, res) =>
         const internalBridgeId = bridgeResult.rows[0].id;
         console.log('✅ Internal bridge ID:', internalBridgeId);
         
-        // Remove date from array using PostgreSQL array functions
+        // CRITICAL FIX: Remove date from BOTH extracted_dates array AND metadata_text string
+        // This prevents deleted dates from reappearing when new tags are added
+        // Escape regex metacharacters in JavaScript before passing to SQL
+        const escapedDate = date.replace(/[.+*?[\](){}|\\^$]/g, '\\$&');
+        
         const dropResult = await client.query(`
             UPDATE drops
             SET extracted_dates = array_remove(extracted_dates, $1),
+                metadata_text = TRIM(
+                    REGEXP_REPLACE(
+                        REGEXP_REPLACE(
+                            metadata_text,
+                            '(^|\\s)' || $2 || '(\\s|$)',
+                            ' ',
+                            'gi'
+                        ),
+                        '\\s+', ' ', 'g'
+                    )
+                ),
                 updated_at = NOW()
-            WHERE bridge_id = $2 AND discord_message_id = $3
+            WHERE bridge_id = $3 AND discord_message_id = $4
             RETURNING *
-        `, [date, internalBridgeId, discord_message_id]);
+        `, [date, escapedDate, internalBridgeId, discord_message_id]);
         
         console.log('🔍 Drop update result:', dropResult.rows.length > 0 ? 'SUCCESS' : 'NOT FOUND');
         
