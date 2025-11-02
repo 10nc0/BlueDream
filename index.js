@@ -72,6 +72,16 @@ const pool = new Pool({
     idle_in_transaction_session_timeout: 30000 // No longer needed since we removed transactions from middleware
 });
 
+// ENVIRONMENT CHECK: Verify production uses ep-bold-flower, dev uses ep-odd-shadow
+const isProd = process.env.REPLIT_DEPLOYMENT === 'true';
+const dbHost = process.env.DATABASE_URL?.split('@')[1]?.split('.')[0] || 'unknown';
+
+console.log(`🚀 Mode: ${isProd ? 'PRODUCTION' : 'DEVELOPMENT'}`);
+console.log(`🗄️  DB Host: ${dbHost}`);
+if (isProd && !dbHost.includes('bold-flower')) {
+  console.error('⚠️  PROD USING WRONG DB! Check override.');
+}
+
 const tenantManager = new TenantManager(pool);
 
 // Timestamp helper function with timezone
