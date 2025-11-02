@@ -4,6 +4,8 @@
 "Your Nyanbook" is a multi-tenant SaaS messaging book designed to forward messages from WhatsApp to Discord. It operates as a secure, multi-user application with robust authentication and permanent message retention via Discord threads. Each user has isolated data storage for privacy and security.
 
 ## Recent Changes
+**November 2, 2025** - DATABASE MIGRATION TOOL: Created `migrate-bridges-to-books.js` to safely migrate production databases from legacy `bridges` table naming to `books`. Script features auto-discovery of all tenant schemas, dry-run preview mode, idempotent operation (skips already-migrated schemas), and comprehensive logging. Required for Genesis production deployment after terminology refactor.
+
 **November 2, 2025** - REAL-TIME UPDATES: Implemented smart polling and jump-to-message navigation for seamless message viewing:
 - **Smart Polling Engine**: 5-second auto-refresh polls Discord for new messages using `?after={messageId}` parameter. Pauses when tab is hidden (Page Visibility API), only fetches messages newer than last seen. Green breath-glow animation highlights newly arrived messages.
 - **Auto-Scroll Logic**: Messages auto-scroll to bottom only if user was already there. When user scrolls up, "New messages" banner appears (clickable to jump to bottom) instead of forced scrolling.
