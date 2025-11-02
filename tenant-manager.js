@@ -115,6 +115,95 @@ class TenantManager {
                 ON ${schemaName}.drops USING gin(search_vector)
             `);
             
+            // Create sessions table for session management
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.sessions (
+                    sid TEXT PRIMARY KEY,
+                    sess JSONB NOT NULL,
+                    expire TIMESTAMP NOT NULL
+                )
+            `);
+            
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS sessions_expire_idx 
+                ON ${schemaName}.sessions (expire)
+            `);
+            
+            // Create refresh_tokens table for JWT refresh tokens
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.refresh_tokens (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    token TEXT NOT NULL UNIQUE,
+                    expires_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            `);
+            
+            // Create audit_logs table for security tracking
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.audit_logs (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    action TEXT NOT NULL,
+                    resource_type TEXT,
+                    resource_id TEXT,
+                    details JSONB,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            `);
+            
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS audit_logs_user_idx 
+                ON ${schemaName}.audit_logs (user_id, created_at DESC)
+            `);
+            
+            // Create media_buffer table for temporary media storage
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.media_buffer (
+                    id SERIAL PRIMARY KEY,
+                    book_id INTEGER NOT NULL REFERENCES ${schemaName}.books(id) ON DELETE CASCADE,
+                    media_data TEXT NOT NULL,
+                    media_type TEXT NOT NULL,
+                    discord_message_id TEXT,
+                    delivered BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            `);
+            
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS media_buffer_book_idx 
+                ON ${schemaName}.media_buffer (book_id, delivered, created_at)
+            `);
+            
+            // Create active_sessions table for session tracking
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.active_sessions (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    session_id TEXT NOT NULL UNIQUE,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    last_activity TIMESTAMP DEFAULT NOW(),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            `);
+            
+            // Create message_analytics table for message statistics
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.message_analytics (
+                    id SERIAL PRIMARY KEY,
+                    book_id INTEGER NOT NULL REFERENCES ${schemaName}.books(id) ON DELETE CASCADE,
+                    date DATE NOT NULL,
+                    message_count INTEGER DEFAULT 0,
+                    media_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(book_id, date)
+                )
+            `);
+            
             return { tenantId, schemaName };
         } finally {
             client.release();
