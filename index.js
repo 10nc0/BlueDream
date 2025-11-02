@@ -4302,9 +4302,26 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
     try {
         const { id } = req.params; // fractal_id
         const client = req.dbClient || pool;
-        const limit = parseInt(req.query.limit) || 50;
+        let limit = parseInt(req.query.limit) || 50;
         const before = req.query.before; // Discord message ID for pagination
+        const after = req.query.after; // For polling - get messages newer than this ID
+        const around = req.query.around; // For jump-to-message - get context around this ID
+        const context = parseInt(req.query.context) || 10; // Context window size (messages before + after)
         const source = req.query.source || 'user'; // Schema switcheroo: ledger|user
+        
+        // Input validation for jump-to-message and polling
+        if (around && isNaN(Number(around))) {
+            return res.status(400).json({ error: 'Invalid message ID for around parameter' });
+        }
+        if (after && isNaN(Number(after))) {
+            return res.status(400).json({ error: 'Invalid message ID for after parameter' });
+        }
+        if (context < 0 || !Number.isInteger(context)) {
+            return res.status(400).json({ error: 'Context must be a non-negative integer' });
+        }
+        if (context > 25) {
+            return res.status(400).json({ error: 'Context window too large - maximum 25 messages' });
+        }
         
         // ROLE GATE: Only dev users can access Ledger (source=ledger)
         if (source === 'ledger' && req.tenantContext?.userRole !== 'dev') {
@@ -4380,8 +4397,25 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
             }
             
             // Fetch messages from Discord (force: true bypasses cache for real-time updates)
-            const options = { limit, force: true };
-            if (before) options.before = before;
+            const options = { force: true };
+            
+            // SMART FETCH: Support 3 modes - pagination, polling, and jump-to-message
+            if (around) {
+                // Jump-to-message mode: Fetch context window around target message
+                // Discord API returns messages around the ID (half before, half after)
+                options.around = around;
+                options.limit = Math.min(context * 2 + 1, 51); // Ensure target is included (odd number)
+                console.log(`  🎯 Jump mode: Fetching ${options.limit} messages around ${around}`);
+            } else if (after) {
+                // Polling mode: Fetch only NEW messages since last poll
+                options.after = after;
+                options.limit = 100; // Get up to 100 new messages
+                console.log(`  🔄 Polling mode: Fetching messages after ${after}`);
+            } else {
+                // Normal pagination mode
+                options.limit = limit;
+                if (before) options.before = before;
+            }
             
             const discordMessages = await thread.messages.fetch(options);
             

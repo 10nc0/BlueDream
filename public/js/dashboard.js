@@ -1334,6 +1334,9 @@
             
             // Always load messages for newly selected book
             await loadBookMessages(selectedBookFractalId, 1);
+            
+            // Start smart polling for real-time message updates
+            startPolling(fractalId);
         }
 
         // Helper functions for badge styling
@@ -2686,6 +2689,9 @@
         
         // Handle book creation form submission
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize URL hash support for shareable message links
+            initUrlHashSupport();
+            
             const bookForm = document.getElementById('book-create-form');
             if (bookForm) {
                 bookForm.addEventListener('submit', async (e) => {
@@ -3813,6 +3819,315 @@
                     container.innerHTML = '<div class="no-messages" style="color: #ef4444;">Error loading messages. Please try refreshing.</div>';
                 }
             }
+        }
+
+        // ====================================
+        // JUMP-TO-MESSAGE & SMART POLLING
+        // ====================================
+
+        // Jump to specific message with context window
+        async function jumpToMessage(targetId, bookId) {
+            if (!targetId || !bookId) return;
+            
+            // Check if message already exists in DOM
+            let targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+            
+            if (targetEl) {
+                // Message already loaded - just scroll and highlight
+                scrollAndHighlight(targetEl);
+                return;
+            }
+            
+            // Message not in DOM - fetch context window
+            try {
+                console.log(`🎯 Jumping to message ${targetId}, fetching context...`);
+                const response = await authFetch(`/api/books/${bookId}/messages?around=${targetId}&context=10&source=${currentViewSource}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const messages = data.messages || [];
+                
+                if (messages.length === 0) {
+                    console.warn('Message not found in context window');
+                    return;
+                }
+                
+                // Insert context messages into DOM
+                await insertContextMessages(messages, targetId, bookId);
+                
+                // Wait for DOM update, then scroll and highlight
+                setTimeout(() => {
+                    targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                    if (targetEl) {
+                        scrollAndHighlight(targetEl);
+                    }
+                }, 100);
+                
+            } catch (error) {
+                console.error('Error jumping to message:', error);
+            }
+        }
+
+        // Insert context messages around target without duplicates
+        async function insertContextMessages(messages, targetId, bookId) {
+            const container = document.getElementById(`discord-messages-${bookId}`);
+            if (!container) return;
+            
+            // Find target message in fetched context
+            const targetIndex = messages.findIndex(m => m.id === targetId);
+            if (targetIndex === -1) return;
+            
+            const before = messages.slice(0, targetIndex);
+            const target = messages[targetIndex];
+            const after = messages.slice(targetIndex + 1);
+            
+            // Render messages if they don't exist in DOM
+            for (const msg of [...before, target, ...after]) {
+                const existing = document.querySelector(`.discord-message[data-msg-id="${msg.id}"]`);
+                if (!existing) {
+                    // Render single message HTML
+                    const searchableText = [
+                        msg.sender_name || '',
+                        msg.message_content || '',
+                        msg.sender_contact || '',
+                        extractEmbedSearchText(msg.embeds || [])
+                    ].join(' ').toLowerCase();
+                    
+                    const html = `
+                    <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml(searchableText)}" data-status="${msg.discord_status || 'success'}" style="position: relative;">
+                        <div style="position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 8px; z-index: 10;">
+                            ${msg.media_url ? `
+                                <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 4px; color: #60a5fa; text-decoration: none; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; line-height: 1;">
+                                    📎
+                                </a>
+                            ` : ''}
+                            <button class="agent-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="🧿 Audit action & closure" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                                🧿
+                            </button>
+                            <button class="tag-add-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                                🏷️
+                            </button>
+                            <label class="custom-checkbox-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="Select for export" style="position: relative; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; cursor: pointer; margin: 0; padding: 0; flex-shrink: 0; transition: all 0.2s; line-height: 1;">
+                                <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-book-id="${bookId}" style="display: none;">
+                                <span class="checkbox-icon" style="font-size: 0.875rem; line-height: 1; pointer-events: none;">☐</span>
+                            </label>
+                        </div>
+                        <div class="discord-avatar">
+                            ${msg.sender_photo_url ? 
+                                `<img src="${escapeHtml(msg.sender_photo_url)}" alt="${escapeHtml(msg.sender_name || 'User')}" class="avatar-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
+                                 <div class="avatar-fallback" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center;">${msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?'}</div>` :
+                                `${msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?'}`
+                            }
+                        </div>
+                        <div class="discord-content">
+                            <div class="discord-header-row">
+                                <span class="discord-username">${escapeHtml(msg.sender_name || 'Unknown')}</span>
+                                <span class="discord-timestamp">${formatDiscordTime(msg.timestamp)}</span>
+                                <span class="discord-status-badge status-${msg.discord_status || 'success'}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
+                            </div>
+                            <div class="discord-contact">${formatPhoneNumber(msg.sender_contact || '')}</div>
+                            <div class="message-drop-section" data-message-id="${msg.id}" data-book-id="${bookId}">
+                                <div class="drop-display hidden"></div>
+                            </div>
+                            ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
+                            ${msg.has_media ? `
+                                <div class="discord-media-preview" id="media-preview-${msg.id}" data-message-id="${msg.id}" data-media-url="${escapeHtml(msg.media_url || '')}" data-media-type="${escapeHtml(msg.media_type || '')}">
+                                    <div class="media-loading">Loading media...</div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>`;
+                    
+                    // Insert at appropriate position (maintain chronological order)
+                    container.insertAdjacentHTML('beforeend', html);
+                }
+            }
+            
+            // Hydrate drops for new messages
+            hydrateDropsForBook(bookId);
+        }
+
+        // Scroll to element and apply highlight animation
+        function scrollAndHighlight(el) {
+            if (!el) return;
+            
+            // Smooth scroll to center of viewport
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Apply jump-pulse highlight
+            el.classList.add('jump-highlight');
+            
+            // Update URL with hash (for shareable links)
+            const msgId = el.getAttribute('data-msg-id');
+            if (msgId) {
+                history.pushState(null, '', `#msg-${msgId}`);
+            }
+            
+            // Remove highlight after animation
+            setTimeout(() => {
+                el.classList.remove('jump-highlight');
+            }, 2000);
+        }
+
+        // Smart polling for real-time message updates
+        let pollingInterval = null;
+        let lastSeenMessageId = null;
+        let userHasScrolled = false;
+
+        function startPolling(bookId) {
+            // Stop existing polling
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+            }
+            
+            // Track scroll position to determine auto-scroll behavior
+            const container = document.getElementById(`discord-messages-${bookId}`);
+            if (container) {
+                container.addEventListener('scroll', () => {
+                    const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
+                    userHasScrolled = !isAtBottom;
+                });
+            }
+            
+            // Poll every 5 seconds
+            pollingInterval = setInterval(async () => {
+                // Pause polling when tab is hidden (Page Visibility API)
+                if (document.hidden) return;
+                
+                try {
+                    // Get last message ID from DOM
+                    const messages = document.querySelectorAll(`#discord-messages-${bookId} .discord-message`);
+                    if (messages.length === 0) return;
+                    
+                    const lastMsg = messages[messages.length - 1];
+                    const lastMsgId = lastMsg?.getAttribute('data-msg-id');
+                    
+                    if (!lastMsgId) return;
+                    
+                    // Fetch only new messages
+                    const response = await authFetch(`/api/books/${bookId}/messages?after=${lastMsgId}&source=${currentViewSource}`);
+                    if (!response.ok) return;
+                    
+                    const data = await response.json();
+                    const newMessages = data.messages || [];
+                    
+                    if (newMessages.length > 0) {
+                        console.log(`🔄 Polling: ${newMessages.length} new message(s)`);
+                        
+                        // Append new messages with breath-glow animation
+                        for (const msg of newMessages) {
+                            const existing = document.querySelector(`.discord-message[data-msg-id="${msg.id}"]`);
+                            if (!existing) {
+                                await insertContextMessages([msg], msg.id, bookId);
+                                
+                                // Add breath-glow to new message
+                                const newEl = document.querySelector(`.discord-message[data-msg-id="${msg.id}"]`);
+                                if (newEl) {
+                                    newEl.classList.add('new-message-glow');
+                                    setTimeout(() => newEl.classList.remove('new-message-glow'), 1500);
+                                }
+                            }
+                        }
+                        
+                        // Auto-scroll if user was at bottom, otherwise show banner
+                        if (!userHasScrolled && container) {
+                            container.scrollTop = container.scrollHeight;
+                        } else {
+                            showNewMessagesBanner(bookId, newMessages.length);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                }
+            }, 5000);
+        }
+
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+        }
+
+        // Show "New messages" banner when user scrolled up
+        function showNewMessagesBanner(bookId, count) {
+            const container = document.getElementById(`discord-messages-${bookId}`);
+            if (!container) return;
+            
+            // Remove existing banner
+            const existing = container.querySelector('.new-messages-banner');
+            if (existing) existing.remove();
+            
+            // Create banner
+            const banner = document.createElement('div');
+            banner.className = 'new-messages-banner';
+            banner.innerHTML = `
+                <span>↓ ${count} new message${count !== 1 ? 's' : ''}</span>
+            `;
+            banner.style.cssText = `
+                position: sticky;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(34, 197, 94, 0.9);
+                color: white;
+                padding: 8px 16px;
+                border-radius: 20px;
+                cursor: pointer;
+                z-index: 100;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+                font-weight: 600;
+                backdrop-filter: blur(10px);
+            `;
+            
+            banner.onclick = () => {
+                container.scrollTop = container.scrollHeight;
+                banner.remove();
+                userHasScrolled = false;
+            };
+            
+            container.appendChild(banner);
+            
+            // Auto-hide when user scrolls to bottom
+            const checkScroll = () => {
+                const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
+                if (isAtBottom && banner.parentNode) {
+                    banner.remove();
+                    userHasScrolled = false;
+                    container.removeEventListener('scroll', checkScroll);
+                }
+            };
+            container.addEventListener('scroll', checkScroll);
+        }
+
+        // URL hash support for shareable links
+        function initUrlHashSupport() {
+            // Check for hash on page load
+            if (window.location.hash && window.location.hash.startsWith('#msg-')) {
+                const msgId = window.location.hash.substring(5); // Remove '#msg-'
+                const bookId = selectedBookFractalId;
+                
+                if (msgId && bookId) {
+                    setTimeout(() => {
+                        jumpToMessage(msgId, bookId);
+                    }, 500);
+                }
+            }
+            
+            // Handle back/forward navigation
+            window.addEventListener('popstate', () => {
+                if (window.location.hash && window.location.hash.startsWith('#msg-')) {
+                    const msgId = window.location.hash.substring(5);
+                    const bookId = selectedBookFractalId;
+                    
+                    if (msgId && bookId) {
+                        jumpToMessage(msgId, bookId);
+                    }
+                }
+            });
         }
 
         // Load and display inline media preview
