@@ -4,6 +4,16 @@
 "Your Nyanbook" is a multi-tenant SaaS messaging book designed to forward messages from WhatsApp to Discord. It operates as a secure, multi-user application with robust authentication and permanent message retention via Discord threads. Each user has isolated data storage for privacy and security.
 
 ## Recent Changes
+**November 2, 2025** - REAL-TIME UPDATES: Implemented smart polling and jump-to-message navigation for seamless message viewing:
+- **Smart Polling Engine**: 5-second auto-refresh polls Discord for new messages using `?after={messageId}` parameter. Pauses when tab is hidden (Page Visibility API), only fetches messages newer than last seen. Green breath-glow animation highlights newly arrived messages.
+- **Auto-Scroll Logic**: Messages auto-scroll to bottom only if user was already there. When user scrolls up, "New messages" banner appears (clickable to jump to bottom) instead of forced scrolling.
+- **Jump-to-Message**: Shareable URLs with `#msg-{messageId}` hash allow direct navigation to specific messages. Backend `?around={messageId}&context={n}` parameter fetches target ± context window (max 25 messages). Yellow jump-pulse animation (2s) highlights target message with smooth scroll to center.
+- **URL Hash Navigation**: Browser back/forward buttons work with message jumps. `initUrlHashSupport()` parses hash on page load and handles `popstate` events.
+- **Duplicate Prevention**: `insertContextMessages()` uses `querySelector` guards to prevent duplicate message insertion. `insertAdjacentHTML` for efficient DOM updates without re-rendering.
+- **Input Validation**: Backend validates `context >= 0 && <= 25`, rejects negative values and non-integers. `around` and `after` parameters validated with `isNaN()` checks.
+- **Timeline Visibility**: Messages have `min-height: 48px` to ensure visibility when zoomed out. Bucket headers show message counts for timeline organization.
+Backend API supports 3 fetch modes: normal pagination (`?before={id}`), polling (`?after={id}`), and jump-to-message (`?around={id}&context={n}`). All modes integrate with existing source parameter (user/ledger) for schema switcheroo.
+
 **November 2, 2025** - CRITICAL FIX: Completed tenant schema initialization for infinite N+1 scalability. TenantManager now creates complete database schemas with all required columns for new tenants. Fixed schema mismatches across four tables:
 - `refresh_tokens`: Added `token_hash` (not `token`), `device_info`, `ip_address`, `revoked_at`, `is_revoked` to match auth-service.js
 - `audit_logs`: Renamed columns to match logAudit function (`actor_user_id`, `action_type`, `target_type`, `target_id`)
