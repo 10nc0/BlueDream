@@ -38,6 +38,9 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **CSP Compliance**: Production-ready Content Security Policy with event delegation and self-hosted libraries.
 
 ## External Dependencies
-- **Database**: PostgreSQL (Neon-backed Replit database)
+- **Database**: PostgreSQL (Supabase)
 - **WhatsApp**: Twilio WhatsApp Business API
 - **Discord**: Discord.js + Discord webhooks for message delivery
+
+## Recent Changes (November 2025)
+- **Database Connection Pool Optimization**: Fixed connection pool exhaustion issues by optimizing pool size (max=10, min=2) for Supabase, reducing frontend polling from 10s to 30s, and adding hourly session cleanup to prevent unnecessary queries. Added `/health` endpoint with DB connection testing and pool statistics monitoring for operational visibility.
