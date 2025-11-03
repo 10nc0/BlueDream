@@ -2970,18 +2970,17 @@
                         });
                         
                         if (book.input_platform === 'whatsapp' && book.contact_info) {
-                            console.log('📱 Redirecting to WhatsApp with join code:', book.contact_info);
+                            console.log('📱 Opening WhatsApp with join code:', book.contact_info);
                             
-                            // Show success toast before redirect
-                            showToast('✅ Book created! Redirecting to WhatsApp...', 'success');
-                            
-                            // Redirect to WhatsApp with magic link (same flow as 📱 button)
+                            // FIX: Use direct navigation instead of window.open() to avoid popup blockers
+                            // This is a user-initiated action, so direct navigation won't be blocked
                             const whatsappUrl = `https://wa.me/14155238886?text=${encodeURIComponent(book.contact_info)}`;
                             
-                            // Small delay to let user see the toast
-                            setTimeout(() => {
-                                window.open(whatsappUrl, '_blank');
-                            }, 800);
+                            // Show success notification
+                            showToast('✅ Book created! Opening WhatsApp...', 'success');
+                            
+                            // Direct navigation (popup-blocker-free)
+                            window.location.href = whatsappUrl;
                         } else {
                             // For non-WhatsApp books, generate QR as before
                             console.log('🚀 Generating QR for new book...');
