@@ -1614,8 +1614,12 @@ app.post('/api/auth/signup', async (req, res) => {
                 ON CONFLICT (email) DO NOTHING
             `, [normalizedEmail, tenantId, schemaName, tenantUserId]);
             
-            // Record tenant creation for Sybil tracking
-            await tenantManager.recordTenantCreation(email, req.ip);
+            // Record tenant creation for Sybil tracking (non-blocking - don't fail signup if this fails)
+            try {
+                await tenantManager.recordTenantCreation(email, req.ip);
+            } catch (analyticsError) {
+                console.error('⚠️ Analytics recording failed (non-critical):', analyticsError.message);
+            }
             
             isGenesisAdmin = isGenesis;
             
@@ -2702,8 +2706,12 @@ app.post('/api/auth/register/public', async (req, res) => {
         );
         const refreshToken = refreshTokenData.token;
 
-        // Record tenant creation for analytics
-        await tenantManager.recordTenantCreation(email, ip);
+        // Record tenant creation for analytics (non-blocking - don't fail signup if this fails)
+        try {
+            await tenantManager.recordTenantCreation(email, ip);
+        } catch (analyticsError) {
+            console.error('⚠️ Analytics recording failed (non-critical):', analyticsError.message);
+        }
 
         console.log(`${isGenesisAdmin ? '🌟 GENESIS ADMIN' : '👤 New admin'} created: ${email} (tenant_${tenantId})`);
 
