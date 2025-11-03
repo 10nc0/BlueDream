@@ -1241,13 +1241,14 @@
             }
         }
 
-        // Auto-refresh book counts every 10 seconds to keep message counts updated
+        // Auto-refresh book counts every 30 seconds to keep message counts updated
         // Use skipDetailRender=true to avoid destroying loaded media
+        // OPTIMIZATION: Reduced from 10s to 30s to prevent DB pool exhaustion
         setInterval(() => {
             if (document.getElementById('booksTab')?.classList.contains('active')) {
                 loadBooksQuietly();
             }
-        }, 10000);
+        }, 30000); // Poll every 30 seconds to reduce DB load
         
         // Quiet refresh that updates book counts without re-rendering detail panel
         async function loadBooksQuietly() {

@@ -71,12 +71,26 @@ const pool = new Pool({
     keepAlive: true // Neon requires keepalive
 });
 
+// CONNECTION POOL MONITORING: Track connection lifecycle
+pool.on('connect', () => {
+    console.log(`🔌 Pool: Connection acquired (Total: ${pool.totalCount}, Idle: ${pool.idleCount}, Waiting: ${pool.waitingCount})`);
+});
+
+pool.on('error', (err) => {
+    console.error('💥 Pool: Unexpected error on idle client', err);
+});
+
+pool.on('remove', () => {
+    console.log(`🔓 Pool: Connection released (Total: ${pool.totalCount}, Idle: ${pool.idleCount})`);
+});
+
 // ENVIRONMENT CHECK: Verify production uses ep-bold-flower, dev uses ep-odd-shadow
 const isProd = process.env.REPLIT_DEPLOYMENT === 'true';
 const dbHost = process.env.DATABASE_URL?.split('@')[1]?.split('.')[0] || 'unknown';
 
 console.log(`🚀 Mode: ${isProd ? 'PRODUCTION' : 'DEVELOPMENT'}`);
 console.log(`🗄️  DB Host: ${dbHost}`);
+console.log(`📊 Pool: max=${pool.options.max}, min=${pool.options.min}, idleTimeout=${pool.options.idleTimeoutMillis}ms`);
 if (isProd && !dbHost.includes('bold-flower')) {
   console.error('⚠️  PROD USING WRONG DB! Check override.');
 }
@@ -126,8 +140,39 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false // Required for iframe embedding
 }));
 
-app.get('/health', (req, res) => {
-  res.send('Nyan breathes φ — Railway alive');
+app.get('/health', async (req, res) => {
+    try {
+        // Test DB connection with quick query
+        const result = await pool.query('SELECT 1 as health');
+        
+        // Get pool stats
+        const poolStats = {
+            total: pool.totalCount,
+            idle: pool.idleCount,
+            waiting: pool.waitingCount,
+            max: pool.options.max
+        };
+        
+        res.json({
+            status: 'healthy',
+            message: 'Nyan breathes φ — Server alive',
+            database: 'connected',
+            pool: poolStats,
+            timestamp: new Date().toISOString()
+        });
+    } catch (err) {
+        res.status(500).json({
+            status: 'unhealthy',
+            message: 'DB connection failed',
+            error: err.message,
+            pool: {
+                total: pool.totalCount,
+                idle: pool.idleCount,
+                waiting: pool.waitingCount,
+                max: pool.options.max
+            }
+        });
+    }
 });
 
 // SECURITY: CORS with origin whitelist
@@ -174,11 +219,13 @@ const PgSession = connectPg(session);
 app.use(session({
     store: new PgSession({
         pool: pool,
-        tableName: 'sessions'
+        tableName: 'sessions',
+        pruneSessionInterval: 60 * 60, // Prune expired sessions every hour (reduces queries)
+        errorLog: console.error
     }),
     secret: process.env.SESSION_SECRET || 'book-secret-key-change-in-production',
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: false, // Don't create session until something is stored
     cookie: {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
         httpOnly: true,
