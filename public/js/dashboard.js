@@ -1280,15 +1280,37 @@
                 selectedBookFractalId = filteredBooks[0].fractal_id;
             }
             
-            // Clean WhatsApp-style list (no platform grouping)
-            sidebar.innerHTML = filteredBooks.map(book => `
-                <button class="channel-item ${book.fractal_id === selectedBookFractalId ? 'active' : ''}" data-fractal-id="${book.fractal_id}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: none; background: ${book.fractal_id === selectedBookFractalId ? 'rgba(88, 101, 242, 0.1)' : 'transparent'}; border-left: 2px solid ${book.fractal_id === selectedBookFractalId ? '#818cf8' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.15s; margin: 0.125rem 0;">
+            // macOS-style scrollable list widget
+            sidebar.innerHTML = filteredBooks.map((book, index) => `
+                <div class="book-list-item ${book.fractal_id === selectedBookFractalId ? 'selected' : ''}" 
+                     data-fractal-id="${book.fractal_id}" 
+                     style="
+                        display: flex; 
+                        justify-content: space-between; 
+                        align-items: center; 
+                        padding: 0.625rem 0.875rem; 
+                        cursor: pointer; 
+                        background: ${book.fractal_id === selectedBookFractalId ? 'rgba(88, 101, 242, 0.12)' : 'transparent'}; 
+                        border-bottom: 1px solid rgba(148, 163, 184, 0.08); 
+                        transition: background 0.12s ease;
+                        user-select: none;
+                    "
+                    onmouseover="if (!this.classList.contains('selected')) this.style.background='rgba(148, 163, 184, 0.05)'"
+                    onmouseout="if (!this.classList.contains('selected')) this.style.background='transparent'">
                     <div style="flex: 1; min-width: 0;">
-                        <div style="color: ${book.fractal_id === selectedBookFractalId ? '#e2e8f0' : '#cbd5e1'}; font-weight: ${book.fractal_id === selectedBookFractalId ? '600' : '500'}; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${book.name || `${book.input_platform} → Discord`}</div>
-                        ${book.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.125rem;">${book.message_count}</div>` : ''}
+                        <div style="
+                            color: ${book.fractal_id === selectedBookFractalId ? '#e2e8f0' : '#cbd5e1'}; 
+                            font-weight: ${book.fractal_id === selectedBookFractalId ? '600' : '500'}; 
+                            font-size: 0.8125rem; 
+                            white-space: nowrap; 
+                            overflow: hidden; 
+                            text-overflow: ellipsis;
+                            line-height: 1.3;
+                        ">${book.name || `${book.input_platform} → Discord`}</div>
+                        ${book.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.25rem; line-height: 1;">${book.message_count} messages</div>` : ''}
                     </div>
                     ${book._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem;">💬</span>` : ''}
-                </button>
+                </div>
             `).join('');
             
             // Only render detail panel if not skipping (avoids destroying loaded media during auto-refresh)
@@ -1316,17 +1338,39 @@
                 bookSearchContext = { query: '', bookId: null };
             }
             
-            // Re-render sidebar to update active state
+            // Re-render sidebar to update active state (macOS list widget)
             const sidebar = document.getElementById('bookListContainer');
             
-            sidebar.innerHTML = filteredBooks.map(book => `
-                <button class="channel-item ${book.fractal_id === selectedBookFractalId ? 'active' : ''}" data-fractal-id="${book.fractal_id}" style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: none; background: ${book.fractal_id === selectedBookFractalId ? 'rgba(88, 101, 242, 0.1)' : 'transparent'}; border-left: 2px solid ${book.fractal_id === selectedBookFractalId ? '#818cf8' : 'transparent'}; cursor: pointer; width: 100%; text-align: left; transition: all 0.15s; margin: 0.125rem 0;">
+            sidebar.innerHTML = filteredBooks.map((book, index) => `
+                <div class="book-list-item ${book.fractal_id === selectedBookFractalId ? 'selected' : ''}" 
+                     data-fractal-id="${book.fractal_id}" 
+                     style="
+                        display: flex; 
+                        justify-content: space-between; 
+                        align-items: center; 
+                        padding: 0.625rem 0.875rem; 
+                        cursor: pointer; 
+                        background: ${book.fractal_id === selectedBookFractalId ? 'rgba(88, 101, 242, 0.12)' : 'transparent'}; 
+                        border-bottom: 1px solid rgba(148, 163, 184, 0.08); 
+                        transition: background 0.12s ease;
+                        user-select: none;
+                    "
+                    onmouseover="if (!this.classList.contains('selected')) this.style.background='rgba(148, 163, 184, 0.05)'"
+                    onmouseout="if (!this.classList.contains('selected')) this.style.background='transparent'">
                     <div style="flex: 1; min-width: 0;">
-                        <div style="color: ${book.fractal_id === selectedBookFractalId ? '#e2e8f0' : '#cbd5e1'}; font-weight: ${book.fractal_id === selectedBookFractalId ? '600' : '500'}; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${book.name || `${book.input_platform} → Discord`}</div>
-                        ${book.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.125rem;">${book.message_count}</div>` : ''}
+                        <div style="
+                            color: ${book.fractal_id === selectedBookFractalId ? '#e2e8f0' : '#cbd5e1'}; 
+                            font-weight: ${book.fractal_id === selectedBookFractalId ? '600' : '500'}; 
+                            font-size: 0.8125rem; 
+                            white-space: nowrap; 
+                            overflow: hidden; 
+                            text-overflow: ellipsis;
+                            line-height: 1.3;
+                        ">${book.name || `${book.input_platform} → Discord`}</div>
+                        ${book.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.25rem; line-height: 1;">${book.message_count} messages</div>` : ''}
                     </div>
                     ${book._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem;">💬</span>` : ''}
-                </button>
+                </div>
             `).join('');
             
             // Render detail panel for selected book
@@ -3607,7 +3651,7 @@
                 
                 if (response.ok) {
                     // Animate book card deletion with liquid glass effect
-                    const bookCard = document.querySelector(`.channel-item[data-book-id="${fractalId}"]`);
+                    const bookCard = document.querySelector(`.book-list-item[data-fractal-id="${fractalId}"], .channel-item[data-book-id="${fractalId}"]`);
                     if (bookCard) {
                         // Apply liquid glass delete animation
                         bookCard.style.transition = 'all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)';
@@ -6049,11 +6093,14 @@ document.addEventListener('click', function(e) {
         return;
     }
     
-    // Book selection
-    if (target.classList.contains('channel-item') || target.closest('.channel-item')) {
-        const item = target.classList.contains('channel-item') ? target : target.closest('.channel-item');
+    // Book selection (supports both old button style and new list widget style)
+    if (target.classList.contains('book-list-item') || target.closest('.book-list-item') || 
+        target.classList.contains('channel-item') || target.closest('.channel-item')) {
+        const item = target.classList.contains('book-list-item') ? target : 
+                     target.closest('.book-list-item') ||
+                     (target.classList.contains('channel-item') ? target : target.closest('.channel-item'));
         const fractalId = item.getAttribute('data-fractal-id');
-        if (fractalId && !item.classList.contains('active')) {
+        if (fractalId && !item.classList.contains('active') && !item.classList.contains('selected')) {
             selectBook(fractalId);
         }
         return;
