@@ -358,6 +358,14 @@ async function initializeDatabase() {
         
         console.log('✅ Book registry initialized with dynamic indexing');
         
+        // MIGRATION TRACKING: Create table to track completed migrations
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS core.migrations (
+                name TEXT PRIMARY KEY,
+                completed_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        
         // MIGRATION: Add join_code column to existing phone_to_book tables FIRST
         try {
             const schemas = await pool.query(`
@@ -395,17 +403,22 @@ async function initializeDatabase() {
             console.warn('⚠️ Migration warning:', migrationError.message);
         }
         
-        // MIGRATION: Backfill existing books into registry (AFTER join_code column exists)
-        try {
-            console.log('📚 Starting registry backfill migration...');
-            const schemas = await pool.query(`
-                SELECT schema_name 
-                FROM information_schema.schemata 
-                WHERE schema_name LIKE 'tenant_%'
-            `);
-            
-            let backfilledCount = 0;
-            for (const { schema_name } of schemas.rows) {
+        // MIGRATION: Backfill existing books into registry (DISABLED - causes pool exhaustion)
+        // Note: New books are automatically added to registry during WhatsApp activation
+        // Existing books will be added to registry when they're first activated
+        const BACKFILL_DISABLED = true;
+        
+        if (!BACKFILL_DISABLED) {
+            try {
+                console.log('📚 Starting registry backfill migration (one-time only)...');
+                const schemas = await pool.query(`
+                    SELECT schema_name 
+                    FROM information_schema.schemata 
+                    WHERE schema_name LIKE 'tenant_%'
+                `);
+                
+                let backfilledCount = 0;
+                for (const { schema_name } of schemas.rows) {
                 // Get tenant email from core.user_email_to_tenant
                 const tenantEmailResult = await pool.query(`
                     SELECT email FROM core.user_email_to_tenant 
@@ -420,6 +433,18 @@ async function initializeDatabase() {
                 
                 const tenantEmail = tenantEmailResult.rows[0].email;
                 
+                // Check if books table exists
+                const booksTableCheck = await pool.query(`
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.tables 
+                        WHERE table_schema = $1 AND table_name = 'books'
+                    ) as exists
+                `, [schema_name]);
+                
+                if (!booksTableCheck.rows[0].exists) {
+                    continue; // Skip tenants without books table
+                }
+                
                 // Get all books from this tenant
                 const booksResult = await pool.query(`
                     SELECT id, name, fractal_id, input_platform, output_01_url, output_0n_url, output_credentials 
@@ -427,15 +452,29 @@ async function initializeDatabase() {
                     WHERE fractal_id IS NOT NULL
                 `);
                 
+                // Check if phone_to_book table exists
+                const phoneTableCheck = await pool.query(`
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.tables 
+                        WHERE table_schema = $1 AND table_name = 'phone_to_book'
+                    ) as exists
+                `, [schema_name]);
+                
                 for (const book of booksResult.rows) {
-                    // Get join_code from phone_to_book if exists
-                    const joinCodeResult = await pool.query(`
-                        SELECT join_code FROM ${schema_name}.phone_to_book 
-                        WHERE book_id = $1 AND join_code IS NOT NULL
-                        LIMIT 1
-                    `, [book.id]);
+                    let joinCode = `no-code-${book.fractal_id}`;
                     
-                    const joinCode = joinCodeResult.rows[0]?.join_code || `no-code-${book.fractal_id}`;
+                    // Get join_code from phone_to_book if table exists
+                    if (phoneTableCheck.rows[0].exists) {
+                        const joinCodeResult = await pool.query(`
+                            SELECT join_code FROM ${schema_name}.phone_to_book 
+                            WHERE book_id = $1 AND join_code IS NOT NULL
+                            LIMIT 1
+                        `, [book.id]);
+                        
+                        if (joinCodeResult.rows[0]?.join_code) {
+                            joinCode = joinCodeResult.rows[0].join_code;
+                        }
+                    }
                     
                     // Prepare outpipes from output_credentials
                     const outpipesUser = book.output_credentials?.webhooks?.map(w => ({
@@ -480,9 +519,18 @@ async function initializeDatabase() {
                     }
                 }
             }
-            console.log(`✅ Registry backfill complete: ${backfilledCount} books migrated`);
-        } catch (migrationError) {
-            console.warn('⚠️ Registry backfill warning:', migrationError.message);
+                console.log(`✅ Registry backfill complete: ${backfilledCount} books migrated`);
+                
+                // Mark migration as complete
+                await pool.query(`
+                    INSERT INTO core.migrations (name) VALUES ('registry_backfill_v1')
+                    ON CONFLICT (name) DO NOTHING
+                `);
+            } catch (migrationError) {
+                console.warn('⚠️ Registry backfill warning:', migrationError.message);
+            }
+        } else {
+            console.log('✅ Registry backfill already completed (skipping)');
         }
         
         // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
