@@ -358,13 +358,7 @@ async function initializeDatabase() {
         
         console.log('✅ Book registry initialized with dynamic indexing');
         
-        // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
-        // No messages table needed - Discord threads provide permanent storage at zero cost
-        
-        // NOTE: All tenant schemas (users, books, media_buffer, etc.) are created by TenantManager
-        // during tenant initialization. No manual migrations needed for N+1 scalability.
-        
-        // MIGRATION: Add join_code column to existing phone_to_book tables
+        // MIGRATION: Add join_code column to existing phone_to_book tables FIRST
         try {
             const schemas = await pool.query(`
                 SELECT schema_name 
@@ -400,6 +394,102 @@ async function initializeDatabase() {
         } catch (migrationError) {
             console.warn('⚠️ Migration warning:', migrationError.message);
         }
+        
+        // MIGRATION: Backfill existing books into registry (AFTER join_code column exists)
+        try {
+            console.log('📚 Starting registry backfill migration...');
+            const schemas = await pool.query(`
+                SELECT schema_name 
+                FROM information_schema.schemata 
+                WHERE schema_name LIKE 'tenant_%'
+            `);
+            
+            let backfilledCount = 0;
+            for (const { schema_name } of schemas.rows) {
+                // Get tenant email from core.user_email_to_tenant
+                const tenantEmailResult = await pool.query(`
+                    SELECT email FROM core.user_email_to_tenant 
+                    WHERE tenant_schema = $1 
+                    LIMIT 1
+                `, [schema_name]);
+                
+                if (tenantEmailResult.rows.length === 0) {
+                    console.warn(`⚠️ No email found for ${schema_name}, skipping...`);
+                    continue;
+                }
+                
+                const tenantEmail = tenantEmailResult.rows[0].email;
+                
+                // Get all books from this tenant
+                const booksResult = await pool.query(`
+                    SELECT id, name, fractal_id, input_platform, output_01_url, output_0n_url, output_credentials 
+                    FROM ${schema_name}.books 
+                    WHERE fractal_id IS NOT NULL
+                `);
+                
+                for (const book of booksResult.rows) {
+                    // Get join_code from phone_to_book if exists
+                    const joinCodeResult = await pool.query(`
+                        SELECT join_code FROM ${schema_name}.phone_to_book 
+                        WHERE book_id = $1 AND join_code IS NOT NULL
+                        LIMIT 1
+                    `, [book.id]);
+                    
+                    const joinCode = joinCodeResult.rows[0]?.join_code || `no-code-${book.fractal_id}`;
+                    
+                    // Prepare outpipes from output_credentials
+                    const outpipesUser = book.output_credentials?.webhooks?.map(w => ({
+                        type: 'webhook',
+                        url: w.url,
+                        name: w.name || 'User Webhook'
+                    })) || [];
+                    
+                    if (book.output_0n_url && !outpipesUser.find(w => w.url === book.output_0n_url)) {
+                        outpipesUser.push({
+                            type: 'webhook',
+                            url: book.output_0n_url,
+                            name: 'Primary Webhook'
+                        });
+                    }
+                    
+                    // Insert into registry (skip if already exists)
+                    try {
+                        await pool.query(`
+                            INSERT INTO core.book_registry (
+                                book_name, join_code, fractal_id, tenant_schema, tenant_email,
+                                phone_number, status, inpipe_type, outpipe_ledger, outpipes_user
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                            ON CONFLICT (join_code) DO NOTHING
+                        `, [
+                            book.name,
+                            joinCode,
+                            book.fractal_id,
+                            schema_name,
+                            tenantEmail,
+                            null, // phone_number - will be set during activation
+                            'pending', // status
+                            book.input_platform || 'whatsapp',
+                            book.output_01_url,
+                            JSON.stringify(outpipesUser)
+                        ]);
+                        backfilledCount++;
+                    } catch (insertError) {
+                        if (!insertError.message.includes('duplicate')) {
+                            console.warn(`⚠️ Failed to backfill book ${book.fractal_id}:`, insertError.message);
+                        }
+                    }
+                }
+            }
+            console.log(`✅ Registry backfill complete: ${backfilledCount} books migrated`);
+        } catch (migrationError) {
+            console.warn('⚠️ Registry backfill warning:', migrationError.message);
+        }
+        
+        // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
+        // No messages table needed - Discord threads provide permanent storage at zero cost
+        
+        // NOTE: All tenant schemas (users, books, media_buffer, etc.) are created by TenantManager
+        // during tenant initialization. No manual migrations needed for N+1 scalability.
         
         console.log('✅ Core schema initialized with security tables');
         console.log('✅ Database initialized successfully');
@@ -1765,48 +1855,53 @@ app.post('/api/twilio/webhook', async (req, res) => {
                 const joinCode = originalMatch ? originalMatch[1].trim() : joinMatch[1].trim();
                 console.log(`🔐 Join code detected: ${joinCode}`);
                 
-                // Search for join_code across all tenant schemas
-                const schemas = await pool.query(`
-                    SELECT schema_name 
-                    FROM information_schema.schemata 
-                    WHERE schema_name LIKE 'tenant_%'
-                `);
+                // OPTIMIZED: Single registry query instead of N-schema loop (26 queries → 1 query!)
+                const registryLookup = await pool.query(`
+                    SELECT id, tenant_schema, tenant_email, fractal_id, book_name
+                    FROM core.book_registry
+                    WHERE join_code = $1 AND status = 'pending'
+                `, [joinCode]);
                 
-                let foundMapping = null;
-                let foundTenantSchema = null;
-                
-                for (const { schema_name } of schemas.rows) {
-                    const mapping = await pool.query(`
-                        SELECT book_id, join_code 
-                        FROM ${schema_name}.phone_to_book 
+                if (registryLookup.rows.length > 0) {
+                    const bookRecord = registryLookup.rows[0];
+                    const tenantSchema = bookRecord.tenant_schema;
+                    console.log(`✅ Found book ${bookRecord.fractal_id} in ${tenantSchema} for join code ${joinCode} (via registry)`);
+                    
+                    // Get book_id from tenant schema's phone_to_book table
+                    const bookMapping = await pool.query(`
+                        SELECT book_id FROM ${tenantSchema}.phone_to_book 
                         WHERE join_code = $1 AND phone_number IS NULL
                     `, [joinCode]);
                     
-                    if (mapping.rows.length > 0) {
-                        foundMapping = mapping.rows[0];
-                        foundTenantSchema = schema_name;
-                        break;
+                    if (bookMapping.rows.length === 0) {
+                        console.error(`❌ Registry-tenant mismatch: join code ${joinCode} not found in ${tenantSchema}.phone_to_book`);
+                        return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
                     }
-                }
-                
-                if (foundMapping) {
-                    console.log(`✅ Found book ${foundMapping.book_id} in ${foundTenantSchema} for join code ${joinCode}`);
                     
-                    // Map phone to book (update existing row with NULL phone_number)
+                    const bookId = bookMapping.rows[0].book_id;
+                    
+                    // Update tenant's phone_to_book (activate book)
                     await pool.query(`
-                        UPDATE ${foundTenantSchema}.phone_to_book 
+                        UPDATE ${tenantSchema}.phone_to_book 
                         SET phone_number = $1, join_code = NULL, updated_at = NOW()
                         WHERE join_code = $2
                     `, [phone, joinCode]);
+                    
+                    // Update registry (activate and set phone)
+                    await pool.query(`
+                        UPDATE core.book_registry 
+                        SET phone_number = $1, status = 'active', activated_at = NOW()
+                        WHERE id = $2
+                    `, [phone, bookRecord.id]);
                     
                     // Map phone to tenant in core
                     await pool.query(`
                         INSERT INTO core.phone_to_tenant (phone_number, tenant_schema)
                         VALUES ($1, $2)
                         ON CONFLICT (phone_number) DO UPDATE SET tenant_schema = $2
-                    `, [phone, foundTenantSchema]);
+                    `, [phone, tenantSchema]);
                     
-                    console.log(`🔗 Mapped phone ${phone} to book ${foundMapping.book_id} (join code nullified)`);
+                    console.log(`🔗 Activated book ${bookRecord.fractal_id} (book_id: ${bookId}) for phone ${phone}`);
                     
                     // Send confirmation message
                     try {
@@ -3131,6 +3226,47 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
             book.contact_info = `join baby-ability ${joinCode}`;
             console.log(`🔐 Generated join code for book ${generatedFractalId}: ${joinCode}`);
         }
+        
+        // REGISTRY INSERT: Add book to centralized global registry for O(1) lookups
+        // This eliminates N-schema loops (26 queries → 1 query per WhatsApp message)
+        const tenantEmail = req.tenantContext.userEmail;
+        const tenantSchema = req.tenantContext.tenantSchema;
+        
+        // Prepare outpipes array from output_credentials webhooks
+        const outpipesUser = outputCredentials?.webhooks?.map(w => ({
+            type: 'webhook',
+            url: w.url,
+            name: w.name || 'User Webhook'
+        })) || [];
+        
+        // If output_0n_url exists but not in webhooks array, add it
+        if (output0nUrl && !outpipesUser.find(w => w.url === output0nUrl)) {
+            outpipesUser.push({
+                type: 'webhook',
+                url: output0nUrl,
+                name: 'Primary Webhook'
+            });
+        }
+        
+        await pool.query(`
+            INSERT INTO core.book_registry (
+                book_name, join_code, fractal_id, tenant_schema, tenant_email,
+                phone_number, status, inpipe_type, outpipe_ledger, outpipes_user
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `, [
+            name,
+            joinCode || `no-code-${generatedFractalId}`, // Fallback for non-WhatsApp books
+            generatedFractalId,
+            tenantSchema,
+            tenantEmail,
+            null, // phone_number = NULL until activated
+            'pending', // status = pending until WhatsApp activation
+            inputPlatform,
+            output01Url,
+            JSON.stringify(outpipesUser)
+        ]);
+        
+        console.log(`📚 Registered book in global registry: ${generatedFractalId} (tenant: ${tenantEmail})`);
         
         // AUTO-CREATE DUAL DISCORD THREADS VIA BOT
         // thread_01 → Nyanbook Ledger (webhook01) - dev-only visibility
