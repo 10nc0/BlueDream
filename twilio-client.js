@@ -54,8 +54,14 @@ async function validateWebhookSignature(signature, url, params) {
   return twilio.validateRequest(authToken, signature, url, params);
 }
 
+async function getTwilioMediaCredentials() {
+  const { accountSid, authToken } = await getCredentials();
+  return { accountSid, authToken };
+}
+
 module.exports = {
   getTwilioClient,
   getTwilioFromPhoneNumber,
-  validateWebhookSignature
+  validateWebhookSignature,
+  getTwilioMediaCredentials
 };

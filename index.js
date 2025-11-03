@@ -2060,10 +2060,18 @@ app.post('/api/twilio/webhook', async (req, res) => {
             
             if (MediaUrl0) {
                 try {
+                    // Get Twilio credentials for authenticated media download
+                    const twilioHelper = require('./twilio-client');
+                    const { accountSid, authToken } = await twilioHelper.getTwilioMediaCredentials();
+                    
                     console.log(`📥 [Limbo] Downloading media from Twilio...`);
                     const mediaResponse = await axios.get(MediaUrl0, { 
                         responseType: 'arraybuffer',
-                        timeout: 30000
+                        timeout: 30000,
+                        auth: {
+                            username: accountSid,
+                            password: authToken
+                        }
                     });
                     limboMediaBuffer = Buffer.from(mediaResponse.data);
                     limboMediaContentType = MediaContentType0 || mediaResponse.headers['content-type'] || 'application/octet-stream';
@@ -2080,6 +2088,7 @@ app.post('/api/twilio/webhook', async (req, res) => {
                     });
                 } catch (downloadError) {
                     console.error(`❌ [Limbo] Failed to download media:`, downloadError.message);
+                    console.error(`   Status: ${downloadError.response?.status}, URL: ${MediaUrl0.substring(0, 60)}`);
                     limboPayload.embeds[0].fields.push({ 
                         name: '⚠️ Media (download failed)', 
                         value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
@@ -2287,10 +2296,18 @@ app.post('/api/twilio/webhook', async (req, res) => {
             
             if (MediaUrl0) {
                 try {
+                    // Get Twilio credentials for authenticated media download
+                    const twilioHelper = require('./twilio-client');
+                    const { accountSid, authToken } = await twilioHelper.getTwilioMediaCredentials();
+                    
                     console.log(`📥 Downloading media from Twilio: ${MediaUrl0.substring(0, 80)}...`);
                     const mediaResponse = await axios.get(MediaUrl0, { 
                         responseType: 'arraybuffer',
-                        timeout: 30000
+                        timeout: 30000,
+                        auth: {
+                            username: accountSid,
+                            password: authToken
+                        }
                     });
                     mediaBuffer = Buffer.from(mediaResponse.data);
                     mediaContentType = MediaContentType0 || mediaResponse.headers['content-type'] || 'application/octet-stream';
@@ -2308,6 +2325,7 @@ app.post('/api/twilio/webhook', async (req, res) => {
                     });
                 } catch (downloadError) {
                     console.error(`❌ Failed to download media:`, downloadError.message);
+                    console.error(`   Status: ${downloadError.response?.status}, URL: ${MediaUrl0.substring(0, 60)}`);
                     embed.fields.push({ 
                         name: '⚠️ Media (download failed)', 
                         value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
