@@ -2173,6 +2173,45 @@ app.post('/api/twilio/webhook', async (req, res) => {
             } else {
                 console.log(`❌ Unknown phone ${phone} - send "join baby-ability" first`);
                 
+                // LIMBO ROUTING: Forward all unactivated messages to t1-b1 Ledger thread
+                const LIMBO_THREAD_ID = '1433850939751534672';
+                
+                try {
+                    const limboEmbed = {
+                        title: `🔮 Limbo Message (Unactivated Phone)`,
+                        description: Body || '_(No text content)_',
+                        color: 0xFF6B6B, // Red for limbo messages
+                        fields: [
+                            { name: '📱 Phone', value: phone, inline: true },
+                            { name: '🕐 Time', value: new Date().toLocaleString(), inline: true },
+                            { name: '🔓 Status', value: 'Unactivated - No join code sent', inline: false }
+                        ],
+                        timestamp: new Date().toISOString(),
+                        footer: { text: 'Send "join baby-ability BOOKNAME-xxxxxx" to activate' }
+                    };
+                    
+                    // Add media if present
+                    if (MediaUrl0) {
+                        limboEmbed.fields.push({ 
+                            name: '📎 Media', 
+                            value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
+                            inline: false 
+                        });
+                    }
+                    
+                    await axios.post(`https://discord.com/api/v10/channels/${LIMBO_THREAD_ID}/messages`, {
+                        embeds: [limboEmbed]
+                    }, {
+                        headers: {
+                            'Authorization': `Bot ${process.env.HERMES_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    console.log(`✅ Limbo message forwarded to t1-b1 thread from ${phone}`);
+                } catch (discordError) {
+                    console.error(`❌ Failed to forward limbo message to t1-b1:`, discordError.message);
+                }
+                
                 // Send help message (optional - don't fail if it errors)
                 try {
                     const twilioHelper = require('./twilio-client');
