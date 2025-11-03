@@ -299,6 +299,65 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire)
         `);
         
+        // CENTRALIZED BOOK REGISTRY: Global substrate for O(1) join code lookups
+        // Eliminates N-schema loops (26+ queries → 1 query per WhatsApp message)
+        // Hierarchy: Tenant (email) → Book (join_code) → Message → Drops + Attachments
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS core.book_registry (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                
+                -- Book identity
+                book_name TEXT NOT NULL,
+                join_code TEXT UNIQUE NOT NULL,
+                fractal_id TEXT UNIQUE NOT NULL,
+                
+                -- Tenant linkage (email substrate)
+                tenant_schema TEXT NOT NULL,
+                tenant_email TEXT NOT NULL,
+                
+                -- Activation tracking (placeholder → code → active)
+                phone_number TEXT,
+                status TEXT DEFAULT 'pending',
+                
+                -- Pipeline architecture (inpipe + multi-outpipe)
+                inpipe_type TEXT DEFAULT 'whatsapp',
+                outpipe_ledger TEXT NOT NULL,
+                outpipes_user JSONB DEFAULT '[]'::jsonb,
+                
+                -- Timestamps
+                created_at TIMESTAMP DEFAULT NOW(),
+                activated_at TIMESTAMP
+            )
+        `);
+        
+        // Dynamic indexes for fast O(1) lookups on any dimension
+        await pool.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_book_registry_join_code 
+            ON core.book_registry(join_code)
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_book_registry_tenant_schema 
+            ON core.book_registry(tenant_schema)
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_book_registry_fractal_id 
+            ON core.book_registry(fractal_id)
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_book_registry_status 
+            ON core.book_registry(status) WHERE status = 'pending'
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_book_registry_tenant_book 
+            ON core.book_registry(tenant_schema, id)
+        `);
+        
+        console.log('✅ Book registry initialized with dynamic indexing');
+        
         // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
         // No messages table needed - Discord threads provide permanent storage at zero cost
         
