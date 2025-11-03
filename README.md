@@ -287,7 +287,7 @@ All available in the admin dashboard!
 ## 💎 Tech Stack
 
 - **Backend**: Node.js + Express
-- **Database**: PostgreSQL (Neon)
+- **Database**: PostgreSQL (Supabase)
 - **Auth**: JWT + Passport.js + Google OAuth
 - **WhatsApp**: whatsapp-web.js
 - **Discord**: Webhooks
