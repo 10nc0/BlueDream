@@ -49,13 +49,24 @@ async function getTwilioFromPhoneNumber() {
 }
 
 async function validateWebhookSignature(signature, url, params) {
-  const { authToken } = await getCredentials();
+  // Auth token from environment (for webhook validation)
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) {
+    throw new Error('TWILIO_AUTH_TOKEN not found in environment');
+  }
   const twilio = require('twilio');
   return twilio.validateRequest(authToken, signature, url, params);
 }
 
 async function getTwilioMediaCredentials() {
-  const { accountSid, authToken } = await getCredentials();
+  // Get Account SID from integration, Auth Token from environment
+  const { accountSid } = await getCredentials();
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  
+  if (!authToken) {
+    throw new Error('TWILIO_AUTH_TOKEN not found in environment');
+  }
+  
   return { accountSid, authToken };
 }
 
