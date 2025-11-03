@@ -1906,11 +1906,11 @@ app.post('/api/twilio/webhook', async (req, res) => {
             const joinCode = bodyText.trim();
             console.log(`🔐 Standalone code detected: ${joinCode}`);
             
-            // OPTIMIZED: Single registry query instead of N-schema loop (26 queries → 1 query!)
+            // OPTIMIZED: Single registry query (case-insensitive) instead of N-schema loop
             const registryLookup = await pool.query(`
                 SELECT id, tenant_schema, tenant_email, fractal_id, book_name, outpipe_ledger
                 FROM core.book_registry
-                WHERE join_code = $1 AND status = 'pending'
+                WHERE LOWER(join_code) = LOWER($1) AND status = 'pending'
             `, [joinCode]);
             
             if (registryLookup.rows.length > 0) {
@@ -1918,10 +1918,10 @@ app.post('/api/twilio/webhook', async (req, res) => {
                 const tenantSchema = bookRecord.tenant_schema;
                 console.log(`✅ Found book ${bookRecord.fractal_id} in ${tenantSchema} for join code ${joinCode} (via registry)`);
                 
-                // Get book_id from tenant schema's phone_to_book table
+                // Get book_id from tenant schema's phone_to_book table (case-insensitive)
                 const bookMapping = await pool.query(`
-                    SELECT book_id FROM ${tenantSchema}.phone_to_book 
-                    WHERE join_code = $1 AND phone_number IS NULL
+                    SELECT book_id, join_code FROM ${tenantSchema}.phone_to_book 
+                    WHERE LOWER(join_code) = LOWER($1) AND phone_number IS NULL
                 `, [joinCode]);
                 
                 if (bookMapping.rows.length === 0) {
@@ -1930,13 +1930,14 @@ app.post('/api/twilio/webhook', async (req, res) => {
                 }
                 
                 const bookId = bookMapping.rows[0].book_id;
+                const dbJoinCode = bookMapping.rows[0].join_code; // Use actual DB value for UPDATE
                 
-                // Update tenant's phone_to_book (activate book)
+                // Update tenant's phone_to_book (activate book) - use DB join_code for exact match
                 await pool.query(`
                     UPDATE ${tenantSchema}.phone_to_book 
                     SET phone_number = $1, join_code = NULL, updated_at = NOW()
                     WHERE join_code = $2
-                `, [phone, joinCode]);
+                `, [phone, dbJoinCode]);
                 
                 // Update registry (activate and set phone)
                 await pool.query(`
