@@ -1457,7 +1457,7 @@
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <button class="btn-icon" data-show-book-info="${book.fractal_id}" title="Book Information" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">ℹ️</button>
-                        ${!isDevPanelView && platform === 'whatsapp' ? `<a href="https://wa.me/14155238886?text=${encodeURIComponent(book.contact_info || 'join baby-ability')}" target="_blank" rel="noopener noreferrer" class="btn-icon" title="Connect WhatsApp" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">📱</a>` : ''}
+                        ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" data-show-whatsapp-activation="${book.fractal_id}" title="WhatsApp Activation" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; display: inline-flex; align-items: center; justify-content: center;">📱</button>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-edit-book="${book.fractal_id}" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-delete-book="${book.fractal_id}" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
                     </div>
@@ -2872,6 +2872,39 @@
                     alert('Failed to copy: ' + err.message);
                 });
             }
+        }
+        
+        function showWhatsAppActivationModal(fractalId) {
+            // Find book by fractal_id
+            const book = books.find(b => b.fractal_id === fractalId);
+            if (!book) {
+                console.error('Book not found:', fractalId);
+                showToast('❌ Book not found', 'error');
+                return;
+            }
+            
+            // Extract join code from contact_info (e.g., "join baby-ability v20pc3-95bfd4" -> "v20pc3-95bfd4")
+            const joinCode = (book.contact_info || '').replace(/^join baby-ability\s+/i, '').trim();
+            
+            if (!joinCode) {
+                console.error('No join code found for book:', book);
+                showToast('❌ No activation code found', 'error');
+                return;
+            }
+            
+            // Populate modal
+            document.getElementById('book-name-display').textContent = `📖 ${book.name}`;
+            document.getElementById('book-fractal-id').textContent = book.fractal_id;
+            document.getElementById('book-join-code').textContent = joinCode;
+            
+            // Show activation section, hide form
+            document.getElementById('book-form-section').style.display = 'none';
+            document.getElementById('book-qr-section').style.display = 'block';
+            
+            // Open modal
+            document.getElementById('createBookModal').classList.add('active');
+            
+            console.log('📱 Showing activation modal for:', book.name, 'Code:', joinCode);
         }
         
         // Handle book creation form submission
@@ -6165,6 +6198,14 @@ document.addEventListener('click', function(e) {
     if (target.hasAttribute('data-show-book-info')) {
         e.preventDefault();
         showBookInfoModal();
+        return;
+    }
+    
+    // Show WhatsApp activation modal button (2-message flow)
+    if (target.hasAttribute('data-show-whatsapp-activation')) {
+        e.preventDefault();
+        const fractalId = target.getAttribute('data-show-whatsapp-activation');
+        if (fractalId) showWhatsAppActivationModal(fractalId);
         return;
     }
     
