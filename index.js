@@ -1894,284 +1894,156 @@ app.post('/api/twilio/webhook', async (req, res) => {
             const bodyText = Body?.trim() || '';
             const bodyLower = bodyText.toLowerCase();
             
-            // NEW FLOW: Check for unique join code "join baby-ability CODE"
-            // CRITICAL: Preserve case of join code for database matching
-            const joinMatch = bodyLower.match(/^join baby-ability (.+)$/);
-            if (joinMatch) {
-                // Extract join code from ORIGINAL body text (case-preserved)
-                const originalMatch = bodyText.match(/^join baby-ability (.+)$/i);
-                const joinCode = originalMatch ? originalMatch[1].trim() : joinMatch[1].trim();
-                console.log(`🔐 Join code detected: ${joinCode}`);
-                
-                // OPTIMIZED: Single registry query instead of N-schema loop (26 queries → 1 query!)
-                const registryLookup = await pool.query(`
-                    SELECT id, tenant_schema, tenant_email, fractal_id, book_name
-                    FROM core.book_registry
-                    WHERE join_code = $1 AND status = 'pending'
-                `, [joinCode]);
-                
-                if (registryLookup.rows.length > 0) {
-                    const bookRecord = registryLookup.rows[0];
-                    const tenantSchema = bookRecord.tenant_schema;
-                    console.log(`✅ Found book ${bookRecord.fractal_id} in ${tenantSchema} for join code ${joinCode} (via registry)`);
-                    
-                    // Get book_id from tenant schema's phone_to_book table
-                    const bookMapping = await pool.query(`
-                        SELECT book_id FROM ${tenantSchema}.phone_to_book 
-                        WHERE join_code = $1 AND phone_number IS NULL
-                    `, [joinCode]);
-                    
-                    if (bookMapping.rows.length === 0) {
-                        console.error(`❌ Registry-tenant mismatch: join code ${joinCode} not found in ${tenantSchema}.phone_to_book`);
-                        return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
-                    }
-                    
-                    const bookId = bookMapping.rows[0].book_id;
-                    
-                    // Update tenant's phone_to_book (activate book)
-                    await pool.query(`
-                        UPDATE ${tenantSchema}.phone_to_book 
-                        SET phone_number = $1, join_code = NULL, updated_at = NOW()
-                        WHERE join_code = $2
-                    `, [phone, joinCode]);
-                    
-                    // Update registry (activate and set phone)
-                    await pool.query(`
-                        UPDATE core.book_registry 
-                        SET phone_number = $1, status = 'active', activated_at = NOW()
-                        WHERE id = $2
-                    `, [phone, bookRecord.id]);
-                    
-                    // Map phone to tenant in core
-                    await pool.query(`
-                        INSERT INTO core.phone_to_tenant (phone_number, tenant_schema)
-                        VALUES ($1, $2)
-                        ON CONFLICT (phone_number) DO UPDATE SET tenant_schema = $2
-                    `, [phone, tenantSchema]);
-                    
-                    console.log(`🔗 Activated book ${bookRecord.fractal_id} (book_id: ${bookId}) for phone ${phone}`);
-                    
-                    // Send confirmation message
-                    try {
-                        const twilioHelper = require('./twilio-client');
-                        const twilioClient = await twilioHelper.getTwilioClient();
-                        const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
-                        
-                        await twilioClient.messages.create({
-                            from: `whatsapp:${twilioNumber}`,
-                            to: From,
-                            body: `✅ WhatsApp connected! Your messages will now be saved to your book. Send anything to test it out! 🌈`
-                        });
-                    } catch (twilioError) {
-                        console.warn(`⚠️ Could not send confirmation (non-fatal):`, twilioError.message);
-                    }
-                    
-                    return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
-                } else {
-                    console.log(`❌ Invalid join code: ${joinCode}`);
-                    
-                    // Send error message
-                    try {
-                        const twilioHelper = require('./twilio-client');
-                        const twilioClient = await twilioHelper.getTwilioClient();
-                        const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
-                        
-                        await twilioClient.messages.create({
-                            from: `whatsapp:${twilioNumber}`,
-                            to: From,
-                            body: `❌ Invalid join code. Please check your code and try again, or create a new book at ${process.env.REPLIT_DOMAINS?.split(',')[0] || 'your dashboard'}.`
-                        });
-                    } catch (twilioError) {
-                        console.warn(`⚠️ Could not send error message (non-fatal):`, twilioError.message);
-                    }
-                    
-                    return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
-                }
+            // 2-MESSAGE FLOW: Ignore "join " commands (let Twilio handle sandbox join)
+            if (bodyLower.startsWith('join ')) {
+                console.log(`⏭️  Ignoring "join" command - Twilio sandbox handles this`);
+                return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
             }
             
-            // LEGACY FLOW: "join baby-ability" (creates new tenant with limbo book)
-            if (bodyLower === 'join baby-ability') {
-                console.log(`✨ Legacy join command detected - creating new tenant for ${phone}`);
+            // 2-MESSAGE FLOW: Parse standalone join code (e.g., "v20pc3-95bfd4")
+            // Format: BOOKNAME-xxxxxx (where xxxxxx is 6-char random code)
+            const joinCode = bodyText.trim();
+            console.log(`🔐 Standalone code detected: ${joinCode}`);
+            
+            // OPTIMIZED: Single registry query instead of N-schema loop (26 queries → 1 query!)
+            const registryLookup = await pool.query(`
+                SELECT id, tenant_schema, tenant_email, fractal_id, book_name, outpipe_ledger
+                FROM core.book_registry
+                WHERE join_code = $1 AND status = 'pending'
+            `, [joinCode]);
+            
+            if (registryLookup.rows.length > 0) {
+                const bookRecord = registryLookup.rows[0];
+                const tenantSchema = bookRecord.tenant_schema;
+                console.log(`✅ Found book ${bookRecord.fractal_id} in ${tenantSchema} for join code ${joinCode} (via registry)`);
                 
-                // Create new tenant using tenant manager (creates all tables)
-                const tenantResult = await tenantManager.createTenant(0); // Use 0 as placeholder user ID
-                const tenantId = tenantResult.tenantId;
-                tenantSchema = tenantResult.schemaName;
+                // Get book_id from tenant schema's phone_to_book table
+                const bookMapping = await pool.query(`
+                    SELECT book_id FROM ${tenantSchema}.phone_to_book 
+                    WHERE join_code = $1 AND phone_number IS NULL
+                `, [joinCode]);
                 
-                console.log(`✅ Created tenant schema ${tenantSchema} with all tables`);
-                
-                // Now create phone-based user and book
-                const client = await pool.connect();
-                try {
-                    await client.query('BEGIN');
-                    
-                    // Adapt users table for phone-based auth (make email nullable, add phone_number)
-                    await client.query(`
-                        ALTER TABLE ${tenantSchema}.users 
-                        ALTER COLUMN email DROP NOT NULL,
-                        ADD COLUMN IF NOT EXISTS phone_number TEXT UNIQUE
-                    `);
-                    
-                    // Create phone_to_book mapping table (tenant manager creates users/books tables)
-                    await client.query(`
-                        CREATE TABLE IF NOT EXISTS ${tenantSchema}.phone_to_book (
-                            id SERIAL PRIMARY KEY,
-                            phone_number TEXT,
-                            book_id INTEGER NOT NULL,
-                            join_code TEXT UNIQUE,
-                            created_at TIMESTAMP DEFAULT NOW(),
-                            updated_at TIMESTAMP DEFAULT NOW(),
-                            UNIQUE(phone_number, book_id)
-                        )
-                    `);
-                    
-                    // Create index for join_code lookups
-                    await client.query(`
-                        CREATE INDEX IF NOT EXISTS idx_${tenantSchema.replace('tenant_', 't')}_phone_to_book_join_code 
-                        ON ${tenantSchema}.phone_to_book(join_code)
-                    `);
-                    
-                    // Create user
-                    const userResult = await client.query(`
-                        INSERT INTO ${tenantSchema}.users (phone_number, password_hash, role, tenant_id, is_genesis_admin)
-                        VALUES ($1, 'TWILIO_USER', 'admin', $2, true)
-                        RETURNING id
-                    `, [phone, tenantId]);
-                    
-                    const userId = userResult.rows[0].id;
-                    
-                    // Create default limbo book (t{X}-b1)
-                    // Note: Hermes will add "[Ledger]" suffix automatically
-                    const isDevTenant = tenantId === 1;
-                    const bookName = isDevTenant ? 
-                        `TB 01 Garuda (t${tenantId}-b1)` : 
-                        `Bridge 01 (t${tenantId}-b1)`;
-                    
-                    // Generate thread name for Hermes
-                    const threadName = `book-t${tenantId}-${Date.now()}`;
-                    const outputCredentials = {
-                        thread_name: threadName,
-                        webhooks: []
-                    };
-                    
-                    // Create default book with proper structure
-                    const bookResult = await client.query(`
-                        INSERT INTO ${tenantSchema}.books (
-                            name, 
-                            input_platform, 
-                            output_platform, 
-                            input_credentials,
-                            output_credentials,
-                            output_01_url,
-                            output_0n_url,
-                            contact_info,
-                            tags,
-                            status, 
-                            archived,
-                            created_by_admin_id
-                        )
-                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                        RETURNING id
-                    `, [
-                        bookName,
-                        'whatsapp',
-                        'discord',
-                        {},
-                        outputCredentials,
-                        NYANBOOK_LEDGER_WEBHOOK,
-                        null,
-                        'join baby-ability',
-                        [],
-                        'inactive',
-                        false,
-                        '01'
-                    ]);
-                    
-                    const bookId = bookResult.rows[0].id;
-                    
-                    // Generate fractalized ID
-                    const fractalId = require('./fractal-id');
-                    const generatedFractalId = fractalId.generate('book', tenantId, bookId, '01');
-                    
-                    // Update book with fractalized ID
-                    await client.query(`
-                        UPDATE ${tenantSchema}.books 
-                        SET fractal_id = $1 
-                        WHERE id = $2
-                    `, [generatedFractalId, bookId]);
-                    
-                    // Map phone to book
-                    await client.query(`
-                        INSERT INTO ${tenantSchema}.phone_to_book (phone_number, book_id)
-                        VALUES ($1, $2)
-                    `, [phone, bookId]);
-                    
-                    // Map phone to tenant in core
-                    await client.query(`
-                        INSERT INTO core.phone_to_tenant (phone_number, tenant_schema)
-                        VALUES ($1, $2)
-                    `, [phone, tenantSchema]);
-                    
-                    await client.query('COMMIT');
-                    console.log(`✅ Created tenant ${tenantSchema} for phone ${phone}, book_id=${bookId}`);
-                    
-                    // Create Discord thread immediately (limbo thread for this tenant)
-                    if (hermesBot && hermesBot.isReady()) {
-                        try {
-                            console.log(`🧵 Creating limbo thread for ${bookName}...`);
-                            const dualThreads = await hermesBot.createDualThreadsForBook(
-                                NYANBOOK_LEDGER_WEBHOOK,
-                                null,
-                                bookName,
-                                tenantId,
-                                bookId
-                            );
-                            
-                            // Update book with thread info
-                            const outputDest = {};
-                            if (dualThreads.output_01) {
-                                outputDest.output_01 = dualThreads.output_01;
-                            }
-                            
-                            await client.query(`
-                                UPDATE ${tenantSchema}.books 
-                                SET output_credentials = $1,
-                                    status = 'active'
-                                WHERE id = $2
-                            `, [{ ...outputCredentials, ...outputDest }, bookId]);
-                            
-                            console.log(`✅ Limbo thread created: ${dualThreads.output_01?.thread_id}`);
-                        } catch (threadError) {
-                            console.warn(`⚠️ Failed to create limbo thread (non-fatal):`, threadError.message);
-                        }
-                    }
-                    
-                    // Send welcome message via Twilio (optional - don't fail if it errors)
-                    try {
-                        const twilioHelper = require('./twilio-client');
-                        const twilioClient = await twilioHelper.getTwilioClient();
-                        const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
-                        
-                        await twilioClient.messages.create({
-                            from: `whatsapp:${twilioNumber}`,
-                            to: From,
-                            body: `✨ Welcome to Your Nyanbook! You're all set. Send any message and it'll be saved to your personal Discord archive. 🌈`
-                        });
-                        console.log(`📤 Welcome message sent to ${phone}`);
-                    } catch (twilioError) {
-                        console.warn(`⚠️ Could not send welcome message (non-fatal):`, twilioError.message);
-                    }
-                    
+                if (bookMapping.rows.length === 0) {
+                    console.error(`❌ Registry-tenant mismatch: join code ${joinCode} not found in ${tenantSchema}.phone_to_book`);
                     return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
-                } catch (error) {
-                    await client.query('ROLLBACK');
-                    console.error('❌ Failed to create tenant:', error);
-                    throw error;
-                } finally {
-                    client.release();
                 }
+                
+                const bookId = bookMapping.rows[0].book_id;
+                
+                // Update tenant's phone_to_book (activate book)
+                await pool.query(`
+                    UPDATE ${tenantSchema}.phone_to_book 
+                    SET phone_number = $1, join_code = NULL, updated_at = NOW()
+                    WHERE join_code = $2
+                `, [phone, joinCode]);
+                
+                // Update registry (activate and set phone)
+                await pool.query(`
+                    UPDATE core.book_registry 
+                    SET phone_number = $1, status = 'active', activated_at = NOW()
+                    WHERE id = $2
+                `, [phone, bookRecord.id]);
+                
+                // Map phone to tenant in core
+                await pool.query(`
+                    INSERT INTO core.phone_to_tenant (phone_number, tenant_schema)
+                    VALUES ($1, $2)
+                    ON CONFLICT (phone_number) DO UPDATE SET tenant_schema = $2
+                `, [phone, tenantSchema]);
+                
+                console.log(`🔗 Activated book ${bookRecord.fractal_id} (book_id: ${bookId}) for phone ${phone}`);
+                
+                // HERMES: Create Discord thread now that book is activated
+                if (hermesBot && hermesBot.isReady()) {
+                    try {
+                        const tenantIdMatch = tenantSchema.match(/tenant_(\d+)/);
+                        const tenantId = tenantIdMatch ? parseInt(tenantIdMatch[1]) : 0;
+                        
+                        console.log(`🧵 Hermes creating dual outputs for: ${bookRecord.book_name} (t${tenantId}-b${bookId})`);
+                        const dualThreads = await hermesBot.createDualThreadsForBook(
+                            bookRecord.outpipe_ledger,
+                            null,
+                            bookRecord.book_name,
+                            tenantId,
+                            bookId
+                        );
+                        
+                        // Update book with thread info
+                        await pool.query(`
+                            UPDATE ${tenantSchema}.books 
+                            SET output_credentials = jsonb_set(
+                                COALESCE(output_credentials, '{}'::jsonb),
+                                '{output_01}',
+                                $1::jsonb
+                            ),
+                            status = 'active'
+                            WHERE id = $2
+                        `, [JSON.stringify(dualThreads.output_01), bookId]);
+                        
+                        // Send activation confirmation to Ledger thread
+                        const activationEmbed = {
+                            embeds: [{
+                                title: `🎉 Book Activated`,
+                                description: `Join code: \`${joinCode}\``,
+                                color: 0x00FF00,
+                                fields: [
+                                    { name: '📱 Phone', value: phone, inline: true },
+                                    { name: '📖 Book', value: bookRecord.book_name, inline: true },
+                                    { name: '🔗 Fractal ID', value: bookRecord.fractal_id, inline: false }
+                                ],
+                                timestamp: new Date().toISOString()
+                            }]
+                        };
+                        
+                        const activationOptions = {
+                            output: dualThreads.output_01
+                        };
+                        
+                        const minimalBook = {
+                            output_01_url: bookRecord.outpipe_ledger
+                        };
+                        
+                        await sendToLedger(activationEmbed, activationOptions, minimalBook);
+                        console.log(`✅ Hermes thread created: ${dualThreads.output_01?.thread_id}`);
+                    } catch (hermesError) {
+                        console.error(`❌ Failed to create Hermes thread:`, hermesError.message);
+                    }
+                }
+                
+                // Send confirmation message
+                try {
+                    const twilioHelper = require('./twilio-client');
+                    const twilioClient = await twilioHelper.getTwilioClient();
+                    const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+                    
+                    await twilioClient.messages.create({
+                        from: `whatsapp:${twilioNumber}`,
+                        to: From,
+                        body: `✅ Book activated! Your messages will now be saved. Send anything to test it out! 🌈`
+                    });
+                } catch (twilioError) {
+                    console.warn(`⚠️ Could not send confirmation (non-fatal):`, twilioError.message);
+                }
+                
+                return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
             } else {
-                console.log(`❌ Unknown phone ${phone} - send "join baby-ability" first`);
+                // Invalid/unknown code - route to limbo
+                console.log(`❌ Invalid join code: ${joinCode}`);
+                
+                // Send error message
+                try {
+                    const twilioHelper = require('./twilio-client');
+                    const twilioClient = await twilioHelper.getTwilioClient();
+                    const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+                    
+                    await twilioClient.messages.create({
+                        from: `whatsapp:${twilioNumber}`,
+                        to: From,
+                        body: `❌ Invalid join code. Please check your code and try again, or create a new book at ${process.env.REPLIT_DOMAINS?.split(',')[0] || 'your dashboard'}.`
+                    });
+                } catch (twilioError) {
+                    console.warn(`⚠️ Could not send error message (non-fatal):`, twilioError.message);
+                }
                 
                 // LIMBO ROUTING: Forward all unactivated messages to t1-b1 Ledger thread
                 const LIMBO_THREAD_ID = '1433850939751534672';
