@@ -1881,436 +1881,396 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
 
 // ============ TWILIO WEBHOOK ROUTES ============
 
-// Twilio WhatsApp webhook - receives incoming messages
+// Twilio WhatsApp webhook - JOIN-CODE-FIRST ROUTING
 app.post('/api/twilio/webhook', async (req, res) => {
     try {
         const { From, Body, MessageSid, MediaUrl0, MediaContentType0 } = req.body;
-        const phone = From.replace(/\D/g, ''); // Remove all non-digits for consistent phone number
+        const phone = From.replace(/\D/g, ''); // Phone is just metadata, not routing key
         
         console.log(`📱 Twilio webhook: From=${From}, Phone=${phone}, Body=${Body?.substring(0, 50)}...`);
         
-        // Step 1: Find tenant schema by phone
-        const phoneMapping = await pool.query(`
-            SELECT tenant_schema 
-            FROM core.phone_to_tenant 
-            WHERE phone_number = $1
-        `, [phone]);
+        const bodyText = Body?.trim() || '';
+        const bodyLower = bodyText.toLowerCase();
         
-        let tenantSchema;
+        // STEP 1: Ignore Twilio sandbox join command
+        if (bodyLower === 'join baby-ability') {
+            console.log(`⏭️  Ignoring Twilio sandbox join command`);
+            return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+        }
         
-        if (phoneMapping.rows.length === 0) {
-            console.log(`🆕 New phone number: ${phone}`);
+        // STEP 2: Parse join code from EVERY message
+        // Format: BOOKNAME-xxxxxx (where xxxxxx is 6-char random code)
+        const joinCode = bodyText.trim();
+        console.log(`🔍 Parsing potential join code: "${joinCode}"`);
+        
+        // STEP 3: Registry lookup by join code (O(1) lookup)
+        const registryLookup = await pool.query(`
+            SELECT id, tenant_schema, tenant_email, fractal_id, book_name, 
+                   outpipe_ledger, outpipes_user, status, phone_number
+            FROM core.book_registry
+            WHERE LOWER(join_code) = LOWER($1)
+        `, [joinCode]);
+        
+        if (registryLookup.rows.length === 0) {
+            // CASE C: No book found → LIMBO
+            console.log(`❌ No book found for join code: "${joinCode}" → Routing to limbo`);
             
-            const bodyText = Body?.trim() || '';
-            const bodyLower = bodyText.toLowerCase();
+            // LIMBO ROUTING: Forward all messages without valid join code to t1-b1 Ledger thread
+            const LIMBO_THREAD_ID = '1433850939751534672';
             
-            // 2-MESSAGE FLOW: Ignore ONLY exact "join baby-ability" (Twilio sandbox join)
-            // Other messages like "join us this campaign" should be saved normally
-            if (bodyLower === 'join baby-ability') {
-                console.log(`⏭️  Ignoring Twilio sandbox join command - letting Twilio handle this`);
+            // Build Discord payload
+            const limboPayload = {
+                embeds: [{
+                    title: `🔮 Limbo Message (No Join Code)`,
+                    description: Body || '_(No text content)_',
+                    color: 0xFF6B6B, // Red for limbo messages
+                    fields: [
+                        { name: '📱 Phone', value: phone, inline: true },
+                        { name: '🕐 Time', value: new Date().toLocaleString(), inline: true },
+                        { name: '🔓 Status', value: 'No valid join code found', inline: false },
+                        { name: '📝 Message', value: `\`${joinCode.substring(0, 100)}\``, inline: false }
+                    ],
+                    timestamp: new Date().toISOString(),
+                    footer: { text: 'User needs to send a valid join code (e.g., "bookname-abc123")' }
+                }]
+            };
+            
+            // DISCORD-NATIVE: Download and attach media for limbo messages
+            let limboMediaBuffer = null;
+            let limboMediaFilename = null;
+            let limboMediaContentType = null;
+            
+            if (MediaUrl0) {
+                try {
+                    console.log(`📥 [Limbo] Downloading media from Twilio...`);
+                    const mediaResponse = await axios.get(MediaUrl0, { 
+                        responseType: 'arraybuffer',
+                        timeout: 30000
+                    });
+                    limboMediaBuffer = Buffer.from(mediaResponse.data);
+                    limboMediaContentType = MediaContentType0 || mediaResponse.headers['content-type'] || 'application/octet-stream';
+                    
+                    const ext = limboMediaContentType.split('/')[1]?.split(';')[0] || 'bin';
+                    limboMediaFilename = `limbo_media_${Date.now()}.${ext}`;
+                    
+                    console.log(`✅ [Limbo] Downloaded ${limboMediaBuffer.length} bytes`);
+                    
+                    limboPayload.embeds[0].fields.push({ 
+                        name: '📎 Media', 
+                        value: `${limboMediaContentType} (${(limboMediaBuffer.length / 1024).toFixed(1)} KB)`,
+                        inline: false 
+                    });
+                } catch (downloadError) {
+                    console.error(`❌ [Limbo] Failed to download media:`, downloadError.message);
+                    limboPayload.embeds[0].fields.push({ 
+                        name: '⚠️ Media (download failed)', 
+                        value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
+                        inline: false 
+                    });
+                }
+            }
+            
+            // Create minimal book object for sendToLedger
+            const limboBook = {
+                output_01_url: NYANBOOK_LEDGER_WEBHOOK
+            };
+            
+            // Send to t1-b1 Ledger using proper pipeline
+            const limboOptions = {
+                output: {
+                    type: 'thread',
+                    thread_id: LIMBO_THREAD_ID
+                },
+                // DISCORD-NATIVE: Pass media buffer if downloaded
+                mediaBuffer: limboMediaBuffer,
+                mediaFilename: limboMediaFilename,
+                mediaContentType: limboMediaContentType
+            };
+            
+            try {
+                await sendToLedger(limboPayload, limboOptions, limboBook);
+                console.log(`✅ Limbo message forwarded to t1-b1 thread from ${phone}`);
+            } catch (discordError) {
+                console.error(`❌ Failed to forward limbo message to t1-b1:`, discordError.message);
+                console.error(`⚠️  CRITICAL: Limbo message delivery failed - phone ${phone} message lost!`);
+            }
+            
+            // Send help message to user
+            try {
+                const twilioHelper = require('./twilio-client');
+                const twilioClient = await twilioHelper.getTwilioClient();
+                const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+                
+                await twilioClient.messages.create({
+                    from: `whatsapp:${twilioNumber}`,
+                    to: From,
+                    body: `👋 Welcome to Nyanbook! To activate your book, send your join code (format: bookname-abc123).\n\nCreate a book at: ${process.env.REPLIT_DOMAINS?.split(',')[0] || 'your dashboard'}`
+                });
+                console.log(`📤 Help message sent to ${phone}`);
+            } catch (twilioError) {
+                console.warn(`⚠️ Could not send help message (non-fatal):`, twilioError.message);
+            }
+            
+            return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+        }
+        
+        // Book found in registry - check status
+        const bookRecord = registryLookup.rows[0];
+        const tenantSchema = bookRecord.tenant_schema;
+        
+        console.log(`✅ Found book ${bookRecord.fractal_id} in registry: status=${bookRecord.status}, tenant=${tenantSchema}`);
+        
+        if (bookRecord.status === 'pending') {
+            // CASE A: Book found with status='pending' → ACTIVATE
+            console.log(`🔓 Activating pending book ${bookRecord.fractal_id} for phone ${phone}`);
+            
+            // Get book_id from tenant's books table (NOT phone_to_book)
+            const bookIdResult = await pool.query(`
+                SELECT id FROM ${tenantSchema}.books 
+                WHERE fractal_id = $1
+                LIMIT 1
+            `, [bookRecord.fractal_id]);
+            
+            if (bookIdResult.rows.length === 0) {
+                console.error(`❌ Book ${bookRecord.fractal_id} not found in ${tenantSchema}.books`);
                 return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
             }
             
-            // 2-MESSAGE FLOW: Parse standalone join code (e.g., "v20pc3-95bfd4")
-            // Format: BOOKNAME-xxxxxx (where xxxxxx is 6-char random code)
-            const joinCode = bodyText.trim();
-            console.log(`🔐 Standalone code detected: ${joinCode}`);
+            const bookId = bookIdResult.rows[0].id;
             
-            // OPTIMIZED: Single registry query (case-insensitive) instead of N-schema loop
-            const registryLookup = await pool.query(`
-                SELECT id, tenant_schema, tenant_email, fractal_id, book_name, outpipe_ledger
-                FROM core.book_registry
-                WHERE LOWER(join_code) = LOWER($1) AND status = 'pending'
-            `, [joinCode]);
+            // Update registry (activate and set phone)
+            await pool.query(`
+                UPDATE core.book_registry 
+                SET phone_number = $1, status = 'active', activated_at = NOW()
+                WHERE id = $2
+            `, [phone, bookRecord.id]);
             
-            if (registryLookup.rows.length > 0) {
-                const bookRecord = registryLookup.rows[0];
-                const tenantSchema = bookRecord.tenant_schema;
-                console.log(`✅ Found book ${bookRecord.fractal_id} in ${tenantSchema} for join code ${joinCode} (via registry)`);
-                
-                // Get book_id from tenant schema's phone_to_book table (case-insensitive)
-                const bookMapping = await pool.query(`
-                    SELECT book_id, join_code FROM ${tenantSchema}.phone_to_book 
-                    WHERE LOWER(join_code) = LOWER($1) AND phone_number IS NULL
-                `, [joinCode]);
-                
-                if (bookMapping.rows.length === 0) {
-                    console.error(`❌ Registry-tenant mismatch: join code ${joinCode} not found in ${tenantSchema}.phone_to_book`);
-                    return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
-                }
-                
-                const bookId = bookMapping.rows[0].book_id;
-                const dbJoinCode = bookMapping.rows[0].join_code; // Use actual DB value for UPDATE
-                
-                // Update tenant's phone_to_book (activate book) - use DB join_code for exact match
-                await pool.query(`
-                    UPDATE ${tenantSchema}.phone_to_book 
-                    SET phone_number = $1, join_code = NULL, updated_at = NOW()
-                    WHERE join_code = $2
-                `, [phone, dbJoinCode]);
-                
-                // Update registry (activate and set phone)
-                await pool.query(`
-                    UPDATE core.book_registry 
-                    SET phone_number = $1, status = 'active', activated_at = NOW()
-                    WHERE id = $2
-                `, [phone, bookRecord.id]);
-                
-                // Map phone to tenant in core
-                await pool.query(`
-                    INSERT INTO core.phone_to_tenant (phone_number, tenant_schema)
-                    VALUES ($1, $2)
-                    ON CONFLICT (phone_number) DO UPDATE SET tenant_schema = $2
-                `, [phone, tenantSchema]);
-                
-                console.log(`🔗 Activated book ${bookRecord.fractal_id} (book_id: ${bookId}) for phone ${phone}`);
-                
-                // HERMES: Create Discord thread now that book is activated
-                if (hermesBot && hermesBot.isReady()) {
-                    try {
-                        const tenantIdMatch = tenantSchema.match(/tenant_(\d+)/);
-                        const tenantId = tenantIdMatch ? parseInt(tenantIdMatch[1]) : 0;
-                        
-                        console.log(`🧵 Hermes creating dual outputs for: ${bookRecord.book_name} (t${tenantId}-b${bookId})`);
-                        const dualThreads = await hermesBot.createDualThreadsForBook(
-                            bookRecord.outpipe_ledger,
-                            null,
-                            bookRecord.book_name,
-                            tenantId,
-                            bookId
-                        );
-                        
-                        // Update book with thread info
-                        await pool.query(`
-                            UPDATE ${tenantSchema}.books 
-                            SET output_credentials = jsonb_set(
-                                COALESCE(output_credentials, '{}'::jsonb),
-                                '{output_01}',
-                                $1::jsonb
-                            ),
-                            status = 'active'
-                            WHERE id = $2
-                        `, [JSON.stringify(dualThreads.output_01), bookId]);
-                        
-                        // Send activation confirmation to Ledger thread
-                        const activationEmbed = {
-                            embeds: [{
-                                title: `🎉 Book Activated`,
-                                description: `Join code: \`${joinCode}\``,
-                                color: 0x00FF00,
-                                fields: [
-                                    { name: '📱 Phone', value: phone, inline: true },
-                                    { name: '📖 Book', value: bookRecord.book_name, inline: true },
-                                    { name: '🔗 Fractal ID', value: bookRecord.fractal_id, inline: false }
-                                ],
-                                timestamp: new Date().toISOString()
-                            }]
-                        };
-                        
-                        const activationOptions = {
-                            output: dualThreads.output_01
-                        };
-                        
-                        const minimalBook = {
-                            output_01_url: bookRecord.outpipe_ledger
-                        };
-                        
-                        await sendToLedger(activationEmbed, activationOptions, minimalBook);
-                        console.log(`✅ Hermes thread created: ${dualThreads.output_01?.thread_id}`);
-                    } catch (hermesError) {
-                        console.error(`❌ Failed to create Hermes thread:`, hermesError.message);
-                    }
-                }
-                
-                // Send confirmation message
+            // Update book status in tenant schema
+            await pool.query(`
+                UPDATE ${tenantSchema}.books 
+                SET status = 'active'
+                WHERE id = $1
+            `, [bookId]);
+            
+            console.log(`🔗 Activated book ${bookRecord.fractal_id} (book_id: ${bookId}) for phone ${phone}`);
+            
+            // HERMES: Create Discord thread now that book is activated
+            if (hermesBot && hermesBot.isReady()) {
                 try {
-                    const twilioHelper = require('./twilio-client');
-                    const twilioClient = await twilioHelper.getTwilioClient();
-                    const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+                    const tenantIdMatch = tenantSchema.match(/tenant_(\d+)/);
+                    const tenantId = tenantIdMatch ? parseInt(tenantIdMatch[1]) : 0;
                     
-                    await twilioClient.messages.create({
-                        from: `whatsapp:${twilioNumber}`,
-                        to: From,
-                        body: `✅ Book activated! Your messages will now be saved. Send anything to test it out! 🌈`
-                    });
-                } catch (twilioError) {
-                    console.warn(`⚠️ Could not send confirmation (non-fatal):`, twilioError.message);
-                }
-                
-                return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
-            } else {
-                // Invalid/unknown code - route to limbo
-                console.log(`❌ Invalid join code: ${joinCode}`);
-                
-                // Send error message
-                try {
-                    const twilioHelper = require('./twilio-client');
-                    const twilioClient = await twilioHelper.getTwilioClient();
-                    const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+                    console.log(`🧵 Hermes creating dual outputs for: ${bookRecord.book_name} (t${tenantId}-b${bookId})`);
+                    const dualThreads = await hermesBot.createDualThreadsForBook(
+                        bookRecord.outpipe_ledger,
+                        null,
+                        bookRecord.book_name,
+                        tenantId,
+                        bookId
+                    );
                     
-                    await twilioClient.messages.create({
-                        from: `whatsapp:${twilioNumber}`,
-                        to: From,
-                        body: `❌ Invalid join code. Please check your code and try again, or create a new book at ${process.env.REPLIT_DOMAINS?.split(',')[0] || 'your dashboard'}.`
-                    });
-                } catch (twilioError) {
-                    console.warn(`⚠️ Could not send error message (non-fatal):`, twilioError.message);
-                }
-                
-                // LIMBO ROUTING: Forward all unactivated messages to t1-b1 Ledger thread
-                const LIMBO_THREAD_ID = '1433850939751534672';
-                
-                // Build Discord payload
-                const limboPayload = {
-                    embeds: [{
-                        title: `🔮 Limbo Message (Unactivated Phone)`,
-                        description: Body || '_(No text content)_',
-                        color: 0xFF6B6B, // Red for limbo messages
-                        fields: [
-                            { name: '📱 Phone', value: phone, inline: true },
-                            { name: '🕐 Time', value: new Date().toLocaleString(), inline: true },
-                            { name: '🔓 Status', value: 'Unactivated - No join code sent', inline: false }
-                        ],
-                        timestamp: new Date().toISOString(),
-                        footer: { text: 'Send "join baby-ability BOOKNAME-xxxxxx" to activate' }
-                    }]
-                };
-                
-                // DISCORD-NATIVE: Download and attach media for limbo messages too
-                let limboMediaBuffer = null;
-                let limboMediaFilename = null;
-                let limboMediaContentType = null;
-                
-                if (MediaUrl0) {
-                    try {
-                        console.log(`📥 [Limbo] Downloading media from Twilio...`);
-                        const mediaResponse = await axios.get(MediaUrl0, { 
-                            responseType: 'arraybuffer',
-                            timeout: 30000
-                        });
-                        limboMediaBuffer = Buffer.from(mediaResponse.data);
-                        limboMediaContentType = MediaContentType0 || mediaResponse.headers['content-type'] || 'application/octet-stream';
-                        
-                        const ext = limboMediaContentType.split('/')[1]?.split(';')[0] || 'bin';
-                        limboMediaFilename = `limbo_media_${Date.now()}.${ext}`;
-                        
-                        console.log(`✅ [Limbo] Downloaded ${limboMediaBuffer.length} bytes`);
-                        
-                        limboPayload.embeds[0].fields.push({ 
-                            name: '📎 Media', 
-                            value: `${limboMediaContentType} (${(limboMediaBuffer.length / 1024).toFixed(1)} KB)`,
-                            inline: false 
-                        });
-                    } catch (downloadError) {
-                        console.error(`❌ [Limbo] Failed to download media:`, downloadError.message);
-                        limboPayload.embeds[0].fields.push({ 
-                            name: '⚠️ Media (download failed)', 
-                            value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
-                            inline: false 
-                        });
-                    }
-                }
-                
-                // Create minimal book object for sendToLedger
-                const limboBook = {
-                    output_01_url: NYANBOOK_LEDGER_WEBHOOK
-                };
-                
-                // Send to t1-b1 Ledger using proper pipeline
-                const limboOptions = {
-                    output: {
-                        type: 'thread',
-                        thread_id: LIMBO_THREAD_ID
-                    },
-                    // DISCORD-NATIVE: Pass media buffer if downloaded
-                    mediaBuffer: limboMediaBuffer,
-                    mediaFilename: limboMediaFilename,
-                    mediaContentType: limboMediaContentType
-                };
-                
-                try {
-                    await sendToLedger(limboPayload, limboOptions, limboBook);
-                    console.log(`✅ Limbo message forwarded to t1-b1 thread from ${phone}`);
-                } catch (discordError) {
-                    console.error(`❌ Failed to forward limbo message to t1-b1:`, discordError.message);
-                    // Alert on delivery failure
-                    console.error(`⚠️  CRITICAL: Limbo message delivery failed - phone ${phone} message lost!`);
-                }
-                
-                // Send help message only after verifying Discord delivery
-                try {
-                    const twilioHelper = require('./twilio-client');
-                    const twilioClient = await twilioHelper.getTwilioClient();
-                    const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+                    // Update book with thread info
+                    await pool.query(`
+                        UPDATE ${tenantSchema}.books 
+                        SET output_credentials = jsonb_set(
+                            COALESCE(output_credentials, '{}'::jsonb),
+                            '{output_01}',
+                            $1::jsonb
+                        )
+                        WHERE id = $2
+                    `, [JSON.stringify(dualThreads.output_01), bookId]);
                     
-                    await twilioClient.messages.create({
-                        from: `whatsapp:${twilioNumber}`,
-                        to: From,
-                        body: `👋 Welcome! Send "join baby-ability" to get started with Your Nyanbook.`
-                    });
-                    console.log(`📤 Help message sent to ${phone}`);
-                } catch (twilioError) {
-                    console.warn(`⚠️ Could not send help message (non-fatal):`, twilioError.message);
+                    // Send activation confirmation to Ledger thread
+                    const activationEmbed = {
+                        embeds: [{
+                            title: `🎉 Book Activated`,
+                            description: `Join code: \`${joinCode}\``,
+                            color: 0x00FF00,
+                            fields: [
+                                { name: '📱 Phone', value: phone, inline: true },
+                                { name: '📖 Book', value: bookRecord.book_name, inline: true },
+                                { name: '🔗 Fractal ID', value: bookRecord.fractal_id, inline: false }
+                            ],
+                            timestamp: new Date().toISOString()
+                        }]
+                    };
+                    
+                    const activationOptions = {
+                        output: dualThreads.output_01
+                    };
+                    
+                    const minimalBook = {
+                        output_01_url: bookRecord.outpipe_ledger
+                    };
+                    
+                    await sendToLedger(activationEmbed, activationOptions, minimalBook);
+                    console.log(`✅ Hermes thread created: ${dualThreads.output_01?.thread_id}`);
+                } catch (hermesError) {
+                    console.error(`❌ Failed to create Hermes thread:`, hermesError.message);
                 }
+            }
+            
+            // Send confirmation message to user
+            try {
+                const twilioHelper = require('./twilio-client');
+                const twilioClient = await twilioHelper.getTwilioClient();
+                const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
                 
+                await twilioClient.messages.create({
+                    from: `whatsapp:${twilioNumber}`,
+                    to: From,
+                    body: `✅ Book activated! Your messages will now be saved to "${bookRecord.book_name}". Send anything to test it out! 🌈`
+                });
+            } catch (twilioError) {
+                console.warn(`⚠️ Could not send confirmation (non-fatal):`, twilioError.message);
+            }
+            
+            return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+            
+        } else if (bookRecord.status === 'active') {
+            // CASE B: Book found with status='active' → FORWARD MESSAGE
+            console.log(`📨 Forwarding message to active book ${bookRecord.fractal_id}`);
+            
+            // Get full book details from tenant schema
+            const bookDetailsResult = await pool.query(`
+                SELECT id, name, fractal_id, output_credentials 
+                FROM ${tenantSchema}.books 
+                WHERE fractal_id = $1
+                LIMIT 1
+            `, [bookRecord.fractal_id]);
+            
+            if (bookDetailsResult.rows.length === 0) {
+                console.error(`❌ Book ${bookRecord.fractal_id} not found in ${tenantSchema}.books`);
                 return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
             }
+            
+            const book = bookDetailsResult.rows[0];
+            const outputCreds = book.output_credentials || {};
+            const output01 = outputCreds.output_01;
+            const webhooks = outputCreds.webhooks || [];
+            
+            // Build Discord embed
+            const embed = {
+                title: `📱 WhatsApp Message`,
+                description: Body || '_(No text content)_',
+                color: 0x25D366, // WhatsApp green
+                fields: [
+                    { name: '📱 Phone', value: phone, inline: true },
+                    { name: '📖 Book', value: book.name, inline: true },
+                    { name: '🕐 Time', value: new Date().toLocaleString(), inline: true }
+                ],
+                timestamp: new Date().toISOString()
+            };
+            
+            // DISCORD-NATIVE: Download media from Twilio MediaUrl
+            let mediaBuffer = null;
+            let mediaFilename = null;
+            let mediaContentType = null;
+            
+            if (MediaUrl0) {
+                try {
+                    console.log(`📥 Downloading media from Twilio: ${MediaUrl0.substring(0, 80)}...`);
+                    const mediaResponse = await axios.get(MediaUrl0, { 
+                        responseType: 'arraybuffer',
+                        timeout: 30000
+                    });
+                    mediaBuffer = Buffer.from(mediaResponse.data);
+                    mediaContentType = MediaContentType0 || mediaResponse.headers['content-type'] || 'application/octet-stream';
+                    
+                    const ext = mediaContentType.split('/')[1]?.split(';')[0] || 'bin';
+                    mediaFilename = `media_${Date.now()}.${ext}`;
+                    
+                    console.log(`✅ Downloaded ${mediaBuffer.length} bytes (${mediaContentType})`);
+                    
+                    // Add metadata embed field
+                    embed.fields.push({ 
+                        name: '📎 Media', 
+                        value: `${mediaContentType} (${(mediaBuffer.length / 1024).toFixed(1)} KB)`,
+                        inline: false 
+                    });
+                } catch (downloadError) {
+                    console.error(`❌ Failed to download media:`, downloadError.message);
+                    embed.fields.push({ 
+                        name: '⚠️ Media (download failed)', 
+                        value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
+                        inline: false 
+                    });
+                }
+            }
+            
+            // Send to Ledger thread (output_01) with attachment
+            if (output01?.type === 'thread' && output01?.thread_id) {
+                try {
+                    if (mediaBuffer) {
+                        const FormData = require('form-data');
+                        const form = new FormData();
+                        form.append('files[0]', mediaBuffer, {
+                            filename: mediaFilename,
+                            contentType: mediaContentType
+                        });
+                        form.append('payload_json', JSON.stringify({ embeds: [embed] }));
+                        
+                        await axios.post(`https://discord.com/api/v10/channels/${output01.thread_id}/messages`, form, {
+                            headers: {
+                                'Authorization': `Bot ${process.env.HERMES_TOKEN}`,
+                                ...form.getHeaders()
+                            }
+                        });
+                        console.log(`✅ Sent to Ledger thread ${output01.thread_id} with ${mediaFilename}`);
+                    } else {
+                        await axios.post(`https://discord.com/api/v10/channels/${output01.thread_id}/messages`, {
+                            embeds: [embed]
+                        }, {
+                            headers: {
+                                'Authorization': `Bot ${process.env.HERMES_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        console.log(`✅ Sent to Ledger thread ${output01.thread_id}`);
+                    }
+                } catch (error) {
+                    console.error(`❌ Failed to send to Ledger:`, error.message);
+                }
+            }
+            
+            // Send to user webhooks (output_0n) with attachment
+            for (const webhook of webhooks) {
+                try {
+                    if (mediaBuffer) {
+                        const FormData = require('form-data');
+                        const form = new FormData();
+                        form.append('files[0]', mediaBuffer, {
+                            filename: mediaFilename,
+                            contentType: mediaContentType
+                        });
+                        form.append('payload_json', JSON.stringify({ embeds: [embed] }));
+                        
+                        await axios.post(webhook.url, form, {
+                            headers: form.getHeaders()
+                        });
+                        console.log(`✅ Sent to webhook ${webhook.name || 'Personal'} with ${mediaFilename}`);
+                    } else {
+                        await axios.post(webhook.url, {
+                            embeds: [embed]
+                        });
+                        console.log(`✅ Sent to webhook ${webhook.name || 'Personal'}`);
+                    }
+                } catch (error) {
+                    console.error(`❌ Failed to send to webhook ${webhook.name || 'Personal'}:`, error.message);
+                }
+            }
+            
+            return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+            
         } else {
-            tenantSchema = phoneMapping.rows[0].tenant_schema;
-            console.log(`📍 Found tenant: ${tenantSchema} for phone ${phone}`);
+            // Unknown status - log and ignore
+            console.warn(`⚠️  Unknown book status: ${bookRecord.status} for ${bookRecord.fractal_id}`);
+            return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
         }
         
-        // Step 2: Get book_id from phone_to_book mapping
-        const bookMapping = await pool.query(`
-            SELECT book_id 
-            FROM ${tenantSchema}.phone_to_book 
-            WHERE phone_number = $1
-            LIMIT 1
-        `, [phone]);
-        
-        if (bookMapping.rows.length === 0) {
-            console.error(`❌ No book found for phone ${phone} in ${tenantSchema}`);
-            return res.status(404).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
-        }
-        
-        const bookId = bookMapping.rows[0].book_id;
-        console.log(`📖 Forwarding to book_id=${bookId} in ${tenantSchema}`);
-        
-        // Step 3: Get book's output webhooks
-        const bookResult = await pool.query(`
-            SELECT output_credentials 
-            FROM ${tenantSchema}.books 
-            WHERE id = $1
-        `, [bookId]);
-        
-        if (bookResult.rows.length === 0) {
-            console.error(`❌ Book ${bookId} not found in ${tenantSchema}`);
-            return res.status(404).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
-        }
-        
-        const outputCreds = bookResult.rows[0].output_credentials;
-        const webhooks = outputCreds?.webhooks || [];
-        const output01 = outputCreds?.output_01;
-        
-        // Step 4: Forward message to Discord webhooks
-        const embed = {
-            title: `📱 WhatsApp Message from ${phone}`,
-            description: Body || '_(No text content)_',
-            color: 0x25D366, // WhatsApp green
-            fields: [
-                { name: '💬 Chat', value: phone, inline: true },
-                { name: '🕐 Time', value: new Date().toLocaleString(), inline: true }
-            ],
-            timestamp: new Date().toISOString()
-        };
-        
-        // DISCORD-NATIVE: Download media from Twilio and upload to Discord as attachment
-        let mediaBuffer = null;
-        let mediaFilename = null;
-        let mediaContentType = null;
-        
-        if (MediaUrl0) {
-            try {
-                console.log(`📥 Downloading media from Twilio: ${MediaUrl0.substring(0, 80)}...`);
-                const mediaResponse = await axios.get(MediaUrl0, { 
-                    responseType: 'arraybuffer',
-                    timeout: 30000 // 30 second timeout
-                });
-                mediaBuffer = Buffer.from(mediaResponse.data);
-                mediaContentType = MediaContentType0 || mediaResponse.headers['content-type'] || 'application/octet-stream';
-                
-                // Generate filename from content type
-                const ext = mediaContentType.split('/')[1]?.split(';')[0] || 'bin';
-                mediaFilename = `media_${Date.now()}.${ext}`;
-                
-                console.log(`✅ Downloaded ${mediaBuffer.length} bytes (${mediaContentType})`);
-                
-                // Add metadata field for audit trail (optional)
-                embed.fields.push({ 
-                    name: '📎 Media', 
-                    value: `${mediaContentType} (${(mediaBuffer.length / 1024).toFixed(1)} KB)`,
-                    inline: false 
-                });
-            } catch (downloadError) {
-                console.error(`❌ Failed to download media from Twilio:`, downloadError.message);
-                // Fallback: add Twilio URL to embed if download fails
-                embed.fields.push({ 
-                    name: '⚠️ Media (download failed)', 
-                    value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
-                    inline: false 
-                });
-            }
-        }
-        
-        // Send to Ledger (output_01) with attachment
-        if (output01?.type === 'thread') {
-            try {
-                if (mediaBuffer) {
-                    // Send with file attachment
-                    const FormData = require('form-data');
-                    const form = new FormData();
-                    form.append('files[0]', mediaBuffer, {
-                        filename: mediaFilename,
-                        contentType: mediaContentType
-                    });
-                    form.append('payload_json', JSON.stringify({ embeds: [embed] }));
-                    
-                    await axios.post(`https://discord.com/api/v10/channels/${output01.thread_id}/messages`, form, {
-                        headers: {
-                            'Authorization': `Bot ${process.env.HERMES_TOKEN}`,
-                            ...form.getHeaders()
-                        }
-                    });
-                    console.log(`✅ Sent to Ledger thread ${output01.thread_id} with ${mediaFilename}`);
-                } else {
-                    // Text-only message
-                    await axios.post(`https://discord.com/api/v10/channels/${output01.thread_id}/messages`, {
-                        embeds: [embed]
-                    }, {
-                        headers: {
-                            'Authorization': `Bot ${process.env.HERMES_TOKEN}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    console.log(`✅ Sent to Ledger thread ${output01.thread_id}`);
-                }
-            } catch (error) {
-                console.error(`❌ Failed to send to Ledger:`, error.message);
-            }
-        }
-        
-        // Send to personal webhooks (output_0n) with attachment
-        for (const webhook of webhooks) {
-            try {
-                if (mediaBuffer) {
-                    // Send with file attachment
-                    const FormData = require('form-data');
-                    const form = new FormData();
-                    form.append('files[0]', mediaBuffer, {
-                        filename: mediaFilename,
-                        contentType: mediaContentType
-                    });
-                    form.append('payload_json', JSON.stringify({ embeds: [embed] }));
-                    
-                    await axios.post(webhook.url, form, {
-                        headers: form.getHeaders()
-                    });
-                    console.log(`✅ Sent to webhook ${webhook.name} with ${mediaFilename}`);
-                } else {
-                    // Text-only message
-                    await axios.post(webhook.url, {
-                        embeds: [embed]
-                    });
-                    console.log(`✅ Sent to webhook ${webhook.name}`);
-                }
-            } catch (error) {
-                console.error(`❌ Failed to send to webhook ${webhook.name}:`, error.message);
-            }
-        }
-        
-        res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
     } catch (error) {
         console.error('❌ Twilio webhook error:', error);
+        console.error('Stack:', error.stack);
         res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
     }
 });
