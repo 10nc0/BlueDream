@@ -4094,45 +4094,48 @@
         async function jumpToMessage(targetId, bookId) {
             if (!targetId || !bookId) return;
             
-            // Check if message already exists in DOM
-            let targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
-            
-            if (targetEl) {
-                // Message already loaded - just scroll and highlight
-                scrollAndHighlight(targetEl);
-                return;
-            }
-            
-            // Message not in DOM - fetch context window
             try {
-                console.log(`🎯 Jumping to message ${targetId}, fetching context...`);
-                const response = await authFetch(`/api/books/${bookId}/messages?around=${targetId}&context=10&source=${currentViewSource}`);
+                console.log(`🎯 Jumping to message ${targetId}, clearing search and reloading all messages...`);
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
+                // Clear search state and UI
+                clearSearchState(bookId);
                 
-                const data = await response.json();
-                const messages = data.messages || [];
+                // Reload all messages for the book (not just search results)
+                await loadBookMessages(bookId);
                 
-                if (messages.length === 0) {
-                    console.warn('Message not found in context window');
-                    return;
-                }
-                
-                // Insert context messages into DOM
-                await insertContextMessages(messages, targetId, bookId);
-                
-                // Wait for DOM update, then scroll and highlight
+                // Wait for DOM update, then scroll to target message (centered, no highlight)
                 setTimeout(() => {
-                    targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                    const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
                     if (targetEl) {
                         scrollAndHighlight(targetEl);
+                    } else {
+                        console.warn('Message not found in DOM after reload');
                     }
-                }, 100);
+                }, 200);
                 
             } catch (error) {
                 console.error('Error jumping to message:', error);
+            }
+        }
+        
+        // Clear search state and UI indicators
+        function clearSearchState(bookId) {
+            // Clear search input
+            const searchBox = document.getElementById(`msg-search-${bookId}`);
+            if (searchBox) {
+                searchBox.value = '';
+            }
+            
+            // Hide search indicator
+            const indicator = document.getElementById(`search-indicator-${bookId}`);
+            if (indicator) {
+                indicator.style.display = 'none';
+            }
+            
+            // Clear bookSearchContext if it matches this book
+            if (bookSearchContext.bookId === bookId) {
+                bookSearchContext.query = '';
+                bookSearchContext.bookId = null;
             }
         }
 
@@ -4215,26 +4218,18 @@
             hydrateDropsForBook(bookId);
         }
 
-        // Scroll to element and apply highlight animation
+        // Scroll to element (centered, no highlight)
         function scrollAndHighlight(el) {
             if (!el) return;
             
             // Smooth scroll to center of viewport
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             
-            // Apply jump-pulse highlight
-            el.classList.add('jump-highlight');
-            
             // Update URL with hash (for shareable links)
             const msgId = el.getAttribute('data-msg-id');
             if (msgId) {
                 history.pushState(null, '', `#msg-${msgId}`);
             }
-            
-            // Remove highlight after animation
-            setTimeout(() => {
-                el.classList.remove('jump-highlight');
-            }, 2000);
         }
 
         // Smart polling for real-time message updates
