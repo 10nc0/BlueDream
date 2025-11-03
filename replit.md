@@ -22,7 +22,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 **Technical Implementations:**
 - **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage. Email = tenant identity (1:1 mapping via core.user_email_to_tenant).
 - **Database**: PostgreSQL with multi-tenant architecture, ensuring data separation per user via isolated schemas.
-- **WhatsApp Integration**: Twilio-based messaging integration using WhatsApp Business API. Users connect via WhatsApp deep links (wa.me) by sending join codes. Phone numbers serve as book identifiers (N:1 mapping via core.phone_to_tenant). Webhook routing: phone → tenant_schema → book_id → Discord.
+- **WhatsApp Integration**: Twilio-based messaging integration using WhatsApp Business API. **Sybil-proof activation** via unique join codes (format: "join baby-ability BOOKNAME-abc123"). Each book generates a 6-char random code (16.7M combinations) stored in phone_to_book with NULL phone_number. When user sends the code via WhatsApp, the system maps their phone to the book and nullifies the code (one-time use). Phone numbers serve as book identifiers (N:1 mapping via core.phone_to_tenant). Webhook routing: phone → tenant_schema → book_id → Discord. **Case-preserved parsing** ensures "GW-37d0f6" matches database exactly.
 - **Webhook Integration**: Messages are permanently saved to an internal Ledger. Optional personal webhooks (Discord, Slack, etc.) can mirror messages in parallel, with improved UX making webhooks optional for initial book creation. Multi-webhook support allows forwarding to unlimited Discord webhooks simultaneously.
 - **Media Handling**: Atomic storage for media attachments, with delivery tracking and automatic cleanup. Supports all media types through Twilio's MediaUrl fields.
 - **Search & Metadata**: Enhanced search across messages and metadata, supporting multilingual text and full-text search indexing.
@@ -33,7 +33,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Multi-Tenant Isolation**: Complete data separation between users via database schemas.
 - **Zero-Friction Onboarding**: WhatsApp deep link activation (no QR scanning, no manual webhook setup required).
 - **Scalability & Recovery**: Designed for Replit Autoscale, with PostgreSQL storing all book state for automatic recovery.
-- **Security**: Strict webhook validation, production hardening with JWT security, staggered resource initialization, security headers, and robust audit logging.
+- **Security**: Strict webhook validation, production hardening with JWT security, staggered resource initialization, security headers, and robust audit logging. **Sybil attack prevention** via unique one-time join codes (users cannot claim others' phone numbers).
 - **CSP Compliance**: Production-ready Content Security Policy with event delegation and self-hosted libraries.
 
 ## External Dependencies
