@@ -209,21 +209,10 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true })); // For Twilio webhooks
 
-// Configure session management with PostgreSQL store
-const PgSession = connectPg(session);
+// TEMPORARY: Use memory session store (PostgreSQL store was exhausting connections)
+// TODO: Re-enable PostgreSQL store once connection pool is stabilized
+console.log('⚠️  Using MEMORY session store (sessions lost on restart)');
 app.use(session({
-    store: new PgSession({
-        pool: pool,
-        tableName: 'sessions',
-        pruneSessionInterval: 5 * 60, // Prune expired sessions every 5 minutes (was 60 min)
-        errorLog: (...args) => {
-            // Only log non-timeout errors to reduce noise
-            const msg = args.join(' ');
-            if (!msg.includes('timeout') && !msg.includes('terminated')) {
-                console.error(...args);
-            }
-        }
-    }),
     secret: process.env.SESSION_SECRET || 'book-secret-key-change-in-production',
     resave: false,
     saveUninitialized: false, // Don't create session until something is stored
