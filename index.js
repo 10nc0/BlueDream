@@ -682,9 +682,19 @@ async function sendToLedger(payload, options = {}, book = null) {
 
         let response;
         
-        // Handle media vs text - read from media_buffer if provided
-        if (options.isMedia && options.mediaBufferId) {
-            // Read media from buffer table (retry-safe storage)
+        // Handle media vs text - support both direct buffer and media_buffer table
+        if (options.mediaBuffer) {
+            // DISCORD-NATIVE: Direct media buffer from Twilio download
+            const FormData = require('form-data');
+            const form = new FormData();
+            form.append('files[0]', options.mediaBuffer, {
+                filename: options.mediaFilename || 'attachment',
+                contentType: options.mediaContentType || 'application/octet-stream'
+            });
+            form.append('payload_json', JSON.stringify(payload));
+            response = await axios.post(url.toString(), form, { headers: form.getHeaders() });
+        } else if (options.isMedia && options.mediaBufferId) {
+            // LEGACY: Read media from buffer table (retry-safe storage)
             // CRITICAL: Use schema-qualified queries instead of SET LOCAL search_path
             const mediaClient = await pool.connect();
             try {
@@ -2066,13 +2076,39 @@ app.post('/api/twilio/webhook', async (req, res) => {
                     }]
                 };
                 
-                // Add media link if present (limbo messages don't use media_buffer)
+                // DISCORD-NATIVE: Download and attach media for limbo messages too
+                let limboMediaBuffer = null;
+                let limboMediaFilename = null;
+                let limboMediaContentType = null;
+                
                 if (MediaUrl0) {
-                    limboPayload.embeds[0].fields.push({ 
-                        name: '📎 Media', 
-                        value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
-                        inline: false 
-                    });
+                    try {
+                        console.log(`📥 [Limbo] Downloading media from Twilio...`);
+                        const mediaResponse = await axios.get(MediaUrl0, { 
+                            responseType: 'arraybuffer',
+                            timeout: 30000
+                        });
+                        limboMediaBuffer = Buffer.from(mediaResponse.data);
+                        limboMediaContentType = MediaContentType0 || mediaResponse.headers['content-type'] || 'application/octet-stream';
+                        
+                        const ext = limboMediaContentType.split('/')[1]?.split(';')[0] || 'bin';
+                        limboMediaFilename = `limbo_media_${Date.now()}.${ext}`;
+                        
+                        console.log(`✅ [Limbo] Downloaded ${limboMediaBuffer.length} bytes`);
+                        
+                        limboPayload.embeds[0].fields.push({ 
+                            name: '📎 Media', 
+                            value: `${limboMediaContentType} (${(limboMediaBuffer.length / 1024).toFixed(1)} KB)`,
+                            inline: false 
+                        });
+                    } catch (downloadError) {
+                        console.error(`❌ [Limbo] Failed to download media:`, downloadError.message);
+                        limboPayload.embeds[0].fields.push({ 
+                            name: '⚠️ Media (download failed)', 
+                            value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
+                            inline: false 
+                        });
+                    }
                 }
                 
                 // Create minimal book object for sendToLedger
@@ -2085,7 +2121,11 @@ app.post('/api/twilio/webhook', async (req, res) => {
                     output: {
                         type: 'thread',
                         thread_id: LIMBO_THREAD_ID
-                    }
+                    },
+                    // DISCORD-NATIVE: Pass media buffer if downloaded
+                    mediaBuffer: limboMediaBuffer,
+                    mediaFilename: limboMediaFilename,
+                    mediaContentType: limboMediaContentType
                 };
                 
                 try {
@@ -2164,39 +2204,105 @@ app.post('/api/twilio/webhook', async (req, res) => {
             timestamp: new Date().toISOString()
         };
         
-        // Add media if present
+        // DISCORD-NATIVE: Download media from Twilio and upload to Discord as attachment
+        let mediaBuffer = null;
+        let mediaFilename = null;
+        let mediaContentType = null;
+        
         if (MediaUrl0) {
-            embed.fields.push({ 
-                name: '📎 Media', 
-                value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
-                inline: false 
-            });
+            try {
+                console.log(`📥 Downloading media from Twilio: ${MediaUrl0.substring(0, 80)}...`);
+                const mediaResponse = await axios.get(MediaUrl0, { 
+                    responseType: 'arraybuffer',
+                    timeout: 30000 // 30 second timeout
+                });
+                mediaBuffer = Buffer.from(mediaResponse.data);
+                mediaContentType = MediaContentType0 || mediaResponse.headers['content-type'] || 'application/octet-stream';
+                
+                // Generate filename from content type
+                const ext = mediaContentType.split('/')[1]?.split(';')[0] || 'bin';
+                mediaFilename = `media_${Date.now()}.${ext}`;
+                
+                console.log(`✅ Downloaded ${mediaBuffer.length} bytes (${mediaContentType})`);
+                
+                // Add metadata field for audit trail (optional)
+                embed.fields.push({ 
+                    name: '📎 Media', 
+                    value: `${mediaContentType} (${(mediaBuffer.length / 1024).toFixed(1)} KB)`,
+                    inline: false 
+                });
+            } catch (downloadError) {
+                console.error(`❌ Failed to download media from Twilio:`, downloadError.message);
+                // Fallback: add Twilio URL to embed if download fails
+                embed.fields.push({ 
+                    name: '⚠️ Media (download failed)', 
+                    value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
+                    inline: false 
+                });
+            }
         }
         
-        // Send to Ledger (output_01)
+        // Send to Ledger (output_01) with attachment
         if (output01?.type === 'thread') {
             try {
-                await axios.post(`https://discord.com/api/v10/channels/${output01.thread_id}/messages`, {
-                    embeds: [embed]
-                }, {
-                    headers: {
-                        'Authorization': `Bot ${process.env.HERMES_TOKEN}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                console.log(`✅ Sent to Ledger thread ${output01.thread_id}`);
+                if (mediaBuffer) {
+                    // Send with file attachment
+                    const FormData = require('form-data');
+                    const form = new FormData();
+                    form.append('files[0]', mediaBuffer, {
+                        filename: mediaFilename,
+                        contentType: mediaContentType
+                    });
+                    form.append('payload_json', JSON.stringify({ embeds: [embed] }));
+                    
+                    await axios.post(`https://discord.com/api/v10/channels/${output01.thread_id}/messages`, form, {
+                        headers: {
+                            'Authorization': `Bot ${process.env.HERMES_TOKEN}`,
+                            ...form.getHeaders()
+                        }
+                    });
+                    console.log(`✅ Sent to Ledger thread ${output01.thread_id} with ${mediaFilename}`);
+                } else {
+                    // Text-only message
+                    await axios.post(`https://discord.com/api/v10/channels/${output01.thread_id}/messages`, {
+                        embeds: [embed]
+                    }, {
+                        headers: {
+                            'Authorization': `Bot ${process.env.HERMES_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    console.log(`✅ Sent to Ledger thread ${output01.thread_id}`);
+                }
             } catch (error) {
                 console.error(`❌ Failed to send to Ledger:`, error.message);
             }
         }
         
-        // Send to personal webhooks (output_0n)
+        // Send to personal webhooks (output_0n) with attachment
         for (const webhook of webhooks) {
             try {
-                await axios.post(webhook.url, {
-                    embeds: [embed]
-                });
-                console.log(`✅ Sent to webhook ${webhook.name}`);
+                if (mediaBuffer) {
+                    // Send with file attachment
+                    const FormData = require('form-data');
+                    const form = new FormData();
+                    form.append('files[0]', mediaBuffer, {
+                        filename: mediaFilename,
+                        contentType: mediaContentType
+                    });
+                    form.append('payload_json', JSON.stringify({ embeds: [embed] }));
+                    
+                    await axios.post(webhook.url, form, {
+                        headers: form.getHeaders()
+                    });
+                    console.log(`✅ Sent to webhook ${webhook.name} with ${mediaFilename}`);
+                } else {
+                    // Text-only message
+                    await axios.post(webhook.url, {
+                        embeds: [embed]
+                    });
+                    console.log(`✅ Sent to webhook ${webhook.name}`);
+                }
             } catch (error) {
                 console.error(`❌ Failed to send to webhook ${webhook.name}:`, error.message);
             }
