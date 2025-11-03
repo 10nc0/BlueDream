@@ -1992,11 +1992,12 @@ app.post('/api/twilio/webhook', async (req, res) => {
         const joinCode = joinCodeMatch ? joinCodeMatch[0] : null;
         console.log(`🔍 Extracted join code: ${joinCode || 'none'}`);
         
-        // STEP 3: HYBRID LOOKUP - Try join code first, fallback to phone number
+        // STEP 3: JOIN-CODE-FIRST ROUTING - Join code supersedes phone lookup
         let bookRecord = null;
         
-        // Try join code first (for activation or explicit book targeting)
         if (joinCode) {
+            // Message contains join code → ONLY use join code (no phone fallback)
+            console.log(`🔑 Join code provided: ${joinCode} → Checking registry (NO phone fallback)`);
             const registryLookup = await pool.query(`
                 SELECT id, tenant_schema, tenant_email, fractal_id, book_name, 
                        outpipe_ledger, outpipes_user, status, phone_number
@@ -2007,13 +2008,12 @@ app.post('/api/twilio/webhook', async (req, res) => {
             if (registryLookup.rows.length > 0) {
                 bookRecord = registryLookup.rows[0];
                 console.log(`✅ Found via join code: ${bookRecord.fractal_id} (status: ${bookRecord.status})`);
+            } else {
+                console.log(`❌ Join code "${joinCode}" not found in registry → Routing to limbo (no phone fallback)`);
             }
-        }
-        
-        // Fallback: Phone lookup for active books (normal message forwarding)
-        // CRITICAL: ORDER BY updated_at DESC to get most recent activation (fixes multi-book conflicts)
-        if (!bookRecord) {
-            console.log(`🔍 No join code found, trying phone lookup for active books...`);
+        } else {
+            // No join code in message → Use phone lookup for active books
+            console.log(`📞 No join code in message → Using phone lookup for active books`);
             const phoneLookup = await pool.query(`
                 SELECT id, tenant_schema, tenant_email, fractal_id, book_name, 
                        outpipe_ledger, outpipes_user, status, phone_number, updated_at
@@ -2026,6 +2026,8 @@ app.post('/api/twilio/webhook', async (req, res) => {
             if (phoneLookup.rows.length > 0) {
                 bookRecord = phoneLookup.rows[0];
                 console.log(`✅ Found via phone: ${bookRecord.fractal_id} (most recent, updated: ${bookRecord.updated_at})`);
+            } else {
+                console.log(`❌ No active book found for phone ${phone} → Routing to limbo`);
             }
         }
         
