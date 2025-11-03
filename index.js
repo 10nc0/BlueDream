@@ -61,7 +61,7 @@ const pool = new Pool({
         rejectUnauthorized: false,
         checkServerIdentity: () => undefined // Allow Neon pooler hostname mismatch
     },
-    max: 40, // Increased from 20 to handle concurrent requests from aggressive frontend polling
+    max: 80, // Increased to handle join code schema loops + aggressive frontend polling
     connectionTimeoutMillis: 60000, // Increased for Neon connection stability
     idleTimeoutMillis: 30000,
     statement_timeout: 30000,
