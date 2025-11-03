@@ -4362,6 +4362,22 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                 .map(msg => {
                     const attachment = msg.attachments.size > 0 ? msg.attachments.first() : null;
                     
+                    // TWILIO MEDIA: Parse "📎 Media" field from embeds (format: [content-type](url))
+                    let mediaFromEmbed = null;
+                    for (const embed of msg.embeds) {
+                        const mediaField = embed.fields?.find(f => f.name === '📎 Media');
+                        if (mediaField && mediaField.value) {
+                            // Parse markdown link: [content-type](url)
+                            const match = mediaField.value.match(/\[(.*?)\]\((.*?)\)/);
+                            if (match) {
+                                mediaFromEmbed = {
+                                    url: match[2],
+                                    contentType: match[1]
+                                };
+                            }
+                        }
+                    }
+                    
                     // DEBUG: Log attachment details for media messages
                     if (msg.attachments.size > 0) {
                         console.log(`  🖼️  Message ${msg.id} has ${msg.attachments.size} attachment(s):`, 
@@ -4372,6 +4388,8 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                                 size: a.size
                             }))
                         );
+                    } else if (mediaFromEmbed) {
+                        console.log(`  📎 Message ${msg.id} has media from embed field: ${mediaFromEmbed.contentType}`);
                     } else {
                         console.log(`  📝 Message ${msg.id} has NO attachments (embeds: ${msg.embeds.length})`);
                     }
@@ -4382,9 +4400,9 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                         sender_avatar: msg.author.displayAvatarURL(),
                         message_content: msg.content || '',
                         timestamp: msg.createdAt.toISOString(),
-                        has_media: msg.attachments.size > 0,
-                        media_url: attachment ? attachment.url : null,
-                        media_type: attachment ? attachment.contentType : null,
+                        has_media: msg.attachments.size > 0 || !!mediaFromEmbed,
+                        media_url: attachment ? attachment.url : (mediaFromEmbed ? mediaFromEmbed.url : null),
+                        media_type: attachment ? attachment.contentType : (mediaFromEmbed ? mediaFromEmbed.contentType : null),
                         embeds: msg.embeds.map(e => ({
                             title: e.title,
                             description: e.description,
