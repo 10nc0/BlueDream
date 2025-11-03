@@ -172,6 +172,7 @@ app.use(cors({
 }));
 
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true })); // For Twilio webhooks
 
 // Configure session management with PostgreSQL store
 const PgSession = connectPg(session);
@@ -2038,9 +2039,9 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
 app.post('/api/twilio/webhook', async (req, res) => {
     try {
         const { From, Body, MessageSid, MediaUrl0, MediaContentType0 } = req.body;
-        const phone = From.replace('whatsapp:', '').replace('+', '');
+        const phone = From.replace(/\D/g, ''); // Remove all non-digits for consistent phone number
         
-        console.log(`📱 Twilio webhook: From=${From}, Body=${Body?.substring(0, 50)}...`);
+        console.log(`📱 Twilio webhook: From=${From}, Phone=${phone}, Body=${Body?.substring(0, 50)}...`);
         
         // Step 1: Find tenant schema by phone
         const phoneMapping = await pool.query(`
@@ -2058,66 +2059,30 @@ app.post('/api/twilio/webhook', async (req, res) => {
             if (Body && Body.trim().toLowerCase() === 'join baby-ability') {
                 console.log(`✨ Join command detected - creating new tenant for ${phone}`);
                 
-                // Create new tenant schema
+                // Create new tenant using tenant manager (creates all tables)
+                const tenantResult = await tenantManager.createTenant(0); // Use 0 as placeholder user ID
+                const tenantId = tenantResult.tenantId;
+                tenantSchema = tenantResult.schemaName;
+                
+                console.log(`✅ Created tenant schema ${tenantSchema} with all tables`);
+                
+                // Now create phone-based user and book
                 const client = await pool.connect();
                 try {
                     await client.query('BEGIN');
                     
-                    // Get next tenant ID
-                    const idResult = await client.query(`SELECT nextval('core.tenant_catalog_id_seq') as id`);
-                    const tenantId = parseInt(idResult.rows[0].id);
-                    tenantSchema = `tenant_${tenantId}`;
-                    
-                    // Register tenant in catalog
+                    // Adapt users table for phone-based auth (make email nullable, add phone_number)
                     await client.query(`
-                        INSERT INTO core.tenant_catalog (id, tenant_schema, genesis_user_id, status)
-                        VALUES ($1, $2, 0, 'active')
-                    `, [tenantId, tenantSchema]);
-                    
-                    // Create schema
-                    await client.query(`CREATE SCHEMA IF NOT EXISTS ${tenantSchema}`);
-                    
-                    // Create minimal tables (users, books, phone_to_book)
-                    await client.query(`
-                        CREATE TABLE IF NOT EXISTS ${tenantSchema}.users (
-                            id SERIAL PRIMARY KEY,
-                            email TEXT UNIQUE,
-                            phone_number TEXT UNIQUE,
-                            password_hash TEXT NOT NULL DEFAULT 'TWILIO_USER',
-                            role TEXT NOT NULL DEFAULT 'admin',
-                            tenant_id INTEGER NOT NULL,
-                            is_genesis_admin BOOLEAN DEFAULT TRUE,
-                            created_at TIMESTAMP DEFAULT NOW(),
-                            updated_at TIMESTAMP DEFAULT NOW()
-                        )
+                        ALTER TABLE ${tenantSchema}.users 
+                        ALTER COLUMN email DROP NOT NULL,
+                        ADD COLUMN IF NOT EXISTS phone_number TEXT UNIQUE
                     `);
                     
-                    await client.query(`
-                        CREATE TABLE IF NOT EXISTS ${tenantSchema}.books (
-                            id SERIAL PRIMARY KEY,
-                            name TEXT NOT NULL,
-                            input_platform TEXT NOT NULL DEFAULT 'twilio',
-                            output_platform TEXT NOT NULL DEFAULT 'discord',
-                            input_credentials JSONB,
-                            output_credentials JSONB,
-                            output_01_url TEXT,
-                            output_0n_url TEXT,
-                            status TEXT DEFAULT 'active',
-                            contact_info TEXT,
-                            tags TEXT[],
-                            archived BOOLEAN DEFAULT FALSE,
-                            include_group_messages BOOLEAN DEFAULT FALSE,
-                            fractal_id TEXT,
-                            created_by_admin_id TEXT,
-                            created_at TIMESTAMP DEFAULT NOW(),
-                            updated_at TIMESTAMP DEFAULT NOW()
-                        )
-                    `);
-                    
+                    // Create phone_to_book mapping table (tenant manager creates users/books tables)
                     await client.query(`
                         CREATE TABLE IF NOT EXISTS ${tenantSchema}.phone_to_book (
                             id SERIAL PRIMARY KEY,
-                            phone_number TEXT REFERENCES ${tenantSchema}.users(phone_number) ON DELETE CASCADE,
+                            phone_number TEXT,
                             book_id INTEGER NOT NULL,
                             created_at TIMESTAMP DEFAULT NOW(),
                             updated_at TIMESTAMP DEFAULT NOW(),
@@ -2158,16 +2123,21 @@ app.post('/api/twilio/webhook', async (req, res) => {
                     await client.query('COMMIT');
                     console.log(`✅ Created tenant ${tenantSchema} for phone ${phone}, book_id=${bookId}`);
                     
-                    // Send welcome message via Twilio
-                    const twilioHelper = require('./twilio-client');
-                    const twilioClient = await twilioHelper.getTwilioClient();
-                    const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
-                    
-                    await twilioClient.messages.create({
-                        from: `whatsapp:${twilioNumber}`,
-                        to: From,
-                        body: `✨ Welcome to Your Nyanbook! You're all set. Send any message and it'll be saved to your personal Discord archive. 🌈`
-                    });
+                    // Send welcome message via Twilio (optional - don't fail if it errors)
+                    try {
+                        const twilioHelper = require('./twilio-client');
+                        const twilioClient = await twilioHelper.getTwilioClient();
+                        const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+                        
+                        await twilioClient.messages.create({
+                            from: `whatsapp:${twilioNumber}`,
+                            to: From,
+                            body: `✨ Welcome to Your Nyanbook! You're all set. Send any message and it'll be saved to your personal Discord archive. 🌈`
+                        });
+                        console.log(`📤 Welcome message sent to ${phone}`);
+                    } catch (twilioError) {
+                        console.warn(`⚠️ Could not send welcome message (non-fatal):`, twilioError.message);
+                    }
                     
                     return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
                 } catch (error) {
@@ -2180,16 +2150,21 @@ app.post('/api/twilio/webhook', async (req, res) => {
             } else {
                 console.log(`❌ Unknown phone ${phone} - send "join baby-ability" first`);
                 
-                // Send help message
-                const twilioHelper = require('./twilio-client');
-                const twilioClient = await twilioHelper.getTwilioClient();
-                const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
-                
-                await twilioClient.messages.create({
-                    from: `whatsapp:${twilioNumber}`,
-                    to: From,
-                    body: `👋 Welcome! Send "join baby-ability" to get started with Your Nyanbook.`
-                });
+                // Send help message (optional - don't fail if it errors)
+                try {
+                    const twilioHelper = require('./twilio-client');
+                    const twilioClient = await twilioHelper.getTwilioClient();
+                    const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+                    
+                    await twilioClient.messages.create({
+                        from: `whatsapp:${twilioNumber}`,
+                        to: From,
+                        body: `👋 Welcome! Send "join baby-ability" to get started with Your Nyanbook.`
+                    });
+                    console.log(`📤 Help message sent to ${phone}`);
+                } catch (twilioError) {
+                    console.warn(`⚠️ Could not send help message (non-fatal):`, twilioError.message);
+                }
                 
                 return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
             }
