@@ -2032,6 +2032,261 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
     }
 });
 
+// ============ TWILIO WEBHOOK ROUTES ============
+
+// Twilio WhatsApp webhook - receives incoming messages
+app.post('/api/twilio/webhook', async (req, res) => {
+    try {
+        const { From, Body, MessageSid, MediaUrl0, MediaContentType0 } = req.body;
+        const phone = From.replace('whatsapp:', '').replace('+', '');
+        
+        console.log(`📱 Twilio webhook: From=${From}, Body=${Body?.substring(0, 50)}...`);
+        
+        // Step 1: Find tenant schema by phone
+        const phoneMapping = await pool.query(`
+            SELECT tenant_schema 
+            FROM core.phone_to_tenant 
+            WHERE phone_number = $1
+        `, [phone]);
+        
+        let tenantSchema;
+        
+        if (phoneMapping.rows.length === 0) {
+            console.log(`🆕 New phone number: ${phone}`);
+            
+            // Check if this is a "join baby-ability" command
+            if (Body && Body.trim().toLowerCase() === 'join baby-ability') {
+                console.log(`✨ Join command detected - creating new tenant for ${phone}`);
+                
+                // Create new tenant schema
+                const client = await pool.connect();
+                try {
+                    await client.query('BEGIN');
+                    
+                    // Get next tenant ID
+                    const idResult = await client.query(`SELECT nextval('core.tenant_catalog_id_seq') as id`);
+                    const tenantId = parseInt(idResult.rows[0].id);
+                    tenantSchema = `tenant_${tenantId}`;
+                    
+                    // Register tenant in catalog
+                    await client.query(`
+                        INSERT INTO core.tenant_catalog (id, tenant_schema, genesis_user_id, status)
+                        VALUES ($1, $2, 0, 'active')
+                    `, [tenantId, tenantSchema]);
+                    
+                    // Create schema
+                    await client.query(`CREATE SCHEMA IF NOT EXISTS ${tenantSchema}`);
+                    
+                    // Create minimal tables (users, books, phone_to_book)
+                    await client.query(`
+                        CREATE TABLE IF NOT EXISTS ${tenantSchema}.users (
+                            id SERIAL PRIMARY KEY,
+                            email TEXT UNIQUE,
+                            phone_number TEXT UNIQUE,
+                            password_hash TEXT NOT NULL DEFAULT 'TWILIO_USER',
+                            role TEXT NOT NULL DEFAULT 'admin',
+                            tenant_id INTEGER NOT NULL,
+                            is_genesis_admin BOOLEAN DEFAULT TRUE,
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            updated_at TIMESTAMP DEFAULT NOW()
+                        )
+                    `);
+                    
+                    await client.query(`
+                        CREATE TABLE IF NOT EXISTS ${tenantSchema}.books (
+                            id SERIAL PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            input_platform TEXT NOT NULL DEFAULT 'twilio',
+                            output_platform TEXT NOT NULL DEFAULT 'discord',
+                            input_credentials JSONB,
+                            output_credentials JSONB,
+                            output_01_url TEXT,
+                            output_0n_url TEXT,
+                            status TEXT DEFAULT 'active',
+                            contact_info TEXT,
+                            tags TEXT[],
+                            archived BOOLEAN DEFAULT FALSE,
+                            include_group_messages BOOLEAN DEFAULT FALSE,
+                            fractal_id TEXT,
+                            created_by_admin_id TEXT,
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            updated_at TIMESTAMP DEFAULT NOW()
+                        )
+                    `);
+                    
+                    await client.query(`
+                        CREATE TABLE IF NOT EXISTS ${tenantSchema}.phone_to_book (
+                            id SERIAL PRIMARY KEY,
+                            phone_number TEXT REFERENCES ${tenantSchema}.users(phone_number) ON DELETE CASCADE,
+                            book_id INTEGER NOT NULL,
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            updated_at TIMESTAMP DEFAULT NOW(),
+                            UNIQUE(phone_number, book_id)
+                        )
+                    `);
+                    
+                    // Create user
+                    const userResult = await client.query(`
+                        INSERT INTO ${tenantSchema}.users (phone_number, password_hash, role, tenant_id, is_genesis_admin)
+                        VALUES ($1, 'TWILIO_USER', 'admin', $2, true)
+                        RETURNING id
+                    `, [phone, tenantId]);
+                    
+                    const userId = userResult.rows[0].id;
+                    
+                    // Create default book
+                    const bookResult = await client.query(`
+                        INSERT INTO ${tenantSchema}.books (name, input_platform, output_platform, status, created_by_admin_id, fractal_id)
+                        VALUES ('My Nyanbook', 'twilio', 'discord', 'active', '01', $1)
+                        RETURNING id
+                    `, [`twilio_book_${phone}_${Date.now()}`]);
+                    
+                    const bookId = bookResult.rows[0].id;
+                    
+                    // Map phone to book
+                    await client.query(`
+                        INSERT INTO ${tenantSchema}.phone_to_book (phone_number, book_id)
+                        VALUES ($1, $2)
+                    `, [phone, bookId]);
+                    
+                    // Map phone to tenant in core
+                    await client.query(`
+                        INSERT INTO core.phone_to_tenant (phone_number, tenant_schema)
+                        VALUES ($1, $2)
+                    `, [phone, tenantSchema]);
+                    
+                    await client.query('COMMIT');
+                    console.log(`✅ Created tenant ${tenantSchema} for phone ${phone}, book_id=${bookId}`);
+                    
+                    // Send welcome message via Twilio
+                    const twilioHelper = require('./twilio-client');
+                    const twilioClient = await twilioHelper.getTwilioClient();
+                    const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+                    
+                    await twilioClient.messages.create({
+                        from: `whatsapp:${twilioNumber}`,
+                        to: From,
+                        body: `✨ Welcome to Your Nyanbook! You're all set. Send any message and it'll be saved to your personal Discord archive. 🌈`
+                    });
+                    
+                    return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+                } catch (error) {
+                    await client.query('ROLLBACK');
+                    console.error('❌ Failed to create tenant:', error);
+                    throw error;
+                } finally {
+                    client.release();
+                }
+            } else {
+                console.log(`❌ Unknown phone ${phone} - send "join baby-ability" first`);
+                
+                // Send help message
+                const twilioHelper = require('./twilio-client');
+                const twilioClient = await twilioHelper.getTwilioClient();
+                const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+                
+                await twilioClient.messages.create({
+                    from: `whatsapp:${twilioNumber}`,
+                    to: From,
+                    body: `👋 Welcome! Send "join baby-ability" to get started with Your Nyanbook.`
+                });
+                
+                return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+            }
+        } else {
+            tenantSchema = phoneMapping.rows[0].tenant_schema;
+            console.log(`📍 Found tenant: ${tenantSchema} for phone ${phone}`);
+        }
+        
+        // Step 2: Get book_id from phone_to_book mapping
+        const bookMapping = await pool.query(`
+            SELECT book_id 
+            FROM ${tenantSchema}.phone_to_book 
+            WHERE phone_number = $1
+            LIMIT 1
+        `, [phone]);
+        
+        if (bookMapping.rows.length === 0) {
+            console.error(`❌ No book found for phone ${phone} in ${tenantSchema}`);
+            return res.status(404).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+        }
+        
+        const bookId = bookMapping.rows[0].book_id;
+        console.log(`📖 Forwarding to book_id=${bookId} in ${tenantSchema}`);
+        
+        // Step 3: Get book's output webhooks
+        const bookResult = await pool.query(`
+            SELECT output_credentials 
+            FROM ${tenantSchema}.books 
+            WHERE id = $1
+        `, [bookId]);
+        
+        if (bookResult.rows.length === 0) {
+            console.error(`❌ Book ${bookId} not found in ${tenantSchema}`);
+            return res.status(404).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+        }
+        
+        const outputCreds = bookResult.rows[0].output_credentials;
+        const webhooks = outputCreds?.webhooks || [];
+        const output01 = outputCreds?.output_01;
+        
+        // Step 4: Forward message to Discord webhooks
+        const embed = {
+            title: `📱 WhatsApp Message from ${phone}`,
+            description: Body || '_(No text content)_',
+            color: 0x25D366, // WhatsApp green
+            fields: [
+                { name: '💬 Chat', value: phone, inline: true },
+                { name: '🕐 Time', value: new Date().toLocaleString(), inline: true }
+            ],
+            timestamp: new Date().toISOString()
+        };
+        
+        // Add media if present
+        if (MediaUrl0) {
+            embed.fields.push({ 
+                name: '📎 Media', 
+                value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
+                inline: false 
+            });
+        }
+        
+        // Send to Ledger (output_01)
+        if (output01?.type === 'thread') {
+            try {
+                await axios.post(`https://discord.com/api/v10/channels/${output01.thread_id}/messages`, {
+                    embeds: [embed]
+                }, {
+                    headers: {
+                        'Authorization': `Bot ${process.env.HERMES_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                console.log(`✅ Sent to Ledger thread ${output01.thread_id}`);
+            } catch (error) {
+                console.error(`❌ Failed to send to Ledger:`, error.message);
+            }
+        }
+        
+        // Send to personal webhooks (output_0n)
+        for (const webhook of webhooks) {
+            try {
+                await axios.post(webhook.url, {
+                    embeds: [embed]
+                });
+                console.log(`✅ Sent to webhook ${webhook.name}`);
+            } catch (error) {
+                console.error(`❌ Failed to send to webhook ${webhook.name}:`, error.message);
+            }
+        }
+        
+        res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+    } catch (error) {
+        console.error('❌ Twilio webhook error:', error);
+        res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+    }
+});
+
 // ============ SESSION MANAGEMENT ROUTES ============
 
 // Get all active sessions (admin only) with filtering and sorting
