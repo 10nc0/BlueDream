@@ -2961,9 +2961,32 @@
                         // Reload books to show the new one
                         await loadBooks();
                         
-                        // Auto-trigger QR generation for new book (no warning shown for inactive books)
-                        console.log('🚀 Generating QR for new book...');
-                        await generateNewQR(book.fractal_id);
+                        // AUTO-REDIRECT to WhatsApp for WhatsApp books (unified magic link flow)
+                        console.log('📋 Book creation debug:', { 
+                            platform, 
+                            bookPlatform: book.input_platform,
+                            contactInfo: book.contact_info,
+                            willRedirect: (book.input_platform === 'whatsapp' && book.contact_info)
+                        });
+                        
+                        if (book.input_platform === 'whatsapp' && book.contact_info) {
+                            console.log('📱 Redirecting to WhatsApp with join code:', book.contact_info);
+                            
+                            // Show success toast before redirect
+                            showToast('✅ Book created! Redirecting to WhatsApp...', 'success');
+                            
+                            // Redirect to WhatsApp with magic link (same flow as 📱 button)
+                            const whatsappUrl = `https://wa.me/14155238886?text=${encodeURIComponent(book.contact_info)}`;
+                            
+                            // Small delay to let user see the toast
+                            setTimeout(() => {
+                                window.open(whatsappUrl, '_blank');
+                            }, 800);
+                        } else {
+                            // For non-WhatsApp books, generate QR as before
+                            console.log('🚀 Generating QR for new book...');
+                            await generateNewQR(book.fractal_id);
+                        }
                         
                     } catch (err) {
                         console.error('❌ Error:', err);
