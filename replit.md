@@ -20,23 +20,23 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Responsive Components**: UI components adapt for mobile/desktop contexts.
 
 **Technical Implementations:**
-- **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage.
+- **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage. Email = tenant identity (1:1 mapping via core.user_email_to_tenant).
 - **Database**: PostgreSQL with multi-tenant architecture, ensuring data separation per user via isolated schemas.
-- **WhatsApp Integration**: Multi-instance Baileys library for independent, persistent WhatsApp sessions. QR regeneration reinitializes sessions with clear warnings about potential message loss during reconnection. Group message forwarding is an optional, per-book configuration. **Grok Protocol v2** provides comprehensive session corruption detection with auto-cleanup to prevent "Unsupported state or unable to authenticate data" crashes.
+- **WhatsApp Integration**: Twilio-based messaging integration using WhatsApp Business API. Users connect via WhatsApp deep links (wa.me) by sending join codes. Phone numbers serve as book identifiers (N:1 mapping via core.phone_to_tenant). Webhook routing: phone → tenant_schema → book_id → Discord.
 - **Webhook Integration**: Messages are permanently saved to an internal Ledger. Optional personal webhooks (Discord, Slack, etc.) can mirror messages in parallel, with improved UX making webhooks optional for initial book creation. Multi-webhook support allows forwarding to unlimited Discord webhooks simultaneously.
-- **Media Handling**: Atomic storage for base64-encoded media, with delivery tracking and automatic cleanup. Fixed critical bugs preventing media delivery, ensuring unique media IDs, and preventing database connection pool exhaustion during multi-webhook media forwarding.
+- **Media Handling**: Atomic storage for media attachments, with delivery tracking and automatic cleanup. Supports all media types through Twilio's MediaUrl fields.
 - **Search & Metadata**: Enhanced search across messages and metadata, supporting multilingual text and full-text search indexing.
 - **Real-time Updates**: Smart polling with `?after={messageId}` fetches new messages, pausing when the tab is hidden. Auto-scrolls only if the user is at the bottom, otherwise shows a "New messages" banner. Jump-to-message functionality with `#msg-{messageId}` allows direct navigation to specific messages.
 - **Terminology Refactor**: All internal and external "bridge" terminology has been replaced with "book" for consistent branding and user understanding.
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation between users via database schemas.
-- **Session Persistence**: WhatsApp sessions survive server restarts with auto-restore.
+- **Zero-Friction Onboarding**: WhatsApp deep link activation (no QR scanning, no manual webhook setup required).
 - **Scalability & Recovery**: Designed for Replit Autoscale, with PostgreSQL storing all book state for automatic recovery.
 - **Security**: Strict webhook validation, production hardening with JWT security, staggered resource initialization, security headers, and robust audit logging.
 - **CSP Compliance**: Production-ready Content Security Policy with event delegation and self-hosted libraries.
 
 ## External Dependencies
 - **Database**: PostgreSQL (Neon-backed Replit database)
-- **WhatsApp**: Baileys library
-- **Discord**: Discord webhooks for message delivery
+- **WhatsApp**: Twilio WhatsApp Business API
+- **Discord**: Discord.js + Discord webhooks for message delivery
