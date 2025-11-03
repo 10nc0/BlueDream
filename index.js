@@ -1894,9 +1894,10 @@ app.post('/api/twilio/webhook', async (req, res) => {
             const bodyText = Body?.trim() || '';
             const bodyLower = bodyText.toLowerCase();
             
-            // 2-MESSAGE FLOW: Ignore "join " commands (let Twilio handle sandbox join)
-            if (bodyLower.startsWith('join ')) {
-                console.log(`⏭️  Ignoring "join" command - Twilio sandbox handles this`);
+            // 2-MESSAGE FLOW: Ignore ONLY exact "join baby-ability" (Twilio sandbox join)
+            // Other messages like "join us this campaign" should be saved normally
+            if (bodyLower === 'join baby-ability') {
+                console.log(`⏭️  Ignoring Twilio sandbox join command - letting Twilio handle this`);
                 return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
             }
             
@@ -3121,6 +3122,11 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         
         if (!tenantId) {
             return res.status(400).json({ error: 'Tenant context required' });
+        }
+        
+        // VALIDATION: Reject blank or whitespace-only book names
+        if (!name || typeof name !== 'string' || !name.trim()) {
+            return res.status(400).json({ error: 'Book name is required and cannot be blank' });
         }
         
         // WEBHOOK-CENTRIC: Dual-output architecture
