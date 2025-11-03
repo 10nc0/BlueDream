@@ -3881,8 +3881,8 @@
         async function loadBookMessages(bookId, page = 1) {
             try {
                 // SECURITY: Validate bookId is a fractal_id (tenant-scoped, non-enumerable)
-                // Format: dev_bridge_t{N}_{HASH}, dev_book_t{N}_{HASH}, prod_bridge_t{N}_{HASH}, or prod_book_t{N}_{HASH}
-                if (!bookId || !/^(dev|prod)_(bridge|book)_t\d+_[a-f0-9]+$/.test(bookId)) {
+                // Format: [dev_|prod_](bridge|book)_t{N}_{HASH} or (bridge|book)_t{N}_{HASH} or twilio_book_{PHONE}_{TIMESTAMP}
+                if (!bookId || !/^((dev|prod)_)?(bridge|book|twilio_book)_(t\d+_[a-f0-9]+|\d+_\d+)$/.test(bookId)) {
                     console.error('🚨 SECURITY: Invalid book ID format:', bookId);
                     throw new Error('Invalid book ID');
                 }

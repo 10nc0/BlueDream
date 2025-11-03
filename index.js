@@ -3156,6 +3156,14 @@ app.post('/api/books/:id/unarchive', requireAuth, setTenantContext, requireRole(
     }
 });
 
+// Stub endpoint for Twilio - no "relink" needed (just show QR again)
+app.post('/api/books/:id/relink', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
+    res.json({ 
+        success: true, 
+        message: 'With Twilio, no relink needed - just show the join code to your user again' 
+    });
+});
+
 // ============ WEBHOOK INPUT ENDPOINT (HYBRID MODEL) ============
 // Support ANY input: Telegram bot, Twitter/X, SMS, Email → Discord
 // Example: POST /api/webhook/bridge_t6_abc123 with { text, username, avatar_url, media_url }
