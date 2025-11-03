@@ -1398,7 +1398,8 @@
                 if (!whatsappStatus) return '';
                 
                 // Button 1: Generate new QR (starts WhatsApp + shows QR modal)
-                return `<button class="btn-icon" data-generate-qr="${book.fractal_id}" title="Generate New QR Code" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">🔗</button>`;
+                const whatsappLink = `https://wa.me/14155238886?text=join%20baby-ability`;
+                return `<a href="${whatsappLink}" target="_blank" class="btn-icon" title="Connect WhatsApp" style="background: rgba(34, 197, 94, 0.2); color: #22c55e; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">📱</a>`;
             };
             
             const detail = document.getElementById('bookDetail');
@@ -1411,7 +1412,7 @@
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <button class="btn-icon" data-show-book-info="${book.fractal_id}" title="Book Information" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">ℹ️</button>
-                        ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" data-generate-qr="${book.fractal_id}" title="Generate QR" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🔗</button>` : ''}
+                        ${!isDevPanelView && platform === 'whatsapp' ? `<a href="https://wa.me/14155238886?text=join%20baby-ability" target="_blank" class="btn-icon" title="Connect WhatsApp" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">📱</a>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-edit-book="${book.fractal_id}" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-delete-book="${book.fractal_id}" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
                     </div>
@@ -1424,13 +1425,13 @@
                         <div style="flex: 1;">
                             <div style="color: #fbbf24; font-weight: 600; font-size: 0.875rem; margin-bottom: 0.25rem;">Setup Incomplete</div>
                             <div style="color: #cbd5e1; font-size: 0.8125rem;">
-                                Discord thread not created. ${platform === 'whatsapp' ? 'Click "Generate QR" to complete setup.' : 'Edit this book to configure outputs.'}
+                                Discord thread not created. ${platform === 'whatsapp' ? 'Click "Connect WhatsApp" to send activation message.' : 'Edit this book to configure outputs.'}
                             </div>
                         </div>
                         ${platform === 'whatsapp' ? `
-                            <button data-generate-qr="${book.fractal_id}" style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap;">
-                                🔗 Generate QR
-                            </button>
+                            <a href="https://wa.me/14155238886?text=join%20baby-ability" target="_blank" style="background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
+                                📱 Connect WhatsApp
+                            </a>
                         ` : ''}
                     </div>
                 ` : ''}

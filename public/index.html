@@ -86,19 +86,26 @@
                         </label>
                     </div>
                     
-                    <button type="submit" class="book-submit-btn">✨ Generate QR Code</button>
+                    <button type="submit" class="book-submit-btn">✨ Create Book</button>
                 </form>
             </div>
 
-            <!-- QR Section -->
+            <!-- WhatsApp Connection Section -->
             <div id="book-qr-section" style="display: none; text-align: center;">
                 <h3 style="color: #22c55e; margin-bottom: 1rem; font-size: 1.5rem;">✅ Book Created!</h3>
-                <p style="color: #94a3b8; font-size: 0.875rem;">Scan this QR code with WhatsApp to activate your book</p>
-                <img id="book-qr-img" alt="WhatsApp QR Code" style="max-width: 300px; width: 100%; border-radius: 12px; background: white; padding: 1rem; margin: 1rem 0;" />
-                <div class="book-qr-status">
-                    <span class="book-loading"></span> Waiting for scan...
+                <p style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 1.5rem;">Click the button below to connect your WhatsApp</p>
+                
+                <a href="https://wa.me/14155238886?text=join%20baby-ability" target="_blank" style="display: inline-flex; align-items: center; justify-content: center; gap: 0.75rem; background: linear-gradient(135deg, #25D366 0%, #1da851 100%); color: white; padding: 1rem 2rem; border-radius: 12px; font-weight: 600; font-size: 1.125rem; text-decoration: none; box-shadow: 0 4px 12px rgba(37, 211, 102, 0.3); transition: all 0.2s;">
+                    📱 Connect WhatsApp
+                </a>
+                
+                <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px;">
+                    <p style="color: #60a5fa; font-size: 0.875rem; margin: 0;">
+                        💡 <strong>Next step:</strong> Send the message "join baby-ability" to activate your book
+                    </p>
                 </div>
-                <p id="book-name-display" style="color: #60a5fa; font-weight: 600; margin: 0.5rem 0;"></p>
+                
+                <p id="book-name-display" style="color: #60a5fa; font-weight: 600; margin: 1rem 0 0.5rem;"></p>
                 <p style="font-family: 'SF Mono', 'Courier New', monospace; color: #a78bfa; font-size: 0.8rem; margin-top: 0.5rem;">
                     Fractal ID: <span id="book-fractal-id" style="user-select: all;"></span>
                     <button class="book-copy-btn">Copy</button>
@@ -233,15 +240,15 @@
                     <p style="color: #94a3b8; font-size: 0.875rem; margin: 0;">Start recording your messages in 3 simple steps</p>
                 </div>
 
-                <!-- Step 1: Scan QR Code -->
+                <!-- Step 1: Connect WhatsApp -->
                 <div class="wizard-step">
                     <div style="display: flex; align-items: start; gap: 1rem; margin-bottom: 1rem;">
-                        <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">1</div>
+                        <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: white; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0;">1</div>
                         <div style="flex: 1;">
-                            <h3 style="color: white; font-size: 1.125rem; margin-bottom: 0.5rem;">📱 Scan QR Code with WhatsApp</h3>
-                            <p style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.75rem;">Open WhatsApp on your phone → Linked Devices → Link a Device → Scan the QR code that appears</p>
+                            <h3 style="color: white; font-size: 1.125rem; margin-bottom: 0.5rem;">📱 Connect Your WhatsApp</h3>
+                            <p style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.75rem;">Click the green WhatsApp button to send "join baby-ability" message and connect your phone number to this book</p>
                             <div style="background: rgba(255, 255, 255, 0.05); border-radius: 0.5rem; padding: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.1);">
-                                <code style="color: #60a5fa; font-size: 0.75rem;">✓ QR code will appear after you click "Create Book"</code>
+                                <code style="color: #22c55e; font-size: 0.75rem;">✓ WhatsApp link will appear after you create the book</code>
                             </div>
                         </div>
                     </div>
