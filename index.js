@@ -60,8 +60,8 @@ const pool = new Pool({
     ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { 
         rejectUnauthorized: false
     },
-    max: 10, // Supabase supports higher connection limits (20-100 depending on plan)
-    min: 2,
+    max: 3, // CRITICAL: Supabase Session mode has very low limits (5-10 total)
+    min: 1,
     connectionTimeoutMillis: 30000, // 30s for cold starts
     idleTimeoutMillis: 30000, // Release idle connections after 30s
     statement_timeout: 30000,
@@ -215,12 +215,19 @@ app.use(session({
     store: new PgSession({
         pool: pool,
         tableName: 'sessions',
-        pruneSessionInterval: 60 * 60, // Prune expired sessions every hour (reduces queries)
-        errorLog: console.error
+        pruneSessionInterval: 5 * 60, // Prune expired sessions every 5 minutes (was 60 min)
+        errorLog: (...args) => {
+            // Only log non-timeout errors to reduce noise
+            const msg = args.join(' ');
+            if (!msg.includes('timeout') && !msg.includes('terminated')) {
+                console.error(...args);
+            }
+        }
     }),
     secret: process.env.SESSION_SECRET || 'book-secret-key-change-in-production',
     resave: false,
     saveUninitialized: false, // Don't create session until something is stored
+    rolling: true, // Reset expiration on every request
     cookie: {
         maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
         httpOnly: true,
@@ -1874,23 +1881,35 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
         }
         
         // Step 3: Destroy PostgreSQL session (connect-pg-simple store)
+        // NON-BLOCKING: Don't fail logout if session destroy times out
         console.log(`💣 Destroying PostgreSQL session ${sessionId}...`);
-        await new Promise((resolve, reject) => {
-            if (!req.session) {
-                console.log(`⚠️ No session object found on request`);
-                return resolve();
-            }
-            
-            req.session.destroy((err) => {
-                if (err) {
-                    console.error('❌ Session destroy error:', err);
-                    reject(err);
-                } else {
-                    console.log(`✅ PostgreSQL session destroyed`);
-                    resolve();
-                }
-            });
-        });
+        try {
+            await Promise.race([
+                new Promise((resolve, reject) => {
+                    if (!req.session) {
+                        console.log(`⚠️ No session object found on request`);
+                        return resolve();
+                    }
+                    
+                    req.session.destroy((err) => {
+                        if (err) {
+                            console.error('❌ Session destroy error:', err.message);
+                            reject(err);
+                        } else {
+                            console.log(`✅ PostgreSQL session destroyed`);
+                            resolve();
+                        }
+                    });
+                }),
+                // Timeout after 5 seconds - don't block logout
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Session destroy timeout')), 5000)
+                )
+            ]);
+        } catch (destroyError) {
+            console.warn(`⚠️ Session destroy failed (non-fatal, will be pruned later):`, destroyError.message);
+            // Continue - session will be cleaned up by pruneSessionInterval
+        }
         
         // Step 4: Clear session cookie
         console.log(`🍪 Clearing book.sid cookie...`);

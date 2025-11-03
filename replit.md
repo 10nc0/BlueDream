@@ -43,4 +43,4 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Discord**: Discord.js + Discord webhooks for message delivery
 
 ## Recent Changes (November 2025)
-- **Database Connection Pool Optimization**: Fixed connection pool exhaustion issues by optimizing pool size (max=10, min=2) for Supabase, reducing frontend polling from 10s to 30s, and adding hourly session cleanup to prevent unnecessary queries. Added `/health` endpoint with DB connection testing and pool statistics monitoring for operational visibility.
+- **Database Connection Pool Optimization**: Fixed critical connection pool exhaustion (`MaxClientsInSessionMode`) by reducing pool size to **3 connections** (Supabase Session mode limit). Optimizations include: reduced frontend polling from 10s to 30s, session cleanup every 5 minutes (was 60 min), non-blocking logout with 5s timeout, and `/health` endpoint for monitoring. Root cause: logout was creating zombie sessions when pool exhausted, creating a death spiral.
