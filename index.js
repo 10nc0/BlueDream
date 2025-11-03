@@ -218,10 +218,16 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true })); // For Twilio webhooks
 
-// TEMPORARY: Use memory session store (PostgreSQL store was exhausting connections)
-// TODO: Re-enable PostgreSQL store once connection pool is stabilized
-console.log('⚠️  Using MEMORY session store (sessions lost on restart)');
+// PostgreSQL session store with explicit schema to prevent search_path pollution
+const pgSession = connectPg(session);
 app.use(session({
+    store: new pgSession({
+        pool,
+        schemaName: 'public', // CRITICAL: Explicit schema prevents tenant_X.sessions targeting
+        tableName: 'sessions',
+        createTableIfMissing: true,
+        pruneSessionInterval: 60 * 15 // Cleanup expired sessions every 15 minutes
+    }),
     secret: process.env.SESSION_SECRET || 'book-secret-key-change-in-production',
     resave: false,
     saveUninitialized: false, // Don't create session until something is stored
@@ -335,16 +341,18 @@ async function initializeDatabase() {
         // - public schema: Only sessions (express-session global store)
         
         // Create sessions table for express-session (global session store)
+        // Note: connect-pg-simple with schemaName: 'public' will auto-create this table
+        // We keep this for backwards compatibility and explicit control
         await pool.query(`
-            CREATE TABLE IF NOT EXISTS sessions (
+            CREATE TABLE IF NOT EXISTS public.sessions (
                 sid VARCHAR NOT NULL PRIMARY KEY,
                 sess JSON NOT NULL,
-                expire TIMESTAMP(6) NOT NULL
+                expires TIMESTAMP(6) NOT NULL
             )
         `);
         
         await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire)
+            CREATE INDEX IF NOT EXISTS idx_sessions_expires ON public.sessions(expires)
         `);
         
         // CENTRALIZED BOOK REGISTRY: Global substrate for O(1) join code lookups
