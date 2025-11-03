@@ -1701,14 +1701,65 @@ app.post('/api/twilio/webhook', async (req, res) => {
                     
                     const userId = userResult.rows[0].id;
                     
-                    // Create default book
+                    // Create default limbo book (t{X}-b1)
+                    // Note: Hermes will add "[Ledger]" suffix automatically
+                    const isDevTenant = tenantId === 1;
+                    const bookName = isDevTenant ? 
+                        `TB 01 Garuda (t${tenantId}-b1)` : 
+                        `Bridge 01 (t${tenantId}-b1)`;
+                    
+                    // Generate thread name for Hermes
+                    const threadName = `book-t${tenantId}-${Date.now()}`;
+                    const outputCredentials = {
+                        thread_name: threadName,
+                        webhooks: []
+                    };
+                    
+                    // Create default book with proper structure
                     const bookResult = await client.query(`
-                        INSERT INTO ${tenantSchema}.books (name, input_platform, output_platform, status, created_by_admin_id, fractal_id)
-                        VALUES ('My Nyanbook', 'twilio', 'discord', 'active', '01', $1)
+                        INSERT INTO ${tenantSchema}.books (
+                            name, 
+                            input_platform, 
+                            output_platform, 
+                            input_credentials,
+                            output_credentials,
+                            output_01_url,
+                            output_0n_url,
+                            contact_info,
+                            tags,
+                            status, 
+                            archived,
+                            created_by_admin_id
+                        )
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                         RETURNING id
-                    `, [`twilio_book_${phone}_${Date.now()}`]);
+                    `, [
+                        bookName,
+                        'whatsapp',
+                        'discord',
+                        {},
+                        outputCredentials,
+                        NYANBOOK_LEDGER_WEBHOOK,
+                        null,
+                        'join baby-ability',
+                        [],
+                        'inactive',
+                        false,
+                        '01'
+                    ]);
                     
                     const bookId = bookResult.rows[0].id;
+                    
+                    // Generate fractalized ID
+                    const fractalId = require('./fractal-id');
+                    const generatedFractalId = fractalId.generate('book', tenantId, bookId, '01');
+                    
+                    // Update book with fractalized ID
+                    await client.query(`
+                        UPDATE ${tenantSchema}.books 
+                        SET fractal_id = $1 
+                        WHERE id = $2
+                    `, [generatedFractalId, bookId]);
                     
                     // Map phone to book
                     await client.query(`
@@ -1724,6 +1775,37 @@ app.post('/api/twilio/webhook', async (req, res) => {
                     
                     await client.query('COMMIT');
                     console.log(`✅ Created tenant ${tenantSchema} for phone ${phone}, book_id=${bookId}`);
+                    
+                    // Create Discord thread immediately (limbo thread for this tenant)
+                    if (hermesBot && hermesBot.isReady()) {
+                        try {
+                            console.log(`🧵 Creating limbo thread for ${bookName}...`);
+                            const dualThreads = await hermesBot.createDualThreadsForBook(
+                                NYANBOOK_LEDGER_WEBHOOK,
+                                null,
+                                bookName,
+                                tenantId,
+                                bookId
+                            );
+                            
+                            // Update book with thread info
+                            const outputDest = {};
+                            if (dualThreads.output_01) {
+                                outputDest.output_01 = dualThreads.output_01;
+                            }
+                            
+                            await client.query(`
+                                UPDATE ${tenantSchema}.books 
+                                SET output_credentials = $1,
+                                    status = 'active'
+                                WHERE id = $2
+                            `, [{ ...outputCredentials, ...outputDest }, bookId]);
+                            
+                            console.log(`✅ Limbo thread created: ${dualThreads.output_01?.thread_id}`);
+                        } catch (threadError) {
+                            console.warn(`⚠️ Failed to create limbo thread (non-fatal):`, threadError.message);
+                        }
+                    }
                     
                     // Send welcome message via Twilio (optional - don't fail if it errors)
                     try {
@@ -2704,6 +2786,10 @@ app.get('/api/books', requireAuth, async (req, res) => {
         let books = [];
         const hasExtendedAccess = req.userRole === 'dev' && user.is_genesis_admin;
         
+        // Limbo book filter: Hide t{X}-b1 books from non-dev users
+        // These are default/limbo books only visible to dev admin
+        const limboFilter = hasExtendedAccess ? '' : `AND b.name NOT LIKE '%(t%-b1)'`;
+        
         if (hasExtendedAccess) {
             // Query all tenant schemas
             const allSchemas = await getAllTenantSchemas(pool, req.userRole);
@@ -2725,11 +2811,12 @@ app.get('/api/books', requireAuth, async (req, res) => {
             
             console.log(`✅ Found ${books.length} active books across ${allSchemas.length} schemas`);
         } else {
-            // Standard tenant-scoped query
+            // Standard tenant-scoped query with limbo filter
             const result = await pool.query(`
                 SELECT b.*
                 FROM ${tenantSchema}.books b
                 WHERE b.archived = false
+                ${limboFilter}
                 ORDER BY b.created_at DESC
             `);
             books = result.rows;
