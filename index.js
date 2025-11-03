@@ -405,6 +405,31 @@ async function initializeDatabase() {
             )
         `);
         
+        // MIGRATION: Add updated_at column to book_registry for routing recency
+        const updatedAtMigration = await pool.query(`
+            SELECT 1 FROM core.migrations WHERE name = 'add_book_registry_updated_at'
+        `);
+        
+        if (updatedAtMigration.rows.length === 0) {
+            await pool.query(`
+                ALTER TABLE core.book_registry 
+                ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()
+            `);
+            
+            // Backfill existing rows with created_at value
+            await pool.query(`
+                UPDATE core.book_registry 
+                SET updated_at = COALESCE(activated_at, created_at)
+                WHERE updated_at IS NULL
+            `);
+            
+            await pool.query(`
+                INSERT INTO core.migrations (name) VALUES ('add_book_registry_updated_at')
+            `);
+            
+            console.log('✅ Added updated_at column to book_registry');
+        }
+        
         // MIGRATION: Add join_code column to existing phone_to_book tables FIRST
         try {
             const schemas = await pool.query(`
@@ -1974,19 +1999,21 @@ app.post('/api/twilio/webhook', async (req, res) => {
         }
         
         // Fallback: Phone lookup for active books (normal message forwarding)
+        // CRITICAL: ORDER BY updated_at DESC to get most recent activation (fixes multi-book conflicts)
         if (!bookRecord) {
             console.log(`🔍 No join code found, trying phone lookup for active books...`);
             const phoneLookup = await pool.query(`
                 SELECT id, tenant_schema, tenant_email, fractal_id, book_name, 
-                       outpipe_ledger, outpipes_user, status, phone_number
+                       outpipe_ledger, outpipes_user, status, phone_number, updated_at
                 FROM core.book_registry
                 WHERE phone_number = $1 AND status = 'active'
+                ORDER BY updated_at DESC
                 LIMIT 1
             `, [phone]);
             
             if (phoneLookup.rows.length > 0) {
                 bookRecord = phoneLookup.rows[0];
-                console.log(`✅ Found via phone: ${bookRecord.fractal_id} (active book)`);
+                console.log(`✅ Found via phone: ${bookRecord.fractal_id} (most recent, updated: ${bookRecord.updated_at})`);
             }
         }
         
@@ -2117,9 +2144,10 @@ app.post('/api/twilio/webhook', async (req, res) => {
             const bookId = bookIdResult.rows[0].id;
             
             // Update registry (activate and set phone)
+            // CRITICAL: Update updated_at to track most recent activation for routing
             await pool.query(`
                 UPDATE core.book_registry 
-                SET phone_number = $1, status = 'active', activated_at = NOW()
+                SET phone_number = $1, status = 'active', activated_at = NOW(), updated_at = NOW()
                 WHERE id = $2
             `, [phone, bookRecord.id]);
             
