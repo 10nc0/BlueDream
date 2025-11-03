@@ -2,6 +2,7 @@ const axios = require('axios');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -23,7 +24,6 @@ const genesisCounter = require('./server/genesis-counter');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
-    const crypto = require('crypto');
     const autoSalt = crypto.randomBytes(32).toString('hex');
     console.error('❌ CRITICAL: FRACTAL_SALT environment variable not set!');
     console.error('');

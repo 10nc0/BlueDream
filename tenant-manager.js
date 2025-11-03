@@ -237,6 +237,29 @@ class TenantManager {
                 )
             `);
             
+            // Create phone_to_book table for WhatsApp phone number mapping and join codes
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.phone_to_book (
+                    id SERIAL PRIMARY KEY,
+                    phone_number TEXT,
+                    book_id INTEGER NOT NULL REFERENCES ${schemaName}.books(id) ON DELETE CASCADE,
+                    join_code TEXT UNIQUE,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )
+            `);
+            
+            await client.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS phone_to_book_phone_book_idx 
+                ON ${schemaName}.phone_to_book (phone_number, book_id)
+                WHERE phone_number IS NOT NULL
+            `);
+            
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS phone_to_book_join_code_idx 
+                ON ${schemaName}.phone_to_book (join_code)
+            `);
+            
             return { tenantId, schemaName };
         } finally {
             client.release();
