@@ -2068,7 +2068,25 @@ app.post('/api/twilio/webhook', async (req, res) => {
                     limboMediaBuffer = Buffer.from(mediaResponse.data);
                     limboMediaContentType = MediaContentType0 || mediaResponse.headers['content-type'] || 'application/octet-stream';
                     
-                    const ext = limboMediaContentType.split('/')[1]?.split(';')[0] || 'bin';
+                    // Map MIME types to proper file extensions
+                    const mimeToExt = {
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+                        'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+                        'application/pdf': 'pdf',
+                        'image/jpeg': 'jpg',
+                        'image/png': 'png',
+                        'image/gif': 'gif',
+                        'image/webp': 'webp',
+                        'video/mp4': 'mp4',
+                        'video/quicktime': 'mov',
+                        'audio/mpeg': 'mp3',
+                        'audio/ogg': 'ogg',
+                        'audio/opus': 'opus',
+                        'application/zip': 'zip',
+                        'text/plain': 'txt'
+                    };
+                    const ext = mimeToExt[limboMediaContentType] || limboMediaContentType.split('/')[1]?.split(';')[0] || 'bin';
                     limboMediaFilename = `limbo_media_${Date.now()}.${ext}`;
                     
                     console.log(`✅ [Limbo] Downloaded ${limboMediaBuffer.length} bytes`);
@@ -2296,7 +2314,25 @@ app.post('/api/twilio/webhook', async (req, res) => {
                     mediaBuffer = Buffer.from(mediaResponse.data);
                     mediaContentType = MediaContentType0 || mediaResponse.headers['content-type'] || 'application/octet-stream';
                     
-                    const ext = mediaContentType.split('/')[1]?.split(';')[0] || 'bin';
+                    // Map MIME types to proper file extensions
+                    const mimeToExt = {
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+                        'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+                        'application/pdf': 'pdf',
+                        'image/jpeg': 'jpg',
+                        'image/png': 'png',
+                        'image/gif': 'gif',
+                        'image/webp': 'webp',
+                        'video/mp4': 'mp4',
+                        'video/quicktime': 'mov',
+                        'audio/mpeg': 'mp3',
+                        'audio/ogg': 'ogg',
+                        'audio/opus': 'opus',
+                        'application/zip': 'zip',
+                        'text/plain': 'txt'
+                    };
+                    const ext = mimeToExt[mediaContentType] || mediaContentType.split('/')[1]?.split(';')[0] || 'bin';
                     mediaFilename = `media_${Date.now()}.${ext}`;
                     
                     console.log(`✅ Downloaded ${mediaBuffer.length} bytes (${mediaContentType})`);
