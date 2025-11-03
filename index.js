@@ -2060,18 +2060,10 @@ app.post('/api/twilio/webhook', async (req, res) => {
             
             if (MediaUrl0) {
                 try {
-                    // Get Twilio credentials for authenticated media download
-                    const twilioHelper = require('./twilio-client');
-                    const { accountSid, authToken } = await twilioHelper.getTwilioMediaCredentials();
-                    
-                    console.log(`📥 [Limbo] Downloading media from Twilio...`);
+                    console.log(`📥 [Limbo] Downloading media from Twilio (no auth)...`);
                     const mediaResponse = await axios.get(MediaUrl0, { 
                         responseType: 'arraybuffer',
-                        timeout: 30000,
-                        auth: {
-                            username: accountSid,
-                            password: authToken
-                        }
+                        timeout: 30000
                     });
                     limboMediaBuffer = Buffer.from(mediaResponse.data);
                     limboMediaContentType = MediaContentType0 || mediaResponse.headers['content-type'] || 'application/octet-stream';
@@ -2296,18 +2288,10 @@ app.post('/api/twilio/webhook', async (req, res) => {
             
             if (MediaUrl0) {
                 try {
-                    // Get Twilio credentials for authenticated media download
-                    const twilioHelper = require('./twilio-client');
-                    const { accountSid, authToken } = await twilioHelper.getTwilioMediaCredentials();
-                    
-                    console.log(`📥 Downloading media from Twilio: ${MediaUrl0.substring(0, 80)}...`);
+                    console.log(`📥 Downloading media from Twilio (no auth): ${MediaUrl0.substring(0, 80)}...`);
                     const mediaResponse = await axios.get(MediaUrl0, { 
                         responseType: 'arraybuffer',
-                        timeout: 30000,
-                        auth: {
-                            username: accountSid,
-                            password: authToken
-                        }
+                        timeout: 30000
                     });
                     mediaBuffer = Buffer.from(mediaResponse.data);
                     mediaContentType = MediaContentType0 || mediaResponse.headers['content-type'] || 'application/octet-stream';
