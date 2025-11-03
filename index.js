@@ -2801,10 +2801,13 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
             webhooks: userOutputCredentials?.webhooks || []
         };
         
+        // For WhatsApp books, set default join code if not provided
+        const finalContactInfo = contactInfo || (inputPlatform === 'whatsapp' ? 'join baby-ability' : null);
+        
         const result = await client.query(
             `INSERT INTO books (name, input_platform, output_platform, input_credentials, output_credentials, output_01_url, output_0n_url, contact_info, tags, status, archived, created_by_admin_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-            [name, inputPlatform, 'discord', {}, outputCredentials, output01Url, output0nUrl, contactInfo || null, tags || [], 'inactive', false, createdByAdminId]
+            [name, inputPlatform, 'discord', {}, outputCredentials, output01Url, output0nUrl, finalContactInfo, tags || [], 'inactive', false, createdByAdminId]
         );
         
         const book = result.rows[0];

@@ -1397,9 +1397,10 @@
             const getWhatsAppActions = () => {
                 if (!whatsappStatus) return '';
                 
-                // Button 1: Generate new QR (starts WhatsApp + shows QR modal)
-                const whatsappLink = `https://wa.me/14155238886?text=join%20baby-ability`;
-                return `<a href="${whatsappLink}" target="_blank" class="btn-icon" title="Connect WhatsApp" style="background: rgba(34, 197, 94, 0.2); color: #22c55e; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">📱</a>`;
+                // Button 1: Connect WhatsApp (Twilio sandbox)
+                const joinCode = book.contact_info || 'join baby-ability';
+                const whatsappLink = `https://wa.me/14155238886?text=${encodeURIComponent(joinCode)}`;
+                return `<a href="${whatsappLink}" target="_blank" rel="noopener noreferrer" class="btn-icon" title="Connect WhatsApp" style="background: rgba(34, 197, 94, 0.2); color: #22c55e; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">📱</a>`;
             };
             
             const detail = document.getElementById('bookDetail');
@@ -1412,7 +1413,7 @@
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <button class="btn-icon" data-show-book-info="${book.fractal_id}" title="Book Information" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">ℹ️</button>
-                        ${!isDevPanelView && platform === 'whatsapp' ? `<a href="https://wa.me/14155238886?text=join%20baby-ability" target="_blank" class="btn-icon" title="Connect WhatsApp" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">📱</a>` : ''}
+                        ${!isDevPanelView && platform === 'whatsapp' ? `<a href="https://wa.me/14155238886?text=${encodeURIComponent(book.contact_info || 'join baby-ability')}" target="_blank" rel="noopener noreferrer" class="btn-icon" title="Connect WhatsApp" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">📱</a>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-edit-book="${book.fractal_id}" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-delete-book="${book.fractal_id}" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
                     </div>
@@ -1420,19 +1421,24 @@
 
                 ${!book.output_credentials?.output_01?.thread_id ? `
                     <!-- WARNING: Missing Ledger thread (critical) -->
-                    <div style="margin: 0.75rem; padding: 0.75rem 1rem; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px; display: flex; align-items: center; gap: 0.75rem;">
-                        <div style="font-size: 1.5rem;">⚠️</div>
-                        <div style="flex: 1;">
-                            <div style="color: #fbbf24; font-weight: 600; font-size: 0.875rem; margin-bottom: 0.25rem;">Setup Incomplete</div>
-                            <div style="color: #cbd5e1; font-size: 0.8125rem;">
-                                Discord thread not created. ${platform === 'whatsapp' ? 'Click "Connect WhatsApp" to send activation message.' : 'Edit this book to configure outputs.'}
+                    <div style="margin: 0.75rem; padding: 0.75rem 1rem; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px;">
+                        <div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.75rem;">
+                            <div style="font-size: 1.5rem;">📱</div>
+                            <div style="flex: 1;">
+                                <div style="color: #22c55e; font-weight: 600; font-size: 0.9375rem; margin-bottom: 0.5rem;">Connect Your WhatsApp</div>
+                                <div style="color: #cbd5e1; font-size: 0.8125rem; line-height: 1.5; margin-bottom: 0.75rem;">
+                                    Click the button below to open WhatsApp, then send the pre-filled message to activate your book.
+                                </div>
+                                ${platform === 'whatsapp' ? `
+                                    <a href="https://wa.me/14155238886?text=${encodeURIComponent(book.contact_info || 'join baby-ability')}" target="_blank" rel="noopener noreferrer" style="background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
+                                        📱 Open WhatsApp
+                                    </a>
+                                ` : ''}
                             </div>
                         </div>
-                        ${platform === 'whatsapp' ? `
-                            <a href="https://wa.me/14155238886?text=join%20baby-ability" target="_blank" style="background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
-                                📱 Connect WhatsApp
-                            </a>
-                        ` : ''}
+                        <div style="background: rgba(15, 23, 42, 0.6); padding: 0.625rem; border-radius: 4px; border-left: 3px solid rgba(34, 197, 94, 0.4);">
+                            <div style="color: #94a3b8; font-size: 0.75rem; font-family: monospace;">Message: <span style="color: #22c55e;">${book.contact_info || 'join baby-ability'}</span></div>
+                        </div>
                     </div>
                 ` : ''}
 
