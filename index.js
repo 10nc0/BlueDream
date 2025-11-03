@@ -1898,21 +1898,49 @@ app.post('/api/twilio/webhook', async (req, res) => {
             return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
         }
         
-        // STEP 2: Parse join code from EVERY message
-        // Format: BOOKNAME-xxxxxx (where xxxxxx is 6-char random code)
-        const joinCode = bodyText.trim();
-        console.log(`🔍 Parsing potential join code: "${joinCode}"`);
+        // STEP 2: HYBRID ROUTING - Extract join code using regex
+        // Format: bookname-abc123 (6 hex chars)
+        const joinCodeMatch = bodyText.match(/([a-z0-9]+)-([a-f0-9]{6})/i);
+        const joinCode = joinCodeMatch ? joinCodeMatch[0] : null;
+        console.log(`🔍 Extracted join code: ${joinCode || 'none'}`);
         
-        // STEP 3: Registry lookup by join code (O(1) lookup)
-        const registryLookup = await pool.query(`
-            SELECT id, tenant_schema, tenant_email, fractal_id, book_name, 
-                   outpipe_ledger, outpipes_user, status, phone_number
-            FROM core.book_registry
-            WHERE LOWER(join_code) = LOWER($1)
-        `, [joinCode]);
+        // STEP 3: HYBRID LOOKUP - Try join code first, fallback to phone number
+        let bookRecord = null;
         
-        if (registryLookup.rows.length === 0) {
-            // CASE C: No book found → LIMBO
+        // Try join code first (for activation or explicit book targeting)
+        if (joinCode) {
+            const registryLookup = await pool.query(`
+                SELECT id, tenant_schema, tenant_email, fractal_id, book_name, 
+                       outpipe_ledger, outpipes_user, status, phone_number
+                FROM core.book_registry
+                WHERE LOWER(join_code) = LOWER($1)
+            `, [joinCode]);
+            
+            if (registryLookup.rows.length > 0) {
+                bookRecord = registryLookup.rows[0];
+                console.log(`✅ Found via join code: ${bookRecord.fractal_id} (status: ${bookRecord.status})`);
+            }
+        }
+        
+        // Fallback: Phone lookup for active books (normal message forwarding)
+        if (!bookRecord) {
+            console.log(`🔍 No join code found, trying phone lookup for active books...`);
+            const phoneLookup = await pool.query(`
+                SELECT id, tenant_schema, tenant_email, fractal_id, book_name, 
+                       outpipe_ledger, outpipes_user, status, phone_number
+                FROM core.book_registry
+                WHERE phone_number = $1 AND status = 'active'
+                LIMIT 1
+            `, [phone]);
+            
+            if (phoneLookup.rows.length > 0) {
+                bookRecord = phoneLookup.rows[0];
+                console.log(`✅ Found via phone: ${bookRecord.fractal_id} (active book)`);
+            }
+        }
+        
+        if (!bookRecord) {
+            // CASE C: No book found via join code OR phone → LIMBO
             console.log(`❌ No book found for join code: "${joinCode}" → Routing to limbo`);
             
             // LIMBO ROUTING: Forward all messages without valid join code to t1-b1 Ledger thread
@@ -2014,8 +2042,7 @@ app.post('/api/twilio/webhook', async (req, res) => {
             return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
         }
         
-        // Book found in registry - check status
-        const bookRecord = registryLookup.rows[0];
+        // Book found in registry - extract tenant schema
         const tenantSchema = bookRecord.tenant_schema;
         
         console.log(`✅ Found book ${bookRecord.fractal_id} in registry: status=${bookRecord.status}, tenant=${tenantSchema}`);
