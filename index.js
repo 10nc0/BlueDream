@@ -17,7 +17,6 @@ const twilio = require('twilio');
 const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
 const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./tenant-middleware');
-const BaileysClientManager = require('./baileys-client-manager');
 const HermesBot = require('./hermes-bot');
 const TothBot = require('./toth-bot');
 const fractalId = require('./utils/fractal-id');
@@ -57,9 +56,6 @@ if (!NYANBOOK_LEDGER_WEBHOOK) {
     console.error('❌ CRITICAL: NYANBOOK_WEBHOOK_URL environment variable not set!');
     console.error('   Book creation will fail without Output #01 webhook configured.');
 }
-
-// PERSISTENT STORAGE: Baileys uses JSON files for auth (no browser needed)
-const BAILEYS_DATA_PATH = process.env.BAILEYS_DATA_PATH || '/home/runner/workspace/.baileys_auth_persistent';
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -312,10 +308,6 @@ app.use('/api/users', setTenantContext);
 app.use('/api/sessions', setTenantContext);
 app.use('/api/audit', setTenantContext);
 app.use('/api/analytics', setTenantContext);
-
-// Multi-tenant WhatsApp Client Manager
-// Each book gets its own WhatsApp session (one per tenant)
-let whatsappManager = null;
 
 // Discord Bot Manager for automatic thread creation per book
 let hermesBot = null;
@@ -1556,34 +1548,48 @@ app.get('/api/auth/check-genesis', async (req, res) => {
     }
 });
 
-// Public Signup Endpoint - Handles both new tenant creation and invite-based signup
+// Public Signup Endpoint - Phone-first auth (email optional for invites)
 app.post('/api/auth/signup', async (req, res) => {
-    const { email, password, inviteToken } = req.body;
+    const { phone, email, password, inviteToken } = req.body;
     
-    console.log(`[${getTimestamp()}] 📝 Signup attempt - Email: ${email}, IP: ${req.ip}, HasInvite: ${!!inviteToken}`);
+    // Phone-first: require phone for new signups, email only for invites
+    const identifier = phone || email;
+    console.log(`[${getTimestamp()}] 📝 Signup attempt - Phone: ${phone}, Email: ${email}, IP: ${req.ip}, HasInvite: ${!!inviteToken}`);
     
     try {
         // Validate input
-        if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+        if (!identifier || !password) {
+            return res.status(400).json({ error: 'Phone/email and password are required' });
         }
         
         if (password.length < 6) {
             return res.status(400).json({ error: 'Password must be at least 6 characters' });
         }
         
-        // Normalize email to lowercase for case-insensitive uniqueness
-        const normalizedEmail = email.toLowerCase().trim();
+        // Normalize phone (remove all non-digits) or email (lowercase)
+        const normalizedIdentifier = phone ? phone.replace(/\D/g, '') : email.toLowerCase().trim();
+        const isPhoneAuth = !!phone;
         
-        // CRITICAL: Email uniqueness gatefencing - check BEFORE any writes
-        // Read-Check-Bounce pattern to enforce one email = one tenant globally
-        const emailCheck = await pool.query(
-            'SELECT tenant_id FROM core.user_email_to_tenant WHERE LOWER(email) = $1',
-            [normalizedEmail]
-        );
-        if (emailCheck.rows.length > 0) {
-            console.log(`[${getTimestamp()}] 🚫 Signup blocked - Email already exists in tenant ${emailCheck.rows[0].tenant_id}`);
-            return res.status(409).json({ error: 'Email already registered' });
+        // CRITICAL: Uniqueness gatefencing - check BEFORE any writes
+        // Phone-first: check phone_to_tenant for phone auth, user_email_to_tenant for email auth
+        if (isPhoneAuth) {
+            const phoneCheck = await pool.query(
+                'SELECT tenant_schema FROM core.phone_to_tenant WHERE phone_number = $1',
+                [normalizedIdentifier]
+            );
+            if (phoneCheck.rows.length > 0) {
+                console.log(`[${getTimestamp()}] 🚫 Signup blocked - Phone already registered`);
+                return res.status(409).json({ error: 'Phone number already registered' });
+            }
+        } else {
+            const emailCheck = await pool.query(
+                'SELECT tenant_id FROM core.user_email_to_tenant WHERE LOWER(email) = $1',
+                [normalizedIdentifier]
+            );
+            if (emailCheck.rows.length > 0) {
+                console.log(`[${getTimestamp()}] 🚫 Signup blocked - Email already exists in tenant ${emailCheck.rows[0].tenant_id}`);
+                return res.status(409).json({ error: 'Email already registered' });
+            }
         }
         
         let newUser;
@@ -5052,81 +5058,6 @@ async function updateAnalytics(bookId) {
     }
 }
 
-
-// Auto-restore all books with saved WhatsApp sessions on server startup
-async function autoRestoreWhatsAppSessions() {
-    try {
-        console.log('🔄 Auto-restoring Baileys WhatsApp sessions from saved data...');
-        
-        // FIRST PRINCIPLES: Only restore from REGISTERED tenants (ignore orphaned schemas)
-        // Query core.tenant_catalog instead of information_schema to avoid ghost tenants
-        const schemas = await pool.query(`
-            SELECT tenant_schema as schema_name
-            FROM core.tenant_catalog
-            WHERE status = 'active'
-            ORDER BY id
-        `);
-        
-        let restoredCount = 0;
-        let skippedCount = 0;
-        
-        // For each tenant schema, find all books with saved sessions
-        for (const { schema_name } of schemas.rows) {
-            try {
-                const books = await pool.query(`
-                    SELECT id, name, status 
-                    FROM ${schema_name}.books 
-                    WHERE status != 'deleted'
-                `);
-                
-                for (const book of books.rows) {
-                    // Check if this book has a saved Baileys session
-                    // Baileys stores auth in a directory with JSON files (creds.json, etc.)
-                    const sessionClientId = `${schema_name}_book_${book.id}`;
-                    // CRITICAL: Use persistent Baileys storage path with "session-" prefix
-                    const sessionPath = path.join(BAILEYS_DATA_PATH, `session-${sessionClientId}`);
-                    
-                    // Check if Baileys session exists (directory with creds.json)
-                    const hasSession = fs.existsSync(sessionPath) && 
-                                      fs.existsSync(path.join(sessionPath, 'creds.json'));
-                    
-                    if (hasSession) {
-                        console.log(`🔗 Auto-restoring ${schema_name}:${book.id} (${book.name})...`);
-                        
-                        try {
-                            // Initialize Baileys client with saved session
-                            // Uses composite tenant:book key for tracking
-                            await whatsappManager.initializeClient(
-                                book.id,
-                                schema_name,
-                                createTenantAwareMessageHandler
-                            );
-                            restoredCount++;
-                            console.log(`✅ ${schema_name}:${book.id} restored successfully`);
-                            
-                            // THROTTLE: Prevent resource explosion from opening 100+ WebSockets at once
-                            // Stagger initialization by 500ms to avoid overwhelming system resources
-                            await new Promise(resolve => setTimeout(resolve, 500));
-                        } catch (error) {
-                            console.error(`⚠️  Failed to restore ${schema_name}:${book.id}:`, error.message);
-                            skippedCount++;
-                        }
-                    } else {
-                        console.log(`⏭️  Skipping ${schema_name}:${book.id} (${book.name}) - no saved session`);
-                        skippedCount++;
-                    }
-                }
-            } catch (error) {
-                console.error(`⚠️  Error processing ${schema_name}:`, error.message);
-            }
-        }
-        
-        console.log(`✅ Auto-restore complete: ${restoredCount} books restored, ${skippedCount} skipped`);
-    } catch (error) {
-        console.error('❌ Auto-restore failed:', error.message);
-    }
-}
-
 // Global error handlers to prevent WhatsApp disconnection from killing the app
 process.on('unhandledRejection', (reason, promise) => {
     // Check if it's a Baileys/WhatsApp error
@@ -5259,11 +5190,6 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🌐 Dashboard available at http://localhost:${PORT}`);
-    
-    // CRITICAL: Initialize managers BEFORE database/session restore
-    // This prevents race conditions where routes try to access null managers
-    whatsappManager = new BaileysClientManager(pool);
-    console.log('✅ Baileys WhatsApp Client Manager initialized (no Chromium required)');
     
     // TRINITY ARCHITECTURE: Hermes (φ - Creator) + Toth (0 - Mirror)
     // Security: Principle of least privilege - each bot has minimal permissions
@@ -5400,10 +5326,6 @@ app.listen(PORT, '0.0.0.0', async () => {
     // Tier 2: φ breath (4000-6472ms sine wave, synchronized with UI φ-breath)
     genesisCounter.start();
     console.log('🔢 Genesis counter started (cat + φ breath tiers)');
-    
-    // Auto-restore WhatsApp sessions for 24/7 uptime
-    await autoRestoreWhatsAppSessions();
-    console.log('📱 All books with saved sessions are now active');
     
     // === PHI BREATHE COUNTER ===
     let phiBreatheCount = 0;
@@ -5592,6 +5514,5 @@ app.listen(PORT, '0.0.0.0', async () => {
 // Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('\n🛑 Shutting down gracefully...');
-    await whatsappManager.cleanup();
     process.exit(0);
 });
