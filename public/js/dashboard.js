@@ -2831,7 +2831,6 @@
                     
                     const bookName = document.getElementById('book-name-input').value;
                     const platform = document.getElementById('book-platform-input').value;
-                    const includeGroupMessages = document.getElementById('book-include-groups-input').checked;
                     
                     const submitBtn = bookForm.querySelector('button[type="submit"]');
                     const originalText = submitBtn.textContent;
@@ -2854,8 +2853,7 @@
                             },
                             body: JSON.stringify({
                                 name: bookName,
-                                inputPlatform: platform,
-                                includeGroupMessages: includeGroupMessages
+                                inputPlatform: platform
                             })
                         });
                         
@@ -3034,7 +3032,6 @@
             const inputPlatform = document.getElementById('botPlatform').value;
             const outputPlatform = document.getElementById('botDestinationPlatform').value;
             const contact = document.getElementById('botContact').value;
-            const includeGroupMessages = document.getElementById('botIncludeGroupMessages').checked;
             
             // Filter out empty webhooks
             const validWebhooks = botWebhooks.filter(w => w.url && w.url.trim());
@@ -3099,7 +3096,6 @@
                 outputCredentials: outputCredentials,
                 contactInfo: contact,
                 tags: botTags,
-                includeGroupMessages: includeGroupMessages,
                 status: 'active'
             };
             
