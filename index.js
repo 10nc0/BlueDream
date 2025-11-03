@@ -305,6 +305,43 @@ async function initializeDatabase() {
         // NOTE: All tenant schemas (users, books, media_buffer, etc.) are created by TenantManager
         // during tenant initialization. No manual migrations needed for N+1 scalability.
         
+        // MIGRATION: Add join_code column to existing phone_to_book tables
+        try {
+            const schemas = await pool.query(`
+                SELECT schema_name 
+                FROM information_schema.schemata 
+                WHERE schema_name LIKE 'tenant_%'
+            `);
+            
+            for (const { schema_name } of schemas.rows) {
+                // Check if phone_to_book table exists
+                const tableCheck = await pool.query(`
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = $1 
+                        AND table_name = 'phone_to_book'
+                    ) as exists
+                `, [schema_name]);
+                
+                if (tableCheck.rows[0].exists) {
+                    // Add join_code column if it doesn't exist
+                    await pool.query(`
+                        ALTER TABLE ${schema_name}.phone_to_book 
+                        ADD COLUMN IF NOT EXISTS join_code TEXT UNIQUE
+                    `);
+                    
+                    // Create index for join_code
+                    await pool.query(`
+                        CREATE INDEX IF NOT EXISTS idx_${schema_name.replace('tenant_', 't')}_phone_to_book_join_code 
+                        ON ${schema_name}.phone_to_book(join_code)
+                    `);
+                }
+            }
+            console.log('✅ Migration: join_code column added to all phone_to_book tables');
+        } catch (migrationError) {
+            console.warn('⚠️ Migration warning:', migrationError.message);
+        }
+        
         console.log('✅ Core schema initialized with security tables');
         console.log('✅ Database initialized successfully');
     } catch (error) {
@@ -1657,9 +1694,102 @@ app.post('/api/twilio/webhook', async (req, res) => {
         if (phoneMapping.rows.length === 0) {
             console.log(`🆕 New phone number: ${phone}`);
             
-            // Check if this is a "join baby-ability" command
-            if (Body && Body.trim().toLowerCase() === 'join baby-ability') {
-                console.log(`✨ Join command detected - creating new tenant for ${phone}`);
+            const bodyText = Body?.trim() || '';
+            const bodyLower = bodyText.toLowerCase();
+            
+            // NEW FLOW: Check for unique join code "join baby-ability CODE"
+            // CRITICAL: Preserve case of join code for database matching
+            const joinMatch = bodyLower.match(/^join baby-ability (.+)$/);
+            if (joinMatch) {
+                // Extract join code from ORIGINAL body text (case-preserved)
+                const originalMatch = bodyText.match(/^join baby-ability (.+)$/i);
+                const joinCode = originalMatch ? originalMatch[1].trim() : joinMatch[1].trim();
+                console.log(`🔐 Join code detected: ${joinCode}`);
+                
+                // Search for join_code across all tenant schemas
+                const schemas = await pool.query(`
+                    SELECT schema_name 
+                    FROM information_schema.schemata 
+                    WHERE schema_name LIKE 'tenant_%'
+                `);
+                
+                let foundMapping = null;
+                let foundTenantSchema = null;
+                
+                for (const { schema_name } of schemas.rows) {
+                    const mapping = await pool.query(`
+                        SELECT book_id, join_code 
+                        FROM ${schema_name}.phone_to_book 
+                        WHERE join_code = $1 AND phone_number IS NULL
+                    `, [joinCode]);
+                    
+                    if (mapping.rows.length > 0) {
+                        foundMapping = mapping.rows[0];
+                        foundTenantSchema = schema_name;
+                        break;
+                    }
+                }
+                
+                if (foundMapping) {
+                    console.log(`✅ Found book ${foundMapping.book_id} in ${foundTenantSchema} for join code ${joinCode}`);
+                    
+                    // Map phone to book (update existing row with NULL phone_number)
+                    await pool.query(`
+                        UPDATE ${foundTenantSchema}.phone_to_book 
+                        SET phone_number = $1, join_code = NULL, updated_at = NOW()
+                        WHERE join_code = $2
+                    `, [phone, joinCode]);
+                    
+                    // Map phone to tenant in core
+                    await pool.query(`
+                        INSERT INTO core.phone_to_tenant (phone_number, tenant_schema)
+                        VALUES ($1, $2)
+                        ON CONFLICT (phone_number) DO UPDATE SET tenant_schema = $2
+                    `, [phone, foundTenantSchema]);
+                    
+                    console.log(`🔗 Mapped phone ${phone} to book ${foundMapping.book_id} (join code nullified)`);
+                    
+                    // Send confirmation message
+                    try {
+                        const twilioHelper = require('./twilio-client');
+                        const twilioClient = await twilioHelper.getTwilioClient();
+                        const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+                        
+                        await twilioClient.messages.create({
+                            from: `whatsapp:${twilioNumber}`,
+                            to: From,
+                            body: `✅ WhatsApp connected! Your messages will now be saved to your book. Send anything to test it out! 🌈`
+                        });
+                    } catch (twilioError) {
+                        console.warn(`⚠️ Could not send confirmation (non-fatal):`, twilioError.message);
+                    }
+                    
+                    return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+                } else {
+                    console.log(`❌ Invalid join code: ${joinCode}`);
+                    
+                    // Send error message
+                    try {
+                        const twilioHelper = require('./twilio-client');
+                        const twilioClient = await twilioHelper.getTwilioClient();
+                        const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+                        
+                        await twilioClient.messages.create({
+                            from: `whatsapp:${twilioNumber}`,
+                            to: From,
+                            body: `❌ Invalid join code. Please check your code and try again, or create a new book at ${process.env.REPLIT_DOMAINS?.split(',')[0] || 'your dashboard'}.`
+                        });
+                    } catch (twilioError) {
+                        console.warn(`⚠️ Could not send error message (non-fatal):`, twilioError.message);
+                    }
+                    
+                    return res.status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+                }
+            }
+            
+            // LEGACY FLOW: "join baby-ability" (creates new tenant with limbo book)
+            if (bodyLower === 'join baby-ability') {
+                console.log(`✨ Legacy join command detected - creating new tenant for ${phone}`);
                 
                 // Create new tenant using tenant manager (creates all tables)
                 const tenantResult = await tenantManager.createTenant(0); // Use 0 as placeholder user ID
@@ -1686,10 +1816,17 @@ app.post('/api/twilio/webhook', async (req, res) => {
                             id SERIAL PRIMARY KEY,
                             phone_number TEXT,
                             book_id INTEGER NOT NULL,
+                            join_code TEXT UNIQUE,
                             created_at TIMESTAMP DEFAULT NOW(),
                             updated_at TIMESTAMP DEFAULT NOW(),
                             UNIQUE(phone_number, book_id)
                         )
+                    `);
+                    
+                    // Create index for join_code lookups
+                    await client.query(`
+                        CREATE INDEX IF NOT EXISTS idx_${tenantSchema.replace('tenant_', 't')}_phone_to_book_join_code 
+                        ON ${tenantSchema}.phone_to_book(join_code)
                     `);
                     
                     // Create user
@@ -2910,6 +3047,31 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         );
         
         book.fractal_id = generatedFractalId;
+        
+        // Generate unique join code for WhatsApp books (sybil-proof activation)
+        let joinCode = null;
+        if (inputPlatform === 'whatsapp') {
+            // Format: "BOOKNAME-abc123" (6 hex chars = 24 bits entropy = 16.7M combinations)
+            const randomCode = crypto.randomBytes(3).toString('hex');
+            const bookNameSlug = name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
+            joinCode = `${bookNameSlug}-${randomCode}`;
+            
+            // Store join code in phone_to_book (phone_number=NULL until activated)
+            await client.query(`
+                INSERT INTO phone_to_book (phone_number, book_id, join_code)
+                VALUES (NULL, $1, $2)
+            `, [book.id, joinCode]);
+            
+            // Update contact_info with unique join code
+            await client.query(`
+                UPDATE books 
+                SET contact_info = $1 
+                WHERE id = $2
+            `, [`join baby-ability ${joinCode}`, book.id]);
+            
+            book.contact_info = `join baby-ability ${joinCode}`;
+            console.log(`🔐 Generated join code for book ${generatedFractalId}: ${joinCode}`);
+        }
         
         // AUTO-CREATE DUAL DISCORD THREADS VIA BOT
         // thread_01 → Nyanbook Ledger (webhook01) - dev-only visibility

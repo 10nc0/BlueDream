@@ -1427,17 +1427,22 @@
                             <div style="flex: 1;">
                                 <div style="color: #22c55e; font-weight: 600; font-size: 0.9375rem; margin-bottom: 0.5rem;">Connect Your WhatsApp</div>
                                 <div style="color: #cbd5e1; font-size: 0.8125rem; line-height: 1.5; margin-bottom: 0.75rem;">
-                                    Click the button below to open WhatsApp, then send the pre-filled message to activate your book.
+                                    Send this message from WhatsApp to activate your book. Each code works only once for security.
                                 </div>
                                 ${platform === 'whatsapp' ? `
-                                    <a href="https://wa.me/14155238886?text=${encodeURIComponent(book.contact_info || 'join baby-ability')}" target="_blank" rel="noopener noreferrer" style="background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
-                                        📱 Open WhatsApp
-                                    </a>
+                                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                        <a href="https://wa.me/14155238886?text=${encodeURIComponent(book.contact_info || 'join baby-ability')}" target="_blank" rel="noopener noreferrer" style="background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
+                                            📱 Open WhatsApp
+                                        </a>
+                                        <button onclick="navigator.clipboard.writeText('${(book.contact_info || 'join baby-ability').replace(/'/g, "\\'")}'); this.innerHTML = '✅ Copied!'; setTimeout(() => this.innerHTML = '📋 Copy Code', 1500);" style="background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #cbd5e1; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap;">
+                                            📋 Copy Code
+                                        </button>
+                                    </div>
                                 ` : ''}
                             </div>
                         </div>
                         <div style="background: rgba(15, 23, 42, 0.6); padding: 0.625rem; border-radius: 4px; border-left: 3px solid rgba(34, 197, 94, 0.4);">
-                            <div style="color: #94a3b8; font-size: 0.75rem; font-family: monospace;">Message: <span style="color: #22c55e;">${book.contact_info || 'join baby-ability'}</span></div>
+                            <div style="color: #94a3b8; font-size: 0.75rem; font-family: monospace;">Message: <span style="color: #22c55e; user-select: all;">${book.contact_info || 'join baby-ability'}</span></div>
                         </div>
                     </div>
                 ` : ''}
