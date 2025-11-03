@@ -34,6 +34,20 @@ class TenantManager {
                 // Ignore duplicate table errors on restart
                 if (err.code !== '23505') throw err;
             });
+            
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS core.user_email_to_tenant (
+                    email TEXT UNIQUE NOT NULL,
+                    tenant_id INTEGER NOT NULL,
+                    tenant_schema TEXT NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            `).catch(err => {
+                // Ignore duplicate table errors on restart
+                if (err.code !== '23505') throw err;
+            });
         } finally {
             client.release();
         }
