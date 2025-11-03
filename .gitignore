@@ -77,3 +77,11 @@ TENANT_ISOLATION*.md
 AUTH_DOCUMENTATION.md
 GITHUB_SECURITY_CHECKLIST.md
 .IP_VAULT_README.md
+*.sql
+.env
+node_modules/
+sessions/
+*.sql
+.env
+node_modules/
+sessions/
