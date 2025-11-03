@@ -85,3 +85,7 @@ sessions/
 .env
 node_modules/
 sessions/
+*.sql
+.env
+node_modules/
+sessions/
