@@ -2176,8 +2176,9 @@ app.post('/api/twilio/webhook', async (req, res) => {
                 // LIMBO ROUTING: Forward all unactivated messages to t1-b1 Ledger thread
                 const LIMBO_THREAD_ID = '1433850939751534672';
                 
-                try {
-                    const limboEmbed = {
+                // Build Discord payload
+                const limboPayload = {
+                    embeds: [{
                         title: `🔮 Limbo Message (Unactivated Phone)`,
                         description: Body || '_(No text content)_',
                         color: 0xFF6B6B, // Red for limbo messages
@@ -2188,31 +2189,41 @@ app.post('/api/twilio/webhook', async (req, res) => {
                         ],
                         timestamp: new Date().toISOString(),
                         footer: { text: 'Send "join baby-ability BOOKNAME-xxxxxx" to activate' }
-                    };
-                    
-                    // Add media if present
-                    if (MediaUrl0) {
-                        limboEmbed.fields.push({ 
-                            name: '📎 Media', 
-                            value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
-                            inline: false 
-                        });
-                    }
-                    
-                    await axios.post(`https://discord.com/api/v10/channels/${LIMBO_THREAD_ID}/messages`, {
-                        embeds: [limboEmbed]
-                    }, {
-                        headers: {
-                            'Authorization': `Bot ${process.env.HERMES_TOKEN}`,
-                            'Content-Type': 'application/json'
-                        }
+                    }]
+                };
+                
+                // Add media link if present (limbo messages don't use media_buffer)
+                if (MediaUrl0) {
+                    limboPayload.embeds[0].fields.push({ 
+                        name: '📎 Media', 
+                        value: `[${MediaContentType0 || 'attachment'}](${MediaUrl0})`,
+                        inline: false 
                     });
+                }
+                
+                // Create minimal book object for sendToLedger
+                const limboBook = {
+                    output_01_url: NYANBOOK_LEDGER_WEBHOOK
+                };
+                
+                // Send to t1-b1 Ledger using proper pipeline
+                const limboOptions = {
+                    output: {
+                        type: 'thread',
+                        thread_id: LIMBO_THREAD_ID
+                    }
+                };
+                
+                try {
+                    await sendToLedger(limboPayload, limboOptions, limboBook);
                     console.log(`✅ Limbo message forwarded to t1-b1 thread from ${phone}`);
                 } catch (discordError) {
                     console.error(`❌ Failed to forward limbo message to t1-b1:`, discordError.message);
+                    // Alert on delivery failure
+                    console.error(`⚠️  CRITICAL: Limbo message delivery failed - phone ${phone} message lost!`);
                 }
                 
-                // Send help message (optional - don't fail if it errors)
+                // Send help message only after verifying Discord delivery
                 try {
                     const twilioHelper = require('./twilio-client');
                     const twilioClient = await twilioHelper.getTwilioClient();
