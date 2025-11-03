@@ -129,6 +129,9 @@ app.use(helmet({
         }
     },
     crossOriginEmbedderPolicy: false // Required for iframe embedding
+    app.get('/health', (req, res) => {
+      res.send('Nyan breathes φ — Railway alive');
+    });
 }));
 
 // SECURITY: CORS with origin whitelist
