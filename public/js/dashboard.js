@@ -2961,26 +2961,33 @@
                         // Reload books to show the new one
                         await loadBooks();
                         
-                        // AUTO-REDIRECT to WhatsApp for WhatsApp books (unified magic link flow)
+                        // 2-MESSAGE FLOW: Show activation modal instead of redirecting
                         console.log('📋 Book creation debug:', { 
                             platform, 
                             bookPlatform: book.input_platform,
-                            contactInfo: book.contact_info,
-                            willRedirect: (book.input_platform === 'whatsapp' && book.contact_info)
+                            contactInfo: book.contact_info
                         });
                         
                         if (book.input_platform === 'whatsapp' && book.contact_info) {
-                            console.log('📱 Opening WhatsApp with join code:', book.contact_info);
+                            console.log('📱 Showing 2-step activation modal for:', book.contact_info);
                             
-                            // FIX: Use direct navigation instead of window.open() to avoid popup blockers
-                            // This is a user-initiated action, so direct navigation won't be blocked
-                            const whatsappUrl = `https://wa.me/14155238886?text=${encodeURIComponent(book.contact_info)}`;
+                            // Extract join code from contact_info (e.g., "join baby-ability v20pc3-95bfd4" -> "v20pc3-95bfd4")
+                            const joinCode = book.contact_info.replace(/^join baby-ability\s+/i, '').trim();
+                            
+                            // Show activation modal
+                            document.getElementById('book-name-display').textContent = `📖 ${bookName}`;
+                            document.getElementById('book-fractal-id').textContent = book.fractal_id;
+                            document.getElementById('book-join-code').textContent = joinCode;
+                            
+                            // Hide form, show activation steps
+                            document.getElementById('book-form-section').style.display = 'none';
+                            document.getElementById('book-qr-section').style.display = 'block';
+                            
+                            // Open modal
+                            document.getElementById('createBookModal').classList.add('active');
                             
                             // Show success notification
-                            showToast('✅ Book created! Opening WhatsApp...', 'success');
-                            
-                            // Direct navigation (popup-blocker-free)
-                            window.location.href = whatsappUrl;
+                            showToast('✅ Book created! Follow the 2 steps to activate.', 'success');
                         } else {
                             // For non-WhatsApp books, generate QR as before
                             console.log('🚀 Generating QR for new book...');
@@ -5663,6 +5670,32 @@ document.addEventListener('DOMContentLoaded', function() {
     if (revokeAllBtn) {
         revokeAllBtn.removeAttribute('onclick');
         revokeAllBtn.addEventListener('click', revokeAllSessions);
+    }
+    
+    // Copy join code button (2-message flow)
+    const copyJoinCodeBtn = document.getElementById('copy-join-code-btn');
+    if (copyJoinCodeBtn) {
+        copyJoinCodeBtn.addEventListener('click', function() {
+            const joinCode = document.getElementById('book-join-code').textContent;
+            if (joinCode) {
+                navigator.clipboard.writeText(joinCode).then(() => {
+                    const btn = this;
+                    const originalText = btn.textContent;
+                    btn.textContent = '✓ Copied!';
+                    btn.style.background = 'rgba(34, 197, 94, 0.2)';
+                    btn.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+                    btn.style.color = '#22c55e';
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.background = '';
+                        btn.style.borderColor = '';
+                        btn.style.color = '';
+                    }, 1500);
+                }).catch(err => {
+                    alert('Failed to copy: ' + err.message);
+                });
+            }
+        });
     }
     
     // Search and filter inputs
