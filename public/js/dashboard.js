@@ -2920,6 +2920,20 @@
                     const bookName = document.getElementById('book-name-input').value;
                     const platform = document.getElementById('book-platform-input').value;
                     
+                    // CLIENT-SIDE VALIDATION: Block empty/whitespace book names
+                    const trimmedName = bookName?.trim();
+                    if (!trimmedName) {
+                        showToast('❌ Book name cannot be empty', 'error');
+                        document.getElementById('book-name-input').focus();
+                        return;
+                    }
+                    
+                    if (trimmedName.length < 2) {
+                        showToast('❌ Book name must be at least 2 characters', 'error');
+                        document.getElementById('book-name-input').focus();
+                        return;
+                    }
+                    
                     const submitBtn = bookForm.querySelector('button[type="submit"]');
                     const originalText = submitBtn.textContent;
                     submitBtn.disabled = true;
