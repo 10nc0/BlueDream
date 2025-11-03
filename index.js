@@ -2493,6 +2493,20 @@ app.post('/api/auth/register/public', async (req, res) => {
         if (password.length < 8) {
             return res.status(400).json({ error: 'Password must be at least 8 characters' });
         }
+        
+        // Normalize email to lowercase for case-insensitive uniqueness
+        const normalizedEmail = email.toLowerCase().trim();
+        
+        // CRITICAL: Email uniqueness gatefencing - check BEFORE any writes
+        // Read-Check-Bounce pattern to enforce one email = one tenant globally
+        const emailCheck = await pool.query(
+            'SELECT tenant_id FROM core.user_email_to_tenant WHERE LOWER(email) = $1',
+            [normalizedEmail]
+        );
+        if (emailCheck.rows.length > 0) {
+            console.log(`[${getTimestamp()}] 🚫 Signup blocked (PUBLIC) - Email already exists in tenant ${emailCheck.rows[0].tenant_id}`);
+            return res.status(409).json({ error: 'Email already registered' });
+        }
 
         // Check if this is the first user (Genesis Admin) BEFORE rate limits
         const tenantCountResult = await pool.query('SELECT COUNT(*) as count FROM core.tenant_catalog');
@@ -2528,7 +2542,7 @@ app.post('/api/auth/register/public', async (req, res) => {
             INSERT INTO ${schemaName}.users (email, password_hash, role, tenant_id, is_genesis_admin)
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id, email, role, tenant_id, is_genesis_admin
-        `, [email, passwordHash, isGenesisAdmin ? 'dev' : 'admin', tenantId, isGenesisAdmin]);
+        `, [normalizedEmail, passwordHash, isGenesisAdmin ? 'dev' : 'admin', tenantId, isGenesisAdmin]);
 
         const newUser = userResult.rows[0];
 
@@ -2536,12 +2550,8 @@ app.post('/api/auth/register/public', async (req, res) => {
         await pool.query(`
             INSERT INTO core.user_email_to_tenant (email, tenant_id, tenant_schema, user_id)
             VALUES ($1, $2, $3, $4)
-            ON CONFLICT (email) DO UPDATE SET
-                tenant_id = EXCLUDED.tenant_id,
-                tenant_schema = EXCLUDED.tenant_schema,
-                user_id = EXCLUDED.user_id,
-                updated_at = NOW()
-        `, [email, tenantId, schemaName, newUser.id]);
+            ON CONFLICT (email) DO NOTHING
+        `, [normalizedEmail, tenantId, schemaName, newUser.id]);
 
         // Generate JWT tokens
         const accessToken = authService.signAccessToken(
