@@ -9,6 +9,19 @@ class TenantManager {
         try {
             // Core schema initialization - safe to run multiple times
             await client.query(`
+                CREATE TABLE IF NOT EXISTS core.tenant_catalog (
+                    id SERIAL PRIMARY KEY,
+                    tenant_schema TEXT NOT NULL UNIQUE,
+                    genesis_user_id INTEGER NOT NULL,
+                    status TEXT DEFAULT 'active',
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            `).catch(err => {
+                // Ignore duplicate table errors on restart
+                if (err.code !== '23505') throw err;
+            });
+            
+            await client.query(`
                 CREATE TABLE IF NOT EXISTS core.invite_tokens (
                     id SERIAL PRIMARY KEY,
                     token TEXT UNIQUE NOT NULL,
