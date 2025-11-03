@@ -1,16 +1,20 @@
 const authService = require('./auth-service');
 
 /**
- * CRITICAL: Tenant Context Middleware with Proper Connection Isolation
+ * CRITICAL: Tenant Context Middleware for Transaction Mode
  * 
  * This middleware ensures complete tenant isolation by:
- * 1. Acquiring a DEDICATED client from the pool for each request
- * 2. Using SET LOCAL search_path inside a transaction (connection-scoped)
- * 3. Storing the client in req.dbClient for use by all route handlers
- * 4. Releasing the client only after the response is complete
+ * 1. Acquiring a SHORT-LIVED client to fetch tenant context
+ * 2. Storing tenant context (tenantSchema) in req.tenantContext
+ * 3. Releasing the client immediately (no holding for entire request)
+ * 4. Route handlers use pool.query() with explicit ${tenantSchema}.table_name prefixes
  * 
- * This prevents the critical bug where pooled connections leak search_path
- * settings between different tenants' requests.
+ * TRANSACTION MODE: We do NOT use SET search_path (not supported in pool_mode=transaction)
+ * All routes must use explicit ${tenantSchema}.table_name prefixes for isolation
+ * This allows scaling to 10,000+ concurrent connections vs 3-10 in Session mode
+ * 
+ * ARCHITECTURE: No client is held for the request lifecycle to prevent pool exhaustion.
+ * Under concurrent load, holding clients blocked downstream queries from acquiring new ones.
  */
 async function setTenantContext(req, res, next) {
     const pool = req.app.locals.pool;
@@ -20,40 +24,8 @@ async function setTenantContext(req, res, next) {
         return res.status(500).json({ error: 'Database connection error' });
     }
 
-    // Acquire a dedicated client from the pool for this request
+    // Acquire client temporarily, release immediately after fetching context
     const client = await pool.connect();
-    
-    // CRITICAL: Store client IMMEDIATELY to ensure cleanup always releases it
-    req.dbClient = client;
-    
-    // Guard against double-cleanup (MUST be declared before any async work)
-    let cleanupCalled = false;
-    
-    // Attach cleanup EARLY, before any async work or early returns
-    const cleanup = async () => {
-        if (cleanupCalled) return; // Prevent double-cleanup
-        cleanupCalled = true;
-        
-        // Capture client reference immediately to avoid race conditions
-        const dbClient = req.dbClient;
-        req.dbClient = null;
-        
-        if (!dbClient) return; // Already cleaned up
-        
-        try {
-            // Reset search_path to default before releasing (prevents schema leaks)
-            await dbClient.query('RESET search_path');
-        } catch (err) {
-            console.error('❌ Failed to reset search_path:', err.message);
-        } finally {
-            // Always release, even if reset fails
-            dbClient.release();
-        }
-    };
-    
-    // Attach ONCE to prevent double-firing
-    res.once('finish', cleanup);
-    res.once('close', cleanup);
     
     try {
         let userId = null;
@@ -83,8 +55,8 @@ async function setTenantContext(req, res, next) {
         
         // If no user, continue without tenant context (will be caught by requireAuth)
         if (!userId || !userEmail) {
+            client.release();
             req.tenantContext = null;
-            // Client will be released by cleanup on 'finish'
             return next();
         }
         
@@ -95,6 +67,7 @@ async function setTenantContext(req, res, next) {
         );
         
         if (mappingResult.rows.length === 0) {
+            client.release();
             if (!res.headersSent) {
                 return res.status(401).json({ error: 'User tenant mapping not found' });
             }
@@ -112,7 +85,7 @@ async function setTenantContext(req, res, next) {
         );
         
         if (userResult.rows.length === 0) {
-            // Client will be released by cleanup on 'finish'
+            client.release();
             if (!res.headersSent) {
                 return res.status(401).json({ error: 'User not found' });
             }
@@ -120,6 +93,9 @@ async function setTenantContext(req, res, next) {
         }
         
         const user = userResult.rows[0];
+        
+        // CRITICAL: Release client immediately after fetching context
+        client.release();
         
         // Store tenant context in request (NO tenant_id for non-dev users)
         req.tenantContext = {
@@ -129,19 +105,19 @@ async function setTenantContext(req, res, next) {
             isGenesisAdmin: user.is_genesis_admin
         };
         
-        // Set search_path based on role hierarchy (connection-scoped, no transaction)
+        // TRANSACTION MODE: Store tenant context without SET search_path
+        // All queries must use explicit ${tenantSchema}.table_name prefixes
         if (user.role === 'dev') {
             // Dev role: Global access - can query all schemas
-            // BUT still need search_path set to their tenant schema for INSERT/UPDATE operations
-            await client.query(`SET search_path TO ${tenant_schema}, public`);
+            // Uses explicit schema prefixes in queries for multi-tenant access
             req.tenantContext.globalAccess = true;
             // Only dev users get to know about tenant IDs
             req.tenantContext.tenantId = tenant_id;
             req.tenantContext.tenantSchema = tenant_schema;
-            console.log(`🔧 Dev user ${user.email} - Global database access (default schema: ${tenant_schema})`);
+            console.log(`🔧 Dev user ${user.email} - Global database access (tenant: ${tenant_schema})`);
         } else if (tenant_id && tenant_schema) {
             // Admin/write-only/read-only: Restrict to their tenant schema
-            await client.query(`SET search_path TO ${tenant_schema}, public`);
+            // Routes will use ${tenantSchema}.table_name for isolation
             req.tenantContext.globalAccess = false;
             // Store tenant_id for SERVER-SIDE use (fractal ID generation, routing)
             // sanitizeForRole() will strip it from API responses to prevent horizontal awareness
@@ -150,7 +126,6 @@ async function setTenantContext(req, res, next) {
             console.log(`🔒 User ${user.email} - Isolated to ${tenant_schema}`);
         } else {
             // User without tenant (shouldn't happen for non-dev users)
-            // Client will be released by cleanup on 'finish'
             if (!res.headersSent) {
                 return res.status(403).json({ error: 'No tenant assigned to user' });
             }
@@ -160,7 +135,8 @@ async function setTenantContext(req, res, next) {
         next();
     } catch (error) {
         console.error('❌ Tenant middleware error:', error);
-        // Do NOT manually release client - cleanup will handle it on 'finish'
+        // CRITICAL: Always release client on error
+        client.release();
         if (!res.headersSent) {
             res.status(500).json({ error: 'Tenant context error' });
         }

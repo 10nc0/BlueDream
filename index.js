@@ -55,13 +55,22 @@ if (!NYANBOOK_LEDGER_WEBHOOK) {
     console.error('   Book creation will fail without Output #01 webhook configured.');
 }
 
+// TRANSACTION MODE: Append pool_mode=transaction to DATABASE_URL for scalability
+// This allows 10,000+ concurrent connections (vs 3-10 in Session mode)
+// Trade-off: Cannot use SET search_path (must use explicit schema prefixes)
+const databaseUrl = process.env.DATABASE_URL;
+const poolModeParam = 'pool_mode=transaction';
+const connectionString = databaseUrl?.includes('?')
+    ? `${databaseUrl}&${poolModeParam}`  // Has existing params, append with &
+    : `${databaseUrl}?${poolModeParam}`;  // No params yet, start with ?
+
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL?.includes('localhost') ? false : { 
+    connectionString,
+    ssl: databaseUrl?.includes('localhost') ? false : { 
         rejectUnauthorized: false
     },
-    max: 3, // CRITICAL: Supabase Session mode has very low limits (5-10 total)
-    min: 1,
+    max: 20, // Transaction Mode supports 10,000+ connections - using 20 for production workload
+    min: 2,
     connectionTimeoutMillis: 30000, // 30s for cold starts
     idleTimeoutMillis: 30000, // Release idle connections after 30s
     statement_timeout: 30000,
@@ -1235,6 +1244,9 @@ function requireRole(...allowedRoles) {
         
         const { tenant_schema } = mappingResult.rows[0];
         
+        // TRANSACTION MODE: Store tenant schema for route handlers to use explicit prefixes
+        req.tenantSchema = tenant_schema;
+        
         // Query user role from tenant-scoped table
         const result = await pool.query(
             `SELECT role FROM ${tenant_schema}.users WHERE id = $1`,
@@ -2386,6 +2398,7 @@ app.post('/api/twilio/webhook', async (req, res) => {
 // Get all active sessions (admin only) with filtering and sorting
 app.get('/api/sessions', requireRole('admin'), async (req, res) => {
     try {
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const { userId, sortBy = 'login_time', sortOrder = 'desc', filterDevice, filterBrowser, filterLocation } = req.query;
         
         let query = `
@@ -2394,8 +2407,8 @@ app.get('/api/sessions', requireRole('admin'), async (req, res) => {
                 s.device_type, s.browser, s.os, s.location, s.login_time, s.last_activity,
                 s.is_active,
                 u.email, u.phone
-            FROM active_sessions s
-            LEFT JOIN users u ON s.user_id = u.id
+            FROM ${tenantSchema}.active_sessions s
+            LEFT JOIN ${tenantSchema}.users u ON s.user_id = u.id
             WHERE 1=1
         `;
         const params = [];
@@ -2448,10 +2461,11 @@ app.get('/api/sessions', requireRole('admin'), async (req, res) => {
 app.delete('/api/sessions/:id', requireRole('admin'), async (req, res) => {
     try {
         const { id } = req.params;
+        const tenantSchema = req.tenantSchema;
         
         // Get session details before deletion for audit log
         const sessionResult = await pool.query(`
-            SELECT user_id, session_id FROM active_sessions WHERE id = $1
+            SELECT user_id, session_id FROM ${tenantSchema}.active_sessions WHERE id = $1
         `, [id]);
         
         if (sessionResult.rows.length === 0) {
@@ -2462,10 +2476,10 @@ app.delete('/api/sessions/:id', requireRole('admin'), async (req, res) => {
         
         // Mark session as inactive
         await pool.query(`
-            UPDATE active_sessions SET is_active = FALSE WHERE id = $1
+            UPDATE ${tenantSchema}.active_sessions SET is_active = FALSE WHERE id = $1
         `, [id]);
         
-        // Destroy the actual session from sessions table
+        // Destroy the actual session from sessions table (public schema)
         await pool.query(`
             DELETE FROM sessions WHERE sid = $1
         `, [session.session_id]);
@@ -2487,17 +2501,18 @@ app.delete('/api/sessions/:id', requireRole('admin'), async (req, res) => {
 app.post('/api/sessions/revoke-all', requireRole('admin'), async (req, res) => {
     try {
         const { userId } = req.body; // Optional: revoke all for specific user
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         
         let sessionQuery;
         let params = [];
         
         if (userId) {
             // Revoke all sessions for specific user
-            sessionQuery = 'SELECT session_id FROM active_sessions WHERE user_id = $1';
+            sessionQuery = `SELECT session_id FROM ${tenantSchema}.active_sessions WHERE user_id = $1`;
             params = [userId];
         } else {
             // Revoke ALL sessions for ALL users (except current session)
-            sessionQuery = 'SELECT session_id FROM active_sessions WHERE session_id != $1';
+            sessionQuery = `SELECT session_id FROM ${tenantSchema}.active_sessions WHERE session_id != $1`;
             params = [req.sessionID];
         }
         
@@ -2511,11 +2526,11 @@ app.post('/api/sessions/revoke-all', requireRole('admin'), async (req, res) => {
         // Mark all as inactive
         if (userId) {
             await pool.query(`
-                UPDATE active_sessions SET is_active = FALSE WHERE user_id = $1
+                UPDATE ${tenantSchema}.active_sessions SET is_active = FALSE WHERE user_id = $1
             `, [userId]);
         } else {
             await pool.query(`
-                UPDATE active_sessions SET is_active = FALSE WHERE session_id != $1
+                UPDATE ${tenantSchema}.active_sessions SET is_active = FALSE WHERE session_id != $1
             `, [req.sessionID]);
         }
         
@@ -2687,6 +2702,7 @@ app.get('/api/dev/webhook', requireAuth, requireRole('admin'), async (req, res) 
 // Set global Discord webhook (admin only)
 app.post('/api/dev/webhook', requireAuth, requireRole('admin'), async (req, res) => {
     try {
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const { webhook_url } = req.body;
         
         // Validate webhook URL
@@ -2704,7 +2720,7 @@ app.post('/api/dev/webhook', requireAuth, requireRole('admin'), async (req, res)
         if (success) {
             // Log admin action
             await pool.query(`
-                INSERT INTO audit_logs (actor, action, target, details, ip_address)
+                INSERT INTO ${tenantSchema}.audit_logs (actor, action, target, details, ip_address)
                 VALUES ($1, $2, $3, $4, $5)
             `, [
                 req.userEmail || `user_${req.userId}`,
@@ -3084,13 +3100,14 @@ app.get('/api/sessions', requireRole('admin'), async (req, res) => {
 // Get audit logs (admin only)
 app.get('/api/audit-logs', requireRole('admin'), async (req, res) => {
     try {
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const { limit = 100, offset = 0, action_type, target_type } = req.query;
         
         let query = `
             SELECT 
                 id, timestamp, actor_email, action_type, target_type, 
                 target_id, target_email, details, ip_address
-            FROM audit_logs
+            FROM ${tenantSchema}.audit_logs
         `;
         
         const conditions = [];
@@ -3298,6 +3315,7 @@ app.get('/api/books', requireAuth, async (req, res) => {
 app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
     try {
         const client = req.dbClient || pool;
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const userRole = req.tenantContext?.userRole || 'read-only';
         const tenantId = req.tenantContext?.tenantId;
         const isGenesisAdmin = req.tenantContext?.isGenesisAdmin || false;
@@ -3342,7 +3360,7 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         const finalContactInfo = contactInfo || (inputPlatform === 'whatsapp' ? 'join baby-ability' : null);
         
         const result = await client.query(
-            `INSERT INTO books (name, input_platform, output_platform, input_credentials, output_credentials, output_01_url, output_0n_url, contact_info, tags, status, archived, created_by_admin_id)
+            `INSERT INTO ${tenantSchema}.books (name, input_platform, output_platform, input_credentials, output_credentials, output_01_url, output_0n_url, contact_info, tags, status, archived, created_by_admin_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
             [name, inputPlatform, 'discord', {}, outputCredentials, output01Url, output0nUrl, finalContactInfo, tags || [], 'inactive', false, createdByAdminId]
         );
@@ -3355,7 +3373,7 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         
         // Update book with fractalized ID
         await client.query(
-            `UPDATE books SET fractal_id = $1 WHERE id = $2`,
+            `UPDATE ${tenantSchema}.books SET fractal_id = $1 WHERE id = $2`,
             [generatedFractalId, book.id]
         );
         
@@ -3371,13 +3389,13 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
             
             // Store join code in phone_to_book (phone_number=NULL until activated)
             await client.query(`
-                INSERT INTO phone_to_book (phone_number, book_id, join_code)
+                INSERT INTO ${tenantSchema}.phone_to_book (phone_number, book_id, join_code)
                 VALUES (NULL, $1, $2)
             `, [book.id, joinCode]);
             
             // Update contact_info with unique join code
             await client.query(`
-                UPDATE books 
+                UPDATE ${tenantSchema}.books 
                 SET contact_info = $1 
                 WHERE id = $2
             `, [`join baby-ability ${joinCode}`, book.id]);
@@ -3389,7 +3407,6 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         // REGISTRY INSERT: Add book to centralized global registry for O(1) lookups
         // This eliminates N-schema loops (26 queries → 1 query per WhatsApp message)
         const tenantEmail = req.tenantContext.userEmail;
-        const tenantSchema = req.tenantContext.tenantSchema;
         
         // Prepare outpipes array from output_credentials webhooks
         const outpipesUser = outputCredentials?.webhooks?.map(w => ({
@@ -3468,7 +3485,7 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
                 }
                 
                 await client.query(
-                    `UPDATE books 
+                    `UPDATE ${tenantSchema}.books 
                      SET output_credentials = output_credentials || $1::jsonb
                      WHERE id = $2`,
                     [JSON.stringify(outputDestinations), book.id]
@@ -3534,7 +3551,7 @@ app.put('/api/books/:id', requireAuth, setTenantContext, requireRole('admin', 'w
         if (userOutputUrl !== undefined || (outputCredentials && outputCredentials.webhooks)) {
             // Check if webhook URL is actually changing
             const currentBook = await client.query(
-                'SELECT output_0n_url, output_credentials FROM books WHERE fractal_id = $1',
+                `SELECT output_0n_url, output_credentials FROM ${tenantSchema}.books WHERE fractal_id = $1`,
                 [id]
             );
             
@@ -3621,7 +3638,7 @@ app.put('/api/books/:id', requireAuth, setTenantContext, requireRole('admin', 'w
         values.push(id); // fractal_id at end
         
         const result = await client.query(
-            `UPDATE books 
+            `UPDATE ${tenantSchema}.books 
              SET ${updates.join(', ')}
              WHERE fractal_id = $${paramCount} RETURNING *`,
             values
@@ -3650,7 +3667,7 @@ app.delete('/api/books/:id', requireAuth, setTenantContext, requireRole('admin')
         // SECURITY: Verify book belongs to user's tenant using fractal_id
         // CRITICAL: Get webhook URLs BEFORE archiving so we can delete them
         const bookResult = await client.query(
-            `SELECT id, fractal_id, output_01_url, output_0n_url FROM books WHERE fractal_id = $1`,
+            `SELECT id, fractal_id, output_01_url, output_0n_url FROM ${tenantSchema}.books WHERE fractal_id = $1`,
             [id]
         );
         
@@ -3692,7 +3709,7 @@ app.delete('/api/books/:id', requireAuth, setTenantContext, requireRole('admin')
         // SOFT DELETE: Set archived=true and status='archived' (preserves all data)
         // Note: updated_at will automatically track when the archive happened
         const result = await client.query(`
-            UPDATE books 
+            UPDATE ${tenantSchema}.books 
             SET archived = true, status = 'archived', updated_at = NOW() 
             WHERE fractal_id = $1 
             RETURNING *
@@ -3725,6 +3742,7 @@ app.delete('/api/books/:id', requireAuth, setTenantContext, requireRole('admin')
 // Archive book (soft delete - keeps all message history)
 app.post('/api/books/:id/archive', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
     try {
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const { id } = req.params;
         
         // Prevent archiving the default active bot
@@ -3734,7 +3752,7 @@ app.post('/api/books/:id/archive', requireAuth, setTenantContext, requireRole('a
             });
         }
         
-        await pool.query('UPDATE books SET archived = true, status = $1 WHERE id = $2', ['archived', id]);
+        await pool.query(`UPDATE ${tenantSchema}.books SET archived = true, status = $1 WHERE id = $2`, ['archived', id]);
         
         logAudit(pool, req, 'ARCHIVE', 'BOT', id, null, {
             message: 'Book archived - message history preserved'
@@ -3749,8 +3767,9 @@ app.post('/api/books/:id/archive', requireAuth, setTenantContext, requireRole('a
 // Unarchive book (restore archived bot)
 app.post('/api/books/:id/unarchive', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
     try {
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const { id } = req.params;
-        await pool.query('UPDATE books SET archived = false, status = $1 WHERE id = $2', ['inactive', id]);
+        await pool.query(`UPDATE ${tenantSchema}.books SET archived = false, status = $1 WHERE id = $2`, ['inactive', id]);
         
         logAudit(pool, req, 'UNARCHIVE', 'BOT', id, null, {
             message: 'Book unarchive and restored'
@@ -3790,11 +3809,11 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
-            await client.query(`SET LOCAL search_path TO ${tenantSchema}`);
+            // TRANSACTION MODE: Use explicit schema prefix instead of SET LOCAL search_path
             
             // Find book by fractal_id
             const bookResult = await client.query(
-                'SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM books WHERE fractal_id = $1',
+                `SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM ${tenantSchema}.books WHERE fractal_id = $1`,
                 [fractalIdParam]
             );
             
@@ -3931,6 +3950,7 @@ const metadataExtractor = new MetadataExtractor();
 // Create a drop (link metadata to Discord message)
 app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
     try {
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const { book_id, discord_message_id, metadata_text } = req.body;
         const client = req.dbClient || pool;
         
@@ -3942,7 +3962,7 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
         
         // Verify book belongs to user's tenant
         const bookResult = await client.query(
-            'SELECT id FROM books WHERE fractal_id = $1',
+            `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
             [book_id]
         );
         
@@ -3954,7 +3974,7 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
         
         // Check if drop already exists to APPEND text instead of replacing
         const existingDrop = await client.query(
-            'SELECT * FROM drops WHERE book_id = $1 AND discord_message_id = $2',
+            `SELECT * FROM ${tenantSchema}.drops WHERE book_id = $1 AND discord_message_id = $2`,
             [internalBookId, discord_message_id]
         );
         
@@ -3971,7 +3991,7 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
             
             // Convert JavaScript arrays to PostgreSQL arrays using ARRAY[]::text[]
             dropResult = await client.query(`
-                UPDATE drops
+                UPDATE ${tenantSchema}.drops
                 SET metadata_text = $1,
                     extracted_tags = $2::text[],
                     extracted_dates = $3::text[],
@@ -3986,7 +4006,7 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
             
             // Convert JavaScript arrays to PostgreSQL arrays using ARRAY[]::text[]
             dropResult = await client.query(`
-                INSERT INTO drops (book_id, discord_message_id, metadata_text, extracted_tags, extracted_dates)
+                INSERT INTO ${tenantSchema}.drops (book_id, discord_message_id, metadata_text, extracted_tags, extracted_dates)
                 VALUES ($1, $2, $3, $4::text[], $5::text[])
                 RETURNING *
             `, [internalBookId, discord_message_id, metadata_text, extracted.tags, extracted.dates]);
@@ -4012,12 +4032,13 @@ app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
 // Get all drops for a book
 app.get('/api/drops/:book_id', requireAuth, setTenantContext, async (req, res) => {
     try {
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const { book_id } = req.params;
         const client = req.dbClient || pool;
         
         // Verify book belongs to user's tenant
         const bookResult = await client.query(
-            'SELECT id FROM books WHERE fractal_id = $1',
+            `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
             [book_id]
         );
         
@@ -4029,7 +4050,7 @@ app.get('/api/drops/:book_id', requireAuth, setTenantContext, async (req, res) =
         
         // Fetch all drops for this book
         const dropsResult = await client.query(
-            'SELECT * FROM drops WHERE book_id = $1 ORDER BY created_at DESC',
+            `SELECT * FROM ${tenantSchema}.drops WHERE book_id = $1 ORDER BY created_at DESC`,
             [internalBookId]
         );
         
@@ -4043,6 +4064,7 @@ app.get('/api/drops/:book_id', requireAuth, setTenantContext, async (req, res) =
 // Delete a specific tag from a message's drop
 app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => {
     try {
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const { book_id, discord_message_id, tag } = req.body;
         const client = req.dbClient || pool;
         
@@ -4057,7 +4079,7 @@ app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => 
         
         // Verify book belongs to user's tenant
         const bookResult = await client.query(
-            'SELECT id FROM books WHERE fractal_id = $1',
+            `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
             [book_id]
         );
         
@@ -4077,7 +4099,7 @@ app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => 
         const escapedTag = tag.replace(/[.+*?[\](){}|\\^$]/g, '\\$&');
         
         const dropResult = await client.query(`
-            UPDATE drops
+            UPDATE ${tenantSchema}.drops
             SET extracted_tags = array_remove(extracted_tags, $1),
                 metadata_text = TRIM(
                     REGEXP_REPLACE(
@@ -4120,6 +4142,7 @@ app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => 
 // Delete a specific date from a message's drop
 app.delete('/api/drops/date', requireAuth, setTenantContext, async (req, res) => {
     try {
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const { book_id, discord_message_id, date } = req.body;
         const client = req.dbClient || pool;
         
@@ -4134,7 +4157,7 @@ app.delete('/api/drops/date', requireAuth, setTenantContext, async (req, res) =>
         
         // Verify book belongs to user's tenant
         const bookResult = await client.query(
-            'SELECT id FROM books WHERE fractal_id = $1',
+            `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
             [book_id]
         );
         
@@ -4154,7 +4177,7 @@ app.delete('/api/drops/date', requireAuth, setTenantContext, async (req, res) =>
         const escapedDate = date.replace(/[.+*?[\](){}|\\^$]/g, '\\$&');
         
         const dropResult = await client.query(`
-            UPDATE drops
+            UPDATE ${tenantSchema}.drops
             SET extracted_dates = array_remove(extracted_dates, $1),
                 metadata_text = TRIM(
                     REGEXP_REPLACE(
@@ -4193,6 +4216,7 @@ app.delete('/api/drops/date', requireAuth, setTenantContext, async (req, res) =>
 // Search drops using PostgreSQL full-text search
 app.get('/api/drops/search/:book_id', requireAuth, setTenantContext, async (req, res) => {
     try {
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const { book_id } = req.params;
         const { query } = req.query;
         const client = req.dbClient || pool;
@@ -4203,7 +4227,7 @@ app.get('/api/drops/search/:book_id', requireAuth, setTenantContext, async (req,
         
         // Verify book belongs to user's tenant
         const bookResult = await client.query(
-            'SELECT id FROM books WHERE fractal_id = $1',
+            `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
             [book_id]
         );
         
@@ -4216,7 +4240,7 @@ app.get('/api/drops/search/:book_id', requireAuth, setTenantContext, async (req,
         // PostgreSQL full-text search (zero-cost, blazing fast)
         const searchResult = await client.query(`
             SELECT *, ts_rank(search_vector, plainto_tsquery('english', $1)) as rank
-            FROM drops
+            FROM ${tenantSchema}.drops
             WHERE book_id = $2 AND search_vector @@ plainto_tsquery('english', $1)
             ORDER BY rank DESC, created_at DESC
             LIMIT 100
@@ -4250,8 +4274,9 @@ const exportBookHandler = async (req, res) => {
         const client = req.dbClient || pool;
         
         // Verify book access
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const bookResult = await client.query(
-            'SELECT id, name, output_credentials FROM books WHERE fractal_id = $1',
+            `SELECT id, name, output_credentials FROM ${tenantSchema}.books WHERE fractal_id = $1`,
             [book_id]
         );
         
@@ -4313,7 +4338,7 @@ const exportBookHandler = async (req, res) => {
         
         // Fetch drops from PostgreSQL
         const dropsResult = await client.query(
-            'SELECT * FROM drops WHERE book_id = $1 ORDER BY created_at DESC',
+            `SELECT * FROM ${tenantSchema}.drops WHERE book_id = $1 ORDER BY created_at DESC`,
             [book.id]
         );
         
@@ -4447,8 +4472,9 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
         }
         
         // Get book with thread info and creation timestamp
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const bookResult = await client.query(
-            'SELECT id, name, output_credentials, created_at FROM books WHERE fractal_id = $1',
+            `SELECT id, name, output_credentials, created_at FROM ${tenantSchema}.books WHERE fractal_id = $1`,
             [id]
         );
         
@@ -4841,7 +4867,7 @@ app.get('/api/analytics/daily', requireAuth, async (req, res) => {
 });
 
 // Update analytics (called periodically or on message insert)
-async function updateAnalytics(bookId) {
+async function updateAnalytics(bookId, tenantSchema) {
     try {
         const today = new Date().toISOString().split('T')[0];
         
@@ -4849,12 +4875,12 @@ async function updateAnalytics(bookId) {
             SELECT 
                 COUNT(*) as total,
                 COUNT(*) FILTER (WHERE discord_status = 'failed') as failed
-            FROM messages
+            FROM ${tenantSchema}.messages
             WHERE book_id = $1 AND DATE(timestamp) = $2
         `, [bookId, today]);
         
         await pool.query(`
-            INSERT INTO message_analytics (date, book_id, total_messages, failed_messages)
+            INSERT INTO ${tenantSchema}.message_analytics (date, book_id, total_messages, failed_messages)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (date, book_id)
             DO UPDATE SET
@@ -4884,6 +4910,7 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
     try {
         const { id } = req.params; // fractal_id
         const client = req.dbClient || pool;
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const tenantId = req.tenantContext?.tenantId;
         
         if (!tenantId) {
@@ -4892,7 +4919,7 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
         
         // Get book by fractal_id
         const book = await client.query(
-            `SELECT id, name, output_01_url, output_credentials, tenant_id FROM books WHERE fractal_id = $1`,
+            `SELECT id, name, output_01_url, output_credentials, tenant_id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
             [id]
         );
         
@@ -4945,7 +4972,7 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
         };
         
         await client.query(
-            `UPDATE books 
+            `UPDATE ${tenantSchema}.books 
              SET output_credentials = $1::jsonb
              WHERE fractal_id = $2`,
             [JSON.stringify(updatedCredentials), id]
