@@ -3028,32 +3028,10 @@
                         // Reload books to show the new one
                         await loadBooks();
                         
-                        // 2-MESSAGE FLOW: Show activation modal instead of redirecting
-                        console.log('📋 Book creation debug:', { 
-                            platform, 
-                            bookPlatform: book.input_platform,
-                            contactInfo: book.contact_info
-                        });
-                        
+                        // 2-MESSAGE FLOW: Show activation modal for WhatsApp books
                         if (book.input_platform === 'whatsapp' && book.contact_info) {
-                            console.log('📱 Showing 2-step activation modal for:', book.contact_info);
-                            
-                            // Extract join code from contact_info (e.g., "join baby-ability v20pc3-95bfd4" -> "v20pc3-95bfd4")
-                            const joinCode = book.contact_info.replace(/^join baby-ability\s+/i, '').trim();
-                            
-                            // Show activation modal
-                            document.getElementById('book-name-display').textContent = `📖 ${bookName}`;
-                            document.getElementById('book-fractal-id').textContent = book.fractal_id;
-                            document.getElementById('book-join-code').textContent = joinCode;
-                            
-                            // Hide form, show activation steps
-                            document.getElementById('book-form-section').style.display = 'none';
-                            document.getElementById('book-qr-section').style.display = 'block';
-                            
-                            // Open modal
-                            document.getElementById('createBookModal').classList.add('active');
-                            
-                            // Show success notification
+                            // Use dedicated function for consistent behavior
+                            showWhatsAppActivationModal(book.fractal_id);
                             showToast('✅ Book created! Follow the 2 steps to activate.', 'success');
                         } else {
                             // For non-WhatsApp books, generate QR as before
