@@ -225,7 +225,7 @@ app.use(session({
         pool,
         schemaName: 'public', // CRITICAL: Explicit schema prevents tenant_X.sessions targeting
         tableName: 'sessions',
-        createTableIfMissing: true,
+        createTableIfMissing: false, // Disabled: We manage schema in initializeDatabase()
         pruneSessionInterval: 60 * 15 // Cleanup expired sessions every 15 minutes
     }),
     secret: process.env.SESSION_SECRET || 'book-secret-key-change-in-production',
@@ -342,18 +342,44 @@ async function initializeDatabase() {
         
         // Create sessions table for express-session (global session store)
         // Note: connect-pg-simple expects column "expire" (singular), not "expires"
-        // We keep this for backwards compatibility and explicit control
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS public.sessions (
-                sid VARCHAR NOT NULL PRIMARY KEY,
-                sess JSON NOT NULL,
-                expire TIMESTAMP(6) NOT NULL
-            )
+        // Auto-fix: Check if table has wrong schema and repair it
+        const schemaCheck = await pool.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+              AND table_name = 'sessions' 
+              AND column_name = 'expire'
         `);
         
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_sessions_expire ON public.sessions(expire)
-        `);
+        // If table exists but doesn't have "expire" column, drop and recreate
+        if (schemaCheck.rows.length === 0) {
+            const tableExists = await pool.query(`
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                      AND table_name = 'sessions'
+                )
+            `);
+            
+            if (tableExists.rows[0].exists) {
+                console.log('⚠️  Sessions table has wrong schema, auto-fixing...');
+                await pool.query('DROP TABLE public.sessions CASCADE');
+            }
+            
+            await pool.query(`
+                CREATE TABLE public.sessions (
+                    sid VARCHAR NOT NULL PRIMARY KEY,
+                    sess JSON NOT NULL,
+                    expire TIMESTAMP(6) NOT NULL
+                )
+            `);
+            
+            await pool.query(`
+                CREATE INDEX idx_sessions_expire ON public.sessions(expire)
+            `);
+            
+            console.log('✅ Sessions table created with correct schema');
+        }
         
         // CENTRALIZED BOOK REGISTRY: Global substrate for O(1) join code lookups
         // Eliminates N-schema loops (26+ queries → 1 query per message)
