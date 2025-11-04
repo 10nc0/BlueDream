@@ -356,7 +356,7 @@ async function initializeDatabase() {
         `);
         
         // CENTRALIZED BOOK REGISTRY: Global substrate for O(1) join code lookups
-        // Eliminates N-schema loops (26+ queries → 1 query per WhatsApp message)
+        // Eliminates N-schema loops (26+ queries → 1 query per message)
         // Hierarchy: Tenant (email) → Book (join_code) → Message → Drops + Attachments
         await pool.query(`
             CREATE TABLE IF NOT EXISTS core.book_registry (
@@ -485,7 +485,7 @@ async function initializeDatabase() {
         }
         
         // MIGRATION: Backfill existing books into registry (DISABLED - causes pool exhaustion)
-        // Note: New books are automatically added to registry during WhatsApp activation
+        // Note: New books are automatically added to registry during Join Code activation
         // Existing books will be added to registry when they're first activated
         const BACKFILL_DISABLED = true;
         
@@ -1036,7 +1036,7 @@ async function getBookTenantSchema(fractalIdOrLegacyId) {
 function cleanupLegacySession() {
     const legacyPath = './.wwebjs_auth/session';
     if (fs.existsSync(legacyPath)) {
-        console.log('🧹 Cleaning up legacy WhatsApp session...');
+        console.log('🧹 Cleaning up legacy session...');
         fs.rmSync(legacyPath, { recursive: true, force: true });
         console.log('✅ Legacy session cleaned');
     }
@@ -1046,7 +1046,7 @@ cleanupLegacySession();
 
 // OLD initializeWhatsAppClient() function removed - replaced with per-book management
 // See book-level API endpoints below: POST /api/books/:id/start, DELETE /api/books/:id/stop, etc.
-// Each book now has its own independent WhatsApp session managed by WhatsAppClientManager
+// Each book now has its own independent message session managed by WhatsAppClientManager
 
 // ============ SESSION TRACKING SYSTEM ============
 
@@ -3435,7 +3435,7 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         
         book.fractal_id = generatedFractalId;
         
-        // Generate unique join code for WhatsApp books (sybil-proof activation)
+        // Generate unique join code for books (sybil-proof activation)
         let joinCode = null;
         if (inputPlatform === 'whatsapp') {
             // Format: "BOOKNAME-abc123" (6 hex chars = 24 bits entropy = 16.7M combinations)
@@ -3492,7 +3492,7 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
             tenantSchema,
             tenantEmail,
             null, // phone_number = NULL until activated
-            'pending', // status = pending until WhatsApp activation
+            'pending', // status = pending until Join Code authentication and activation
             inputPlatform,
             output01Url,
             JSON.stringify(outpipesUser)
@@ -3940,7 +3940,6 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
     }
 });
 
-// ============ BOT-LEVEL WHATSAPP MANAGEMENT ENDPOINTS ============
 // WhatsApp endpoints removed - Baileys library no longer used
 
 // Get archived books (with message history)
@@ -5187,7 +5186,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     } else {
         console.warn('⚠️  Hermes not ready, skipping auto-heal');
     }
-    console.log('✅ Multi-tenant WhatsApp Book ready');
+    console.log('✅ Multi-tenant NyanBook~ ready');
     
     // Start genesis counter (noisy constant for future security)
     // Tier 1: Cat breath (500ms constant)
