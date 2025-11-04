@@ -5741,6 +5741,84 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Copy sandbox code button (Step 1: join baby-ability)
+    const copySandboxCodeBtn = document.getElementById('copy-sandbox-code-btn');
+    if (copySandboxCodeBtn) {
+        copySandboxCodeBtn.addEventListener('click', function() {
+            const sandboxCode = 'join baby-ability';
+            const btn = this;
+            const originalText = btn.textContent;
+            
+            // Try modern clipboard API first, fallback to execCommand for compatibility
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(sandboxCode).then(() => {
+                    btn.textContent = '✓ Copied!';
+                    btn.style.background = 'rgba(34, 197, 94, 0.2)';
+                    btn.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+                    btn.style.color = '#22c55e';
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.background = '';
+                        btn.style.borderColor = '';
+                        btn.style.color = '';
+                    }, 1500);
+                }).catch(err => {
+                    console.error('Clipboard API failed:', err);
+                    fallbackCopyToClipboard(sandboxCode, btn, originalText);
+                });
+            } else {
+                // Fallback for HTTP and mobile webviews
+                fallbackCopyToClipboard(sandboxCode, btn, originalText);
+            }
+        });
+    }
+    
+    // Fallback copy function using textarea + execCommand
+    // iOS Safari and Android webviews require focus + setSelectionRange
+    function fallbackCopyToClipboard(text, btn, originalText) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.top = '0';
+        textarea.style.left = '0';
+        textarea.style.width = '1px';
+        textarea.style.height = '1px';
+        textarea.style.padding = '0';
+        textarea.style.border = 'none';
+        textarea.style.outline = 'none';
+        textarea.style.boxShadow = 'none';
+        textarea.style.background = 'transparent';
+        document.body.appendChild(textarea);
+        
+        // Critical for iOS Safari: focus before select
+        textarea.focus();
+        textarea.select();
+        textarea.setSelectionRange(0, text.length);
+        
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                btn.textContent = '✓ Copied!';
+                btn.style.background = 'rgba(34, 197, 94, 0.2)';
+                btn.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+                btn.style.color = '#22c55e';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = '';
+                    btn.style.borderColor = '';
+                    btn.style.color = '';
+                }, 1500);
+            } else {
+                alert('Failed to copy text. Please copy manually: ' + text);
+            }
+        } catch (err) {
+            console.error('Fallback copy failed:', err);
+            alert('Failed to copy text. Please copy manually: ' + text);
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    }
+    
     // Search and filter inputs
     const searchBox = document.getElementById('searchBox');
     if (searchBox) searchBox.addEventListener('input', debouncedFilterBots);
