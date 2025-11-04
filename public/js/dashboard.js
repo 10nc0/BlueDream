@@ -1486,7 +1486,7 @@
                                 ` : ''}
                             </div>
                         </div>
-                        <div style="background: rgba(15, 23, 42, 0.6); padding: 0.625rem; border-radius: 4px; border-left: 3px solid rgba(34, 197, 94, 0.4);">
+                        <div style="background: rgba(15, 23, 42, 0.6); padding: 0.625rem; border-radius: 4px;">
                             <div style="color: #94a3b8; font-size: 0.75rem; font-family: monospace;">Message: <span style="color: #22c55e; user-select: all;">${book.contact_info || 'join baby-ability'}</span></div>
                         </div>
                     </div>
@@ -1782,7 +1782,7 @@
                         </div>
                         ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
                         ${msg.embeds && msg.embeds.length > 0 ? msg.embeds.map(embed => `
-                            <div class="discord-embed" style="border-left: 4px solid ${embed.color ? '#' + embed.color.toString(16).padStart(6, '0') : '#5865F2'}; background: rgba(47, 49, 54, 0.6); border-radius: 4px; padding: 0.75rem; margin-top: 0.5rem; max-width: 520px;">
+                            <div class="discord-embed" style="background: rgba(47, 49, 54, 0.6); border-radius: 4px; padding: 0.75rem; margin-top: 0.5rem; max-width: 520px;">
                                 ${embed.title ? `<div class="embed-title" style="font-weight: 600; color: #00AFF4; margin-bottom: 0.5rem;">${escapeHtml(embed.title)}</div>` : ''}
                                 ${embed.description ? `<div class="embed-description" style="color: #DCDDDE; margin-bottom: 0.5rem; white-space: pre-wrap;">${escapeHtml(embed.description)}</div>` : ''}
                                 ${embed.fields && embed.fields.length > 0 ? `
