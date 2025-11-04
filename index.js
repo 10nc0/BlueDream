@@ -2893,7 +2893,8 @@ app.get('/api/dev/books', requireAuth, requireRole('dev'), async (req, res) => {
                         $2::text as tenant_schema,
                         $3::text as tenant_owner_email
                     FROM ${tenantSchema}.books b
-                    ORDER BY b.archived ASC, b.created_at DESC
+                    WHERE b.archived = false
+                    ORDER BY b.created_at DESC
                 `, [tenant.tenant_id, tenantSchema, ownerEmail]);
                 
                 allBooks.push(...booksResult.rows);

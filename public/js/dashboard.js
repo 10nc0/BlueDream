@@ -1228,8 +1228,18 @@
                 }
                 const data = await response.json();
                 console.log('📦 Books response:', data);
-                books = data.books || data || [];
-                console.log(`✅ Loaded ${books.length} books`);
+                const rawBooks = data.books || data || [];
+                
+                // DEDUPLICATION: Use fractal_id as unique key (handles multi-tenant dev admin view)
+                const uniqueBooksMap = new Map();
+                rawBooks.forEach(book => {
+                    if (book.fractal_id && !uniqueBooksMap.has(book.fractal_id)) {
+                        uniqueBooksMap.set(book.fractal_id, book);
+                    }
+                });
+                books = Array.from(uniqueBooksMap.values());
+                
+                console.log(`✅ Loaded ${books.length} unique books (${rawBooks.length} total from API)`);
                 filteredBooks = books;
                 renderBooks();
                 updatePlatformFilter();
@@ -1255,7 +1265,16 @@
             try {
                 const response = await authFetch('/api/books');
                 const data = await response.json();
-                books = data.books || data || [];
+                const rawBooks = data.books || data || [];
+                
+                // DEDUPLICATION: Use fractal_id as unique key (handles multi-tenant dev admin view)
+                const uniqueBooksMap = new Map();
+                rawBooks.forEach(book => {
+                    if (book.fractal_id && !uniqueBooksMap.has(book.fractal_id)) {
+                        uniqueBooksMap.set(book.fractal_id, book);
+                    }
+                });
+                books = Array.from(uniqueBooksMap.values());
                 filteredBooks = books;
                 renderBooks(true); // Skip detail render to preserve loaded media
             } catch (error) {
