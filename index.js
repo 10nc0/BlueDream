@@ -341,18 +341,18 @@ async function initializeDatabase() {
         // - public schema: Only sessions (express-session global store)
         
         // Create sessions table for express-session (global session store)
-        // Note: connect-pg-simple with schemaName: 'public' will auto-create this table
+        // Note: connect-pg-simple expects column "expire" (singular), not "expires"
         // We keep this for backwards compatibility and explicit control
         await pool.query(`
             CREATE TABLE IF NOT EXISTS public.sessions (
                 sid VARCHAR NOT NULL PRIMARY KEY,
                 sess JSON NOT NULL,
-                expires TIMESTAMP(6) NOT NULL
+                expire TIMESTAMP(6) NOT NULL
             )
         `);
         
         await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_sessions_expires ON public.sessions(expires)
+            CREATE INDEX IF NOT EXISTS idx_sessions_expire ON public.sessions(expire)
         `);
         
         // CENTRALIZED BOOK REGISTRY: Global substrate for O(1) join code lookups
