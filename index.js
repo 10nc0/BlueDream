@@ -2765,6 +2765,10 @@ app.post('/api/auth/register/public', async (req, res) => {
 });
 
 // Forgot password endpoints removed - use email-based auth for multi-tenant architecture
+// Redirect /forgot-password to 404 (prevent direct URL access to deleted page)
+app.get('/forgot-password.html', (req, res) => {
+    res.status(404).send('Not Found');
+});
 
 // ===========================
 // DEV PANEL API (Admin Role Only)
