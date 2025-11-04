@@ -3446,6 +3446,8 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         // For WhatsApp books, set default join code if not provided
         const finalContactInfo = contactInfo || (inputPlatform === 'whatsapp' ? 'join baby-ability' : null);
         
+        console.log(`📋 Book creation request: name="${name}", inputPlatform="${inputPlatform}", contactInfo="${contactInfo}"`);
+        
         const result = await client.query(
             `INSERT INTO ${tenantSchema}.books (name, input_platform, output_platform, input_credentials, output_credentials, output_01_url, output_0n_url, contact_info, tags, status, archived, created_by_admin_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
@@ -3468,17 +3470,29 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
         
         // Generate unique join code for books (sybil-proof activation)
         let joinCode = null;
+        console.log(`🔍 Checking join code generation: inputPlatform="${inputPlatform}", condition=${inputPlatform === 'whatsapp'}`);
         if (inputPlatform === 'whatsapp') {
             // Format: "BOOKNAME-abc123" (6 hex chars = 24 bits entropy = 16.7M combinations)
             const randomCode = crypto.randomBytes(3).toString('hex');
             const bookNameSlug = name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
             joinCode = `${bookNameSlug}-${randomCode}`;
             
-            // Store join code in phone_to_book (phone_number=NULL until activated)
-            await client.query(`
-                INSERT INTO ${tenantSchema}.phone_to_book (phone_number, book_id, join_code)
-                VALUES (NULL, $1, $2)
-            `, [book.id, joinCode]);
+            // LEGACY: Store join code in phone_to_book if table exists (backward compatibility)
+            // NOTE: Join-code-first routing now uses core.book_registry (O(1) lookups)
+            const phoneToBookExists = await client.query(`
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables 
+                    WHERE table_schema = $1 AND table_name = 'phone_to_book'
+                )
+            `, [tenantSchema]);
+            
+            if (phoneToBookExists.rows[0].exists) {
+                await client.query(`
+                    INSERT INTO ${tenantSchema}.phone_to_book (phone_number, book_id, join_code)
+                    VALUES (NULL, $1, $2)
+                `, [book.id, joinCode]);
+                console.log(`  📝 Stored join code in legacy phone_to_book table`);
+            }
             
             // Update contact_info with unique join code
             await client.query(`
