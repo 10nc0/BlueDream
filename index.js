@@ -4572,7 +4572,24 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
         }
         
         // Get book with thread info and creation timestamp
-        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+        // DEV ADMIN FIX: Use book registry to resolve cross-tenant access
+        let tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+        const isDev = req.tenantContext?.userRole === 'dev';
+        
+        // For dev users, check registry first to find the correct tenant
+        if (isDev) {
+            const registryLookup = await client.query(
+                `SELECT tenant_schema FROM core.book_registry WHERE fractal_id = $1 LIMIT 1`,
+                [id]
+            );
+            
+            if (registryLookup.rows.length > 0) {
+                const registryTenant = registryLookup.rows[0].tenant_schema;
+                console.log(`🔧 Dev user accessing book ${id} from ${registryTenant} (user tenant: ${tenantSchema})`);
+                tenantSchema = registryTenant;
+            }
+        }
+        
         const bookResult = await client.query(
             `SELECT id, name, output_credentials, created_at FROM ${tenantSchema}.books WHERE fractal_id = $1`,
             [id]
