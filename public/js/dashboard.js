@@ -5443,16 +5443,17 @@
             const day = String(now.getDate()).padStart(2, '0');
             const timeHours = now.getHours();
             const timeMinutes = String(now.getMinutes()).padStart(2, '0');
+            const timeSeconds = String(now.getSeconds()).padStart(2, '0');
             const ampm = timeHours >= 12 ? 'PM' : 'AM';
             const displayHours = timeHours % 12 || 12;
             
             // Default view: Two-line format (below cat)
             const currentTimeEl = document.getElementById('currentTime');
-            if (currentTimeEl) currentTimeEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}${ampm}`;
+            if (currentTimeEl) currentTimeEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
             
             // Compact view: Single-line with dash separator (before user info)
             const currentTimeCompactEl = document.getElementById('currentTimeCompact');
-            if (currentTimeCompactEl) currentTimeCompactEl.textContent = `${year}/${month}/${day} - ${displayHours}:${timeMinutes}${ampm}`;
+            if (currentTimeCompactEl) currentTimeCompactEl.textContent = `${year}/${month}/${day} - ${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
             
             // Update book count in compact indicators only
             const bookCountEl = document.getElementById('bookCountCompact');
