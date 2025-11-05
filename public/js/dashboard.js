@@ -1764,21 +1764,18 @@
                 
                 return `
                 <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml(searchableText)}" data-status="${msg.discord_status}" style="position: relative;">
-                    <div style="position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 8px; z-index: 10;">
+                    <div style="position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 6px; z-index: 10;">
                         ${msg.media_url ? `
-                            <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 4px; color: #60a5fa; text-decoration: none; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; line-height: 1;">
+                            <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 4px; color: #60a5fa; text-decoration: none; font-size: 0.9rem; transition: all 0.2s; flex-shrink: 0; line-height: 1;">
                                 📎
                             </a>
                         ` : ''}
-                        <button class="agent-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="🧿 Audit action & closure" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
-                            🧿
-                        </button>
-                        <button class="tag-add-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                        <button class="tag-add-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.9rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                             🏷️
                         </button>
-                        <label class="custom-checkbox-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="Select for export" style="position: relative; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; cursor: pointer; margin: 0; padding: 0; flex-shrink: 0; transition: all 0.2s; line-height: 1;">
+                        <label class="custom-checkbox-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="Select for export" style="position: relative; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.9rem; cursor: pointer; margin: 0; padding: 0; flex-shrink: 0; transition: all 0.2s; line-height: 1;">
                             <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-book-id="${bookId}" style="display: none;">
-                            <span class="checkbox-icon" style="font-size: 0.875rem; line-height: 1; pointer-events: none;">☐</span>
+                            <span class="checkbox-icon" style="font-size: 0.9rem; line-height: 1; pointer-events: none;">☐</span>
                         </label>
                     </div>
                     <div class="discord-avatar">
