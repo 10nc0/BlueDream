@@ -5343,6 +5343,17 @@ app.listen(PORT, '0.0.0.0', async () => {
         phiBreathe();
     });
     
+    // GRACEFUL SHUTDOWN: Save phi breathe count on exit
+    async function gracefulShutdown(signal) {
+        console.log(`\n💾 Received ${signal} - saving phi breathe count before shutdown...`);
+        await savePhiCounter();
+        console.log('✅ Phi breathe count saved. Goodbye!');
+        process.exit(0);
+    }
+    
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    
     // 3-DAY MEDIA PURGE: Clean up old media from buffer
     // Nyanbook Ledger has permanent copy, so buffer only needed for retry safety
     async function purgeOldMedia() {
