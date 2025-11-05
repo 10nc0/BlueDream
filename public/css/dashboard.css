@@ -3385,6 +3385,28 @@ body.desktop-mode .thumbs-zone {
         touch-action: manipulation;
     }
     
+    /* Optimize message header row for mobile */
+    .discord-header-row {
+        gap: 0.25rem;
+    }
+    
+    .discord-username {
+        font-size: 0.9rem;
+        max-width: 40%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .discord-timestamp {
+        font-size: 0.75rem;
+    }
+    
+    .jump-to-msg-btn {
+        font-size: 0.625rem;
+        padding: 0.125rem 0.3rem;
+        margin-left: 0.25rem !important;
+    }
+    
     /* Message images optimized for tap */
     .discord-media-preview img,
     .message img {
