@@ -5477,7 +5477,7 @@
         const hints = {
             'createBook': {
                 element: '.create-bot-btn',
-                text: 'Click here to connect two platforms (e.g., WhatsApp → Discord)',
+                text: 'Click here to initiate your Nyanbook~',
                 shown: false
             },
             'searchMessages': {
@@ -5503,7 +5503,7 @@
             hintEl.className = 'onboarding-hint';
             hintEl.innerHTML = `
                 ${hint.text}
-                <button class="close-hint" data-dismiss-hint('${hintKey}', this)">×</button>
+                <button class="close-hint" onclick="dismissHint('${hintKey}', this)">×</button>
             `;
             
             const rect = targetEl.getBoundingClientRect();
