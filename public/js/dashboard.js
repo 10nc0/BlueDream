@@ -1529,7 +1529,8 @@
                                 <option value="success">✓</option>
                                 <option value="failed">✗</option>
                             </select>
-                            <button id="export-selected-${book.fractal_id}" data-export-book="${book.fractal_id}" disabled style="padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;">📦 Export</button>
+                            <button id="download-selected-${book.fractal_id}" data-download-book="${book.fractal_id}" disabled style="padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;">⬇️ Download</button>
+                            <button id="tag-selected-${book.fractal_id}" data-tag-book="${book.fractal_id}" disabled style="padding: 0.375rem 0.75rem; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 0.375rem; color: #a855f7; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;">🏷️ Tag</button>
                         </div>
                         <!-- Search indicator (if active) -->
                         <div id="search-indicator-${book.fractal_id}" style="display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between; margin-bottom: 0.5rem; flex-shrink: 0;">
@@ -3786,8 +3787,8 @@
             }
         }
         
-        // Export book data (messages + drops) as ZIP
-        async function exportBookData(fractalId) {
+        // Download book data (messages + drops) as ZIP
+        async function downloadBookData(fractalId) {
             try {
                 const book = books.find(b => b.fractal_id === fractalId);
                 if (!book) {
@@ -3860,13 +3861,14 @@
             });
         }
         
-        // Update export button state based on selected messages
-        function updateExportButtonState(bookId) {
-            console.log(`🔄 updateExportButtonState called for book: ${bookId}`);
-            const exportBtn = document.querySelector(`[data-export-book="${bookId}"]`);
-            console.log(`🔍 Export button found:`, exportBtn ? 'YES' : 'NO');
-            if (!exportBtn) {
-                console.warn(`⚠️ Export button not found for book: ${bookId}`);
+        // Update bulk action buttons (Download & Tag) state based on selected messages
+        function updateBulkActionButtons(bookId) {
+            console.log(`🔄 updateBulkActionButtons called for book: ${bookId}`);
+            const downloadBtn = document.querySelector(`[data-download-book="${bookId}"]`);
+            const tagBtn = document.querySelector(`[data-tag-book="${bookId}"]`);
+            
+            if (!downloadBtn || !tagBtn) {
+                console.warn(`⚠️ Bulk action buttons not found for book: ${bookId}`);
                 return;
             }
             
@@ -3874,15 +3876,29 @@
             console.log(`📊 Selected count for ${bookId}: ${count}`);
             
             if (count > 0) {
-                exportBtn.textContent = `📦 Export (${count})`;
-                exportBtn.disabled = false;
-                exportBtn.style.opacity = '1';
-                console.log(`✅ Export button enabled with ${count} messages`);
+                // Enable Download button
+                downloadBtn.textContent = `⬇️ Download (${count})`;
+                downloadBtn.disabled = false;
+                downloadBtn.style.opacity = '1';
+                
+                // Enable Tag button
+                tagBtn.textContent = `🏷️ Tag (${count})`;
+                tagBtn.disabled = false;
+                tagBtn.style.opacity = '1';
+                
+                console.log(`✅ Bulk action buttons enabled with ${count} messages`);
             } else {
-                exportBtn.textContent = '📦 Export';
-                exportBtn.disabled = true;
-                exportBtn.style.opacity = '0.5';
-                console.log(`🔒 Export button disabled (no messages selected)`);
+                // Disable Download button
+                downloadBtn.textContent = '⬇️ Download';
+                downloadBtn.disabled = true;
+                downloadBtn.style.opacity = '0.5';
+                
+                // Disable Tag button
+                tagBtn.textContent = '🏷️ Tag';
+                tagBtn.disabled = true;
+                tagBtn.style.opacity = '0.5';
+                
+                console.log(`🔒 Bulk action buttons disabled (no messages selected)`);
             }
         }
         
@@ -5931,8 +5947,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log(`✗ Deselected message ${msgId} in book ${bookId} (total: ${selectedMessages[bookId].size})`);
             }
             
-            console.log('📋 Calling updateExportButtonState for book:', bookId);
-            updateExportButtonState(bookId);
+            console.log('📋 Calling updateBulkActionButtons for book:', bookId);
+            updateBulkActionButtons(bookId);
         }
         
         // Select all checkbox
@@ -5963,7 +5979,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log(`✗ Cleared all selections in book ${bookId}`);
             }
             
-            updateExportButtonState(bookId);
+            updateBulkActionButtons(bookId);
         }
     });
 });
@@ -6226,6 +6242,111 @@ function showTagInputDialog(messageId, bookId) {
     });
 }
 
+// Show bulk tag modal for multiple messages
+function showBulkTagModal(bookId) {
+    // Get selected message IDs
+    const selectedIds = selectedMessages[bookId] ? Array.from(selectedMessages[bookId]) : [];
+    
+    if (selectedIds.length === 0) {
+        showToast('❌ Please select messages to tag', 'error');
+        return;
+    }
+    
+    // Create modal overlay
+    const modal = document.createElement('div');
+    modal.className = 'tag-input-modal';
+    modal.innerHTML = `
+        <div class="tag-input-dialog">
+            <h3>🏷️ Bulk Tag ${selectedIds.length} Message${selectedIds.length > 1 ? 's' : ''}</h3>
+            <input type="text" id="bulk-tag-input" placeholder="#FromDad Christmas 2021" autocomplete="off">
+            <div class="tag-input-dialog-buttons">
+                <button class="cancel-btn" data-action="close-bulk-tag-dialog">Cancel</button>
+                <button class="save-btn" data-action="save-bulk-tag-dialog" data-book-id="${bookId}">Apply to All</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Focus input
+    const input = document.getElementById('bulk-tag-input');
+    if (input) input.focus();
+    
+    // Close on overlay click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal || e.target.hasAttribute('data-action') && e.target.getAttribute('data-action') === 'close-bulk-tag-dialog') {
+            modal.remove();
+        }
+    });
+    
+    // Save on button click
+    modal.addEventListener('click', async (e) => {
+        if (e.target.hasAttribute('data-action') && e.target.getAttribute('data-action') === 'save-bulk-tag-dialog') {
+            const metadataText = input.value.trim();
+            if (metadataText) {
+                showToast(`🏷️ Applying tags to ${selectedIds.length} message(s)...`, 'info');
+                
+                // Apply tags to all selected messages
+                let successCount = 0;
+                for (const messageId of selectedIds) {
+                    const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-book-id="${bookId}"]`);
+                    if (section) {
+                        try {
+                            await saveDrop(bookId, messageId, metadataText, section);
+                            successCount++;
+                        } catch (error) {
+                            console.error(`Failed to tag message ${messageId}:`, error);
+                        }
+                    }
+                }
+                
+                showToast(`✅ Tagged ${successCount}/${selectedIds.length} message(s)`, 'success');
+                
+                // Clear selections and update buttons
+                const checkboxes = document.querySelectorAll(`input.message-checkbox[data-book-id="${bookId}"]`);
+                checkboxes.forEach(cb => cb.checked = false);
+                selectedMessages[bookId].clear();
+                updateBulkActionButtons(bookId);
+            }
+            modal.remove();
+        }
+    });
+    
+    // Save on Enter key
+    input.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const metadataText = input.value.trim();
+            if (metadataText) {
+                showToast(`🏷️ Applying tags to ${selectedIds.length} message(s)...`, 'info');
+                
+                // Apply tags to all selected messages
+                let successCount = 0;
+                for (const messageId of selectedIds) {
+                    const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-book-id="${bookId}"]`);
+                    if (section) {
+                        try {
+                            await saveDrop(bookId, messageId, metadataText, section);
+                            successCount++;
+                        } catch (error) {
+                            console.error(`Failed to tag message ${messageId}:`, error);
+                        }
+                    }
+                }
+                
+                showToast(`✅ Tagged ${successCount}/${selectedIds.length} message(s)`, 'success');
+                
+                // Clear selections and update buttons
+                const checkboxes = document.querySelectorAll(`input.message-checkbox[data-book-id="${bookId}"]`);
+                checkboxes.forEach(cb => cb.checked = false);
+                selectedMessages[bookId].clear();
+                updateBulkActionButtons(bookId);
+            }
+            modal.remove();
+        }
+    });
+}
+
 // Hydrate drops for all messages in a book
 async function hydrateDropsForBook(bookId) {
     const drops = await fetchDrops(bookId);
@@ -6314,11 +6435,19 @@ document.addEventListener('click', function(e) {
         return;
     }
     
-    // Export book data button
-    if (target.hasAttribute('data-export-book')) {
+    // Download book data button
+    if (target.hasAttribute('data-download-book')) {
         e.preventDefault();
-        const fractalId = target.getAttribute('data-export-book');
-        if (fractalId) exportBookData(fractalId);
+        const fractalId = target.getAttribute('data-download-book');
+        if (fractalId) downloadBookData(fractalId);
+        return;
+    }
+    
+    // Bulk tag button
+    if (target.hasAttribute('data-tag-book')) {
+        e.preventDefault();
+        const fractalId = target.getAttribute('data-tag-book');
+        if (fractalId) showBulkTagModal(fractalId);
         return;
     }
     
