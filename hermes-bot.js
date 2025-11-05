@@ -42,7 +42,7 @@ class HermesBot {
                         reject(new Error('Hermes login timeout (30s)'));
                     }, 30000);
 
-                    this.client.once('ready', () => {
+                    this.client.once('clientReady', () => {
                         clearTimeout(timeout);
                         this.ready = true;
                         console.log(`✅ Hermes (φ) logged in as ${this.client.user.tag}`);

@@ -42,7 +42,7 @@ class TothBot {
                         reject(new Error('Toth login timeout (30s)'));
                     }, 30000);
 
-                    this.client.once('ready', () => {
+                    this.client.once('clientReady', () => {
                         clearTimeout(timeout);
                         this.ready = true;
                         console.log(`✅ Toth (0) logged in as ${this.client.user.tag}`);
