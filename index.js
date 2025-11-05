@@ -226,7 +226,15 @@ app.use(session({
         schemaName: 'public', // CRITICAL: Explicit schema prevents tenant_X.sessions targeting
         tableName: 'sessions',
         createTableIfMissing: false, // Disabled: We manage schema in initializeDatabase()
-        pruneSessionInterval: 60 * 15 // Cleanup expired sessions every 15 minutes
+        pruneSessionInterval: 60 * 60, // 1 hour (reduced from 15 min to avoid Transaction Mode timeouts)
+        errorLog: (err) => {
+            // Graceful error handling for Transaction Mode connection resets
+            if (err.message && err.message.includes('terminated unexpectedly')) {
+                console.warn('⚠️  Session prune failed (connection reset) – will retry next cycle');
+            } else {
+                console.error('❌ Session store error:', err.message || err);
+            }
+        }
     }),
     secret: process.env.SESSION_SECRET || 'book-secret-key-change-in-production',
     resave: false,
