@@ -456,6 +456,23 @@ async function initializeDatabase() {
             )
         `);
         
+        // SYSTEM COUNTERS: Persistent counters for phi breathe and other eternal values
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS core.system_counters (
+                id SERIAL PRIMARY KEY,
+                key TEXT UNIQUE NOT NULL,
+                value BIGINT NOT NULL,
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        `);
+        
+        // Initialize phi breathe counter if it doesn't exist
+        await pool.query(`
+            INSERT INTO core.system_counters (key, value) 
+            VALUES ('phi_breathe_count', 0)
+            ON CONFLICT (key) DO NOTHING
+        `);
+        
         // MIGRATION: Add updated_at column to book_registry for routing recency
         const updatedAtMigration = await pool.query(`
             SELECT 1 FROM core.migrations WHERE name = 'add_book_registry_updated_at'
