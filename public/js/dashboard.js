@@ -5436,18 +5436,23 @@
             const uptimeEl = document.getElementById('systemUptimeCompact');
             if (uptimeEl) uptimeEl.textContent = `${hours}h ${minutes}m`;
             
-            // Update current time (two-line format under cat animation)
+            // Update current time (both default and compact displays)
             const now = new Date();
             const year = now.getFullYear();
             const month = String(now.getMonth() + 1).padStart(2, '0');
             const day = String(now.getDate()).padStart(2, '0');
             const timeHours = now.getHours();
             const timeMinutes = String(now.getMinutes()).padStart(2, '0');
-            const timeSeconds = String(now.getSeconds()).padStart(2, '0');
             const ampm = timeHours >= 12 ? 'PM' : 'AM';
             const displayHours = timeHours % 12 || 12;
+            
+            // Default view: Two-line format (below cat)
             const currentTimeEl = document.getElementById('currentTime');
-            if (currentTimeEl) currentTimeEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
+            if (currentTimeEl) currentTimeEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}${ampm}`;
+            
+            // Compact view: Single-line with dash separator (before user info)
+            const currentTimeCompactEl = document.getElementById('currentTimeCompact');
+            if (currentTimeCompactEl) currentTimeCompactEl.textContent = `${year}/${month}/${day} - ${displayHours}:${timeMinutes}${ampm}`;
             
             // Update book count in compact indicators only
             const bookCountEl = document.getElementById('bookCountCompact');
@@ -6923,13 +6928,6 @@ document.addEventListener('input', function(e) {
         }
     }
     
-    // Sync time updates to both elements
-    function syncTimeDisplay() {
-        if (currentTime && currentTimeCompact) {
-            currentTimeCompact.textContent = currentTime.textContent;
-        }
-    }
-    
     // Update position on load
     updateDateTimePosition();
     
@@ -6947,9 +6945,5 @@ document.addEventListener('input', function(e) {
     // Also check periodically to catch any missed updates
     setInterval(() => {
         updateDateTimePosition();
-        syncTimeDisplay();
     }, 500);
-    
-    // Sync time displays immediately
-    syncTimeDisplay();
 })();
