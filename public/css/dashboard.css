@@ -987,6 +987,15 @@ body::before {
   color: var(--color-text-muted);
 }
 
+/* Desktop: show timestamp in header row, hide mobile version */
+.discord-timestamp-mobile {
+  display: none;
+}
+
+.discord-timestamp-desktop {
+  display: inline;
+}
+
 .discord-status-badge {
   font-size: var(--text-xs);
   padding: 0.0625rem 0.375rem;
@@ -3399,6 +3408,18 @@ body.desktop-mode .thumbs-zone {
     
     .discord-timestamp {
         font-size: 0.75rem;
+    }
+    
+    /* Mobile: hide desktop timestamp, show mobile timestamp on separate row */
+    .discord-timestamp-desktop {
+        display: none !important;
+    }
+    
+    .discord-timestamp-mobile {
+        display: block !important;
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+        margin-bottom: 0.25rem;
     }
     
     .jump-to-msg-btn {
