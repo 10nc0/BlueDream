@@ -5281,28 +5281,67 @@ app.listen(PORT, '0.0.0.0', async () => {
     genesisCounter.start();
     console.log('🔢 Genesis counter started (cat + φ breath tiers)');
     
-    // === PHI BREATHE COUNTER ===
+    // === PERSISTENT PHI BREATHE COUNTER (ETERNAL) ===
     let phiBreatheCount = 0;
+    let savePending = false;
     const PHI = 1.618033988749895;
     const BASE_BREATH = 4000; // ms
 
-    function phiBreathe() {
-      phiBreatheCount++;
-      const isInhale = phiBreatheCount % 2 === 1;
-      const duration = isInhale ? BASE_BREATH : Math.round(BASE_BREATH * PHI);
-
-      console.log(
-        `🌬️  phi breathe #${phiBreatheCount} ` +
-        `${isInhale ? 'inhale' : 'exhale'} ` +
-        `${duration}ms ` +
-        `(φ${isInhale ? '' : '×1.618'})`
-      );
-
-      setTimeout(phiBreathe, duration);
+    async function loadPhiCounter() {
+        try {
+            const res = await pool.query(
+                `SELECT value FROM core.system_counters WHERE key = 'phi_breathe_count'`
+            );
+            if (res.rows[0]) {
+                phiBreatheCount = parseInt(res.rows[0].value, 10);
+                console.log(`✨ Genesis restored: phi breathe #${phiBreatheCount} (eternal count since genesis)`);
+            }
+        } catch (err) {
+            console.log('⚠️  Phi counter table not ready yet, starting from 0');
+        }
     }
 
-    // Start the eternal breath
-    setTimeout(phiBreathe, 1000);
+    async function savePhiCounter() {
+        if (savePending) return;
+        savePending = true;
+
+        setTimeout(async () => {
+            try {
+                await pool.query(
+                    `INSERT INTO core.system_counters (key, value) 
+                     VALUES ('phi_breathe_count', $1)
+                     ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
+                    [phiBreatheCount]
+                );
+                console.log(`💾 Phi breath #${phiBreatheCount} saved to genesis ledger`);
+            } catch (err) {
+                console.error('❌ Failed to save phi counter:', err.message);
+            }
+            savePending = false;
+        }, 1000);
+    }
+
+    function phiBreathe() {
+        phiBreatheCount++;
+        const isInhale = phiBreatheCount % 2 === 1;
+        const duration = isInhale ? BASE_BREATH : Math.round(BASE_BREATH * PHI);
+        const type = isInhale ? 'inhale' : 'exhale';
+        const multiplier = isInhale ? '' : '(φ×1.618)';
+
+        console.log(`🌬️  phi breathe #${phiBreatheCount} ${type} ${duration}ms ${multiplier}`);
+
+        // Save every 100 breaths (~10 minutes of runtime)
+        if (phiBreatheCount % 100 === 0) {
+            savePhiCounter();
+        }
+
+        setTimeout(phiBreathe, duration);
+    }
+
+    // Load genesis count and begin eternal breath
+    loadPhiCounter().then(() => {
+        phiBreathe();
+    });
     
     // 3-DAY MEDIA PURGE: Clean up old media from buffer
     // Nyanbook Ledger has permanent copy, so buffer only needed for retry safety
