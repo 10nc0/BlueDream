@@ -2300,7 +2300,7 @@
                             showBookFanModal();
                             break;
                         case 'regenerate-qr':
-                            regenerateQRCode(currentBook);
+                            showWhatsAppActivationModal(currentBook.fractal_id);
                             break;
                         case 'edit':
                             showEditBookModal(currentBook);
