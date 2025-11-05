@@ -5516,7 +5516,7 @@
             hintEl.className = 'onboarding-hint';
             hintEl.innerHTML = `
                 ${hint.text}
-                <button class="close-hint" onclick="dismissHint('${hintKey}', this)">×</button>
+                <button class="close-hint" data-dismiss-hint="${hintKey}">×</button>
             `;
             
             const rect = targetEl.getBoundingClientRect();
@@ -6546,11 +6546,15 @@ document.addEventListener('click', function(e) {
         return;
     }
     
-    // Hint dismissal
+    // Hint dismissal (CSP-safe event delegation)
     if (target.classList.contains('close-hint') || target.hasAttribute('data-dismiss-hint')) {
         e.preventDefault();
-        const hintKey = target.getAttribute('data-dismiss-hint') || target.closest('[data-dismiss-hint]')?.getAttribute('data-dismiss-hint');
-        if (hintKey && typeof dismissHint === 'function') dismissHint(hintKey, target);
+        e.stopPropagation();
+        const hintKey = target.getAttribute('data-dismiss-hint');
+        if (hintKey) {
+            localStorage.setItem(`hint_${hintKey}`, 'dismissed');
+            target.closest('.onboarding-hint')?.remove();
+        }
         return;
     }
     
