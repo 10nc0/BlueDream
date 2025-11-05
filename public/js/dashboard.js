@@ -721,25 +721,20 @@
             html += `<button class="thumb-btn desktop-only" data-action="search" aria-label="Search messages">🔍</button>`;
             
             // Position 4: Book Actions (ONLY if current book exists)
-            // Shows stacked menu with book actions: ℹ️ 🔗 ✏️ 🗑️
+            // Shows stacked menu with book actions: ℹ️ 📚 ✏️ 🗑️
             if (hasBooks) {
                 const currentBookId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
                 const currentBook = activeBooks.find(b => b.fractal_id === currentBookId) || activeBooks[0];
                 
-                console.log(`🔘 Adding button 4 (🔗) for book: ${currentBook.name}`);
-                html += `<button class="thumb-btn" data-action="book-actions" data-book-id="${currentBook.fractal_id}" aria-label="Book actions">🔗</button>`;
+                console.log(`🔘 Adding button 4 (🤔) for book: ${currentBook.name}`);
+                html += `<button class="thumb-btn" data-action="book-actions" data-book-id="${currentBook.fractal_id}" aria-label="Book actions">🤔</button>`;
             } else {
                 console.log(`🔘 NO button 4 - no books found`);
             }
             
-            // Position 5: Book Card (ONLY if 4+ books)
+            // Position 5: All Books (ONLY if 4+ books)
             if (activeBooks.length >= 4) {
-                html += `<button class="thumb-btn" data-action="fan" aria-label="All books (${activeBooks.length} total)">🔗</button>`;
-            }
-            
-            // Position n: Next (ONLY if 2+ books)
-            if (activeBooks.length > 1) {
-                html += `<button class="thumb-btn" data-action="next" aria-label="Next book">→</button>`;
+                html += `<button class="thumb-btn" data-action="fan" aria-label="All books (${activeBooks.length} total)">📚</button>`;
             }
             
             html += `</div>`; // Close layer-01
@@ -2258,8 +2253,8 @@
             // Build stacked action buttons (5 options)
             const actions = [
                 { icon: 'ℹ️', label: 'Book Info', action: 'info', color: '#3b82f6' },
-                { icon: '🔗', label: 'View All Books', action: 'fan', color: '#10b981' },
-                { icon: '🔄', label: 'Regenerate QR', action: 'regenerate-qr', color: '#a855f7' },
+                { icon: '📚', label: 'View All Books', action: 'fan', color: '#10b981' },
+                { icon: '📱', label: 'Display Code', action: 'regenerate-qr', color: '#a855f7' },
                 { icon: '✏️', label: 'Edit Book', action: 'edit', color: '#f59e0b' },
                 { icon: '🗑️', label: 'Delete Book', action: 'delete', color: '#ef4444' }
             ];
