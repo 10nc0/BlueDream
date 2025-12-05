@@ -315,7 +315,7 @@
             <form id="botForm">
                 <div class="form-group">
                     <label class="form-label">Book Name</label>
-                    <input type="text" class="form-input" id="botName" placeholder="e.g., My WhatsApp Book" required>
+                    <input type="text" class="form-input" id="botName" placeholder="e.g., My Photo Book" required>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Input Platform (Where messages come from)</label>
@@ -490,15 +490,18 @@
             </div>
             
             <div class="onboarding-progress" style="display: flex; gap: 0.5rem; margin-bottom: 2rem; justify-content: center;">
-                <div class="onboarding-progress-step" style="padding: 0.5rem 1rem; border-radius: 8px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; font-size: 0.85rem;">1. Platform</div>
-                <div class="onboarding-progress-step" style="padding: 0.5rem 1rem; border-radius: 8px; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); color: #94a3b8; font-size: 0.85rem;">2. Connect</div>
-                <div class="onboarding-progress-step" style="padding: 0.5rem 1rem; border-radius: 8px; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); color: #94a3b8; font-size: 0.85rem;">3. Output</div>
+                <div class="onboarding-progress-step" style="padding: 0.5rem 1rem; border-radius: 8px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; font-size: 0.85rem;">1. Create</div>
+                <div class="onboarding-progress-step" style="padding: 0.5rem 1rem; border-radius: 8px; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); color: #94a3b8; font-size: 0.85rem;">2. Activate</div>
             </div>
             
             <div class="onboarding-step" id="onboarding-step-1" style="display: block;">
-                <h3 style="color: #e2e8f0; margin-bottom: 1rem;">Select Input Platform</h3>
+                <h3 style="color: #e2e8f0; margin-bottom: 1rem;">Name Your Book</h3>
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label class="form-label">Book Name</label>
+                    <input type="text" class="form-input" id="onboarding-book-name" placeholder="My Nyanbook" required>
+                </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                    <div class="platform-option" style="padding: 1.5rem; border-radius: 8px; background: rgba(37, 99, 235, 0.1); border: 2px solid rgba(37, 99, 235, 0.3); cursor: pointer; text-align: center; transition: all 0.2s;">
+                    <div class="platform-option selected" data-platform="WhatsApp" style="padding: 1.5rem; border-radius: 8px; background: rgba(37, 99, 235, 0.2); border: 2px solid rgba(59, 130, 246, 0.5); cursor: pointer; text-align: center; transition: all 0.2s;">
                         <div style="font-size: 2rem; margin-bottom: 0.5rem;">📱</div>
                         <div style="color: #e2e8f0; font-weight: 600;">WhatsApp</div>
                     </div>
@@ -508,29 +511,34 @@
                         <div style="font-size: 0.7rem; color: #d8b4fe;">🚧 Coming Soon</div>
                     </div>
                 </div>
-                <button id="step1-next" class="submit-btn" disabled style="margin-top: 1.5rem; width: 100%;">Next →</button>
+                <div class="form-group" style="margin-top: 1.5rem;">
+                    <label class="form-label">Webhook URL <span style="color: #94a3b8; font-size: 0.85rem; font-weight: normal;">(Optional)</span></label>
+                    <input type="url" class="form-input" id="onboarding-webhook-url" placeholder="https://discord.com/api/webhooks/...">
+                    <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #94a3b8;">
+                        Skip to use Nyanbook Ledger only. Add later in Edit to mirror messages.
+                    </div>
+                </div>
+                <button id="step1-next" class="submit-btn" style="margin-top: 1.5rem; width: 100%;">Create Book →</button>
             </div>
             
             <div class="onboarding-step" id="onboarding-step-2" style="display: none;">
-                <h3 style="color: #e2e8f0; margin-bottom: 1rem;">📱 Scan QR Code</h3>
-                <div style="text-align: center;">
-                    <img id="onboarding-qr" src="" alt="QR Code" style="width: 250px; height: 250px; border-radius: 8px; background: white;">
-                    <p style="margin-top: 1rem; color: #94a3b8; font-size: 0.9rem;">Open WhatsApp → Settings → Linked Devices → Link a Device</p>
-                </div>
-                <button class="submit-btn" style="margin-top: 1.5rem; width: 100%;">Next →</button>
-            </div>
-            
-            <div class="onboarding-step" id="onboarding-step-3" style="display: none;">
-                <h3 style="color: #e2e8f0; margin-bottom: 1rem;">🎯 Webhook URL <span style="color: #94a3b8; font-size: 0.85rem; font-weight: normal;">(Optional)</span></h3>
-                <div class="form-group">
-                    <label class="form-label">Personal Webhook URL</label>
-                    <input type="url" class="form-input" id="onboarding-webhook-url" placeholder="https://discord.com/api/webhooks/... or https://hooks.slack.com/...">
-                    <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #94a3b8;">
-                        Skip this to use Nyanbook Ledger only. Add later in Edit to mirror messages to your channel.
+                <h3 style="color: #e2e8f0; margin-bottom: 1rem;">📱 Activate Your Book</h3>
+                <div style="text-align: center; padding: 1.5rem; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 12px;">
+                    <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 1rem;">Send this code via WhatsApp to activate:</p>
+                    <div id="onboarding-join-code" style="font-size: 1.5rem; font-weight: 700; color: #22c55e; font-family: monospace; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: 8px; margin-bottom: 1rem;">...</div>
+                    <div style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;">
+                        <a id="onboarding-whatsapp-link" href="#" target="_blank" rel="noopener noreferrer" style="background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
+                            📱 Open WhatsApp
+                        </a>
+                        <button id="onboarding-copy-code" style="background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #cbd5e1; padding: 0.75rem 1.5rem; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                            📋 Copy Code
+                        </button>
                     </div>
                 </div>
-                <div id="onboarding-validation-status" style="margin-top: 0.5rem; min-height: 1.5rem;"></div>
-                <button class="submit-btn" style="margin-top: 1.5rem; width: 100%;">🎉 Complete Setup</button>
+                <p style="margin-top: 1rem; color: #94a3b8; font-size: 0.85rem; text-align: center;">
+                    Once you send the code, your book will be activated automatically.
+                </p>
+                <button id="onboarding-done" class="submit-btn" style="margin-top: 1.5rem; width: 100%;">🎉 Done</button>
             </div>
         </div>
     </div>

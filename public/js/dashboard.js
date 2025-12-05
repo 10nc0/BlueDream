@@ -1441,7 +1441,7 @@
                 const status = whatsappStatus.status;
                 const badges = {
                     'ready': '<span class="stat-badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981;">✅ Connected</span>',
-                    'qr_ready': '<span class="stat-badge" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">📱 Scan QR</span>',
+                    'qr_ready': '<span class="stat-badge" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">📱 Pending Activation</span>',
                     'initializing': '<span class="stat-badge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">⏳ Starting...</span>',
                     'authenticated': '<span class="stat-badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981;">🔐 Authenticated</span>',
                     'inactive': '<span class="stat-badge" style="background: rgba(148, 163, 184, 0.2); color: #94a3b8;">⏸️ Inactive</span>',
@@ -3143,7 +3143,7 @@
             const banner = document.createElement('div');
             banner.className = 'setup-banner';
             banner.style.cssText = 'background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.875rem;';
-            banner.innerHTML = '<strong>🎯 Step 1:</strong> Fill in the book name → <strong>Step 2:</strong> QR code appears instantly → <strong>Step 3:</strong> Optional: Add webhook later in Edit';
+            banner.innerHTML = '<strong>🎯 Step 1:</strong> Fill in book name → <strong>Step 2:</strong> Send join code via WhatsApp → <strong>Done!</strong> Add webhook later in Edit';
             form.insertBefore(banner, form.firstChild);
         }
 
@@ -3489,7 +3489,7 @@
                 
                 // CRITICAL FIX: Poll for client readiness after relink
                 // Relink destroys and recreates the client, need to wait for initialization
-                console.log('⏳ Waiting for Baileys client to initialize after relink...');
+                console.log('⏳ Waiting for WhatsApp client to initialize after relink...');
                 
                 let attempts = 0;
                 const maxAttempts = 15; // 15 attempts * 500ms = 7.5 seconds max
@@ -3504,7 +3504,7 @@
                         
                         // Client is ready if it has a QR or is already connected
                         if (data.qr || data.status === 'qr_ready' || data.status === 'connected' || data.status === 'active') {
-                            console.log(`✅ Baileys client ready after ${attempts * 500}ms`);
+                            console.log(`✅ WhatsApp client ready after ${attempts * 500}ms`);
                             break;
                         }
                     }

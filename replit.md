@@ -38,6 +38,10 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **CSP Compliance**: Production-ready Content Security Policy with event delegation and self-hosted libraries.
 
 ## External Dependencies
-- **Database**: PostgreSQL (Supabase)
+- **Database**: PostgreSQL (Supabase) with RLS configured via Supabase dashboard
 - **WhatsApp**: Twilio WhatsApp Business API
 - **Discord**: Discord.js + Discord webhooks for message delivery
+
+## Database Notes
+- **RLS Policy**: Row Level Security for `public.sessions` table is configured directly in Supabase SQL editor (not in code). Policy enables backend full access while satisfying Supabase security requirements.
+- **Onboarding Flow**: 2-step wizard (Create Book → Activate with Join Code). Webhook URL is optional in Step 1.

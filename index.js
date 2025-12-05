@@ -389,6 +389,8 @@ async function initializeDatabase() {
             console.log('✅ Sessions table created with correct schema');
         }
         
+        // Note: RLS for public.sessions is configured directly in Supabase dashboard
+        
         // CENTRALIZED BOOK REGISTRY: Global substrate for O(1) join code lookups
         // Eliminates N-schema loops (26+ queries → 1 query per message)
         // Hierarchy: Tenant (email) → Book (join_code) → Message → Drops + Attachments

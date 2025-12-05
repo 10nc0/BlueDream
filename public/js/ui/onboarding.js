@@ -1,8 +1,10 @@
-// Onboarding Wizard System
+// Onboarding Wizard System - Twilio Join Code Flow
 let onboardingState = {
     step: 1,
-    platform: null,
+    platform: 'WhatsApp',
     bookId: null,
+    bookName: null,
+    joinCode: null,
     webhookUrl: null
 };
 
@@ -32,9 +34,15 @@ async function saveOnboardingProgress(completed = false) {
 }
 
 function openOnboardingWizard() {
-    onboardingState = { step: 1, platform: null, bookId: null, webhookUrl: null };
+    onboardingState = { step: 1, platform: 'WhatsApp', bookId: null, bookName: null, joinCode: null, webhookUrl: null };
     showOnboardingStep(1);
     document.getElementById('onboardingModal').style.display = 'flex';
+    
+    // Focus on book name input
+    setTimeout(() => {
+        const nameInput = document.getElementById('onboarding-book-name');
+        if (nameInput) nameInput.focus();
+    }, 100);
 }
 
 function closeOnboardingWizard() {
@@ -50,7 +58,8 @@ function showOnboardingStep(step) {
     });
     
     // Show current step
-    document.getElementById(`onboarding-step-${step}`).style.display = 'block';
+    const stepEl = document.getElementById(`onboarding-step-${step}`);
+    if (stepEl) stepEl.style.display = 'block';
     
     // Update progress indicator
     updateOnboardingProgress(step);
@@ -61,147 +70,175 @@ function updateOnboardingProgress(currentStep) {
     steps.forEach((step, index) => {
         const stepNum = index + 1;
         if (stepNum < currentStep) {
-            step.classList.add('completed');
-            step.classList.remove('active');
+            step.style.background = 'rgba(34, 197, 94, 0.2)';
+            step.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+            step.style.color = '#22c55e';
         } else if (stepNum === currentStep) {
-            step.classList.add('active');
-            step.classList.remove('completed');
+            step.style.background = 'rgba(59, 130, 246, 0.2)';
+            step.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+            step.style.color = '#93c5fd';
         } else {
-            step.classList.remove('active', 'completed');
+            step.style.background = 'rgba(148, 163, 184, 0.1)';
+            step.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+            step.style.color = '#94a3b8';
         }
     });
 }
 
 function selectOnboardingPlatform(platform) {
+    if (platform === 'Telegram') return; // Coming soon
+    
     onboardingState.platform = platform;
     
     // Highlight selected platform
     document.querySelectorAll('.platform-option').forEach(el => {
-        el.classList.remove('selected');
+        const elPlatform = el.dataset.platform || el.textContent.trim();
+        if (elPlatform.includes(platform)) {
+            el.classList.add('selected');
+            el.style.background = 'rgba(37, 99, 235, 0.2)';
+            el.style.borderColor = 'rgba(59, 130, 246, 0.5)';
+        } else {
+            el.classList.remove('selected');
+            el.style.background = 'rgba(148, 163, 184, 0.05)';
+            el.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+        }
     });
-    event.target.closest('.platform-option').classList.add('selected');
-    
-    // Enable next button
-    document.getElementById('step1-next').disabled = false;
 }
 
 async function onboardingStep1Next() {
-    if (!onboardingState.platform) {
-        alert('Please select a platform');
+    const bookName = document.getElementById('onboarding-book-name').value.trim();
+    const webhookUrl = document.getElementById('onboarding-webhook-url').value.trim();
+    
+    if (!bookName) {
+        alert('Please enter a name for your book');
+        document.getElementById('onboarding-book-name').focus();
         return;
     }
     
-    if (onboardingState.platform === 'WhatsApp') {
-        // Create book and show QR code
-        try {
-            const response = await authFetch('/api/books', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    input_platform: 'WhatsApp',
-                    output_platform: 'Discord',
-                    webhook_url: 'placeholder' // Will be set in step 3
-                })
-            });
-            
-            if (response.ok) {
-                const book = await response.json();
-                onboardingState.bookId = book.id;
-                showOnboardingStep(2);
-                
-                // Generate QR code
-                const qrResponse = await authFetch(`/api/books/${book.id}/qr`);
-                if (qrResponse.ok) {
-                    const qrData = await qrResponse.json();
-                    document.getElementById('onboarding-qr').src = qrData.qr;
-                }
-            }
-        } catch (error) {
-            alert('Failed to create bot: ' + error.message);
-        }
-    } else {
-        // Skip to step 3 for other platforms
-        showOnboardingStep(3);
-    }
-}
-
-function onboardingStep2Next() {
-    showOnboardingStep(3);
-}
-
-async function validateDiscordWebhook(url) {
-    if (!url || !url.includes('discord.com/api/webhooks/')) {
-        return { valid: false, error: 'Invalid Discord webhook URL format' };
-    }
+    onboardingState.bookName = bookName;
+    onboardingState.webhookUrl = webhookUrl;
+    
+    // Show loading state
+    const btn = document.getElementById('step1-next');
+    const originalText = btn.textContent;
+    btn.textContent = '⏳ Creating...';
+    btn.disabled = true;
     
     try {
-        // Test webhook with a test message
-        const response = await fetch(url, {
+        // Create the book
+        const response = await authFetch('/api/books', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                content: '✅ Nyan Book webhook test - connection successful!',
-                username: 'Nyan Book'
+                name: bookName,
+                input_platform: 'whatsapp',
+                output_platform: 'discord',
+                webhook_url: webhookUrl || null
             })
         });
         
-        if (response.ok || response.status === 204) {
-            return { valid: true };
+        if (response.ok) {
+            const book = await response.json();
+            onboardingState.bookId = book.fractal_id || book.id;
+            onboardingState.joinCode = book.contact_info || book.join_code;
+            
+            // Show step 2 with join code
+            showOnboardingStep(2);
+            displayJoinCode(onboardingState.joinCode);
         } else {
-            return { valid: false, error: `Webhook returned status ${response.status}` };
+            const error = await response.json();
+            alert('Failed to create book: ' + (error.error || 'Unknown error'));
         }
     } catch (error) {
-        return { valid: false, error: error.message };
+        console.error('Error creating book:', error);
+        alert('Failed to create book: ' + error.message);
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
     }
 }
 
-async function onboardingStep3Complete() {
-    const webhookUrl = document.getElementById('onboarding-webhook-url').value;
+function displayJoinCode(joinCode) {
+    const code = joinCode || 'join code-here';
+    const whatsappNumber = '14155238886'; // Twilio sandbox number
+    const whatsappLink = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(code)}`;
     
-    if (!webhookUrl) {
-        alert('Please enter a Discord webhook URL');
-        return;
+    // Update join code display
+    document.getElementById('onboarding-join-code').textContent = code;
+    
+    // Update WhatsApp link
+    const linkEl = document.getElementById('onboarding-whatsapp-link');
+    if (linkEl) linkEl.href = whatsappLink;
+    
+    // Setup copy button
+    const copyBtn = document.getElementById('onboarding-copy-code');
+    if (copyBtn) {
+        copyBtn.onclick = () => {
+            navigator.clipboard.writeText(code);
+            copyBtn.textContent = '✅ Copied!';
+            setTimeout(() => {
+                copyBtn.textContent = '📋 Copy Code';
+            }, 1500);
+        };
     }
-    
-    // Show validation spinner
-    document.getElementById('onboarding-validation-status').innerHTML = 
-        '<span style="color: #fbbf24;">⏳ Validating webhook...</span>';
-    
-    const validation = await validateDiscordWebhook(webhookUrl);
-    
-    if (!validation.valid) {
-        const statusEl = document.getElementById('onboarding-validation-status');
-        statusEl.textContent = '';
-        const span = document.createElement('span');
-        span.style.color = '#ef4444';
-        span.textContent = `❌ ${validation.error}`;
-        statusEl.appendChild(span);
-        return;
-    }
-    
-    document.getElementById('onboarding-validation-status').innerHTML = 
-        '<span style="color: #22c55e;">✅ Webhook validated!</span>';
-    
-    // Update book with webhook URL
-    if (onboardingState.bookId) {
-        try {
-            await authFetch(`/api/books/${onboardingState.bookId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    webhook_url: webhookUrl
-                })
-            });
-        } catch (error) {
-            console.error('Failed to update webhook:', error);
-        }
-    }
-    
+}
+
+async function onboardingComplete() {
     // Mark onboarding as completed
     await saveOnboardingProgress(true);
     
-    // Show success and close
-    alert('🎉 Onboarding complete! Your book is ready.');
+    // Close modal and refresh book list
     closeOnboardingWizard();
-    loadBots(); // Refresh book list
+    
+    // Refresh the book list to show the new book
+    if (typeof loadBots === 'function') {
+        loadBots();
+    }
+    
+    // Show success toast if available
+    if (typeof showToast === 'function') {
+        showToast('🎉 Book created! Send the join code via WhatsApp to activate.', 'success');
+    }
 }
+
+// Initialize onboarding event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    // Step 1 next button
+    const step1NextBtn = document.getElementById('step1-next');
+    if (step1NextBtn) {
+        step1NextBtn.addEventListener('click', onboardingStep1Next);
+    }
+    
+    // Done button
+    const doneBtn = document.getElementById('onboarding-done');
+    if (doneBtn) {
+        doneBtn.addEventListener('click', onboardingComplete);
+    }
+    
+    // Platform selection
+    document.querySelectorAll('.platform-option').forEach(el => {
+        if (!el.style.cursor || el.style.cursor !== 'not-allowed') {
+            el.addEventListener('click', (e) => {
+                const platform = el.dataset.platform || 'WhatsApp';
+                selectOnboardingPlatform(platform);
+            });
+        }
+    });
+    
+    // Close button
+    const closeBtn = document.querySelector('#onboardingModal .close-btn');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeOnboardingWizard);
+    }
+    
+    // Enter key on book name input
+    const nameInput = document.getElementById('onboarding-book-name');
+    if (nameInput) {
+        nameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                onboardingStep1Next();
+            }
+        });
+    }
+});

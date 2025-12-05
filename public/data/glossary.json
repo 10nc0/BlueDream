@@ -1,20 +1,19 @@
 {
   "tooltips": {
-    "message_count": "Total messages received from this bridge (includes successful, failed, and pending)",
+    "message_count": "Total messages received from this book (includes successful, failed, and pending)",
     "forwarded_count": "Messages successfully forwarded to output platform",
     "failed_count": "Messages that failed to forward (check logs for details)",
     "status_success": "Message successfully delivered to output platform",
     "status_failed": "Message delivery failed (check Discord webhook, rate limits, or network)",
     "status_pending": "Message is being processed",
-    "platform_whatsapp": "WhatsApp Web via whatsapp-web.js library",
+    "platform_whatsapp": "WhatsApp via Twilio Business API",
     "platform_discord": "Discord via webhook integration",
     "platform_telegram": "🚧 Coming Soon - Telegram Bot API",
     "platform_slack": "🚧 Coming Soon - Slack Webhook API",
     "platform_matrix": "🚧 Coming Soon - Matrix Protocol",
     "rate_limit": "Messages per minute allowed by output platform",
-    "onboarding_step1": "Select your input platform (where messages come from)",
-    "onboarding_step2": "Scan QR code to authenticate with WhatsApp Web",
-    "onboarding_step3": "Enter Discord webhook URL to deliver messages"
+    "onboarding_step1": "Name your book and select platform",
+    "onboarding_step2": "Send join code via WhatsApp to activate"
   },
   "thresholds": {
     "failed_warning": 3,
