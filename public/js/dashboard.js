@@ -4240,21 +4240,11 @@
         // Smart polling for real-time message updates
         let pollingInterval = null;
         let lastSeenMessageId = null;
-        let userHasScrolled = false;
 
         function startPolling(bookId) {
             // Stop existing polling
             if (pollingInterval) {
                 clearInterval(pollingInterval);
-            }
-            
-            // Track scroll position to determine auto-scroll behavior
-            const container = document.getElementById(`discord-messages-${bookId}`);
-            if (container) {
-                container.addEventListener('scroll', () => {
-                    const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
-                    userHasScrolled = !isAtBottom;
-                });
             }
             
             // Poll every 5 seconds
@@ -4282,19 +4272,12 @@
                     if (newMessages.length > 0) {
                         console.log(`🔄 Polling: ${newMessages.length} new message(s)`);
                         
-                        // Append new messages
+                        // Append new messages silently (no auto-scroll, no banner)
                         for (const msg of newMessages) {
                             const existing = document.querySelector(`.discord-message[data-msg-id="${msg.id}"]`);
                             if (!existing) {
                                 await insertContextMessages([msg], msg.id, bookId);
                             }
-                        }
-                        
-                        // Auto-scroll if user was at bottom, otherwise show banner
-                        if (!userHasScrolled && container) {
-                            container.scrollTop = container.scrollHeight;
-                        } else {
-                            showNewMessagesBanner(bookId, newMessages.length);
                         }
                     }
                 } catch (error) {
@@ -4308,57 +4291,6 @@
                 clearInterval(pollingInterval);
                 pollingInterval = null;
             }
-        }
-
-        // Show "New messages" banner when user scrolled up
-        function showNewMessagesBanner(bookId, count) {
-            const container = document.getElementById(`discord-messages-${bookId}`);
-            if (!container) return;
-            
-            // Remove existing banner
-            const existing = container.querySelector('.new-messages-banner');
-            if (existing) existing.remove();
-            
-            // Create banner
-            const banner = document.createElement('div');
-            banner.className = 'new-messages-banner';
-            banner.innerHTML = `
-                <span>↓ ${count} new message${count !== 1 ? 's' : ''}</span>
-            `;
-            banner.style.cssText = `
-                position: sticky;
-                bottom: 20px;
-                left: 50%;
-                transform: translateX(-50%);
-                background: rgba(34, 197, 94, 0.9);
-                color: white;
-                padding: 8px 16px;
-                border-radius: 20px;
-                cursor: pointer;
-                z-index: 100;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-                font-weight: 600;
-                backdrop-filter: blur(10px);
-            `;
-            
-            banner.onclick = () => {
-                container.scrollTop = container.scrollHeight;
-                banner.remove();
-                userHasScrolled = false;
-            };
-            
-            container.appendChild(banner);
-            
-            // Auto-hide when user scrolls to bottom
-            const checkScroll = () => {
-                const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
-                if (isAtBottom && banner.parentNode) {
-                    banner.remove();
-                    userHasScrolled = false;
-                    container.removeEventListener('scroll', checkScroll);
-                }
-            };
-            container.addEventListener('scroll', checkScroll);
         }
 
         // URL hash support for shareable links
