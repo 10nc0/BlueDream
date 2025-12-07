@@ -4369,13 +4369,15 @@
                 // Always reload all messages to ensure message is in main DOM (not in search preview)
                 await loadBookMessages(bookId);
                 
-                // Find and scroll to the message
-                const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
-                if (targetEl) {
-                    scrollAndHighlight(targetEl);
-                } else {
-                    console.warn('Message not found in DOM after reload');
-                }
+                // Wait for DOM to fully paint before scrolling (ensures offset is last action)
+                requestAnimationFrame(() => {
+                    const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                    if (targetEl) {
+                        scrollAndHighlight(targetEl);
+                    } else {
+                        console.warn('Message not found in DOM after reload');
+                    }
+                });
                 
             } catch (error) {
                 console.error('Error jumping to message:', error);
