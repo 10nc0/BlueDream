@@ -3391,7 +3391,7 @@ async function fetchBookContextForPrometheus(fractalId, tenantSchema, client = p
             messagesThisMonth: messagesThisMonth,
             dateRange: dateRange,
             messageStats: messagesByMonth,
-            recentMessages: messages.slice(0, 20).map(m => ({
+            recentMessages: messages.slice(0, 100).map(m => ({
                 timestamp: m.timestamp,
                 content: m.content
             }))
@@ -3490,7 +3490,7 @@ async function fetchMultiBookContextForPrometheus(bookIds, tenantSchema, userRol
         bookCount: books.length,
         books: bookSummaries,
         totalMessages: totalMessages,
-        recentMessages: allMessages.slice(0, 50), // Up to 50 messages across all books
+        recentMessages: allMessages.slice(0, 150), // Up to 150 messages across all books (increased from 50 to cover older data)
         dateRange: allMessages.length > 0
             ? `${allMessages[allMessages.length - 1].timestamp.split('T')[0]} to ${allMessages[0].timestamp.split('T')[0]}`
             : 'No messages'
