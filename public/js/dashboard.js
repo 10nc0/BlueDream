@@ -1320,9 +1320,7 @@
                     "
                     onmouseover="if (!this.classList.contains('selected')) this.style.background='rgba(148, 163, 184, 0.05)'"
                     onmouseout="if (!this.classList.contains('selected')) this.style.background='transparent'">
-                    <div style="flex-shrink: 0; width: 1.25rem; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;">
-                        ${hasSearchMatch ? `<span style="color: #22c55e; font-weight: 700; font-size: 0.875rem;">✓</span>` : ''}
-                    </div>
+                    ${hasSearchMatch ? `<div style="flex-shrink: 0; width: 1.25rem; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;"><span style="color: #22c55e; font-weight: 700; font-size: 0.875rem;">✓</span></div>` : ''}
                     <div style="flex: 1; min-width: 0;">
                         <div style="
                             color: ${book.fractal_id === selectedBookFractalId ? '#e2e8f0' : '#cbd5e1'}; 
@@ -1389,9 +1387,7 @@
                     "
                     onmouseover="if (!this.classList.contains('selected')) this.style.background='rgba(148, 163, 184, 0.05)'"
                     onmouseout="if (!this.classList.contains('selected')) this.style.background='transparent'">
-                    <div style="flex-shrink: 0; width: 1.25rem; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;">
-                        ${hasSearchMatch ? `<span style="color: #22c55e; font-weight: 700; font-size: 0.875rem;">✓</span>` : ''}
-                    </div>
+                    ${hasSearchMatch ? `<div style="flex-shrink: 0; width: 1.25rem; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;"><span style="color: #22c55e; font-weight: 700; font-size: 0.875rem;">✓</span></div>` : ''}
                     <div style="flex: 1; min-width: 0;">
                         <div style="
                             color: ${book.fractal_id === selectedBookFractalId ? '#e2e8f0' : '#cbd5e1'}; 
@@ -1631,6 +1627,8 @@
                 if (embed.footer) {
                     parts.push(typeof embed.footer === 'string' ? embed.footer : embed.footer.text);
                 }
+                // Include attachment filename if present
+                if (embed.filename) parts.push(embed.filename);
                 return parts.join(' ');
             }).join(' ');
         }
@@ -2891,6 +2889,7 @@
                     msg.sender_name || '',
                     msg.message_content || '',
                     msg.sender_contact || '',
+                    msg.media_type || '',           // Include media type (e.g. file info)
                     extractEmbedSearchText(msg.embeds)
                 ];
                 return parts.join(' ');
