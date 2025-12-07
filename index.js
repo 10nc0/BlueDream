@@ -4424,10 +4424,11 @@ const exportBookHandler = async (req, res) => {
         
         for (const msg of enrichedMessages) {
             if (msg.attachments && msg.attachments.length > 0) {
-                // Format timestamp as YYYY-MM-DD/HH-MM-SS for folder organization
+                // Format timestamp as YYYY-MM-DD/HhMMmSSs for folder organization
                 const timestamp = new Date(msg.timestamp);
                 const dateFolder = timestamp.toISOString().split('T')[0]; // YYYY-MM-DD
-                const timeFolder = timestamp.toISOString().split('T')[1].substring(0, 8).replace(/:/g, '-'); // HH-MM-SS
+                const isoTime = timestamp.toISOString().split('T')[1].substring(0, 8); // HH:MM:SS
+                const timeFolder = isoTime.replace(/:/g, '').replace(/(\d{2})(\d{2})(\d{2})/, '$1h$2m$3s'); // 7h38m07s
                 
                 for (const attachment of msg.attachments) {
                     attachmentStats.total++;
