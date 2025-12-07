@@ -3521,17 +3521,21 @@ app.post('/api/prometheus/check', requireAuth, async (req, res) => {
         // Convert messages array to query string for book name detection
         const userQuery = Array.isArray(messages) ? messages.join('\n') : messages;
         
-        // AUTO-DETECT BOOK NAMES: Try to find referenced books in the query
-        let detectedBookIds = bookIds;
-        if (!bookIds || bookIds.length === 0) {
-            const autoDetectedFractalIds = await detectAndLookupBookNames(userQuery, tenantSchema);
-            if (autoDetectedFractalIds.length > 0) {
-                detectedBookIds = autoDetectedFractalIds;
-                console.log(`📖 Auto-detected ${detectedBookIds.length} book(s) from query text`);
-            }
+        // AUTO-DETECT BOOK NAMES: Always try to find referenced books in the query (highest priority)
+        const autoDetectedFractalIds = await detectAndLookupBookNames(userQuery, tenantSchema);
+        let detectedBookIds = null;
+        
+        if (autoDetectedFractalIds && autoDetectedFractalIds.length > 0) {
+            // If books mentioned in query, use those (ignore fractalId)
+            detectedBookIds = autoDetectedFractalIds;
+            console.log(`📖 Auto-detected ${detectedBookIds.length} book(s) from query text - prioritizing over fractalId`);
+        } else if (bookIds && Array.isArray(bookIds) && bookIds.length > 0) {
+            // Otherwise use explicitly provided bookIds
+            detectedBookIds = bookIds;
+            console.log(`📖 Using explicitly provided bookIds: ${detectedBookIds.length} book(s)`);
         }
         
-        // MULTI-BOOK QUERY: If bookIds array provided or auto-detected, fetch context from multiple books
+        // MULTI-BOOK QUERY: If any books detected or explicitly provided, use multi-book context
         if (detectedBookIds && Array.isArray(detectedBookIds) && detectedBookIds.length > 0 && tenantSchema) {
             console.log(`🔮 Prometheus API: Multi-book query for ${detectedBookIds.length} books`);
             
@@ -3545,7 +3549,7 @@ app.post('/api/prometheus/check', requireAuth, async (req, res) => {
                 result = await Prometheus.check(messages, ruleType, { language });
             }
         }
-        // SINGLE BOOK QUERY: If fractalId provided, fetch book context
+        // SINGLE BOOK QUERY: If fractalId provided and no books detected, fetch book context
         else if (fractalId && fractalId !== 'null' && fractalId !== 'undefined' && tenantSchema) {
             console.log(`🔮 Prometheus API: Context query for book ${fractalId}`);
             
