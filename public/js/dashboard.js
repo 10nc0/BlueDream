@@ -94,7 +94,7 @@
                 showInMobile: true,
                 showInDesktop: true,
                 requireAuth: true,
-                handler: () => showToast('🧿 Audit features coming soon!', 'info')
+                handler: () => showPrometheusAuditModal()
             },
             search: {
                 id: 'search',
@@ -2468,6 +2468,166 @@
             
             // Call existing QR generation logic
             await generateNewQR(book.fractal_id);
+        }
+        
+        // Prometheus Audit Modal - AI-powered message checking
+        function showPrometheusAuditModal() {
+            let auditModal = document.getElementById('prometheusAuditModal');
+            if (!auditModal) {
+                const modalHtml = `
+                    <div id="prometheusAuditModal" class="book-fan-modal" style="z-index: 10000;">
+                        <div class="book-fan-content" style="max-width: 600px; padding: 2rem;">
+                            <button class="book-fan-close" id="prometheusAuditClose">×</button>
+                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧿 Prometheus Audit</h3>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Rule Type</label>
+                                <select id="prometheusRuleType" class="form-input" style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; width: 100%;">
+                                    <option value="general">General Check</option>
+                                    <option value="tire_check">Tire Inspection</option>
+                                    <option value="expense">Expense Verification</option>
+                                    <option value="inventory">Inventory Audit</option>
+                                    <option value="delivery">Delivery Confirmation</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group" style="margin-top: 1rem;">
+                                <label class="form-label">Message to Check</label>
+                                <textarea id="prometheusMessage" class="form-input" placeholder="Paste a message to analyze..." style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; width: 100%; min-height: 120px; resize: vertical; font-family: inherit;"></textarea>
+                            </div>
+                            
+                            <button id="prometheusCheckBtn" class="form-button" style="width: 100%; margin-top: 1rem; padding: 0.875rem; background: linear-gradient(135deg, #a855f7, #ec4899); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: opacity 0.2s;">
+                                🔮 Run Prometheus Check
+                            </button>
+                            
+                            <div id="prometheusResult" style="margin-top: 1.5rem; display: none;">
+                                <div style="padding: 1rem; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px;">
+                                    <div id="prometheusResultContent"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+                auditModal = document.getElementById('prometheusAuditModal');
+                
+                // Event listeners
+                auditModal.addEventListener('click', function(e) {
+                    if (e.target === this) closePrometheusAuditModal();
+                });
+                document.getElementById('prometheusAuditClose').addEventListener('click', closePrometheusAuditModal);
+                document.getElementById('prometheusCheckBtn').addEventListener('click', runPrometheusCheck);
+            }
+            
+            // Reset state
+            document.getElementById('prometheusMessage').value = '';
+            document.getElementById('prometheusResult').style.display = 'none';
+            document.getElementById('prometheusCheckBtn').disabled = false;
+            document.getElementById('prometheusCheckBtn').textContent = '🔮 Run Prometheus Check';
+            
+            auditModal.style.display = 'flex';
+        }
+        
+        function closePrometheusAuditModal() {
+            const modal = document.getElementById('prometheusAuditModal');
+            if (modal) modal.style.display = 'none';
+        }
+        
+        async function runPrometheusCheck() {
+            const message = document.getElementById('prometheusMessage').value.trim();
+            const ruleType = document.getElementById('prometheusRuleType').value;
+            const btn = document.getElementById('prometheusCheckBtn');
+            const resultDiv = document.getElementById('prometheusResult');
+            const resultContent = document.getElementById('prometheusResultContent');
+            
+            if (!message) {
+                showToast('⚠️ Please enter a message to check', 'error');
+                return;
+            }
+            
+            // Loading state
+            btn.disabled = true;
+            btn.textContent = '🔮 Analyzing...';
+            resultDiv.style.display = 'none';
+            
+            try {
+                const token = localStorage.getItem('authToken');
+                const response = await fetch('/api/prometheus/check', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ messages: message, ruleType })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Prometheus check failed');
+                }
+                
+                // Display result
+                const result = data.result;
+                const statusColors = {
+                    'PASS': '#10b981',
+                    'FAIL': '#ef4444',
+                    'WARNING': '#f59e0b',
+                    'REVIEW': '#6366f1'
+                };
+                const statusColor = statusColors[result.status] || '#94a3b8';
+                
+                resultContent.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                        <span style="font-size: 1.5rem; padding: 0.5rem 1rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 8px; color: ${statusColor}; font-weight: 700;">
+                            ${escapeHtml(result.status)}
+                        </span>
+                        <span style="color: #94a3b8; font-size: 0.875rem;">
+                            Confidence: ${(result.confidence * 100).toFixed(0)}%
+                        </span>
+                    </div>
+                    
+                    <div style="margin-bottom: 0.75rem;">
+                        <strong style="color: #e2e8f0;">Reason:</strong>
+                        <p style="color: #94a3b8; margin: 0.25rem 0;">${escapeHtml(result.reason || 'No reason provided')}</p>
+                    </div>
+                    
+                    <div style="margin-bottom: 0.75rem;">
+                        <strong style="color: #e2e8f0;">Recommended Action:</strong>
+                        <p style="color: #94a3b8; margin: 0.25rem 0;">${escapeHtml(result.recommended_action || 'None')}</p>
+                    </div>
+                    
+                    ${result.data_extracted && Object.keys(result.data_extracted).length > 0 ? `
+                    <div style="margin-bottom: 0.75rem;">
+                        <strong style="color: #e2e8f0;">Extracted Data:</strong>
+                        <pre style="margin: 0.25rem 0; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; color: #94a3b8; font-size: 0.8rem; overflow-x: auto;">${escapeHtml(JSON.stringify(result.data_extracted, null, 2))}</pre>
+                    </div>
+                    ` : ''}
+                    
+                    ${result.needs_human_review ? `
+                    <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; color: #a5b4fc; font-size: 0.875rem;">
+                        ⚠️ Human review recommended
+                    </div>
+                    ` : ''}
+                `;
+                
+                resultDiv.style.display = 'block';
+                showToast(`🧿 Check complete: ${result.status}`, result.status === 'PASS' ? 'success' : 'info');
+                
+            } catch (error) {
+                console.error('Prometheus check error:', error);
+                showToast(`⚠️ ${error.message}`, 'error');
+                
+                resultContent.innerHTML = `
+                    <div style="color: #ef4444;">
+                        <strong>Error:</strong> ${escapeHtml(error.message)}
+                    </div>
+                `;
+                resultDiv.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔮 Run Prometheus Check';
+            }
         }
         
         // Book Info Modal (Read-only: Show webhook0n data only)

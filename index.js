@@ -21,6 +21,7 @@ const ThothBot = require('./thoth-bot');
 const fractalId = require('./utils/fractal-id');
 const MetadataExtractor = require('./metadata-extractor');
 const genesisCounter = require('./server/genesis-counter');
+const Prometheus = require('./prometheus');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
@@ -3145,6 +3146,57 @@ app.get('/api/audit-logs', requireRole('admin'), async (req, res) => {
         
         const result = await pool.query(query, params);
         res.json(result.rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============ PROMETHEUS AI CHECK API ============
+// AI-powered message verification with H(0) guard rails
+
+// Check messages against business rules
+app.post('/api/prometheus/check', requireAuth, async (req, res) => {
+    try {
+        const { messages, ruleType = 'general', language } = req.body;
+        
+        if (!messages || (Array.isArray(messages) && messages.length === 0)) {
+            return res.status(400).json({ 
+                error: 'messages is required (string or array of strings)' 
+            });
+        }
+        
+        console.log(`🔮 Prometheus API: Checking ${Array.isArray(messages) ? messages.length : 1} message(s) with rule: ${ruleType}`);
+        
+        const result = await Prometheus.check(messages, ruleType, { language });
+        
+        // Log the check
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+        await logAudit(pool, req, 'PROMETHEUS_CHECK', 'MESSAGE', null, null, {
+            rule_type: ruleType,
+            message_count: Array.isArray(messages) ? messages.length : 1,
+            result_status: Array.isArray(result) ? result.map(r => r.status) : result.status
+        }, tenantSchema);
+        
+        res.json({ 
+            success: true, 
+            result,
+            rule_type: ruleType,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('❌ Prometheus API error:', error);
+        res.status(500).json({ 
+            error: error.message,
+            needs_human_review: true
+        });
+    }
+});
+
+// List available rule types
+app.get('/api/prometheus/rules', requireAuth, async (req, res) => {
+    try {
+        const rules = Prometheus.listRuleTypes();
+        res.json({ rules });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
