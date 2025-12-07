@@ -1969,7 +1969,7 @@ app.post('/api/twilio/webhook', async (req, res) => {
                         { name: '📱 Phone', value: phone, inline: true },
                         { name: '🕐 Time', value: new Date().toLocaleString(), inline: true },
                         { name: '🔓 Status', value: 'No valid join code found', inline: false },
-                        { name: '📝 Message', value: `\`${joinCode.substring(0, 100)}\``, inline: false }
+                        { name: '📝 Message', value: `\`${(Body || '').substring(0, 100)}\``, inline: false }
                     ],
                     timestamp: new Date().toISOString(),
                     footer: { text: 'User needs to send a valid join code (e.g., "bookname-abc123")' }
