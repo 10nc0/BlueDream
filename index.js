@@ -4424,11 +4424,19 @@ const exportBookHandler = async (req, res) => {
         
         for (const msg of enrichedMessages) {
             if (msg.attachments && msg.attachments.length > 0) {
-                // Format timestamp as YYYY-MM-DD/HhMMmSSs for folder organization
+                // Format timestamp as YYYY-MM-DD/HhMMmSSs_GMTxx for folder organization
                 const timestamp = new Date(msg.timestamp);
                 const dateFolder = timestamp.toISOString().split('T')[0]; // YYYY-MM-DD
                 const isoTime = timestamp.toISOString().split('T')[1].substring(0, 8); // HH:MM:SS
                 const timeFolder = isoTime.replace(/:/g, '').replace(/(\d{2})(\d{2})(\d{2})/, '$1h$2m$3s'); // 7h38m07s
+                
+                // Get timezone offset
+                const offset = -timestamp.getTimezoneOffset();
+                const sign = offset >= 0 ? '+' : '-';
+                const absOffset = Math.abs(offset);
+                const tzHours = Math.floor(absOffset / 60);
+                const tzMinutes = absOffset % 60;
+                const tzString = `GMT${sign}${tzHours.toString().padStart(2, '0')}${tzMinutes > 0 ? ':' + tzMinutes.toString().padStart(2, '0') : ''}`;
                 
                 for (const attachment of msg.attachments) {
                     attachmentStats.total++;
@@ -4439,8 +4447,8 @@ const exportBookHandler = async (req, res) => {
                             timeout: 30000 
                         });
                         
-                        // Organize by timestamp: attachments/YYYY-MM-DD/HH-MM-SS/{filename}
-                        const folderPath = `attachments/${dateFolder}/${timeFolder}/${attachment.filename}`;
+                        // Organize by timestamp with timezone: attachments/YYYY-MM-DD/HhMMmSSs_GMTxx/{filename}
+                        const folderPath = `attachments/${dateFolder}/${timeFolder}_${tzString}/${attachment.filename}`;
                         archive.append(response.data, { name: folderPath });
                         attachmentStats.downloaded++;
                         console.log(`📦 Added to ZIP: ${folderPath}`);
@@ -4464,15 +4472,22 @@ This archive contains:
   - ${dropsResult.rows.length} metadata drops
   - ${enrichedMessages.filter(m => m.metadata).length} messages with metadata
 
-- attachments/: Media files organized by message ID
+- attachments/: Media files organized by timestamp
   - ${attachmentStats.downloaded} files downloaded
   - ${attachmentStats.failed} files failed to download
   - Total attempted: ${attachmentStats.total}
 
 Folder Structure:
-attachments/{message_id}/{filename}
+attachments/YYYY-MM-DD/HhMMmSSs_GMTxx/{filename}
 
-Each message with attachments has its own folder containing the media files.
+Example:
+  attachments/2025-12-07/7h38m07s_GMT+08/phi12.xlsx
+  attachments/2025-12-07/6h46m03s_GMT+08/3x3+1.xlsx
+
+Each attachment is organized by:
+- Date (YYYY-MM-DD)
+- Time (HhMMmSSs) with timezone (GMT+XX)
+- Filename
 `;
         archive.append(readme, { name: 'README.txt' });
         
