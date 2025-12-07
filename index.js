@@ -692,6 +692,85 @@ async function initializeDatabase() {
             console.log('✅ Registry backfill already completed (skipping)');
         }
         
+        // MIGRATION: Add drops table to tenant schemas that are missing it
+        // (older tenants created before drops feature was added)
+        try {
+            const dropsCheckMigration = await pool.query(`
+                SELECT 1 FROM core.migrations WHERE name = 'add_drops_table_to_all_tenants'
+            `);
+            
+            if (dropsCheckMigration.rows.length === 0) {
+                console.log('🏷️  Migration: Adding drops table to older tenant schemas...');
+                
+                const schemas = await pool.query(`
+                    SELECT schema_name 
+                    FROM information_schema.schemata 
+                    WHERE schema_name LIKE 'tenant_%'
+                `);
+                
+                let addedCount = 0;
+                for (const { schema_name } of schemas.rows) {
+                    // Check if drops table exists
+                    const tableCheck = await pool.query(`
+                        SELECT EXISTS (
+                            SELECT 1 FROM information_schema.tables 
+                            WHERE table_schema = $1 AND table_name = 'drops'
+                        ) as exists
+                    `, [schema_name]);
+                    
+                    if (!tableCheck.rows[0].exists) {
+                        // Check if books table exists (drops depends on books)
+                        const booksCheck = await pool.query(`
+                            SELECT EXISTS (
+                                SELECT 1 FROM information_schema.tables 
+                                WHERE table_schema = $1 AND table_name = 'books'
+                            ) as exists
+                        `, [schema_name]);
+                        
+                        if (booksCheck.rows[0].exists) {
+                            // Create drops table
+                            await pool.query(`
+                                CREATE TABLE ${schema_name}.drops (
+                                    id SERIAL PRIMARY KEY,
+                                    book_id INTEGER NOT NULL REFERENCES ${schema_name}.books(id) ON DELETE CASCADE,
+                                    discord_message_id TEXT NOT NULL,
+                                    metadata_text TEXT NOT NULL,
+                                    extracted_tags TEXT[] DEFAULT '{}'::text[],
+                                    extracted_dates TEXT[] DEFAULT '{}'::text[],
+                                    search_vector tsvector,
+                                    created_at TIMESTAMPTZ DEFAULT NOW(),
+                                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                                )
+                            `);
+                            
+                            // Create indexes
+                            await pool.query(`
+                                CREATE UNIQUE INDEX IF NOT EXISTS drops_book_message_idx 
+                                ON ${schema_name}.drops (book_id, discord_message_id)
+                            `);
+                            
+                            await pool.query(`
+                                CREATE INDEX IF NOT EXISTS drops_search_idx 
+                                ON ${schema_name}.drops USING gin(search_vector)
+                            `);
+                            
+                            addedCount++;
+                            console.log(`   ✅ Created drops table in ${schema_name}`);
+                        }
+                    }
+                }
+                
+                // Mark migration as complete
+                await pool.query(`
+                    INSERT INTO core.migrations (name) VALUES ('add_drops_table_to_all_tenants')
+                `);
+                
+                console.log(`✅ Migration complete: Added drops table to ${addedCount} tenant schemas`);
+            }
+        } catch (dropsMigrationError) {
+            console.warn('⚠️ Drops migration warning:', dropsMigrationError.message);
+        }
+        
         // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
         // No messages table needed - Discord threads provide permanent storage at zero cost
         
