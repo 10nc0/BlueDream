@@ -1491,7 +1491,7 @@
                         <button class="btn-icon" data-show-book-info="${book.fractal_id}" title="Book Information" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">ℹ️</button>
                         ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" data-show-whatsapp-activation="${book.fractal_id}" title="WhatsApp Activation" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; display: inline-flex; align-items: center; justify-content: center;">📱</button>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-edit-book="${book.fractal_id}" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
-                        ${!isDevPanelView ? `<button class="btn-icon" data-download-entire-book="${book.fractal_id}" title="Download Entire Book" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">📥</button>` : ''}
+                        ${!isDevPanelView ? `<button class="btn-icon" data-download-entire-book="${book.fractal_id}" title="Download Entire Book" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">⬇️</button>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-delete-book="${book.fractal_id}" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
                     </div>
                 </div>
@@ -1542,7 +1542,7 @@
                                 <option value="success">✓</option>
                                 <option value="failed">✗</option>
                             </select>
-                            <button id="download-selected-${book.fractal_id}" data-download-book="${book.fractal_id}" disabled style="padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;">⬇️ Download</button>
+                            <button id="download-selected-${book.fractal_id}" data-download-book="${book.fractal_id}" disabled style="padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;">⬇️ Attachment</button>
                             <button id="tag-selected-${book.fractal_id}" data-tag-book="${book.fractal_id}" disabled style="padding: 0.375rem 0.75rem; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 0.375rem; color: #a855f7; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;">🏷️ Tag</button>
                         </div>
                         <!-- Search indicator (if active) -->
@@ -4086,7 +4086,7 @@
             
             if (count > 0) {
                 // Enable Download button
-                downloadBtn.textContent = `⬇️ Download (${count})`;
+                downloadBtn.textContent = `⬇️ Attachment (${count})`;
                 downloadBtn.disabled = false;
                 downloadBtn.style.opacity = '1';
                 
@@ -4098,7 +4098,7 @@
                 console.log(`✅ Bulk action buttons enabled with ${count} messages`);
             } else {
                 // Disable Download button
-                downloadBtn.textContent = '⬇️ Download';
+                downloadBtn.textContent = '⬇️ Attachment';
                 downloadBtn.disabled = true;
                 downloadBtn.style.opacity = '0.5';
                 
@@ -4683,8 +4683,8 @@
         // Download entire book as ZIP archive
         async function downloadEntireBook(fractalId) {
             try {
-                showDownloadStatus('📥 Preparing book download...', 'info');
-                console.log('📥 Starting download for book:', fractalId);
+                showDownloadStatus('⬇️ Preparing book download...', 'info');
+                console.log('⬇️ Starting download for book:', fractalId);
                 
                 const accessToken = localStorage.getItem('accessToken');
                 
@@ -4696,9 +4696,9 @@
                     }
                 });
                 
-                showDownloadStatus('📥 Downloading data...', 'info');
-                console.log('📥 Response status:', response.status);
-                console.log('📥 Response headers:', {
+                showDownloadStatus('⬇️ Downloading data...', 'info');
+                console.log('⬇️ Response status:', response.status);
+                console.log('⬇️ Response headers:', {
                     'content-type': response.headers.get('content-type'),
                     'content-disposition': response.headers.get('content-disposition'),
                     'content-length': response.headers.get('content-length')
@@ -4708,9 +4708,9 @@
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
-                showDownloadStatus('📥 Creating ZIP file...', 'info');
+                showDownloadStatus('⬇️ Creating ZIP file...', 'info');
                 const blob = await response.blob();
-                console.log('📥 Blob created:', {
+                console.log('⬇️ Blob created:', {
                     size: blob.size,
                     type: blob.type
                 });
@@ -4720,13 +4720,13 @@
                 }
                 
                 // Create download link and trigger download
-                showDownloadStatus('📥 Triggering download...', 'info');
+                showDownloadStatus('⬇️ Triggering download...', 'info');
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
                 link.download = `${fractalId}-complete-book.zip`;
                 
-                console.log('📥 Triggering download with filename:', link.download);
+                console.log('⬇️ Triggering download with filename:', link.download);
                 
                 // Must be in DOM to work on some browsers
                 document.body.appendChild(link);
@@ -4734,7 +4734,7 @@
                 // Add small delay to ensure DOM is ready
                 setTimeout(() => {
                     link.click();
-                    console.log('📥 Download click triggered');
+                    console.log('⬇️ Download click triggered');
                     
                     // Show success message
                     showDownloadStatus('✅ Book downloaded successfully', 'success');
