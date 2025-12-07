@@ -4363,24 +4363,14 @@
             try {
                 console.log(`🎯 Jumping to message ${targetId}...`);
                 
-                // Clear search state and UI
+                // Clear search state and UI (clears preview container too)
                 clearSearchState(bookId);
                 
-                // Check if message is already in DOM first (fast path for cached messages)
-                let targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
-                
-                if (targetEl) {
-                    // Message already cached - scroll instantly
-                    scrollAndHighlight(targetEl);
-                    return;
-                }
-                
-                // Message not in cache - reload all messages then scroll
-                console.log(`⏳ Loading messages...`);
+                // Always reload all messages to ensure message is in main DOM (not in search preview)
                 await loadBookMessages(bookId);
                 
-                // Now find and scroll to the message
-                targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                // Find and scroll to the message
+                const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
                 if (targetEl) {
                     scrollAndHighlight(targetEl);
                 } else {
