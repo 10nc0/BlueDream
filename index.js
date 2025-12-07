@@ -5524,7 +5524,7 @@ app.post('/api/onboarding/status', requireAuth, async (req, res) => {
 // Searches messages in Discord threads for uncached books
 // ===========================
 
-app.get('/api/search', requireAuth, setTenantContext, async (req, res) => {
+app.get('/api/search', requireAuth, async (req, res) => {
     const { term, bookIds } = req.query;
     
     if (!term || term.trim().length === 0) {
@@ -5534,11 +5534,25 @@ app.get('/api/search', requireAuth, setTenantContext, async (req, res) => {
     const searchTerm = term.toLowerCase().trim();
     
     try {
-        // SECURITY: Use tenant context from middleware (validated, not user-supplied)
-        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+        // PERMISSION MODEL: Follow same access as /api/books (not setTenantContext)
+        // This ensures search works on any book the user can see in dashboard
+        const tenantSchema = req.tenantSchema;
         if (!tenantSchema) {
             return res.status(500).json({ error: 'Tenant context not found' });
         }
+        
+        // Get user info for permission check
+        const userResult = await pool.query(
+            `SELECT id, email, tenant_id, is_genesis_admin FROM ${tenantSchema}.users WHERE id = $1`,
+            [req.userId]
+        );
+        
+        if (!userResult.rows.length) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        const user = userResult.rows[0];
+        const hasExtendedAccess = req.userRole === 'dev' && user.is_genesis_admin;
         
         // Parse bookIds if provided (comma-separated list of fractal_ids to search)
         let targetBookIds = null;
@@ -5546,27 +5560,83 @@ app.get('/api/search', requireAuth, setTenantContext, async (req, res) => {
             targetBookIds = bookIds.split(',').map(id => id.trim()).filter(id => id);
         }
         
-        // SECURITY: Query ONLY from tenant's own books table - NO registry access
-        // This ensures complete tenant isolation without cross-tenant enumeration
-        let booksQuery = `
-            SELECT fractal_id, name as book_name, output_credentials, created_at
-            FROM ${tenantSchema}.books
-            WHERE status = 'active'
-        `;
-        const queryParams = [];
+        // EXHAUSTIVE SEARCH: Detect if this is a tag search (starts with #)
+        const isTagSearch = searchTerm.startsWith('#');
+        const tagQuery = isTagSearch ? searchTerm.slice(1) : searchTerm;
         
-        // Filter to specific books if provided - ONLY matches books in tenant's own table
-        // NOTE: Frontend sends only uncached books, so this is already a filtered subset
-        if (targetBookIds && targetBookIds.length > 0) {
-            booksQuery += ` AND fractal_id = ANY($1)`;
-            queryParams.push(targetBookIds);
+        // PERMISSION-AWARE: Query books based on user's access level (same as /api/books)
+        let books = [];
+        
+        if (hasExtendedAccess) {
+            // Dev users: query all tenant schemas (same as /api/books)
+            const allSchemas = await getAllTenantSchemas(pool, req.userRole);
+            
+            for (const schemaRow of allSchemas) {
+                const schemaName = schemaRow.tenant_schema;
+                try {
+                    let schemaQuery = `
+                        SELECT fractal_id, name as book_name, output_credentials, created_at, tags
+                        FROM ${schemaName}.books
+                        WHERE status = 'active' AND archived = false
+                    `;
+                    const schemaParams = [];
+                    
+                    if (targetBookIds && targetBookIds.length > 0) {
+                        schemaQuery += ` AND fractal_id = ANY($1)`;
+                        schemaParams.push(targetBookIds);
+                    }
+                    
+                    const schemaResult = await pool.query(schemaQuery, schemaParams);
+                    books.push(...schemaResult.rows);
+                } catch (error) {
+                    // Skip schemas that fail
+                }
+            }
+        } else {
+            // Regular users: query their tenant's books (same as /api/books)
+            let booksQuery = `
+                SELECT fractal_id, name as book_name, output_credentials, created_at, tags
+                FROM ${tenantSchema}.books
+                WHERE status = 'active' AND archived = false
+            `;
+            const queryParams = [];
+            
+            if (targetBookIds && targetBookIds.length > 0) {
+                booksQuery += ` AND fractal_id = ANY($1)`;
+                queryParams.push(targetBookIds);
+            }
+            
+            const booksResult = await pool.query(booksQuery, queryParams);
+            books = booksResult.rows;
         }
         
-        const booksResult = await pool.query(booksQuery, queryParams);
+        // EXHAUSTIVE SEARCH: First check book metadata (tags, name) for matches
+        // This ensures tag searches find books even if Discord messages don't contain the tag
+        const metadataMatches = new Set();
+        for (const book of books) {
+            // Check book name
+            if ((book.book_name || '').toLowerCase().includes(tagQuery)) {
+                metadataMatches.add(book.fractal_id);
+                continue;
+            }
+            
+            // Check tags (especially for hashtag searches)
+            if (book.tags && Array.isArray(book.tags)) {
+                const hasTagMatch = book.tags.some(tag => 
+                    (tag || '').toLowerCase().includes(tagQuery)
+                );
+                if (hasTagMatch) {
+                    metadataMatches.add(book.fractal_id);
+                }
+            }
+        }
         
-        if (booksResult.rows.length === 0) {
+        if (books.length === 0) {
             return res.json({ matchingBooks: [] });
         }
+        
+        // Use books array instead of booksResult.rows
+        const booksResult = { rows: books };
         
         // Check if Thoth bot is ready
         if (!thothBot || !thothBot.client || !thothBot.ready) {
@@ -5688,8 +5758,10 @@ app.get('/api/search', requireAuth, setTenantContext, async (req, res) => {
                 // Handle rate limits gracefully - stop search entirely but signal partial results
                 if (bookError.message?.includes('429')) {
                     console.warn(`⚠️  Discord rate limited, returning partial results`);
+                    // Merge metadata matches before returning
+                    const allMatches = [...new Set([...matchingBooks, ...metadataMatches])];
                     return res.json({ 
-                        matchingBooks, 
+                        matchingBooks: allMatches, 
                         partial: true, 
                         reason: 'Rate limited by Discord - some books not searched' 
                     });
@@ -5698,9 +5770,12 @@ app.get('/api/search', requireAuth, setTenantContext, async (req, res) => {
             }
         }
         
-        console.log(`🔍 Server search for "${term}": ${matchingBooks.length}/${searchedCount} books matched`);
+        // EXHAUSTIVE: Merge metadata matches with Discord message matches
+        const allMatches = [...new Set([...matchingBooks, ...metadataMatches])];
         
-        res.json({ matchingBooks, partial: false });
+        console.log(`🔍 Server search for "${term}": ${allMatches.length} matches (${matchingBooks.length} Discord + ${metadataMatches.size} metadata) from ${searchedCount} books searched`);
+        
+        res.json({ matchingBooks: allMatches, partial: false });
     } catch (error) {
         console.error('❌ Server search error:', error);
         res.status(500).json({ error: error.message });
