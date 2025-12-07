@@ -5616,10 +5616,11 @@ app.get('/api/search', requireAuth, setTenantContext, async (req, res) => {
                 if (!thread) continue;
                 
                 // Fetch messages with timeout
+                // Increased from 50 to 100 to catch messages not in top 50 recent
                 let discordMessages;
                 try {
                     discordMessages = await Promise.race([
-                        thread.messages.fetch({ limit: 50, force: true }),
+                        thread.messages.fetch({ limit: 100, force: true }),
                         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), TIMEOUT_MS))
                     ]);
                 } catch (fetchError) {
