@@ -3250,6 +3250,45 @@ app.get('/api/audit-logs', requireRole('admin'), async (req, res) => {
 // ============ PROMETHEUS AI CHECK API ============
 // AI-powered message verification with H(0) guard rails
 
+// Helper: Detect book names in user query and lookup their fractal IDs
+async function detectAndLookupBookNames(userQuery, tenantSchema, client = pool) {
+    if (!userQuery || typeof userQuery !== 'string') return [];
+    
+    try {
+        // Fetch all books for this tenant with their names
+        const result = await client.query(
+            `SELECT fractal_id, name FROM ${tenantSchema}.books WHERE status != 'archived' ORDER BY name ASC`
+        );
+        
+        const books = result.rows;
+        if (books.length === 0) return [];
+        
+        const detectedFractalIds = [];
+        const queryLower = userQuery.toLowerCase();
+        
+        // Look for book names in the query
+        for (const book of books) {
+            const bookNameLower = book.name.toLowerCase();
+            // Match book name as whole word or with "and" separator
+            if (queryLower.includes(bookNameLower) || 
+                new RegExp(`\\b${bookNameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(userQuery)) {
+                if (!detectedFractalIds.includes(book.fractal_id)) {
+                    detectedFractalIds.push(book.fractal_id);
+                }
+            }
+        }
+        
+        if (detectedFractalIds.length > 1) {
+            console.log(`📖 Detected ${detectedFractalIds.length} books in query: ${detectedFractalIds.join(', ')}`);
+        }
+        
+        return detectedFractalIds;
+    } catch (error) {
+        console.warn(`⚠️ Failed to detect book names:`, error.message);
+        return [];
+    }
+}
+
 // Helper: Fetch book context for Prometheus
 async function fetchBookContextForPrometheus(fractalId, tenantSchema, client = pool) {
     if (!fractalId || !tenantSchema) return null;
@@ -3479,14 +3518,26 @@ app.post('/api/prometheus/check', requireAuth, async (req, res) => {
         let hasBookContext = false;
         let multiBookContext = null;
         
-        // MULTI-BOOK QUERY: If bookIds array provided, fetch context from multiple books
-        if (bookIds && Array.isArray(bookIds) && bookIds.length > 0 && tenantSchema) {
-            console.log(`🔮 Prometheus API: Multi-book query for ${bookIds.length} books`);
+        // Convert messages array to query string for book name detection
+        const userQuery = Array.isArray(messages) ? messages.join('\n') : messages;
+        
+        // AUTO-DETECT BOOK NAMES: Try to find referenced books in the query
+        let detectedBookIds = bookIds;
+        if (!bookIds || bookIds.length === 0) {
+            const autoDetectedFractalIds = await detectAndLookupBookNames(userQuery, tenantSchema);
+            if (autoDetectedFractalIds.length > 0) {
+                detectedBookIds = autoDetectedFractalIds;
+                console.log(`📖 Auto-detected ${detectedBookIds.length} book(s) from query text`);
+            }
+        }
+        
+        // MULTI-BOOK QUERY: If bookIds array provided or auto-detected, fetch context from multiple books
+        if (detectedBookIds && Array.isArray(detectedBookIds) && detectedBookIds.length > 0 && tenantSchema) {
+            console.log(`🔮 Prometheus API: Multi-book query for ${detectedBookIds.length} books`);
             
-            multiBookContext = await fetchMultiBookContextForPrometheus(bookIds, tenantSchema, userRole);
+            multiBookContext = await fetchMultiBookContextForPrometheus(detectedBookIds, tenantSchema, userRole);
             
             if (multiBookContext && multiBookContext.totalMessages > 0) {
-                const userQuery = Array.isArray(messages) ? messages.join('\n') : messages;
                 result = await Prometheus.checkWithMultiBookContext(userQuery, multiBookContext, { language });
                 hasBookContext = true;
             } else {
