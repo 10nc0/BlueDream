@@ -508,6 +508,68 @@ async function initializeDatabase() {
             ON CONFLICT (key) DO NOTHING
         `);
         
+        // MIGRATION: Add audit_queries table to existing tenant schemas
+        const auditQueriesMigration = await pool.query(`
+            SELECT name FROM core.migrations WHERE name = 'audit_queries_table'
+        `);
+        
+        if (auditQueriesMigration.rows.length === 0) {
+            console.log('🔄 Running migration: audit_queries_table for existing tenants...');
+            
+            // Get all tenant schemas
+            const tenantSchemas = await pool.query(`
+                SELECT schema_name FROM core.tenant_catalog
+            `);
+            
+            for (const row of tenantSchemas.rows) {
+                const schema = row.schema_name;
+                // Validate schema name format (tenant_X where X is numeric) for SQL injection protection
+                if (!/^tenant_\d+$/.test(schema)) {
+                    console.warn(`  ⚠️ Skipping invalid schema name: ${schema}`);
+                    continue;
+                }
+                // Schema is validated, safe to use with double-quote identifier quoting
+                const safeSchema = `"${schema}"`;
+                try {
+                    await pool.query(`
+                        CREATE TABLE IF NOT EXISTS ${safeSchema}.audit_queries (
+                            id SERIAL PRIMARY KEY,
+                            user_id INTEGER NOT NULL,
+                            book_id INTEGER,
+                            rule_type TEXT NOT NULL,
+                            language TEXT DEFAULT 'en',
+                            input_messages JSONB NOT NULL,
+                            result_status TEXT,
+                            result_confidence NUMERIC(4,3),
+                            result_reason TEXT,
+                            result_data JSONB,
+                            raw_response TEXT,
+                            processing_time_ms INTEGER,
+                            created_at TIMESTAMPTZ DEFAULT NOW()
+                        )
+                    `);
+                    
+                    await pool.query(`
+                        CREATE INDEX IF NOT EXISTS idx_audit_queries_user_id ON ${safeSchema}.audit_queries(user_id)
+                    `);
+                    
+                    await pool.query(`
+                        CREATE INDEX IF NOT EXISTS idx_audit_queries_book_id ON ${safeSchema}.audit_queries(book_id)
+                    `);
+                    
+                    console.log(`  ✅ Added audit_queries table to ${schema}`);
+                } catch (err) {
+                    console.error(`  ⚠️ Failed to add audit_queries to ${schema}:`, err.message);
+                }
+            }
+            
+            // Mark migration as complete
+            await pool.query(`
+                INSERT INTO core.migrations (name) VALUES ('audit_queries_table')
+            `);
+            console.log('✅ Migration audit_queries_table completed');
+        }
+        
         // NOTE: One-time migrations (updated_at, creator_phone, join_code, drops) have been
         // applied to production database and removed from startup code for clean deploys.
         // Migration records preserved in core.migrations table for audit trail.
