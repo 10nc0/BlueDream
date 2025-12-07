@@ -1899,24 +1899,27 @@ app.post('/api/twilio/webhook', async (req, res) => {
         // Format: bookname-abc123 (6 hex chars)
         const joinCodeMatch = bodyText.match(/([a-z0-9]+)-([a-f0-9]{6})/i);
         const joinCode = joinCodeMatch ? joinCodeMatch[0] : null;
-        console.log(`🔍 Extracted join code: ${joinCode || 'none'}`);
+        console.log(`🔍 Extracted join code: ${joinCode || 'none'} (from body: "${bodyText.substring(0, 100)}")`);
         
         // STEP 3: JOIN-CODE-FIRST ROUTING - Join code supersedes phone lookup
         let bookRecord = null;
+        let routingMethod = 'unknown';
         
         if (joinCode) {
             // Message contains join code → ONLY use join code (no phone fallback)
             console.log(`🔑 Join code provided: ${joinCode} → Checking registry (NO phone fallback)`);
             const registryLookup = await pool.query(`
-                SELECT id, tenant_schema, tenant_email, fractal_id, book_name, 
+                SELECT id, tenant_schema, tenant_email, fractal_id, book_name, join_code,
                        outpipe_ledger, outpipes_user, status, phone_number, creator_phone
                 FROM core.book_registry
                 WHERE LOWER(join_code) = LOWER($1)
             `, [joinCode]);
             
+            console.log(`🔍 Registry lookup result: ${registryLookup.rows.length} rows for join_code="${joinCode}"`);
             if (registryLookup.rows.length > 0) {
                 bookRecord = registryLookup.rows[0];
-                console.log(`✅ Found via join code: ${bookRecord.fractal_id} (status: ${bookRecord.status})`);
+                routingMethod = 'join_code';
+                console.log(`✅ Found via join code: fractal_id=${bookRecord.fractal_id}, book_name="${bookRecord.book_name}", stored_join_code="${bookRecord.join_code}" (status: ${bookRecord.status})`);
             } else {
                 console.log(`❌ Join code "${joinCode}" not found in registry → Routing to limbo (no phone fallback)`);
             }
@@ -1924,8 +1927,9 @@ app.post('/api/twilio/webhook', async (req, res) => {
             // No join code in message → Use phone lookup via book_engaged_phones (multi-source support)
             console.log(`📞 No join code in message → Using engaged phones lookup for active books`);
             const phoneLookup = await pool.query(`
-                SELECT br.id, br.tenant_schema, br.tenant_email, br.fractal_id, br.book_name, 
-                       br.outpipe_ledger, br.outpipes_user, br.status, br.phone_number, br.creator_phone, br.updated_at
+                SELECT br.id, br.tenant_schema, br.tenant_email, br.fractal_id, br.book_name, br.join_code,
+                       br.outpipe_ledger, br.outpipes_user, br.status, br.phone_number, br.creator_phone, br.updated_at,
+                       ep.last_engaged_at
                 FROM core.book_engaged_phones ep
                 JOIN core.book_registry br ON br.id = ep.book_registry_id
                 WHERE ep.phone = $1 AND br.status = 'active'
@@ -1933,12 +1937,19 @@ app.post('/api/twilio/webhook', async (req, res) => {
                 LIMIT 1
             `, [phone]);
             
+            console.log(`🔍 Phone lookup result: ${phoneLookup.rows.length} rows for phone="${phone}"`);
             if (phoneLookup.rows.length > 0) {
                 bookRecord = phoneLookup.rows[0];
-                console.log(`✅ Found via phone: ${bookRecord.fractal_id} (most recent, updated: ${bookRecord.updated_at})`);
+                routingMethod = 'phone';
+                console.log(`✅ Found via phone: fractal_id=${bookRecord.fractal_id}, book_name="${bookRecord.book_name}", join_code="${bookRecord.join_code}", last_engaged: ${bookRecord.last_engaged_at}`);
             } else {
                 console.log(`❌ No active book found for phone ${phone} → Routing to limbo`);
             }
+        }
+        
+        // ROUTING DECISION LOG
+        if (bookRecord) {
+            console.log(`🚀 ROUTING DECISION: method=${routingMethod}, target_book="${bookRecord.book_name}" (${bookRecord.fractal_id}), join_code="${bookRecord.join_code}"`);
         }
         
         if (!bookRecord) {
