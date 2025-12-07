@@ -4366,37 +4366,36 @@
                 // Clear search state and UI (clears preview container too)
                 clearSearchState(bookId);
                 
-                // CRITICAL: First check if message is ALREADY in DOM
-                // This preserves chronological order and prevents DOM reconstruction
-                let targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                // Check if we're in a filtered view - if so, we MUST reload to show context
+                const searchBox = document.getElementById(`msg-search-${bookId}`);
+                const isFiltered = searchBox && searchBox.value.trim() !== '';
                 
-                if (targetEl) {
-                    console.log(`✅ Message already in DOM, scrolling directly (no reload)`);
-                    scrollAndHighlight(targetEl, bookId);
-                } else {
-                    // Message not in DOM - must load messages to find it
-                    console.log(`📥 Message not in DOM, loading messages...`);
-                    await loadBookMessages(bookId);
-                    
-                    console.log(`📄 Load complete, searching for message...`);
-                    
-                    // Use setTimeout + RAF to ensure DOM is painted before querying
-                    setTimeout(() => {
+                console.log(`📋 Was filtered: ${isFiltered}`);
+                
+                // CRITICAL: Always reload when jumping from filtered search
+                // This shows messages above and below the target while preserving chronological order
+                console.log(`📥 Loading all messages to show context...`);
+                await loadBookMessages(bookId);
+                
+                console.log(`📄 Load complete, searching for target message...`);
+                
+                // Use setTimeout + double RAF to ensure DOM is FULLY painted before scrolling
+                setTimeout(() => {
+                    requestAnimationFrame(() => {
                         requestAnimationFrame(() => {
-                            requestAnimationFrame(() => {
-                                const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
-                                
-                                if (targetEl) {
-                                    console.log(`✅ Target found after reload, calling scrollAndHighlight...`);
-                                    scrollAndHighlight(targetEl, bookId);
-                                } else {
-                                    console.warn(`⚠️ Message ${targetId} not found even after reload`);
-                                    showToast(`⚠️ Message not found`, 'error');
-                                }
-                            });
+                            console.log(`🔍 Looking for target element...`);
+                            const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                            
+                            if (targetEl) {
+                                console.log(`✅ Target found, calling scrollAndHighlight...`);
+                                scrollAndHighlight(targetEl, bookId);
+                            } else {
+                                console.warn(`⚠️ Message ${targetId} not found in DOM after reload`);
+                                showToast(`⚠️ Message not found`, 'error');
+                            }
                         });
-                    }, 50);
-                }
+                    });
+                }, 50); // Small delay to ensure browser has committed layout
                 
             } catch (error) {
                 console.error('Error jumping to message:', error);
