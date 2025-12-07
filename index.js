@@ -4821,7 +4821,7 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                         media_url: attachment ? attachment.url : (mediaFromEmbed ? mediaFromEmbed.url : null),
                         media_type: attachment ? attachment.contentType : (mediaFromEmbed ? mediaFromEmbed.contentType : null),
                         embeds: msg.embeds.map(e => ({
-                            title: e.title,
+                            title: e.title === '🎉 Book Activated' ? e.title : null,
                             description: e.description,
                             color: e.color,
                             fields: e.fields
