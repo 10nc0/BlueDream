@@ -1,20 +1,22 @@
 /**
- * PROMETHEUS HUGGINGFACE CLIENT
+ * PROMETHEUS GROQ CLIENT
  * 
- * Qwen2.5-3B-Instruct via HuggingFace Router (OpenAI-compatible API)
+ * Llama 3.3-70B via Groq (OpenAI-compatible API)
  * 
  * Features:
  * - H(0) temperature shield (0.1 - minimal creativity)
  * - 3 retry attempts with exponential backoff
  * - 60 second timeout
  * - Error handling with graceful degradation
+ * - Indonesian + English bilingual support
+ * - Ultra-fast inference (300+ tokens/sec)
  */
 
 const axios = require('axios');
 
-const HF_API_URL = 'https://router.huggingface.co/hf-inference/v1/chat/completions';
-const HF_MODEL = 'Qwen/Qwen2-1.5B-Instruct';
-const HF_TOKEN = process.env.HF_API_TOKEN;
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_TOKEN = process.env.GROQ_API_KEY;
 
 const DEFAULT_PARAMS = {
   max_tokens: 500,
@@ -31,8 +33,8 @@ async function sleep(ms) {
 }
 
 async function callLLM(prompt, options = {}) {
-  if (!HF_TOKEN) {
-    throw new Error('HF_API_TOKEN not configured. Add it to Replit Secrets.');
+  if (!GROQ_TOKEN) {
+    throw new Error('GROQ_API_KEY not configured. Add it to Replit Secrets.');
   }
   
   const params = { ...DEFAULT_PARAMS, ...options };
@@ -43,9 +45,9 @@ async function callLLM(prompt, options = {}) {
       console.log(`🔮 Prometheus LLM call (attempt ${attempt + 1}/${MAX_RETRIES})...`);
       
       const response = await axios.post(
-        HF_API_URL,
+        GROQ_API_URL,
         {
-          model: HF_MODEL,
+          model: GROQ_MODEL,
           messages: [
             { role: 'user', content: prompt }
           ],
@@ -55,7 +57,7 @@ async function callLLM(prompt, options = {}) {
         },
         {
           headers: {
-            'Authorization': `Bearer ${HF_TOKEN}`,
+            'Authorization': `Bearer ${GROQ_TOKEN}`,
             'Content-Type': 'application/json'
           },
           timeout: TIMEOUT_MS
@@ -102,7 +104,7 @@ async function callLLM(prompt, options = {}) {
   let errorMessage = 'Unknown error';
   if (lastError?.response?.data) {
     const errorData = lastError.response.data;
-    console.error('🔍 HuggingFace error response:', JSON.stringify(errorData, null, 2));
+    console.error('🔍 Groq error response:', JSON.stringify(errorData, null, 2));
     if (typeof errorData.error === 'string') {
       errorMessage = errorData.error;
     } else if (typeof errorData.error === 'object' && errorData.error?.message) {
@@ -117,7 +119,7 @@ async function callLLM(prompt, options = {}) {
   }
   
   console.error(`❌ Prometheus LLM failed after ${MAX_RETRIES} attempts: ${errorMessage}`);
-  throw new Error(`HuggingFace API error: ${errorMessage}`);
+  throw new Error(`Groq API error: ${errorMessage}`);
 }
 
 function extractJSON(text) {
@@ -171,7 +173,7 @@ module.exports = {
   callLLM,
   checkWithLLM,
   extractJSON,
-  HF_API_URL,
-  HF_MODEL,
+  GROQ_API_URL,
+  GROQ_MODEL,
   DEFAULT_PARAMS
 };
