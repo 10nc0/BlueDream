@@ -21,7 +21,8 @@ const GROQ_TOKEN = process.env.GROQ_API_KEY;
 const DEFAULT_PARAMS = {
   max_tokens: 500,
   temperature: 0.1,           // H(0) shield - no creativity, only facts
-  top_p: 0.95                 // Minimal diversity without hallucination
+  top_p: 0.95,                // Minimal diversity without hallucination
+  repetition_penalty: 1.1     // Prevents looping/repetition
 };
 
 const MAX_RETRIES = 3;
@@ -53,7 +54,8 @@ async function callLLM(prompt, options = {}) {
           ],
           max_tokens: params.max_tokens,
           temperature: params.temperature,
-          top_p: params.top_p
+          top_p: params.top_p,
+          repetition_penalty: params.repetition_penalty
         },
         {
           headers: {
@@ -164,6 +166,11 @@ async function checkWithLLM(prompt) {
       needs_human_review: true,
       raw_response: rawResponse
     };
+  }
+  
+  // Ensure confidence field is always present (LLM may omit it in edge cases)
+  if (typeof parsed.confidence !== 'number' || parsed.confidence < 0 || parsed.confidence > 1) {
+    parsed.confidence = 0.5;  // Default: uncertain
   }
   
   return parsed;
