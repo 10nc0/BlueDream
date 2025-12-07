@@ -4499,12 +4499,13 @@
                 let headerHeight = 0;
                 
                 if (stickyHeader) {
-                    // Get actual header height + some padding to position message below it
-                    headerHeight = stickyHeader.offsetHeight + 8; // +8px extra padding
+                    // Get actual header height + padding to position message below it
+                    // Add generous padding to ensure message sits well below the sticky header
+                    headerHeight = stickyHeader.offsetHeight + 16; // +16px extra padding below header
                 }
                 
                 // If no header found, use safe fallback offset
-                const offset = Math.max(headerHeight, 70);
+                const offset = Math.max(headerHeight, 100);
                 
                 // Position message below the sticky header
                 const scrollTarget = el.offsetTop - offset;
