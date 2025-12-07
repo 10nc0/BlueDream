@@ -4494,10 +4494,23 @@
             const container = bookId ? document.getElementById(`discord-messages-${bookId}`) : null;
             
             if (container) {
-                // Account for sticky header: offset message to sit below time header without clipping sender
-                const headerOffset = 240;
-                const scrollTarget = el.offsetTop - headerOffset;
+                // Find the sticky header height dynamically
+                const stickyHeader = container.querySelector('.time-bucket-header');
+                let headerHeight = 0;
+                
+                if (stickyHeader) {
+                    // Get actual header height + some padding to position message below it
+                    headerHeight = stickyHeader.offsetHeight + 8; // +8px extra padding
+                }
+                
+                // If no header found, use safe fallback offset
+                const offset = Math.max(headerHeight, 70);
+                
+                // Position message below the sticky header
+                const scrollTarget = el.offsetTop - offset;
                 container.scrollTop = Math.max(0, scrollTarget);
+                
+                console.log(`📍 Jumping: header=${headerHeight}px, offset=${offset}px, scrollTarget=${scrollTarget}px, scrollTop=${container.scrollTop}px`);
             } else {
                 // Fallback: instant scroll to top of viewport if no container found
                 el.scrollIntoView({ behavior: 'auto', block: 'start' });
