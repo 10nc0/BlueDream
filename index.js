@@ -4424,6 +4424,11 @@ const exportBookHandler = async (req, res) => {
         
         for (const msg of enrichedMessages) {
             if (msg.attachments && msg.attachments.length > 0) {
+                // Format timestamp as YYYY-MM-DD/HH-MM-SS for folder organization
+                const timestamp = new Date(msg.timestamp);
+                const dateFolder = timestamp.toISOString().split('T')[0]; // YYYY-MM-DD
+                const timeFolder = timestamp.toISOString().split('T')[1].substring(0, 8).replace(/:/g, '-'); // HH-MM-SS
+                
                 for (const attachment of msg.attachments) {
                     attachmentStats.total++;
                     try {
@@ -4433,8 +4438,8 @@ const exportBookHandler = async (req, res) => {
                             timeout: 30000 
                         });
                         
-                        // Organize by message ID folder
-                        const folderPath = `attachments/${msg.id}/${attachment.filename}`;
+                        // Organize by timestamp: attachments/YYYY-MM-DD/HH-MM-SS/{filename}
+                        const folderPath = `attachments/${dateFolder}/${timeFolder}/${attachment.filename}`;
                         archive.append(response.data, { name: folderPath });
                         attachmentStats.downloaded++;
                         console.log(`📦 Added to ZIP: ${folderPath}`);
