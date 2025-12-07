@@ -48,7 +48,7 @@ class Prometheus {
         return await Prometheus.checkBatch(messageList, ruleType, language);
       }
     } catch (error) {
-      console.error('❌ Prometheus check failed:', error.message);
+      console.error(`❌ Prometheus check failed (rule: ${ruleType}):`, error.message);
       
       // Return indexed error results for batch, single result otherwise
       if (isArray) {
@@ -106,6 +106,11 @@ class Prometheus {
     
     const llmResult = await checkWithLLM(prompt);
     
+    // Defensive H(0) - ensure confidence always exists
+    if (typeof llmResult.confidence !== 'number') {
+      llmResult.confidence = llmResult.status === 'PASS' ? 0.95 : 0.6;
+    }
+    
     if (llmResult.data_extracted && Object.keys(llmResult.data_extracted).length > 0) {
       const businessResult = applyBusinessRules(llmResult.data_extracted, ruleType, lang);
       
@@ -141,6 +146,17 @@ class Prometheus {
     console.log(`🔮 Prometheus batch checking ${messages.length} messages (${ruleType}, ${lang})...`);
     
     const llmResult = await checkWithLLM(prompt);
+    
+    // Defensive H(0) - ensure confidence always exists
+    if (Array.isArray(llmResult)) {
+      llmResult.forEach(result => {
+        if (typeof result.confidence !== 'number') {
+          result.confidence = result.status === 'PASS' ? 0.95 : 0.6;
+        }
+      });
+    } else if (typeof llmResult.confidence !== 'number') {
+      llmResult.confidence = llmResult.status === 'PASS' ? 0.95 : 0.6;
+    }
     
     if (Array.isArray(llmResult)) {
       return llmResult.map((result, index) => {
