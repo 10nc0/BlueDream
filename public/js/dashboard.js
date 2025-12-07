@@ -4369,15 +4369,15 @@
                 // Reload all messages for the book (not just search results)
                 await loadBookMessages(bookId);
                 
-                // Wait for DOM update, then scroll to target message (centered, no highlight)
-                setTimeout(() => {
+                // Use RAF to scroll immediately after DOM update, no artificial delay
+                requestAnimationFrame(() => {
                     const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
                     if (targetEl) {
                         scrollAndHighlight(targetEl);
                     } else {
                         console.warn('Message not found in DOM after reload');
                     }
-                }, 200);
+                });
                 
             } catch (error) {
                 console.error('Error jumping to message:', error);
@@ -4488,8 +4488,8 @@
         function scrollAndHighlight(el) {
             if (!el) return;
             
-            // Smooth scroll to center of viewport
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Instant scroll to center of viewport (fast jump response)
+            el.scrollIntoView({ behavior: 'auto', block: 'center' });
             
             // Update URL with hash (for shareable links)
             const msgId = el.getAttribute('data-msg-id');
