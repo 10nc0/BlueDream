@@ -4434,8 +4434,7 @@
             try {
                 showToast('📥 Preparing book download...', 'info');
                 const response = await authFetch(`/api/books/${fractalId}/export`, {
-                    method: 'GET',
-                    headers: { 'Authorization': `Bearer ${authToken}` }
+                    method: 'GET'
                 });
                 
                 if (!response.ok) {
