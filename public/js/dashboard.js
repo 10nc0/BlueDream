@@ -4361,27 +4361,23 @@
             if (!targetId || !bookId) return;
             
             try {
-                console.log(`🎯 Jumping to message ${targetId}...`);
+                console.log(`🎯 Jumping to message ${targetId}, clearing search and reloading all messages...`);
                 
                 // Clear search state and UI
                 clearSearchState(bookId);
                 
-                // Check if message is already in DOM
-                let targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                // Reload all messages for the book (not just search results)
+                await loadBookMessages(bookId);
                 
-                if (!targetEl) {
-                    // Message not in DOM, reload all messages
-                    console.log(`⏳ Message not in cache, reloading...`);
-                    await loadBookMessages(bookId);
-                    targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
-                }
-                
-                // Scroll immediately (no RAF delay)
-                if (targetEl) {
-                    scrollAndHighlight(targetEl);
-                } else {
-                    console.warn('Message not found in DOM');
-                }
+                // Use RAF to scroll immediately after DOM update, no artificial delay
+                requestAnimationFrame(() => {
+                    const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                    if (targetEl) {
+                        scrollAndHighlight(targetEl);
+                    } else {
+                        console.warn('Message not found in DOM after reload');
+                    }
+                });
                 
             } catch (error) {
                 console.error('Error jumping to message:', error);
