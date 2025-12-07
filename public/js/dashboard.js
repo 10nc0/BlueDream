@@ -4369,15 +4369,25 @@
                 // Always reload all messages to ensure message is in main DOM (not in search preview)
                 await loadBookMessages(bookId);
                 
-                // Wait for DOM to fully paint before scrolling (ensures offset is last action)
-                requestAnimationFrame(() => {
-                    const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
-                    if (targetEl) {
-                        scrollAndHighlight(targetEl);
-                    } else {
-                        console.warn('Message not found in DOM after reload');
-                    }
-                });
+                console.log(`📄 Load complete, scheduling scroll...`);
+                
+                // Use setTimeout + double RAF to ensure DOM is FULLY painted before scrolling
+                // This guarantees scroll offset is the LAST action after all rendering
+                setTimeout(() => {
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => {
+                            console.log(`🔍 Looking for target element...`);
+                            const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                            
+                            if (targetEl) {
+                                console.log(`✅ Target found, calling scrollAndHighlight...`);
+                                scrollAndHighlight(targetEl);
+                            } else {
+                                console.warn(`⚠️ Message ${targetId} not found in DOM after reload`);
+                            }
+                        });
+                    });
+                }, 50); // Small delay to ensure browser has committed layout
                 
             } catch (error) {
                 console.error('Error jumping to message:', error);
@@ -4486,12 +4496,26 @@
 
         // Scroll to element with offset for sticky time header
         function scrollAndHighlight(el) {
+            console.log(`🎨 scrollAndHighlight called, el exists:`, !!el);
             if (!el) return;
             
-            // Find the message container
+            // Find the message container - try multiple approaches
             const msgId = el.getAttribute('data-msg-id');
-            const bookId = el.closest('[data-book-id]')?.getAttribute('data-book-id');
+            let bookId = el.getAttribute('data-book-id');
+            
+            // If no bookId on element, find from parent container
+            if (!bookId) {
+                const parentContainer = el.closest('.discord-messages');
+                if (parentContainer) {
+                    const containerId = parentContainer.id; // e.g., "discord-messages-dev_book_t1_..."
+                    bookId = containerId.replace('discord-messages-', '');
+                }
+            }
+            
+            console.log(`📊 msgId=${msgId}, bookId=${bookId}`);
+            
             const container = bookId ? document.getElementById(`discord-messages-${bookId}`) : null;
+            console.log(`📦 Container found:`, !!container);
             
             if (container) {
                 // Find the sticky header height dynamically
@@ -4504,15 +4528,23 @@
                     headerHeight = stickyHeader.offsetHeight + 16; // +16px extra padding below header
                 }
                 
+                console.log(`📏 Sticky header found: ${!!stickyHeader}, height: ${stickyHeader?.offsetHeight}px`);
+                
                 // If no header found, use safe fallback offset
                 const offset = Math.max(headerHeight, 100);
                 
-                // Position message below the sticky header
-                const scrollTarget = el.offsetTop - offset;
+                // Get element position and compute scroll target
+                const elOffsetTop = el.offsetTop;
+                const scrollTarget = elOffsetTop - offset;
+                
+                console.log(`📐 elOffsetTop=${elOffsetTop}, offset=${offset}, scrollTarget=${scrollTarget}`);
+                
+                // Apply the scroll
                 container.scrollTop = Math.max(0, scrollTarget);
                 
-                console.log(`📍 Jumping: header=${headerHeight}px, offset=${offset}px, scrollTarget=${scrollTarget}px, scrollTop=${container.scrollTop}px`);
+                console.log(`📍 SCROLL APPLIED: scrollTop now = ${container.scrollTop}px (wanted ${Math.max(0, scrollTarget)}px)`);
             } else {
+                console.log(`⚠️ No container found, using scrollIntoView fallback`);
                 // Fallback: instant scroll to top of viewport if no container found
                 el.scrollIntoView({ behavior: 'auto', block: 'start' });
             }
