@@ -4419,7 +4419,34 @@ const exportBookHandler = async (req, res) => {
         // Add messages.json to ZIP
         archive.append(JSON.stringify(exportData, null, 2), { name: 'messages.json' });
         
-        // Add README
+        // Download and add attachments to ZIP
+        let attachmentStats = { total: 0, downloaded: 0, failed: 0 };
+        
+        for (const msg of enrichedMessages) {
+            if (msg.attachments && msg.attachments.length > 0) {
+                for (const attachment of msg.attachments) {
+                    attachmentStats.total++;
+                    try {
+                        console.log(`📦 Downloading attachment: ${attachment.filename}`);
+                        const response = await axios.get(attachment.url, { 
+                            responseType: 'arraybuffer',
+                            timeout: 30000 
+                        });
+                        
+                        // Organize by message ID folder
+                        const folderPath = `attachments/${msg.id}/${attachment.filename}`;
+                        archive.append(response.data, { name: folderPath });
+                        attachmentStats.downloaded++;
+                        console.log(`📦 Added to ZIP: ${folderPath}`);
+                    } catch (err) {
+                        attachmentStats.failed++;
+                        console.log(`📦 Failed to download ${attachment.filename}: ${err.message}`);
+                    }
+                }
+            }
+        }
+        
+        // Add README with attachment info
         const readme = `# Your Nyanbook Export
         
 Book: ${book.name}
@@ -4431,7 +4458,15 @@ This archive contains:
   - ${dropsResult.rows.length} metadata drops
   - ${enrichedMessages.filter(m => m.metadata).length} messages with metadata
 
-Media files are not included but accessible via Discord CDN URLs in messages.json.
+- attachments/: Media files organized by message ID
+  - ${attachmentStats.downloaded} files downloaded
+  - ${attachmentStats.failed} files failed to download
+  - Total attempted: ${attachmentStats.total}
+
+Folder Structure:
+attachments/{message_id}/{filename}
+
+Each message with attachments has its own folder containing the media files.
 `;
         archive.append(readme, { name: 'README.txt' });
         
