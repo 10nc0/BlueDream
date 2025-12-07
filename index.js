@@ -3216,10 +3216,123 @@ app.get('/api/audit-logs', requireRole('admin'), async (req, res) => {
 // ============ PROMETHEUS AI CHECK API ============
 // AI-powered message verification with H(0) guard rails
 
-// Check messages against business rules
+// Helper: Fetch book context for Prometheus
+async function fetchBookContextForPrometheus(fractalId, tenantSchema, client = pool) {
+    if (!fractalId || !tenantSchema) return null;
+    
+    try {
+        // Get book info
+        const bookResult = await client.query(
+            `SELECT id, name, output_credentials, created_at FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+            [fractalId]
+        );
+        
+        if (bookResult.rows.length === 0) return null;
+        
+        const book = bookResult.rows[0];
+        const bookCreatedAt = new Date(book.created_at);
+        
+        // Parse output_credentials
+        let outputCredentials = book.output_credentials;
+        if (typeof outputCredentials === 'string') {
+            outputCredentials = JSON.parse(outputCredentials);
+        }
+        
+        const outputData = outputCredentials?.output_01;
+        if (!outputData?.thread_id) {
+            return {
+                name: book.name,
+                fractalId: fractalId,
+                createdAt: bookCreatedAt.toISOString(),
+                totalMessages: 0,
+                messagesThisMonth: 0,
+                dateRange: 'No messages yet',
+                recentMessages: []
+            };
+        }
+        
+        // Fetch messages from Discord
+        if (!thothBot || !thothBot.client || !thothBot.ready) {
+            return {
+                name: book.name,
+                fractalId: fractalId,
+                createdAt: bookCreatedAt.toISOString(),
+                totalMessages: 0,
+                messagesThisMonth: 0,
+                dateRange: 'Discord bot not ready',
+                recentMessages: []
+            };
+        }
+        
+        const thread = await thothBot.client.channels.fetch(outputData.thread_id);
+        if (!thread) return null;
+        
+        // Fetch up to 100 messages for context
+        const discordMessages = await thread.messages.fetch({ limit: 100, force: true });
+        
+        // Filter messages after book creation and transform
+        const now = new Date();
+        const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        
+        const messages = Array.from(discordMessages.values())
+            .filter(msg => msg.createdAt >= bookCreatedAt)
+            .map(msg => {
+                // Extract content from embeds if present
+                let content = msg.content;
+                if (!content && msg.embeds.length > 0) {
+                    const embed = msg.embeds[0];
+                    content = embed.description || '';
+                    const bodyField = embed.fields?.find(f => f.name === '📝 Body');
+                    if (bodyField) content = bodyField.value;
+                }
+                
+                return {
+                    id: msg.id,
+                    content: content,
+                    timestamp: msg.createdAt.toISOString(),
+                    createdAt: msg.createdAt
+                };
+            })
+            .sort((a, b) => b.createdAt - a.createdAt);
+        
+        // Calculate stats by month
+        const messagesByMonth = {};
+        messages.forEach(msg => {
+            const monthKey = `${msg.createdAt.getFullYear()}-${String(msg.createdAt.getMonth() + 1).padStart(2, '0')}`;
+            messagesByMonth[monthKey] = (messagesByMonth[monthKey] || 0) + 1;
+        });
+        
+        const messagesThisMonth = messages.filter(m => m.createdAt >= thisMonth).length;
+        
+        const dateRange = messages.length > 0
+            ? `${messages[messages.length - 1].timestamp.split('T')[0]} to ${messages[0].timestamp.split('T')[0]}`
+            : 'No messages';
+        
+        console.log(`📚 Prometheus context: Book "${book.name}" has ${messages.length} messages`);
+        
+        return {
+            name: book.name,
+            fractalId: fractalId,
+            createdAt: bookCreatedAt.toISOString(),
+            totalMessages: messages.length,
+            messagesThisMonth: messagesThisMonth,
+            dateRange: dateRange,
+            messageStats: messagesByMonth,
+            recentMessages: messages.slice(0, 20).map(m => ({
+                timestamp: m.timestamp,
+                content: m.content
+            }))
+        };
+    } catch (error) {
+        console.error(`❌ Failed to fetch book context: ${error.message}`);
+        return null;
+    }
+}
+
+// Check messages against business rules (with optional book context)
 app.post('/api/prometheus/check', requireAuth, async (req, res) => {
     try {
-        const { messages, ruleType = 'general', language, bookId } = req.body;
+        const { messages, ruleType = 'general', language, bookId, fractalId } = req.body;
         
         if (!messages || (Array.isArray(messages) && messages.length === 0)) {
             return res.status(400).json({ 
@@ -3227,14 +3340,34 @@ app.post('/api/prometheus/check', requireAuth, async (req, res) => {
             });
         }
         
-        console.log(`🔮 Prometheus API: Checking ${Array.isArray(messages) ? messages.length : 1} message(s) with rule: ${ruleType}`);
-        
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const startTime = Date.now();
-        const result = await Prometheus.check(messages, ruleType, { language });
+        let result;
+        let hasBookContext = false;
+        
+        // If fractalId provided, fetch book context and use context-aware check
+        if (fractalId && tenantSchema) {
+            console.log(`🔮 Prometheus API: Context query for book ${fractalId}`);
+            
+            const bookContext = await fetchBookContextForPrometheus(fractalId, tenantSchema);
+            
+            if (bookContext && bookContext.totalMessages > 0) {
+                // Use context-aware check
+                const userQuery = Array.isArray(messages) ? messages.join('\n') : messages;
+                result = await Prometheus.checkWithContext(userQuery, bookContext, { language });
+                hasBookContext = true;
+            } else {
+                // Fallback to regular check if no book context
+                console.log(`⚠️ No book context available, using regular check`);
+                result = await Prometheus.check(messages, ruleType, { language });
+            }
+        } else {
+            console.log(`🔮 Prometheus API: Checking ${Array.isArray(messages) ? messages.length : 1} message(s) with rule: ${ruleType}`);
+            result = await Prometheus.check(messages, ruleType, { language });
+        }
+        
         const processingTime = Date.now() - startTime;
         
-        // Get tenant schema and save to audit_queries
-        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const userId = req.user?.id || req.session?.userId;
         
         // Save to audit_queries table for history
@@ -3276,6 +3409,7 @@ app.post('/api/prometheus/check', requireAuth, async (req, res) => {
             success: true, 
             result,
             rule_type: ruleType,
+            has_book_context: hasBookContext,
             processing_time_ms: processingTime,
             timestamp: new Date().toISOString()
         });

@@ -11,7 +11,7 @@
  * - Zero hallucination protocol
  */
 
-const { buildCheckPrompt, buildBatchPrompt, detectLanguage } = require('./prompts');
+const { buildCheckPrompt, buildBatchPrompt, buildContextPrompt, detectLanguage } = require('./prompts');
 const { checkWithLLM } = require('./huggingface');
 const { applyBusinessRules, getRuleInfo, listRules, RULES } = require('./rules');
 
@@ -203,6 +203,51 @@ class Prometheus {
    */
   static detectLanguage(text) {
     return detectLanguage(text);
+  }
+  
+  /**
+   * Check with book context - answers queries about actual book data
+   * @param {string} userQuery - User's question about the book
+   * @param {Object} bookContext - Book context with messages and stats
+   * @param {Object} options - Additional options
+   * @returns {Promise<Object>} Check result with answer
+   */
+  static async checkWithContext(userQuery, bookContext, options = {}) {
+    const language = options.language || detectLanguage(userQuery);
+    
+    console.log(`🔮 Prometheus context query (book: ${bookContext.name}, ${bookContext.totalMessages} msgs)...`);
+    
+    try {
+      const prompt = buildContextPrompt(userQuery, bookContext, language);
+      const llmResult = await checkWithLLM(prompt);
+      
+      return {
+        ...llmResult,
+        hasBookContext: true,
+        bookName: bookContext.name,
+        totalMessages: bookContext.totalMessages,
+        language
+      };
+    } catch (error) {
+      console.error('❌ Prometheus context query failed:', error.message);
+      
+      return {
+        status: 'REVIEW',
+        confidence: 0,
+        answer: language === 'id'
+          ? `Terjadi kesalahan saat mengakses data buku: ${error.message}`
+          : `Error accessing book data: ${error.message}`,
+        reason: error.message,
+        data_extracted: {},
+        recommended_action: language === 'id'
+          ? 'Coba lagi atau hubungi admin'
+          : 'Try again or contact admin',
+        needs_human_review: true,
+        hasBookContext: false,
+        error: error.message,
+        language
+      };
+    }
   }
 }
 
