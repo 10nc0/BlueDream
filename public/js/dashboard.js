@@ -2483,30 +2483,62 @@
             await generateNewQR(book.fractal_id);
         }
         
-        // AI Audit Modal - AI-powered message checking
+        // AI Audit Modal - AI-powered message checking (Two-pane layout)
         function showPrometheusAuditModal() {
             let auditModal = document.getElementById('prometheusAuditModal');
             if (!auditModal) {
                 const modalHtml = `
                     <div id="prometheusAuditModal" class="book-fan-modal" style="z-index: 10000;">
-                        <div class="book-fan-content" style="max-width: 600px; padding: 2rem;">
-                            <button class="book-fan-close" id="prometheusAuditClose">×</button>
-                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧿 AI Audit</h3>
-                            
-                            <div class="form-group">
-                                <label class="form-label">Message to Check</label>
-                                <textarea id="prometheusMessage" class="form-input" placeholder="Paste a message to analyze..." style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; width: 100%; min-height: 120px; resize: vertical; font-family: inherit;"></textarea>
+                        <div class="book-fan-content" style="max-width: 960px; width: 95vw; padding: 1.5rem; max-height: 90vh; display: flex; flex-direction: column;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-shrink: 0;">
+                                <h3 style="margin: 0; font-size: 1.25rem; background: linear-gradient(135deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧿 AI Audit</h3>
+                                <button class="book-fan-close" id="prometheusAuditClose" style="position: static; margin: 0;">×</button>
                             </div>
                             
-                            <button id="prometheusCheckBtn" class="form-button" style="width: 100%; margin-top: 1rem; padding: 0.875rem; background: linear-gradient(135deg, #a855f7, #ec4899); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: opacity 0.2s;">
-                                🔮 Run AI Check
-                            </button>
-                            
-                            <div id="prometheusResult" style="margin-top: 1.5rem; display: none;">
-                                <div style="padding: 1rem; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px;">
-                                    <div id="prometheusResultContent"></div>
+                            <div id="prometheusAuditGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; flex: 1; min-height: 0; overflow: hidden;">
+                                <!-- Left Pane: Input -->
+                                <div style="display: flex; flex-direction: column; min-height: 0;">
+                                    <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.5rem; font-weight: 600;">📝 Your Query</div>
+                                    <textarea id="prometheusMessage" class="form-input" placeholder="Ask anything about your data..." style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; width: 100%; flex: 1; min-height: 150px; resize: none; font-family: inherit; box-sizing: border-box;"></textarea>
+                                    
+                                    <div id="prometheusBookContext" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(34, 211, 238, 0.1); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 6px; color: #22d3ee; font-size: 0.75rem; flex-shrink: 0;">
+                                        📚 Searching all authorized books
+                                    </div>
+                                    
+                                    <button id="prometheusCheckBtn" class="form-button" style="width: 100%; margin-top: 0.75rem; padding: 0.75rem; background: linear-gradient(135deg, #a855f7, #ec4899); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: opacity 0.2s; flex-shrink: 0;">
+                                        🔮 Run AI Check
+                                    </button>
+                                </div>
+                                
+                                <!-- Right Pane: Result -->
+                                <div style="display: flex; flex-direction: column; min-height: 0;">
+                                    <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.5rem; font-weight: 600;">💬 AI Response</div>
+                                    <div id="prometheusResult" style="flex: 1; overflow-y: auto; padding: 1rem; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; min-height: 150px;">
+                                        <div id="prometheusResultContent" style="color: #64748b; font-size: 0.875rem;">
+                                            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;">
+                                                <div style="font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.6;">🔮</div>
+                                                <p style="margin: 0; color: #64748b;">Enter your query and click "Run AI Check" to get an answer</p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+                            
+                            <style>
+                                @media (max-width: 768px) {
+                                    #prometheusAuditGrid {
+                                        grid-template-columns: 1fr !important;
+                                        gap: 1rem !important;
+                                    }
+                                    #prometheusAuditModal .book-fan-content {
+                                        max-width: 100% !important;
+                                        width: 100% !important;
+                                        height: 100vh !important;
+                                        max-height: 100vh !important;
+                                        border-radius: 0 !important;
+                                    }
+                                }
+                            </style>
                         </div>
                     </div>
                 `;
@@ -2523,9 +2555,21 @@
             
             // Reset state
             document.getElementById('prometheusMessage').value = '';
-            document.getElementById('prometheusResult').style.display = 'none';
+            document.getElementById('prometheusResultContent').innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.6;">🔮</div>
+                    <p style="margin: 0; color: #64748b;">Enter your query and click "Run AI Check" to get an answer</p>
+                </div>
+            `;
             document.getElementById('prometheusCheckBtn').disabled = false;
             document.getElementById('prometheusCheckBtn').textContent = '🔮 Run AI Check';
+            
+            // Update book context display
+            const bookCount = books?.length || 0;
+            const contextDiv = document.getElementById('prometheusBookContext');
+            if (contextDiv && bookCount > 0) {
+                contextDiv.innerHTML = `📚 Searching ${bookCount} authorized book${bookCount !== 1 ? 's' : ''}`;
+            }
             
             auditModal.style.display = 'flex';
         }
@@ -2561,7 +2605,6 @@
         async function runPrometheusCheck() {
             const message = document.getElementById('prometheusMessage').value.trim();
             const btn = document.getElementById('prometheusCheckBtn');
-            const resultDiv = document.getElementById('prometheusResult');
             const resultContent = document.getElementById('prometheusResultContent');
             
             if (!message) {
@@ -2583,13 +2626,24 @@
                 });
             }
             
-            // Loading state
+            // Loading state - show spinner in result pane
             btn.disabled = true;
             btn.textContent = '🔮 Analyzing...';
-            resultDiv.style.display = 'none';
+            resultContent.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.75rem; animation: pulse 1.5s ease-in-out infinite;">🔮</div>
+                    <p style="margin: 0; color: #a855f7;">Analyzing your query...</p>
+                    <p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 0.75rem;">Searching ${books?.length || 0} books</p>
+                </div>
+                <style>
+                    @keyframes pulse {
+                        0%, 100% { opacity: 1; transform: scale(1); }
+                        50% { opacity: 0.6; transform: scale(1.1); }
+                    }
+                </style>
+            `;
             
             // SINGULARITY: Comprehensive search - ALWAYS search ALL books for thorough analysis
-            // Even if books are detected in query, include all books to find related data elsewhere
             const detectedBooks = detectBookNamesInQuery(message);
             console.log(`📚 Books available for analysis: ${books?.length || 0}, query: "${message.substring(0, 50)}..."`);
             
@@ -2635,42 +2689,36 @@
                 const statusColor = statusColors[result.status] || '#94a3b8';
                 
                 resultContent.innerHTML = `
-                    ${hasBookContext ? `
-                    <div style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(34, 211, 238, 0.1); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 6px; color: #22d3ee; font-size: 0.8rem;">
-                        📚 Using book context: ${result.bookName || 'Selected Book'} (${result.totalMessages || 0} messages)
-                    </div>
-                    ` : ''}
-                    ${result.answer ? `
-                    <div style="margin-bottom: 1rem; padding: 1rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(236, 72, 153, 0.1)); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px;">
-                        <strong style="color: #c084fc; font-size: 0.875rem; display: block; margin-bottom: 0.5rem;">💬 Answer</strong>
-                        <p style="color: #e2e8f0; margin: 0; line-height: 1.6;">${escapeHtml(result.answer)}</p>
-                    </div>
-                    ` : ''}
-                    
-                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
-                        <span style="font-size: 1rem; padding: 0.375rem 0.75rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 6px; color: ${statusColor}; font-weight: 600;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+                        <span style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 4px; color: ${statusColor}; font-weight: 600;">
                             ${escapeHtml(result.status)}
                         </span>
-                        <span style="color: #64748b; font-size: 0.8rem;">
+                        <span style="color: #64748b; font-size: 0.75rem;">
                             ${(result.confidence * 100).toFixed(0)}% confidence
                         </span>
+                        ${hasBookContext ? `<span style="color: #22d3ee; font-size: 0.75rem;">📚 ${result.totalMessages || 0} msgs</span>` : ''}
                     </div>
                     
+                    ${result.answer ? `
+                    <div style="padding: 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; margin-bottom: 0.75rem;">
+                        <p style="color: #e2e8f0; margin: 0; line-height: 1.6; font-size: 0.9rem;">${escapeHtml(result.answer)}</p>
+                    </div>
+                    ` : ''}
+                    
                     ${result.data_extracted && Object.keys(result.data_extracted).length > 0 ? `
-                    <details style="margin-bottom: 0.75rem;">
-                        <summary style="color: #94a3b8; cursor: pointer; font-size: 0.875rem;">📊 Extracted Data</summary>
-                        <pre style="margin: 0.5rem 0; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; color: #94a3b8; font-size: 0.75rem; overflow-x: auto;">${escapeHtml(JSON.stringify(result.data_extracted, null, 2))}</pre>
+                    <details style="margin-bottom: 0.5rem;">
+                        <summary style="color: #94a3b8; cursor: pointer; font-size: 0.8rem;">📊 Extracted Data</summary>
+                        <pre style="margin: 0.5rem 0; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; color: #94a3b8; font-size: 0.7rem; overflow-x: auto; max-height: 120px; overflow-y: auto;">${escapeHtml(JSON.stringify(result.data_extracted, null, 2))}</pre>
                     </details>
                     ` : ''}
                     
                     ${result.needs_human_review ? `
-                    <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; color: #a5b4fc; font-size: 0.8rem;">
+                    <div style="padding: 0.375rem 0.5rem; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 4px; color: #a5b4fc; font-size: 0.75rem;">
                         ⚠️ Human review recommended
                     </div>
                     ` : ''}
                 `;
                 
-                resultDiv.style.display = 'block';
                 showToast(`🧿 Check complete: ${result.status}`, result.status === 'PASS' ? 'success' : 'info');
                 
             } catch (error) {
@@ -2678,11 +2726,11 @@
                 showToast(`⚠️ ${error.message}`, 'error');
                 
                 resultContent.innerHTML = `
-                    <div style="color: #ef4444;">
-                        <strong>Error:</strong> ${escapeHtml(error.message)}
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;">
+                        <div style="font-size: 2rem; margin-bottom: 0.75rem;">❌</div>
+                        <p style="color: #ef4444; margin: 0; font-size: 0.875rem;"><strong>Error:</strong> ${escapeHtml(error.message)}</p>
                     </div>
                 `;
-                resultDiv.style.display = 'block';
             } finally {
                 btn.disabled = false;
                 btn.textContent = '🔮 Run AI Check';
