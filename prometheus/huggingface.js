@@ -1,7 +1,7 @@
 /**
  * PROMETHEUS HUGGINGFACE CLIENT
  * 
- * Qwen2.5-3B-Instruct via HuggingFace Inference API
+ * Qwen2.5-3B-Instruct via HuggingFace Router (OpenAI-compatible API)
  * 
  * Features:
  * - H(0) temperature shield (0.1 - minimal creativity)
@@ -12,15 +12,14 @@
 
 const axios = require('axios');
 
-const HF_API_URL = 'https://router.huggingface.co/hf-inference/models/Qwen/Qwen2.5-3B-Instruct';
+const HF_API_URL = 'https://router.huggingface.co/v1/chat/completions';
+const HF_MODEL = 'Qwen/Qwen2.5-3B-Instruct';
 const HF_TOKEN = process.env.HF_API_TOKEN;
 
 const DEFAULT_PARAMS = {
-  max_new_tokens: 500,
+  max_tokens: 500,
   temperature: 0.1,           // H(0) shield - no creativity, only facts
-  top_p: 0.95,                // Minimal diversity without hallucination
-  repetition_penalty: 1.1,    // Prevents looping
-  return_full_text: false
+  top_p: 0.95                 // Minimal diversity without hallucination
 };
 
 const MAX_RETRIES = 3;
@@ -46,8 +45,13 @@ async function callLLM(prompt, options = {}) {
       const response = await axios.post(
         HF_API_URL,
         {
-          inputs: prompt,
-          parameters: params
+          model: HF_MODEL,
+          messages: [
+            { role: 'user', content: prompt }
+          ],
+          max_tokens: params.max_tokens,
+          temperature: params.temperature,
+          top_p: params.top_p
         },
         {
           headers: {
@@ -59,9 +63,7 @@ async function callLLM(prompt, options = {}) {
       );
       
       if (response.status === 200 && response.data) {
-        const result = Array.isArray(response.data) 
-          ? response.data[0]?.generated_text 
-          : response.data.generated_text;
+        const result = response.data.choices?.[0]?.message?.content;
         
         if (result) {
           console.log(`✅ Prometheus LLM response received (${result.length} chars)`);
@@ -153,5 +155,6 @@ module.exports = {
   checkWithLLM,
   extractJSON,
   HF_API_URL,
+  HF_MODEL,
   DEFAULT_PARAMS
 };
