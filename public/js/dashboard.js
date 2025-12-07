@@ -2542,8 +2542,17 @@
             for (const book of books) {
                 if (!book.name) continue;
                 const bookNameLower = book.name.toLowerCase();
-                if (queryLower.includes(bookNameLower)) {
-                    matchedBooks.push({ fractalId: book.fractal_id, name: book.name });
+                // Use word boundary to match whole book names only (avoid matching substrings like "perbaikan" in "mengalami perbaikan")
+                try {
+                    const regex = new RegExp(`\\b${bookNameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+                    if (regex.test(queryLower)) {
+                        matchedBooks.push({ fractalId: book.fractal_id, name: book.name });
+                    }
+                } catch (e) {
+                    // Fallback to substring match if regex fails
+                    if (queryLower.includes(bookNameLower)) {
+                        matchedBooks.push({ fractalId: book.fractal_id, name: book.name });
+                    }
                 }
             }
             return matchedBooks;
