@@ -450,6 +450,38 @@ async function initializeDatabase() {
         
         console.log('✅ Book registry initialized with dynamic indexing');
         
+        // MULTI-SOURCE UPLOADS: Track all phones that have engaged with each book
+        // Enables contributors (not just creator) to send files without join code
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS core.book_engaged_phones (
+                id SERIAL PRIMARY KEY,
+                book_registry_id UUID NOT NULL REFERENCES core.book_registry(id) ON DELETE CASCADE,
+                phone TEXT NOT NULL,
+                is_creator BOOLEAN DEFAULT FALSE,
+                first_engaged_at TIMESTAMP DEFAULT NOW(),
+                last_engaged_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(book_registry_id, phone)
+            )
+        `);
+        
+        // Indexes for fast phone lookups
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_book_engaged_phones_phone 
+            ON core.book_engaged_phones(phone)
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_book_engaged_phones_book 
+            ON core.book_engaged_phones(book_registry_id)
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_book_engaged_phones_last_engaged 
+            ON core.book_engaged_phones(phone, last_engaged_at DESC)
+        `);
+        
+        console.log('✅ Book engaged phones table initialized');
+        
         // MIGRATION TRACKING: Create table to track completed migrations
         await pool.query(`
             CREATE TABLE IF NOT EXISTS core.migrations (
@@ -2070,6 +2102,15 @@ app.post('/api/twilio/webhook', async (req, res) => {
             `, [bookId]);
             
             console.log(`🔗 Activated book ${bookRecord.fractal_id} (book_id: ${bookId}) for phone ${phone}`);
+            
+            // MULTI-SOURCE: Add creator to engaged phones (is_creator = true)
+            await pool.query(`
+                INSERT INTO core.book_engaged_phones (book_registry_id, phone, is_creator, first_engaged_at, last_engaged_at)
+                VALUES ($1, $2, TRUE, NOW(), NOW())
+                ON CONFLICT (book_registry_id, phone) DO UPDATE 
+                SET last_engaged_at = NOW(), is_creator = TRUE
+            `, [bookRecord.id, phone]);
+            console.log(`📱 Added ${phone} as creator to engaged phones for book ${bookRecord.fractal_id}`);
             
             // HERMES: Create Discord thread now that book is activated
             if (hermesBot && hermesBot.isReady()) {
