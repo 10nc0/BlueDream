@@ -4433,8 +4433,23 @@
         async function downloadEntireBook(fractalId) {
             try {
                 showToast('📥 Preparing book download...', 'info');
-                const response = await authFetch(`/api/books/${fractalId}/export`, {
-                    method: 'GET'
+                console.log('📥 Starting download for book:', fractalId);
+                
+                const accessToken = localStorage.getItem('accessToken');
+                
+                // Use direct fetch for binary data to avoid JSON header issues
+                const response = await fetch(`/api/books/${fractalId}/export`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+                
+                console.log('📥 Response status:', response.status);
+                console.log('📥 Response headers:', {
+                    'content-type': response.headers.get('content-type'),
+                    'content-disposition': response.headers.get('content-disposition'),
+                    'content-length': response.headers.get('content-length')
                 });
                 
                 if (!response.ok) {
@@ -4442,18 +4457,41 @@
                 }
                 
                 const blob = await response.blob();
+                console.log('📥 Blob created:', {
+                    size: blob.size,
+                    type: blob.type
+                });
+                
+                if (blob.size === 0) {
+                    throw new Error('Downloaded file is empty');
+                }
+                
+                // Create download link and trigger download
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
                 link.download = `${fractalId}-complete-book.zip`;
+                
+                console.log('📥 Triggering download with filename:', link.download);
+                
+                // Must be in DOM to work on some browsers
                 document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+                
+                // Add small delay to ensure DOM is ready
+                setTimeout(() => {
+                    link.click();
+                    console.log('📥 Download click triggered');
+                    
+                    // Cleanup
+                    setTimeout(() => {
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                }, 50);
                 
                 showToast('✅ Book downloaded successfully', 'success');
             } catch (error) {
-                console.error('Download error:', error);
+                console.error('❌ Download error:', error);
                 showToast(`❌ Download failed: ${error.message}`, 'error');
             }
         }
