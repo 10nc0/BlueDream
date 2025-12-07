@@ -2383,7 +2383,7 @@ app.post('/api/twilio/webhook', async (req, res) => {
             // FALLBACK: If creator_phone is NULL (pre-migration books), treat phone_number as creator
             const isCreator = (bookRecord.creator_phone && phone === bookRecord.creator_phone) ||
                               (!bookRecord.creator_phone && phone === bookRecord.phone_number);
-            const senderRole = isCreator ? '👑 Creator' : '👤 Contributor';
+            const senderRole = isCreator ? '🌟' : '👥';
             
             // Build Discord embed
             const embed = {
