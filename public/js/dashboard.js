@@ -4493,7 +4493,7 @@
             
             if (container) {
                 // Account for sticky header: offset message to sit below time header without clipping sender
-                const headerOffset = 70;
+                const headerOffset = 240;
                 const scrollTarget = el.offsetTop - headerOffset;
                 container.scrollTop = Math.max(0, scrollTarget);
             } else {
