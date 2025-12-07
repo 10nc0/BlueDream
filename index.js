@@ -3521,18 +3521,21 @@ app.post('/api/prometheus/check', requireAuth, async (req, res) => {
         // Convert messages array to query string for book name detection
         const userQuery = Array.isArray(messages) ? messages.join('\n') : messages;
         
-        // AUTO-DETECT BOOK NAMES: Always try to find referenced books in the query (highest priority)
-        const autoDetectedFractalIds = await detectAndLookupBookNames(userQuery, tenantSchema);
+        // SINGULARITY: Client provides bookIds from user's authorized book list (highest priority)
+        // This ensures AI sees exactly what user sees - no separate permission computation
         let detectedBookIds = null;
         
-        if (autoDetectedFractalIds && autoDetectedFractalIds.length > 0) {
-            // If books mentioned in query, use those (ignore fractalId)
-            detectedBookIds = autoDetectedFractalIds;
-            console.log(`📖 Auto-detected ${detectedBookIds.length} book(s) from query text - prioritizing over fractalId`);
-        } else if (bookIds && Array.isArray(bookIds) && bookIds.length > 0) {
-            // Otherwise use explicitly provided bookIds
+        if (bookIds && Array.isArray(bookIds) && bookIds.length > 0) {
+            // Client-detected book names from user's authorized list (singularity approach)
             detectedBookIds = bookIds;
-            console.log(`📖 Using explicitly provided bookIds: ${detectedBookIds.length} book(s)`);
+            console.log(`📖 Using client-provided bookIds (singularity): ${detectedBookIds.length} book(s)`);
+        } else {
+            // Fallback: server-side detection (for API calls without frontend)
+            const autoDetectedFractalIds = await detectAndLookupBookNames(userQuery, tenantSchema);
+            if (autoDetectedFractalIds && autoDetectedFractalIds.length > 0) {
+                detectedBookIds = autoDetectedFractalIds;
+                console.log(`📖 Server auto-detected ${detectedBookIds.length} book(s) from query text`);
+            }
         }
         
         // MULTI-BOOK QUERY: If any books detected or explicitly provided, use multi-book context

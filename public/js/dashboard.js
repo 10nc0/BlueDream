@@ -2535,6 +2535,20 @@
             if (modal) modal.style.display = 'none';
         }
         
+        function detectBookNamesInQuery(query) {
+            if (!query || !books || books.length === 0) return [];
+            const queryLower = query.toLowerCase();
+            const matchedBooks = [];
+            for (const book of books) {
+                if (!book.name) continue;
+                const bookNameLower = book.name.toLowerCase();
+                if (queryLower.includes(bookNameLower)) {
+                    matchedBooks.push({ fractalId: book.fractal_id, name: book.name });
+                }
+            }
+            return matchedBooks;
+        }
+        
         async function runPrometheusCheck() {
             const message = document.getElementById('prometheusMessage').value.trim();
             const btn = document.getElementById('prometheusCheckBtn');
@@ -2551,9 +2565,17 @@
             btn.textContent = '🔮 Analyzing...';
             resultDiv.style.display = 'none';
             
+            // SINGULARITY: Detect book names from query using user's authorized book list
+            const detectedBooks = detectBookNamesInQuery(message);
+            const detectedBookIds = detectedBooks.map(b => b.fractalId);
+            
+            if (detectedBooks.length > 0) {
+                console.log(`📖 Detected ${detectedBooks.length} book(s) in query: ${detectedBooks.map(b => b.name).join(', ')}`);
+            }
+            
             try {
                 const token = localStorage.getItem('accessToken');
-                console.log(`🔮 Prometheus: Sending request with fractalId="${selectedBookFractalId}"`);
+                console.log(`🔮 Prometheus: Sending request with fractalId="${selectedBookFractalId}", detectedBookIds=${JSON.stringify(detectedBookIds)}`);
                 const response = await fetch('/api/prometheus/check', {
                     method: 'POST',
                     headers: {
@@ -2563,7 +2585,8 @@
                     body: JSON.stringify({ 
                         messages: message, 
                         ruleType: 'general',
-                        fractalId: selectedBookFractalId || null
+                        fractalId: selectedBookFractalId || null,
+                        bookIds: detectedBookIds.length > 0 ? detectedBookIds : null
                     })
                 });
                 
