@@ -98,7 +98,24 @@ async function callLLM(prompt, options = {}) {
     }
   }
   
-  const errorMessage = lastError?.response?.data?.error || lastError?.message || 'Unknown error';
+  // Extract error message properly (handle object errors)
+  let errorMessage = 'Unknown error';
+  if (lastError?.response?.data) {
+    const errorData = lastError.response.data;
+    console.error('🔍 HuggingFace error response:', JSON.stringify(errorData, null, 2));
+    if (typeof errorData.error === 'string') {
+      errorMessage = errorData.error;
+    } else if (typeof errorData.error === 'object' && errorData.error?.message) {
+      errorMessage = errorData.error.message;
+    } else if (errorData.message) {
+      errorMessage = errorData.message;
+    } else {
+      errorMessage = JSON.stringify(errorData);
+    }
+  } else if (lastError?.message) {
+    errorMessage = lastError.message;
+  }
+  
   console.error(`❌ Prometheus LLM failed after ${MAX_RETRIES} attempts: ${errorMessage}`);
   throw new Error(`HuggingFace API error: ${errorMessage}`);
 }
