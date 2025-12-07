@@ -3347,71 +3347,88 @@
                 window.searchState.dateContext = null;
             }
             
-            // Track ALL books for server-side search (not just uncached)
-            // This ensures we find matches even in cached books where content is paginated
+            // EXHAUSTIVE SEARCH: Track all books for server-side search
+            // Server search runs for ALL books to ensure no matches are missed
             const booksToSearch = [];
             
             filteredBooks = books.filter(book => {
-                // Search match using universal search function
-                let matchesSearch = true;
-                let matchType = null; // Track where match came from
+                // EXHAUSTIVE SEARCH: Check ALL sources independently (no short-circuiting)
+                // This ensures we find matches everywhere like AI query logic
+                const matchSources = []; // Accumulate all match sources
                 
                 if (searchTerm && !naturalDateRange) {
                     // Only filter by text if NOT a pure date search
-                    // COMPREHENSIVE: Search ALL book fields (matching Discord message search strength)
+                    
+                    // HASHTAG SEARCH: If query starts with #, search tags specifically
+                    const isTagSearch = searchTerm.startsWith('#');
+                    const tagQuery = isTagSearch ? searchTerm.slice(1).toLowerCase() : null;
+                    
+                    // SOURCE 1: Tag match (for hashtag searches)
+                    if (isTagSearch && book.tags && Array.isArray(book.tags)) {
+                        const matchesTag = book.tags.some(tag => 
+                            tag.toLowerCase().includes(tagQuery)
+                        );
+                        if (matchesTag) matchSources.push('tag');
+                    }
+                    
+                    // SOURCE 2: Book metadata (name, platform, status, etc.)
                     const bookMetadata = [
-                        book.bridge_name || book.name || '',        // ✅ Book title
-                        book.input_platform || '',                    // ✅ Input platform
-                        book.output_platform || '',                   // ✅ Output platform
-                        book.contact_info || '',                      // ✅ Contact info
-                        book.status || '',                            // ✅ Status
-                        book.created_at ? new Date(book.created_at).toLocaleString() : '', // ✅ Creation date
-                        ...(book.tags || [])                          // ✅ Tags
+                        book.bridge_name || book.name || '',        // Book title
+                        book.input_platform || '',                    // Input platform
+                        book.output_platform || '',                   // Output platform
+                        book.contact_info || '',                      // Contact info
+                        book.status || '',                            // Status
+                        book.created_at ? new Date(book.created_at).toLocaleString() : '', // Creation date
+                        ...(book.tags || []).map(t => '#' + t)        // Tags (with # prefix)
                     ].join(' ').toLowerCase();
                     
-                    // UNIVERSAL SEARCH: Check book metadata first
-                    const matchesMetadata = window.searchState.performSearch(searchTerm, bookMetadata);
+                    if (window.searchState.performSearch(searchTerm, bookMetadata)) {
+                        matchSources.push('metadata');
+                    }
                     
-                    // UNIVERSAL SEARCH: Check cached messages if metadata doesn't match
-                    let matchesMessages = false;
-                    if (!matchesMetadata && messageCache[book.fractal_id]) {
+                    // SOURCE 3: Cached messages (ALWAYS check, not just when metadata fails)
+                    if (messageCache[book.fractal_id]) {
                         const messageText = getMessageSearchText(book.fractal_id);
-                        matchesMessages = window.searchState.performSearch(searchTerm, messageText);
+                        if (window.searchState.performSearch(searchTerm, messageText)) {
+                            matchSources.push('cache');
+                        }
                     }
                     
-                    // FIX: Track ALL non-metadata-matching books for server search
-                    // Previously only tracked uncached books, missing paginated content
-                    if (!matchesMetadata) {
-                        booksToSearch.push(book.fractal_id);
-                    }
+                    // EXHAUSTIVE: Queue ALL books for server search (not just non-metadata matches)
+                    // Server has full Discord history, cache may be incomplete
+                    booksToSearch.push(book.fractal_id);
                     
-                    matchesSearch = matchesMetadata || matchesMessages;
+                    // Store match sources for visual indicators
+                    book._matchSources = matchSources;
+                    book._matchType = matchSources.includes('cache') ? 'message' : 
+                                      matchSources.includes('tag') ? 'tag' :
+                                      matchSources.includes('metadata') ? 'metadata' : null;
                     
-                    // Store match type for visual indicator
-                    if (matchesMessages) {
-                        book._matchType = 'message';
-                        // SEAMLESS SEARCH: Store query for auto-filtering when book is opened
+                    // SEAMLESS SEARCH: Store query for auto-filtering when book is opened
+                    if (matchSources.length > 0) {
                         book._searchQuery = searchTerm;
-                    } else if (matchesMetadata) {
-                        book._matchType = 'metadata';
                     }
+                    
+                    // Include book if ANY source matched
+                    const matchesSearch = matchSources.length > 0;
+                    const matchesPlatform = !platformFilter || book.input_platform === platformFilter;
+                    return matchesSearch && matchesPlatform;
                 }
                 
                 const matchesPlatform = !platformFilter || book.input_platform === platformFilter;
-                
-                return matchesSearch && matchesPlatform;
+                return matchesPlatform;
             });
             
             renderBooks();
             // Update thumbs zone if in mobile mode
             if (isMobile()) renderThumbsZone();
             
-            // SERVER-SIDE SEARCH: Search ALL books that don't match metadata (not just uncached)
-            // This ensures we find matches in paginated content that isn't in cache
+            // EXHAUSTIVE SERVER SEARCH: Search ALL books in Discord for complete results
+            // This catches matches in paginated content not in cache
             if (searchTerm && booksToSearch.length > 0 && !naturalDateRange && !serverSearchPending && lastServerSearchTerm !== searchTerm) {
                 serverSearchPending = true;
                 lastServerSearchTerm = searchTerm;
-                console.log(`🔍 Server search for "${searchTerm}" in ${booksToSearch.length} books (full Discord search)...`);
+                console.log(`🔍 Exhaustive server search for "${searchTerm}" in ${booksToSearch.length} books...`);
                 
                 try {
                     const response = await authFetch(`/api/search?term=${encodeURIComponent(searchTerm)}&bookIds=${booksToSearch.join(',')}`);
@@ -3428,24 +3445,39 @@
                                 console.warn(`⚠️ Partial results: ${data.reason}`);
                             }
                             
-                            // DEDUP: Track existing IDs to prevent duplicates
-                            const existingIds = new Set(filteredBooks.map(b => b.fractal_id));
+                            // Track existing books in filtered list
+                            const existingBooks = new Map(filteredBooks.map(b => [b.fractal_id, b]));
                             
-                            // Add matching books to filtered list (with deduplication)
-                            // COPY book objects to avoid mutating shared array
                             for (const bookId of matchingBookIds) {
-                                if (existingIds.has(bookId)) continue; // Skip duplicates
+                                const existingBook = existingBooks.get(bookId);
                                 
-                                const originalBook = books.find(b => b.fractal_id === bookId);
-                                if (originalBook) {
-                                    // Create copy with match metadata (don't mutate original)
-                                    const bookCopy = { ...originalBook, _matchType: 'message', _searchQuery: searchTerm };
-                                    filteredBooks.push(bookCopy);
-                                    existingIds.add(bookId);
+                                if (existingBook) {
+                                    // MERGE: Add 'server' to existing book's match sources
+                                    if (!existingBook._matchSources) existingBook._matchSources = [];
+                                    if (!existingBook._matchSources.includes('server')) {
+                                        existingBook._matchSources.push('server');
+                                    }
+                                    // Update match type if this is now a message match
+                                    if (existingBook._matchType !== 'message') {
+                                        existingBook._matchType = 'message';
+                                    }
+                                } else {
+                                    // ADD: New book found by server search
+                                    const originalBook = books.find(b => b.fractal_id === bookId);
+                                    if (originalBook) {
+                                        const bookCopy = { 
+                                            ...originalBook, 
+                                            _matchType: 'message', 
+                                            _matchSources: ['server'],
+                                            _searchQuery: searchTerm 
+                                        };
+                                        filteredBooks.push(bookCopy);
+                                        existingBooks.set(bookId, bookCopy);
+                                    }
                                 }
                             }
                             
-                            // Re-render with server results
+                            // Re-render with merged server results
                             renderBooks();
                             if (isMobile()) renderThumbsZone();
                         }
@@ -3464,6 +3496,7 @@
                 // Clear match indicators from all books
                 books.forEach(b => {
                     delete b._matchType;
+                    delete b._matchSources;
                     delete b._searchQuery;
                 });
             }
