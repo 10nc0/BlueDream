@@ -4662,6 +4662,17 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
         const book = bookResult.rows[0];
         const bookCreatedAt = new Date(book.created_at);
         
+        // Fetch creator_phone from book registry for is_creator comparison
+        // FALLBACK: For pre-migration books, use phone_number when creator_phone is NULL
+        let creatorPhone = null;
+        const registryResult = await client.query(
+            `SELECT creator_phone, phone_number FROM core.book_registry WHERE fractal_id = $1 LIMIT 1`,
+            [id]
+        );
+        if (registryResult.rows.length > 0) {
+            creatorPhone = registryResult.rows[0].creator_phone || registryResult.rows[0].phone_number;
+        }
+        
         // Parse JSON if needed
         let outputCredentials = book.output_credentials;
         if (typeof outputCredentials === 'string') {
@@ -4792,12 +4803,19 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                         console.log(`  📝 Message ${msg.id} has NO attachments (embeds: ${msg.embeds.length})`);
                     }
                     
+                    // SERVER-SIDE is_creator: Compare sender phone against book's creator_phone
+                    // Normalize phones by removing +, spaces, and non-digits for comparison
+                    const normalizePhone = (phone) => phone ? phone.replace(/\D/g, '') : '';
+                    const senderPhoneNorm = normalizePhone(senderContact);
+                    const creatorPhoneNorm = normalizePhone(creatorPhone);
+                    const isCreator = senderPhoneNorm && creatorPhoneNorm && senderPhoneNorm === creatorPhoneNorm;
+                    
                     return {
                         id: msg.id,
                         sender_name: msg.author.username,
                         sender_avatar: msg.author.displayAvatarURL(),
                         sender_contact: senderContact,
-                        sender_role: senderRole,
+                        is_creator: isCreator,
                         message_content: msg.content || '',
                         timestamp: msg.createdAt.toISOString(),
                         has_media: msg.attachments.size > 0 || !!mediaFromEmbed,
