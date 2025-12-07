@@ -4361,23 +4361,31 @@
             if (!targetId || !bookId) return;
             
             try {
-                console.log(`🎯 Jumping to message ${targetId}, clearing search and reloading all messages...`);
+                console.log(`🎯 Jumping to message ${targetId}...`);
                 
                 // Clear search state and UI
                 clearSearchState(bookId);
                 
-                // Reload all messages for the book (not just search results)
+                // Check if message is already in DOM first (fast path for cached messages)
+                let targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                
+                if (targetEl) {
+                    // Message already cached - scroll instantly
+                    scrollAndHighlight(targetEl);
+                    return;
+                }
+                
+                // Message not in cache - reload all messages then scroll
+                console.log(`⏳ Loading messages...`);
                 await loadBookMessages(bookId);
                 
-                // Use RAF to scroll immediately after DOM update, no artificial delay
-                requestAnimationFrame(() => {
-                    const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
-                    if (targetEl) {
-                        scrollAndHighlight(targetEl);
-                    } else {
-                        console.warn('Message not found in DOM after reload');
-                    }
-                });
+                // Now find and scroll to the message
+                targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                if (targetEl) {
+                    scrollAndHighlight(targetEl);
+                } else {
+                    console.warn('Message not found in DOM after reload');
+                }
                 
             } catch (error) {
                 console.error('Error jumping to message:', error);
@@ -4494,8 +4502,8 @@
             const container = bookId ? document.getElementById(`discord-messages-${bookId}`) : null;
             
             if (container) {
-                // Account for sticky header: increased offset to ensure message card is fully visible below time header
-                const headerOffset = 120;
+                // Account for sticky header: offset message to sit below time header without clipping sender
+                const headerOffset = 70;
                 const scrollTarget = el.offsetTop - headerOffset;
                 container.scrollTop = Math.max(0, scrollTarget);
             } else {
