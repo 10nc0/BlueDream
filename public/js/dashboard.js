@@ -4429,10 +4429,52 @@
             }
         }
 
+        // Helper function to show persistent download status
+        function showDownloadStatus(message, type = 'info') {
+            let statusEl = document.getElementById('downloadStatus');
+            if (!statusEl) {
+                statusEl = document.createElement('div');
+                statusEl.id = 'downloadStatus';
+                statusEl.style.cssText = `
+                    position: fixed;
+                    bottom: 20px;
+                    right: 20px;
+                    background: rgba(0, 0, 0, 0.8);
+                    color: white;
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    font-size: 14px;
+                    z-index: 10000;
+                    max-width: 300px;
+                    word-wrap: break-word;
+                    backdrop-filter: blur(10px);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                `;
+                document.body.appendChild(statusEl);
+            }
+            
+            // Set background color based on type
+            if (type === 'error') {
+                statusEl.style.background = 'rgba(239, 68, 68, 0.9)';
+                statusEl.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+            } else if (type === 'success') {
+                statusEl.style.background = 'rgba(34, 197, 94, 0.9)';
+                statusEl.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+            } else {
+                statusEl.style.background = 'rgba(0, 0, 0, 0.8)';
+                statusEl.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+            }
+            
+            statusEl.textContent = message;
+            statusEl.style.display = 'block';
+            return statusEl;
+        }
+
         // Download entire book as ZIP archive
         async function downloadEntireBook(fractalId) {
             try {
-                showToast('📥 Preparing book download...', 'info');
+                showDownloadStatus('📥 Preparing book download...', 'info');
                 console.log('📥 Starting download for book:', fractalId);
                 
                 const accessToken = localStorage.getItem('accessToken');
@@ -4445,6 +4487,7 @@
                     }
                 });
                 
+                showDownloadStatus('📥 Downloading data...', 'info');
                 console.log('📥 Response status:', response.status);
                 console.log('📥 Response headers:', {
                     'content-type': response.headers.get('content-type'),
@@ -4456,6 +4499,7 @@
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
+                showDownloadStatus('📥 Creating ZIP file...', 'info');
                 const blob = await response.blob();
                 console.log('📥 Blob created:', {
                     size: blob.size,
@@ -4467,6 +4511,7 @@
                 }
                 
                 // Create download link and trigger download
+                showDownloadStatus('📥 Triggering download...', 'info');
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
@@ -4482,17 +4527,26 @@
                     link.click();
                     console.log('📥 Download click triggered');
                     
+                    // Show success message
+                    showDownloadStatus('✅ Book downloaded successfully', 'success');
+                    
                     // Cleanup
                     setTimeout(() => {
                         document.body.removeChild(link);
                         URL.revokeObjectURL(url);
                     }, 100);
+                    
+                    // Auto-hide success message after 5 seconds
+                    setTimeout(() => {
+                        const statusEl = document.getElementById('downloadStatus');
+                        if (statusEl) {
+                            statusEl.style.display = 'none';
+                        }
+                    }, 5000);
                 }, 50);
-                
-                showToast('✅ Book downloaded successfully', 'success');
             } catch (error) {
                 console.error('❌ Download error:', error);
-                showToast(`❌ Download failed: ${error.message}`, 'error');
+                showDownloadStatus(`❌ Download failed: ${error.message}`, 'error');
             }
         }
 
