@@ -2582,14 +2582,19 @@
             // SINGULARITY: Detect book names from query using user's authorized book list
             const detectedBooks = detectBookNamesInQuery(message);
             console.log(`📚 Books available for detection: ${books?.length || 0}, query: "${message.substring(0, 50)}..."`);
-            const detectedBookIds = detectedBooks.map(b => b.fractalId);
+            let detectedBookIds = detectedBooks.map(b => b.fractalId);
             
             if (detectedBooks.length > 0) {
                 console.log(`📖 Detected ${detectedBooks.length} book(s) in query: ${detectedBooks.map(b => b.name).join(', ')}`);
+            } else {
+                // DOMAIN-WIDE SEARCH: No specific book mentioned → search ALL authorized books
+                // This ensures AI can find data anywhere within user's domain
+                detectedBookIds = books.map(b => b.fractal_id);
+                console.log(`🌐 Domain-wide search: Searching ALL ${detectedBookIds.length} authorized books`);
             }
             
             try {
-                console.log(`🔮 Prometheus: Sending request with fractalId="${selectedBookFractalId}", detectedBookIds=${JSON.stringify(detectedBookIds)}`);
+                console.log(`🔮 Prometheus: Sending request with fractalId="${selectedBookFractalId}", bookIds=${JSON.stringify(detectedBookIds.slice(0, 3))}${detectedBookIds.length > 3 ? `... (${detectedBookIds.length} total)` : ''}`);
                 const response = await authFetch('/api/prometheus/check', {
                     method: 'POST',
                     headers: {
@@ -2599,7 +2604,7 @@
                         messages: message, 
                         ruleType: 'general',
                         fractalId: selectedBookFractalId || null,
-                        bookIds: detectedBookIds.length > 0 ? detectedBookIds : null
+                        bookIds: detectedBookIds
                     })
                 });
                 
