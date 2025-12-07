@@ -17,7 +17,7 @@ const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
 const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./tenant-middleware');
 const HermesBot = require('./hermes-bot');
-const TothBot = require('./toth-bot');
+const ThothBot = require('./thoth-bot');
 const fractalId = require('./utils/fractal-id');
 const MetadataExtractor = require('./metadata-extractor');
 const genesisCounter = require('./server/genesis-counter');
@@ -336,8 +336,8 @@ app.use('/api/analytics', setTenantContext);
 // Discord Bot Manager for automatic thread creation per book
 let hermesBot = null;
 
-// Trinity: Toth bot for read-only message fetching
-let tothBot = null;
+// Trinity: Thoth bot for read-only message fetching
+let thothBot = null;
 
 async function initializeDatabase() {
     try {
@@ -4482,8 +4482,8 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
             });
         }
         
-        // Fetch messages from Discord using Toth (read-only bot)
-        if (!tothBot || !tothBot.client || !tothBot.ready) {
+        // Fetch messages from Discord using Thoth (read-only bot)
+        if (!thothBot || !thothBot.client || !thothBot.ready) {
             return res.json({ 
                 messages: [], 
                 total: 0,
@@ -4495,7 +4495,7 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
         try {
             // Fetch from Ledger thread (output_01 is always a thread)
             const threadId = outputData.thread_id;
-            const thread = await tothBot.client.channels.fetch(threadId);
+            const thread = await thothBot.client.channels.fetch(threadId);
             
             if (!thread) {
                 return res.json({ 
@@ -4999,17 +4999,17 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', async () => {
     console.log(`🌐 Dashboard available at http://localhost:${PORT}`);
     
-    // TRINITY ARCHITECTURE: Hermes (φ - Creator) + Toth (0 - Mirror)
+    // TRINITY ARCHITECTURE: Hermes (φ - Creator) + Thoth (0 - Mirror)
     // Security: Principle of least privilege - each bot has minimal permissions
     hermesBot = new HermesBot();
-    tothBot = new TothBot();
+    thothBot = new ThothBot();
     
     console.log('🌈 Initializing Trinity architecture...');
     try {
         // Initialize bots sequentially to reduce connection spike
         await hermesBot.initialize();
-        await tothBot.initialize();
-        console.log('✨ Trinity ready: Hermes (φ) + Toth (0)');
+        await thothBot.initialize();
+        console.log('✨ Trinity ready: Hermes (φ) + Thoth (0)');
     } catch (error) {
         console.error('❌ Trinity initialization failed:', error.message);
         console.error('   Book thread creation/reading may be unavailable');
