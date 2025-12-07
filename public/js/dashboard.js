@@ -2911,13 +2911,17 @@
             
             if (naturalDateRange) {
                 // Show context badge
-                contextBadge.textContent = `📅 ${naturalDateRange.context}`;
-                contextBadge.style.display = 'block';
+                if (contextBadge) {
+                    contextBadge.textContent = `📅 ${naturalDateRange.context}`;
+                    contextBadge.style.display = 'block';
+                }
                 window.searchState.dateContext = naturalDateRange;
                 console.log('🔍 Natural language date detected:', naturalDateRange);
             } else {
                 // Hide context badge
-                contextBadge.style.display = 'none';
+                if (contextBadge) {
+                    contextBadge.style.display = 'none';
+                }
                 window.searchState.dateContext = null;
             }
             
