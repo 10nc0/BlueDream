@@ -5219,10 +5219,9 @@ app.listen(PORT, '0.0.0.0', async () => {
     
     console.log('🌈 Initializing Trinity architecture...');
     try {
-        await Promise.all([
-            hermesBot.initialize(),
-            tothBot.initialize()
-        ]);
+        // Initialize bots sequentially to reduce connection spike
+        await hermesBot.initialize();
+        await tothBot.initialize();
         console.log('✨ Trinity ready: Hermes (φ) + Toth (0)');
     } catch (error) {
         console.error('❌ Trinity initialization failed:', error.message);
@@ -5231,15 +5230,32 @@ app.listen(PORT, '0.0.0.0', async () => {
     
     await initializeDatabase();
     
+    // Server is now ready for requests
+    console.log('✅ Multi-tenant NyanBook~ ready');
+    
+    // DEFERRED STARTUP: Run non-critical tasks after server is ready
+    // This prevents connection pool exhaustion during startup
+    setTimeout(() => {
+        runDeferredStartupTasks();
+    }, 2000); // 2 second delay to let initial connections settle
+});
+
+// Non-critical background tasks that run after server is ready
+async function runDeferredStartupTasks() {
+    console.log('🔄 Running deferred startup tasks...');
+    
     // AUTO-HEAL: Fix books with missing Discord threads
-    // This catches cases where thread creation failed during book creation
-    // (e.g., Hermes was offline, Discord API error, permission issues)
+    // Uses single client connection to reduce pool exhaustion
     if (hermesBot && hermesBot.isReady()) {
+        let client = null;
         try {
             console.log('🔧 Auto-healing: Checking all books for missing Discord threads...');
             
+            // Use single client for all batch queries
+            client = await pool.connect();
+            
             // Get all tenant schemas
-            const schemas = await pool.query(`
+            const schemas = await client.query(`
                 SELECT schema_name 
                 FROM information_schema.schemata 
                 WHERE schema_name LIKE 'tenant_%'
@@ -5251,7 +5267,7 @@ app.listen(PORT, '0.0.0.0', async () => {
             
             for (const { schema_name } of schemas.rows) {
                 // Check if books table exists (skip empty tenant schemas)
-                const tableCheck = await pool.query(`
+                const tableCheck = await client.query(`
                     SELECT EXISTS (
                         SELECT FROM information_schema.tables 
                         WHERE table_schema = $1 
@@ -5264,7 +5280,7 @@ app.listen(PORT, '0.0.0.0', async () => {
                 }
                 
                 // Get all non-archived books in this tenant
-                const books = await pool.query(`
+                const books = await client.query(`
                     SELECT id, name, output_01_url, output_0n_url, output_credentials 
                     FROM ${schema_name}.books 
                     WHERE archived = false
@@ -5305,7 +5321,7 @@ app.listen(PORT, '0.0.0.0', async () => {
                             }
                             
                             // Save thread IDs to database
-                            await pool.query(`
+                            await client.query(`
                                 UPDATE ${schema_name}.books 
                                 SET output_credentials = output_credentials || $1::jsonb
                                 WHERE id = $2
@@ -5336,11 +5352,16 @@ app.listen(PORT, '0.0.0.0', async () => {
             console.log(`✅ Auto-heal complete: ${totalHealed}/${totalChecked} books healed`);
         } catch (error) {
             console.error('❌ Auto-heal failed:', error.message);
+        } finally {
+            // Always release the client back to the pool
+            if (client) {
+                client.release();
+                console.log('🔌 Auto-heal client released');
+            }
         }
     } else {
         console.warn('⚠️  Hermes not ready, skipping auto-heal');
     }
-    console.log('✅ Multi-tenant NyanBook~ ready');
     
     // Start genesis counter (noisy constant for future security)
     // Tier 1: Cat breath (500ms constant)
@@ -5423,12 +5444,17 @@ app.listen(PORT, '0.0.0.0', async () => {
     
     // 3-DAY MEDIA PURGE: Clean up old media from buffer
     // Nyanbook Ledger has permanent copy, so buffer only needed for retry safety
+    // Uses single client connection to reduce pool exhaustion
     async function purgeOldMedia() {
+        let client = null;
         try {
             console.log('🧹 Starting 3-day media purge...');
             
+            // Use single client for all batch queries
+            client = await pool.connect();
+            
             // Get all tenant schemas
-            const schemas = await pool.query(`
+            const schemas = await client.query(`
                 SELECT schema_name 
                 FROM information_schema.schemata 
                 WHERE schema_name LIKE 'tenant_%'
@@ -5439,7 +5465,7 @@ app.listen(PORT, '0.0.0.0', async () => {
             
             for (const { schema_name } of schemas.rows) {
                 // Check if media_buffer table exists (skip empty tenant schemas)
-                const tableCheck = await pool.query(`
+                const tableCheck = await client.query(`
                     SELECT EXISTS (
                         SELECT FROM information_schema.tables 
                         WHERE table_schema = $1 
@@ -5451,7 +5477,7 @@ app.listen(PORT, '0.0.0.0', async () => {
                     continue; // Skip empty tenant schema
                 }
                 
-                const result = await pool.query(`
+                const result = await client.query(`
                     DELETE FROM ${schema_name}.media_buffer 
                     WHERE created_at < NOW() - INTERVAL '3 days'
                     RETURNING id
@@ -5466,6 +5492,11 @@ app.listen(PORT, '0.0.0.0', async () => {
             console.log(`✅ Media purge complete: ${totalPurged} total entries removed`);
         } catch (error) {
             console.error('❌ Media purge failed:', error.message);
+        } finally {
+            // Always release the client back to the pool
+            if (client) {
+                client.release();
+            }
         }
     }
     
@@ -5475,7 +5506,9 @@ app.listen(PORT, '0.0.0.0', async () => {
     // Schedule purge every 24 hours
     setInterval(purgeOldMedia, 24 * 60 * 60 * 1000);
     console.log('⏰ 3-day media purge scheduled (runs every 24 hours)');
-});
+    
+    console.log('✅ All deferred startup tasks completed');
+}
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
