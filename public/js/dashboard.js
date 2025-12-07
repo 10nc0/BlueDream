@@ -1845,12 +1845,124 @@
             return escapeHtml(text).replace(regex, '<mark>$1</mark>');
         }
 
+        // Helper: Parse date and jump to first message from that date
+        async function jumpToMessageDate(bookId, dateRange) {
+            const messagesContainer = document.getElementById(`discord-messages-${bookId}`);
+            if (!messagesContainer) return;
+            
+            const bucketHeaders = messagesContainer.querySelectorAll('.time-bucket-header');
+            const targetDate = dateRange.dateFrom; // ISO format YYYY-MM-DD
+            
+            // Find bucket header matching the target date
+            let targetBucket = null;
+            for (const header of bucketHeaders) {
+                const headerText = header.textContent || '';
+                // Match date in various formats that might appear in header
+                if (headerText.includes(targetDate.split('-')[0]) || 
+                    headerText.toLowerCase().includes(dateRange.context.toLowerCase())) {
+                    targetBucket = header;
+                    break;
+                }
+            }
+            
+            // If no exact match, find closest date
+            if (!targetBucket) {
+                const targetTime = new Date(targetDate).getTime();
+                let closestBucket = null;
+                let closestDiff = Infinity;
+                
+                bucketHeaders.forEach(header => {
+                    const headerText = header.textContent || '';
+                    // Extract date from common formats like "Today", "Yesterday", or "Dec 05, 2025"
+                    const dateMatch = headerText.match(/([A-Z][a-z]+\s+\d{2},?\s+\d{4}|Today|Yesterday)/);
+                    if (dateMatch) {
+                        try {
+                            const headerDate = new Date(dateMatch[0]);
+                            if (!isNaN(headerDate)) {
+                                const diff = Math.abs(headerDate.getTime() - targetTime);
+                                if (diff < closestDiff) {
+                                    closestDiff = diff;
+                                    closestBucket = header;
+                                }
+                            }
+                        } catch (e) {
+                            // Skip invalid dates
+                        }
+                    }
+                });
+                targetBucket = closestBucket;
+            }
+            
+            // Scroll to and highlight the target bucket
+            if (targetBucket) {
+                targetBucket.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                
+                // Flash highlight effect
+                const originalBg = targetBucket.style.background;
+                targetBucket.style.background = 'rgba(59, 130, 246, 0.2)';
+                targetBucket.style.transition = 'background 0.3s ease';
+                
+                setTimeout(() => {
+                    targetBucket.style.background = originalBg || '';
+                }, 1500);
+                
+                console.log(`📅 Jumped to ${dateRange.context}`);
+            }
+        }
+
         // Universal Search - searches both message content AND drops metadata
         async function filterDiscordMessages(bookId) {
             const searchText = document.getElementById(`msg-search-${bookId}`)?.value || '';
             const statusFilter = document.getElementById(`status-filter-${bookId}`)?.value || 'all';
             const messages = document.querySelectorAll(`#discord-messages-${bookId} .discord-message`);
             const bucketHeaders = document.querySelectorAll(`#discord-messages-${bookId} .time-bucket-header`);
+            
+            // Check if search text is a date format
+            const dateRange = parseNaturalLanguageDate(searchText);
+            if (dateRange) {
+                console.log(`📅 Date detected: ${dateRange.context} (${dateRange.dateFrom} to ${dateRange.dateTo})`);
+                // Jump to the date and show all messages (don't filter)
+                await jumpToMessageDate(bookId, dateRange);
+                
+                // Show all messages if date is detected
+                messages.forEach(msg => {
+                    msg.style.display = 'flex';
+                });
+                bucketHeaders.forEach(header => {
+                    header.style.display = '';
+                });
+                
+                // Show date context indicator
+                const contextEl = document.createElement('div');
+                contextEl.style.cssText = `
+                    position: fixed;
+                    top: 80px;
+                    right: 20px;
+                    background: rgba(59, 130, 246, 0.9);
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                    font-size: 12px;
+                    z-index: 9999;
+                    backdrop-filter: blur(10px);
+                    border: 1px solid rgba(59, 130, 246, 0.3);
+                `;
+                contextEl.textContent = `📅 Showing: ${dateRange.context}`;
+                
+                // Remove old context indicator
+                document.querySelectorAll('[data-date-context]').forEach(el => el.remove());
+                contextEl.setAttribute('data-date-context', 'true');
+                document.body.appendChild(contextEl);
+                
+                // Auto-hide after 3 seconds
+                setTimeout(() => {
+                    contextEl.style.opacity = '0';
+                    contextEl.style.transition = 'opacity 0.3s ease';
+                    setTimeout(() => contextEl.remove(), 300);
+                }, 3000);
+                
+                return;
+            }
             
             let dropsMatches = new Set();
             
