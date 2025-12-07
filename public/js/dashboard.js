@@ -2780,12 +2780,7 @@
             const paginationDiv = document.getElementById('prometheusHistoryPagination');
             
             try {
-                const token = localStorage.getItem('accessToken');
-                const response = await fetch(`/api/prometheus/discord-history?limit=${limit}`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
+                const response = await authFetch(`/api/prometheus/discord-history?limit=${limit}`);
                 
                 if (!response.ok) {
                     const text = await response.text();
