@@ -12,7 +12,7 @@
 
 const axios = require('axios');
 
-const HF_API_URL = 'https://api-inference.huggingface.co/models/Qwen/Qwen2.5-3B-Instruct';
+const HF_API_URL = 'https://router.huggingface.co/hf-inference/models/Qwen/Qwen2.5-3B-Instruct';
 const HF_TOKEN = process.env.HF_API_TOKEN;
 
 const DEFAULT_PARAMS = {
