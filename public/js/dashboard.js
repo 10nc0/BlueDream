@@ -27,6 +27,9 @@
         // Per-message export: Track selected message IDs per book
         let selectedMessages = {}; // { bookId: Set([msgId1, msgId2, ...]) }
         
+        // INFINITE SCROLL: Track pagination state per book
+        let messagePageState = {}; // { bookId: { currentPage, isLoading, hasMore } }
+        
         // Platform roadmap for future features
         const roadmapGlossary = {
             platforms: {
@@ -1474,6 +1477,7 @@
                         <button class="btn-icon" data-show-book-info="${book.fractal_id}" title="Book Information" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">ℹ️</button>
                         ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" data-show-whatsapp-activation="${book.fractal_id}" title="WhatsApp Activation" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; display: inline-flex; align-items: center; justify-content: center;">📱</button>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-edit-book="${book.fractal_id}" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
+                        ${!isDevPanelView ? `<button class="btn-icon" data-download-entire-book="${book.fractal_id}" title="Download Entire Book" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">📥</button>` : ''}
                         ${!isDevPanelView ? `<button class="btn-icon" data-delete-book="${book.fractal_id}" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
                     </div>
                 </div>
@@ -4015,7 +4019,7 @@
             }
         }
         
-        async function loadBookMessages(bookId, page = 1) {
+        async function loadBookMessages(bookId, page = 1, append = false) {
             try {
                 // SECURITY: Validate bookId is a fractal_id (tenant-scoped, non-enumerable)
                 // Format: [dev_|prod_](bridge|book)_t{N}_{HASH} or (bridge|book)_t{N}_{HASH} or twilio_book_{PHONE}_{TIMESTAMP}
@@ -4024,8 +4028,17 @@
                     throw new Error('Invalid book ID');
                 }
                 
+                // Initialize page state if needed
+                if (!messagePageState[bookId]) {
+                    messagePageState[bookId] = { currentPage: 1, isLoading: false, hasMore: true };
+                }
+                
+                // Prevent concurrent loads
+                if (messagePageState[bookId].isLoading) return;
+                messagePageState[bookId].isLoading = true;
+                
                 // SCHEMA SWITCHEROO: Use currentViewSource to pull from correct webhook
-                console.log(`Loading messages for book ${bookId} (source: ${currentViewSource})...`);
+                console.log(`Loading messages for book ${bookId} page ${page} (source: ${currentViewSource})...`);
                 const response = await authFetch(`/api/books/${bookId}/messages?page=${page}&limit=50&source=${currentViewSource}`);
                 
                 if (!response.ok) {
@@ -4038,7 +4051,12 @@
                 
                 // SECURITY: Cache ONLY with tenant-scoped fractal_id
                 // This ensures complete tenant isolation in message cache
-                messageCache[bookId] = data.messages;
+                if (!append) {
+                    messageCache[bookId] = data.messages;
+                } else {
+                    // Append new messages to cache
+                    messageCache[bookId] = messageCache[bookId] ? [...messageCache[bookId], ...data.messages] : data.messages;
+                }
                 
                 // Re-render Discord-style messages
                 const container = document.getElementById(`discord-messages-${bookId}`);
@@ -4046,8 +4064,19 @@
                 if (container) {
                     const html = renderDiscordMessages(data.messages, bookId);
                     console.log(`📝 Generated HTML length: ${html.length} chars`);
-                    container.innerHTML = html;
-                    console.log(`✅ Rendered ${data.messages?.length || 0} messages to container`);
+                    if (append) {
+                        // Append to existing messages (infinite scroll)
+                        container.innerHTML += html;
+                        console.log(`✅ Appended ${data.messages?.length || 0} messages`);
+                    } else {
+                        // Replace all (fresh load)
+                        container.innerHTML = html;
+                        console.log(`✅ Rendered ${data.messages?.length || 0} messages to container`);
+                    }
+                    
+                    // Update page state
+                    messagePageState[bookId].currentPage = page;
+                    messagePageState[bookId].hasMore = data.messages && data.messages.length > 0;
                     
                     // Dynamically create export checkboxes AFTER HTML render
                     // This ensures they're truly interactive and separate from read-only message structure
@@ -4079,11 +4108,34 @@
                             window.initMediaLazyLoading();
                         }
                     }, 100);
+                    
+                    // Add infinite scroll listener (only on first load)
+                    if (page === 1 && !append) {
+                        const messagesContainer = document.getElementById(`discord-messages-${bookId}`);
+                        if (messagesContainer) {
+                            messagesContainer.addEventListener('scroll', async () => {
+                                const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
+                                const scrollPercent = (scrollTop + clientHeight) / scrollHeight;
+                                
+                                if (scrollPercent > 0.8) {
+                                    const pageState = messagePageState[bookId] || {};
+                                    if (!pageState.isLoading && pageState.hasMore !== false) {
+                                        const nextPage = (pageState.currentPage || 1) + 1;
+                                        await loadBookMessages(bookId, nextPage, true);
+                                    }
+                                }
+                            });
+                        }
+                    }
                 } else {
                     console.error(`❌ Container NOT FOUND: discord-messages-${bookId}`);
                 }
+                
+                // Mark load complete
+                messagePageState[bookId].isLoading = false;
             } catch (error) {
                 console.error('Error loading messages:', error);
+                messagePageState[bookId].isLoading = false;
                 const container = document.getElementById(`discord-messages-${bookId}`);
                 if (container) {
                     container.innerHTML = '<div class="no-messages" style="color: #ef4444;">Error loading messages. Please try refreshing.</div>';
@@ -4374,6 +4426,36 @@
             } catch (error) {
                 console.error('Error loading media preview:', error);
                 previewContainer.innerHTML = '<div class="media-error">Failed to load media</div>';
+            }
+        }
+
+        // Download entire book as ZIP archive
+        async function downloadEntireBook(fractalId) {
+            try {
+                showToast('📥 Preparing book download...', 'info');
+                const response = await authFetch(`/api/books/${fractalId}/export`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${fractalId}-complete-book.zip`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                showToast('✅ Book downloaded successfully', 'success');
+            } catch (error) {
+                console.error('Download error:', error);
+                showToast(`❌ Download failed: ${error.message}`, 'error');
             }
         }
 
@@ -6358,6 +6440,14 @@ document.addEventListener('click', function(e) {
         e.preventDefault();
         const fractalId = target.getAttribute('data-edit-book');
         if (fractalId) editBook(fractalId);
+        return;
+    }
+    
+    // Download entire book button
+    if (target.hasAttribute('data-download-entire-book')) {
+        e.preventDefault();
+        const fractalId = target.getAttribute('data-download-entire-book');
+        if (fractalId) downloadEntireBook(fractalId);
         return;
     }
     
