@@ -5615,24 +5615,41 @@ app.get('/api/search', requireAuth, setTenantContext, async (req, res) => {
                 }
                 if (!thread) continue;
                 
-                // Fetch messages with timeout
-                // Increased from 50 to 100 to catch messages not in top 50 recent
-                let discordMessages;
+                // Fetch ALL messages from thread (paginate through all)
+                let allMessages = [];
+                let lastId = null;
+                let fetchCount = 0;
+                const maxFetches = 10; // Fetch up to 10 batches (1000+ messages)
+                
                 try {
-                    discordMessages = await Promise.race([
-                        thread.messages.fetch({ limit: 100, force: true }),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), TIMEOUT_MS))
-                    ]);
+                    while (fetchCount < maxFetches) {
+                        const options = { limit: 100, force: true };
+                        if (lastId) options.before = lastId;
+                        
+                        const batch = await Promise.race([
+                            thread.messages.fetch(options),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), TIMEOUT_MS))
+                        ]);
+                        
+                        if (batch.size === 0) break; // No more messages
+                        
+                        for (const msg of batch.values()) {
+                            allMessages.push(msg);
+                            lastId = msg.id;
+                        }
+                        
+                        fetchCount++;
+                    }
                 } catch (fetchError) {
-                    console.warn(`⚠️  Message fetch failed for ${book.fractal_id}: ${fetchError.message}`);
-                    continue;
+                    // Log but continue with what we have
+                    console.warn(`⚠️  Partial message fetch for ${book.fractal_id}: ${fetchError.message} (got ${allMessages.length} msgs)`);
                 }
                 
                 searchedCount++;
                 
-                // Search through messages
+                // Search through all fetched messages
                 let hasMatch = false;
-                for (const msg of discordMessages.values()) {
+                for (const msg of allMessages) {
                     // Skip messages before book creation
                     if (msg.createdAt < bookCreatedAt) continue;
                     
