@@ -2560,6 +2560,20 @@
                 return;
             }
             
+            // Wait for books to load if not yet available
+            if (!books || books.length === 0) {
+                showToast('⏳ Waiting for books to load...', 'info');
+                await new Promise(resolve => {
+                    const checkBooks = setInterval(() => {
+                        if (books && books.length > 0) {
+                            clearInterval(checkBooks);
+                            resolve();
+                        }
+                    }, 200);
+                    setTimeout(() => { clearInterval(checkBooks); resolve(); }, 5000);
+                });
+            }
+            
             // Loading state
             btn.disabled = true;
             btn.textContent = '🔮 Analyzing...';
@@ -2567,6 +2581,7 @@
             
             // SINGULARITY: Detect book names from query using user's authorized book list
             const detectedBooks = detectBookNamesInQuery(message);
+            console.log(`📚 Books available for detection: ${books?.length || 0}, query: "${message.substring(0, 50)}..."`);
             const detectedBookIds = detectedBooks.map(b => b.fractalId);
             
             if (detectedBooks.length > 0) {
