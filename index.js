@@ -4748,7 +4748,10 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                     const attachment = msg.attachments.size > 0 ? msg.attachments.first() : null;
                     
                     // TWILIO MEDIA: Parse "📎 Media" field from embeds (format: [content-type](url))
+                    // Also extract sender_contact (📱 Phone) and sender_role (👤 Sender) from embeds
                     let mediaFromEmbed = null;
+                    let senderContact = null;
+                    let senderRole = null;
                     for (const embed of msg.embeds) {
                         const mediaField = embed.fields?.find(f => f.name === '📎 Media');
                         if (mediaField && mediaField.value) {
@@ -4760,6 +4763,16 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                                     contentType: match[1]
                                 };
                             }
+                        }
+                        // Extract phone number from "📱 Phone" field
+                        const phoneField = embed.fields?.find(f => f.name === '📱 Phone');
+                        if (phoneField && phoneField.value) {
+                            senderContact = phoneField.value;
+                        }
+                        // Extract sender role from "👤 Sender" field (🌟 = creator, 👥 = contributor)
+                        const senderField = embed.fields?.find(f => f.name === '👤 Sender');
+                        if (senderField && senderField.value) {
+                            senderRole = senderField.value.trim();
                         }
                     }
                     
@@ -4783,6 +4796,8 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                         id: msg.id,
                         sender_name: msg.author.username,
                         sender_avatar: msg.author.displayAvatarURL(),
+                        sender_contact: senderContact,
+                        sender_role: senderRole,
                         message_content: msg.content || '',
                         timestamp: msg.createdAt.toISOString(),
                         has_media: msg.attachments.size > 0 || !!mediaFromEmbed,

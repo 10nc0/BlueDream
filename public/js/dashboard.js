@@ -1784,12 +1784,13 @@
                     <div class="discord-content">
                         <div class="discord-header-row">
                             <span class="discord-username">${escapeHtml(msg.sender_name || 'Unknown')}</span>
+                            ${msg.sender_role ? `<span class="sender-role" title="${msg.sender_role === '🌟' ? 'Book Creator' : 'Contributor'}">${msg.sender_role}</span>` : ''}
                             <span class="discord-timestamp discord-timestamp-desktop">${formatDiscordTime(msg.timestamp)}</span>
                             <span class="discord-status-badge status-${msg.discord_status}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
                             <button class="jump-to-msg-btn" data-msg-id="${msg.id}" data-book-id="${bookId}">Jump</button>
                         </div>
                         <div class="discord-timestamp discord-timestamp-mobile">${formatDiscordTime(msg.timestamp)}</div>
-                        <div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>
+                        ${msg.sender_contact ? `<div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>` : ''}
                         <div class="message-drop-section" data-message-id="${msg.id}" data-book-id="${bookId}">
                             <div class="drop-display hidden"></div>
                         </div>
@@ -4198,10 +4199,11 @@
                         <div class="discord-content">
                             <div class="discord-header-row">
                                 <span class="discord-username">${escapeHtml(msg.sender_name || 'Unknown')}</span>
+                                ${msg.sender_role ? `<span class="sender-role" title="${msg.sender_role === '🌟' ? 'Book Creator' : 'Contributor'}">${msg.sender_role}</span>` : ''}
                                 <span class="discord-timestamp">${formatDiscordTime(msg.timestamp)}</span>
                                 <span class="discord-status-badge status-${msg.discord_status || 'success'}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
                             </div>
-                            <div class="discord-contact">${formatPhoneNumber(msg.sender_contact || '')}</div>
+                            ${msg.sender_contact ? `<div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>` : ''}
                             <div class="message-drop-section" data-message-id="${msg.id}" data-book-id="${bookId}">
                                 <div class="drop-display hidden"></div>
                             </div>
