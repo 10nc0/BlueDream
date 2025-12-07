@@ -3286,8 +3286,9 @@
                 window.searchState.dateContext = null;
             }
             
-            // Track books without cached messages for server-side search
-            const uncachedBooks = [];
+            // Track ALL books for server-side search (not just uncached)
+            // This ensures we find matches even in cached books where content is paginated
+            const booksToSearch = [];
             
             filteredBooks = books.filter(book => {
                 // Search match using universal search function
@@ -3317,9 +3318,10 @@
                         matchesMessages = window.searchState.performSearch(searchTerm, messageText);
                     }
                     
-                    // Track uncached books for server-side search
-                    if (!matchesMetadata && !messageCache[book.fractal_id]) {
-                        uncachedBooks.push(book.fractal_id);
+                    // FIX: Track ALL non-metadata-matching books for server search
+                    // Previously only tracked uncached books, missing paginated content
+                    if (!matchesMetadata) {
+                        booksToSearch.push(book.fractal_id);
                     }
                     
                     matchesSearch = matchesMetadata || matchesMessages;
@@ -3343,17 +3345,15 @@
             // Update thumbs zone if in mobile mode
             if (isMobile()) renderThumbsZone();
             
-            // SERVER-SIDE SEARCH: For uncached books, call server to search Discord threads
-            if (searchTerm && uncachedBooks.length > 0 && !naturalDateRange && !serverSearchPending && lastServerSearchTerm !== searchTerm) {
+            // SERVER-SIDE SEARCH: Search ALL books that don't match metadata (not just uncached)
+            // This ensures we find matches in paginated content that isn't in cache
+            if (searchTerm && booksToSearch.length > 0 && !naturalDateRange && !serverSearchPending && lastServerSearchTerm !== searchTerm) {
                 serverSearchPending = true;
                 lastServerSearchTerm = searchTerm;
-                console.log(`🔍 Server search for "${searchTerm}" in ${uncachedBooks.length} uncached books...`);
+                console.log(`🔍 Server search for "${searchTerm}" in ${booksToSearch.length} books (full Discord search)...`);
                 
                 try {
-                    const token = localStorage.getItem('authToken');
-                    const response = await fetch(`/api/search?term=${encodeURIComponent(searchTerm)}&bookIds=${uncachedBooks.join(',')}`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    const response = await authFetch(`/api/search?term=${encodeURIComponent(searchTerm)}&bookIds=${booksToSearch.join(',')}`);
                     
                     if (response.ok) {
                         const data = await response.json();
