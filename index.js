@@ -18,6 +18,8 @@ const TenantManager = require('./tenant-manager');
 const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = require('./tenant-middleware');
 const HermesBot = require('./hermes-bot');
 const ThothBot = require('./thoth-bot');
+const IdrisBot = require('./idris-bot');
+const HorusBot = require('./horus-bot');
 const fractalId = require('./utils/fractal-id');
 const MetadataExtractor = require('./metadata-extractor');
 const genesisCounter = require('./server/genesis-counter');
@@ -340,6 +342,10 @@ let hermesBot = null;
 // Trinity: Thoth bot for read-only message fetching
 let thothBot = null;
 
+// Prometheus Trinity: Idris (write-only) + Horus (read-only) for AI audit logs
+let idrisBot = null;
+let horusBot = null;
+
 async function initializeDatabase() {
     try {
         await tenantManager.initializeCoreSchema();
@@ -518,11 +524,11 @@ async function initializeDatabase() {
             
             // Get all tenant schemas
             const tenantSchemas = await pool.query(`
-                SELECT schema_name FROM core.tenant_catalog
+                SELECT tenant_schema FROM core.tenant_catalog
             `);
             
             for (const row of tenantSchemas.rows) {
-                const schema = row.schema_name;
+                const schema = row.tenant_schema;
                 // Validate schema name format (tenant_X where X is numeric) for SQL injection protection
                 if (!/^tenant_\d+$/.test(schema)) {
                     console.warn(`  ⚠️ Skipping invalid schema name: ${schema}`);
@@ -573,6 +579,32 @@ async function initializeDatabase() {
         // NOTE: One-time migrations (updated_at, creator_phone, join_code, drops) have been
         // applied to production database and removed from startup code for clean deploys.
         // Migration records preserved in core.migrations table for audit trail.
+        
+        // MIGRATION: Add AI log columns to tenant_catalog for Prometheus Trinity
+        const aiLogMigration = await pool.query(`
+            SELECT name FROM core.migrations WHERE name = 'ai_log_columns'
+        `);
+        
+        if (aiLogMigration.rows.length === 0) {
+            console.log('🔄 Running migration: ai_log_columns for tenant_catalog...');
+            
+            try {
+                // Add AI log columns to core.tenant_catalog
+                await pool.query(`
+                    ALTER TABLE core.tenant_catalog 
+                    ADD COLUMN IF NOT EXISTS ai_log_thread_id TEXT,
+                    ADD COLUMN IF NOT EXISTS ai_log_channel_id TEXT
+                `);
+                
+                // Mark migration as complete
+                await pool.query(`
+                    INSERT INTO core.migrations (name) VALUES ('ai_log_columns')
+                `);
+                console.log('✅ Migration ai_log_columns completed');
+            } catch (err) {
+                console.error(`⚠️ Failed to add AI log columns:`, err.message);
+            }
+        }
         
         // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
         // No messages table needed - Discord threads provide permanent storage at zero cost
@@ -3407,6 +3439,61 @@ app.post('/api/prometheus/check', requireAuth, async (req, res) => {
             result_status: Array.isArray(result) ? result.map(r => r.status) : result.status
         }, tenantSchema);
         
+        // POST TO DISCORD: Use Idris to log audit result to AI log thread
+        if (idrisBot && idrisBot.isReady() && tenantSchema) {
+            try {
+                const tenantId = parseInt(tenantSchema.replace('tenant_', ''));
+                console.log(`🧿 Prometheus Discord: Looking up AI log thread for ${tenantSchema}...`);
+                
+                // Get or create AI log thread for this tenant (query by tenant_schema for reliability)
+                const tenantInfo = await pool.query(`
+                    SELECT id, ai_log_thread_id, ai_log_channel_id 
+                    FROM core.tenant_catalog 
+                    WHERE tenant_schema = $1
+                `, [tenantSchema]);
+                
+                // Check if tenant exists in catalog
+                if (tenantInfo.rows.length === 0) {
+                    console.warn(`⚠️ Prometheus Discord: ${tenantSchema} not found in tenant_catalog - skipping Discord logging`);
+                } else {
+                    const catalogId = tenantInfo.rows[0].id;
+                    let threadId = tenantInfo.rows[0]?.ai_log_thread_id;
+                    
+                    // Create thread if doesn't exist
+                    if (!threadId) {
+                        console.log(`🧿 Creating AI log thread for ${tenantSchema}...`);
+                        const threadInfo = await idrisBot.createAILogThread(tenantId, tenantSchema);
+                        threadId = threadInfo.threadId;
+                        
+                        // Save thread ID to tenant_catalog (using catalog id for reliable update)
+                        await pool.query(`
+                            UPDATE core.tenant_catalog 
+                            SET ai_log_thread_id = $1, ai_log_channel_id = $2 
+                            WHERE id = $3
+                        `, [threadInfo.threadId, threadInfo.channelId, catalogId]);
+                        console.log(`✅ AI log thread created: ${threadId}`);
+                    } else {
+                        console.log(`🧿 Using existing AI log thread: ${threadId}`);
+                    }
+                    
+                    // Post audit result to Discord
+                    const resultObj = Array.isArray(result) ? result[0] : result;
+                    const userQuery = Array.isArray(messages) ? messages.join('\n') : messages;
+                    const bookName = hasBookContext ? resultObj.bookName : null;
+                    
+                    await idrisBot.postAuditResult(threadId, resultObj, userQuery, bookName);
+                    console.log(`📜 Prometheus audit posted to Discord thread ${threadId}`);
+                }
+            } catch (discordError) {
+                console.error('⚠️ Failed to post audit to Discord:', discordError.message);
+                // Don't fail the request, just log the error
+            }
+        } else {
+            if (!idrisBot) console.log('⚠️ Prometheus Discord: Idris bot not available');
+            else if (!idrisBot.isReady()) console.log('⚠️ Prometheus Discord: Idris bot not ready');
+            else if (!tenantSchema) console.log('⚠️ Prometheus Discord: No tenant schema available');
+        }
+        
         res.json({ 
             success: true, 
             result,
@@ -3483,6 +3570,47 @@ app.get('/api/prometheus/history', requireAuth, async (req, res) => {
         if (error.code === '42P01') {
             return res.json({ success: true, history: [], total: 0, limit: 50, offset: 0 });
         }
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get AI audit logs from Discord via Horus (Prometheus Trinity)
+app.get('/api/prometheus/discord-history', requireAuth, async (req, res) => {
+    try {
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+        const { limit = 50 } = req.query;
+        
+        if (!tenantSchema) {
+            return res.status(400).json({ error: 'Tenant context required' });
+        }
+        
+        if (!horusBot || !horusBot.isReady()) {
+            return res.status(503).json({ error: 'AI audit log reader not available' });
+        }
+        
+        // Get AI log thread ID for this tenant (query by tenant_schema for reliability)
+        const tenantInfo = await pool.query(`
+            SELECT ai_log_thread_id FROM core.tenant_catalog WHERE tenant_schema = $1
+        `, [tenantSchema]);
+        
+        const threadId = tenantInfo.rows[0]?.ai_log_thread_id;
+        
+        if (!threadId) {
+            return res.json({ success: true, logs: [], message: 'No AI audit log thread exists yet' });
+        }
+        
+        // Fetch logs via Horus
+        const logs = await horusBot.fetchAuditLogs(threadId, parseInt(limit));
+        const stats = await horusBot.getAuditStats(threadId);
+        
+        res.json({
+            success: true,
+            logs,
+            stats,
+            thread_id: threadId
+        });
+    } catch (error) {
+        console.error('❌ Discord history error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -5556,6 +5684,11 @@ app.listen(PORT, '0.0.0.0', async () => {
     hermesBot = new HermesBot();
     thothBot = new ThothBot();
     
+    // PROMETHEUS TRINITY: Idris (ι - Scribe) + Horus (Ω - Watcher)
+    // Separate channel/bots for AI audit logging (data silo)
+    idrisBot = new IdrisBot();
+    horusBot = new HorusBot();
+    
     console.log('🌈 Initializing Trinity architecture...');
     try {
         // Initialize bots sequentially to reduce connection spike
@@ -5565,6 +5698,16 @@ app.listen(PORT, '0.0.0.0', async () => {
     } catch (error) {
         console.error('❌ Trinity initialization failed:', error.message);
         console.error('   Book thread creation/reading may be unavailable');
+    }
+    
+    console.log('🧿 Initializing Prometheus Trinity...');
+    try {
+        await idrisBot.initialize();
+        await horusBot.initialize();
+        console.log('✨ Prometheus Trinity ready: Idris (ι) + Horus (Ω)');
+    } catch (error) {
+        console.error('❌ Prometheus Trinity initialization failed:', error.message);
+        console.error('   AI audit logging may be unavailable');
     }
     
     await initializeDatabase();
