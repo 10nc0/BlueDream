@@ -4504,6 +4504,7 @@
         }
 
         // Scroll to element with offset for sticky time header
+        // Handles async image loading to ensure accurate scroll position
         function scrollAndHighlight(el, bookIdParam) {
             console.log(`🎨 scrollAndHighlight called, el exists:`, !!el, `bookId param:`, bookIdParam);
             if (!el) return;
@@ -4527,6 +4528,8 @@
             console.log(`📦 Container found:`, !!container);
             
             if (container) {
+                // PRIORITY: (i) Jump pressed (✓) -> (ii) Clear filter (✓) -> (iii) Snap to top -> (iv) Offset
+                
                 // Find the sticky header height dynamically
                 const stickyHeader = container.querySelector('.time-bucket-header');
                 let headerHeight = 0;
@@ -4540,22 +4543,56 @@
                 // Use generous fallback offset (sticky header + extra padding)
                 const offset = Math.max(headerHeight, 120);
                 
-                // Use getBoundingClientRect for accurate position calculation
-                // This works even with nested elements and sticky positioning
+                // STEP 1: Snap to top immediately (rough scroll to element position)
                 const containerRect = container.getBoundingClientRect();
                 const elRect = el.getBoundingClientRect();
-                
-                // Calculate element's position relative to container's scrollable area
-                // Current scroll + (element top relative to container visible area) - offset
                 const elTopRelativeToContainer = elRect.top - containerRect.top;
-                const scrollTarget = container.scrollTop + elTopRelativeToContainer - offset;
+                const roughScrollTarget = container.scrollTop + elTopRelativeToContainer - offset;
+                container.scrollTop = Math.max(0, roughScrollTarget);
+                console.log(`📐 STEP 1 - Snap to top: scrollTop = ${container.scrollTop}px`);
                 
-                console.log(`📐 containerTop=${containerRect.top}, elTop=${elRect.top}, elRelative=${elTopRelativeToContainer}, currentScroll=${container.scrollTop}, offset=${offset}, scrollTarget=${scrollTarget}`);
+                // STEP 2: Wait for images in this message to load before final offset
+                // This ensures accurate height calculation once media is rendered
+                const images = el.querySelectorAll('img');
+                const mediaPreview = el.querySelector('.discord-media-preview');
                 
-                // Apply the scroll
-                container.scrollTop = Math.max(0, scrollTarget);
+                if (images.length > 0 || mediaPreview) {
+                    console.log(`⏳ Waiting for ${images.length} image(s) + media to load...`);
+                    
+                    // Create array of image load promises
+                    const imagePromises = Array.from(images).map(img => {
+                        return new Promise(resolve => {
+                            if (img.complete) {
+                                // Image already loaded or cached
+                                resolve();
+                            } else {
+                                // Wait for image to load
+                                img.onload = () => resolve();
+                                img.onerror = () => resolve(); // Resolve even on error to avoid hanging
+                            }
+                        });
+                    });
+                    
+                    // STEP 3: After images load, recalculate and apply final offset
+                    Promise.all(imagePromises).then(() => {
+                        console.log(`✅ Images loaded, recalculating scroll offset...`);
+                        
+                        // Recalculate with fully loaded element height
+                        const finalContainerRect = container.getBoundingClientRect();
+                        const finalElRect = el.getBoundingClientRect();
+                        const finalElTopRelativeToContainer = finalElRect.top - finalContainerRect.top;
+                        const finalScrollTarget = container.scrollTop + finalElTopRelativeToContainer - offset;
+                        
+                        console.log(`📐 STEP 3 - Final offset: scrollTop = ${finalScrollTarget}px (offset=${offset}px)`);
+                        
+                        // Apply final scroll
+                        container.scrollTop = Math.max(0, finalScrollTarget);
+                    });
+                } else {
+                    console.log(`✓ No images/media, scroll offset applied immediately`);
+                }
                 
-                console.log(`📍 SCROLL APPLIED: scrollTop now = ${container.scrollTop}px (wanted ${Math.max(0, scrollTarget)}px)`);
+                console.log(`📍 SCROLL APPLIED: scrollTop now = ${container.scrollTop}px (offset=${offset}px)`);
                 
                 // Add highlight animation to make the target message visible
                 el.classList.add('jump-highlight');
