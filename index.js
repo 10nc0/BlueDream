@@ -2177,7 +2177,6 @@ app.post('/api/twilio/webhook', async (req, res) => {
                 description: Body || '_(No text content)_',
                 color: isCreator ? 0x25D366 : 0x7289DA, // WhatsApp green for creator, Discord blue for contributor
                 fields: [
-                    { name: '👤 Sender', value: `${senderRole}`, inline: true },
                     { name: '📱 Phone', value: phone, inline: true },
                     { name: '📖 Book', value: book.name, inline: true },
                     { name: '🕐 Time', value: new Date().toLocaleString(), inline: true }
@@ -4545,10 +4544,9 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                     const attachment = msg.attachments.size > 0 ? msg.attachments.first() : null;
                     
                     // TWILIO MEDIA: Parse "📎 Media" field from embeds (format: [content-type](url))
-                    // Also extract sender_contact (📱 Phone) and sender_role (👤 Sender) from embeds
+                    // Also extract sender_contact (📱 Phone) from embeds
                     let mediaFromEmbed = null;
                     let senderContact = null;
-                    let senderRole = null;
                     for (const embed of msg.embeds) {
                         const mediaField = embed.fields?.find(f => f.name === '📎 Media');
                         if (mediaField && mediaField.value) {
@@ -4565,11 +4563,6 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                         const phoneField = embed.fields?.find(f => f.name === '📱 Phone');
                         if (phoneField && phoneField.value) {
                             senderContact = phoneField.value;
-                        }
-                        // Extract sender role from "👤 Sender" field (🌟 = creator, 👥 = contributor)
-                        const senderField = embed.fields?.find(f => f.name === '👤 Sender');
-                        if (senderField && senderField.value) {
-                            senderRole = senderField.value.trim();
                         }
                     }
                     
