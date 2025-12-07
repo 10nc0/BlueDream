@@ -500,6 +500,31 @@ async function initializeDatabase() {
             console.log('✅ Added updated_at column to book_registry');
         }
         
+        // MIGRATION: Add creator_phone column to book_registry for contributor tracking
+        const creatorPhoneMigration = await pool.query(`
+            SELECT 1 FROM core.migrations WHERE name = 'add_book_registry_creator_phone'
+        `);
+        
+        if (creatorPhoneMigration.rows.length === 0) {
+            await pool.query(`
+                ALTER TABLE core.book_registry 
+                ADD COLUMN IF NOT EXISTS creator_phone TEXT
+            `);
+            
+            // Backfill: existing active books get their phone_number as creator_phone
+            await pool.query(`
+                UPDATE core.book_registry 
+                SET creator_phone = phone_number
+                WHERE status = 'active' AND creator_phone IS NULL AND phone_number IS NOT NULL
+            `);
+            
+            await pool.query(`
+                INSERT INTO core.migrations (name) VALUES ('add_book_registry_creator_phone')
+            `);
+            
+            console.log('✅ Added creator_phone column to book_registry (first activator = creator)');
+        }
+        
         // MIGRATION: Add join_code column to existing phone_to_book tables FIRST
         try {
             const schemas = await pool.query(`
@@ -2065,7 +2090,7 @@ app.post('/api/twilio/webhook', async (req, res) => {
             console.log(`🔑 Join code provided: ${joinCode} → Checking registry (NO phone fallback)`);
             const registryLookup = await pool.query(`
                 SELECT id, tenant_schema, tenant_email, fractal_id, book_name, 
-                       outpipe_ledger, outpipes_user, status, phone_number
+                       outpipe_ledger, outpipes_user, status, phone_number, creator_phone
                 FROM core.book_registry
                 WHERE LOWER(join_code) = LOWER($1)
             `, [joinCode]);
@@ -2081,7 +2106,7 @@ app.post('/api/twilio/webhook', async (req, res) => {
             console.log(`📞 No join code in message → Using phone lookup for active books`);
             const phoneLookup = await pool.query(`
                 SELECT id, tenant_schema, tenant_email, fractal_id, book_name, 
-                       outpipe_ledger, outpipes_user, status, phone_number, updated_at
+                       outpipe_ledger, outpipes_user, status, phone_number, creator_phone, updated_at
                 FROM core.book_registry
                 WHERE phone_number = $1 AND status = 'active'
                 ORDER BY updated_at DESC
@@ -2243,9 +2268,10 @@ app.post('/api/twilio/webhook', async (req, res) => {
             
             // Update registry (activate and set phone)
             // CRITICAL: Update updated_at to track most recent activation for routing
+            // CREATOR TRACKING: First activator becomes the creator_phone
             await pool.query(`
                 UPDATE core.book_registry 
-                SET phone_number = $1, status = 'active', activated_at = NOW(), updated_at = NOW()
+                SET phone_number = $1, creator_phone = $1, status = 'active', activated_at = NOW(), updated_at = NOW()
                 WHERE id = $2
             `, [phone, bookRecord.id]);
             
@@ -2353,12 +2379,19 @@ app.post('/api/twilio/webhook', async (req, res) => {
             const output01 = outputCreds.output_01;
             const webhooks = outputCreds.webhooks || [];
             
+            // Determine if sender is the book creator
+            // FALLBACK: If creator_phone is NULL (pre-migration books), treat phone_number as creator
+            const isCreator = (bookRecord.creator_phone && phone === bookRecord.creator_phone) ||
+                              (!bookRecord.creator_phone && phone === bookRecord.phone_number);
+            const senderRole = isCreator ? '👑 Creator' : '👤 Contributor';
+            
             // Build Discord embed
             const embed = {
                 title: `📱 WhatsApp Message`,
                 description: Body || '_(No text content)_',
-                color: 0x25D366, // WhatsApp green
+                color: isCreator ? 0x25D366 : 0x7289DA, // WhatsApp green for creator, Discord blue for contributor
                 fields: [
+                    { name: '👤 Sender', value: `${senderRole}`, inline: true },
                     { name: '📱 Phone', value: phone, inline: true },
                     { name: '📖 Book', value: book.name, inline: true },
                     { name: '🕐 Time', value: new Date().toLocaleString(), inline: true }
