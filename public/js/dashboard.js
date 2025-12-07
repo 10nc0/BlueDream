@@ -2551,7 +2551,7 @@
             resultDiv.style.display = 'none';
             
             try {
-                const token = localStorage.getItem('authToken');
+                const token = localStorage.getItem('accessToken');
                 const response = await fetch('/api/prometheus/check', {
                     method: 'POST',
                     headers: {
