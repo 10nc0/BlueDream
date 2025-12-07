@@ -4361,23 +4361,27 @@
             if (!targetId || !bookId) return;
             
             try {
-                console.log(`🎯 Jumping to message ${targetId}, clearing search and reloading all messages...`);
+                console.log(`🎯 Jumping to message ${targetId}...`);
                 
                 // Clear search state and UI
                 clearSearchState(bookId);
                 
-                // Reload all messages for the book (not just search results)
-                await loadBookMessages(bookId);
+                // Check if message is already in DOM
+                let targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
                 
-                // Use RAF to scroll immediately after DOM update, no artificial delay
-                requestAnimationFrame(() => {
-                    const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
-                    if (targetEl) {
-                        scrollAndHighlight(targetEl);
-                    } else {
-                        console.warn('Message not found in DOM after reload');
-                    }
-                });
+                if (!targetEl) {
+                    // Message not in DOM, reload all messages
+                    console.log(`⏳ Message not in cache, reloading...`);
+                    await loadBookMessages(bookId);
+                    targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                }
+                
+                // Scroll immediately (no RAF delay)
+                if (targetEl) {
+                    scrollAndHighlight(targetEl);
+                } else {
+                    console.warn('Message not found in DOM');
+                }
                 
             } catch (error) {
                 console.error('Error jumping to message:', error);
@@ -4494,8 +4498,8 @@
             const container = bookId ? document.getElementById(`discord-messages-${bookId}`) : null;
             
             if (container) {
-                // Account for sticky "Today" header (~45px height + 10px padding)
-                const headerOffset = 55;
+                // Account for sticky header: increased offset to ensure message card is fully visible below time header
+                const headerOffset = 120;
                 const scrollTarget = el.offsetTop - headerOffset;
                 container.scrollTop = Math.max(0, scrollTarget);
             } else {
