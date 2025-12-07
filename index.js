@@ -2387,7 +2387,6 @@ app.post('/api/twilio/webhook', async (req, res) => {
             
             // Build Discord embed
             const embed = {
-                title: `📱 WhatsApp Message`,
                 description: Body || '_(No text content)_',
                 color: isCreator ? 0x25D366 : 0x7289DA, // WhatsApp green for creator, Discord blue for contributor
                 fields: [
