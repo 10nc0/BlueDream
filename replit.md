@@ -24,7 +24,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Database**: PostgreSQL with multi-tenant architecture, ensuring data separation per user via isolated schemas.
 - **Book Registry**: Centralized global registry (`core.book_registry`) for O(1) join code lookups, storing book metadata (join_code, fractal_id, tenant linkage, status, multi-outpipe configuration).
 - **WhatsApp Integration**: Twilio-based messaging integration using WhatsApp Business API. Employs a join-code-first routing architecture for incoming messages, allowing phone number recycling.
-- **Webhook Integration**: Messages are permanently saved to an internal Ledger. Supports optional personal webhooks (Discord, Slack, etc.) for mirroring messages, with multi-webhook capability.
+- **Webhook Integration**: Messages are permanently saved to your Ledger with multi-webhook capability for external user's preferred storage.
 - **Media Handling**: Discord-native storage for media. WhatsApp media is downloaded from Twilio and uploaded to Discord as native attachments, making the system Twilio-independent for reads.
 - **Search & Metadata**: Enhanced search across messages and metadata, supporting multilingual text and full-text search indexing.
 - **Real-time Updates**: Smart polling with `?after={messageId}` for new messages, with auto-scroll and "New messages" banner. Jump-to-message functionality with `#msg-{messageId}`.
@@ -40,7 +40,6 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase) with RLS configured via Supabase dashboard
 - **WhatsApp**: Twilio WhatsApp Business API
-- **Discord**: Discord.js + Discord webhooks for message delivery
 
 ## Database Notes
 - **RLS Policy**: Row Level Security for `public.sessions` table is configured directly in Supabase SQL editor (not in code). Policy enables backend full access while satisfying Supabase security requirements.
