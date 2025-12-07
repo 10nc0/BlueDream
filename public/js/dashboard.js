@@ -2719,7 +2719,7 @@
             }
             
             historyModal.style.display = 'flex';
-            loadPrometheusHistory(0);
+            loadPrometheusHistory(50);
         }
         
         function closePrometheusHistoryModal() {
@@ -2727,13 +2727,13 @@
             if (modal) modal.style.display = 'none';
         }
         
-        async function loadPrometheusHistory(offset = 0, limit = 10) {
+        async function loadPrometheusHistory(limit = 50) {
             const contentDiv = document.getElementById('prometheusHistoryContent');
             const paginationDiv = document.getElementById('prometheusHistoryPagination');
             
             try {
                 const token = localStorage.getItem('accessToken');
-                const response = await fetch(`/api/prometheus/history?limit=${limit}&offset=${offset}`, {
+                const response = await fetch(`/api/prometheus/discord-history?limit=${limit}`, {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
@@ -2753,10 +2753,11 @@
                 
                 const data = await response.json();
                 
-                if (data.history.length === 0) {
+                // Handle message when no thread exists yet
+                if (data.message || !data.logs || data.logs.length === 0) {
                     contentDiv.innerHTML = `
                         <div style="text-align: center; padding: 2rem; color: #94a3b8;">
-                            <div style="font-size: 3rem; margin-bottom: 1rem;">🧿</div>
+                            <div style="font-size: 3rem; margin-bottom: 1rem;">👁️</div>
                             <p>No audit history yet.</p>
                             <p style="font-size: 0.875rem; margin-top: 0.5rem;">Run your first AI check to see results here.</p>
                         </div>
@@ -2772,61 +2773,69 @@
                     'REVIEW': '#6366f1'
                 };
                 
-                const historyHtml = data.history.map(item => {
-                    const statusColor = statusColors[item.result_status] || '#94a3b8';
-                    const date = new Date(item.created_at).toLocaleString();
-                    const inputPreview = item.input_messages ? 
-                        (typeof item.input_messages === 'string' ? item.input_messages : JSON.stringify(item.input_messages)).substring(0, 100) + '...' : 
-                        'No input';
+                // Show stats summary if available
+                let statsHtml = '';
+                if (data.stats && data.stats.total > 0) {
+                    statsHtml = `
+                        <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                            <div style="padding: 0.5rem 0.75rem; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; color: #10b981; font-size: 0.8rem;">
+                                ✅ Pass: ${data.stats.pass}
+                            </div>
+                            <div style="padding: 0.5rem 0.75rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; color: #ef4444; font-size: 0.8rem;">
+                                ❌ Fail: ${data.stats.fail}
+                            </div>
+                            <div style="padding: 0.5rem 0.75rem; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; color: #f59e0b; font-size: 0.8rem;">
+                                ⚠️ Warning: ${data.stats.warning}
+                            </div>
+                            <div style="padding: 0.5rem 0.75rem; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; color: #6366f1; font-size: 0.8rem;">
+                                🔍 Review: ${data.stats.review}
+                            </div>
+                            <div style="padding: 0.5rem 0.75rem; background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 6px; color: #94a3b8; font-size: 0.8rem;">
+                                🎯 Avg: ${data.stats.averageConfidence}%
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Render logs from Horus (Discord-based)
+                const historyHtml = data.logs.map(log => {
+                    const parsed = log.parsed || {};
+                    const status = parsed.status?.toUpperCase() || 'UNKNOWN';
+                    const statusColor = statusColors[status] || '#94a3b8';
+                    const date = new Date(log.timestamp).toLocaleString();
+                    const query = parsed.query || log.content || 'No query';
+                    const answer = parsed.answer || 'No answer';
+                    const confidence = parsed.confidence;
+                    const bookContext = parsed.bookContext;
                     
                     return `
                         <div style="padding: 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; margin-bottom: 0.75rem;">
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
                                 <div style="display: flex; align-items: center; gap: 0.75rem;">
                                     <span style="padding: 0.25rem 0.5rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 4px; color: ${statusColor}; font-weight: 600; font-size: 0.75rem;">
-                                        ${escapeHtml(item.result_status || 'UNKNOWN')}
+                                        ${escapeHtml(status)}
                                     </span>
-                                    <span style="padding: 0.25rem 0.5rem; background: rgba(148, 163, 184, 0.1); border-radius: 4px; color: #94a3b8; font-size: 0.75rem;">
-                                        ${escapeHtml(item.rule_type || 'general')}
-                                    </span>
-                                    ${item.book_name ? `<span style="color: #60a5fa; font-size: 0.75rem;">📚 ${escapeHtml(item.book_name)}</span>` : ''}
+                                    ${bookContext ? `<span style="color: #60a5fa; font-size: 0.75rem;">📚 ${escapeHtml(bookContext)}</span>` : ''}
                                 </div>
                                 <span style="color: #64748b; font-size: 0.75rem;">${date}</span>
                             </div>
                             <div style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.5rem;">
-                                <strong>Input:</strong> ${escapeHtml(inputPreview)}
+                                <strong>Query:</strong> ${escapeHtml(query.substring(0, 150))}${query.length > 150 ? '...' : ''}
                             </div>
                             <div style="color: #e2e8f0; font-size: 0.875rem;">
-                                <strong>Result:</strong> ${escapeHtml(item.result_reason || 'No reason provided')}
+                                <strong>Answer:</strong> ${escapeHtml(answer.substring(0, 200))}${answer.length > 200 ? '...' : ''}
                             </div>
-                            ${item.result_confidence ? `
+                            ${confidence ? `
                             <div style="color: #64748b; font-size: 0.75rem; margin-top: 0.5rem;">
-                                Confidence: ${(item.result_confidence * 100).toFixed(0)}% | Processing: ${item.processing_time_ms || '?'}ms
+                                Confidence: ${confidence}%
                             </div>
                             ` : ''}
                         </div>
                     `;
                 }).join('');
                 
-                contentDiv.innerHTML = historyHtml;
-                
-                // Pagination
-                const totalPages = Math.ceil(data.total / limit);
-                const currentPage = Math.floor(offset / limit);
-                
-                if (totalPages > 1) {
-                    let paginationHtml = '';
-                    if (currentPage > 0) {
-                        paginationHtml += `<button onclick="loadPrometheusHistory(${(currentPage - 1) * limit})" style="padding: 0.5rem 1rem; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; color: #e2e8f0; cursor: pointer;">← Previous</button>`;
-                    }
-                    paginationHtml += `<span style="color: #94a3b8; padding: 0.5rem;">Page ${currentPage + 1} of ${totalPages}</span>`;
-                    if (currentPage < totalPages - 1) {
-                        paginationHtml += `<button onclick="loadPrometheusHistory(${(currentPage + 1) * limit})" style="padding: 0.5rem 1rem; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; color: #e2e8f0; cursor: pointer;">Next →</button>`;
-                    }
-                    paginationDiv.innerHTML = paginationHtml;
-                } else {
-                    paginationDiv.innerHTML = '';
-                }
+                contentDiv.innerHTML = statsHtml + historyHtml;
+                paginationDiv.innerHTML = `<span style="color: #64748b; font-size: 0.75rem;">👁️ Powered by Horus | Showing ${data.logs.length} logs</span>`;
                 
             } catch (error) {
                 console.error('Failed to load Prometheus history:', error);
