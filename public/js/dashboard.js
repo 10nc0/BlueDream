@@ -2590,7 +2590,7 @@
             
             try {
                 console.log(`🔮 Prometheus: Sending request with fractalId="${selectedBookFractalId}", detectedBookIds=${JSON.stringify(detectedBookIds)}`);
-                const response = await authenticatedFetch('/api/prometheus/check', {
+                const response = await authFetch('/api/prometheus/check', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
