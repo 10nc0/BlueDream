@@ -4484,15 +4484,26 @@
             hydrateDropsForBook(bookId);
         }
 
-        // Scroll to element (centered, no highlight)
+        // Scroll to element with offset for sticky time header
         function scrollAndHighlight(el) {
             if (!el) return;
             
-            // Instant scroll to center of viewport (fast jump response)
-            el.scrollIntoView({ behavior: 'auto', block: 'center' });
+            // Find the message container
+            const msgId = el.getAttribute('data-msg-id');
+            const bookId = el.closest('[data-book-id]')?.getAttribute('data-book-id');
+            const container = bookId ? document.getElementById(`discord-messages-${bookId}`) : null;
+            
+            if (container) {
+                // Account for sticky "Today" header (~45px height + 10px padding)
+                const headerOffset = 55;
+                const scrollTarget = el.offsetTop - headerOffset;
+                container.scrollTop = Math.max(0, scrollTarget);
+            } else {
+                // Fallback: instant scroll to top of viewport if no container found
+                el.scrollIntoView({ behavior: 'auto', block: 'start' });
+            }
             
             // Update URL with hash (for shareable links)
-            const msgId = el.getAttribute('data-msg-id');
             if (msgId) {
                 history.pushState(null, '', `#msg-${msgId}`);
             }
