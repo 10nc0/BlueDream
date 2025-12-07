@@ -78,6 +78,60 @@ DISCIPLINE (Nyan Guard Rail):
 - If no relevant context → confidence: 0.3, explain what data would be needed
 - Never invent facts/numbers beyond what's in context`;
 
+const SYSTEM_PROMPT_MULTI_BOOK = `You are the AI assistant for Nyanbook, a message archiving system.
+
+MISSION: Answer user queries using MULTIPLE BOOK CONTEXTS provided below. You have access to real data from multiple books.
+
+H(0) PROTOCOL (strict):
+- Use ONLY the data provided in the BOOK CONTEXTS below
+- Cross-reference between books when asked
+- Aggregate counts, find patterns across books
+- Never guess numbers, dates, or IDs
+- Respond in user's language (Indonesian or English)
+
+CROSS-BOOK ANALYSIS CAPABILITIES:
+- Count occurrences across multiple books
+- Compare data between books
+- Find patterns (e.g., "which vehicle appears most in both books")
+- Aggregate statistics
+
+PATTERN RECOGNITION:
+- Vehicle plates: Usually format like "BA 1234 AB" or "BK 5678 XY"
+- Look for repeated patterns in message content
+- Count unique occurrences per book and combined
+
+OUTPUT: JSON only, no explanations outside structure.
+
+TASKS:
+1. FIRST: Directly answer the user's question using data from ALL provided books
+2. Aggregate and compare data across books when relevant
+3. List top items with counts if asked for rankings
+4. Return structured result
+
+LANGUAGES: Indonesian and English (match input language)
+
+OUTPUT FORMAT (JSON only):
+{
+  "answer": "Direct response to user's question based on all book contexts. Include specific counts and comparisons between books.",
+  "status": "PASS|FAIL|WARNING|REVIEW",
+  "confidence": 0.0-1.0,
+  "reason": "Brief explanation in user's language",
+  "data_extracted": {
+    "books_analyzed": ["Book1", "Book2"],
+    "total_messages_scanned": 123,
+    "rankings": [{"item": "...", "count": 10, "sources": ["Book1", "Book2"]}]
+  },
+  "recommended_action": "What should happen next",
+  "needs_human_review": true|false
+}
+
+DISCIPLINE (Nyan Guard Rail):
+- Use REAL data from ALL BOOK CONTEXTS to answer
+- Cross-reference and aggregate when multiple books are involved
+- If context has the answer → confidence: 0.9-1.0
+- If context is partial → confidence: 0.6-0.8, explain what's available
+- Never invent facts/numbers beyond what's in context`;
+
 const INDONESIAN_KEYWORDS = [
   'adalah', 'yang', 'ini', 'itu', 'dan', 'atau', 'sudah', 'belum',
   'untuk', 'dengan', 'dari', 'ke', 'di', 'pada', 'oleh', 'saya',
@@ -189,12 +243,52 @@ ${userQuery}
 Answer the user's question using ONLY the book context above. Return JSON only:`;
 }
 
+function buildMultiBookContextPrompt(userQuery, multiBookContext, language = null) {
+  const detectedLang = language || detectLanguage(userQuery);
+  const langInstruction = detectedLang === 'id' 
+    ? 'Respond in Indonesian (Bahasa Indonesia).'
+    : 'Respond in English.';
+  
+  const booksOverview = multiBookContext.books.map((b, i) => 
+    `  ${i+1}. "${b.name}" - ${b.totalMessages} messages (${b.dateRange})`
+  ).join('\n');
+  
+  const messagesWithSource = multiBookContext.recentMessages.map((msg, i) => 
+    `[${i+1}] [${msg.bookName}] ${msg.timestamp || 'Unknown'}: ${msg.content?.substring(0, 200) || 'No content'}${msg.content?.length > 200 ? '...' : ''}`
+  ).join('\n');
+  
+  return `${SYSTEM_PROMPT_MULTI_BOOK}
+
+${langInstruction}
+
+=== MULTI-BOOK CONTEXT ===
+Number of Books: ${multiBookContext.bookCount}
+Total Messages Across All Books: ${multiBookContext.totalMessages}
+Date Range: ${multiBookContext.dateRange || 'Unknown'}
+
+=== BOOKS SUMMARY ===
+${booksOverview}
+
+=== MESSAGES FROM ALL BOOKS (Most Recent ${multiBookContext.recentMessages.length}) ===
+${messagesWithSource}
+=== END MULTI-BOOK CONTEXT ===
+
+USER QUERY:
+"""
+${userQuery}
+"""
+
+Answer the user's question by analyzing data from ALL books above. Cross-reference and aggregate when needed. Return JSON only:`;
+}
+
 module.exports = {
   SYSTEM_PROMPT,
   SYSTEM_PROMPT_WITH_CONTEXT,
+  SYSTEM_PROMPT_MULTI_BOOK,
   INDONESIAN_KEYWORDS,
   detectLanguage,
   buildCheckPrompt,
   buildBatchPrompt,
-  buildContextPrompt
+  buildContextPrompt,
+  buildMultiBookContextPrompt
 };

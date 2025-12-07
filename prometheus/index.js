@@ -11,7 +11,7 @@
  * - Zero hallucination protocol
  */
 
-const { buildCheckPrompt, buildBatchPrompt, buildContextPrompt, detectLanguage } = require('./prompts');
+const { buildCheckPrompt, buildBatchPrompt, buildContextPrompt, buildMultiBookContextPrompt, detectLanguage } = require('./prompts');
 const { checkWithLLM } = require('./huggingface');
 const { applyBusinessRules, getRuleInfo, listRules, RULES } = require('./rules');
 
@@ -244,6 +244,55 @@ class Prometheus {
           : 'Try again or contact admin',
         needs_human_review: true,
         hasBookContext: false,
+        error: error.message,
+        language
+      };
+    }
+  }
+  
+  /**
+   * Check with multi-book context - answers queries across multiple books
+   * @param {string} userQuery - User's question about multiple books
+   * @param {Object} multiBookContext - Aggregated context from multiple books
+   * @param {Object} options - Additional options
+   * @returns {Promise<Object>} Check result with cross-book answer
+   */
+  static async checkWithMultiBookContext(userQuery, multiBookContext, options = {}) {
+    const language = options.language || detectLanguage(userQuery);
+    
+    const bookNames = multiBookContext.books.map(b => b.name).join(', ');
+    console.log(`🔮 Prometheus multi-book query (${multiBookContext.bookCount} books: ${bookNames}, ${multiBookContext.totalMessages} msgs)...`);
+    
+    try {
+      const prompt = buildMultiBookContextPrompt(userQuery, multiBookContext, language);
+      const llmResult = await checkWithLLM(prompt);
+      
+      return {
+        ...llmResult,
+        hasBookContext: true,
+        isMultiBook: true,
+        bookCount: multiBookContext.bookCount,
+        books: multiBookContext.books,
+        totalMessages: multiBookContext.totalMessages,
+        language
+      };
+    } catch (error) {
+      console.error('❌ Prometheus multi-book query failed:', error.message);
+      
+      return {
+        status: 'REVIEW',
+        confidence: 0,
+        answer: language === 'id'
+          ? `Terjadi kesalahan saat mengakses data buku: ${error.message}`
+          : `Error accessing book data: ${error.message}`,
+        reason: error.message,
+        data_extracted: {},
+        recommended_action: language === 'id'
+          ? 'Coba lagi atau hubungi admin'
+          : 'Try again or contact admin',
+        needs_human_review: true,
+        hasBookContext: false,
+        isMultiBook: false,
         error: error.message,
         language
       };

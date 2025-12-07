@@ -3361,12 +3361,108 @@ async function fetchBookContextForPrometheus(fractalId, tenantSchema, client = p
     }
 }
 
+// Helper: Fetch context from multiple books for Prometheus multi-book queries
+async function fetchMultiBookContextForPrometheus(bookIds, tenantSchema, userRole, client = pool) {
+    if (!bookIds || !Array.isArray(bookIds) || bookIds.length === 0 || !tenantSchema) {
+        return null;
+    }
+    
+    console.log(`📚 Prometheus multi-book: Fetching ${bookIds.length} books for ${tenantSchema}...`);
+    
+    const books = [];
+    const accessibleSchemas = new Set();
+    
+    // For dev users with genesis access, they can access all tenant schemas
+    const hasExtendedAccess = userRole === 'dev';
+    
+    if (hasExtendedAccess) {
+        // Dev can access all tenant schemas
+        const allSchemas = await getAllTenantSchemas(client, userRole);
+        allSchemas.forEach(s => accessibleSchemas.add(s.tenant_schema));
+    } else {
+        // Regular users only access their own tenant
+        accessibleSchemas.add(tenantSchema);
+    }
+    
+    // Fetch each book's context
+    for (const bookId of bookIds) {
+        let bookContext = null;
+        
+        // Try the user's tenant schema first
+        bookContext = await fetchBookContextForPrometheus(bookId, tenantSchema, client);
+        
+        // If not found and user has extended access, search other schemas
+        if (!bookContext && hasExtendedAccess) {
+            for (const schema of accessibleSchemas) {
+                if (schema === tenantSchema) continue; // Already tried
+                bookContext = await fetchBookContextForPrometheus(bookId, schema, client);
+                if (bookContext) {
+                    bookContext.sourceSchema = schema;
+                    break;
+                }
+            }
+        }
+        
+        if (bookContext && bookContext.totalMessages > 0) {
+            bookContext.sourceSchema = bookContext.sourceSchema || tenantSchema;
+            books.push(bookContext);
+        } else {
+            console.warn(`⚠️ Book ${bookId} not accessible or has no messages`);
+        }
+    }
+    
+    if (books.length === 0) {
+        return null;
+    }
+    
+    // Aggregate all messages across books
+    const allMessages = [];
+    const bookSummaries = [];
+    
+    for (const book of books) {
+        bookSummaries.push({
+            name: book.name,
+            fractalId: book.fractalId,
+            totalMessages: book.totalMessages,
+            dateRange: book.dateRange
+        });
+        
+        // Add book name to each message for cross-book context
+        for (const msg of book.recentMessages) {
+            allMessages.push({
+                ...msg,
+                bookName: book.name,
+                bookFractalId: book.fractalId
+            });
+        }
+    }
+    
+    // Sort all messages by timestamp (newest first)
+    allMessages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    const totalMessages = books.reduce((sum, b) => sum + b.totalMessages, 0);
+    
+    console.log(`📚 Prometheus multi-book: Aggregated ${totalMessages} messages from ${books.length} books`);
+    
+    return {
+        isMultiBook: true,
+        bookCount: books.length,
+        books: bookSummaries,
+        totalMessages: totalMessages,
+        recentMessages: allMessages.slice(0, 50), // Up to 50 messages across all books
+        dateRange: allMessages.length > 0
+            ? `${allMessages[allMessages.length - 1].timestamp.split('T')[0]} to ${allMessages[0].timestamp.split('T')[0]}`
+            : 'No messages'
+    };
+}
+
 // Check messages against business rules (with optional book context)
+// Supports single book (fractalId) or multi-book (bookIds array) queries
 app.post('/api/prometheus/check', requireAuth, async (req, res) => {
     try {
-        const { messages, ruleType = 'general', language, bookId, fractalId } = req.body;
+        const { messages, ruleType = 'general', language, bookId, fractalId, bookIds } = req.body;
         
-        console.log(`🔮 Prometheus API received: fractalId="${fractalId}", type=${typeof fractalId}, tenantSchema="${req.tenantContext?.tenantSchema || req.tenantSchema}"`);
+        console.log(`🔮 Prometheus API received: fractalId="${fractalId}", bookIds=${JSON.stringify(bookIds)}, tenantSchema="${req.tenantContext?.tenantSchema || req.tenantSchema}"`);
         
         if (!messages || (Array.isArray(messages) && messages.length === 0)) {
             return res.status(400).json({ 
@@ -3375,27 +3471,44 @@ app.post('/api/prometheus/check', requireAuth, async (req, res) => {
         }
         
         const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+        const userRole = req.userRole;
         const startTime = Date.now();
         let result;
         let hasBookContext = false;
+        let multiBookContext = null;
         
-        // If fractalId provided (and not null/undefined), fetch book context and use context-aware check
-        if (fractalId && fractalId !== 'null' && fractalId !== 'undefined' && tenantSchema) {
+        // MULTI-BOOK QUERY: If bookIds array provided, fetch context from multiple books
+        if (bookIds && Array.isArray(bookIds) && bookIds.length > 0 && tenantSchema) {
+            console.log(`🔮 Prometheus API: Multi-book query for ${bookIds.length} books`);
+            
+            multiBookContext = await fetchMultiBookContextForPrometheus(bookIds, tenantSchema, userRole);
+            
+            if (multiBookContext && multiBookContext.totalMessages > 0) {
+                const userQuery = Array.isArray(messages) ? messages.join('\n') : messages;
+                result = await Prometheus.checkWithMultiBookContext(userQuery, multiBookContext, { language });
+                hasBookContext = true;
+            } else {
+                console.log(`⚠️ No multi-book context available, using regular check`);
+                result = await Prometheus.check(messages, ruleType, { language });
+            }
+        }
+        // SINGLE BOOK QUERY: If fractalId provided, fetch book context
+        else if (fractalId && fractalId !== 'null' && fractalId !== 'undefined' && tenantSchema) {
             console.log(`🔮 Prometheus API: Context query for book ${fractalId}`);
             
             const bookContext = await fetchBookContextForPrometheus(fractalId, tenantSchema);
             
             if (bookContext && bookContext.totalMessages > 0) {
-                // Use context-aware check
                 const userQuery = Array.isArray(messages) ? messages.join('\n') : messages;
                 result = await Prometheus.checkWithContext(userQuery, bookContext, { language });
                 hasBookContext = true;
             } else {
-                // Fallback to regular check if no book context
                 console.log(`⚠️ No book context available, using regular check`);
                 result = await Prometheus.check(messages, ruleType, { language });
             }
-        } else {
+        } 
+        // NO BOOK CONTEXT: Regular message check
+        else {
             console.log(`🔮 Prometheus API: Checking ${Array.isArray(messages) ? messages.length : 1} message(s) with rule: ${ruleType}`);
             result = await Prometheus.check(messages, ruleType, { language });
         }
