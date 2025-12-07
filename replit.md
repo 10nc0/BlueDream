@@ -37,6 +37,39 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Security**: Strict webhook validation, JWT security, and robust audit logging. Sybil attack prevention via unique one-time join codes. Password recovery functionality has been removed for enhanced security.
 - **CSP Compliance**: Production-ready Content Security Policy with event delegation and self-hosted libraries.
 
+## Discord Bot Trinity Architecture
+The system uses paired Discord bots following the "Trinity" pattern: write-only + read-only bots for secure, permission-isolated operations.
+
+### Human Trinity (Message Flow)
+For WhatsApp → Discord message forwarding:
+- **Hermes (φ)** - Write-only bot for creating threads and posting messages via webhook
+- **Thoth (0)** - Read-only bot for fetching message history from Discord threads
+
+**Flow:** WhatsApp → Twilio → Server → Hermes (write) → Discord Thread ← Thoth (read) → Dashboard
+
+**Files:** `hermes-bot.js`, `thoth-bot.js`
+
+**Environment:**
+- `HERMES_BOT_TOKEN` - Hermes Discord bot token
+- `THOTH_BOT_TOKEN` - Thoth Discord bot token
+- `NYANBOOK_WEBHOOK_URL` - Main Ledger webhook for message posting
+
+### Prometheus Trinity (AI Audit Flow)
+For AI audit logging to Discord:
+- **Idris (ι)** - Write-only bot for creating AI log threads and posting audit results
+- **Horus (Ω)** - Read-only bot for fetching AI audit history
+
+**Flow:** Prometheus Check → Idris (write) → Discord AI Log Thread ← Horus (read) → Dashboard History
+
+**Files:** `idris-bot.js`, `horus-bot.js`
+
+**Database Columns:** `ai_log_thread_id`, `ai_log_channel_id` in `core.tenant_catalog`
+
+**Environment:**
+- `IDRIS_AI_LOG_TOKEN` - Idris Discord bot token
+- `HORUS_AI_LOG_TOKEN` - Horus Discord bot token  
+- `PROMETHEUS_WEBHOOK_URL` - AI audit log webhook
+
 ## AI Audit System
 The Prometheus module (internal codename) provides AI-powered message verification using Groq API (llama-3.3-70b-versatile).
 
@@ -46,24 +79,26 @@ The Prometheus module (internal codename) provides AI-powered message verificati
 - **Bilingual Support**: Automatic Indonesian/English language detection and response
 - **Prompt-Directed**: Direction and behavior controlled via system prompts, not rule type selection
 - **UI Integration**: 🧿 AI Audit button in dashboard opens modal for message checking, 🧠 History button shows audit history
+- **Discord Logging**: All AI audit results are automatically logged to Discord via Prometheus Trinity (Idris writes, Horus reads)
 
 **API Endpoints:**
-- `POST /api/prometheus/check` - Check messages against business rules
+- `POST /api/prometheus/check` - Check messages against business rules (also posts to Discord via Idris)
 - `GET /api/prometheus/rules` - List available rule types
+- `GET /api/prometheus/discord-history` - Fetch AI audit history from Discord via Horus
 
 **Module Structure:**
 - `prometheus/index.js` - Main Prometheus class
 - `prometheus/prompts.js` - System prompts with H(0) protocol
-- `prometheus/huggingface.js` - HuggingFace API client
+- `prometheus/huggingface.js` - HuggingFace API client (legacy)
 - `prometheus/rules.js` - Business rules engine
 
 **Environment:**
-- `HF_API_TOKEN` - HuggingFace API token (required)
+- `GROQ_API_KEY` - Groq API key (required for AI checks)
 
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase) with RLS configured via Supabase dashboard
 - **WhatsApp**: Twilio WhatsApp Business API
-- **AI**: HuggingFace Inference API (Qwen2.5-3B-Instruct)
+- **AI**: Groq API (llama-3.3-70b-versatile)
 
 ## Database Notes
 - **RLS Policy**: Row Level Security for `public.sessions` table is configured directly in Supabase SQL editor (not in code). Policy enables backend full access while satisfying Supabase security requirements.
