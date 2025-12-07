@@ -4285,6 +4285,13 @@ app.get('/api/drops/search/:book_id', requireAuth, setTenantContext, async (req,
 // Export book data (messages + drops metadata) as ZIP
 // Supports both GET (all messages) and POST (selected message IDs)
 const exportBookHandler = async (req, res) => {
+    console.log('🔔 EXPORT HANDLER CALLED');
+    console.log('🔔 URL:', req.originalUrl);
+    console.log('🔔 Params:', req.params);
+    console.log('🔔 Query:', req.query);
+    console.log('🔔 User ID:', req.userId);
+    console.log('🔔 Tenant Context:', req.tenantContext?.tenantSchema);
+    
     const archiver = require('archiver');
     const { book_id } = req.params;
     const selectedMessageIds = req.body?.messageIds || null; // POST: selected IDs, GET: null (all)
@@ -4434,8 +4441,10 @@ Media files are not included but accessible via Discord CDN URLs in messages.jso
 };
 
 // Register both GET (all messages) and POST (selected messages) routes
+console.log('🔄 Registering export routes: GET/POST /api/books/:book_id/export');
 app.get('/api/books/:book_id/export', requireAuth, setTenantContext, exportBookHandler);
 app.post('/api/books/:book_id/export', requireAuth, setTenantContext, exportBookHandler);
+console.log('✅ Export routes registered successfully');
 
 // REMOVED: Duplicate QR endpoint - using the multi-instance version above (line ~2741)
 
