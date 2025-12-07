@@ -5740,10 +5740,18 @@
         });
         // ===== SYSTEM STATUS BAR =====
         let startTime = Date.now();
+        let lastUpdateSecond = -1;
         
         function updateSystemStatus() {
+            const now = Date.now();
+            const currentSecond = Math.floor(now / 1000);
+            
+            // Only update when second actually changes (prevents drift)
+            if (currentSecond === lastUpdateSecond) return;
+            lastUpdateSecond = currentSecond;
+            
             // Update uptime
-            const uptime = Date.now() - startTime;
+            const uptime = now - startTime;
             const hours = Math.floor(uptime / 3600000);
             const minutes = Math.floor((uptime % 3600000) / 60000);
             
@@ -5752,13 +5760,13 @@
             if (uptimeEl) uptimeEl.textContent = `${hours}h ${minutes}m`;
             
             // Update current time (both default and compact displays)
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const timeHours = now.getHours();
-            const timeMinutes = String(now.getMinutes()).padStart(2, '0');
-            const timeSeconds = String(now.getSeconds()).padStart(2, '0');
+            const date = new Date();
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const timeHours = date.getHours();
+            const timeMinutes = String(date.getMinutes()).padStart(2, '0');
+            const timeSeconds = String(date.getSeconds()).padStart(2, '0');
             const ampm = timeHours >= 12 ? 'PM' : 'AM';
             const displayHours = timeHours % 12 || 12;
             
@@ -5782,8 +5790,13 @@
             }
         }
         
-        // Update status every second
-        setInterval(updateSystemStatus, 1000);
+        // Update via RAF for smooth, drift-free timing (piggyback on cat animation loop)
+        let statusRafId = null;
+        function updateStatusLoop() {
+            updateSystemStatus();
+            statusRafId = requestAnimationFrame(updateStatusLoop);
+        }
+        updateStatusLoop();
         updateSystemStatus();
         
         // ===== COMPACT MODE TOGGLE =====
