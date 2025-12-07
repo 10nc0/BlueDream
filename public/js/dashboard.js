@@ -1333,7 +1333,7 @@
                         ">${book.name || `${book.input_platform} → Discord`}</div>
                         ${book.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.25rem; line-height: 1;">${book.message_count} messages</div>` : ''}
                     </div>
-                    ${book._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem; flex-shrink: 0;">💬</span>` : ''}
+                    ${book._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem; flex-shrink: 0;">✅</span>` : ''}
                 </div>
             `;
             }).join('');
@@ -1400,7 +1400,7 @@
                         ">${book.name || `${book.input_platform} → Discord`}</div>
                         ${book.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.25rem; line-height: 1;">${book.message_count} messages</div>` : ''}
                     </div>
-                    ${book._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem; flex-shrink: 0;">💬</span>` : ''}
+                    ${book._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem; flex-shrink: 0;">✅</span>` : ''}
                 </div>
             `;
             }).join('');
@@ -3039,6 +3039,11 @@
             // Reset server search state if search term cleared
             if (!searchTerm) {
                 lastServerSearchTerm = '';
+                // Clear match indicators from all books
+                books.forEach(b => {
+                    delete b._matchType;
+                    delete b._searchQuery;
+                });
             }
         }
 
