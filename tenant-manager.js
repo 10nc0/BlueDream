@@ -273,6 +273,35 @@ class TenantManager {
                 ON ${schemaName}.phone_to_book (join_code)
             `);
             
+            // Create audit_queries table for Prometheus AI audit history
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.audit_queries (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES ${schemaName}.users(id) ON DELETE CASCADE,
+                    book_id INTEGER REFERENCES ${schemaName}.books(id) ON DELETE SET NULL,
+                    rule_type TEXT NOT NULL,
+                    language TEXT DEFAULT 'en',
+                    input_messages JSONB NOT NULL,
+                    result_status TEXT NOT NULL,
+                    result_confidence NUMERIC(4,3),
+                    result_reason TEXT,
+                    result_data JSONB,
+                    raw_response TEXT,
+                    processing_time_ms INTEGER,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            `);
+            
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS audit_queries_user_idx 
+                ON ${schemaName}.audit_queries (user_id, created_at DESC)
+            `);
+            
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS audit_queries_book_idx 
+                ON ${schemaName}.audit_queries (book_id, created_at DESC)
+            `);
+            
             return { tenantId, schemaName };
         } finally {
             client.release();

@@ -3157,7 +3157,7 @@ app.get('/api/audit-logs', requireRole('admin'), async (req, res) => {
 // Check messages against business rules
 app.post('/api/prometheus/check', requireAuth, async (req, res) => {
     try {
-        const { messages, ruleType = 'general', language } = req.body;
+        const { messages, ruleType = 'general', language, bookId } = req.body;
         
         if (!messages || (Array.isArray(messages) && messages.length === 0)) {
             return res.status(400).json({ 
@@ -3167,10 +3167,43 @@ app.post('/api/prometheus/check', requireAuth, async (req, res) => {
         
         console.log(`🔮 Prometheus API: Checking ${Array.isArray(messages) ? messages.length : 1} message(s) with rule: ${ruleType}`);
         
+        const startTime = Date.now();
         const result = await Prometheus.check(messages, ruleType, { language });
+        const processingTime = Date.now() - startTime;
+        
+        // Get tenant schema and save to audit_queries
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+        const userId = req.user?.id || req.session?.userId;
+        
+        // Save to audit_queries table for history
+        if (tenantSchema && userId) {
+            try {
+                const resultObj = Array.isArray(result) ? result[0] : result;
+                await pool.query(`
+                    INSERT INTO ${tenantSchema}.audit_queries 
+                    (user_id, book_id, rule_type, language, input_messages, result_status, 
+                     result_confidence, result_reason, result_data, raw_response, processing_time_ms)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                `, [
+                    userId,
+                    bookId ? parseInt(bookId) : null,
+                    ruleType,
+                    language || 'en',
+                    JSON.stringify(Array.isArray(messages) ? messages : [messages]),
+                    resultObj?.status || 'UNKNOWN',
+                    resultObj?.confidence || 0,
+                    resultObj?.reason || null,
+                    resultObj?.data_extracted ? JSON.stringify(resultObj.data_extracted) : null,
+                    resultObj?.raw_response || null,
+                    processingTime
+                ]);
+                console.log(`✅ Prometheus audit saved to ${tenantSchema}.audit_queries`);
+            } catch (dbError) {
+                console.error('⚠️ Failed to save audit query (table may not exist):', dbError.message);
+            }
+        }
         
         // Log the check
-        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         await logAudit(pool, req, 'PROMETHEUS_CHECK', 'MESSAGE', null, null, {
             rule_type: ruleType,
             message_count: Array.isArray(messages) ? messages.length : 1,
@@ -3181,6 +3214,7 @@ app.post('/api/prometheus/check', requireAuth, async (req, res) => {
             success: true, 
             result,
             rule_type: ruleType,
+            processing_time_ms: processingTime,
             timestamp: new Date().toISOString()
         });
     } catch (error) {
@@ -3198,6 +3232,59 @@ app.get('/api/prometheus/rules', requireAuth, async (req, res) => {
         const rules = Prometheus.listRuleTypes();
         res.json({ rules });
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get Prometheus audit history
+app.get('/api/prometheus/history', requireAuth, async (req, res) => {
+    try {
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+        const userId = req.user?.id || req.session?.userId;
+        const { limit = 50, offset = 0 } = req.query;
+        
+        if (!tenantSchema) {
+            return res.status(400).json({ error: 'Tenant context required' });
+        }
+        
+        const result = await pool.query(`
+            SELECT 
+                aq.id,
+                aq.rule_type,
+                aq.language,
+                aq.input_messages,
+                aq.result_status,
+                aq.result_confidence,
+                aq.result_reason,
+                aq.result_data,
+                aq.processing_time_ms,
+                aq.created_at,
+                b.name as book_name,
+                b.fractal_id as book_fractal_id
+            FROM ${tenantSchema}.audit_queries aq
+            LEFT JOIN ${tenantSchema}.books b ON aq.book_id = b.id
+            WHERE aq.user_id = $1
+            ORDER BY aq.created_at DESC
+            LIMIT $2 OFFSET $3
+        `, [userId, parseInt(limit), parseInt(offset)]);
+        
+        const countResult = await pool.query(`
+            SELECT COUNT(*) as total FROM ${tenantSchema}.audit_queries WHERE user_id = $1
+        `, [userId]);
+        
+        res.json({
+            success: true,
+            history: result.rows,
+            total: parseInt(countResult.rows[0].total),
+            limit: parseInt(limit),
+            offset: parseInt(offset)
+        });
+    } catch (error) {
+        console.error('❌ Prometheus history error:', error);
+        // Table might not exist yet
+        if (error.code === '42P01') {
+            return res.json({ success: true, history: [], total: 0, limit: 50, offset: 0 });
+        }
         res.status(500).json({ error: error.message });
     }
 });
