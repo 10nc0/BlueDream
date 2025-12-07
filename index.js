@@ -4322,50 +4322,57 @@ const exportBookHandler = async (req, res) => {
         console.log('📦 Book found:', book.name);
         console.log('📦 Output thread:', outputCreds?.output_01?.thread_id);
         
-        // Fetch messages from Discord (output_01 - Ledger)
+        // Fetch messages from Discord (output_01 - Ledger) using Thoth bot
         let messages = [];
-        try {
-            const threadId = outputCreds?.output_01?.thread_id;
-            if (threadId) {
-                const channel = await discordClient.channels.fetch(threadId);
-                const fetchedMessages = await channel.messages.fetch({ limit: 100 });
-                console.log('📦 Fetched', fetchedMessages.size, 'messages from Discord');
-                
-                let allMessages = fetchedMessages.map(m => ({
-                    id: m.id,
-                    content: m.content,
-                    author: m.author.username,
-                    timestamp: m.createdAt.toISOString(),
-                    embeds: m.embeds.map(e => ({
-                        title: e.title,
-                        description: e.description,
-                        fields: e.fields
-                    })),
-                    attachments: m.attachments.map(a => ({
-                        url: a.url,
-                        filename: a.name,
-                        size: a.size
-                    }))
-                }));
-                
-                console.log('📦 Sample message:', {
-                    id: allMessages[0]?.id,
-                    content: allMessages[0]?.content?.substring(0, 50),
-                    attachments: allMessages[0]?.attachments?.length
-                });
-                
-                // Filter to selected messages if POST request with messageIds
-                if (selectedMessageIds && selectedMessageIds.length > 0) {
-                    const selectedSet = new Set(selectedMessageIds);
-                    messages = allMessages.filter(m => selectedSet.has(m.id));
-                    console.log('📦 Filtered to', messages.length, 'selected messages out of', allMessages.length);
-                } else {
-                    messages = allMessages;
-                    console.log('📦 Using all', messages.length, 'messages (no selection)');
+        
+        // Check if Thoth bot is ready
+        if (!thothBot || !thothBot.client || !thothBot.ready) {
+            console.log('📦 ERROR: Discord bot not ready');
+            messages = [];
+        } else {
+            try {
+                const threadId = outputCreds?.output_01?.thread_id;
+                if (threadId) {
+                    const channel = await thothBot.client.channels.fetch(threadId);
+                    const fetchedMessages = await channel.messages.fetch({ limit: 100 });
+                    console.log('📦 Fetched', fetchedMessages.size, 'messages from Discord');
+                    
+                    let allMessages = fetchedMessages.map(m => ({
+                        id: m.id,
+                        content: m.content,
+                        author: m.author.username,
+                        timestamp: m.createdAt.toISOString(),
+                        embeds: m.embeds.map(e => ({
+                            title: e.title,
+                            description: e.description,
+                            fields: e.fields
+                        })),
+                        attachments: m.attachments.map(a => ({
+                            url: a.url,
+                            filename: a.name,
+                            size: a.size
+                        }))
+                    }));
+                    
+                    console.log('📦 Sample message:', {
+                        id: allMessages[0]?.id,
+                        content: allMessages[0]?.content?.substring(0, 50),
+                        attachments: allMessages[0]?.attachments?.length
+                    });
+                    
+                    // Filter to selected messages if POST request with messageIds
+                    if (selectedMessageIds && selectedMessageIds.length > 0) {
+                        const selectedSet = new Set(selectedMessageIds);
+                        messages = allMessages.filter(m => selectedSet.has(m.id));
+                        console.log('📦 Filtered to', messages.length, 'selected messages out of', allMessages.length);
+                    } else {
+                        messages = allMessages;
+                        console.log('📦 Using all', messages.length, 'messages (no selection)');
+                    }
                 }
+            } catch (err) {
+                console.log('📦 ERROR fetching Discord messages:', err.message);
             }
-        } catch (err) {
-            console.log('📦 ERROR fetching Discord messages:', err.message);
         }
         
         // Fetch drops from PostgreSQL
