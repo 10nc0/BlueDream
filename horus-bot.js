@@ -117,8 +117,8 @@ class HorusBot {
                     }
 
                     return log;
-                })
-                .reverse();
+                });
+            // Discord returns newest first - keep that order for display
 
             console.log(`👁️ Horus fetched ${auditLogs.length} audit logs from thread ${threadId}`);
             return auditLogs;
