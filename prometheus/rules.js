@@ -90,7 +90,8 @@ function applyBusinessRules(data, ruleType, language = 'en') {
         : `Unknown rule type: ${ruleType}`,
       recommended_action: language === 'id'
         ? 'Periksa manual diperlukan'
-        : 'Manual review required'
+        : 'Manual review required',
+      confidence: 0.7
     };
   }
   
@@ -104,7 +105,8 @@ function applyBusinessRules(data, ruleType, language = 'en') {
       recommended_action: language === 'id'
         ? 'Minta informasi yang hilang'
         : 'Request missing information',
-      needs_human_review: true
+      needs_human_review: true,
+      confidence: 0.7
     };
   }
   
@@ -121,7 +123,8 @@ function applyBusinessRules(data, ruleType, language = 'en') {
       return {
         status: 'PASS',
         reason: language === 'id' ? 'Data diekstrak berhasil' : 'Data extracted successfully',
-        recommended_action: language === 'id' ? 'Tidak ada tindakan diperlukan' : 'No action required'
+        recommended_action: language === 'id' ? 'Tidak ada tindakan diperlukan' : 'No action required',
+        confidence: 0.95
       };
   }
 }
@@ -149,7 +152,8 @@ function applyTireRules(data, thresholds, language) {
       reason: issues.join('; '),
       recommended_action: language === 'id'
         ? 'Jadwalkan penggantian ban segera'
-        : 'Schedule tire replacement immediately'
+        : 'Schedule tire replacement immediately',
+      confidence: 0.95
     };
   }
   
@@ -161,7 +165,8 @@ function applyTireRules(data, thresholds, language) {
         : `Tread depth ${treadDepth}mm approaching minimum threshold`,
       recommended_action: language === 'id'
         ? 'Monitor kondisi ban, pertimbangkan penggantian dalam 30 hari'
-        : 'Monitor tire condition, consider replacement within 30 days'
+        : 'Monitor tire condition, consider replacement within 30 days',
+      confidence: 0.95
     };
   }
   
@@ -172,12 +177,49 @@ function applyTireRules(data, thresholds, language) {
       : 'Tire condition within normal limits',
     recommended_action: language === 'id'
       ? 'Lanjutkan penggunaan normal'
-      : 'Continue normal use'
+      : 'Continue normal use',
+    confidence: 0.95
   };
 }
 
 function applyExpenseRules(data, thresholds, language) {
-  let amount = parseFloat(data.amount);
+  // Smart number parsing: handles Indonesian "Rp 1.500.000", US "$1,500.00", EU "1.500,00"
+  let amountStr = (data.amount || '').toString().replace(/[^\d,.-]/g, '');
+  
+  const lastDot = amountStr.lastIndexOf('.');
+  const lastComma = amountStr.lastIndexOf(',');
+  const hasBothSeparators = lastDot !== -1 && lastComma !== -1;
+  
+  if (hasBothSeparators) {
+    if (lastDot > lastComma) {
+      // US format: 1,500.00 → 1500.00
+      amountStr = amountStr.replace(/,/g, '');
+    } else {
+      // EU format: 1.500,00 → 1500.00
+      amountStr = amountStr.replace(/\./g, '').replace(',', '.');
+    }
+  } else if (lastComma !== -1) {
+    // Only commas: check if thousands separator (3 digits after) or decimal
+    const afterComma = amountStr.slice(lastComma + 1);
+    if (afterComma.length === 3 && !afterComma.includes(',')) {
+      // Thousands: 1,500 → 1500
+      amountStr = amountStr.replace(/,/g, '');
+    } else {
+      // Decimal: 1500,50 → 1500.50
+      amountStr = amountStr.replace(',', '.');
+    }
+  } else if (lastDot !== -1) {
+    // Only dots: check if thousands separator (3 digits after) or decimal (1-2 digits after)
+    const afterDot = amountStr.slice(lastDot + 1);
+    const dotCount = (amountStr.match(/\./g) || []).length;
+    if (dotCount > 1 || afterDot.length === 3) {
+      // Thousands: 1.500.000, 1.500 → strip dots (3 digits = thousands, not decimal)
+      amountStr = amountStr.replace(/\./g, '');
+    }
+    // else: decimal like 1500.50 or 1500.5 → keep as-is (1-2 digits after dot)
+  }
+  
+  let amount = parseFloat(amountStr);
   const currency = (data.currency || 'USD').toUpperCase();
   
   const threshold = currency === 'IDR' 
@@ -193,7 +235,8 @@ function applyExpenseRules(data, thresholds, language) {
       recommended_action: language === 'id'
         ? 'Verifikasi jumlah secara manual'
         : 'Verify amount manually',
-      needs_human_review: true
+      needs_human_review: true,
+      confidence: 0.7
     };
   }
   
@@ -205,7 +248,8 @@ function applyExpenseRules(data, thresholds, language) {
         : `Amount ${currency} ${amount.toLocaleString()} exceeds approval threshold of ${currency} ${threshold.toLocaleString()}`,
       recommended_action: language === 'id'
         ? 'Memerlukan persetujuan manajer'
-        : 'Requires manager approval'
+        : 'Requires manager approval',
+      confidence: 0.95
     };
   }
   
@@ -216,7 +260,8 @@ function applyExpenseRules(data, thresholds, language) {
       : `Expense ${currency} ${amount.toLocaleString()} within approval limits`,
     recommended_action: language === 'id'
       ? 'Dapat diproses langsung'
-      : 'Can be processed directly'
+      : 'Can be processed directly',
+    confidence: 0.95
   };
 }
 
@@ -233,7 +278,8 @@ function applyInventoryRules(data, thresholds, language) {
       recommended_action: language === 'id'
         ? 'Verifikasi hitungan secara manual'
         : 'Verify count manually',
-      needs_human_review: true
+      needs_human_review: true,
+      confidence: 0.7
     };
   }
   
@@ -248,7 +294,8 @@ function applyInventoryRules(data, thresholds, language) {
           : `Variance ${variance.toFixed(1)}% exceeds threshold of ${thresholds.variance_threshold_percent}% (count: ${count}, expected: ${expected})`,
         recommended_action: language === 'id'
           ? 'Investigasi perbedaan stok diperlukan'
-          : 'Stock discrepancy investigation required'
+          : 'Stock discrepancy investigation required',
+        confidence: 0.95
       };
     }
   }
@@ -260,7 +307,8 @@ function applyInventoryRules(data, thresholds, language) {
       : `Stock count of ${count} recorded`,
     recommended_action: language === 'id'
       ? 'Tidak ada tindakan diperlukan'
-      : 'No action required'
+      : 'No action required',
+    confidence: 0.95
   };
 }
 
@@ -278,7 +326,8 @@ function applyDeliveryRules(data, thresholds, language) {
         : `Delivery successful: ${data.status}`,
       recommended_action: language === 'id'
         ? 'Tutup order'
-        : 'Close order'
+        : 'Close order',
+      confidence: 0.95
     };
   }
   
@@ -290,7 +339,8 @@ function applyDeliveryRules(data, thresholds, language) {
         : `Delivery failed: ${data.status}`,
       recommended_action: language === 'id'
         ? 'Hubungi pelanggan untuk jadwal ulang'
-        : 'Contact customer to reschedule'
+        : 'Contact customer to reschedule',
+      confidence: 0.95
     };
   }
   
@@ -301,7 +351,8 @@ function applyDeliveryRules(data, thresholds, language) {
       : `Delivery status: ${data.status || 'unknown'}`,
     recommended_action: language === 'id'
       ? 'Pantau dan tindak lanjut'
-      : 'Monitor and follow up'
+      : 'Monitor and follow up',
+    confidence: 0.7
   };
 }
 
