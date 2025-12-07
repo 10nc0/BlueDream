@@ -1299,7 +1299,12 @@
             }
             
             // macOS-style scrollable list widget
-            sidebar.innerHTML = filteredBooks.map((book, index) => `
+            sidebar.innerHTML = filteredBooks.map((book, index) => {
+                const searchBox = document.getElementById('searchBox');
+                const searchTerm = searchBox ? searchBox.value.trim() : '';
+                const hasSearchMatch = searchTerm && (book._matchType === 'message' || book._matchType === 'metadata');
+                
+                return `
                 <div class="book-list-item ${book.fractal_id === selectedBookFractalId ? 'selected' : ''}" 
                      data-fractal-id="${book.fractal_id}" 
                      style="
@@ -1315,6 +1320,9 @@
                     "
                     onmouseover="if (!this.classList.contains('selected')) this.style.background='rgba(148, 163, 184, 0.05)'"
                     onmouseout="if (!this.classList.contains('selected')) this.style.background='transparent'">
+                    <div style="flex-shrink: 0; width: 1.25rem; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;">
+                        ${hasSearchMatch ? `<span style="color: #22c55e; font-weight: 700; font-size: 0.875rem;">✓</span>` : ''}
+                    </div>
                     <div style="flex: 1; min-width: 0;">
                         <div style="
                             color: ${book.fractal_id === selectedBookFractalId ? '#e2e8f0' : '#cbd5e1'}; 
@@ -1327,9 +1335,10 @@
                         ">${book.name || `${book.input_platform} → Discord`}</div>
                         ${book.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.25rem; line-height: 1;">${book.message_count} messages</div>` : ''}
                     </div>
-                    ${book._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem;">💬</span>` : ''}
+                    ${book._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem; flex-shrink: 0;">💬</span>` : ''}
                 </div>
-            `).join('');
+            `;
+            }).join('');
             
             // Only render detail panel if not skipping (avoids destroying loaded media during auto-refresh)
             if (!skipDetailRender) {
@@ -1359,7 +1368,12 @@
             // Re-render sidebar to update active state (macOS list widget)
             const sidebar = document.getElementById('bookListContainer');
             
-            sidebar.innerHTML = filteredBooks.map((book, index) => `
+            sidebar.innerHTML = filteredBooks.map((book, index) => {
+                const searchBox = document.getElementById('searchBox');
+                const searchTerm = searchBox ? searchBox.value.trim() : '';
+                const hasSearchMatch = searchTerm && (book._matchType === 'message' || book._matchType === 'metadata');
+                
+                return `
                 <div class="book-list-item ${book.fractal_id === selectedBookFractalId ? 'selected' : ''}" 
                      data-fractal-id="${book.fractal_id}" 
                      style="
@@ -1375,6 +1389,9 @@
                     "
                     onmouseover="if (!this.classList.contains('selected')) this.style.background='rgba(148, 163, 184, 0.05)'"
                     onmouseout="if (!this.classList.contains('selected')) this.style.background='transparent'">
+                    <div style="flex-shrink: 0; width: 1.25rem; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;">
+                        ${hasSearchMatch ? `<span style="color: #22c55e; font-weight: 700; font-size: 0.875rem;">✓</span>` : ''}
+                    </div>
                     <div style="flex: 1; min-width: 0;">
                         <div style="
                             color: ${book.fractal_id === selectedBookFractalId ? '#e2e8f0' : '#cbd5e1'}; 
@@ -1387,9 +1404,10 @@
                         ">${book.name || `${book.input_platform} → Discord`}</div>
                         ${book.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.25rem; line-height: 1;">${book.message_count} messages</div>` : ''}
                     </div>
-                    ${book._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem;">💬</span>` : ''}
+                    ${book._matchType === 'message' ? `<span style="background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.25); color: #22c55e; padding: 0.125rem 0.3rem; border-radius: 3px; font-size: 0.7rem; margin-left: 0.5rem; flex-shrink: 0;">💬</span>` : ''}
                 </div>
-            `).join('');
+            `;
+            }).join('');
             
             // Render detail panel for selected book
             await renderBookDetail();
