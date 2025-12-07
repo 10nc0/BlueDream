@@ -2579,34 +2579,31 @@
                 const statusColor = statusColors[result.status] || '#94a3b8';
                 
                 resultContent.innerHTML = `
-                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
-                        <span style="font-size: 1.5rem; padding: 0.5rem 1rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 8px; color: ${statusColor}; font-weight: 700;">
-                            ${escapeHtml(result.status)}
-                        </span>
-                        <span style="color: #94a3b8; font-size: 0.875rem;">
-                            Confidence: ${(result.confidence * 100).toFixed(0)}%
-                        </span>
-                    </div>
-                    
-                    <div style="margin-bottom: 0.75rem;">
-                        <strong style="color: #e2e8f0;">Reason:</strong>
-                        <p style="color: #94a3b8; margin: 0.25rem 0;">${escapeHtml(result.reason || 'No reason provided')}</p>
-                    </div>
-                    
-                    <div style="margin-bottom: 0.75rem;">
-                        <strong style="color: #e2e8f0;">Recommended Action:</strong>
-                        <p style="color: #94a3b8; margin: 0.25rem 0;">${escapeHtml(result.recommended_action || 'None')}</p>
-                    </div>
-                    
-                    ${result.data_extracted && Object.keys(result.data_extracted).length > 0 ? `
-                    <div style="margin-bottom: 0.75rem;">
-                        <strong style="color: #e2e8f0;">Extracted Data:</strong>
-                        <pre style="margin: 0.25rem 0; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; color: #94a3b8; font-size: 0.8rem; overflow-x: auto;">${escapeHtml(JSON.stringify(result.data_extracted, null, 2))}</pre>
+                    ${result.answer ? `
+                    <div style="margin-bottom: 1rem; padding: 1rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(236, 72, 153, 0.1)); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px;">
+                        <strong style="color: #c084fc; font-size: 0.875rem; display: block; margin-bottom: 0.5rem;">💬 Answer</strong>
+                        <p style="color: #e2e8f0; margin: 0; line-height: 1.6;">${escapeHtml(result.answer)}</p>
                     </div>
                     ` : ''}
                     
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                        <span style="font-size: 1rem; padding: 0.375rem 0.75rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 6px; color: ${statusColor}; font-weight: 600;">
+                            ${escapeHtml(result.status)}
+                        </span>
+                        <span style="color: #64748b; font-size: 0.8rem;">
+                            ${(result.confidence * 100).toFixed(0)}% confidence
+                        </span>
+                    </div>
+                    
+                    ${result.data_extracted && Object.keys(result.data_extracted).length > 0 ? `
+                    <details style="margin-bottom: 0.75rem;">
+                        <summary style="color: #94a3b8; cursor: pointer; font-size: 0.875rem;">📊 Extracted Data</summary>
+                        <pre style="margin: 0.5rem 0; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; color: #94a3b8; font-size: 0.75rem; overflow-x: auto;">${escapeHtml(JSON.stringify(result.data_extracted, null, 2))}</pre>
+                    </details>
+                    ` : ''}
+                    
                     ${result.needs_human_review ? `
-                    <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; color: #a5b4fc; font-size: 0.875rem;">
+                    <div style="margin-top: 0.75rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; color: #a5b4fc; font-size: 0.8rem;">
                         ⚠️ Human review recommended
                     </div>
                     ` : ''}
