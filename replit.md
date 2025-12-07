@@ -37,14 +37,14 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Security**: Strict webhook validation, JWT security, and robust audit logging. Sybil attack prevention via unique one-time join codes. Password recovery functionality has been removed for enhanced security.
 - **CSP Compliance**: Production-ready Content Security Policy with event delegation and self-hosted libraries.
 
-## Prometheus AI Audit System
-The Prometheus module provides AI-powered message verification using Qwen2.5-3B-Instruct via HuggingFace.
+## AI Audit System
+The Prometheus module (internal codename) provides AI-powered message verification using Groq API (llama-3.3-70b-versatile).
 
 **Features:**
 - **H(0) Guard Rails**: Zero-hallucination protocol - flags uncertain data for human review
 - **Bilingual Support**: Automatic Indonesian/English language detection and response
 - **Business Rules**: tire_check, expense, inventory, delivery, general
-- **UI Integration**: 🧿 Audit button in dashboard opens modal for message checking
+- **UI Integration**: 🧿 AI Audit button in dashboard opens modal for message checking, 🧠 History button shows audit history
 
 **API Endpoints:**
 - `POST /api/prometheus/check` - Check messages against business rules

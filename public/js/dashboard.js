@@ -85,11 +85,11 @@
             },
             audit: {
                 id: 'audit',
-                label: '🧿 Audit',
+                label: '🧿 AI Audit',
                 icon: '🧿',
                 mobileIcon: '🧿',
-                desktopLabel: '🧿 Audit',
-                tooltip: 'Audit action & closure (ward off evil)',
+                desktopLabel: '🧿 AI Audit',
+                tooltip: 'AI audit action & closure (ward off evil)',
                 priority: 2,
                 showInMobile: true,
                 showInDesktop: true,
@@ -2483,7 +2483,7 @@
             await generateNewQR(book.fractal_id);
         }
         
-        // Prometheus Audit Modal - AI-powered message checking
+        // AI Audit Modal - AI-powered message checking
         function showPrometheusAuditModal() {
             let auditModal = document.getElementById('prometheusAuditModal');
             if (!auditModal) {
@@ -2491,7 +2491,7 @@
                     <div id="prometheusAuditModal" class="book-fan-modal" style="z-index: 10000;">
                         <div class="book-fan-content" style="max-width: 600px; padding: 2rem;">
                             <button class="book-fan-close" id="prometheusAuditClose">×</button>
-                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧿 Prometheus Audit</h3>
+                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧿 AI Audit</h3>
                             
                             <div class="form-group">
                                 <label class="form-label">Rule Type</label>
@@ -2510,7 +2510,7 @@
                             </div>
                             
                             <button id="prometheusCheckBtn" class="form-button" style="width: 100%; margin-top: 1rem; padding: 0.875rem; background: linear-gradient(135deg, #a855f7, #ec4899); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: opacity 0.2s;">
-                                🔮 Run Prometheus Check
+                                🔮 Run AI Check
                             </button>
                             
                             <div id="prometheusResult" style="margin-top: 1.5rem; display: none;">
@@ -2536,7 +2536,7 @@
             document.getElementById('prometheusMessage').value = '';
             document.getElementById('prometheusResult').style.display = 'none';
             document.getElementById('prometheusCheckBtn').disabled = false;
-            document.getElementById('prometheusCheckBtn').textContent = '🔮 Run Prometheus Check';
+            document.getElementById('prometheusCheckBtn').textContent = '🔮 Run AI Check';
             
             auditModal.style.display = 'flex';
         }
@@ -2639,11 +2639,11 @@
                 resultDiv.style.display = 'block';
             } finally {
                 btn.disabled = false;
-                btn.textContent = '🔮 Run Prometheus Check';
+                btn.textContent = '🔮 Run AI Check';
             }
         }
         
-        // Prometheus History Modal - View past audit queries
+        // AI Audit History Modal - View past audit queries
         function showPrometheusHistoryModal() {
             let historyModal = document.getElementById('prometheusHistoryModal');
             if (!historyModal) {
@@ -2712,7 +2712,7 @@
                         <div style="text-align: center; padding: 2rem; color: #94a3b8;">
                             <div style="font-size: 3rem; margin-bottom: 1rem;">🧿</div>
                             <p>No audit history yet.</p>
-                            <p style="font-size: 0.875rem; margin-top: 0.5rem;">Run your first Prometheus check to see results here.</p>
+                            <p style="font-size: 0.875rem; margin-top: 0.5rem;">Run your first AI check to see results here.</p>
                         </div>
                     `;
                     paginationDiv.innerHTML = '';
