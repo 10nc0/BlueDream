@@ -41,9 +41,10 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 The Prometheus module (internal codename) provides AI-powered message verification using Groq API (llama-3.3-70b-versatile).
 
 **Features:**
+- **General Intelligence**: Single unified check powered by Groq's llama-3.3-70b-versatile model
 - **H(0) Guard Rails**: Zero-hallucination protocol - flags uncertain data for human review
 - **Bilingual Support**: Automatic Indonesian/English language detection and response
-- **Business Rules**: tire_check, expense, inventory, delivery, general
+- **Prompt-Directed**: Direction and behavior controlled via system prompts, not rule type selection
 - **UI Integration**: 🧿 AI Audit button in dashboard opens modal for message checking, 🧠 History button shows audit history
 
 **API Endpoints:**

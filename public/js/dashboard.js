@@ -2494,17 +2494,6 @@
                             <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧿 AI Audit</h3>
                             
                             <div class="form-group">
-                                <label class="form-label">Rule Type</label>
-                                <select id="prometheusRuleType" class="form-input" style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; width: 100%;">
-                                    <option value="general">General Check</option>
-                                    <option value="tire_check">Tire Inspection</option>
-                                    <option value="expense">Expense Verification</option>
-                                    <option value="inventory">Inventory Audit</option>
-                                    <option value="delivery">Delivery Confirmation</option>
-                                </select>
-                            </div>
-                            
-                            <div class="form-group" style="margin-top: 1rem;">
                                 <label class="form-label">Message to Check</label>
                                 <textarea id="prometheusMessage" class="form-input" placeholder="Paste a message to analyze..." style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; width: 100%; min-height: 120px; resize: vertical; font-family: inherit;"></textarea>
                             </div>
@@ -2548,7 +2537,6 @@
         
         async function runPrometheusCheck() {
             const message = document.getElementById('prometheusMessage').value.trim();
-            const ruleType = document.getElementById('prometheusRuleType').value;
             const btn = document.getElementById('prometheusCheckBtn');
             const resultDiv = document.getElementById('prometheusResult');
             const resultContent = document.getElementById('prometheusResultContent');
@@ -2571,7 +2559,7 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({ messages: message, ruleType })
+                    body: JSON.stringify({ messages: message, ruleType: 'general' })
                 });
                 
                 const data = await response.json();
