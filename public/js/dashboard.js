@@ -2588,18 +2588,18 @@
             btn.textContent = '🔮 Analyzing...';
             resultDiv.style.display = 'none';
             
-            // SINGULARITY: Detect book names from query using user's authorized book list
+            // SINGULARITY: Comprehensive search - ALWAYS search ALL books for thorough analysis
+            // Even if books are detected in query, include all books to find related data elsewhere
             const detectedBooks = detectBookNamesInQuery(message);
-            console.log(`📚 Books available for detection: ${books?.length || 0}, query: "${message.substring(0, 50)}..."`);
-            let detectedBookIds = detectedBooks.map(b => b.fractalId);
+            console.log(`📚 Books available for analysis: ${books?.length || 0}, query: "${message.substring(0, 50)}..."`);
+            
+            // Always use ALL authorized books for comprehensive domain-wide search
+            let detectedBookIds = books.map(b => b.fractal_id);
             
             if (detectedBooks.length > 0) {
-                console.log(`📖 Detected ${detectedBooks.length} book(s) in query: ${detectedBooks.map(b => b.name).join(', ')}`);
+                console.log(`📖 Detected ${detectedBooks.length} book(s) in query: ${detectedBooks.map(b => b.name).join(', ')} - plus ALL other books`);
             } else {
-                // DOMAIN-WIDE SEARCH: No specific book mentioned → search ALL authorized books
-                // This ensures AI can find data anywhere within user's domain
-                detectedBookIds = books.map(b => b.fractal_id);
-                console.log(`🌐 Domain-wide search: Searching ALL ${detectedBookIds.length} authorized books`);
+                console.log(`🌐 Domain-wide search: Analyzing ALL ${detectedBookIds.length} authorized books comprehensively`);
             }
             
             try {
