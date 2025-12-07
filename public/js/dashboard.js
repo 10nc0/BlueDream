@@ -1790,7 +1790,6 @@
                             <button class="jump-to-msg-btn" data-msg-id="${msg.id}" data-book-id="${bookId}">Jump</button>
                         </div>
                         <div class="discord-timestamp discord-timestamp-mobile">${formatDiscordTime(msg.timestamp)}</div>
-                        ${msg.sender_contact ? `<div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>` : ''}
                         <div class="message-drop-section" data-message-id="${msg.id}" data-book-id="${bookId}">
                             <div class="drop-display hidden"></div>
                         </div>
@@ -4203,7 +4202,6 @@
                                 <span class="discord-timestamp">${formatDiscordTime(msg.timestamp)}</span>
                                 <span class="discord-status-badge status-${msg.discord_status || 'success'}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
                             </div>
-                            ${msg.sender_contact ? `<div class="discord-contact">${formatPhoneNumber(msg.sender_contact)}</div>` : ''}
                             <div class="message-drop-section" data-message-id="${msg.id}" data-book-id="${bookId}">
                                 <div class="drop-display hidden"></div>
                             </div>
