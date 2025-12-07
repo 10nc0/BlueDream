@@ -4824,7 +4824,7 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
                             title: e.title === '🎉 Book Activated' ? e.title : null,
                             description: e.description,
                             color: e.color,
-                            fields: e.fields
+                            fields: e.fields ? e.fields.filter(f => f.name !== '📖 Book') : []
                         }))
                     };
                 });
