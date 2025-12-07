@@ -3334,6 +3334,8 @@ app.post('/api/prometheus/check', requireAuth, async (req, res) => {
     try {
         const { messages, ruleType = 'general', language, bookId, fractalId } = req.body;
         
+        console.log(`🔮 Prometheus API received: fractalId="${fractalId}", type=${typeof fractalId}, tenantSchema="${req.tenantContext?.tenantSchema || req.tenantSchema}"`);
+        
         if (!messages || (Array.isArray(messages) && messages.length === 0)) {
             return res.status(400).json({ 
                 error: 'messages is required (string or array of strings)' 

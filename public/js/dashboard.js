@@ -2553,6 +2553,7 @@
             
             try {
                 const token = localStorage.getItem('accessToken');
+                console.log(`🔮 Prometheus: Sending request with fractalId="${selectedBookFractalId}"`);
                 const response = await fetch('/api/prometheus/check', {
                     method: 'POST',
                     headers: {
