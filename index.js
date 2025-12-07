@@ -2218,15 +2218,28 @@ app.post('/api/twilio/webhook', async (req, res) => {
             
             // MULTI-SOURCE: Track sender engagement with this book (contributor or creator)
             try {
-                await pool.query(`
+                console.log(`📱 [ENGAGE] Updating engagement: book_registry_id=${bookRecord.id}, phone=${phone}, book=${bookRecord.fractal_id}`);
+                const engageResult = await pool.query(`
                     INSERT INTO core.book_engaged_phones (book_registry_id, phone, is_creator, first_engaged_at, last_engaged_at)
                     VALUES ($1, $2, FALSE, NOW(), NOW())
                     ON CONFLICT (book_registry_id, phone) DO UPDATE 
                     SET last_engaged_at = NOW()
+                    RETURNING id, last_engaged_at
                 `, [bookRecord.id, phone]);
-                console.log(`📱 Tracked ${phone} engagement with book ${bookRecord.fractal_id}`);
+                console.log(`📱 [ENGAGE] Tracked ${phone} engagement with book ${bookRecord.fractal_id}, result: ${JSON.stringify(engageResult.rows[0])}`);
+                
+                // VERIFICATION: Check what books this phone is now engaged with
+                const verifyResult = await pool.query(`
+                    SELECT br.fractal_id, br.book_name, ep.last_engaged_at, ep.is_creator
+                    FROM core.book_engaged_phones ep
+                    JOIN core.book_registry br ON br.id = ep.book_registry_id
+                    WHERE ep.phone = $1 AND br.status = 'active'
+                    ORDER BY ep.last_engaged_at DESC
+                    LIMIT 3
+                `, [phone]);
+                console.log(`📱 [VERIFY] Phone ${phone} engaged books (top 3): ${JSON.stringify(verifyResult.rows)}`);
             } catch (engageErr) {
-                console.warn(`⚠️ Could not track engagement (non-fatal):`, engageErr.message);
+                console.error(`❌ [ENGAGE] Could not track engagement:`, engageErr.message, engageErr.stack);
             }
             
             const outputCreds = book.output_credentials || {};
