@@ -2559,7 +2559,11 @@
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({ messages: message, ruleType: 'general' })
+                    body: JSON.stringify({ 
+                        messages: message, 
+                        ruleType: 'general',
+                        fractalId: selectedBookFractalId || null
+                    })
                 });
                 
                 const data = await response.json();
@@ -2570,6 +2574,7 @@
                 
                 // Display result
                 const result = data.result;
+                const hasBookContext = data.has_book_context;
                 const statusColors = {
                     'PASS': '#10b981',
                     'FAIL': '#ef4444',
@@ -2579,6 +2584,11 @@
                 const statusColor = statusColors[result.status] || '#94a3b8';
                 
                 resultContent.innerHTML = `
+                    ${hasBookContext ? `
+                    <div style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(34, 211, 238, 0.1); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 6px; color: #22d3ee; font-size: 0.8rem;">
+                        📚 Using book context: ${result.bookName || 'Selected Book'} (${result.totalMessages || 0} messages)
+                    </div>
+                    ` : ''}
                     ${result.answer ? `
                     <div style="margin-bottom: 1rem; padding: 1rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(236, 72, 153, 0.1)); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px;">
                         <strong style="color: #c084fc; font-size: 0.875rem; display: block; margin-bottom: 0.5rem;">💬 Answer</strong>

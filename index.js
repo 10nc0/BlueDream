@@ -3345,8 +3345,8 @@ app.post('/api/prometheus/check', requireAuth, async (req, res) => {
         let result;
         let hasBookContext = false;
         
-        // If fractalId provided, fetch book context and use context-aware check
-        if (fractalId && tenantSchema) {
+        // If fractalId provided (and not null/undefined), fetch book context and use context-aware check
+        if (fractalId && fractalId !== 'null' && fractalId !== 'undefined' && tenantSchema) {
             console.log(`🔮 Prometheus API: Context query for book ${fractalId}`);
             
             const bookContext = await fetchBookContextForPrometheus(fractalId, tenantSchema);
