@@ -2589,13 +2589,11 @@
             }
             
             try {
-                const token = localStorage.getItem('accessToken');
                 console.log(`🔮 Prometheus: Sending request with fractalId="${selectedBookFractalId}", detectedBookIds=${JSON.stringify(detectedBookIds)}`);
-                const response = await fetch('/api/prometheus/check', {
+                const response = await authenticatedFetch('/api/prometheus/check', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ 
                         messages: message, 
