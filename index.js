@@ -4931,6 +4931,176 @@ app.get('/api/messages/search', requireAuth, async (req, res) => {
 });
 
 // ===========================
+// SERVER-SIDE MESSAGE SEARCH API
+// Searches messages in Discord threads for uncached books
+// ===========================
+
+app.get('/api/search', requireAuth, setTenantContext, async (req, res) => {
+    const { term, bookIds } = req.query;
+    
+    if (!term || term.trim().length === 0) {
+        return res.status(400).json({ error: 'Search term is required' });
+    }
+    
+    const searchTerm = term.toLowerCase().trim();
+    
+    try {
+        // SECURITY: Use tenant context from middleware (validated, not user-supplied)
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+        if (!tenantSchema) {
+            return res.status(500).json({ error: 'Tenant context not found' });
+        }
+        
+        // Parse bookIds if provided (comma-separated list of fractal_ids to search)
+        let targetBookIds = null;
+        if (bookIds) {
+            targetBookIds = bookIds.split(',').map(id => id.trim()).filter(id => id);
+        }
+        
+        // SECURITY: Query ONLY from tenant's own books table - NO registry access
+        // This ensures complete tenant isolation without cross-tenant enumeration
+        let booksQuery = `
+            SELECT fractal_id, name as book_name, output_credentials, created_at
+            FROM ${tenantSchema}.books
+            WHERE status = 'active'
+        `;
+        const queryParams = [];
+        
+        // Filter to specific books if provided - ONLY matches books in tenant's own table
+        // NOTE: Frontend sends only uncached books, so this is already a filtered subset
+        if (targetBookIds && targetBookIds.length > 0) {
+            booksQuery += ` AND fractal_id = ANY($1)`;
+            queryParams.push(targetBookIds);
+        }
+        
+        const booksResult = await pool.query(booksQuery, queryParams);
+        
+        if (booksResult.rows.length === 0) {
+            return res.json({ matchingBooks: [] });
+        }
+        
+        // Check if Thoth bot is ready
+        if (!thothBot || !thothBot.client || !thothBot.ready) {
+            return res.json({ 
+                matchingBooks: [],
+                note: 'Discord bot not ready - search temporarily unavailable'
+            });
+        }
+        
+        const matchingBooks = [];
+        let searchedCount = 0;
+        const DISCORD_DELAY_MS = 150;   // Delay between Discord API calls to avoid 429s
+        const TIMEOUT_MS = 5000;        // 5 second timeout per Discord call
+        
+        // Search each book's Discord thread for matches
+        for (const book of booksResult.rows) {
+            try {
+                let outputCredentials = book.output_credentials;
+                if (typeof outputCredentials === 'string') {
+                    outputCredentials = JSON.parse(outputCredentials);
+                }
+                
+                const outputData = outputCredentials?.output_01;
+                if (!outputData || !outputData.thread_id) {
+                    continue; // Skip books without Ledger thread
+                }
+                
+                const threadId = outputData.thread_id;
+                const bookCreatedAt = new Date(book.created_at);
+                
+                // Add delay between Discord API calls to avoid rate limits
+                if (searchedCount > 0) {
+                    await new Promise(resolve => setTimeout(resolve, DISCORD_DELAY_MS));
+                }
+                
+                // Fetch thread with timeout
+                let thread;
+                try {
+                    thread = await Promise.race([
+                        thothBot.client.channels.fetch(threadId),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), TIMEOUT_MS))
+                    ]);
+                } catch (fetchError) {
+                    console.warn(`⚠️  Thread fetch failed for ${book.fractal_id}: ${fetchError.message}`);
+                    continue;
+                }
+                if (!thread) continue;
+                
+                // Fetch messages with timeout
+                let discordMessages;
+                try {
+                    discordMessages = await Promise.race([
+                        thread.messages.fetch({ limit: 50, force: true }),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), TIMEOUT_MS))
+                    ]);
+                } catch (fetchError) {
+                    console.warn(`⚠️  Message fetch failed for ${book.fractal_id}: ${fetchError.message}`);
+                    continue;
+                }
+                
+                searchedCount++;
+                
+                // Search through messages
+                let hasMatch = false;
+                for (const msg of discordMessages.values()) {
+                    // Skip messages before book creation
+                    if (msg.createdAt < bookCreatedAt) continue;
+                    
+                    // Build searchable text from message
+                    let searchableText = (msg.content || '').toLowerCase();
+                    
+                    // Add embed content
+                    for (const embed of msg.embeds) {
+                        if (embed.description) searchableText += ' ' + embed.description.toLowerCase();
+                        if (embed.title) searchableText += ' ' + embed.title.toLowerCase();
+                        if (embed.fields) {
+                            for (const field of embed.fields) {
+                                searchableText += ' ' + (field.name || '').toLowerCase();
+                                searchableText += ' ' + (field.value || '').toLowerCase();
+                            }
+                        }
+                    }
+                    
+                    // Add attachment filenames and content types
+                    for (const attachment of msg.attachments.values()) {
+                        if (attachment.name) searchableText += ' ' + attachment.name.toLowerCase();
+                        if (attachment.contentType) searchableText += ' ' + attachment.contentType.toLowerCase();
+                    }
+                    
+                    // Check for match
+                    if (searchableText.includes(searchTerm)) {
+                        hasMatch = true;
+                        break;
+                    }
+                }
+                
+                if (hasMatch) {
+                    matchingBooks.push(book.fractal_id);
+                }
+            } catch (bookError) {
+                // Handle rate limits gracefully - stop search entirely but signal partial results
+                if (bookError.message?.includes('429')) {
+                    console.warn(`⚠️  Discord rate limited, returning partial results`);
+                    return res.json({ 
+                        matchingBooks, 
+                        partial: true, 
+                        reason: 'Rate limited by Discord - some books not searched' 
+                    });
+                }
+                console.warn(`⚠️  Search failed for book ${book.fractal_id}:`, bookError.message);
+            }
+        }
+        
+        console.log(`🔍 Server search for "${term}": ${matchingBooks.length}/${searchedCount} books matched`);
+        
+        res.json({ matchingBooks, partial: false });
+    } catch (error) {
+        console.error('❌ Server search error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ===========================
 // ANALYTICS API
 // ===========================
 

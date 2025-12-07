@@ -2896,7 +2896,11 @@
             }).join(' ').toLowerCase();
         }
 
-        function filterBots() {
+        // Track server-side search state to avoid duplicate requests
+        let serverSearchPending = false;
+        let lastServerSearchTerm = '';
+        
+        async function filterBots() {
             const searchTerm = document.getElementById('searchBox').value;
             const platformFilter = document.getElementById('platformFilter')?.value || '';
             const messageTypeFilter = document.getElementById('messageTypeFilter')?.value || '';
@@ -2916,6 +2920,9 @@
                 contextBadge.style.display = 'none';
                 window.searchState.dateContext = null;
             }
+            
+            // Track books without cached messages for server-side search
+            const uncachedBooks = [];
             
             filteredBooks = books.filter(book => {
                 // Search match using universal search function
@@ -2945,6 +2952,11 @@
                         matchesMessages = window.searchState.performSearch(searchTerm, messageText);
                     }
                     
+                    // Track uncached books for server-side search
+                    if (!matchesMetadata && !messageCache[book.fractal_id]) {
+                        uncachedBooks.push(book.fractal_id);
+                    }
+                    
                     matchesSearch = matchesMetadata || matchesMessages;
                     
                     // Store match type for visual indicator
@@ -2965,6 +2977,65 @@
             renderBooks();
             // Update thumbs zone if in mobile mode
             if (isMobile()) renderThumbsZone();
+            
+            // SERVER-SIDE SEARCH: For uncached books, call server to search Discord threads
+            if (searchTerm && uncachedBooks.length > 0 && !naturalDateRange && !serverSearchPending && lastServerSearchTerm !== searchTerm) {
+                serverSearchPending = true;
+                lastServerSearchTerm = searchTerm;
+                console.log(`🔍 Server search for "${searchTerm}" in ${uncachedBooks.length} uncached books...`);
+                
+                try {
+                    const token = localStorage.getItem('authToken');
+                    const response = await fetch(`/api/search?term=${encodeURIComponent(searchTerm)}&bookIds=${uncachedBooks.join(',')}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        const matchingBookIds = data.matchingBooks || [];
+                        
+                        if (matchingBookIds.length > 0) {
+                            console.log(`✅ Server found matches in ${matchingBookIds.length} books:`, matchingBookIds);
+                            
+                            // Log if partial results due to rate limiting
+                            if (data.partial) {
+                                console.warn(`⚠️ Partial results: ${data.reason}`);
+                            }
+                            
+                            // DEDUP: Track existing IDs to prevent duplicates
+                            const existingIds = new Set(filteredBooks.map(b => b.fractal_id));
+                            
+                            // Add matching books to filtered list (with deduplication)
+                            // COPY book objects to avoid mutating shared array
+                            for (const bookId of matchingBookIds) {
+                                if (existingIds.has(bookId)) continue; // Skip duplicates
+                                
+                                const originalBook = books.find(b => b.fractal_id === bookId);
+                                if (originalBook) {
+                                    // Create copy with match metadata (don't mutate original)
+                                    const bookCopy = { ...originalBook, _matchType: 'message', _searchQuery: searchTerm };
+                                    filteredBooks.push(bookCopy);
+                                    existingIds.add(bookId);
+                                }
+                            }
+                            
+                            // Re-render with server results
+                            renderBooks();
+                            if (isMobile()) renderThumbsZone();
+                        }
+                    }
+                } catch (err) {
+                    console.warn('⚠️ Server search failed:', err);
+                } finally {
+                    // ALWAYS reset pending state, even on error
+                    serverSearchPending = false;
+                }
+            }
+            
+            // Reset server search state if search term cleared
+            if (!searchTerm) {
+                lastServerSearchTerm = '';
+            }
         }
 
         function updatePlatformFilter() {
