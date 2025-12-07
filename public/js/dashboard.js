@@ -2898,7 +2898,7 @@
 
         function filterBots() {
             const searchTerm = document.getElementById('searchBox').value;
-            const platformFilter = document.getElementById('platformFilter').value;
+            const platformFilter = document.getElementById('platformFilter')?.value || '';
             const messageTypeFilter = document.getElementById('messageTypeFilter')?.value || '';
             
             // Parse natural language dates from search query
