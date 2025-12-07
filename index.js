@@ -1921,14 +1921,15 @@ app.post('/api/twilio/webhook', async (req, res) => {
                 console.log(`❌ Join code "${joinCode}" not found in registry → Routing to limbo (no phone fallback)`);
             }
         } else {
-            // No join code in message → Use phone lookup for active books
-            console.log(`📞 No join code in message → Using phone lookup for active books`);
+            // No join code in message → Use phone lookup via book_engaged_phones (multi-source support)
+            console.log(`📞 No join code in message → Using engaged phones lookup for active books`);
             const phoneLookup = await pool.query(`
-                SELECT id, tenant_schema, tenant_email, fractal_id, book_name, 
-                       outpipe_ledger, outpipes_user, status, phone_number, creator_phone, updated_at
-                FROM core.book_registry
-                WHERE phone_number = $1 AND status = 'active'
-                ORDER BY updated_at DESC
+                SELECT br.id, br.tenant_schema, br.tenant_email, br.fractal_id, br.book_name, 
+                       br.outpipe_ledger, br.outpipes_user, br.status, br.phone_number, br.creator_phone, br.updated_at
+                FROM core.book_engaged_phones ep
+                JOIN core.book_registry br ON br.id = ep.book_registry_id
+                WHERE ep.phone = $1 AND br.status = 'active'
+                ORDER BY ep.last_engaged_at DESC
                 LIMIT 1
             `, [phone]);
             
@@ -2203,6 +2204,20 @@ app.post('/api/twilio/webhook', async (req, res) => {
             }
             
             const book = bookDetailsResult.rows[0];
+            
+            // MULTI-SOURCE: Track sender engagement with this book (contributor or creator)
+            try {
+                await pool.query(`
+                    INSERT INTO core.book_engaged_phones (book_registry_id, phone, is_creator, first_engaged_at, last_engaged_at)
+                    VALUES ($1, $2, FALSE, NOW(), NOW())
+                    ON CONFLICT (book_registry_id, phone) DO UPDATE 
+                    SET last_engaged_at = NOW()
+                `, [bookRecord.id, phone]);
+                console.log(`📱 Tracked ${phone} engagement with book ${bookRecord.fractal_id}`);
+            } catch (engageErr) {
+                console.warn(`⚠️ Could not track engagement (non-fatal):`, engageErr.message);
+            }
+            
             const outputCreds = book.output_credentials || {};
             const output01 = outputCreds.output_01;
             const webhooks = outputCreds.webhooks || [];
