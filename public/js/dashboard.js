@@ -4530,24 +4530,14 @@
             if (container) {
                 // PRIORITY: (i) Jump pressed (✓) -> (ii) Clear filter (✓) -> (iii) Snap to top -> (iv) Offset
                 
-                // Find the sticky header height dynamically
-                const stickyHeader = container.querySelector('.time-bucket-header');
-                let headerHeight = 0;
-                
-                if (stickyHeader) {
-                    headerHeight = stickyHeader.offsetHeight + 20;
-                }
-                
-                console.log(`📏 Sticky header found: ${!!stickyHeader}, height: ${stickyHeader?.offsetHeight}px`);
-                
-                // Use generous fallback offset (sticky header + extra padding)
-                const offset = Math.max(headerHeight, 120);
+                // FIXED OFFSET: Time bar height is constant, no need for dynamic calculation
+                const FIXED_OFFSET = 56; // Time bar height (40px) + minimal padding (16px)
                 
                 // STEP 1: Snap to top immediately (rough scroll to element position)
                 const containerRect = container.getBoundingClientRect();
                 const elRect = el.getBoundingClientRect();
                 const elTopRelativeToContainer = elRect.top - containerRect.top;
-                const roughScrollTarget = container.scrollTop + elTopRelativeToContainer - offset;
+                const roughScrollTarget = container.scrollTop + elTopRelativeToContainer - FIXED_OFFSET;
                 container.scrollTop = Math.max(0, roughScrollTarget);
                 console.log(`📐 STEP 1 - Snap to top: scrollTop = ${container.scrollTop}px`);
                 
@@ -4581,9 +4571,9 @@
                         const finalContainerRect = container.getBoundingClientRect();
                         const finalElRect = el.getBoundingClientRect();
                         const finalElTopRelativeToContainer = finalElRect.top - finalContainerRect.top;
-                        const finalScrollTarget = container.scrollTop + finalElTopRelativeToContainer - offset;
+                        const finalScrollTarget = container.scrollTop + finalElTopRelativeToContainer - FIXED_OFFSET;
                         
-                        console.log(`📐 STEP 3 - Final offset: scrollTop = ${finalScrollTarget}px (offset=${offset}px)`);
+                        console.log(`📐 STEP 3 - Final offset: scrollTop = ${finalScrollTarget}px (offset=${FIXED_OFFSET}px)`);
                         
                         // Apply final scroll
                         container.scrollTop = Math.max(0, finalScrollTarget);
@@ -4592,7 +4582,7 @@
                     console.log(`✓ No images/media, scroll offset applied immediately`);
                 }
                 
-                console.log(`📍 SCROLL APPLIED: scrollTop now = ${container.scrollTop}px (offset=${offset}px)`);
+                console.log(`📍 SCROLL APPLIED: scrollTop now = ${container.scrollTop}px (offset=${FIXED_OFFSET}px)`);
                 
                 // Add highlight animation to make the target message visible
                 el.classList.add('jump-highlight');
