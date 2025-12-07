@@ -1977,9 +1977,11 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
 app.post('/api/twilio/webhook', async (req, res) => {
     try {
         const { From, Body, MessageSid, MediaUrl0, MediaContentType0 } = req.body;
-        const phone = From.replace(/\D/g, ''); // Phone is just metadata, not routing key
+        // E.164 NORMALIZATION: Keep + prefix for global compatibility
+        // Twilio format: "whatsapp:+6281234567890" → "+6281234567890"
+        const phone = From.replace('whatsapp:', '').trim();
         
-        console.log(`📱 Twilio webhook: From=${From}, Phone=${phone}, Body=${Body?.substring(0, 50)}...`);
+        console.log(`📱 Twilio webhook: From=${From}, Phone=${phone} (E.164), Body=${Body?.substring(0, 50)}...`);
         
         const bodyText = Body?.trim() || '';
         const bodyLower = bodyText.toLowerCase();
@@ -3863,7 +3865,7 @@ app.get('/api/books', requireAuth, async (req, res) => {
             
             console.log(`✅ Found ${books.length} active books across ${allSchemas.length} schemas`);
         } else {
-            // Standard tenant-scoped query with limbo filter
+            // Standard tenant-scoped query with limbo filter (owned books)
             const result = await pool.query(`
                 SELECT b.*
                 FROM ${tenantSchema}.books b
@@ -3873,7 +3875,58 @@ app.get('/api/books', requireAuth, async (req, res) => {
             `);
             books = result.rows;
             
-            console.log(`✅ Found ${books.length} active books in ${tenantSchema} for ${user.email}`);
+            console.log(`✅ Found ${books.length} owned books in ${tenantSchema} for ${user.email}`);
+            
+            // CONTRIBUTOR ACCESS: Find books user contributed to (not created)
+            // Step 1: Get user's phone number(s) from books they created
+            const userPhonesResult = await pool.query(`
+                SELECT DISTINCT ep.phone
+                FROM core.book_engaged_phones ep
+                JOIN core.book_registry br ON br.id = ep.book_registry_id
+                WHERE br.tenant_email = $1 AND ep.is_creator = true
+            `, [user.email]);
+            
+            const userPhones = userPhonesResult.rows.map(r => r.phone);
+            
+            if (userPhones.length > 0) {
+                console.log(`📱 User ${user.email} has verified phone(s): ${userPhones.join(', ')}`);
+                
+                // Step 2: Find all books where user's phone is a contributor (not creator)
+                // Excludes revoked contributors (last_engaged_at = NULL means 60-day dormancy revoked)
+                const contributedBooksResult = await pool.query(`
+                    SELECT DISTINCT 
+                        br.fractal_id, br.book_name, br.tenant_schema, br.tenant_email,
+                        ep.is_creator, ep.first_engaged_at, ep.last_engaged_at
+                    FROM core.book_engaged_phones ep
+                    JOIN core.book_registry br ON br.id = ep.book_registry_id
+                    WHERE ep.phone = ANY($1::text[])
+                      AND ep.is_creator = false
+                      AND ep.last_engaged_at IS NOT NULL
+                      AND br.status = 'active'
+                      AND br.tenant_email != $2
+                    ORDER BY ep.last_engaged_at DESC
+                `, [userPhones, user.email]);
+                
+                // Step 3: Fetch full book details from each tenant schema
+                for (const contrib of contributedBooksResult.rows) {
+                    try {
+                        const bookResult = await pool.query(`
+                            SELECT b.*, '${contrib.tenant_schema}'::text as tenant_schema,
+                                   true as is_contributed
+                            FROM ${contrib.tenant_schema}.books b
+                            WHERE b.fractal_id = $1 AND b.archived = false
+                        `, [contrib.fractal_id]);
+                        
+                        if (bookResult.rows.length > 0) {
+                            books.push(bookResult.rows[0]);
+                        }
+                    } catch (error) {
+                        console.warn(`⚠️ Could not fetch contributed book ${contrib.fractal_id}:`, error.message);
+                    }
+                }
+                
+                console.log(`✅ Total: ${books.length} books (owned + contributed) for ${user.email}`);
+            }
         }
         
         // PHASE 2 TRANSITION: Include both id and fractal_id during migration period
@@ -6101,6 +6154,52 @@ async function runDeferredStartupTasks() {
     // Schedule purge every 24 hours
     setInterval(purgeOldMedia, 24 * 60 * 60 * 1000);
     console.log('⏰ 3-day media purge scheduled (runs every 24 hours)');
+    
+    // 60-DAY DORMANCY CLEANUP: Revoke access for unregistered contributors
+    // Only affects phones NOT linked to a registered user (no email anchor)
+    // Protects against phone recycling for global users
+    async function revokeDormantContributors() {
+        try {
+            console.log('🔒 Starting 60-day dormancy cleanup...');
+            
+            // Find unregistered phone contributors with no activity in 60 days
+            // Unregistered = phone exists in book_engaged_phones BUT
+            // NOT linked to any email via is_creator=true in ANY book
+            const dormantResult = await pool.query(`
+                WITH registered_phones AS (
+                    -- Phones that are creators of at least one book (email-linked)
+                    SELECT DISTINCT ep.phone
+                    FROM core.book_engaged_phones ep
+                    WHERE ep.is_creator = true
+                )
+                UPDATE core.book_engaged_phones ep
+                SET last_engaged_at = NULL
+                WHERE ep.is_creator = false
+                  AND ep.last_engaged_at < NOW() - INTERVAL '60 days'
+                  AND ep.phone NOT IN (SELECT phone FROM registered_phones)
+                RETURNING ep.phone, ep.book_registry_id
+            `);
+            
+            if (dormantResult.rowCount > 0) {
+                console.log(`🔒 Revoked access for ${dormantResult.rowCount} dormant unregistered contributors`);
+                
+                // Log to Discord via Idris if available
+                if (idrisBot && idrisBot.ready) {
+                    const revokedPhones = [...new Set(dormantResult.rows.map(r => r.phone))];
+                    console.log(`   Revoked phones: ${revokedPhones.join(', ')}`);
+                }
+            } else {
+                console.log('✅ No dormant unregistered contributors to revoke');
+            }
+        } catch (error) {
+            console.error('❌ Dormancy cleanup failed:', error.message);
+        }
+    }
+    
+    // Run dormancy cleanup on startup and every 24 hours
+    revokeDormantContributors();
+    setInterval(revokeDormantContributors, 24 * 60 * 60 * 1000);
+    console.log('⏰ 60-day dormancy cleanup scheduled (runs every 24 hours)');
     
     console.log('✅ All deferred startup tasks completed');
 }
