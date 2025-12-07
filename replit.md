@@ -37,9 +37,32 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Security**: Strict webhook validation, JWT security, and robust audit logging. Sybil attack prevention via unique one-time join codes. Password recovery functionality has been removed for enhanced security.
 - **CSP Compliance**: Production-ready Content Security Policy with event delegation and self-hosted libraries.
 
+## Prometheus AI Audit System
+The Prometheus module provides AI-powered message verification using Qwen2.5-3B-Instruct via HuggingFace.
+
+**Features:**
+- **H(0) Guard Rails**: Zero-hallucination protocol - flags uncertain data for human review
+- **Bilingual Support**: Automatic Indonesian/English language detection and response
+- **Business Rules**: tire_check, expense, inventory, delivery, general
+- **UI Integration**: 🧿 Audit button in dashboard opens modal for message checking
+
+**API Endpoints:**
+- `POST /api/prometheus/check` - Check messages against business rules
+- `GET /api/prometheus/rules` - List available rule types
+
+**Module Structure:**
+- `prometheus/index.js` - Main Prometheus class
+- `prometheus/prompts.js` - System prompts with H(0) protocol
+- `prometheus/huggingface.js` - HuggingFace API client
+- `prometheus/rules.js` - Business rules engine
+
+**Environment:**
+- `HF_API_TOKEN` - HuggingFace API token (required)
+
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase) with RLS configured via Supabase dashboard
 - **WhatsApp**: Twilio WhatsApp Business API
+- **AI**: HuggingFace Inference API (Qwen2.5-3B-Instruct)
 
 ## Database Notes
 - **RLS Policy**: Row Level Security for `public.sessions` table is configured directly in Supabase SQL editor (not in code). Policy enables backend full access while satisfying Supabase security requirements.
