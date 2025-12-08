@@ -54,7 +54,8 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 **AI Playground (Public):**
 - Sovereign, public AI playground at `/AI` without authentication.
 - **Multimodal Support**: Text (Groq Llama 3.3 70B), Photo (Groq Llama 4 Scout Vision), Audio (Groq Whisper), Documents (PDF, Excel, Word).
-- **Input Methods**: Drag & drop, file picker, microphone, paste images.
+- **Multi-File Upload**: Up to 10 attachments per query, mixed types supported (photo + doc + audio processed together).
+- **Input Methods**: Drag & drop, file picker, microphone, paste images - all support multiple files.
 - **Rate Limiting**: Per-IP 50 requests/hour; Groq Vision rate-limited per Groq's API quotas.
 - **Query Classification**: Regex-based routing (DDG-first for "what is", Brave-first for "latest/2025", Groq-only for "calculate/solve").
 - **Factual Cache**: 24h TTL for simple facts, NEVER caches Nyan Protocol topics (H₀ compliance), 1000 entry LRU limit.
@@ -74,5 +75,6 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth` (for local processing)
 
 ## Recent Changes (December 8, 2025)
+- **Multi-File Upload**: Added support for up to 10 attachments per query. Mixed types (photo + document + audio) are processed together in parallel. Frontend displays attachment chips with individual remove buttons.
 - **Token Separation Complete**: Split Groq API tokens - `PLAYGROUND_GROQ_TOKEN` (text) + `PLAYGROUND_GROQ_VISION_TOKEN` (vision) to isolate rate limits and prevent vision from blocking text queries.
 - **Legacy Code Cleanup**: Removed deprecated HuggingFace Vision fallback code (never implemented), eliminated unused HF quota tracking system (~30 lines), simplifying codebase.
