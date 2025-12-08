@@ -149,29 +149,27 @@ async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
     
     try {
         // Use unpdf for reliable PDF rendering with @napi-rs/canvas
-        const { renderPageAsImage, getDocumentInfo } = await import('unpdf');
+        const { renderPageAsImage, getMeta } = await import('unpdf');
         
         // Get document info to determine page count
-        const info = await getDocumentInfo(new Uint8Array(buffer));
-        const totalPages = info.numPages || 1;
+        const meta = await getMeta(new Uint8Array(buffer));
+        const totalPages = meta.info?.numPages || 1;
         const pagesToRender = Math.min(totalPages, options.maxPages);
         
         console.log(`🖼️ PDF Visual: Rendering ${pagesToRender}/${totalPages} pages...`);
         
         for (let i = 1; i <= pagesToRender; i++) {
             try {
-                // Render page as image using unpdf (handles canvas internally)
-                const imageData = await renderPageAsImage(new Uint8Array(buffer), i, {
-                    scale: 2.0,
-                    canvas: () => import('@napi-rs/canvas')
+                // Render page as base64 data URL using unpdf (toDataURL: true)
+                const dataURL = await renderPageAsImage(new Uint8Array(buffer), i, {
+                    canvasImport: () => import('@napi-rs/canvas'),
+                    scale: 1.5,
+                    toDataURL: true
                 });
-                
-                // Convert to base64
-                const base64 = `data:image/png;base64,${Buffer.from(imageData).toString('base64')}`;
                 
                 images.push({
                     page: i,
-                    base64: base64,
+                    base64: dataURL,
                     width: 0,
                     height: 0
                 });
