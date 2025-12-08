@@ -131,8 +131,8 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 - Zero hallucination design
 
 **Visual Elements:**
-- **Header**: Cat animation (left), title in center, blinking date/time display (left of login button), login button (with 🐈‍⬛ emoji) on right
-- **Date/Time**: Blinking animation (opacity 1 → 0.4, 1.5s ease-in-out infinite), adaptive positioning - single-line format left of button
+- **Header**: Cat animation (left, with `initHopAnimation()` call), title in center, blinking date/time display (left of login button), login button (with 🐈‍⬛ emoji) on right
+- **Date/Time**: Blinking animation (opacity 1 → 0.4, 1.5s ease-in-out infinite), positioned left of login button
 - **Message Layout**: Discord-style two-pane design with glassmorphism aesthetic
 
 **Files:** `public/playground.html`, `public/js/playground.js`

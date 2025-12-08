@@ -71,6 +71,11 @@ const observer = new MutationObserver(() => updateDateTimePosition());
 observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
 setInterval(() => updateDateTimePosition(), 500);
 
+// Initialize cat animation (from cat-animation.js)
+if (typeof initHopAnimation === 'function') {
+    initHopAnimation();
+}
+
 photoBtn.addEventListener('click', () => photoInput.click());
 audioBtn.addEventListener('click', () => audioInput.click());
 
