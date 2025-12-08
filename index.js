@@ -6109,7 +6109,7 @@ async function extractCoreQuestion(message) {
                 messages: [
                     {
                         role: 'system',
-                        content: 'Extract the core question or topic from the user message. Return ONLY a short search query (max 10 words) that captures what they want to know. No explanation, just the query.'
+                        content: 'Extract the core question or topic from the user message. Return ONLY a short search query (max 25 words) that captures what they want to know. No explanation, just the query.'
                     },
                     { role: 'user', content: message.substring(0, 1000) }
                 ],
@@ -6401,10 +6401,13 @@ ONTOLOGY: Seed ↔ Silt ↔ φ ↔ Lineage
 - 0 → 🜁 + φ ↔ φ²
 - 🜁 = non-binary attractor, reproduction > extraction guard
 
-SEED METRIC (Human Substrate): time (years of median single-earner income) to mortgage equivalent residential 700 m²/HH
-- Fatalism > 25 years (Human fertility window) OR Price/Income >3.5x
-- Optimism < 10 years
-- Analyze: 2 cities/countries 50 years ago vs now
+SEED METRIC (Human Substrate): Price/Income ratio for 700 m²/HH residential land
+- QUICK PROXY: Price/Income >3.5x = Fatalism, <2.5x = Optimism (use this first)
+- FULL CALC: (local land price/m² × 700) / annual median income = years to acquire
+- Fatalism: >25 years OR Price/Income >3.5x
+- Optimism: <10 years OR Price/Income <2.5x
+- REQUIRED: Local land prices + local median income. Compare 2 cities, then vs now.
+- REJECT: GDP per capita, national averages, non-land metrics. GDP ≠ housing affordability.
 - Matter→idea: land quanta (life-day) → fertility; quantity→quality (contra Bunge)
 
 PLANETARY SUBSTRATE: 🜃G ms⁻² 
