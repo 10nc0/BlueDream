@@ -88,6 +88,11 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Auth Middleware Optimization**: Removed duplicate tenant lookup in `requireRole` - now trusts `req.tenantSchema` already set by `requireAuth`. Saves 1 DB query per role-checked request.
 - **Cache Headers DRY**: Extracted `noCacheHeaders(res)` helper to replace 4× repeated Cache-Control/Pragma/Expires header sets across auth endpoints.
 - **Request ID Fix**: Replaced buggy global `console.log` patching with `AsyncLocalStorage`. Previous implementation caused double/triple request IDs when concurrent requests arrived. Now uses `requestContext.run()` for proper request-scoped context. Added `rlog()`/`rerror()` helpers for request-aware logging.
+- **Universal Document Visual Analysis**: Extended visual analysis beyond PDFs to Word and PowerPoint files:
+  - **Word (DOCX)**: `extractWordImages()` uses mammoth to extract embedded images, then sends to Groq Vision for chemical structure/chart/diagram identification.
+  - **PowerPoint (PPTX)**: `convertDocumentToImages()` extracts media from ppt/media folder via JSZip, sends to Groq Vision.
+  - **Pipeline Enhancement**: Cascade now passes `extractedImages` between steps via `cascadeOptions`, enabling mammoth-images → groq-doc-vision flow.
+  - **libuuid Fix**: Installed system dependency to fix PDF page rendering with pdfjs-dist + canvas.
 
 **Previous improvements (still active):**
 - **Circuit Breaker**: Persistent abusers (5 events in 1 hour) get 30-minute cooldown. Progressive warnings at 3/5 and 4/5.

@@ -5,7 +5,7 @@ integrations = ["discord:1.0.0", "javascript_openai_ai_integrations:1.0.0", "twi
 
 [nix]
 channel = "stable-25_05"
-packages = ["chromium", "nano", "q-text-as-data", "try", "mailutils"]
+packages = ["chromium", "nano", "q-text-as-data", "try", "mailutils", "libuuid"]
 
 [workflows]
 runButton = "Project"
@@ -38,6 +38,10 @@ externalPort = 80
 [[ports]]
 localPort = 38893
 externalPort = 3000
+
+[[ports]]
+localPort = 46105
+externalPort = 3001
 
 [deployment]
 deploymentTarget = "autoscale"

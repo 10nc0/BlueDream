@@ -26,6 +26,7 @@ const FILE_TYPES = {
     PDF: 'pdf',
     EXCEL: 'excel',
     WORD: 'word',
+    PRESENTATION: 'presentation',
     TEXT: 'text',
     IMAGE: 'image',
     AUDIO: 'audio',
@@ -50,9 +51,11 @@ const EXTRACTION_TOOLS = {
     'tabula': { tier: COST_TIERS.FREE_LOCAL, type: 'table', name: 'tabula-js' },
     'exceljs': { tier: COST_TIERS.FREE_LOCAL, type: 'table', name: 'exceljs' },
     'mammoth': { tier: COST_TIERS.FREE_LOCAL, type: 'text', name: 'mammoth' },
+    'mammoth-images': { tier: COST_TIERS.FREE_LOCAL, type: 'images', name: 'mammoth-images' },
     'buffer-text': { tier: COST_TIERS.FREE_LOCAL, type: 'text', name: 'buffer-utf8' },
     'groq-whisper': { tier: COST_TIERS.CHEAP_API, type: 'audio', name: 'groq-whisper' },
     'groq-pdf-vision': { tier: COST_TIERS.MODERATE_API, type: 'vision', name: 'groq-pdf-vision' },
+    'groq-doc-vision': { tier: COST_TIERS.MODERATE_API, type: 'vision', name: 'groq-doc-vision' },
     'tesseract-ocr': { tier: COST_TIERS.MODERATE_API, type: 'ocr', name: 'tesseract.js' }
 };
 
@@ -68,6 +71,9 @@ function identifyFileType(fileName, mimeType) {
     }
     if (['docx', 'doc'].includes(ext) || mime.includes('word')) {
         return { type: FILE_TYPES.WORD, extension: ext, mime: mime };
+    }
+    if (['pptx', 'ppt'].includes(ext) || mime.includes('presentation') || mime.includes('powerpoint')) {
+        return { type: FILE_TYPES.PRESENTATION, extension: ext, mime: mime };
     }
     if (['txt', 'md', 'csv', 'json', 'xml', 'html'].includes(ext) || mime.includes('text')) {
         return { type: FILE_TYPES.TEXT, extension: ext, mime: mime };
@@ -103,7 +109,15 @@ function selectExtractionPipeline(fileType) {
             
         case FILE_TYPES.WORD:
             pipeline.push(
-                { tool: 'mammoth', tier: COST_TIERS.FREE_LOCAL, purpose: 'text-extraction' }
+                { tool: 'mammoth', tier: COST_TIERS.FREE_LOCAL, purpose: 'text-extraction' },
+                { tool: 'mammoth-images', tier: COST_TIERS.FREE_LOCAL, purpose: 'image-extraction' },
+                { tool: 'groq-doc-vision', tier: COST_TIERS.MODERATE_API, purpose: 'visual-analysis' }
+            );
+            break;
+            
+        case FILE_TYPES.PRESENTATION:
+            pipeline.push(
+                { tool: 'groq-doc-vision', tier: COST_TIERS.MODERATE_API, purpose: 'visual-analysis' }
             );
             break;
             
@@ -160,6 +174,8 @@ async function executeExtractionCascade(buffer, fileType, fileName, options = {}
     console.log(`🔄 Cascade: Starting extraction for ${fileName} (${fileType.type})`);
     console.log(`🔄 Cascade: Pipeline = [${pipeline.map(p => p.tool).join(' → ')}]`);
     
+    const cascadeOptions = { ...options };
+    
     for (const step of pipeline) {
         if (step.condition === 'sparse-text' && result.extractedData?.text?.length > 100) {
             result.cascadeLog.push({ tool: step.tool, skipped: true, reason: 'text already extracted' });
@@ -168,7 +184,7 @@ async function executeExtractionCascade(buffer, fileType, fileName, options = {}
         
         try {
             console.log(`⚙️ Cascade: Executing ${step.tool} (tier ${step.tier})`);
-            const stepResult = await executeTool(step.tool, buffer, fileName, options);
+            const stepResult = await executeTool(step.tool, buffer, fileName, cascadeOptions);
             
             if (stepResult.success) {
                 result.toolsUsed.push(step.tool);
@@ -177,6 +193,11 @@ async function executeExtractionCascade(buffer, fileType, fileName, options = {}
                 result.extractedData = mergeExtractionResults(result.extractedData, stepResult.data);
                 result.dataStructure = determineDataStructure(result.extractedData);
                 result.success = true;
+                
+                if (stepResult.data?.embeddedImages) {
+                    cascadeOptions.extractedImages = stepResult.data.embeddedImages;
+                    console.log(`📷 Cascade: Captured ${stepResult.data.embeddedImages.length} images for vision analysis`);
+                }
                 
                 console.log(`✅ Cascade: ${step.tool} succeeded`);
             } else {
@@ -214,6 +235,12 @@ async function executeTool(toolName, buffer, fileName, options) {
             
         case 'mammoth':
             return await extractWordText(buffer);
+            
+        case 'mammoth-images':
+            return await extractWordImages(buffer, options);
+            
+        case 'groq-doc-vision':
+            return await analyzeDocumentVisuals(buffer, fileName, options);
             
         case 'buffer-text':
             return { success: true, data: { text: buffer.toString('utf-8') } };
@@ -304,6 +331,217 @@ async function extractWordText(buffer) {
     } catch (error) {
         return { success: false, error: error.message };
     }
+}
+
+async function extractWordImages(buffer, options = {}) {
+    try {
+        const images = [];
+        const result = await mammoth.convertToHtml({
+            buffer,
+            convertImage: mammoth.images.imgElement(async function(image) {
+                const imageBuffer = await image.read();
+                const base64 = imageBuffer.toString('base64');
+                const contentType = image.contentType || 'image/png';
+                images.push({
+                    base64,
+                    contentType,
+                    size: imageBuffer.length
+                });
+                return { src: `data:${contentType};base64,${base64}` };
+            })
+        });
+        
+        if (images.length === 0) {
+            return { success: false, error: 'No embedded images found in document' };
+        }
+        
+        console.log(`📷 Extracted ${images.length} embedded image(s) from Word document`);
+        
+        options.extractedImages = images;
+        return { 
+            success: true, 
+            data: { 
+                embeddedImages: images,
+                imageCount: images.length,
+                type: 'word-images'
+            }
+        };
+    } catch (error) {
+        console.error(`❌ Word image extraction error: ${error.message}`);
+        return { success: false, error: error.message };
+    }
+}
+
+async function analyzeDocumentVisuals(buffer, fileName, options = {}) {
+    const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
+    
+    if (!PLAYGROUND_GROQ_VISION_TOKEN) {
+        console.log('⚠️ PLAYGROUND_GROQ_VISION_TOKEN not configured - skipping document visual analysis');
+        return { success: false, error: 'Vision token not configured' };
+    }
+    
+    const images = options.extractedImages || [];
+    
+    if (images.length === 0) {
+        const ext = (fileName || '').toLowerCase().split('.').pop();
+        if (['pptx', 'ppt', 'xlsx', 'xls'].includes(ext)) {
+            console.log(`🔬 Doc Visual: Converting ${fileName} to images for analysis...`);
+            const convertedImages = await convertDocumentToImages(buffer, fileName);
+            if (convertedImages.length > 0) {
+                images.push(...convertedImages);
+            }
+        }
+    }
+    
+    if (images.length === 0) {
+        return { success: false, error: 'No images to analyze' };
+    }
+    
+    console.log(`🔬 Doc Visual: Analyzing ${images.length} image(s) with Groq Vision...`);
+    
+    const visualDescriptions = [];
+    const axios = require('axios');
+    
+    const maxImages = Math.min(images.length, 5);
+    
+    for (let i = 0; i < maxImages; i++) {
+        const img = images[i];
+        const base64Data = img.base64.includes('base64,') 
+            ? img.base64.split('base64,')[1] 
+            : img.base64;
+        
+        try {
+            const response = await axios.post(
+                'https://api.groq.com/openai/v1/chat/completions',
+                {
+                    model: 'llama-4-scout-17b-16e-instruct',
+                    messages: [
+                        {
+                            role: 'user',
+                            content: [
+                                {
+                                    type: 'text',
+                                    text: `Analyze this image from a document. Identify and describe in detail:
+1. If it's a CHEMICAL STRUCTURE: Identify the compound, functional groups, molecular formula if visible
+2. If it's a CHART/GRAPH: Describe the type, axes, data points, trends
+3. If it's a DIAGRAM: Explain what it shows, labels, relationships
+4. If it's other content: Describe what you see
+
+Be specific and technical. This is for scientific/business document analysis.`
+                                },
+                                {
+                                    type: 'image_url',
+                                    image_url: {
+                                        url: `data:${img.contentType || 'image/png'};base64,${base64Data}`
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    max_tokens: 1024,
+                    temperature: 0.1
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${PLAYGROUND_GROQ_VISION_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 60000
+                }
+            );
+            
+            const description = response.data.choices?.[0]?.message?.content || 'Unable to analyze image';
+            
+            const contentType = description.toLowerCase().includes('chemical') || 
+                               description.toLowerCase().includes('molecule') ||
+                               description.toLowerCase().includes('structure') ? 'chemical' :
+                               description.toLowerCase().includes('chart') ||
+                               description.toLowerCase().includes('graph') ? 'chart' :
+                               description.toLowerCase().includes('diagram') ? 'diagram' : 'visual';
+            
+            visualDescriptions.push({
+                index: i + 1,
+                contentType,
+                description
+            });
+            
+            console.log(`✅ Analyzed image ${i + 1}/${maxImages} (${contentType})`);
+            
+        } catch (error) {
+            console.error(`❌ Failed to analyze image ${i + 1}: ${error.message}`);
+            visualDescriptions.push({
+                index: i + 1,
+                contentType: 'error',
+                description: `Analysis failed: ${error.message}`
+            });
+        }
+    }
+    
+    if (visualDescriptions.length === 0) {
+        return { success: false, error: 'No images could be analyzed' };
+    }
+    
+    const formattedVisuals = visualDescriptions.map(vc => {
+        const typeLabel = vc.contentType === 'chemical' ? '🧪 Chemical Structure' :
+                          vc.contentType === 'chart' ? '📊 Chart/Graph' :
+                          vc.contentType === 'diagram' ? '📐 Diagram' : '🖼️ Visual';
+        return `**Image ${vc.index} (${typeLabel}):**\n${vc.description}`;
+    }).join('\n\n');
+    
+    return {
+        success: true,
+        data: {
+            text: `\n### Visual Content Analysis:\n${formattedVisuals}`,
+            visualContent: visualDescriptions,
+            type: 'doc-vision'
+        }
+    };
+}
+
+async function convertDocumentToImages(buffer, fileName) {
+    const images = [];
+    const ext = (fileName || '').toLowerCase().split('.').pop();
+    
+    try {
+        if (['xlsx', 'xls'].includes(ext)) {
+            console.log(`📊 Excel file detected - extracting charts/images not directly supported, relying on table data`);
+            return images;
+        }
+        
+        if (['pptx', 'ppt'].includes(ext)) {
+            console.log(`📽️ PowerPoint file detected - attempting slide extraction via JSZip...`);
+            const JSZip = require('jszip');
+            const zip = await JSZip.loadAsync(buffer);
+            
+            const mediaFolder = zip.folder('ppt/media');
+            if (mediaFolder) {
+                const mediaFiles = [];
+                mediaFolder.forEach((relativePath, file) => {
+                    if (/\.(png|jpg|jpeg|gif|bmp)$/i.test(relativePath)) {
+                        mediaFiles.push({ path: relativePath, file });
+                    }
+                });
+                
+                for (const { path, file } of mediaFiles.slice(0, 5)) {
+                    try {
+                        const imgBuffer = await file.async('nodebuffer');
+                        const base64 = imgBuffer.toString('base64');
+                        const ext = path.split('.').pop().toLowerCase();
+                        const contentType = ext === 'png' ? 'image/png' : 
+                                           ext === 'gif' ? 'image/gif' : 'image/jpeg';
+                        images.push({ base64, contentType, size: imgBuffer.length });
+                        console.log(`📷 Extracted PPT image: ${path}`);
+                    } catch (e) {
+                        console.error(`Failed to extract ${path}: ${e.message}`);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error(`❌ Document to images conversion error: ${error.message}`);
+    }
+    
+    return images;
 }
 
 async function transcribeAudio(buffer, fileName, options) {
