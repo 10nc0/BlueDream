@@ -143,46 +143,83 @@ function tableToMarkdown(tableData) {
 
 // VISUAL PDF ANALYSIS: Render pages as images and analyze with Groq Vision
 // Unlocks chemical structures, charts, diagrams, and other visual content
+// Uses pdf-poppler (Poppler library) to bypass pdfjs-dist + canvas Path2D bug
 
 async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
     const images = [];
+    const pdfPoppler = require('pdf-poppler');
+    
+    // Create unique temp file paths
+    const timestamp = Date.now();
+    const tempPdfPath = path.join(os.tmpdir(), `nyan_pdf_${timestamp}.pdf`);
+    const tempPrefix = `nyan_page_${timestamp}`;
     
     try {
-        // Use unpdf for reliable PDF rendering with @napi-rs/canvas
-        const { renderPageAsImage, getMeta } = await import('unpdf');
+        // Write buffer to temp file (Poppler needs file path)
+        fs.writeFileSync(tempPdfPath, buffer);
         
-        // Get document info to determine page count
-        const meta = await getMeta(new Uint8Array(buffer));
-        const totalPages = meta.info?.numPages || 1;
+        // Get total page count
+        const info = await pdfPoppler.info(tempPdfPath);
+        const totalPages = info.pages || 1;
         const pagesToRender = Math.min(totalPages, options.maxPages);
         
-        console.log(`🖼️ PDF Visual: Rendering ${pagesToRender}/${totalPages} pages...`);
+        console.log(`🖼️ PDF Poppler: Rendering ${pagesToRender}/${totalPages} pages...`);
         
+        // Render pages to JPEG
+        const opts = {
+            format: 'jpeg',
+            out_dir: os.tmpdir(),
+            out_prefix: tempPrefix,
+            scale: 2048,  // Max dimension (high-res for vision)
+            page: pagesToRender > 1 ? `1-${pagesToRender}` : null  // null = first page only
+        };
+        
+        await pdfPoppler.convert(tempPdfPath, opts);
+        
+        // Load rendered images as base64
         for (let i = 1; i <= pagesToRender; i++) {
-            try {
-                // Render page as base64 data URL using unpdf (toDataURL: true)
-                const dataURL = await renderPageAsImage(new Uint8Array(buffer), i, {
-                    canvasImport: () => import('@napi-rs/canvas'),
-                    scale: 1.5,
-                    toDataURL: true
-                });
+            // Poppler naming: prefix-1.jpg, prefix-2.jpg, etc (or prefix-01 for multi-page)
+            const possibleNames = [
+                `${tempPrefix}-${i}.jpg`,
+                `${tempPrefix}-${String(i).padStart(2, '0')}.jpg`,
+                `${tempPrefix}-${String(i).padStart(3, '0')}.jpg`
+            ];
+            
+            let imgPath = null;
+            for (const name of possibleNames) {
+                const fullPath = path.join(os.tmpdir(), name);
+                if (fs.existsSync(fullPath)) {
+                    imgPath = fullPath;
+                    break;
+                }
+            }
+            
+            if (imgPath) {
+                const imgBuffer = fs.readFileSync(imgPath);
+                const base64 = `data:image/jpeg;base64,${imgBuffer.toString('base64')}`;
                 
                 images.push({
                     page: i,
-                    base64: dataURL,
+                    base64: base64,
                     width: 0,
                     height: 0
                 });
                 
-                console.log(`  📄 Page ${i}: rendered successfully`);
-            } catch (pageError) {
-                console.log(`  ⚠️ Page ${i} render failed: ${pageError.message}`);
+                // Cleanup temp image
+                try { fs.unlinkSync(imgPath); } catch (e) {}
+                
+                console.log(`  📄 Page ${i}: rendered (JPEG)`);
+            } else {
+                console.log(`  ⚠️ Page ${i}: output file not found`);
             }
         }
         
-        console.log(`🖼️ PDF Visual: ${images.length} pages rendered successfully`);
+        console.log(`🖼️ PDF Poppler: ${images.length} pages rendered successfully`);
     } catch (error) {
-        console.error(`❌ PDF Visual: Rendering failed - ${error.message}`);
+        console.error(`❌ PDF Poppler: Rendering failed - ${error.message}`);
+    } finally {
+        // Cleanup temp PDF
+        try { if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath); } catch (e) {}
     }
     
     return images;
