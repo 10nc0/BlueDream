@@ -6113,7 +6113,7 @@ async function extractCoreQuestion(message) {
                     },
                     { role: 'user', content: message.substring(0, 1000) }
                 ],
-                temperature: 0.1,
+                temperature: 0.2,
                 max_tokens: 30
             },
             {
