@@ -561,6 +561,8 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
                             explaintext: 1,          // Plain text, no HTML
                             inprop: 'url',           // Include page URL
                             format: 'json',
+                            formatversion: 2,        // Modern JSON: pages as array, not object
+                            redirects: 1,            // Follow redirects: THC → Tetrahydrocannabinol
                             origin: '*'              // CORS support
                         },
                         headers: {
@@ -569,24 +571,25 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
                     }
                 );
                 
-                // Parse Action API response structure: { query: { pages: { [pageId]: { ... } } } }
+                // Parse Action API response with formatversion=2: { query: { pages: [ { ... } ] } }
                 const pages = wikiResponse.data?.query?.pages;
-                if (pages) {
-                    const pageId = Object.keys(pages)[0];
-                    const page = pages[pageId];
+                if (pages && pages.length > 0) {
+                    const page = pages[0]; // formatversion=2 returns array
                     
-                    // Check for valid page (pageId !== '-1' means page exists)
-                    if (pageId !== '-1' && page.extract) {
+                    // Check for valid page (missing: true means page not found)
+                    if (!page.missing && page.extract) {
                         wikipediaContext = {
                             title: page.title,
                             description: '', // Action API doesn't return description
                             extract: page.extract, // Full intro section (up to 2000 chars)
-                            source: page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title)}`,
+                            source: page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, '_'))}`,
                             type: 'standard'
                         };
                         console.log(`📚 Wikipedia API: ✓ Retrieved ${wikipediaContext.extract.length} chars for "${wikipediaContext.title}"`);
+                    } else if (page.missing) {
+                        console.log(`📚 Wikipedia API: Page not found for "${cleanWikiName}"`);
                     } else {
-                        console.log(`📚 Wikipedia API: Page not found or no extract for "${cleanWikiName}"`);
+                        console.log(`📚 Wikipedia API: No extract for "${cleanWikiName}"`);
                     }
                 }
             } catch (wikiErr) {
