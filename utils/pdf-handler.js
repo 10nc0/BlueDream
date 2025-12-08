@@ -148,67 +148,35 @@ async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
     const images = [];
     
     try {
-        // Dynamic import for ESM module compatibility
-        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        const { createCanvas } = require('@napi-rs/canvas');
+        // Use unpdf for reliable PDF rendering with @napi-rs/canvas
+        const { renderPageAsImage, getDocumentInfo } = await import('unpdf');
         
-        // Node.js canvas factory for pdfjs-dist compatibility (using @napi-rs/canvas)
-        const canvasFactory = {
-            create: function(width, height) {
-                const canvas = createCanvas(width, height);
-                return { canvas, context: canvas.getContext('2d') };
-            },
-            reset: function(canvasAndContext, width, height) {
-                canvasAndContext.canvas.width = width;
-                canvasAndContext.canvas.height = height;
-            },
-            destroy: function(canvasAndContext) {
-                canvasAndContext.canvas = null;
-                canvasAndContext.context = null;
-            }
-        };
-        
-        // Load PDF document with canvas factory
-        const loadingTask = pdfjsLib.getDocument({ 
-            data: new Uint8Array(buffer),
-            canvasFactory: canvasFactory
-        });
-        const pdf = await loadingTask.promise;
-        const totalPages = pdf.numPages;
+        // Get document info to determine page count
+        const info = await getDocumentInfo(new Uint8Array(buffer));
+        const totalPages = info.numPages || 1;
         const pagesToRender = Math.min(totalPages, options.maxPages);
         
         console.log(`🖼️ PDF Visual: Rendering ${pagesToRender}/${totalPages} pages...`);
         
         for (let i = 1; i <= pagesToRender; i++) {
             try {
-                const page = await pdf.getPage(i);
-                const viewport = page.getViewport({ scale: 2.0 }); // High-res for vision
+                // Render page as image using unpdf (handles canvas internally)
+                const imageData = await renderPageAsImage(new Uint8Array(buffer), i, {
+                    scale: 2.0,
+                    canvas: () => import('@napi-rs/canvas')
+                });
                 
-                // Use canvas factory to create canvas and context
-                const canvasAndContext = canvasFactory.create(Math.floor(viewport.width), Math.floor(viewport.height));
-                
-                // Render page to canvas
-                await page.render({
-                    canvasContext: canvasAndContext.context,
-                    viewport: viewport,
-                    canvasFactory: canvasFactory
-                }).promise;
-                
-                // Convert to base64 using encode() then Buffer
-                const pngBuffer = await canvasAndContext.canvas.encode('png');
-                const base64 = `data:image/png;base64,${pngBuffer.toString('base64')}`;
+                // Convert to base64
+                const base64 = `data:image/png;base64,${Buffer.from(imageData).toString('base64')}`;
                 
                 images.push({
                     page: i,
                     base64: base64,
-                    width: viewport.width,
-                    height: viewport.height
+                    width: 0,
+                    height: 0
                 });
                 
-                console.log(`  📄 Page ${i}: ${Math.floor(viewport.width)}x${Math.floor(viewport.height)}px rendered`);
-                
-                // Cleanup
-                canvasFactory.destroy(canvasAndContext);
+                console.log(`  📄 Page ${i}: rendered successfully`);
             } catch (pageError) {
                 console.log(`  ⚠️ Page ${i} render failed: ${pageError.message}`);
             }

@@ -42,6 +42,7 @@
     "querystring": "^0.2.1",
     "tabula-js": "^1.0.1",
     "tesseract.js": "^6.0.1",
-    "twilio": "^5.10.3"
+    "twilio": "^5.10.3",
+    "unpdf": "^1.4.0"
   }
 }
