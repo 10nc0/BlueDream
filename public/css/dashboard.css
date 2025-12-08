@@ -3497,3 +3497,31 @@ body.desktop-mode .thumbs-zone {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
 }
+
+/* ===== RESPONSIVE HEADER SQUEEZE: Progressive Element Hiding =====
+   Desktop (1200px+): All elements visible
+   Tablet (1000px-1199px): Hide user info
+   Mobile (768px-999px): Hide user info + title
+   Compact (480px-767px): Hide user info + title + date/time
+*/
+
+/* Tablet: Hide user info when width shrinks */
+@media (max-width: 1199px) {
+    #userInfo {
+        display: none !important;
+    }
+}
+
+/* Tablet-to-Mobile transition: Hide title section */
+@media (max-width: 999px) {
+    #headerTitle {
+        display: none !important;
+    }
+}
+
+/* Mobile: Hide date/time for more space */
+@media (max-width: 767px) {
+    #dateTimeDefault {
+        display: none !important;
+    }
+}
