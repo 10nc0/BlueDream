@@ -6036,8 +6036,35 @@ async function groqWithRetry(axiosConfig, maxRetries = 3) {
             return await axios.post(axiosConfig.url, axiosConfig.data, axiosConfig.config);
         } catch (error) {
             lastError = error;
-            if (error.response?.status === 429 && attempt < maxRetries) {
-                const delayMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+            
+            // Detailed error logging for diagnosis
+            const status = error.response?.status;
+            const headers = error.response?.headers || {};
+            const errorBody = error.response?.data;
+            
+            console.log(`🔴 Groq Error (attempt ${attempt + 1}/${maxRetries + 1}):`);
+            console.log(`   Status: ${status}`);
+            console.log(`   x-ratelimit-limit-requests: ${headers['x-ratelimit-limit-requests'] || 'N/A'}`);
+            console.log(`   x-ratelimit-limit-tokens: ${headers['x-ratelimit-limit-tokens'] || 'N/A'}`);
+            console.log(`   x-ratelimit-remaining-requests: ${headers['x-ratelimit-remaining-requests'] || 'N/A'}`);
+            console.log(`   x-ratelimit-remaining-tokens: ${headers['x-ratelimit-remaining-tokens'] || 'N/A'}`);
+            console.log(`   x-ratelimit-reset-requests: ${headers['x-ratelimit-reset-requests'] || 'N/A'}`);
+            console.log(`   x-ratelimit-reset-tokens: ${headers['x-ratelimit-reset-tokens'] || 'N/A'}`);
+            console.log(`   retry-after: ${headers['retry-after'] || 'N/A'}`);
+            console.log(`   Error body: ${JSON.stringify(errorBody) || 'N/A'}`);
+            
+            // Also log prompt size for context
+            const promptTokensEstimate = axiosConfig.data?.messages 
+                ? JSON.stringify(axiosConfig.data.messages).length / 4 
+                : 'unknown';
+            console.log(`   Prompt size estimate: ~${Math.round(promptTokensEstimate)} tokens`);
+            
+            if (status === 429 && attempt < maxRetries) {
+                // Use retry-after header if available, otherwise exponential backoff
+                const retryAfter = headers['retry-after'];
+                const delayMs = retryAfter 
+                    ? parseInt(retryAfter) * 1000 
+                    : Math.min(1000 * Math.pow(2, attempt), 8000);
                 console.log(`⏳ Groq 429: Retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, delayMs));
             } else {
