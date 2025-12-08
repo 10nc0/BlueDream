@@ -26,6 +26,7 @@ const MetadataExtractor = require('./metadata-extractor');
 const genesisCounter = require('./server/genesis-counter');
 const Prometheus = require('./prometheus');
 const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document-parser');
+const { identifyFileType, executeExtractionCascade, formatJSONForGroq } = require('./utils/attachment-cascade');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
@@ -6320,7 +6321,8 @@ app.post('/api/playground', async (req, res) => {
             }
         }
         
-        // Document analysis (PDF, Excel, Word, Text)
+        // Document analysis with CASCADE WORKFLOW
+        // Flow: Attachment → Identify Type → Select Tools → Execute Cascade (cheap→expensive) → JSON → Groq
         else if (document) {
             if (!PLAYGROUND_GROQ_TOKEN) {
                 return res.status(503).json({ 
@@ -6328,28 +6330,43 @@ app.post('/api/playground', async (req, res) => {
                 });
             }
             
-            console.log(`🎮 Playground: Analyzing document "${documentName}" for ${clientIp}`);
+            console.log(`🎮 Playground: Document cascade for "${documentName}" - ${clientIp}`);
             
             try {
                 const base64Data = document.split(',')[1] || document;
+                const buffer = Buffer.from(base64Data, 'base64');
                 
-                // Extract text using proper parser (PDF, Excel, Word support)
-                const documentText = await extractTextFromDocument(base64Data, documentName);
+                // STEP 1: Identify file type and data structure
+                const fileType = identifyFileType(documentName);
+                console.log(`📋 Cascade Step 1: Identified ${fileType.type} (${fileType.extension})`);
                 
-                if (!documentText || documentText.trim().length === 0) {
+                // STEP 2: Execute extraction cascade (tools ordered by cost tier)
+                const cascadeResult = await executeExtractionCascade(buffer, fileType, documentName, {
+                    imagePrompt: message || 'Describe this image in detail. Extract any text, numbers, or data visible.'
+                });
+                
+                // Log cascade execution summary
+                const toolsSummary = cascadeResult.toolsUsed.join(' → ') || 'none';
+                console.log(`📋 Cascade Step 2: Tools executed: ${toolsSummary}`);
+                console.log(`📋 Cascade Step 2: Data structure: ${cascadeResult.dataStructure}`);
+                
+                if (!cascadeResult.success || !cascadeResult.jsonOutput) {
+                    const errors = cascadeResult.cascadeLog
+                        .filter(l => !l.success && !l.skipped)
+                        .map(l => l.error)
+                        .join('; ');
                     return res.status(400).json({ 
-                        reply: 'Could not extract text from this document. Please try a different file or paste the text directly.' 
+                        reply: `Could not extract data from this document. ${errors || 'Please try a different file or paste the text directly.'}` 
                     });
                 }
                 
-                // Build document-aware prompt
-                finalPrompt = getDocumentPrompt(documentText, documentName, message);
-                console.log(`📄 Document processed: ${documentText.length} chars extracted from ${documentName}`);
+                // STEP 3: Format JSON output for Groq reasoning
+                finalPrompt = formatJSONForGroq(cascadeResult, message);
+                console.log(`📋 Cascade Step 3: JSON prepared for Groq (${finalPrompt.length} chars)`);
                 
             } catch (docError) {
-                console.error('❌ Playground document error:', docError.message);
+                console.error('❌ Cascade error:', docError.message);
                 
-                // Friendly 400 for known unsupported formats
                 if (docError.message.includes('not supported') || 
                     docError.message.includes('Please convert')) {
                     return res.status(400).json({ 

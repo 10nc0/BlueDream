@@ -109,17 +109,29 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 - **Audio**: Groq Whisper-large-v3-turbo (Indonesian transcription) → Groq Llama 3.3
 - **Documents**: PDF (pdf-parse), Excel/XLSX (exceljs), Word/DOCX (mammoth) → text extraction → Groq Llama 3.3
 
-**Document Parsing:**
-- Supported formats: PDF, XLSX, DOCX, TXT, MD, CSV
+**Document Parsing with Cascade Workflow:**
+- Supported formats: PDF, XLSX, DOCX, TXT, MD, CSV, Images (JPG/PNG), Audio (MP3/WAV/WebM)
 - Unsupported: Legacy .doc/.xls (returns friendly 400 with conversion guidance)
 - Token limit: ~6,000 tokens max (truncates with smart paragraph/sentence breaks)
-- Flow: Upload → Extract text → Chunk if large → Inject as Groq context → AI reasons over document + query
-- **Hybrid PDF Parser** (`utils/pdf-handler.js`):
-  - Text extraction: pdf-parse v2 API (PDFParse class with getText())
-  - Table extraction: tabula-js (requires Java runtime, installed)
-  - Result formatted as markdown tables + raw text for AI context
-  - Future: OCR for scanned PDFs, chart/graph vision analysis (requires PDF-to-image pipeline)
-- Module: `utils/document-parser.js`
+
+**Attachment Cascade Logic Gate** (`utils/attachment-cascade.js`):
+- **Step 1**: Identify file type & data structure (PDF, Excel, Word, Image, Audio, Text)
+- **Step 2**: Select extraction pipeline based on file type
+- **Step 3**: Execute cascade (tools ordered by cost tier):
+  - **Tier 0 (FREE_LOCAL)**: pdf-parse, tabula-js, exceljs, mammoth, buffer-text
+  - **Tier 1 (CHEAP_API)**: Groq Whisper (audio transcription, auto-language detection)
+  - **Tier 2 (MODERATE_API)**: Tesseract OCR (future: scanned PDFs)
+  - **Tier 3 (EXPENSIVE_API)**: HuggingFace Vision API (image analysis)
+- **Step 4**: Format extracted data as JSON
+- **Step 5**: Feed JSON to Groq → Groq reasons → Output
+
+**Hybrid PDF Parser** (`utils/pdf-handler.js`):
+- Text extraction: pdf-parse v2 API (PDFParse class with getText())
+- Table extraction: tabula-js (requires Java runtime, installed)
+- Result formatted as markdown tables + raw text for AI context
+- Future: OCR for scanned PDFs, chart/graph vision analysis (requires PDF-to-image pipeline)
+
+- Modules: `utils/attachment-cascade.js`, `utils/document-parser.js`, `utils/pdf-handler.js`
 
 **Isolation Architecture:**
 - Uses separate tokens: `PLAYGROUND_GROQ_TOKEN`, `PLAYGROUND_HF_VISION_TOKEN`, `PLAYGROUND_BRAVE_API`
