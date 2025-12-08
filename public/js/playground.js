@@ -143,6 +143,30 @@ messageInput.addEventListener('keydown', (e) => {
     }
 });
 
+// Paste support for clipboard images (Ctrl+V / Cmd+V)
+document.addEventListener('paste', (e) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imageItem = items.find(item => item.type.startsWith('image/'));
+    
+    if (imageItem) {
+        e.preventDefault();
+        const blob = imageItem.getAsFile();
+        if (!blob) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            currentAttachment = {
+                type: 'photo',
+                data: event.target.result,
+                name: 'pasted-image.png'
+            };
+            attachmentName.textContent = '📷 Pasted image';
+            attachmentPreview.classList.add('visible');
+        };
+        reader.readAsDataURL(blob);
+    }
+});
+
 // Auto-resize textarea based on content
 function autoResizeTextarea() {
     messageInput.style.height = 'auto';

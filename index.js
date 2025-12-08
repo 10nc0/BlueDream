@@ -6316,7 +6316,7 @@ app.post('/api/playground', async (req, res) => {
                 const base64Data = photo.split(',')[1] || photo;
                 
                 const visionResponse = await axios.post(
-                    'https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct',
+                    'https://api-inference.huggingface.co/models/Qwen/Qwen2.5-VL-7B-Instruct',
                     {
                         inputs: { image: base64Data, question: visionPrompt },
                         parameters: {

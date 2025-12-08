@@ -312,7 +312,7 @@ async function analyzeImage(buffer, fileName, options) {
         const base64 = buffer.toString('base64');
         
         const response = await axios.post(
-            'https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct',
+            'https://api-inference.huggingface.co/models/Qwen/Qwen2.5-VL-7B-Instruct',
             {
                 inputs: {
                     image: base64,
