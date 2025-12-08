@@ -1,8 +1,9 @@
 const ACTIVITY_WINDOW_MS = 180 * 60 * 1000; // 180 minutes (3 hours)
 const REFILL_INTERVAL_MS = 60 * 1000; // Minimum interval between refill checks
-const CIRCUIT_BREAKER_WINDOW_MS = 10 * 60 * 1000; // 10 minutes for abuse tracking
-const CIRCUIT_BREAKER_THRESHOLD = 3; // 3 abuse events triggers circuit breaker
-const CIRCUIT_BREAKER_COOLDOWN_MS = 15 * 60 * 1000; // 15 minute cooldown
+const CIRCUIT_BREAKER_WINDOW_MS = 60 * 60 * 1000; // 1 hour for abuse tracking (more forgiving window)
+const CIRCUIT_BREAKER_THRESHOLD = 5; // 5 abuse events triggers circuit breaker
+const CIRCUIT_BREAKER_COOLDOWN_MS = 30 * 60 * 1000; // 30 minute cooldown (longer consequence)
+const FORGIVENESS_WINDOW_MS = 60 * 60 * 1000; // 1 hour of good behavior resets abuse counter
 const MIN_VIABLE_RATE = 2; // Minimum 2 queries/hour even at extreme scale
 
 const SERVICE_CONFIGS = {
@@ -229,27 +230,56 @@ function normalizePrompt(text) {
 }
 
 // Circuit breaker: track abuse events and block persistent abusers
+// Returns { blocked, warning, count } for progressive warnings
 function recordAbuseEvent(ip) {
     const now = Date.now();
     
     if (!circuitBreakers.has(ip)) {
-        circuitBreakers.set(ip, { abuseEvents: [], blockedUntil: 0 });
+        circuitBreakers.set(ip, { abuseEvents: [], blockedUntil: 0, lastAbuse: 0 });
     }
     
     const breaker = circuitBreakers.get(ip);
     
+    // Forgiveness: Reset counter if 1 hour of good behavior since last abuse
+    if (breaker.lastAbuse > 0 && (now - breaker.lastAbuse) > FORGIVENESS_WINDOW_MS) {
+        breaker.abuseEvents = [];
+        console.log(`✨ Forgiveness granted for IP (1 hour of good behavior)`);
+    }
+    
     // Add this abuse event
     breaker.abuseEvents.push(now);
+    breaker.lastAbuse = now;
     
-    // Clean up old events outside the window
+    // Clean up old events outside the window (1 hour)
     breaker.abuseEvents = breaker.abuseEvents.filter(t => now - t < CIRCUIT_BREAKER_WINDOW_MS);
     
-    // If threshold exceeded, activate circuit breaker
-    if (breaker.abuseEvents.length >= CIRCUIT_BREAKER_THRESHOLD) {
+    const count = breaker.abuseEvents.length;
+    
+    // If threshold exceeded (5), activate circuit breaker
+    if (count >= CIRCUIT_BREAKER_THRESHOLD) {
         breaker.blockedUntil = now + CIRCUIT_BREAKER_COOLDOWN_MS;
         breaker.abuseEvents = []; // Reset events after blocking
-        console.log(`🔌 Circuit breaker activated for IP (15 min cooldown)`);
+        console.log(`🔌 Circuit breaker activated for IP (30 min cooldown)`);
+        return { blocked: true, warning: null, count };
     }
+    
+    // Progressive warnings at 3/5 and 4/5
+    if (count === 3) {
+        return { 
+            blocked: false, 
+            warning: `Nyan's ears are twitching~ 2 more and we both need a 30min rest...`, 
+            count 
+        };
+    }
+    if (count === 4) {
+        return { 
+            blocked: false, 
+            warning: `Nyan is getting sleepy~ 1 more and it's 30min dreamtime for both of us...`, 
+            count 
+        };
+    }
+    
+    return { blocked: false, warning: null, count };
 }
 
 function isCircuitBreakerActive(ip) {
@@ -294,11 +324,16 @@ function checkAbuse(ip, prompt) {
     burstTrackers.set(burstKey, recentBursts);
     
     if (recentBursts.length > 5) {
-        recordAbuseEvent(ip); // Track for circuit breaker
+        const abuseResult = recordAbuseEvent(ip);
+        let message = 'Nyan AI needs a moment to catch up~ Please wait 15 seconds.';
+        if (abuseResult.warning) {
+            message += `\n\n⚠️ ${abuseResult.warning}`;
+        }
         return { 
             abusive: true, 
             reason: 'burst',
-            message: 'Nyan AI needs a moment to catch up~ Please wait 15 seconds.'
+            message,
+            abuseCount: abuseResult.count
         };
     }
     
@@ -312,11 +347,16 @@ function checkAbuse(ip, prompt) {
         h.prompt === normalized && (now - h.time) < 60000
     );
     if (recentDuplicate) {
-        recordAbuseEvent(ip); // Track for circuit breaker
+        const abuseResult = recordAbuseEvent(ip);
+        let message = 'Nyan AI already answered this~ Please try a different question or wait a moment.';
+        if (abuseResult.warning) {
+            message += `\n\n⚠️ ${abuseResult.warning}`;
+        }
         return { 
             abusive: true, 
             reason: 'duplicate',
-            message: 'Nyan AI already answered this~ Please try a different question or wait a moment.'
+            message,
+            abuseCount: abuseResult.count
         };
     }
     
@@ -328,11 +368,16 @@ function checkAbuse(ip, prompt) {
     if (prompt && prompt.length > 10) {
         const entropy = calculateEntropy(prompt);
         if (entropy < 2.0) {
-            recordAbuseEvent(ip); // Track for circuit breaker
+            const abuseResult = recordAbuseEvent(ip);
+            let message = 'Nyan AI needs a real question to help you~';
+            if (abuseResult.warning) {
+                message += `\n\n⚠️ ${abuseResult.warning}`;
+            }
             return { 
                 abusive: true, 
                 reason: 'gibberish',
-                message: 'Nyan AI needs a real question to help you~'
+                message,
+                abuseCount: abuseResult.count
             };
         }
     }

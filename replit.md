@@ -76,7 +76,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth` (for local processing)
 
 ## Recent Changes (December 8, 2025)
-- **Circuit Breaker**: Persistent abusers (3+ abuse events in 10 min) get 15-minute cooldown with friendly message: "Nyan AI needs a X minute break~"
+- **Circuit Breaker**: Persistent abusers (5 events in 1 hour) get 30-minute cooldown. Progressive warnings at 3/5 and 4/5 so lockout is never sudden. Forgiveness: 1 hour of good behavior resets abuse counter.
 - **Minimum Viable Floor**: Even at extreme scale (500+ users), everyone gets at least 2 queries/hour guaranteed.
 - **Logarithmic Reputation Growth**: Faster early rewards: ~1.09× at day 1, 1.27× at day 7, 1.44× at day 30 (vs linear 1.07×/1.30×). Reaches 1.5× cap at ~100 days.
 - **Friendly Rate Limit Messages**: No explicit rate disclosure (violates "pocket sovereign" principle). Users rest WITH Nyan via tiered cat-themed messages: catnap (1min), sunbeam rest (3-5min), cozy box (6-10min), sacred rest (11-15min), dreamtime (circuit breaker).
