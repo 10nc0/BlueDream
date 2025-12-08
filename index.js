@@ -6060,6 +6060,18 @@ setInterval(() => {
     }
 }, 10 * 60 * 1000);
 
+// Vision quota tracker (40/day, resets at UTC midnight)
+const visionQuota = { used: 0, resetDate: new Date().toISOString().split('T')[0] };
+function checkVisionQuota() {
+    const today = new Date().toISOString().split('T')[0];
+    if (visionQuota.resetDate !== today) {
+        visionQuota.used = 0;
+        visionQuota.resetDate = today;
+        console.log(`🔄 Vision quota reset for ${today}`);
+    }
+    return visionQuota.used < 40;
+}
+
 // H₀ PROTOCOL: temperature = 0.15 (sweet spot: 0.1 too rigid, 0.2 hallucinates)
 const H0_TEMPERATURE = 0.15;
 
@@ -6470,6 +6482,13 @@ app.post('/api/playground', async (req, res) => {
             for (let i = 0; i < photoList.length; i++) {
                 const photoData = photoList[i];
                 
+                // Skip if vision quota exhausted (40/day, resets UTC midnight)
+                if (!checkVisionQuota()) {
+                    extractedContent.push(`[Photo ${i + 1}]: Skipped - vision quota preserved for tomorrow (UTC midnight reset)`);
+                    console.log(`⏸️ Photo ${i + 1} skipped: vision quota full (${visionQuota.used}/40)`);
+                    continue;
+                }
+                
                 // Preserve original MIME type from data URL
                 let imageUrl = photoData;
                 if (!photoData.startsWith('data:')) {
@@ -6477,6 +6496,7 @@ app.post('/api/playground', async (req, res) => {
                 }
                 
                 try {
+                    visionQuota.used++;
                     const visionResponse = await axios.post(
                         'https://api.groq.com/openai/v1/chat/completions',
                         {
