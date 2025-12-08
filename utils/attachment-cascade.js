@@ -87,13 +87,13 @@ function extractFormulaAndKnownName(text) {
         }
     }
     
-    // Strategy 2: Look for recognized compound names (19 settled-science compounds only)
+    // Strategy 2: Look for recognized compound names (18 settled-science compounds only)
     // Matches CHEMICAL_CONSTANTS - unique formulas with IUPAC names
     if (!knownName) {
-        // Only match the 19 settled-science compounds
+        // Only match the 18 settled-science compounds
         const compoundPatterns = [
             // CANNABINOIDS
-            /\b(THC|tetrahydrocannabinol)\b/i,
+            /\b(THC|tetrahydrocannabinol|Δ9-THC|delta-9-thc)\b/i,
             /\b(CBD|cannabidiol)\b/i,
             /\b(CBG|cannabigerol)\b/i,
             // PHARMACEUTICAL
@@ -124,6 +124,29 @@ function extractFormulaAndKnownName(text) {
             if (match) {
                 knownName = match[1];
                 break;
+            }
+        }
+    }
+    
+    // Strategy 3: Extract from verbose Vision patterns like "appears to represent X" or "appears to be X"
+    // This catches cases where Vision output is structured as sentences
+    if (!knownName) {
+        const verboseExtractionPatterns = [
+            /(?:appears to (?:represent|be|show)|represents?|identified as|likely (?:is|to be)|seems to be|is (?:likely|probably))\s+(?:a\s+)?(?:compound\s+)?(?:called\s+|known as\s+)?([A-Za-z][A-Za-z0-9\-]*(?:[\s\-][A-Za-z0-9\-]+)*?)(?:\s*\(|\s*,|\s*\.|\s*with|\s*compound|\s*molecule|\s*structure|\s+the\b|$)/i,
+            /(?:This|The)\s+(?:compound|structure|molecule)\s+(?:is|appears to be|represents?)\s+([A-Za-z][A-Za-z0-9\-]+(?:\s+[A-Za-z0-9\-]+)*?)(?:\s*\(|\s*,|\s*\.|\s+the\b|$)/i,
+        ];
+        
+        for (const pattern of verboseExtractionPatterns) {
+            const match = text.match(pattern);
+            if (match && match[1]) {
+                let candidate = match[1].trim();
+                // Clean common trailing words
+                candidate = candidate.replace(/\s+(compound|molecule|structure|chemical|with|formula)$/i, '').trim();
+                // Reject single letters or very short strings
+                if (candidate.length > 2 && !/^(a|an|the|this|it)$/i.test(candidate)) {
+                    knownName = candidate;
+                    break;
+                }
             }
         }
     }
