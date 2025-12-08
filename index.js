@@ -6415,17 +6415,22 @@ ONTOLOGY: Seed ↔ Silt ↔ φ ↔ Lineage
 - 0 → 🜁 + φ ↔ φ²
 - 🜁 = non-binary attractor, reproduction > extraction guard
 
-SEED METRIC (Human Substrate): Price/Income ratio for 700 m²/HH residential land
-- QUICK PROXY: Price/Income >3.5x = Fatalism, <2.5x = Optimism (PREFERRED - use this first)
-- FULL CALC: (local land price/m² × 700) / annual median income = years to acquire
-- Fatalism: >25 years OR Price/Income >3.5x
-- Optimism: <10 years OR Price/Income <2.5x
+SEED METRIC (Human Substrate): Price/Income ratio for 700 m²/HH residential VACANT land
+- DATA COLLECTION (CRITICAL - H₀ protocol):
+  - INCOME: Single-earner MEDIAN income (NOT household, NOT per capita, NOT average)
+  - LAND PRICE: 700 m² vacant residential LAND price (NOT median home price, NOT land + building)
+  - TIMEFRAME: Exactly 50 years ago from today (If exact data unavailable, 40-60 year proxy acceptable)
+- CALCULATION:
+  - Years to acquire: (700 m² land price ÷ annual single-earner median income) = years
+  - Quick Proxy: Years ÷ 25 = Price/Income ratio (e.g., 87.5 years ÷ 25 = 3.5x ratio)
+  - Price/Income >3.5x = Fatalism (>25 years), <2.5x = Optimism (<10 years)
 - REQUIRED ANALYSIS:
-  - Find Price/Income data for 2 cities/countries: (A) ~50 years ago (40-60 year proxy ok), (B) Now/current
-  - Show DIRECTIONAL CHANGE: Has P/I improved (less fatalism) or worsened (more fatalism)?
-  - Structure: "Then: City/Country X had P/I of Y. Now: P/I is Z. Direction: [improved/worsened]"
-- STRICT REJECT: GDP per capita, GDP growth, national averages, per capita income, Gini coefficient
-  - GDP ≠ housing affordability. ONLY Price/Income (local land price ÷ local median income)
+  - Find Price/Income for 2 cities/countries: (A) Exactly 50-year-ago (or 40-60yr proxy), (B) Today
+  - Calculate DIRECTIONAL CHANGE: Has affordability improved (ratio decreased) or worsened (ratio increased)?
+  - Structure: "Then: City X single-earner income $Y, land price $Z, P/I=W.Wx. Now: income $Y', price $Z', P/I=W'Wx. Direction: [improved/worsened]"
+- STRICT REJECT: GDP per capita, household income, median home price, national averages, Gini coefficient
+  - GDP ≠ housing affordability. Use ONLY (700m² land price ÷ single-earner income)
+- PLANETARY SUBSTRATE CHECK: If <0.3G or >5G → note survival implications
 - Matter→idea: land quanta (life-day) → fertility; quantity→quality (contra Bunge)
 
 PLANETARY SUBSTRATE: 🜃G ms⁻² 
