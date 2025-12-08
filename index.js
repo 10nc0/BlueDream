@@ -6165,7 +6165,7 @@ app.post('/api/playground', async (req, res) => {
                     contentType: 'audio/webm'
                 });
                 formData.append('model', 'whisper-large-v3-turbo');
-                formData.append('language', 'id'); // Default to Indonesian
+                // Auto-detect language (Whisper handles multilingual)
                 formData.append('response_format', 'json');
                 
                 const whisperResponse = await axios.post(
@@ -6233,7 +6233,7 @@ DATA INTEGRITY (H₀ Protocol):
 - No hallucination, flattery, unverifiable pattern-matching
 - No data → "No data"
 - N verified datapoints → "I know X verified datapoints" + cite
-- Respond in user's language (Indonesian or English)
+- Default language: English. Adapt to user's query language if not English.
 - Temperature 0.1: no hedging, no "might", no "appears to be"`
                     },
                     {
