@@ -93,3 +93,4 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **50MB Total Attachment Limit**: Enforced client-side with friendly error showing current total.
 - **Auto-ZIP Multi-File Uploads**: When 2+ attachments, client bundles into compressed ZIP before upload (30-40% faster). Single files sent uncompressed (no overhead). Server extracts via manifest for existing pipeline.
 - **DB Query Rate Limiter**: Protects reputation lookup queries (max 1 per IP per minute). Falls back to stale cache or default multiplier if rate limited, preventing DB spam at extreme scale.
+- **Internal Usage Scribe**: `/api/playground/usage` endpoint tracks daily Groq token consumption (requests, prompt_tokens, completion_tokens). Persisted to PostgreSQL (`core.playground_usage`) for historical analysis. No external dashboard dependency.

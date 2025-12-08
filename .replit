@@ -1,4 +1,4 @@
-modules = ["python-3.11", "nodejs-20", "postgresql-16", "java-graalvm22.3"]
+modules = ["python-3.11", "nodejs-20", "java-graalvm22.3", "postgresql-16"]
 [agent]
 expertMode = true
 integrations = ["discord:1.0.0", "javascript_openai_ai_integrations:1.0.0", "twilio:1.0.0"]
