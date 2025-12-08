@@ -6477,7 +6477,7 @@ DATA INTEGRITY (H₀ + PROBLEM-SOLVING PROTOCOL):
   * 80% = good proxy used
   * 60% = reasonable estimate
   * <60% = "Insufficient data" (LAST RESORT ONLY)
-- FORMATTING: Minimize line breaks. Use compact format. Avoid excessive whitespace.
+- FORMATTING: Use one line break between paragraphs for readability. Keep each paragraph compact.
 - NEVER say "no data" if reasonable proxy exists
 - ALWAYS calculate Price/Income ratio and years to acquire
 - ALWAYS compare exact 50-year span: BOTH "~50 years ago" AND "today" for EVERY city mentioned
