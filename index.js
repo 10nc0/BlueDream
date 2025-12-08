@@ -6551,9 +6551,7 @@ app.post('/api/playground', async (req, res) => {
                 // Check vision capacity (dynamic sharing among active IPs)
                 const visionCapacity = await capacityManager.consumeToken(clientIp, 'vision');
                 if (!visionCapacity.allowed) {
-                    const replenishMsg = visionCapacity.replenishMinutes 
-                        ? `Nyan AI needs a ${visionCapacity.replenishMinutes} minute break~`
-                        : 'Nyan AI needs a moment to rest~';
+                    const replenishMsg = capacityManager.getNyanRestMessage(visionCapacity.replenishMinutes || 1);
                     extractedContent.push(`[Photo ${i + 1}]: ${replenishMsg}`);
                     console.log(`⏸️ Photo ${i + 1} skipped: capacity exhausted, replenish in ${visionCapacity.replenishMinutes}min`);
                     continue;
@@ -6723,7 +6721,7 @@ app.post('/api/playground', async (req, res) => {
             const replenishMinutes = textCapacity.replenishMinutes || 1;
             console.log(`⏸️ Text generation blocked for ${clientIp}: capacity exhausted, replenish in ${replenishMinutes}min`);
             return res.status(429).json({ 
-                reply: `Nyan AI needs a ${replenishMinutes} minute break before continuing~` 
+                reply: capacityManager.getNyanRestMessage(replenishMinutes)
             });
         }
         

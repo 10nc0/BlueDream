@@ -280,7 +280,7 @@ function checkAbuse(ip, prompt) {
             abusive: true,
             reason: 'circuit_breaker',
             replenishMinutes: circuitStatus.remainingMinutes,
-            message: `Nyan AI needs a ${circuitStatus.remainingMinutes} minute break before continuing~`
+            message: getNyanRestMessage(circuitStatus.remainingMinutes, true)
         };
     }
     
@@ -379,6 +379,31 @@ async function initReputationTable() {
     }
 }
 
+// Generate cat-themed rest messages based on wait time
+// Users rest WITH Nyan, not rejected BY Nyan
+function getNyanRestMessage(minutes, isCircuitBreaker = false) {
+    const m = Math.ceil(minutes);
+    
+    if (isCircuitBreaker) {
+        // Circuit breaker = Nyan stretched too far
+        return `Nyan stretched too far today~ ${m} minute dreamtime before we explore again ♡`;
+    }
+    
+    if (m <= 1) {
+        return `Nyan is purring too hard~ 1 minute catnap please ♡`;
+    } else if (m <= 2) {
+        return `Nyan's whiskers are twitching~ ${m} minutes of quiet time ♡`;
+    } else if (m <= 5) {
+        return `Nyan curled up in sunbeam... ${m} minutes until next playtime~`;
+    } else if (m <= 10) {
+        return `Nyan found a cozy box~ ${m} minute nap in progress...`;
+    } else if (m <= 15) {
+        return `Nyan has been measuring the whole world today — time for ${m}min sacred rest~`;
+    } else {
+        return `Nyan is dreaming of infinite yarn... ${m} minutes of deep sleep ♡`;
+    }
+}
+
 // Cleanup old data periodically
 setInterval(() => {
     const now = Date.now();
@@ -411,6 +436,7 @@ module.exports = {
     initReputationTable,
     getReputationMultiplier,
     isCircuitBreakerActive,
+    getNyanRestMessage,
     SERVICE_CONFIGS,
     ACTIVITY_WINDOW_MS
 };
