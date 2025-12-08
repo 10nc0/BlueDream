@@ -28,10 +28,36 @@ function extractMolecularFormula(text) {
     return null;
 }
 
-// Search DDG for compound name based on molecular formula
-async function identifyCompoundByFormula(formula) {
-    if (!formula) return null;
+// Generate fuzzy formula variations (±1 on H and C to handle Vision counting errors)
+function generateFormulaVariations(formula) {
+    const variations = [formula]; // Start with exact match
     
+    // Parse formula: extract C and H counts
+    const cMatch = formula.match(/C(\d+)/);
+    const hMatch = formula.match(/H(\d+)/);
+    
+    if (cMatch && hMatch) {
+        const cCount = parseInt(cMatch[1]);
+        const hCount = parseInt(hMatch[1]);
+        
+        // Generate ±1 H variations (most common Vision error)
+        if (hCount > 1) {
+            variations.push(formula.replace(/H\d+/, `H${hCount - 1}`));
+        }
+        variations.push(formula.replace(/H\d+/, `H${hCount + 1}`));
+        
+        // Generate ±1 C variations
+        if (cCount > 1) {
+            variations.push(formula.replace(/C\d+/, `C${cCount - 1}`));
+        }
+        variations.push(formula.replace(/C\d+/, `C${cCount + 1}`));
+    }
+    
+    return [...new Set(variations)]; // Remove duplicates
+}
+
+// Search DDG for a single formula
+async function searchDDGForFormula(formula) {
     const query = `${formula} molecule compound name`;
     const params = {
         q: query,
@@ -46,36 +72,105 @@ async function identifyCompoundByFormula(formula) {
         const response = await axios.get(url, { timeout: 5000 });
         const data = response.data;
         
-        // Extract compound name from instant answer
         if (data.AbstractText) {
-            console.log(`🔬 Compound ID: Found info for ${formula}`);
-            // Try to extract specific compound name from the abstract
-            const nameMatch = data.Heading || '';
             return {
-                name: nameMatch,
+                name: data.Heading || '',
                 description: data.AbstractText.substring(0, 300),
-                source: data.AbstractURL || 'DuckDuckGo'
+                source: data.AbstractURL || 'DuckDuckGo',
+                matchedFormula: formula
             };
         }
         
-        // Check related topics for compound names
         if (data.RelatedTopics && data.RelatedTopics.length > 0) {
-            const topic = data.RelatedTopics.find(t => t.Text && t.Text.toLowerCase().includes(formula.toLowerCase()));
+            const topic = data.RelatedTopics.find(t => t.Text);
             if (topic) {
                 return {
                     name: topic.FirstURL ? topic.FirstURL.split('/').pop().replace(/_/g, ' ') : formula,
                     description: topic.Text.substring(0, 300),
-                    source: topic.FirstURL || 'DuckDuckGo'
+                    source: topic.FirstURL || 'DuckDuckGo',
+                    matchedFormula: formula
                 };
             }
         }
         
-        console.log(`🔬 Compound ID: No match found for ${formula}`);
         return null;
     } catch (err) {
-        console.error(`🔬 Compound ID error: ${err.message}`);
+        console.log(`🔬 DDG search error for ${formula}: ${err.message}`);
         return null;
     }
+}
+
+// Search DDG for compound name with fuzzy formula matching
+async function identifyCompoundByFormula(formula, structureDescription = '') {
+    if (!formula) return null;
+    
+    // Try exact formula first, then fuzzy variations
+    const variations = generateFormulaVariations(formula);
+    console.log(`🔬 Compound ID: Trying ${variations.length} formula variations...`);
+    
+    for (let i = 0; i < variations.length; i++) {
+        const variant = variations[i];
+        const result = await searchDDGForFormula(variant);
+        if (result) {
+            // Annotate match type: exact (first variation) vs fuzzy (subsequent)
+            const matchType = (i === 0) ? 'exact' : 'fuzzy';
+            result.matchType = matchType;
+            
+            if (variant !== formula) {
+                console.log(`🔬 Compound ID: Found fuzzy match using ${variant} (original: ${formula})`);
+            } else {
+                console.log(`🔬 Compound ID: Found exact match for ${formula}`);
+            }
+            return result;
+        }
+    }
+    
+    // Fallback: Try structure-based search if we have structural keywords
+    if (structureDescription) {
+        // Extract key structural terms
+        const structureTerms = [];
+        if (/benzene|aromatic/i.test(structureDescription)) structureTerms.push('benzene');
+        if (/pyran/i.test(structureDescription)) structureTerms.push('pyran');
+        if (/cyclohexene|cyclohexane/i.test(structureDescription)) structureTerms.push('cyclohexene');
+        if (/cannabin|thc|tetrahydro/i.test(structureDescription)) structureTerms.push('cannabinoid');
+        if (/pentyl|alkyl chain/i.test(structureDescription)) structureTerms.push('pentyl');
+        if (/hydroxyl|oh group/i.test(structureDescription)) structureTerms.push('hydroxyl');
+        
+        if (structureTerms.length >= 2) {
+            const structureQuery = `${structureTerms.join(' ')} molecule compound`;
+            console.log(`🔬 Compound ID: Trying structure-based search: "${structureQuery}"`);
+            
+            const params = {
+                q: structureQuery,
+                format: 'json',
+                no_html: 1,
+                skip_disambig: 1,
+                t: 'nyanbook'
+            };
+            const url = `https://api.duckduckgo.com/?${querystring.stringify(params)}`;
+            
+            try {
+                const response = await axios.get(url, { timeout: 5000 });
+                const data = response.data;
+                
+                if (data.AbstractText) {
+                    console.log(`🔬 Compound ID: Structure-based match found!`);
+                    return {
+                        name: data.Heading || '',
+                        description: data.AbstractText.substring(0, 300),
+                        source: data.AbstractURL || 'DuckDuckGo',
+                        matchedFormula: formula,
+                        matchType: 'structure-based'
+                    };
+                }
+            } catch (err) {
+                // Ignore structure search errors
+            }
+        }
+    }
+    
+    console.log(`🔬 Compound ID: No match found for ${formula} (tried ${variations.length} variations)`);
+    return null;
 }
 
 // Content-based cache: SHA-256 hash → extraction result
@@ -700,13 +795,14 @@ async function extractPDFVisualContent(buffer, fileName, options = {}) {
         // Check for chemical structures and try to identify compounds
         let compoundInfo = null;
         if (result.chemicalStructures && result.chemicalStructures.length > 0) {
-            // Extract molecular formula from descriptions
+            // Extract molecular formula and structure description from Vision analysis
             const allDescriptions = result.chemicalStructures.map(cs => cs.description).join(' ');
             const formula = extractMolecularFormula(allDescriptions);
             
             if (formula) {
                 console.log(`🧪 Detected molecular formula: ${formula}`);
-                compoundInfo = await identifyCompoundByFormula(formula);
+                // Pass structure description for fallback search if formula variations fail
+                compoundInfo = await identifyCompoundByFormula(formula, allDescriptions);
             }
         }
         
