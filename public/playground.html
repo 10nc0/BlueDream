@@ -431,11 +431,12 @@
         }
         
         .welcome .features {
-            display: flex;
-            gap: 1rem;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
             justify-content: center;
-            flex-wrap: wrap;
-            margin-top: 1.5rem;
+            max-width: 280px;
+            margin: 1.5rem auto 0;
         }
         
         .welcome .feature {
@@ -534,14 +535,13 @@
             
             /* Horizontal mode bubbles - scale to screen */
             .welcome .features { 
-                flex-direction: row;
-                flex-wrap: nowrap;
-                justify-content: stretch;
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
                 gap: 0.5rem;
-                width: 100%;
+                max-width: 240px;
+                margin: 1rem auto 0;
             }
             .welcome .feature {
-                flex: 1;
                 min-width: 0;
                 padding: 0.75rem 0.5rem;
             }
@@ -625,15 +625,19 @@
                 <div class="features">
                     <div class="feature">
                         <div class="feature-icon">💬</div>
-                        <div class="feature-label">Text Chat</div>
+                        <div class="feature-label">Text</div>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon">📸</div>
+                        <div class="feature-label">Photo</div>
                     </div>
                     <div class="feature">
                         <div class="feature-icon">📎</div>
-                        <div class="feature-label">File Upload</div>
+                        <div class="feature-label">Attachment</div>
                     </div>
                     <div class="feature">
                         <div class="feature-icon">🔊</div>
-                        <div class="feature-label">Audio Transcription</div>
+                        <div class="feature-label">Audio</div>
                     </div>
                 </div>
             </div>
