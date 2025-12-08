@@ -23,25 +23,17 @@ args = "Nyanbook"
 name = "Nyanbook"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "node index.js"
 waitForPort = 5000
 
-[workflows.workflow.metadata]
-outputType = "webview"
-
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 34233
-externalPort = 3001
-
-[[ports]]
-localPort = 38893
-externalPort = 3000
 
 [deployment]
 deploymentTarget = "autoscale"

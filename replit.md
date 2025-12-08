@@ -67,6 +67,17 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **H₀ + Problem-Solving Protocol**: Temperature 0.15, confidence-based extrapolation, strict citation, and zero hallucination.
 - **Isolation Architecture**: Uses separate API tokens for playground to prevent abuse and isolate vision rate limits.
 
+## Recent Changes (December 9, 2025)
+- **Chemistry Verbose Phrase Fix**: Fixed bug where AI vision returning "- The compound appears to be" was incorrectly used as compound name
+  - Added leading punctuation/bullet stripping before verbose pattern detection
+  - Expanded verbose patterns to include "appears to", "seems to", "compound appears"
+  - Added extra safety check in DDG Query 3 to skip invalid compound names
+- **Autoscale Deployment Fix**: Fixed health endpoint for Autoscale deployments
+  - Added 30-second startup grace period where health returns 200 during initialization
+  - After startup, returns 503 if DB connection fails (honest health reporting)
+  - Added 2-second timeout for DB checks to prevent blocking health responses
+  - Cleaned up extra port mappings (only 5000→80 now, as required by Autoscale)
+
 ## Recent Changes (December 8, 2025)
 - **Wikipedia Extraction Enhanced**: Removed `exintro: 1` parameter and bumped `exchars` from 2000 to 5000 characters
   - Now captures full harm-reduction data: uses, metabolism, side effects, abuse potential, toxicity, and lethal doses

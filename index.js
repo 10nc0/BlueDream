@@ -189,38 +189,66 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false // Required for iframe embedding
 }));
 
+// Track startup phase for health checks (30s grace period for Autoscale)
+const serverStartTime = Date.now();
+const STARTUP_GRACE_PERIOD_MS = 30000;
+
 app.get('/health', async (req, res) => {
+    const isStartupPhase = (Date.now() - serverStartTime) < STARTUP_GRACE_PERIOD_MS;
+    
     try {
-        // Test DB connection with quick query
-        const result = await pool.query('SELECT 1 as health');
+        // Quick timeout for DB check - don't block health response
+        const dbCheck = await Promise.race([
+            pool.query('SELECT 1 as health').then(() => 'connected').catch(() => 'unavailable'),
+            new Promise(resolve => setTimeout(() => resolve('timeout'), 2000))
+        ]);
         
-        // Get pool stats
         const poolStats = {
-            total: pool.totalCount,
-            idle: pool.idleCount,
-            waiting: pool.waitingCount,
-            max: pool.options.max
+            total: pool.totalCount || 0,
+            idle: pool.idleCount || 0,
+            waiting: pool.waitingCount || 0,
+            max: pool.options?.max || 20
         };
         
-        res.json({
-            status: 'healthy',
-            message: 'Nyan breathes φ — Server alive',
-            database: 'connected',
-            pool: poolStats,
-            timestamp: new Date().toISOString()
-        });
+        const isDbHealthy = dbCheck === 'connected';
+        
+        // During startup: always return 200 (Autoscale needs time for DB init)
+        // After startup: return 503 if DB is down
+        if (isDbHealthy || isStartupPhase) {
+            res.json({
+                status: isDbHealthy ? 'healthy' : 'starting',
+                message: 'Nyan breathes φ — Server alive',
+                database: dbCheck,
+                pool: poolStats,
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            res.status(503).json({
+                status: 'unhealthy',
+                message: 'Database connection failed',
+                database: dbCheck,
+                pool: poolStats,
+                timestamp: new Date().toISOString()
+            });
+        }
     } catch (err) {
-        res.status(500).json({
-            status: 'unhealthy',
-            message: 'DB connection failed',
-            error: err.message,
-            pool: {
-                total: pool.totalCount,
-                idle: pool.idleCount,
-                waiting: pool.waitingCount,
-                max: pool.options.max
-            }
-        });
+        // During startup: return 200 to allow initialization
+        // After startup: return 503 for real failures
+        if (isStartupPhase) {
+            res.json({
+                status: 'starting',
+                message: 'Server initializing',
+                database: 'initializing',
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            res.status(503).json({
+                status: 'unhealthy',
+                message: 'Health check failed',
+                error: err.message,
+                timestamp: new Date().toISOString()
+            });
+        }
     }
 });
 
