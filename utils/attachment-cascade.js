@@ -336,20 +336,58 @@ async function extractWordText(buffer) {
 async function extractWordImages(buffer, options = {}) {
     try {
         const images = [];
-        const result = await mammoth.convertToHtml({
-            buffer,
-            convertImage: mammoth.images.imgElement(async function(image) {
-                const imageBuffer = await image.read();
-                const base64 = imageBuffer.toString('base64');
-                const contentType = image.contentType || 'image/png';
-                images.push({
-                    base64,
-                    contentType,
-                    size: imageBuffer.length
+        
+        try {
+            const result = await mammoth.convertToHtml({
+                buffer,
+                convertImage: mammoth.images.imgElement(async function(image) {
+                    const imageBuffer = await image.read();
+                    const base64 = imageBuffer.toString('base64');
+                    const contentType = image.contentType || 'image/png';
+                    images.push({
+                        base64,
+                        contentType,
+                        size: imageBuffer.length
+                    });
+                    return { src: `data:${contentType};base64,${base64}` };
+                })
+            });
+        } catch (mammothErr) {
+            console.log(`⚠️ Mammoth convertToHtml failed: ${mammothErr.message}`);
+        }
+        
+        if (images.length === 0) {
+            console.log('🔍 Mammoth found no images, trying direct DOCX media extraction...');
+            const JSZip = require('jszip');
+            const zip = await JSZip.loadAsync(buffer);
+            
+            const mediaFolder = zip.folder('word/media');
+            if (mediaFolder) {
+                const mediaFiles = [];
+                mediaFolder.forEach((relativePath, file) => {
+                    if (!file.dir) {
+                        mediaFiles.push({ path: relativePath, file });
+                    }
                 });
-                return { src: `data:${contentType};base64,${base64}` };
-            })
-        });
+                
+                for (const { path, file } of mediaFiles) {
+                    const ext = path.toLowerCase().split('.').pop();
+                    const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'wmf', 'emf'];
+                    if (imageExts.includes(ext)) {
+                        const imgBuffer = await file.async('nodebuffer');
+                        const base64 = imgBuffer.toString('base64');
+                        const contentType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+                        images.push({
+                            base64,
+                            contentType,
+                            size: imgBuffer.length,
+                            source: 'docx-media-folder'
+                        });
+                        console.log(`📷 Extracted from word/media: ${path} (${imgBuffer.length} bytes)`);
+                    }
+                }
+            }
+        }
         
         if (images.length === 0) {
             return { success: false, error: 'No embedded images found in document' };
