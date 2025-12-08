@@ -6119,13 +6119,16 @@ app.post('/api/playground', async (req, res) => {
             ? history.filter(msg => msg && typeof msg === 'object' && msg.role && msg.content)
             : [];
         
-        // DDG PRE-GROQ: Search for context if query-like (contains ?, apa, how, what, when, where, why)
+        // DDG PRE-GROQ: Always search for real-time context to overcome 2023 knowledge cutoff
         let ddgContext = null;
-        if (message && /[\?]|apa|how|what|when|where|why|who/i.test(message)) {
-            console.log(`🔍 Playground: DDG search triggered for query: "${message.substring(0, 50)}..."`);
+        if (message) {
+            console.log(`🔍 Playground: DDG search for real-time context: "${message.substring(0, 50)}..."`);
             ddgContext = await searchDuckDuckGo(message);
             if (ddgContext) {
                 finalPrompt = `Context from web search:\n${ddgContext}\n\nUser query: ${message}`;
+                console.log(`✅ DDG context injected into prompt for knowledge augmentation`);
+            } else {
+                console.log(`ℹ️ DDG: No results - using Groq's base knowledge (cutoff: Dec 2023)`);
             }
         }
         
