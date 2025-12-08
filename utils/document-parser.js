@@ -1,4 +1,4 @@
-const pdfParse = require('pdf-parse');
+const pdf = require('pdf-parse');
 const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
 
@@ -41,7 +41,7 @@ async function extractTextFromDocument(base64Data, fileName) {
 }
 
 async function extractPDF(buffer) {
-    const data = await pdfParse(buffer);
+    const data = await pdf(buffer);
     return data.text || '';
 }
 
