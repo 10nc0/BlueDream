@@ -3498,30 +3498,60 @@ body.desktop-mode .thumbs-zone {
     50% { opacity: 0.4; }
 }
 
-/* ===== RESPONSIVE HEADER SQUEEZE: Progressive Element Hiding =====
+/* ===== RESPONSIVE HEADER SQUEEZE: Smooth Progressive Element Hiding =====
    Desktop (1200px+): All elements visible
-   Tablet (1000px-1199px): Hide user info
-   Mobile (768px-999px): Hide user info + title
-   Compact (480px-767px): Hide user info + title + date/time
+   Tablet (1000px-1199px): Hide user info gradually
+   Mobile (768px-999px): Hide title section
+   Compact (<768px): Mobile mode handles layout via body.mobile-mode
+   
+   Smooth Transition Strategy:
+   - Use opacity + transition for non-abrupt disappearance
+   - Coordinate with mobile-mode CSS which activates at <768px
+   - Ensure no layout shifts as elements hide
 */
 
-/* Tablet: Hide user info when width shrinks */
+/* Smooth transitions for all elements */
+#userInfo,
+#headerTitle,
+#dateTimeDefault {
+    transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+}
+
+/* Tablet: Fade out user info (1200px → 1199px) */
 @media (max-width: 1199px) {
     #userInfo {
-        display: none !important;
+        opacity: 0;
+        visibility: hidden;
+        width: 0;
+        overflow: hidden;
     }
 }
 
-/* Tablet-to-Mobile transition: Hide title section */
+/* Tablet-to-Mobile: Fade out title section (1000px → 999px) */
 @media (max-width: 999px) {
     #headerTitle {
-        display: none !important;
+        opacity: 0;
+        visibility: hidden;
+        width: 0;
+        overflow: hidden;
     }
 }
 
-/* Mobile: Hide date/time for more space */
+/* Desktop-to-Compact: Fade out date/time BEFORE mobile mode (768px → 767px) */
 @media (max-width: 767px) {
     #dateTimeDefault {
-        display: none !important;
+        opacity: 0;
+        visibility: hidden;
+        display: none;
     }
+}
+
+/* Smooth transition coordination: Mobile mode at <768px overrides with grid layout */
+/* Ensure 🧠 AI button stays visible on mobile */
+body.mobile-mode #aiPlaygroundBtn {
+    display: flex !important;
+    height: 32px;
+    padding: 0.25rem 0.5rem !important;
+    font-size: 0.7rem !important;
+    flex-shrink: 0;
 }
