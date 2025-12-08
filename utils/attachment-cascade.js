@@ -573,8 +573,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
                             action: 'query',
                             titles: cleanWikiName,
                             prop: 'extracts|info',
-                            exchars: 2000,           // Up to 2000 chars
-                            exintro: 1,              // First section only (before TOC)
+                            exchars: 5000,           // Up to 5000 chars (full article for harm-reduction coverage)
                             explaintext: 1,          // Plain text, no HTML
                             inprop: 'url',           // Include page URL
                             format: 'json',
@@ -598,7 +597,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
                         wikipediaContext = {
                             title: page.title,
                             description: '', // Action API doesn't return description
-                            extract: page.extract, // Full intro section (up to 2000 chars)
+                            extract: page.extract, // Full article content (up to 5000 chars - includes uses, side effects, abuse potential)
                             source: page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, '_'))}`,
                             type: 'standard'
                         };
