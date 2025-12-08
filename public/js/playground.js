@@ -158,7 +158,7 @@ function handleFileSelect(e) {
             data: event.target.result,
             name: file.name
         };
-        attachmentName.textContent = `${currentAttachment.type === 'photo' ? '📷' : '🎤'} ${file.name}`;
+        attachmentName.textContent = `${currentAttachment.type === 'photo' ? '📷' : '🔊'} ${file.name}`;
         attachmentPreview.classList.add('visible');
     };
     reader.readAsDataURL(file);
@@ -203,7 +203,7 @@ function addMessage(role, content, attachment = null) {
     }
     
     if (attachment) {
-        const icon = attachment.type === 'photo' ? '📷' : attachment.type === 'audio' ? '🎤' : '📄';
+        const icon = attachment.type === 'photo' ? '📷' : attachment.type === 'audio' ? '🔊' : '📄';
         html += `<div class="attachment">${icon} ${attachment.name}</div>`;
     }
     
