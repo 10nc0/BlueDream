@@ -80,10 +80,12 @@ function extractFormulaAndKnownName(text) {
         let candidate = knownAsMatch[1].trim();
         // Clean up trailing words like "compound", "molecule", etc.
         candidate = candidate.replace(/\s+(compound|molecule|structure|chemical|acid|analog|derivative)$/i, '').trim();
+        // Strip leading punctuation/bullets before checking verbose patterns (fixes "- The compound appears to be")
+        const cleanedCandidate = candidate.replace(/^[\-\*\•\·\>\s]+/, '').trim();
         // Reject verbose phrases that aren't actual compound names
-        const verbosePatterns = /^(the\s+(compound|structure|molecule)|this|it|appears|seems|likely|possibly|probably)/i;
-        if (candidate && candidate.toLowerCase() !== 'unknown' && candidate.length > 1 && !verbosePatterns.test(candidate)) {
-            knownName = candidate;
+        const verbosePatterns = /^(the\s+(compound|structure|molecule)|this|it|appears\s+to|seems\s+to|likely|possibly|probably|compound\s+appears)/i;
+        if (cleanedCandidate && cleanedCandidate.toLowerCase() !== 'unknown' && cleanedCandidate.length > 1 && !verbosePatterns.test(cleanedCandidate)) {
+            knownName = cleanedCandidate;
         }
     }
     
@@ -482,9 +484,19 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
     
     // Query 3: Direct compound name search (highest success rate with DDG)
     if (knownCompoundName) {
-        // Clean compound name
-        const cleanName = knownCompoundName.replace(/[^\w\s-]/g, '').trim();
+        // Clean compound name - strip leading punctuation/bullets
+        let cleanName = knownCompoundName.replace(/^[\-\*\•\·\>\s]+/, '').replace(/[^\w\s-]/g, '').trim();
         
+        // Extra safety: reject verbose phrases that slipped through extraction
+        const verboseCheck = /^(the\s+(compound|structure|molecule)|this|it|appears\s+to|seems\s+to|likely|possibly|probably|compound\s+appears)/i;
+        if (verboseCheck.test(cleanName)) {
+            console.log(`🔬 DDG Query 3: Skipped - verbose phrase detected: "${cleanName}"`);
+            cleanName = null;
+        }
+        
+        if (!cleanName) {
+            // Skip Query 3 if no valid compound name
+        } else {
         // Map common abbreviations to full chemical names for better DDG results
         const chemicalNameMap = {
             'thc': 'tetrahydrocannabinol',
@@ -548,6 +560,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         });
         
         promises.push(compoundPromise.then(r => { results.compoundContext = r; }));
+        }
     }
     
     // Wait for all queries in parallel
