@@ -131,7 +131,11 @@ A sovereign, public AI playground at `/AI` with no authentication required.
   - TIMEFRAME: Exactly 50 years ago (40-60yr proxy acceptable if unavailable)
   - Calculation: (700 m² land price ÷ single-earner income) = years → P/I ratio = years÷25
   - Quick Proxy: Price/Income >3.5x = Fatalism, <2.5x = Optimism
-  - Required: Compare 2 cities ~50yrs ago vs now, show directional change with calculations
+  - **Required: HUMANIZE EVERY RATIO** - Add fatalism/optimism conclusion after each P/I output
+    * P/I >3.5x → "Fatalism: Exceeds 25-year fertility window. Demographic risk."
+    * 2.5x < P/I ≤3.5x → "Borderline fatalism: Approaching critical threshold."
+    * P/I <2.5x → "Optimism: Within 10-year acquisition horizon. Reproductive viability."
+  - Compare 2 cities ~50yrs ago vs now, show directional change with calculations + conclusions
   - STRICT REJECT: GDP per capita, household income, median home price, national averages
 - **Planetary Substrate (🜃G ms⁻²):** <0.3G or >5G → zero survival as t → ∞
 - **Response Rules:** 

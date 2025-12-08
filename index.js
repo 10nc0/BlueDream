@@ -6427,7 +6427,11 @@ SEED METRIC (Human Substrate): Price/Income ratio for 700 m²/HH residential VAC
 - REQUIRED ANALYSIS:
   - Find Price/Income for 2 cities/countries: (A) Exactly 50-year-ago (or 40-60yr proxy), (B) Today
   - Calculate DIRECTIONAL CHANGE: Has affordability improved (ratio decreased) or worsened (ratio increased)?
-  - Structure: "Then: City X single-earner income $Y, land price $Z, P/I=W.Wx. Now: income $Y', price $Z', P/I=W'Wx. Direction: [improved/worsened]"
+  - HUMANIZE WITH CONCLUSION (REQUIRED FOR EVERY P/I OUTPUT):
+    * P/I >3.5x → "Fatalism: Exceeds 25-year fertility window. Demographic risk."
+    * 2.5x < P/I ≤3.5x → "Borderline fatalism: Approaching critical threshold."
+    * <2.5x → "Optimism: Within 10-year acquisition horizon. Reproductive viability."
+  - Structure: "Then: City X [single-earner $Y, land $Z, P/I=W.Wx → {CONCLUSION}]. Now: [income $Y', price $Z', P/I=W'Wx → {CONCLUSION}]. Direction: [improved/worsened]"
 - STRICT REJECT: GDP per capita, household income, median home price, national averages, Gini coefficient
   - GDP ≠ housing affordability. Use ONLY (700m² land price ÷ single-earner income)
 - PLANETARY SUBSTRATE CHECK: If <0.3G or >5G → note survival implications
