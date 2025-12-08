@@ -245,16 +245,38 @@ async function analyzePageWithGroqVision(imageBase64, pageNum, GROQ_TOKEN) {
                         content: [
                             {
                                 type: 'text',
-                                text: `Page ${pageNum}: Analyze this PDF page in detail. For any chemical structures:
-- Molecular formula: Count EVERY atom carefully. Count carbon atoms (C), hydrogen (H), oxygen (O), nitrogen (N), etc. separately.
-- Fused ring systems: Identify all ring types (benzene, furan, pyran, quinoline, indole, etc.) and count atoms in each ring.
-- Functional groups: OH, NH, C=O, C=C, ethers, esters, etc.
-- Stereochemistry: Wedge/dash bonds, double bond geometry
-- Reaction schemes: reactants, products, arrows
-- Charts/graphs: axes labels, data points, trends
-- Tables: headers and row data
-- Diagrams: flowcharts, schematics, illustrations
-For molecular formulas: List as "CxHyOz..." with exact counts. Double-check by summing atoms visually.`
+                                text: `Page ${pageNum}: Detailed chemical structure analysis. CRITICAL ATOM COUNTING RULES:
+
+=== MOLECULAR FORMULA (Most Important) ===
+Count EVERY atom separately. Final formula: "CxHyOzNw..." with exact counts.
+
+FUSED RING SYSTEMS - KEY RULE:
+- At ring fusion points, carbons are SHARED - count them ONCE, not twice
+- Example: Naphthalene (2 fused benzene): 10 unique carbons (not 6+6=12)
+- Example: THC (benzene + cyclohexene + pyran fused): Count shared carbons at junction once
+- Tricyclic: If 3 rings share carbons, mark fusion points and count unique carbons only
+
+STEP-BY-STEP ATOM COUNTING:
+1. Identify all rings and their fusion points
+2. Mark each unique carbon vertex (don't double-count)
+3. Count hydrogens: Each unsubstituted carbon has H (valence rule)
+4. Identify heteroatoms (O, N, S) and their substitution pattern
+5. Sum: Total C + Total H + Total O + Total N... = Formula
+
+RING IDENTIFICATION:
+- Benzene (6C aromatic)
+- Pyran (5C + 1O heterocycle)
+- Furan/Thiophene (4C + 1X heterocycle)
+- Cyclohexane/Cyclohexene (6C saturated/unsaturated)
+- Cyclopentanone (5C + 1O ketone ring)
+- Quinoline/Isoquinoline (bicyclic aromatic)
+
+FUNCTIONAL GROUPS: OH, NH, C=O, C=C, ethers, esters, alkyl chains
+STEREOCHEMISTRY: Wedge/dash bonds, double bond cis/trans
+CHARTS/GRAPHS: axes, legend, data points
+TABLES: Headers and row data
+
+VERIFICATION: After counting, verify by recount. If complex tricyclic, explain ring fusion clearly.`
                             },
                             {
                                 type: 'image_url',
