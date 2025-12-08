@@ -4,6 +4,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { AsyncLocalStorage } = require('async_hooks');
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -133,6 +134,34 @@ function noCacheHeaders(res) {
     res.set('Expires', '0');
 }
 
+// REQUEST CONTEXT: AsyncLocalStorage for request-scoped data (no global console patching)
+const requestContext = new AsyncLocalStorage();
+
+// Get current request ID (returns empty string if not in request context)
+function getRequestId() {
+    const store = requestContext.getStore();
+    return store?.requestId || '';
+}
+
+// Request-aware logging helper (only prefixes when in request context)
+function rlog(...args) {
+    const reqId = getRequestId();
+    if (reqId) {
+        console.log(`[${reqId}]`, ...args);
+    } else {
+        console.log(...args);
+    }
+}
+
+function rerror(...args) {
+    const reqId = getRequestId();
+    if (reqId) {
+        console.error(`[${reqId}]`, ...args);
+    } else {
+        console.error(...args);
+    }
+}
+
 const app = express();
 
 // Make pool available to middleware
@@ -235,24 +264,14 @@ app.use(bodyParser.json({ limit: '10mb' })); // Increased for image uploads
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' })); // For Twilio webhooks
 
 // REQUEST ID MIDDLEWARE: Add unique ID to every request for tracing
+// Uses AsyncLocalStorage for proper request-scoped context (no global console patching)
 app.use((req, res, next) => {
     req.requestId = crypto.randomUUID();
     res.setHeader('X-Request-ID', req.requestId);
-    // Add request ID to all logs via console patching
-    const originalLog = console.log;
-    const originalError = console.error;
-    console.log = function(...args) {
-        originalLog(`[${req.requestId}]`, ...args);
-    };
-    console.error = function(...args) {
-        originalError(`[${req.requestId}]`, ...args);
-    };
-    // Restore original console after request
-    res.on('finish', () => {
-        console.log = originalLog;
-        console.error = originalError;
+    // Run the rest of the request in context with requestId
+    requestContext.run({ requestId: req.requestId }, () => {
+        next();
     });
-    next();
 });
 
 // PostgreSQL session store with explicit schema to prevent search_path pollution
