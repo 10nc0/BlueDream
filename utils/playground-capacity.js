@@ -18,6 +18,7 @@ const promptHistory = new Map();
 const burstTrackers = new Map();
 const ipReputation = new Map(); // In-memory cache for reputation data
 const circuitBreakers = new Map(); // IP → { abuseEvents: [timestamps], blockedUntil: timestamp }
+const dbQueryLimiter = new Map(); // IP → last DB query timestamp (rate limit DB queries)
 
 let exemptIPs = new Set(['127.0.0.1', '::1']);
 let dbPool = null; // Database pool reference for reputation persistence
@@ -61,6 +62,7 @@ async function getReputationMultiplier(ip) {
     const cached = ipReputation.get(ip);
     const now = Date.now();
     
+    // Check in-memory cache first (5 minutes)
     if (cached && (now - cached.cachedAt) < 300000) {
         return cached.multiplier;
     }
@@ -69,7 +71,16 @@ async function getReputationMultiplier(ip) {
         return 1.0;
     }
     
+    // Rate limit DB queries: max 1 per IP per minute
+    const lastQuery = dbQueryLimiter.get(ip);
+    if (lastQuery && (now - lastQuery) < 60000) {
+        // Query rate limited, use stale cache if available
+        return cached?.multiplier || 1.0;
+    }
+    
     try {
+        dbQueryLimiter.set(ip, now); // Record this query attempt
+        
         const result = await dbPool.query(
             `SELECT first_seen FROM core.playground_reputation WHERE ip_hash = $1`,
             [hashIP(ip)]
