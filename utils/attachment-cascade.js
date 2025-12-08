@@ -538,6 +538,87 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
     };
 }
 
+// ===== UNIFIED CHEMISTRY PIPELINE =====
+// Topic-based processing: works for ANY document format with visual content
+async function processChemistryContent(visionObservations) {
+    // visionObservations: array of {description, contentType, ...}
+    // Returns: { compoundInfo, chemistryEnrichment, enrichedText }
+    
+    if (!visionObservations || visionObservations.length === 0) {
+        return null;
+    }
+    
+    // Filter to only chemical content
+    const chemicalObservations = visionObservations.filter(obs => 
+        obs.contentType === 'chemical' || 
+        /chemical|molecule|compound|formula|structure/i.test(obs.description || '')
+    );
+    
+    if (chemicalObservations.length === 0) {
+        return null;
+    }
+    
+    console.log(`🧪 Chemistry Pipeline: Processing ${chemicalObservations.length} chemical observation(s)`);
+    
+    // Combine all descriptions for extraction
+    const allDescriptions = chemicalObservations.map(obs => obs.description || '').join('\n\n');
+    
+    // Extract formula and compound name
+    const { formula, knownName } = extractFormulaAndKnownName(allDescriptions);
+    
+    if (!formula && !knownName) {
+        console.log(`🧪 Chemistry Pipeline: No formula or compound name detected`);
+        return null;
+    }
+    
+    console.log(`🧪 Chemistry Pipeline: Formula=${formula || 'unknown'}, Name=${knownName || 'unknown'}`);
+    
+    // Run DDG enrichment
+    const chemistryEnrichment = await enrichChemistryContext(formula, allDescriptions, knownName);
+    
+    // Determine final compound info
+    let compoundInfo = null;
+    if (chemistryEnrichment.verifiedCompound) {
+        compoundInfo = chemistryEnrichment.verifiedCompound;
+        console.log(`🔬 Chemistry Pipeline: DDG verified → ${compoundInfo.name}`);
+    } else if (knownName) {
+        compoundInfo = {
+            name: knownName,
+            description: `Identified by Groq Vision with formula ${formula || 'unknown'}`,
+            source: 'Groq Vision',
+            matchedFormula: formula,
+            matchType: 'groq-known'
+        };
+        console.log(`🔬 Chemistry Pipeline: Groq identified → ${knownName}`);
+    }
+    
+    // Build enriched text section
+    let enrichedText = '';
+    
+    if (compoundInfo && compoundInfo.name) {
+        enrichedText += `\n\n### 🔬 Compound Identification:\n**Name:** ${compoundInfo.name}`;
+        if (compoundInfo.canonicalFormula) {
+            enrichedText += `\n**Formula:** ${compoundInfo.canonicalFormula}`;
+        } else if (formula) {
+            enrichedText += `\n**Formula:** ${formula}`;
+        }
+        enrichedText += `\n**Source:** ${compoundInfo.source}`;
+    }
+    
+    // Add DDG context
+    if (chemistryEnrichment.contextText) {
+        enrichedText += chemistryEnrichment.contextText;
+    }
+    
+    return {
+        compoundInfo,
+        chemistryEnrichment,
+        enrichedText,
+        formula,
+        knownName
+    };
+}
+
 // Content-based cache: SHA-256 hash → extraction result
 const extractionCache = new Map();
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
@@ -1066,38 +1147,7 @@ Be specific and technical. This is for scientific document analysis.`
         return { success: false, error: 'No images could be analyzed' };
     }
     
-    // Check for chemical structures and apply DDG enrichment
-    const chemicalStructures = visualDescriptions.filter(vc => vc.contentType === 'chemical');
-    let compoundInfo = null;
-    let chemistryEnrichment = null;
-    
-    if (chemicalStructures.length > 0) {
-        const allDescriptions = chemicalStructures.map(cs => cs.description).join(' ');
-        const { formula, knownName } = extractFormulaAndKnownName(allDescriptions);
-        
-        if (formula || knownName) {
-            console.log(`🧪 Detected molecular formula: ${formula || 'unknown'}${knownName ? ` (Known as: ${knownName})` : ''}`);
-            
-            // Run DDG enrichment for chemistry queries - pass compound name for Query 3
-            chemistryEnrichment = await enrichChemistryContext(formula, allDescriptions, knownName);
-            
-            if (chemistryEnrichment.verifiedCompound) {
-                compoundInfo = chemistryEnrichment.verifiedCompound;
-                console.log(`🔬 Compound identified via DDG: ${compoundInfo.name}`);
-            } else if (knownName) {
-                // Fall back to Groq's identification if DDG didn't find it
-                compoundInfo = {
-                    name: knownName,
-                    description: `Identified by Groq Vision with formula ${formula}`,
-                    source: 'Groq Vision',
-                    matchedFormula: formula,
-                    matchType: 'groq-known'
-                };
-                console.log(`🔬 Compound identified via Groq: ${knownName}`);
-            }
-        }
-    }
-    
+    // Format visual descriptions
     const formattedVisuals = visualDescriptions.map(vc => {
         const typeLabel = vc.contentType === 'chemical' ? '🧪 Chemical Structure' :
                           vc.contentType === 'chart' ? '📊 Chart/Graph' :
@@ -1105,27 +1155,18 @@ Be specific and technical. This is for scientific document analysis.`
         return `**Image ${vc.index} (${typeLabel}):**\n${vc.description}`;
     }).join('\n\n');
     
-    // Add compound identification section
-    let compoundSection = '';
-    if (compoundInfo && compoundInfo.name) {
-        compoundSection = `\n\n### 🔬 Compound Identification:\n**Name:** ${compoundInfo.name}`;
-        if (compoundInfo.canonicalFormula) {
-            compoundSection += `\n**Formula:** ${compoundInfo.canonicalFormula}`;
-        }
-        compoundSection += `\n**Source:** ${compoundInfo.source}`;
-    }
-    
-    // Add DDG enrichment context
-    const enrichmentSection = chemistryEnrichment?.contextText || '';
+    // Use unified chemistry pipeline (topic-based, not format-based)
+    const chemistryResult = await processChemistryContent(visualDescriptions);
+    const chemicalStructures = visualDescriptions.filter(vc => vc.contentType === 'chemical');
     
     return {
         success: true,
         data: {
-            text: `\n### Visual Content Analysis:\n${formattedVisuals}${compoundSection}${enrichmentSection}`,
+            text: `\n### Visual Content Analysis:\n${formattedVisuals}${chemistryResult?.enrichedText || ''}`,
             visualContent: visualDescriptions,
             chemicalStructures: chemicalStructures,
-            compoundInfo: compoundInfo,
-            chemistryEnrichment: chemistryEnrichment,
+            compoundInfo: chemistryResult?.compoundInfo || null,
+            chemistryEnrichment: chemistryResult?.chemistryEnrichment || null,
             type: 'doc-vision'
         }
     };
@@ -1217,37 +1258,6 @@ async function extractPDFVisualContent(buffer, fileName, options = {}) {
             return { success: false, error: result.error || 'No visual content extracted' };
         }
         
-        // Check for chemical structures and apply DDG enrichment
-        let compoundInfo = null;
-        let chemistryEnrichment = null;
-        
-        if (result.chemicalStructures && result.chemicalStructures.length > 0) {
-            const allDescriptions = result.chemicalStructures.map(cs => cs.description).join(' ');
-            const { formula, knownName } = extractFormulaAndKnownName(allDescriptions);
-            
-            if (formula || knownName) {
-                console.log(`🧪 Detected molecular formula: ${formula || 'unknown'}${knownName ? ` (Known as: ${knownName})` : ''}`);
-                
-                // Run DDG enrichment for chemistry queries - pass compound name for Query 3
-                chemistryEnrichment = await enrichChemistryContext(formula, allDescriptions, knownName);
-                
-                if (chemistryEnrichment.verifiedCompound) {
-                    compoundInfo = chemistryEnrichment.verifiedCompound;
-                    console.log(`🔬 Compound identified via DDG: ${compoundInfo.name}`);
-                } else if (knownName) {
-                    // Fall back to Groq's identification if DDG didn't find it
-                    compoundInfo = {
-                        name: knownName,
-                        description: `Identified by Groq Vision with formula ${formula}`,
-                        source: 'Groq Vision',
-                        matchedFormula: formula,
-                        matchType: 'groq-known'
-                    };
-                    console.log(`🔬 Compound identified via Groq: ${knownName}`);
-                }
-            }
-        }
-        
         // Format visual content for merging with text extraction
         const visualDescriptions = result.visualContent.map(vc => {
             const typeLabel = vc.contentType === 'chemical' ? '🧪 Chemical Structure' :
@@ -1256,29 +1266,19 @@ async function extractPDFVisualContent(buffer, fileName, options = {}) {
             return `**Page ${vc.page} (${typeLabel}):**\n${vc.description}`;
         }).join('\n\n');
         
-        // Add compound identification section
-        let compoundSection = '';
-        if (compoundInfo && compoundInfo.name) {
-            compoundSection = `\n\n### 🔬 Compound Identification:\n**Name:** ${compoundInfo.name}`;
-            if (compoundInfo.canonicalFormula) {
-                compoundSection += `\n**Formula:** ${compoundInfo.canonicalFormula}`;
-            }
-            compoundSection += `\n**Source:** ${compoundInfo.source}`;
-        }
-        
-        // Add DDG enrichment context
-        const enrichmentSection = chemistryEnrichment?.contextText || '';
+        // Use unified chemistry pipeline (topic-based, not format-based)
+        const chemistryResult = await processChemistryContent(result.visualContent);
         
         return { 
             success: true, 
             data: { 
-                text: `\n### Visual Content Analysis:\n${visualDescriptions}${compoundSection}${enrichmentSection}`,
+                text: `\n### Visual Content Analysis:\n${visualDescriptions}${chemistryResult?.enrichedText || ''}`,
                 visualContent: result.visualContent,
                 charts: result.charts,
                 chemicalStructures: result.chemicalStructures,
                 diagrams: result.diagrams,
-                compoundInfo: compoundInfo,
-                chemistryEnrichment: chemistryEnrichment,
+                compoundInfo: chemistryResult?.compoundInfo || null,
+                chemistryEnrichment: chemistryResult?.chemistryEnrichment || null,
                 type: 'pdf-vision'
             }
         };

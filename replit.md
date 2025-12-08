@@ -89,7 +89,9 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
   - `groq-known`: Groq Vision identified + DDG fallback
   - `exact`, `verified-ddg`, `structure-based`, `fuzzy`: Progressive fallback stages
 - **Word/PPT Vision Prompt Update**: Now matches PDF Vision - asks for "Molecular Formula:" and "Known as:" fields
-- **Unified Chemistry Pipeline**: Both `extractPDFVisualContent` and `analyzeDocumentVisuals` now use same DDG enrichment pattern
+- **Unified Chemistry Pipeline**: Topic-based `processChemistryContent()` function handles ALL chemistry enrichment regardless of document format (PDF, DOCX, PPTX). Single source of truth eliminates code duplication and ensures consistent behavior.
+- **Smart Compound Name Expansion**: DDG Query 3 now expands abbreviations to full chemical names (THC → tetrahydrocannabinol) for better DDG Instant Answer results.
+- **Multi-Strategy Compound Extraction**: 3 extraction strategies for compound names: (1) "Known as:" regex, (2) 30+ common compound patterns, (3) "similar to X" pattern matching.
 - **Request ID Middleware**: Every HTTP request gets a unique UUID logged at request middleware level. All console logs automatically prefixed with `[request-id]` for easy tracing and debugging. X-Request-ID header returned in responses.
 - **Externalized System Prompts**: NYAN Protocol (1000+ lines) moved from hardcoded inline string to `prompts/nyan-protocol.js`. Cleaner code, easier iteration on prompt tuning, maintains full functionality.
 - **Centralized Constants**: Created `config/constants.js` with all magic numbers grouped by category: TIMEOUTS, CAPACITY, CACHE, SESSION, DISCORD, AI_MODELS, GROQ_RETRY, REPUTATION, FILE_UPLOAD, MISC. Single source of truth for tuning database timeouts, rate limits, cache settings, etc.
