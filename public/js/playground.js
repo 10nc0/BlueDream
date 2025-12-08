@@ -92,20 +92,24 @@ documentInput.addEventListener('change', handleFileSelect);
 
 removeAttachment.addEventListener('click', clearAttachment);
 
-// ===== DRAG & DROP =====
-inputContainer.addEventListener('dragover', (e) => {
+// ===== DRAG & DROP (FULL PAGE) =====
+// Listen for drag over entire document
+document.addEventListener('dragover', (e) => {
     e.preventDefault();
     e.stopPropagation();
     inputContainer.classList.add('drag-over');
 });
 
-inputContainer.addEventListener('dragleave', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    inputContainer.classList.remove('drag-over');
+// Remove visual feedback when dragging leaves the page
+document.addEventListener('dragleave', (e) => {
+    // Only remove if we're leaving the document entirely
+    if (e.clientX === 0 && e.clientY === 0) {
+        inputContainer.classList.remove('drag-over');
+    }
 });
 
-inputContainer.addEventListener('drop', (e) => {
+// Handle file drop anywhere on the page
+document.addEventListener('drop', (e) => {
     e.preventDefault();
     e.stopPropagation();
     inputContainer.classList.remove('drag-over');
