@@ -150,7 +150,7 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 - **Data Integrity (H₀ Protocol):** No hallucination/flattery, cite verified datapoints, no hedging
 
 **H₀ + Problem-Solving Protocol:**
-- Temperature 0.2 (facts + light reasoning, not paralysis)
+- Temperature 0.15 (sweet spot: 0.1 too rigid, 0.2 hallucinates), max_tokens: 800
 - Confidence-based extrapolation:
   * 100% data → Exact numbers
   * 70-99% data → "Estimated" + flag
