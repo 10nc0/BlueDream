@@ -1,5 +1,9 @@
 const ACTIVITY_WINDOW_MS = 180 * 60 * 1000; // 180 minutes (3 hours)
 const REFILL_INTERVAL_MS = 60 * 1000; // Minimum interval between refill checks
+const CIRCUIT_BREAKER_WINDOW_MS = 10 * 60 * 1000; // 10 minutes for abuse tracking
+const CIRCUIT_BREAKER_THRESHOLD = 3; // 3 abuse events triggers circuit breaker
+const CIRCUIT_BREAKER_COOLDOWN_MS = 15 * 60 * 1000; // 15 minute cooldown
+const MIN_VIABLE_RATE = 2; // Minimum 2 queries/hour even at extreme scale
 
 const SERVICE_CONFIGS = {
     text: { poolPerHour: 240, costMultiplier: 1 },
@@ -12,6 +16,7 @@ const ipBuckets = new Map();
 const promptHistory = new Map();
 const burstTrackers = new Map();
 const ipReputation = new Map(); // In-memory cache for reputation data
+const circuitBreakers = new Map(); // IP → { abuseEvents: [timestamps], blockedUntil: timestamp }
 
 let exemptIPs = new Set(['127.0.0.1', '::1']);
 let dbPool = null; // Database pool reference for reputation persistence
@@ -82,7 +87,10 @@ async function getReputationMultiplier(ip) {
         }
         
         const daysSinceStart = (now - new Date(firstSeen).getTime()) / (24 * 60 * 60 * 1000);
-        const multiplier = Math.min(1.5, 1.0 + daysSinceStart * 0.01);
+        
+        // Logarithmic growth: faster early rewards, caps at 1.5×
+        // Day 1: ~1.09×, Day 7: ~1.27×, Day 30: ~1.44×, Day 100: 1.5× (cap)
+        const multiplier = Math.min(1.5, 1.0 + Math.log10(daysSinceStart + 1) * 0.3);
         
         ipReputation.set(ip, { multiplier, cachedAt: now });
         
@@ -98,12 +106,18 @@ function hashIP(ip) {
     return crypto.createHash('sha256').update(ip + '_nyan_salt_v1').digest('hex').substring(0, 32);
 }
 
-function calculateShare(poolPerHour, activeCount) {
+function calculateShare(poolPerHour, activeCount, costMultiplier = 1) {
     const evenShare = poolPerHour / activeCount;
+    // Minimum viable floor accounts for cost multiplier
+    // e.g., vision (3× cost) needs 6 tokens/hr to guarantee 2 queries/hr
+    const minFloor = MIN_VIABLE_RATE * costMultiplier;
+    
     if (activeCount <= 10) {
-        return Math.max(evenShare, poolPerHour * 0.1);
+        // For small user counts, guarantee at least 10% of pool
+        return Math.max(evenShare, poolPerHour * 0.1, minFloor);
     }
-    return evenShare;
+    // At extreme scale, guarantee minimum viable rate (2 queries/hr adjusted for cost)
+    return Math.max(evenShare, minFloor);
 }
 
 function getIPBucket(ip, serviceType) {
@@ -111,7 +125,7 @@ function getIPBucket(ip, serviceType) {
     if (!ipBuckets.has(key)) {
         const config = SERVICE_CONFIGS[serviceType];
         const activeCount = getActiveIPCount();
-        const tokensPerIP = calculateShare(config.poolPerHour, activeCount);
+        const tokensPerIP = calculateShare(config.poolPerHour, activeCount, config.costMultiplier);
         ipBuckets.set(key, {
             tokens: tokensPerIP,
             maxTokens: tokensPerIP * 2,
@@ -132,7 +146,7 @@ function refillBuckets() {
         
         if (minutesElapsed >= 0.1) {
             const config = SERVICE_CONFIGS[bucket.serviceType];
-            const sharePerHour = calculateShare(config.poolPerHour, activeCount);
+            const sharePerHour = calculateShare(config.poolPerHour, activeCount, config.costMultiplier);
             const refillAmount = (sharePerHour / 60) * minutesElapsed;
             const maxForUser = sharePerHour * 2;
             
@@ -141,6 +155,20 @@ function refillBuckets() {
             bucket.lastRefill = now;
         }
     }
+}
+
+// Calculate minutes until next token is available
+function calculateReplenishmentTime(bucket, config, reputationMultiplier) {
+    const activeCount = getActiveIPCount();
+    const sharePerHour = calculateShare(config.poolPerHour, activeCount, config.costMultiplier);
+    const refillRatePerMinute = sharePerHour / 60;
+    const effectiveCost = config.costMultiplier / reputationMultiplier;
+    const tokensNeeded = effectiveCost - bucket.tokens;
+    
+    if (tokensNeeded <= 0) return 0;
+    
+    const minutesNeeded = Math.ceil(tokensNeeded / refillRatePerMinute);
+    return Math.max(1, minutesNeeded); // At least 1 minute
 }
 
 async function consumeToken(ip, serviceType) {
@@ -168,12 +196,16 @@ async function consumeToken(ip, serviceType) {
         };
     }
     
+    // Calculate replenishment time for friendly message
+    const replenishMinutes = calculateReplenishmentTime(bucket, config, reputationMultiplier);
     const activeCount = getActiveIPCount();
+    
     return { 
         allowed: false, 
         remaining: 0,
         activeUsers: activeCount,
-        reason: `${serviceType} capacity exhausted. ${activeCount} active users sharing pool.`
+        replenishMinutes,
+        reason: `capacity_exhausted`
     };
 }
 
@@ -196,12 +228,61 @@ function normalizePrompt(text) {
     return (text || '').toLowerCase().replace(/\s+/g, ' ').trim().substring(0, 200);
 }
 
+// Circuit breaker: track abuse events and block persistent abusers
+function recordAbuseEvent(ip) {
+    const now = Date.now();
+    
+    if (!circuitBreakers.has(ip)) {
+        circuitBreakers.set(ip, { abuseEvents: [], blockedUntil: 0 });
+    }
+    
+    const breaker = circuitBreakers.get(ip);
+    
+    // Add this abuse event
+    breaker.abuseEvents.push(now);
+    
+    // Clean up old events outside the window
+    breaker.abuseEvents = breaker.abuseEvents.filter(t => now - t < CIRCUIT_BREAKER_WINDOW_MS);
+    
+    // If threshold exceeded, activate circuit breaker
+    if (breaker.abuseEvents.length >= CIRCUIT_BREAKER_THRESHOLD) {
+        breaker.blockedUntil = now + CIRCUIT_BREAKER_COOLDOWN_MS;
+        breaker.abuseEvents = []; // Reset events after blocking
+        console.log(`🔌 Circuit breaker activated for IP (15 min cooldown)`);
+    }
+}
+
+function isCircuitBreakerActive(ip) {
+    const breaker = circuitBreakers.get(ip);
+    if (!breaker) return { active: false };
+    
+    const now = Date.now();
+    if (breaker.blockedUntil > now) {
+        const remainingMs = breaker.blockedUntil - now;
+        const remainingMinutes = Math.ceil(remainingMs / 60000);
+        return { active: true, remainingMinutes };
+    }
+    
+    return { active: false };
+}
+
 function checkAbuse(ip, prompt) {
     if (isExempt(ip)) {
         return { abusive: false, exempt: true };
     }
     
     const now = Date.now();
+    
+    // Check circuit breaker first
+    const circuitStatus = isCircuitBreakerActive(ip);
+    if (circuitStatus.active) {
+        return {
+            abusive: true,
+            reason: 'circuit_breaker',
+            replenishMinutes: circuitStatus.remainingMinutes,
+            message: `Nyan AI needs a ${circuitStatus.remainingMinutes} minute break before continuing~`
+        };
+    }
     
     const burstKey = ip;
     if (!burstTrackers.has(burstKey)) {
@@ -213,10 +294,11 @@ function checkAbuse(ip, prompt) {
     burstTrackers.set(burstKey, recentBursts);
     
     if (recentBursts.length > 5) {
+        recordAbuseEvent(ip); // Track for circuit breaker
         return { 
             abusive: true, 
             reason: 'burst',
-            message: 'Too many requests. Please wait 15 seconds.'
+            message: 'Nyan AI needs a moment to catch up~ Please wait 15 seconds.'
         };
     }
     
@@ -230,10 +312,11 @@ function checkAbuse(ip, prompt) {
         h.prompt === normalized && (now - h.time) < 60000
     );
     if (recentDuplicate) {
+        recordAbuseEvent(ip); // Track for circuit breaker
         return { 
             abusive: true, 
             reason: 'duplicate',
-            message: 'Identical query sent recently. Please wait or try a different question.'
+            message: 'Nyan AI already answered this~ Please try a different question or wait a moment.'
         };
     }
     
@@ -245,10 +328,11 @@ function checkAbuse(ip, prompt) {
     if (prompt && prompt.length > 10) {
         const entropy = calculateEntropy(prompt);
         if (entropy < 2.0) {
+            recordAbuseEvent(ip); // Track for circuit breaker
             return { 
                 abusive: true, 
                 reason: 'gibberish',
-                message: 'Query appears to be invalid. Please enter a meaningful question.'
+                message: 'Nyan AI needs a real question to help you~'
             };
         }
     }
@@ -261,7 +345,7 @@ function getCapacityStatus() {
     const status = {};
     
     for (const [type, config] of Object.entries(SERVICE_CONFIGS)) {
-        const tokensPerUser = calculateShare(config.poolPerHour, activeCount);
+        const tokensPerUser = calculateShare(config.poolPerHour, activeCount, config.costMultiplier);
         status[type] = {
             poolPerHour: config.poolPerHour,
             activeUsers: activeCount,
@@ -295,6 +379,7 @@ async function initReputationTable() {
     }
 }
 
+// Cleanup old data periodically
 setInterval(() => {
     const now = Date.now();
     for (const [ip, lastSeen] of activeIPs.entries()) {
@@ -303,6 +388,13 @@ setInterval(() => {
             ipBuckets.delete(ip);
             promptHistory.delete(ip);
             burstTrackers.delete(ip);
+        }
+    }
+    
+    // Clean up expired circuit breakers
+    for (const [ip, breaker] of circuitBreakers.entries()) {
+        if (breaker.blockedUntil < now && breaker.abuseEvents.length === 0) {
+            circuitBreakers.delete(ip);
         }
     }
 }, 5 * 60 * 1000);
@@ -318,6 +410,7 @@ module.exports = {
     isExempt,
     initReputationTable,
     getReputationMultiplier,
+    isCircuitBreakerActive,
     SERVICE_CONFIGS,
     ACTIVITY_WINDOW_MS
 };

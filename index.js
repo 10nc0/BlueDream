@@ -6551,8 +6551,11 @@ app.post('/api/playground', async (req, res) => {
                 // Check vision capacity (dynamic sharing among active IPs)
                 const visionCapacity = await capacityManager.consumeToken(clientIp, 'vision');
                 if (!visionCapacity.allowed) {
-                    extractedContent.push(`[Photo ${i + 1}]: Skipped - ${visionCapacity.reason}`);
-                    console.log(`⏸️ Photo ${i + 1} skipped: ${visionCapacity.reason}`);
+                    const replenishMsg = visionCapacity.replenishMinutes 
+                        ? `Nyan AI needs a ${visionCapacity.replenishMinutes} minute break~`
+                        : 'Nyan AI needs a moment to rest~';
+                    extractedContent.push(`[Photo ${i + 1}]: ${replenishMsg}`);
+                    console.log(`⏸️ Photo ${i + 1} skipped: capacity exhausted, replenish in ${visionCapacity.replenishMinutes}min`);
                     continue;
                 }
                 
@@ -6717,9 +6720,10 @@ app.post('/api/playground', async (req, res) => {
         // Check text capacity (dynamic sharing among active IPs)
         const textCapacity = await capacityManager.consumeToken(clientIp, 'text');
         if (!textCapacity.allowed) {
-            console.log(`⏸️ Text generation blocked for ${clientIp}: ${textCapacity.reason}`);
+            const replenishMinutes = textCapacity.replenishMinutes || 1;
+            console.log(`⏸️ Text generation blocked for ${clientIp}: capacity exhausted, replenish in ${replenishMinutes}min`);
             return res.status(429).json({ 
-                reply: `Text generation paused - ${textCapacity.reason}. Please try again later.` 
+                reply: `Nyan AI needs a ${replenishMinutes} minute break before continuing~` 
             });
         }
         
