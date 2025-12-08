@@ -185,7 +185,22 @@ function addMessage(role, content, attachment = null) {
     msgEl.className = `message ${role}`;
     
     let html = `<div class="label">${role === 'user' ? 'You' : 'AI'}</div>`;
-    html += `<div class="content">${escapeHtml(content)}</div>`;
+    
+    // Render markdown for AI responses, plain text for user
+    if (role === 'assistant' && typeof marked !== 'undefined') {
+        try {
+            const renderedMarkdown = marked.parse(content, {
+                breaks: true,
+                gfm: true
+            });
+            html += `<div class="content">${renderedMarkdown}</div>`;
+        } catch (err) {
+            console.error('Markdown parse error:', err);
+            html += `<div class="content">${escapeHtml(content)}</div>`;
+        }
+    } else {
+        html += `<div class="content">${escapeHtml(content)}</div>`;
+    }
     
     if (attachment) {
         const icon = attachment.type === 'photo' ? '📷' : attachment.type === 'audio' ? '🎤' : '📄';
