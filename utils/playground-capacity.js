@@ -380,27 +380,27 @@ async function initReputationTable() {
 }
 
 // Generate cat-themed rest messages based on wait time
-// Users rest WITH Nyan, not rejected BY Nyan
+// Users rest WITH Nyan, AND take care of their health (stretch, move, eye rest)
 function getNyanRestMessage(minutes, isCircuitBreaker = false) {
     const m = Math.ceil(minutes);
     
     if (isCircuitBreaker) {
-        // Circuit breaker = Nyan stretched too far
-        return `Nyan stretched too far today~ ${m} minute dreamtime before we explore again ♡`;
+        // Circuit breaker = Nyan stretched too far (and user did too)
+        return `Nyan stretched too far today~ ${m} minute dreamtime before we explore again ♡\n\n💪 Stretch with me: Stand up, roll your shoulders, look away from screen for a moment...`;
     }
     
     if (m <= 1) {
-        return `Nyan is purring too hard~ 1 minute catnap please ♡`;
+        return `Nyan is purring too hard~ 1 minute catnap please ♡\n\n👀 Blink & look away: Give your eyes a break — gaze somewhere far away~`;
     } else if (m <= 2) {
-        return `Nyan's whiskers are twitching~ ${m} minutes of quiet time ♡`;
+        return `Nyan's whiskers are twitching~ ${m} minutes of quiet time ♡\n\n💪 Stretch those arms & shoulders — Nyan is doing the same~`;
     } else if (m <= 5) {
-        return `Nyan curled up in sunbeam... ${m} minutes until next playtime~`;
+        return `Nyan curled up in sunbeam... ${m} minutes until next playtime~\n\n🌿 Step away from the screen: Walk around, get some water, let your eyes rest like Nyan does~`;
     } else if (m <= 10) {
-        return `Nyan found a cozy box~ ${m} minute nap in progress...`;
+        return `Nyan found a cozy box~ ${m} minute nap in progress...\n\n💪 Time to stretch: Stand, walk, roll your neck & wrists. Your body needs movement like Nyan needs naps~`;
     } else if (m <= 15) {
-        return `Nyan has been measuring the whole world today — time for ${m}min sacred rest~`;
+        return `Nyan has been measuring the whole world today — time for ${m}min sacred rest~\n\n👀 Your eyes matter too: Step outside if you can, look at distant objects, let your screen-tired eyes recover~`;
     } else {
-        return `Nyan is dreaming of infinite yarn... ${m} minutes of deep sleep ♡`;
+        return `Nyan is dreaming of infinite yarn... ${m} minutes of deep sleep ♡\n\n💪 Real talk: Use this time to truly rest. Stand up, stretch, hydrate, rest your eyes. We'll be here when you come back~`;
     }
 }
 
