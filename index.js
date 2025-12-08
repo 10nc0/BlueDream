@@ -1,4 +1,5 @@
 const axios = require('axios');
+const querystring = require('querystring');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -6048,6 +6049,38 @@ setInterval(() => {
 // H₀ PROTOCOL: temperature = 0.1 (no creativity, only facts)
 const H0_TEMPERATURE = 0.1;
 
+// ===== DUCKDUCKGO SEARCH FUNCTION =====
+async function searchDuckDuckGo(query) {
+    const params = {
+        q: query,
+        format: 'json',
+        no_html: 1,
+        skip_disambig: 1
+    };
+    const url = `https://api.duckduckgo.com/?${querystring.stringify(params)}`;
+    
+    try {
+        const response = await axios.get(url, { timeout: 5000 });
+        const data = response.data;
+        
+        // Extract instant answer + top 3 related topics
+        const context = [];
+        if (data.AbstractText) {
+            context.push(`Search Result: ${data.AbstractText}`);
+        }
+        if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+            data.RelatedTopics.slice(0, 3).forEach(topic => {
+                if (topic.Text) context.push(`• ${topic.Text}`);
+            });
+        }
+        
+        return context.length > 0 ? context.join('\n') : null;
+    } catch (err) {
+        console.error('🔍 DDG search error:', err.message);
+        return null;
+    }
+}
+
 app.post('/api/playground', async (req, res) => {
     const clientIp = req.ip || req.connection.remoteAddress;
     
@@ -6073,6 +6106,16 @@ app.post('/api/playground', async (req, res) => {
         const conversationHistory = Array.isArray(history) 
             ? history.filter(msg => msg && typeof msg === 'object' && msg.role && msg.content)
             : [];
+        
+        // DDG PRE-GROQ: Search for context if query-like (contains ?, apa, how, what, when, where, why)
+        let ddgContext = null;
+        if (message && /[\?]|apa|how|what|when|where|why|who/i.test(message)) {
+            console.log(`🔍 Playground: DDG search triggered for query: "${message.substring(0, 50)}..."`);
+            ddgContext = await searchDuckDuckGo(message);
+            if (ddgContext) {
+                finalPrompt = `Context from web search:\n${ddgContext}\n\nUser query: ${message}`;
+            }
+        }
         
         // File size limits (base64 encoded)
         if (photo) {
