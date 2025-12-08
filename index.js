@@ -637,6 +637,34 @@ async function initializeDatabase() {
     }
 }
 
+// Initialize playground usage table for internal scribe (token tracking)
+async function initUsageTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS core.playground_usage (
+                id SERIAL PRIMARY KEY,
+                date DATE NOT NULL,
+                service_type TEXT NOT NULL,
+                requests INTEGER DEFAULT 0,
+                prompt_tokens INTEGER DEFAULT 0,
+                completion_tokens INTEGER DEFAULT 0,
+                total_tokens INTEGER DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(date, service_type)
+            )
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_playground_usage_date ON core.playground_usage(date)
+        `);
+        
+        console.log('✅ Playground usage table ready');
+    } catch (error) {
+        console.error('⚠️ Failed to create usage table:', error.message);
+    }
+}
+
 // WEBHOOK-CENTRIC ARCHITECTURE: Dual-output delivery (Book #01 + Book #0n)
 // Output #01: Nyanbook Ledger (eternal, masked, Dev #01 only) via output_01_url
 // Output #0n: User Discord (mutable, visible, Admin #0n only) via output_0n_url
@@ -6020,6 +6048,9 @@ const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN ||
 // Dynamic capacity manager with adaptive rate limiting
 const capacityManager = require('./utils/playground-capacity');
 
+// Usage tracking for internal scribe (token consumption visibility)
+const usageTracker = require('./utils/playground-usage');
+
 // Initialize exempt IPs from environment
 const RATE_LIMIT_EXEMPT_IPS = [
     '127.0.0.1',
@@ -6030,11 +6061,18 @@ capacityManager.setExemptIPs(RATE_LIMIT_EXEMPT_IPS);
 console.log(`🛡️ Capacity exempt IPs: ${RATE_LIMIT_EXEMPT_IPS.length} configured`);
 
 // Exponential backoff retry for Groq 429 (rate limit)
-async function groqWithRetry(axiosConfig, maxRetries = 3) {
+async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') {
     let lastError;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            return await axios.post(axiosConfig.url, axiosConfig.data, axiosConfig.config);
+            const response = await axios.post(axiosConfig.url, axiosConfig.data, axiosConfig.config);
+            
+            // Record usage from successful response
+            if (response.data?.usage) {
+                usageTracker.recordUsage(serviceType, response.data.usage);
+            }
+            
+            return response;
         } catch (error) {
             lastError = error;
             
@@ -6347,6 +6385,17 @@ async function searchBrave(query, clientIp = null) {
     }
 }
 
+// Internal scribe: Token usage visibility (no auth required - dev tool)
+app.get('/api/playground/usage', (req, res) => {
+    try {
+        const stats = usageTracker.getAllUsageStats();
+        res.json(stats);
+    } catch (error) {
+        console.error('❌ Usage stats error:', error.message);
+        res.status(500).json({ error: 'Failed to get usage stats' });
+    }
+});
+
 app.post('/api/playground', async (req, res) => {
     const clientIp = req.ip || req.connection.remoteAddress;
     
@@ -6632,7 +6681,7 @@ app.post('/api/playground', async (req, res) => {
                             },
                             timeout: 30000
                         }
-                    }, 2);
+                    }, 2, 'vision');
                     
                     const photoDescription = visionResponse.data.choices?.[0]?.message?.content || 'Unable to analyze image';
                     extractedContent.push(`[Photo ${i + 1}]: ${photoDescription}`);
@@ -6894,7 +6943,7 @@ End with 🔥 nyan~`
                 },
                 timeout: 15000
             }
-        });
+        }, 3, 'text');
         
         let reply = groqResponse.data.choices[0]?.message?.content || 'No response generated.';
         
@@ -6966,6 +7015,11 @@ app.listen(PORT, '0.0.0.0', async () => {
     // Initialize capacity manager with database for reputation persistence
     capacityManager.setDbPool(pool);
     await capacityManager.initReputationTable();
+    
+    // Initialize usage tracker with database for persistence
+    usageTracker.setDbPool(pool);
+    await initUsageTable();
+    await usageTracker.loadTodayUsageFromDb();
     
     // Server is now ready for requests
     console.log('✅ Multi-tenant NyanBook~ ready');
