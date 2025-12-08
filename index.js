@@ -6021,7 +6021,19 @@ const playgroundRateLimits = new Map();
 const PLAYGROUND_RATE_LIMIT = 50;
 const PLAYGROUND_RATE_WINDOW = 60 * 60 * 1000; // 1 hour
 
+// Dev/admin IPs exempt from internal rate limiting
+const RATE_LIMIT_EXEMPT_IPS = new Set([
+    '127.0.0.1',
+    '::1',
+    '10.83.9.13'  // Dev tenant 01 internal IP
+]);
+
 function checkPlaygroundRateLimit(ip) {
+    // Exempt dev/admin IPs from internal rate limiting
+    if (RATE_LIMIT_EXEMPT_IPS.has(ip)) {
+        return true;
+    }
+    
     const now = Date.now();
     const record = playgroundRateLimits.get(ip);
     
