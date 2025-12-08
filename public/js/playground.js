@@ -143,38 +143,6 @@ messageInput.addEventListener('keydown', (e) => {
     }
 });
 
-// Handle clipboard paste for images
-document.addEventListener('paste', (e) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    
-    for (const item of items) {
-        if (item.type.startsWith('image/')) {
-            e.preventDefault();
-            const file = item.getAsFile();
-            if (!file) return;
-            
-            if (file.size > 5 * 1024 * 1024) {
-                showError('Image too large. Maximum size is 5MB.');
-                return;
-            }
-            
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                currentAttachment = {
-                    type: 'photo',
-                    data: event.target.result,
-                    name: `pasted-image-${Date.now()}.png`
-                };
-                attachmentName.textContent = `📷 ${currentAttachment.name}`;
-                attachmentPreview.classList.add('visible');
-            };
-            reader.readAsDataURL(file);
-            break;
-        }
-    }
-});
-
 // Auto-resize textarea based on content
 function autoResizeTextarea() {
     messageInput.style.height = 'auto';

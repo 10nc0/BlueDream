@@ -105,14 +105,9 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 
 **Multimodal Support:**
 - **Text**: Groq Llama 3.3 70B Versatile (0.8s response)
-- **Photo**: Groq Llama 4 Scout 17B (direct vision analysis, OCR, image understanding)
+- **Photo**: HuggingFace Qwen2-VL-7B-Instruct (Indonesian OCR) → Groq Llama 3.3
 - **Audio**: Groq Whisper-large-v3-turbo (Indonesian transcription) → Groq Llama 3.3
 - **Documents**: PDF (pdf-parse), Excel/XLSX (exceljs), Word/DOCX (mammoth) → text extraction → Groq Llama 3.3
-
-**Image Input Methods:**
-- Drag & drop images onto the playground
-- Click attachment button to select file
-- Paste from clipboard (Ctrl+V / Cmd+V)
 
 **Document Parsing with Cascade Workflow:**
 - Supported formats: PDF, XLSX, DOCX, TXT, MD, CSV, Images (JPG/PNG), Audio (MP3/WAV/WebM)
@@ -124,14 +119,11 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 - **Step 2**: Select extraction pipeline based on file type
 - **Step 3**: Execute cascade (tools ordered by cost tier):
   - **Tier 0 (FREE_LOCAL)**: pdf-parse, tabula-js, exceljs, mammoth, buffer-text
-  - **Tier 1 (CHEAP_API)**: Groq Whisper (audio transcription), Groq Llama 4 Scout (vision)
+  - **Tier 1 (CHEAP_API)**: Groq Whisper (audio transcription, auto-language detection)
   - **Tier 2 (MODERATE_API)**: Tesseract OCR (future: scanned PDFs)
+  - **Tier 3 (EXPENSIVE_API)**: HuggingFace Vision API (image analysis)
 - **Step 4**: Format extracted data as JSON
 - **Step 5**: Feed JSON to Groq → Groq reasons → Output
-
-**Vision Quota Management:**
-- Daily cap: 40 photos/day (resets at UTC midnight)
-- Graceful degradation when quota exhausted (text + search still available)
 
 **Hybrid PDF Parser** (`utils/pdf-handler.js`):
 - Text extraction: pdf-parse v2 API (PDFParse class with getText())
@@ -142,10 +134,10 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 - Modules: `utils/attachment-cascade.js`, `utils/document-parser.js`, `utils/pdf-handler.js`
 
 **Isolation Architecture:**
-- Uses separate tokens: `PLAYGROUND_GROQ_TOKEN` (text + vision), `PLAYGROUND_BRAVE_API` (search fallback)
-- All multimodal processing (text, vision, audio) now unified on Groq
+- Uses separate tokens: `PLAYGROUND_GROQ_TOKEN`, `PLAYGROUND_HF_VISION_TOKEN`, `PLAYGROUND_BRAVE_API`
 - Prevents abuse from affecting production Prometheus system
-- 50 requests/hour per IP rate limiting, 40 photos/day global cap
+- Can disable/rate-limit playground without impacting core app
+- 50 requests/hour per IP rate limiting
 
 **Search Cascade (Real-time Knowledge):**
 - **Step 0**: Query Extraction - Groq extracts core question + auto-appends "vs 50 years ago" for NYAN protocol queries

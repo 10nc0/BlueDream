@@ -6293,15 +6293,15 @@ app.post('/api/playground', async (req, res) => {
             }
         }
         
-        // Photo analysis via Groq Llama 3.2 Vision
+        // Photo analysis via HuggingFace Qwen2-VL
         if (photo) {
-            if (!PLAYGROUND_GROQ_TOKEN) {
+            if (!PLAYGROUND_HF_VISION_TOKEN) {
                 return res.status(503).json({ 
                     reply: 'Photo analysis is not configured. Please try text only.' 
                 });
             }
             
-            // Check vision daily quota (40/day, UTC midnight reset)
+            // Check HF Vision daily quota (40/day, UTC midnight reset)
             const quotaCheck = checkHfVisionQuota();
             if (!quotaCheck.allowed) {
                 return res.json({ 
@@ -6310,68 +6310,47 @@ app.post('/api/playground', async (req, res) => {
             }
             
             console.log(`🎮 Playground: Analyzing photo for ${clientIp}`);
+            const visionPrompt = 'Extract all text exactly. Describe image factually. No interpretation, only observations.';
             
             try {
                 const base64Data = photo.split(',')[1] || photo;
                 
-                // Detect image type from data URL or default to jpeg
-                let mimeType = 'image/jpeg';
-                if (photo.startsWith('data:')) {
-                    const mimeMatch = photo.match(/data:([^;]+);/);
-                    if (mimeMatch) mimeType = mimeMatch[1];
-                }
-                
                 const visionResponse = await axios.post(
-                    'https://api.groq.com/openai/v1/chat/completions',
+                    'https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct',
                     {
-                        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-                        messages: [
-                            {
-                                role: 'user',
-                                content: [
-                                    {
-                                        type: 'text',
-                                        text: message || 'Extract all text from this image. Describe what you see factually.'
-                                    },
-                                    {
-                                        type: 'image_url',
-                                        image_url: {
-                                            url: `data:${mimeType};base64,${base64Data}`
-                                        }
-                                    }
-                                ]
-                            }
-                        ],
-                        temperature: H0_TEMPERATURE,
-                        max_completion_tokens: 1024,
-                        top_p: 1,
-                        stream: false
+                        inputs: { image: base64Data, question: visionPrompt },
+                        parameters: {
+                            max_new_tokens: 500,
+                            temperature: H0_TEMPERATURE,
+                            top_p: 0.95,
+                            repetition_penalty: 1.1,
+                            return_full_text: false
+                        }
                     },
                     {
                         headers: {
-                            'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`,
+                            'Authorization': `Bearer ${PLAYGROUND_HF_VISION_TOKEN}`,
                             'Content-Type': 'application/json'
                         },
                         timeout: 30000
                     }
                 );
                 
-                const photoDescription = visionResponse.data.choices?.[0]?.message?.content || 
+                const photoDescription = visionResponse.data[0]?.generated_text || 
+                                         visionResponse.data.generated_text || 
                                          'Unable to analyze image';
                 
-                // Consume vision quota on successful analysis
+                // Consume HF Vision quota on successful analysis
                 consumeHfVisionQuota();
-                console.log(`📸 Vision analysis complete: ${photoDescription.length} chars`);
                 
-                // Return directly for vision (no need for second Groq call)
-                return res.json({ reply: photoDescription });
+                finalPrompt = `Photo analysis: ${photoDescription}\n\nUser query: ${message || 'Analyze this image.'}`;
                 
             } catch (visionError) {
-                console.error('❌ Playground vision error:', visionError.response?.data || visionError.message);
+                console.error('❌ Playground vision error:', visionError.message);
                 
-                if (visionError.response?.status === 429) {
-                    return res.status(429).json({ 
-                        reply: 'Vision API rate limit reached. Please try again in a moment.' 
+                if (visionError.response?.status === 503) {
+                    return res.status(503).json({ 
+                        reply: 'Vision model is warming up. Please try again in 30 seconds.' 
                     });
                 }
                 
