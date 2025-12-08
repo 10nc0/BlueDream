@@ -401,18 +401,34 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
     
     // Query 3: Direct compound name search (highest success rate with DDG)
     if (knownCompoundName) {
-        // Clean compound name and create search query
+        // Clean compound name
         const cleanName = knownCompoundName.replace(/[^\w\s-]/g, '').trim();
-        const compoundQuery = `${cleanName} chemical compound`;
-        console.log(`🔬 DDG Query 3: "${compoundQuery}"`);
+        
+        // Map common abbreviations to full chemical names for better DDG results
+        const chemicalNameMap = {
+            'thc': 'tetrahydrocannabinol',
+            'cbd': 'cannabidiol',
+            'lsd': 'lysergic acid diethylamide',
+            'mdma': 'methylenedioxymethamphetamine',
+            'gaba': 'gamma aminobutyric acid',
+            'dmt': 'dimethyltryptamine',
+            'pcp': 'phencyclidine',
+            'ghb': 'gamma hydroxybutyrate'
+        };
+        
+        // Try full name first, then abbreviation
+        const fullName = chemicalNameMap[cleanName.toLowerCase()] || null;
+        const queryName = fullName || cleanName;
+        
+        console.log(`🔬 DDG Query 3: "${queryName}"${fullName ? ` (expanded from ${cleanName})` : ''}`);
         
         const compoundPromise = axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
-            q: compoundQuery,
+            q: queryName,
             format: 'json',
             no_html: 1,
             skip_disambig: 1,
             t: 'nyanbook'
-        })}`, { timeout: 5000 }).then(res => {
+        })}`, { timeout: 5000 }).then(async res => {
             if (res.data.AbstractText) {
                 console.log(`🔬 DDG Query 3: ✓ Found context for compound name`);
                 return {
@@ -420,8 +436,29 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
                     name: res.data.Heading || cleanName,
                     description: res.data.AbstractText,
                     source: res.data.AbstractURL || 'DuckDuckGo',
-                    searchedName: cleanName
+                    searchedName: queryName
                 };
+            }
+            // Fallback: try abbreviation if we expanded
+            if (fullName && cleanName !== queryName) {
+                console.log(`🔬 DDG Query 3b: Trying "${cleanName}" as fallback`);
+                const fallbackRes = await axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
+                    q: cleanName,
+                    format: 'json',
+                    no_html: 1,
+                    skip_disambig: 1,
+                    t: 'nyanbook'
+                })}`, { timeout: 5000 });
+                if (fallbackRes.data.AbstractText) {
+                    console.log(`🔬 DDG Query 3b: ✓ Found context via fallback`);
+                    return {
+                        type: 'compound',
+                        name: fallbackRes.data.Heading || cleanName,
+                        description: fallbackRes.data.AbstractText,
+                        source: fallbackRes.data.AbstractURL || 'DuckDuckGo',
+                        searchedName: cleanName
+                    };
+                }
             }
             return null;
         }).catch(err => {
