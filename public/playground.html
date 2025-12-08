@@ -32,12 +32,20 @@
             border-bottom: 1px solid rgba(148, 163, 184, 0.1);
             flex-shrink: 0;
             z-index: 10;
+            height: 50px;
+            overflow: visible;
         }
         
         .header-left {
             display: flex;
             align-items: center;
             gap: 0.5rem;
+        }
+        
+        #catContainer {
+            position: relative;
+            top: 10px;
+            z-index: 20;
         }
         
         .header-title {
@@ -431,7 +439,7 @@
             </div>
             <div class="input-row">
                 <div class="input-wrapper">
-                    <textarea id="messageInput" placeholder="Ask anything in Indonesian or English..." rows="2"></textarea>
+                    <textarea id="messageInput" placeholder="Ask Nyan AI in English or your own language... 🐈‍⬛" rows="2"></textarea>
                 </div>
                 <div class="action-buttons">
                     <button class="upload-btn" id="photoBtn" title="Upload Photo">📷</button>
