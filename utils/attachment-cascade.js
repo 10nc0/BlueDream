@@ -312,11 +312,14 @@ async function analyzeImage(buffer, fileName, options) {
         const base64 = buffer.toString('base64');
         
         const response = await axios.post(
-            'https://api-inference.huggingface.co/models/Qwen/Qwen2.5-VL-7B-Instruct',
+            'https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct',
             {
-                inputs: {
-                    image: base64,
-                    text: options.imagePrompt || "Describe this image in detail. Extract any text, numbers, or data visible. Be precise and factual."
+                inputs: base64,
+                parameters: {
+                    text: options.imagePrompt || "Describe this image in detail. Extract any text, numbers, or data visible. Be precise and factual.",
+                    max_new_tokens: 500,
+                    temperature: 0.1,
+                    top_p: 0.95
                 }
             },
             {

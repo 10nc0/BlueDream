@@ -6316,15 +6316,14 @@ app.post('/api/playground', async (req, res) => {
                 const base64Data = photo.split(',')[1] || photo;
                 
                 const visionResponse = await axios.post(
-                    'https://api-inference.huggingface.co/models/Qwen/Qwen2.5-VL-7B-Instruct',
+                    'https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct',
                     {
-                        inputs: { image: base64Data, question: visionPrompt },
+                        inputs: base64Data,
                         parameters: {
+                            text: visionPrompt,
                             max_new_tokens: 500,
                             temperature: H0_TEMPERATURE,
-                            top_p: 0.95,
-                            repetition_penalty: 1.1,
-                            return_full_text: false
+                            top_p: 0.95
                         }
                     },
                     {
