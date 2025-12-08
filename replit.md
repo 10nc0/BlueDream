@@ -130,6 +130,11 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 - Temperature 0.1 everywhere (no creativity, only facts)
 - Zero hallucination design
 
+**Visual Elements:**
+- **Header**: Cat animation (left) with live date/time display below it, title in center, login button (with 🐈‍⬛ emoji) on right
+- **Date/Time**: Adaptive positioning - shows full two-line format below cat on desktop, compact single-line format left of login button on smaller screens
+- **Message Layout**: Discord-style two-pane design with glassmorphism aesthetic
+
 **Files:** `public/playground.html`, `public/js/playground.js`
 
 **API Endpoint:** `POST /api/playground` (public, no auth)

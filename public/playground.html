@@ -356,15 +356,23 @@
 <body>
     <div class="header">
         <div class="header-left">
-            <div id="catContainer" class="cat-animation-component" style="transform: scale(0.6); margin: -20px;">
-                <canvas id="hopCanvas" class="character-canvas" width="100" height="100"></canvas>
+            <div id="catContainer" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; flex-shrink: 0;">
+                <canvas id="hopCanvas" class="character-canvas" width="100" height="100" style="display: block; margin: 0;"></canvas>
+                <div id="dateTimeDefault" style="text-align: center; color: #94a3b8; font-size: 0.7rem; white-space: nowrap; line-height: 1; margin-top: -4px;">
+                    <span id="currentTime">2025/12/08 - 3:00:00PM</span>
+                </div>
             </div>
             <div class="header-title">
                 <h1>AI Playground</h1>
                 <p>Groq Llama 3.3 70B - Free, fast, sovereign</p>
             </div>
         </div>
-        <a href="/login.html" class="login-btn">Login to Nyanbook</a>
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-left: auto;">
+            <div id="dateTimeCompact" style="display: none; text-align: center; color: #94a3b8; font-size: 0.7rem; white-space: nowrap; line-height: 1;">
+                <span id="currentTimeCompact">2025/12/08 - 3:00:00PM</span>
+            </div>
+            <a href="/login.html" class="login-btn">🐈‍⬛ Login to Nyanbook</a>
+        </div>
     </div>
     
     <div class="chat-container">

@@ -13,6 +13,64 @@ const errorToast = document.getElementById('errorToast');
 let currentAttachment = null;
 let isProcessing = false;
 
+// ===== DATE/TIME ANIMATION =====
+let lastUpdateSecond = -1;
+function updateDateTime() {
+    const now = Date.now();
+    const currentSecond = Math.floor(now / 1000);
+    
+    if (currentSecond === lastUpdateSecond) return;
+    lastUpdateSecond = currentSecond;
+    
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const timeHours = date.getHours();
+    const timeMinutes = String(date.getMinutes()).padStart(2, '0');
+    const timeSeconds = String(date.getSeconds()).padStart(2, '0');
+    const ampm = timeHours >= 12 ? 'PM' : 'AM';
+    const displayHours = timeHours % 12 || 12;
+    
+    const currentTimeEl = document.getElementById('currentTime');
+    if (currentTimeEl) currentTimeEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
+    
+    const currentTimeCompactEl = document.getElementById('currentTimeCompact');
+    if (currentTimeCompactEl) currentTimeCompactEl.textContent = `${year}/${month}/${day} - ${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
+}
+
+let dateTimeRafId = null;
+function updateDateTimeLoop() {
+    updateDateTime();
+    dateTimeRafId = requestAnimationFrame(updateDateTimeLoop);
+}
+updateDateTimeLoop();
+updateDateTime();
+
+// Adaptive date/time positioning
+const dateTimeDefault = document.getElementById('dateTimeDefault');
+const dateTimeCompact = document.getElementById('dateTimeCompact');
+const header = document.querySelector('.header');
+const COMPACT_THRESHOLD = 65;
+
+function updateDateTimePosition() {
+    if (!header || !dateTimeDefault || !dateTimeCompact) return;
+    const headerHeight = header.offsetHeight;
+    
+    if (headerHeight < COMPACT_THRESHOLD) {
+        dateTimeDefault.style.display = 'none';
+        dateTimeCompact.style.display = 'block';
+    } else {
+        dateTimeDefault.style.display = 'block';
+        dateTimeCompact.style.display = 'none';
+    }
+}
+
+updateDateTimePosition();
+const observer = new MutationObserver(() => updateDateTimePosition());
+observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+setInterval(() => updateDateTimePosition(), 500);
+
 photoBtn.addEventListener('click', () => photoInput.click());
 audioBtn.addEventListener('click', () => audioInput.click());
 
