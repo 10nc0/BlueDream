@@ -184,18 +184,20 @@ async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
                 const page = await pdf.getPage(i);
                 const viewport = page.getViewport({ scale: 2.0 }); // High-res for vision
                 
-                const canvas = createCanvas(viewport.width, viewport.height);
-                const context = canvas.getContext('2d');
+                // Use canvas factory to create canvas and context
+                const canvasAndContext = canvasFactory.create(Math.floor(viewport.width), Math.floor(viewport.height));
                 
-                // Render page to canvas with canvas factory
+                // Render page to canvas
                 await page.render({
-                    canvasContext: context,
+                    canvasContext: canvasAndContext.context,
                     viewport: viewport,
                     canvasFactory: canvasFactory
                 }).promise;
                 
-                // Convert to base64 JPEG (smaller than PNG)
-                const base64 = canvas.toDataURL('image/jpeg', 0.85);
+                // Convert to base64 using encode() then Buffer
+                const pngBuffer = await canvasAndContext.canvas.encode('png');
+                const base64 = `data:image/png;base64,${pngBuffer.toString('base64')}`;
+                
                 images.push({
                     page: i,
                     base64: base64,
@@ -203,7 +205,10 @@ async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
                     height: viewport.height
                 });
                 
-                console.log(`  📄 Page ${i}: ${viewport.width}x${viewport.height}px rendered`);
+                console.log(`  📄 Page ${i}: ${Math.floor(viewport.width)}x${Math.floor(viewport.height)}px rendered`);
+                
+                // Cleanup
+                canvasFactory.destroy(canvasAndContext);
             } catch (pageError) {
                 console.log(`  ⚠️ Page ${i} render failed: ${pageError.message}`);
             }
