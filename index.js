@@ -6162,8 +6162,15 @@ app.post('/api/playground', async (req, res) => {
             : [];
         
         // SEARCH CASCADE: DDG first (free), then Brave fallback (API) for real-time data
+        // Skip search for: very long messages (system prompts), or non-question internal context
         let searchContext = null;
-        if (message) {
+        const isSearchableQuery = message && 
+            message.length < 300 && 
+            !message.includes('Identity:') && 
+            !message.includes('Ontology:') &&
+            !message.includes('Protocol');
+        
+        if (isSearchableQuery) {
             console.log(`🔍 Playground: Searching for context: "${message.substring(0, 50)}..."`);
             
             // Step 1: Try DDG (free, good for Wikipedia-style facts)
@@ -6182,6 +6189,8 @@ app.post('/api/playground', async (req, res) => {
             } else {
                 console.log(`ℹ️ No search results - using Groq's base knowledge (cutoff: Dec 2023)`);
             }
+        } else if (message) {
+            console.log(`⏭️ Skipping search: message too long or contains system context (${message.length} chars)`);
         }
         
         // File size limits (base64 encoded)
