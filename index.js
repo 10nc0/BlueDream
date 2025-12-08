@@ -126,6 +126,13 @@ function getTimestamp() {
     });
 }
 
+// Cache-busting headers helper (prevents browsers/CDNs from caching sensitive responses)
+function noCacheHeaders(res) {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+}
+
 const app = express();
 
 // Make pool available to middleware
@@ -1274,30 +1281,16 @@ async function requireAuth(req, res, next) {
 }
 
 // Middleware to check roles with hierarchy: dev > admin > user
+// PREREQUISITE: Must be used AFTER requireAuth (which sets req.tenantSchema)
 function requireRole(...allowedRoles) {
     return async (req, res, next) => {
-        if (!req.userId) {
+        if (!req.userId || !req.tenantSchema) {
             return res.status(401).json({ error: 'Authentication required' });
         }
         
-        // Get tenant schema from tenant mapping
-        const mappingResult = await pool.query(
-            'SELECT tenant_schema FROM core.user_email_to_tenant WHERE email = $1',
-            [req.userEmail]
-        );
-        
-        if (mappingResult.rows.length === 0) {
-            return res.status(401).json({ error: 'User not found' });
-        }
-        
-        const { tenant_schema } = mappingResult.rows[0];
-        
-        // TRANSACTION MODE: Store tenant schema for route handlers to use explicit prefixes
-        req.tenantSchema = tenant_schema;
-        
-        // Query user role from tenant-scoped table
+        // Query user role from tenant-scoped table (tenantSchema already set by requireAuth)
         const result = await pool.query(
-            `SELECT role FROM ${tenant_schema}.users WHERE id = $1`,
+            `SELECT role FROM ${req.tenantSchema}.users WHERE id = $1`,
             [req.userId]
         );
         
@@ -1334,10 +1327,7 @@ function requireRole(...allowedRoles) {
 
 // Check if user is logged in (supports both JWT and cookies) - TENANT-AWARE
 app.get('/api/auth/status', async (req, res) => {
-    // CACHE-BUSTING: Prevent browsers/CDNs from caching auth status
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
+    noCacheHeaders(res);
     
     try {
         // Check JWT first
@@ -1396,10 +1386,7 @@ app.get('/api/auth/status', async (req, res) => {
 
 // Email/Password Login
 app.post('/api/auth/login', async (req, res) => {
-    // CACHE-BUSTING: Prevent browsers/CDNs from caching login responses
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
+    noCacheHeaders(res);
     
     const { email, password } = req.body;
     
@@ -1511,10 +1498,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 // Check if next signup would be the genesis user (first user)
 app.get('/api/auth/check-genesis', async (req, res) => {
-    // CACHE-BUSTING: Prevent browsers/CDNs from caching genesis status
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
+    noCacheHeaders(res);
     
     try {
         // Multi-tenant: Check tenant_catalog instead of public.users
@@ -2706,10 +2690,7 @@ app.post('/api/sessions/revoke-all', requireRole('admin'), async (req, res) => {
 
 // Public registration (no auth required) - Multi-tenant architecture
 app.post('/api/auth/register/public', async (req, res) => {
-    // CACHE-BUSTING: Prevent browsers/CDNs from caching signup responses
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
+    noCacheHeaders(res);
     
     const { email, password } = req.body;
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';
