@@ -6010,67 +6010,23 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
 
 // ===========================
 // AI PLAYGROUND API (Public, No Auth)
-// Isolated tokens: Text vs Vision separation to prevent rate limit cross-impact
+// Dynamic capacity sharing: distributes API quota among active IPs (180-min window)
 // ===========================
 
 const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;  // Text (Llama 3.3 70B)
 const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_GROQ_TOKEN;  // Vision (Llama 4 Scout) - fallback to text token
 
-// Simple in-memory rate limiter for playground (50 req/hour per IP)
-const playgroundRateLimits = new Map();
-const PLAYGROUND_RATE_LIMIT = 50;
-const PLAYGROUND_RATE_WINDOW = 60 * 60 * 1000; // 1 hour
+// Dynamic capacity manager with adaptive rate limiting
+const capacityManager = require('./utils/playground-capacity');
 
-// Dev/admin IPs exempt from internal rate limiting
-const RATE_LIMIT_EXEMPT_IPS = new Set([
+// Initialize exempt IPs from environment
+const RATE_LIMIT_EXEMPT_IPS = [
     '127.0.0.1',
     '::1',
     ...(process.env.RATE_LIMIT_EXEMPT_IPS || '').split(',').map(ip => ip.trim()).filter(Boolean)
-]);
-
-function checkPlaygroundRateLimit(ip) {
-    // Exempt dev/admin IPs from internal rate limiting
-    if (RATE_LIMIT_EXEMPT_IPS.has(ip)) {
-        return true;
-    }
-    
-    const now = Date.now();
-    const record = playgroundRateLimits.get(ip);
-    
-    if (!record || now - record.windowStart > PLAYGROUND_RATE_WINDOW) {
-        playgroundRateLimits.set(ip, { count: 1, windowStart: now });
-        return true;
-    }
-    
-    if (record.count >= PLAYGROUND_RATE_LIMIT) {
-        return false;
-    }
-    
-    record.count++;
-    return true;
-}
-
-// Clean up old rate limit records every 10 minutes
-setInterval(() => {
-    const now = Date.now();
-    for (const [ip, record] of playgroundRateLimits.entries()) {
-        if (now - record.windowStart > PLAYGROUND_RATE_WINDOW) {
-            playgroundRateLimits.delete(ip);
-        }
-    }
-}, 10 * 60 * 1000);
-
-// Vision quota tracker (40/day, resets at UTC midnight)
-const visionQuota = { used: 0, resetDate: new Date().toISOString().split('T')[0] };
-function checkVisionQuota() {
-    const today = new Date().toISOString().split('T')[0];
-    if (visionQuota.resetDate !== today) {
-        visionQuota.used = 0;
-        visionQuota.resetDate = today;
-        console.log(`🔄 Vision quota reset for ${today}`);
-    }
-    return visionQuota.used < 40;
-}
+];
+capacityManager.setExemptIPs(RATE_LIMIT_EXEMPT_IPS);
+console.log(`🛡️ Capacity exempt IPs: ${RATE_LIMIT_EXEMPT_IPS.length} configured`);
 
 // H₀ PROTOCOL: temperature = 0.15 (sweet spot: 0.1 too rigid, 0.2 hallucinates)
 const H0_TEMPERATURE = 0.15;
@@ -6293,11 +6249,20 @@ async function extractCoreQuestion(message) {
 }
 
 // ===== BRAVE SEARCH FUNCTION (Fallback for real-time data) =====
-async function searchBrave(query) {
+async function searchBrave(query, clientIp = null) {
     const BRAVE_API_KEY = process.env.PLAYGROUND_BRAVE_API;
     if (!BRAVE_API_KEY) {
         console.log('🦁 Brave: API key not configured, skipping');
         return null;
+    }
+    
+    // Check brave capacity if IP provided
+    if (clientIp) {
+        const braveCapacity = capacityManager.consumeToken(clientIp, 'brave');
+        if (!braveCapacity.allowed) {
+            console.log(`🦁 Brave: Capacity exhausted for ${clientIp} - ${braveCapacity.reason}`);
+            return null;
+        }
     }
     
     try {
@@ -6337,17 +6302,20 @@ async function searchBrave(query) {
 app.post('/api/playground', async (req, res) => {
     const clientIp = req.ip || req.connection.remoteAddress;
     
-    // Rate limiting
-    if (!checkPlaygroundRateLimit(clientIp)) {
-        return res.status(429).json({ 
-            reply: 'Too many requests. Please wait an hour before trying again.' 
-        });
-    }
+    // Record activity for capacity sharing (180-min window)
+    capacityManager.recordActivity(clientIp);
     
     try {
         const { message, photo, audio, document, documentName, photos, audios, documents, history } = req.body;
         let finalPrompt = message || '';
         let extractedContent = [];
+        
+        // Abuse detection (burst, duplicate, gibberish)
+        const abuseCheck = capacityManager.checkAbuse(clientIp, message);
+        if (abuseCheck.abusive) {
+            console.log(`🚫 Abuse detected from ${clientIp}: ${abuseCheck.reason}`);
+            return res.status(429).json({ reply: abuseCheck.message });
+        }
         
         // Normalize to arrays (support both single and multi-file)
         const photoList = photos || (photo ? [photo] : []);
@@ -6410,12 +6378,12 @@ app.post('/api/playground', async (req, res) => {
                     searchContext = await searchDuckDuckGo(searchQuery);
                     if (!searchContext) {
                         console.log(`🔄 DDG returned nothing, trying Brave fallback...`);
-                        searchContext = await searchBrave(searchQuery);
+                        searchContext = await searchBrave(searchQuery, clientIp);
                     }
                 } else if (queryClass.searchStrategy === 'brave') {
                     // Brave-first: skip DDG for time-sensitive/Nyan queries
                     console.log(`⚡ Brave-first mode (${queryClass.type})`);
-                    searchContext = await searchBrave(searchQuery);
+                    searchContext = await searchBrave(searchQuery, clientIp);
                     // Smart retry: if Brave returned nothing, try DDG
                     if (!searchContext) {
                         console.log(`🔄 Brave returned nothing, trying DDG fallback...`);
@@ -6426,7 +6394,7 @@ app.post('/api/playground', async (req, res) => {
                     searchContext = await searchDuckDuckGo(searchQuery);
                     if (!searchContext) {
                         console.log(`🔄 DDG returned nothing, trying Brave fallback...`);
-                        searchContext = await searchBrave(searchQuery);
+                        searchContext = await searchBrave(searchQuery, clientIp);
                     }
                 }
                 
@@ -6482,10 +6450,11 @@ app.post('/api/playground', async (req, res) => {
             for (let i = 0; i < photoList.length; i++) {
                 const photoData = photoList[i];
                 
-                // Skip if vision quota exhausted (40/day, resets UTC midnight)
-                if (!checkVisionQuota()) {
-                    extractedContent.push(`[Photo ${i + 1}]: Skipped - vision quota preserved for tomorrow (UTC midnight reset)`);
-                    console.log(`⏸️ Photo ${i + 1} skipped: vision quota full (${visionQuota.used}/40)`);
+                // Check vision capacity (dynamic sharing among active IPs)
+                const visionCapacity = capacityManager.consumeToken(clientIp, 'vision');
+                if (!visionCapacity.allowed) {
+                    extractedContent.push(`[Photo ${i + 1}]: Skipped - ${visionCapacity.reason}`);
+                    console.log(`⏸️ Photo ${i + 1} skipped: ${visionCapacity.reason}`);
                     continue;
                 }
                 
@@ -6496,7 +6465,6 @@ app.post('/api/playground', async (req, res) => {
                 }
                 
                 try {
-                    visionQuota.used++;
                     const visionResponse = await axios.post(
                         'https://api.groq.com/openai/v1/chat/completions',
                         {
@@ -6648,7 +6616,16 @@ app.post('/api/playground', async (req, res) => {
             });
         }
         
-        console.log(`🎮 Playground: Generating response for ${clientIp}`);
+        // Check text capacity (dynamic sharing among active IPs)
+        const textCapacity = capacityManager.consumeToken(clientIp, 'text');
+        if (!textCapacity.allowed) {
+            console.log(`⏸️ Text generation blocked for ${clientIp}: ${textCapacity.reason}`);
+            return res.status(429).json({ 
+                reply: `Text generation paused - ${textCapacity.reason}. Please try again later.` 
+            });
+        }
+        
+        console.log(`🎮 Playground: Generating response for ${clientIp} (${textCapacity.activeUsers} active users)`);
         
         // Build messages array: system message + conversation history + current message
         const messages = [
