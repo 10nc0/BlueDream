@@ -1,12 +1,13 @@
 const { PDFParse } = require('pdf-parse');
 const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
+const { parsePDFHybrid, formatPDFResultForPrompt } = require('./pdf-handler');
 
 const MAX_TOKENS = 6000;
 const CHARS_PER_TOKEN = 4;
 const MAX_CHARS = MAX_TOKENS * CHARS_PER_TOKEN;
 
-async function extractTextFromDocument(base64Data, fileName) {
+async function extractTextFromDocument(base64Data, fileName, options = {}) {
     const buffer = Buffer.from(base64Data, 'base64');
     const ext = (fileName || '').toLowerCase().split('.').pop();
     
@@ -14,9 +15,23 @@ async function extractTextFromDocument(base64Data, fileName) {
     
     try {
         let text = '';
+        let structuredResult = null;
         
         if (ext === 'pdf') {
-            text = await extractPDF(buffer);
+            structuredResult = await parsePDFHybrid(buffer, fileName);
+            
+            if (structuredResult.tables.length > 0) {
+                const tableMarkdown = structuredResult.tables.map((t, i) => 
+                    `### Table ${i + 1}\n${t.markdown}`
+                ).join('\n\n');
+                text = `${tableMarkdown}\n\n### Document Text\n${structuredResult.text}`;
+            } else {
+                text = structuredResult.text;
+            }
+            
+            if (options.returnStructured) {
+                return { text, structured: structuredResult };
+            }
         } else if (['xlsx', 'xls'].includes(ext)) {
             text = await extractExcel(buffer, ext);
         } else if (ext === 'docx') {

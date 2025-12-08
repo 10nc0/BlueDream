@@ -31,10 +31,14 @@
     "openai": "^6.7.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
+    "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.449",
     "pg": "^8.16.3",
     "pino": "^10.1.0",
     "querystring": "^0.2.1",
+    "tabula-js": "^1.0.1",
+    "tesseract.js": "^6.0.1",
     "twilio": "^5.10.3"
   }
 }
