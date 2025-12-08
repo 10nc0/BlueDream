@@ -46,3 +46,8 @@ externalPort = 3000
 [deployment]
 deploymentTarget = "autoscale"
 run = ["node", "index.js"]
+
+[userenv]
+
+[userenv.shared]
+RATE_LIMIT_EXEMPT_IPS = "10.83.9.13"

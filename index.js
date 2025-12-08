@@ -6025,7 +6025,7 @@ const PLAYGROUND_RATE_WINDOW = 60 * 60 * 1000; // 1 hour
 const RATE_LIMIT_EXEMPT_IPS = new Set([
     '127.0.0.1',
     '::1',
-    '10.83.9.13'  // Dev tenant 01 internal IP
+    ...(process.env.RATE_LIMIT_EXEMPT_IPS || '').split(',').map(ip => ip.trim()).filter(Boolean)
 ]);
 
 function checkPlaygroundRateLimit(ip) {
