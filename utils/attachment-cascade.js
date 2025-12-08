@@ -463,6 +463,67 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
     // Wait for all queries in parallel
     await Promise.all(promises);
     
+    // === Additional Queries 4 & 5: Uses and Interactions (run after compound identified) ===
+    let usesContext = null;
+    let interactionsContext = null;
+    
+    if (results.compoundContext && results.compoundContext.name) {
+        const compoundName = results.compoundContext.name;
+        console.log(`🔬 DDG Query 4-5: Fetching uses & interactions for "${compoundName}"...`);
+        
+        const additionalPromises = [];
+        
+        // Query 4: Uses and applications
+        const usesQuery = `${compoundName} uses applications`;
+        console.log(`🔬 DDG Query 4: "${usesQuery}"`);
+        additionalPromises.push(
+            axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
+                q: usesQuery,
+                format: 'json',
+                no_html: 1,
+                skip_disambig: 1,
+                t: 'nyanbook'
+            })}`, { timeout: 5000 }).then(res => {
+                if (res.data.AbstractText && res.data.AbstractText !== results.compoundContext.description) {
+                    console.log(`🔬 DDG Query 4: ✓ Found uses context`);
+                    usesContext = {
+                        description: res.data.AbstractText,
+                        source: res.data.AbstractURL || 'DuckDuckGo'
+                    };
+                }
+            }).catch(err => {
+                console.log(`🔬 DDG Query 4: Failed - ${err.message}`);
+            })
+        );
+        
+        // Query 5: Metabolism/interactions/effects
+        const interactionsQuery = `${compoundName} metabolism effects pharmacology`;
+        console.log(`🔬 DDG Query 5: "${interactionsQuery}"`);
+        additionalPromises.push(
+            axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
+                q: interactionsQuery,
+                format: 'json',
+                no_html: 1,
+                skip_disambig: 1,
+                t: 'nyanbook'
+            })}`, { timeout: 5000 }).then(res => {
+                if (res.data.AbstractText && 
+                    res.data.AbstractText !== results.compoundContext.description &&
+                    res.data.AbstractText !== usesContext?.description) {
+                    console.log(`🔬 DDG Query 5: ✓ Found interactions context`);
+                    interactionsContext = {
+                        description: res.data.AbstractText,
+                        source: res.data.AbstractURL || 'DuckDuckGo'
+                    };
+                }
+            }).catch(err => {
+                console.log(`🔬 DDG Query 5: Failed - ${err.message}`);
+            })
+        );
+        
+        await Promise.all(additionalPromises);
+    }
+    
     // Format enrichment context for prompt injection
     let contextText = '';
     
@@ -485,6 +546,20 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         contextText += `\n### 🔬 External Knowledge (Structure):\n`;
         contextText += `**${results.structureContext.name}**: ${results.structureContext.description}\n`;
         contextText += `Source: ${results.structureContext.source}\n`;
+    }
+    
+    // Add uses context (Query 4)
+    if (usesContext) {
+        contextText += `\n### 💊 Common Uses:\n`;
+        contextText += `${usesContext.description}\n`;
+        contextText += `Source: ${usesContext.source}\n`;
+    }
+    
+    // Add interactions/metabolism context (Query 5)
+    if (interactionsContext) {
+        contextText += `\n### ⚗️ Interactions & Effects:\n`;
+        contextText += `${interactionsContext.description}\n`;
+        contextText += `Source: ${interactionsContext.source}\n`;
     }
     
     // Determine verified compound info (compound context has highest priority)
@@ -518,7 +593,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         }
     }
     
-    console.log(`🔬 Chemistry Enrichment: Complete (formula: ${results.formulaContext ? '✓' : '✗'}, structure: ${results.structureContext ? '✓' : '✗'}, compound: ${results.compoundContext ? '✓' : '✗'})`);
+    console.log(`🔬 Chemistry Enrichment: Complete (formula: ${results.formulaContext ? '✓' : '✗'}, structure: ${results.structureContext ? '✓' : '✗'}, compound: ${results.compoundContext ? '✓' : '✗'}, uses: ${usesContext ? '✓' : '✗'}, interactions: ${interactionsContext ? '✓' : '✗'})`);
     
     return {
         contextText,
