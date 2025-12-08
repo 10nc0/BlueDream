@@ -1,6 +1,26 @@
 const { parsePDFHybrid, analyzePDFVisualContent } = require('./pdf-handler');
 const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
+const crypto = require('crypto');
+
+// Content-based cache: SHA-256 hash → extraction result
+const extractionCache = new Map();
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_MAX_SIZE = 1000; // LRU eviction threshold
+
+function getCacheKey(buffer) {
+    return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+function pruneCache() {
+    if (extractionCache.size > CACHE_MAX_SIZE) {
+        // Simple LRU: delete oldest 10% of entries
+        const deleteCount = Math.floor(CACHE_MAX_SIZE * 0.1);
+        const keys = Array.from(extractionCache.keys()).slice(0, deleteCount);
+        keys.forEach(k => extractionCache.delete(k));
+        console.log(`🧹 Cache: Pruned ${deleteCount} old entries`);
+    }
+}
 
 const FILE_TYPES = {
     PDF: 'pdf',
@@ -117,6 +137,15 @@ function selectExtractionPipeline(fileType) {
 }
 
 async function executeExtractionCascade(buffer, fileType, fileName, options = {}) {
+    // Check cache first (SHA-256 content hash)
+    const cacheKey = getCacheKey(buffer);
+    const cached = extractionCache.get(cacheKey);
+    
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        console.log(`📦 Cache HIT for ${fileName} (${cacheKey.slice(0, 8)}...)`);
+        return { ...cached.result, fromCache: true };
+    }
+    
     const pipeline = selectExtractionPipeline(fileType);
     const result = {
         success: false,
@@ -126,7 +155,8 @@ async function executeExtractionCascade(buffer, fileType, fileName, options = {}
         extractedData: null,
         toolsUsed: [],
         cascadeLog: [],
-        jsonOutput: null
+        jsonOutput: null,
+        fromCache: false
     };
     
     console.log(`🔄 Cascade: Starting extraction for ${fileName} (${fileType.type})`);
@@ -162,6 +192,13 @@ async function executeExtractionCascade(buffer, fileType, fileName, options = {}
     }
     
     result.jsonOutput = formatAsJSON(result);
+    
+    // Cache successful extractions
+    if (result.success) {
+        extractionCache.set(cacheKey, { result, timestamp: Date.now() });
+        pruneCache();
+        console.log(`📦 Cache SET for ${fileName} (${cacheKey.slice(0, 8)}...)`);
+    }
     
     return result;
 }

@@ -4,6 +4,31 @@ const os = require('os');
 
 const PLAYGROUND_HF_VISION_TOKEN = process.env.PLAYGROUND_HF_VISION_TOKEN;
 
+// Retry helper with exponential backoff for Groq API calls
+async function groqWithRetry(axiosCall, maxRetries = 3) {
+    const axios = require('axios');
+    let lastError;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await axiosCall();
+        } catch (error) {
+            lastError = error;
+            const status = error.response?.status;
+            
+            // Retry on 429 (rate limit) or 5xx (server errors)
+            if ((status === 429 || status >= 500) && attempt < maxRetries) {
+                const delayMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+                console.log(`⏳ Groq ${status}: Retry ${attempt + 1}/${maxRetries} in ${delayMs}ms`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            } else {
+                throw error;
+            }
+        }
+    }
+    throw lastError;
+}
+
 async function parsePDFHybrid(buffer, fileName) {
     const result = { 
         text: '', 
@@ -220,7 +245,8 @@ async function analyzePageWithGroqVision(imageBase64, pageNum, GROQ_TOKEN) {
         // Extract base64 data (remove data:image/jpeg;base64, prefix)
         const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
         
-        const response = await axios.post(
+        // Use retry wrapper for resilient API calls
+        const response = await groqWithRetry(() => axios.post(
             'https://api.groq.com/openai/v1/chat/completions',
             {
                 model: 'llama-4-scout-17b-16e-instruct',
@@ -257,7 +283,7 @@ Be factual and precise. Extract exact values where visible.`
                 },
                 timeout: 30000
             }
-        );
+        ));
         
         const description = response.data.choices[0]?.message?.content || '';
         
