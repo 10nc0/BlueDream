@@ -87,6 +87,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Dead Code Cleanup**: Removed orphaned `extractPDF()` from document-parser.js, removed unused `EXPENSIVE_API` cost tier from attachment-cascade.js.
 - **Auth Middleware Optimization**: Removed duplicate tenant lookup in `requireRole` - now trusts `req.tenantSchema` already set by `requireAuth`. Saves 1 DB query per role-checked request.
 - **Cache Headers DRY**: Extracted `noCacheHeaders(res)` helper to replace 4× repeated Cache-Control/Pragma/Expires header sets across auth endpoints.
+- **Request ID Fix**: Replaced buggy global `console.log` patching with `AsyncLocalStorage`. Previous implementation caused double/triple request IDs when concurrent requests arrived. Now uses `requestContext.run()` for proper request-scoped context. Added `rlog()`/`rerror()` helpers for request-aware logging.
 
 **Previous improvements (still active):**
 - **Circuit Breaker**: Persistent abusers (5 events in 1 hour) get 30-minute cooldown. Progressive warnings at 3/5 and 4/5.
