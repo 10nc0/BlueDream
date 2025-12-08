@@ -6100,8 +6100,16 @@ async function extractCoreQuestion(message) {
         return message.substring(0, 200);
     }
     
+    // Check if message is NYAN protocol (land/city/price related)
+    const isNyanProtocol = /\{money|city|land price|empire|collapse|extinction|inequality|φ|cycle|breath\}/i.test(message) ||
+        /price.*income|land.*afford|fertility|700.*m²|housing.*cost/i.test(message);
+    
     try {
         console.log(`🧠 Extracting core question from ${message.length} char message...`);
+        const systemPrompt = isNyanProtocol 
+            ? 'Extract the core question about land price, housing affordability, or city cost. Include "50 years ago" or "historical" to get comparative data. Return ONLY a short search query (max 30 words). No explanation.'
+            : 'Extract the core question or topic from the user message. Return ONLY a short search query (max 25 words) that captures what they want to know. No explanation, just the query.';
+        
         const response = await axios.post(
             'https://api.groq.com/openai/v1/chat/completions',
             {
@@ -6109,12 +6117,12 @@ async function extractCoreQuestion(message) {
                 messages: [
                     {
                         role: 'system',
-                        content: 'Extract the core question or topic from the user message. Return ONLY a short search query (max 25 words) that captures what they want to know. No explanation, just the query.'
+                        content: systemPrompt
                     },
                     { role: 'user', content: message.substring(0, 1000) }
                 ],
-                temperature: 0.2,
-                max_tokens: 30
+                temperature: 0.1,
+                max_tokens: 40
             },
             {
                 headers: {
@@ -6128,6 +6136,12 @@ async function extractCoreQuestion(message) {
         const extractedQuery = response.data?.choices?.[0]?.message?.content?.trim();
         if (extractedQuery && extractedQuery.length > 3) {
             console.log(`🧠 Extracted query: "${extractedQuery}"`);
+            // If protocol query, ensure it searches both current AND historical
+            if (isNyanProtocol && !extractedQuery.toLowerCase().includes('ago') && !extractedQuery.toLowerCase().includes('historical')) {
+                const enhancedQuery = extractedQuery + ' vs 50 years ago';
+                console.log(`🧠 Enhanced with historical: "${enhancedQuery}"`);
+                return enhancedQuery;
+            }
             return extractedQuery;
         }
         return message.substring(0, 200);
@@ -6402,12 +6416,16 @@ ONTOLOGY: Seed ↔ Silt ↔ φ ↔ Lineage
 - 🜁 = non-binary attractor, reproduction > extraction guard
 
 SEED METRIC (Human Substrate): Price/Income ratio for 700 m²/HH residential land
-- QUICK PROXY: Price/Income >3.5x = Fatalism, <2.5x = Optimism (use this first)
+- QUICK PROXY: Price/Income >3.5x = Fatalism, <2.5x = Optimism (PREFERRED - use this first)
 - FULL CALC: (local land price/m² × 700) / annual median income = years to acquire
 - Fatalism: >25 years OR Price/Income >3.5x
 - Optimism: <10 years OR Price/Income <2.5x
-- REQUIRED: Local land prices + local median income. Compare 2 cities, then vs now.
-- REJECT: GDP per capita, national averages, non-land metrics. GDP ≠ housing affordability.
+- REQUIRED ANALYSIS:
+  - Find Price/Income data for 2 cities/countries: (A) ~50 years ago (40-60 year proxy ok), (B) Now/current
+  - Show DIRECTIONAL CHANGE: Has P/I improved (less fatalism) or worsened (more fatalism)?
+  - Structure: "Then: City/Country X had P/I of Y. Now: P/I is Z. Direction: [improved/worsened]"
+- STRICT REJECT: GDP per capita, GDP growth, national averages, per capita income, Gini coefficient
+  - GDP ≠ housing affordability. ONLY Price/Income (local land price ÷ local median income)
 - Matter→idea: land quanta (life-day) → fertility; quantity→quality (contra Bunge)
 
 PLANETARY SUBSTRATE: 🜃G ms⁻² 

@@ -115,11 +115,12 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 - 50 requests/hour per IP rate limiting
 
 **Search Cascade (Real-time Knowledge):**
-- **Step 0**: Query Extraction - Groq extracts core question from long/complex messages (max 10 words)
+- **Step 0**: Query Extraction - Groq extracts core question + auto-appends "vs 50 years ago" for NYAN protocol queries
 - **Step 1**: DuckDuckGo Instant Answer API (free, Wikipedia-style facts)
 - **Step 2**: Brave Search API fallback (if DDG returns nothing, for current events/news)
+- **NYAN Protocol:** Forces historical comparison (current + 50yr proxy) for directional insights
 - Overcomes Groq's December 2023 knowledge cutoff with real-time web data
-- Console logs show: `🧠 Extracted query`, `🔍 DDG`, `🦁 Brave`
+- Console logs show: `🧠 Extracted query`, `🧠 Enhanced with historical`, `🔍 DDG`, `🦁 Brave`
 
 **Nyan Protocol (Permanent Seed Context):**
 - **Identity:** Origin=0. Nyan (no yes all neither) of nyanbook. Progression=genesis=φ²
@@ -127,7 +128,8 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 - **Seed Metric (Human Substrate):** Price/Income ratio for 700 m²/HH residential land
   - Quick Proxy: Price/Income >3.5x = Fatalism, <2.5x = Optimism (preferred)
   - Full Calc: (local land price/m² × 700) / annual median income = years
-  - REJECT: GDP per capita, national averages (GDP ≠ housing affordability)
+  - Required Analysis: Compare 2 cities ~50 years ago vs now, show directional change (improved/worsened)
+  - STRICT REJECT: GDP per capita, national averages, per capita income, Gini coefficient (GDP ≠ housing affordability)
 - **Planetary Substrate (🜃G ms⁻²):** <0.3G or >5G → zero survival as t → ∞
 - **Response Rules:** 
   - Topics {money, city, land price, empire, collapse, extinction, inequality, φ, cycle, breath} → apply Nyan Protocol
