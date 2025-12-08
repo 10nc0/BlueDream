@@ -9,11 +9,21 @@ const querystring = require('querystring');
 // Extract molecular formula from Vision description (e.g., C21H30O2)
 function extractMolecularFormula(text) {
     // Match patterns like C21H30O2, C6H12O6, C15H22N2O, etc.
-    const formulaRegex = /\b(C\d{1,3}H\d{1,3}(?:O\d{0,3})?(?:N\d{0,3})?(?:S\d{0,3})?(?:Cl\d{0,3})?(?:Br\d{0,3})?(?:F\d{0,3})?)\b/gi;
+    // Preserve original casing for multi-letter elements (Cl, Br, etc.)
+    const formulaRegex = /\b(C\d{1,3}H\d{1,3}(?:O\d{0,3})?(?:N\d{0,3})?(?:S\d{0,3})?(?:Cl\d{0,3})?(?:Br\d{0,3})?(?:F\d{0,3})?)\b/g;
     const matches = text.match(formulaRegex);
     if (matches && matches.length > 0) {
         // Return the most likely complete formula (longest match)
-        return matches.sort((a, b) => b.length - a.length)[0].toUpperCase();
+        // Normalize casing: Element symbols uppercase, counts as-is
+        const formula = matches.sort((a, b) => b.length - a.length)[0];
+        // Normalize: C, H, O, N, S, F uppercase; Cl, Br proper case
+        return formula.replace(/([A-Za-z])(\d*)/g, (match, elem, num) => {
+            // Handle two-letter elements (Cl, Br)
+            if (elem.toLowerCase() === 'l' || elem.toLowerCase() === 'r') {
+                return match; // Keep as-is (part of Cl/Br)
+            }
+            return elem.toUpperCase() + (num || '');
+        });
     }
     return null;
 }
