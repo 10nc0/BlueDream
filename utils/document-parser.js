@@ -55,12 +55,6 @@ async function extractTextFromDocument(base64Data, fileName, options = {}) {
     }
 }
 
-async function extractPDF(buffer) {
-    const parser = new PDFParse();
-    const data = await parser(buffer);
-    return data.text || '';
-}
-
 async function extractExcel(buffer, ext) {
     const workbook = new ExcelJS.Workbook();
     

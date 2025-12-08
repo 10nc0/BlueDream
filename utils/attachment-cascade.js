@@ -42,8 +42,7 @@ const DATA_STRUCTURES = {
 const COST_TIERS = {
     FREE_LOCAL: 0,
     CHEAP_API: 1,
-    MODERATE_API: 2,
-    EXPENSIVE_API: 3
+    MODERATE_API: 2
 };
 
 const EXTRACTION_TOOLS = {
