@@ -1,4 +1,4 @@
-const { parsePDFHybrid } = require('./pdf-handler');
+const { parsePDFHybrid, analyzePDFVisualContent } = require('./pdf-handler');
 const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
 
@@ -33,6 +33,7 @@ const EXTRACTION_TOOLS = {
     'mammoth': { tier: COST_TIERS.FREE_LOCAL, type: 'text', name: 'mammoth' },
     'buffer-text': { tier: COST_TIERS.FREE_LOCAL, type: 'text', name: 'buffer-utf8' },
     'groq-whisper': { tier: COST_TIERS.CHEAP_API, type: 'audio', name: 'groq-whisper' },
+    'groq-pdf-vision': { tier: COST_TIERS.MODERATE_API, type: 'vision', name: 'groq-pdf-vision' },
     'tesseract-ocr': { tier: COST_TIERS.MODERATE_API, type: 'ocr', name: 'tesseract.js' },
     'hf-vision': { tier: COST_TIERS.EXPENSIVE_API, type: 'vision', name: 'huggingface-vision' }
 };
@@ -71,6 +72,7 @@ function selectExtractionPipeline(fileType) {
             pipeline.push(
                 { tool: 'pdf-parse', tier: COST_TIERS.FREE_LOCAL, purpose: 'text-extraction' },
                 { tool: 'tabula', tier: COST_TIERS.FREE_LOCAL, purpose: 'table-extraction' },
+                { tool: 'groq-pdf-vision', tier: COST_TIERS.MODERATE_API, purpose: 'visual-analysis' },
                 { tool: 'tesseract-ocr', tier: COST_TIERS.MODERATE_API, purpose: 'ocr-fallback', condition: 'sparse-text' }
             );
             break;
@@ -187,8 +189,11 @@ async function executeTool(toolName, buffer, fileName, options) {
         case 'hf-vision':
             return await analyzeImage(buffer, fileName, options);
             
+        case 'groq-pdf-vision':
+            return await extractPDFVisualContent(buffer, fileName, options);
+            
         case 'tesseract-ocr':
-            return { success: false, error: 'OCR requires image data - PDF-to-image pipeline not implemented' };
+            return { success: false, error: 'OCR requires image data - use groq-pdf-vision instead' };
             
         default:
             return { success: false, error: `Unknown tool: ${toolName}` };
@@ -334,6 +339,39 @@ async function analyzeImage(buffer, fileName, options) {
         const description = response.data?.[0]?.generated_text || '';
         return { success: true, data: { text: description, type: 'vision-analysis' } };
     } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+async function extractPDFVisualContent(buffer, fileName, options = {}) {
+    try {
+        const result = await analyzePDFVisualContent(buffer, fileName, { maxPages: 5 });
+        
+        if (!result.success || result.visualContent.length === 0) {
+            return { success: false, error: result.error || 'No visual content extracted' };
+        }
+        
+        // Format visual content for merging with text extraction
+        const visualDescriptions = result.visualContent.map(vc => {
+            const typeLabel = vc.contentType === 'chemical' ? '🧪 Chemical Structure' :
+                              vc.contentType === 'chart' ? '📊 Chart/Graph' :
+                              vc.contentType === 'diagram' ? '📐 Diagram' : '🖼️ Visual';
+            return `**Page ${vc.page} (${typeLabel}):**\n${vc.description}`;
+        }).join('\n\n');
+        
+        return { 
+            success: true, 
+            data: { 
+                text: `\n### Visual Content Analysis:\n${visualDescriptions}`,
+                visualContent: result.visualContent,
+                charts: result.charts,
+                chemicalStructures: result.chemicalStructures,
+                diagrams: result.diagrams,
+                type: 'pdf-vision'
+            }
+        };
+    } catch (error) {
+        console.error(`❌ PDF visual extraction error: ${error.message}`);
         return { success: false, error: error.message };
     }
 }

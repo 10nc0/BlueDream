@@ -153,6 +153,208 @@ async function describeChartWithVision(imageBase64) {
     }
 }
 
+// VISUAL PDF ANALYSIS: Render pages as images and analyze with Groq Vision
+// Unlocks chemical structures, charts, diagrams, and other visual content
+
+async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
+    const images = [];
+    
+    try {
+        // Dynamic import for ESM module compatibility
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        const { createCanvas } = require('canvas');
+        
+        // Load PDF document
+        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
+        const pdf = await loadingTask.promise;
+        const totalPages = pdf.numPages;
+        const pagesToRender = Math.min(totalPages, options.maxPages);
+        
+        console.log(`🖼️ PDF Visual: Rendering ${pagesToRender}/${totalPages} pages...`);
+        
+        for (let i = 1; i <= pagesToRender; i++) {
+            try {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 2.0 }); // High-res for vision
+                
+                const canvas = createCanvas(viewport.width, viewport.height);
+                const context = canvas.getContext('2d');
+                
+                // Render page to canvas
+                await page.render({
+                    canvasContext: context,
+                    viewport: viewport
+                }).promise;
+                
+                // Convert to base64 JPEG (smaller than PNG)
+                const base64 = canvas.toDataURL('image/jpeg', 0.85);
+                images.push({
+                    page: i,
+                    base64: base64,
+                    width: viewport.width,
+                    height: viewport.height
+                });
+                
+                console.log(`  📄 Page ${i}: ${viewport.width}x${viewport.height}px rendered`);
+            } catch (pageError) {
+                console.log(`  ⚠️ Page ${i} render failed: ${pageError.message}`);
+            }
+        }
+        
+        console.log(`🖼️ PDF Visual: ${images.length} pages rendered successfully`);
+    } catch (error) {
+        console.error(`❌ PDF Visual: Rendering failed - ${error.message}`);
+    }
+    
+    return images;
+}
+
+async function analyzePageWithGroqVision(imageBase64, pageNum, GROQ_TOKEN) {
+    if (!GROQ_TOKEN) {
+        return { success: false, error: 'Groq Vision token not configured' };
+    }
+    
+    try {
+        const axios = require('axios');
+        
+        // Extract base64 data (remove data:image/jpeg;base64, prefix)
+        const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+        
+        const response = await axios.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            {
+                model: 'llama-4-scout-17b-16e-instruct',
+                messages: [
+                    {
+                        role: 'user',
+                        content: [
+                            {
+                                type: 'text',
+                                text: `Page ${pageNum}: Analyze this PDF page. Describe all visual elements:
+- Charts/graphs: type, axes, data points, trends
+- Chemical structures: molecules, formulas, reaction schemes
+- Diagrams: flowcharts, schematics, illustrations
+- Tables: if visible, extract key data
+- Equations: mathematical or chemical formulas
+Be factual and precise. Extract exact values where visible.`
+                            },
+                            {
+                                type: 'image_url',
+                                image_url: {
+                                    url: `data:image/jpeg;base64,${base64Data}`
+                                }
+                            }
+                        ]
+                    }
+                ],
+                temperature: 0.15,
+                max_tokens: 1000
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${GROQ_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000
+            }
+        );
+        
+        const description = response.data.choices[0]?.message?.content || '';
+        
+        // Classify visual content type
+        const lower = description.toLowerCase();
+        let contentType = 'general';
+        if (lower.includes('chemical') || lower.includes('molecule') || 
+            lower.includes('structure') || lower.includes('formula') ||
+            lower.includes('benzene') || lower.includes('reaction')) {
+            contentType = 'chemical';
+        } else if (lower.includes('chart') || lower.includes('graph') || 
+                   lower.includes('bar') || lower.includes('line') || lower.includes('pie')) {
+            contentType = 'chart';
+        } else if (lower.includes('diagram') || lower.includes('flowchart') || 
+                   lower.includes('schematic')) {
+            contentType = 'diagram';
+        }
+        
+        return {
+            success: true,
+            data: {
+                page: pageNum,
+                description: description,
+                contentType: contentType
+            }
+        };
+    } catch (error) {
+        console.error(`❌ Vision API error (page ${pageNum}):`, error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+async function analyzePDFVisualContent(buffer, fileName, options = {}) {
+    const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
+    
+    if (!PLAYGROUND_GROQ_VISION_TOKEN) {
+        console.log('⚠️ PLAYGROUND_GROQ_VISION_TOKEN not configured - skipping PDF visual analysis');
+        return { success: false, error: 'Vision token not configured', visualContent: [] };
+    }
+    
+    const maxPages = options.maxPages || 5;
+    const result = {
+        success: false,
+        visualContent: [],
+        charts: [],
+        chemicalStructures: [],
+        diagrams: []
+    };
+    
+    try {
+        console.log(`🔬 PDF Visual: Analyzing ${fileName} for charts, structures, diagrams...`);
+        
+        // Render PDF pages to images
+        const images = await renderPDFPagesToImages(buffer, { maxPages });
+        
+        if (images.length === 0) {
+            return { success: false, error: 'No pages rendered', visualContent: [] };
+        }
+        
+        // Analyze each page with Groq Vision (sequentially to respect rate limits)
+        for (const img of images) {
+            const analysis = await analyzePageWithGroqVision(
+                img.base64, 
+                img.page, 
+                PLAYGROUND_GROQ_VISION_TOKEN
+            );
+            
+            if (analysis.success) {
+                result.visualContent.push(analysis.data);
+                
+                // Categorize by content type
+                switch (analysis.data.contentType) {
+                    case 'chemical':
+                        result.chemicalStructures.push(analysis.data);
+                        break;
+                    case 'chart':
+                        result.charts.push(analysis.data);
+                        break;
+                    case 'diagram':
+                        result.diagrams.push(analysis.data);
+                        break;
+                }
+            }
+        }
+        
+        result.success = result.visualContent.length > 0;
+        
+        console.log(`🔬 PDF Visual: Found ${result.charts.length} charts, ${result.chemicalStructures.length} chemical structures, ${result.diagrams.length} diagrams`);
+        
+    } catch (error) {
+        console.error(`❌ PDF Visual analysis failed: ${error.message}`);
+        result.error = error.message;
+    }
+    
+    return result;
+}
+
 function formatPDFResultForPrompt(result, fileName, userQuery) {
     const sections = [];
     
@@ -192,5 +394,8 @@ module.exports = {
     parsePDFHybrid,
     extractTablesWithTabula,
     describeChartWithVision,
-    formatPDFResultForPrompt
+    formatPDFResultForPrompt,
+    renderPDFPagesToImages,
+    analyzePageWithGroqVision,
+    analyzePDFVisualContent
 };
