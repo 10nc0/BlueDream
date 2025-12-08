@@ -5,10 +5,12 @@ const photoBtn = document.getElementById('photoBtn');
 const audioBtn = document.getElementById('audioBtn');
 const photoInput = document.getElementById('photoInput');
 const audioInput = document.getElementById('audioInput');
+const documentInput = document.getElementById('documentInput');
 const attachmentPreview = document.getElementById('attachmentPreview');
 const attachmentName = document.getElementById('attachmentName');
 const removeAttachment = document.getElementById('removeAttachment');
 const errorToast = document.getElementById('errorToast');
+const inputContainer = document.querySelector('.input-container');
 
 let currentAttachment = null;
 let isProcessing = false;
@@ -82,8 +84,54 @@ audioBtn.addEventListener('click', () => audioInput.click());
 
 photoInput.addEventListener('change', handleFileSelect);
 audioInput.addEventListener('change', handleFileSelect);
+documentInput.addEventListener('change', handleFileSelect);
 
 removeAttachment.addEventListener('click', clearAttachment);
+
+// ===== DRAG & DROP =====
+inputContainer.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    inputContainer.classList.add('drag-over');
+});
+
+inputContainer.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    inputContainer.classList.remove('drag-over');
+});
+
+inputContainer.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    inputContainer.classList.remove('drag-over');
+    
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+        const file = files[0];
+        const isImage = file.type.startsWith('image/');
+        const isAudio = file.type.startsWith('audio/');
+        const isDocument = /\.(pdf|txt|doc|docx|md|rtf)$/i.test(file.name);
+        
+        if (!isImage && !isAudio && !isDocument) {
+            showError('Unsupported file type. Please upload images, audio, or documents (PDF, TXT, DOC, DOCX, MD, RTF).');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            currentAttachment = {
+                type: isImage ? 'photo' : isAudio ? 'audio' : 'document',
+                data: event.target.result,
+                name: file.name
+            };
+            const icon = isImage ? '📷' : isAudio ? '🎤' : '📄';
+            attachmentName.textContent = `${icon} ${file.name}`;
+            attachmentPreview.classList.add('visible');
+        };
+        reader.readAsDataURL(file);
+    }
+});
 
 sendBtn.addEventListener('click', sendMessage);
 messageInput.addEventListener('keydown', (e) => {
@@ -140,7 +188,8 @@ function addMessage(role, content, attachment = null) {
     html += `<div class="content">${escapeHtml(content)}</div>`;
     
     if (attachment) {
-        html += `<div class="attachment">${attachment.type === 'photo' ? '📷' : '🎤'} ${attachment.name}</div>`;
+        const icon = attachment.type === 'photo' ? '📷' : attachment.type === 'audio' ? '🎤' : '📄';
+        html += `<div class="attachment">${icon} ${attachment.name}</div>`;
     }
     
     msgEl.innerHTML = html;
@@ -202,8 +251,11 @@ async function sendMessage() {
     if (currentAttachment) {
         if (currentAttachment.type === 'photo') {
             payload.photo = currentAttachment.data;
-        } else {
+        } else if (currentAttachment.type === 'audio') {
             payload.audio = currentAttachment.data;
+        } else if (currentAttachment.type === 'document') {
+            payload.document = currentAttachment.data;
+            payload.documentName = currentAttachment.name;
         }
     }
     

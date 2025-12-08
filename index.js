@@ -6059,13 +6059,13 @@ app.post('/api/playground', async (req, res) => {
     }
     
     try {
-        const { message, photo, audio, history } = req.body;
+        const { message, photo, audio, document, documentName, history } = req.body;
         let finalPrompt = message || '';
         
         // Validation
-        if (!message?.trim() && !photo && !audio) {
+        if (!message?.trim() && !photo && !audio && !document) {
             return res.status(400).json({ 
-                reply: 'Please enter text or upload a photo/audio file.' 
+                reply: 'Please enter text or upload a photo, audio, or document file.' 
             });
         }
         
@@ -6145,6 +6145,33 @@ app.post('/api/playground', async (req, res) => {
                 
                 return res.status(500).json({ 
                     reply: 'Photo analysis failed. Please try again.' 
+                });
+            }
+        }
+        
+        // Document analysis
+        else if (document) {
+            if (!PLAYGROUND_GROQ_TOKEN) {
+                return res.status(503).json({ 
+                    reply: 'Document analysis is not configured. Please try text only.' 
+                });
+            }
+            
+            console.log(`🎮 Playground: Analyzing document for ${clientIp}`);
+            const docPrompt = 'Extract key information from this document. Provide a structured summary of its contents.';
+            
+            try {
+                const base64Data = document.split(',')[1] || document;
+                const docBuffer = Buffer.from(base64Data, 'base64');
+                const docText = docBuffer.toString('utf-8');
+                
+                // For documents, include extracted text in the prompt
+                finalPrompt = `Document: ${documentName}\n\nContent:\n${docText}\n\nUser query: ${message || 'Analyze this document.'}`;
+                
+            } catch (docError) {
+                console.error('❌ Playground document error:', docError.message);
+                return res.status(500).json({ 
+                    reply: 'Document analysis failed. Please try with text only.' 
                 });
             }
         }

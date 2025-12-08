@@ -163,6 +163,12 @@
             padding: 1rem;
             margin: 1rem;
             flex-shrink: 0;
+            transition: all 0.2s;
+        }
+        
+        .input-container.drag-over {
+            border: 2px solid rgba(168, 85, 247, 0.6);
+            background: rgba(168, 85, 247, 0.05);
         }
         
         .input-row {
@@ -452,6 +458,7 @@
     
     <input type="file" id="photoInput" class="hidden-input" accept="image/*">
     <input type="file" id="audioInput" class="hidden-input" accept="audio/*">
+    <input type="file" id="documentInput" class="hidden-input" accept=".pdf,.txt,.doc,.docx,.md,.rtf">
     
     <div class="error-toast" id="errorToast"></div>
     
