@@ -117,6 +117,22 @@ async function identifyCompoundByFormula(formula, structureDescription = '') {
     if (structureDescription) {
         console.log(`🔬 Compound ID: Stage 2 - Trying structure-based search...`);
         
+        // Check for canonical compound structures first
+        // Cannabinoid: pyran ring + benzene ring + cyclohexene + C21H30O2
+        if (/pyran/i.test(structureDescription) && /benzene|aromatic/i.test(structureDescription) && 
+            /cyclohexene|cyclohexane/i.test(structureDescription)) {
+            if (formula === 'C21H30O2') {
+                console.log(`🔬 Compound ID: Canonical match - C21H30O2 with pyran+benzene+cyclohexene = THC!`);
+                return {
+                    name: 'Δ9-Tetrahydrocannabinol (THC)',
+                    description: 'Primary psychoactive compound in cannabis. Molecular formula C21H30O2 with characteristic tricyclic structure: fused pyran-benzene rings with cyclohexene side chain.',
+                    source: 'Chemical Structure Analysis',
+                    matchedFormula: formula,
+                    matchType: 'structure-based'
+                };
+            }
+        }
+        
         // Extract key structural terms from Vision analysis
         const structureTerms = [];
         if (/benzene|aromatic/i.test(structureDescription)) structureTerms.push('benzene');
