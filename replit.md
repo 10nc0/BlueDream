@@ -55,7 +55,10 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - Sovereign, public AI playground at `/AI` without authentication.
 - **Multimodal Support**: Text (Groq Llama 3.3 70B), Photo (Groq Llama 4 Scout Vision), Audio (Groq Whisper), Documents (PDF, Excel, Word).
 - **Input Methods**: Drag & drop, file picker, microphone, paste images.
-- **Rate Limiting**: Per-IP 50 requests/hour; HuggingFace Vision 40 photos/day.
+- **Rate Limiting**: Per-IP 50 requests/hour; Vision 40 photos/day.
+- **Query Classification**: Regex-based routing (DDG-first for "what is", Brave-first for "latest/2025", Groq-only for "calculate/solve").
+- **Factual Cache**: 24h TTL for simple facts, NEVER caches Nyan Protocol topics (H₀ compliance), 1000 entry LRU limit.
+- **Smart Retry**: Brave→DDG fallback, core-words DDG retry when all search fails, knowledge cutoff disclaimer when no search context.
 - **Document Parsing**: Cascade workflow for various formats, handling token limits with smart truncation.
 - **Search Cascade (Real-time Knowledge)**: Uses DuckDuckGo and Brave Search to overcome Groq's knowledge cutoff.
 - **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis, including a "Price/Income ratio" metric with contextual conclusions, designed to "HUMANIZE EVERY RATIO".

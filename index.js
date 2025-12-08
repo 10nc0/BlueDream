@@ -6079,6 +6079,121 @@ function consumeHfVisionQuota() {
 // H₀ PROTOCOL: temperature = 0.15 (sweet spot: 0.1 too rigid, 0.2 hallucinates)
 const H0_TEMPERATURE = 0.15;
 
+// ===== IMPROVEMENT 1: QUERY CLASSIFICATION (saves 0.8s latency) =====
+// Regex patterns to route queries directly without Groq compression
+const QUERY_PATTERNS = {
+    // DDG-first: Simple factual queries (Wikipedia-style)
+    ddgFirst: /^(what is|who is|what are|who are|define|meaning of|definition of|explain what|tell me about)\s/i,
+    
+    // Brave-first: Time-sensitive queries (skip DDG, go straight to Brave)
+    braveFirst: /\b(latest|recent|today|yesterday|this week|this month|2024|2025|breaking|current|now|news|update|price today)\b/i,
+    
+    // Groq-only: Complex reasoning, calculations, or creative tasks (skip search entirely)
+    groqOnly: /\b(calculate|compute|analyze|compare|summarize|write|create|generate|explain how|step by step|think about|reason|help me|code|program|solve)\b/i,
+    
+    // Nyan Protocol: Land/price/affordability topics (special handling, never cache)
+    nyanProtocol: /\b(land price|price.*income|income.*price|affordability|housing cost|fertility|700.*m²|land.*afford|city.*collapse|empire|extinction|inequality|φ|cycle|breath|fatalism|optimism)\b/i
+};
+
+function classifyQuery(message) {
+    const trimmed = message.trim();
+    const isShort = trimmed.length < 80; // Only bypass compression for short queries
+    
+    // Check Nyan Protocol first (special handling, always use Groq extraction)
+    if (QUERY_PATTERNS.nyanProtocol.test(trimmed)) {
+        return { type: 'nyan', skipCache: true, searchStrategy: 'brave', skipCompression: false };
+    }
+    
+    // Check if DDG-first (simple facts) - only skip compression if SHORT
+    if (QUERY_PATTERNS.ddgFirst.test(trimmed) && isShort) {
+        return { type: 'ddg-first', skipCache: false, searchStrategy: 'ddg', skipCompression: true };
+    }
+    
+    // Check if Brave-first (time-sensitive) - still use search, just skip DDG
+    if (QUERY_PATTERNS.braveFirst.test(trimmed)) {
+        return { type: 'brave-first', skipCache: true, searchStrategy: 'brave', skipCompression: isShort };
+    }
+    
+    // Check if Groq-only (complex reasoning) - but STILL allow search fallback
+    if (QUERY_PATTERNS.groqOnly.test(trimmed)) {
+        return { type: 'groq-only', skipCache: false, searchStrategy: 'cascade', skipCompression: false };
+    }
+    
+    // Default: try DDG first, then Brave
+    return { type: 'default', skipCache: false, searchStrategy: 'cascade', skipCompression: false };
+}
+
+// ===== IMPROVEMENT 2: FACTUAL RESPONSE CACHE (24h TTL) =====
+// Cache simple factual queries to reduce Groq load
+// NEVER cache: Nyan Protocol topics, calculations, time-sensitive queries
+const factualCache = new Map();
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+function getCacheKey(message) {
+    // Normalize: lowercase, trim, remove punctuation, collapse whitespace
+    return message.toLowerCase().trim().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ');
+}
+
+function getCachedResponse(message, queryClass) {
+    // Never cache Nyan Protocol or time-sensitive queries
+    if (queryClass.skipCache) {
+        return null;
+    }
+    
+    const key = getCacheKey(message);
+    const cached = factualCache.get(key);
+    
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        console.log(`📦 Cache HIT for: "${message.substring(0, 40)}..." (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
+        return cached.response;
+    }
+    
+    if (cached) {
+        // Expired, remove it
+        factualCache.delete(key);
+    }
+    
+    return null;
+}
+
+function setCachedResponse(message, response, queryClass) {
+    // Never cache Nyan Protocol, time-sensitive, or complex queries
+    if (queryClass.skipCache || queryClass.type === 'nyan' || queryClass.type === 'brave-first') {
+        return;
+    }
+    
+    // Only cache DDG-first queries (simple facts)
+    if (queryClass.type !== 'ddg-first') {
+        return;
+    }
+    
+    const key = getCacheKey(message);
+    factualCache.set(key, { response, timestamp: Date.now() });
+    console.log(`📦 Cache SET for: "${message.substring(0, 40)}..." (cache size: ${factualCache.size})`);
+    
+    // Proper LRU eviction: keep only 1000 entries by removing oldest
+    while (factualCache.size > 1000) {
+        const oldestKey = factualCache.keys().next().value;
+        factualCache.delete(oldestKey);
+        console.log(`📦 Cache evicted oldest entry (limit: 1000)`);
+    }
+}
+
+// Clean up expired cache entries every hour
+setInterval(() => {
+    const now = Date.now();
+    let evicted = 0;
+    for (const [key, value] of factualCache.entries()) {
+        if (now - value.timestamp > CACHE_TTL) {
+            factualCache.delete(key);
+            evicted++;
+        }
+    }
+    if (evicted > 0) {
+        console.log(`📦 Cache cleanup: evicted ${evicted} expired entries`);
+    }
+}, 60 * 60 * 1000);
+
 // ===== DUCKDUCKGO SEARCH FUNCTION =====
 async function searchDuckDuckGo(query) {
     const params = {
@@ -6249,28 +6364,78 @@ app.post('/api/playground', async (req, res) => {
             ? history.filter(msg => msg && typeof msg === 'object' && msg.role && msg.content)
             : [];
         
-        // SEARCH CASCADE: Extract core question → DDG (free) → Brave fallback (API)
+        // OPTIMIZED SEARCH CASCADE with Query Classification + Caching
         let searchContext = null;
+        let queryClass = { type: 'default', skipCache: false, searchStrategy: 'cascade' };
+        let noSearchDisclaimer = false;
+        
         if (message) {
-            // Step 0: Extract core question from long/complex messages
-            const searchQuery = await extractCoreQuestion(message);
-            console.log(`🔍 Playground: Searching for: "${searchQuery.substring(0, 50)}..."`);
+            // Step 0: Classify query to determine optimal routing
+            queryClass = classifyQuery(message);
+            console.log(`🎯 Query classified as: ${queryClass.type} (strategy: ${queryClass.searchStrategy})`);
             
-            // Step 1: Try DDG (free, good for Wikipedia-style facts)
-            searchContext = await searchDuckDuckGo(searchQuery);
-            
-            // Step 2: If DDG fails, try Brave (API, good for current events/news)
-            if (!searchContext) {
-                console.log(`🔄 DDG returned nothing, trying Brave fallback...`);
-                searchContext = await searchBrave(searchQuery);
+            // Step 0.5: Check cache for simple factual queries
+            const cachedResponse = getCachedResponse(message, queryClass);
+            if (cachedResponse) {
+                console.log(`✅ Returning cached response (saved Groq call)`);
+                return res.json({ reply: cachedResponse });
             }
             
-            // Inject context if found
+            // Step 1: Route based on classification (saves 0.8s Groq compression for SHORT simple queries)
+            let searchQuery;
+            if (queryClass.skipCompression) {
+                // Direct routing for short simple queries
+                searchQuery = message.substring(0, 200);
+                console.log(`⚡ Direct routing (skipped Groq compression): "${searchQuery.substring(0, 50)}..."`);
+            } else {
+                // Use Groq extraction for long/complex queries
+                searchQuery = await extractCoreQuestion(message);
+                console.log(`🔍 Playground: Searching for: "${searchQuery.substring(0, 50)}..."`);
+            }
+            
+            // Step 2: Execute search based on strategy
+            if (searchQuery) {
+                if (queryClass.searchStrategy === 'ddg') {
+                    // DDG-first: try DDG, fallback to Brave
+                    searchContext = await searchDuckDuckGo(searchQuery);
+                    if (!searchContext) {
+                        console.log(`🔄 DDG returned nothing, trying Brave fallback...`);
+                        searchContext = await searchBrave(searchQuery);
+                    }
+                } else if (queryClass.searchStrategy === 'brave') {
+                    // Brave-first: skip DDG for time-sensitive/Nyan queries
+                    console.log(`⚡ Brave-first mode (${queryClass.type})`);
+                    searchContext = await searchBrave(searchQuery);
+                    // Smart retry: if Brave returned nothing, try DDG
+                    if (!searchContext) {
+                        console.log(`🔄 Brave returned nothing, trying DDG fallback...`);
+                        searchContext = await searchDuckDuckGo(searchQuery);
+                    }
+                } else {
+                    // Default cascade: DDG → Brave
+                    searchContext = await searchDuckDuckGo(searchQuery);
+                    if (!searchContext) {
+                        console.log(`🔄 DDG returned nothing, trying Brave fallback...`);
+                        searchContext = await searchBrave(searchQuery);
+                    }
+                }
+                
+                // Smart retry: if all search failed, try simplified query on DDG
+                if (!searchContext) {
+                    const coreWords = searchQuery.split(/\s+/).slice(0, 5).join(' ');
+                    console.log(`🔄 All search failed, trying DDG with core words: "${coreWords}"`);
+                    searchContext = await searchDuckDuckGo(coreWords);
+                }
+            }
+            
+            // Inject context or add disclaimer
             if (searchContext) {
                 finalPrompt = `Context from web search:\n${searchContext}\n\nUser query: ${message}`;
                 console.log(`✅ Search context injected into prompt for knowledge augmentation`);
-            } else {
-                console.log(`ℹ️ No search results - using Groq's base knowledge (cutoff: Dec 2023)`);
+            } else if (queryClass.searchStrategy !== 'none') {
+                // No search results - add disclaimer about knowledge cutoff
+                noSearchDisclaimer = true;
+                console.log(`⚠️ No search results - will add knowledge cutoff disclaimer`);
             }
         }
         
@@ -6620,7 +6785,17 @@ End with 🔥 nyan~`
             }
         );
         
-        const reply = groqResponse.data.choices[0]?.message?.content || 'No response generated.';
+        let reply = groqResponse.data.choices[0]?.message?.content || 'No response generated.';
+        
+        // Add knowledge cutoff disclaimer when no search context was found
+        if (noSearchDisclaimer && !photo && !audio && !document) {
+            reply = `${reply}\n\n⚠️ *Note: Unable to verify with current web data. Information based on knowledge cutoff (September 2023).*`;
+        }
+        
+        // Cache simple factual responses for future queries
+        if (message && !photo && !audio && !document) {
+            setCachedResponse(message, reply, queryClass);
+        }
         
         console.log(`✅ Playground response sent (${reply.length} chars)`);
         res.json({ reply });
