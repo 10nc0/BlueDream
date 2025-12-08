@@ -32,60 +32,8 @@ args = "node index.js"
 waitForPort = 5000
 
 [[ports]]
-localPort = 5000
+localPort = 36221
 externalPort = 80
-
-[[ports]]
-localPort = 34241
-externalPort = 3002
-
-[[ports]]
-localPort = 34271
-externalPort = 3001
-
-[[ports]]
-localPort = 34705
-externalPort = 5000
-
-[[ports]]
-localPort = 35345
-externalPort = 4200
-
-[[ports]]
-localPort = 35709
-externalPort = 6000
-
-[[ports]]
-localPort = 37635
-externalPort = 3000
-
-[[ports]]
-localPort = 40403
-externalPort = 8008
-
-[[ports]]
-localPort = 41395
-externalPort = 5173
-
-[[ports]]
-localPort = 43525
-externalPort = 6800
-
-[[ports]]
-localPort = 44223
-externalPort = 8080
-
-[[ports]]
-localPort = 45367
-externalPort = 8000
-
-[[ports]]
-localPort = 45377
-externalPort = 8081
-
-[[ports]]
-localPort = 45621
-externalPort = 3003
 
 [deployment]
 deploymentTarget = "autoscale"

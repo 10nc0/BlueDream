@@ -3,9 +3,11 @@ const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const photoBtn = document.getElementById('photoBtn');
 const audioBtn = document.getElementById('audioBtn');
+const attachBtn = document.getElementById('attachBtn');
 const photoInput = document.getElementById('photoInput');
 const audioInput = document.getElementById('audioInput');
 const documentInput = document.getElementById('documentInput');
+const universalInput = document.getElementById('universalInput');
 const attachmentPreview = document.getElementById('attachmentPreview');
 const attachmentName = document.getElementById('attachmentName');
 const removeAttachment = document.getElementById('removeAttachment');
@@ -81,8 +83,10 @@ if (typeof initHopAnimation === 'function') {
 
 photoBtn.addEventListener('click', () => photoInput.click());
 audioBtn.addEventListener('click', () => audioInput.click());
+attachBtn.addEventListener('click', () => universalInput.click());
 
 photoInput.addEventListener('change', handleFileSelect);
+universalInput.addEventListener('change', handleUniversalFileSelect);
 audioInput.addEventListener('change', handleFileSelect);
 documentInput.addEventListener('change', handleFileSelect);
 
@@ -174,9 +178,44 @@ function handleFileSelect(e) {
     reader.readAsDataURL(file);
 }
 
+function handleUniversalFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const isImage = file.type.startsWith('image/');
+    const isAudio = file.type.startsWith('audio/');
+    const isDocument = /\.(pdf|txt|doc|docx|md|rtf)$/i.test(file.name);
+    
+    if (!isImage && !isAudio && !isDocument) {
+        showError('Unsupported file type. Please upload images, audio, or documents.');
+        return;
+    }
+    
+    const maxSize = isImage ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+        showError(`File too large. Max ${isImage ? '5' : '10'}MB.`);
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        currentAttachment = {
+            type: isImage ? 'photo' : isAudio ? 'audio' : 'document',
+            data: event.target.result,
+            name: file.name
+        };
+        const icon = isImage ? '📷' : isAudio ? '🔊' : '📄';
+        attachmentName.textContent = `${icon} ${file.name}`;
+        attachmentPreview.classList.add('visible');
+    };
+    reader.readAsDataURL(file);
+    universalInput.value = '';
+}
+
 function clearAttachment() {
     currentAttachment = null;
     attachmentPreview.classList.remove('visible');
+    universalInput.value = '';
     photoInput.value = '';
     audioInput.value = '';
 }

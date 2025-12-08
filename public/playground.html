@@ -399,6 +399,10 @@
         
         .hidden-input { display: none; }
         
+        /* Mobile/Desktop visibility helpers */
+        .mobile-only { display: none; }
+        .desktop-only { display: flex; }
+        
         .welcome {
             text-align: center;
             padding: 2rem;
@@ -529,10 +533,9 @@
                 font-size: 0.7rem;
             }
             
-            /* Hide upload buttons on mobile for wider query field */
-            .action-buttons .upload-btn {
-                display: none;
-            }
+            /* Swap button visibility on mobile */
+            .mobile-only { display: flex; }
+            .desktop-only { display: none; }
             
             /* Fixed input container at bottom */
             .input-container {
@@ -609,8 +612,9 @@
                     <textarea id="messageInput" placeholder="Drop your file & Ask Nyan AI (all language supported) 🐈‍⬛ nyan~" rows="2"></textarea>
                 </div>
                 <div class="action-buttons">
-                    <button class="upload-btn" id="photoBtn" title="Upload Photo">📷</button>
-                    <button class="upload-btn" id="audioBtn" title="Upload Audio">🔊</button>
+                    <button class="upload-btn desktop-only" id="photoBtn" title="Upload Photo">📷</button>
+                    <button class="upload-btn desktop-only" id="audioBtn" title="Upload Audio">🔊</button>
+                    <button class="upload-btn mobile-only" id="attachBtn" title="Attach File">📎</button>
                     <button class="send-btn" id="sendBtn">Send →</button>
                 </div>
             </div>
@@ -620,6 +624,7 @@
     <input type="file" id="photoInput" class="hidden-input" accept="image/*">
     <input type="file" id="audioInput" class="hidden-input" accept="audio/*">
     <input type="file" id="documentInput" class="hidden-input" accept=".pdf,.txt,.doc,.docx,.md,.rtf">
+    <input type="file" id="universalInput" class="hidden-input" accept="image/*,audio/*,.pdf,.txt,.doc,.docx,.md,.rtf">
     
     <div class="error-toast" id="errorToast"></div>
     
