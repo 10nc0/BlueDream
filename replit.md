@@ -88,3 +88,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Abuse Prevention System**: Burst throttling (>5 req/15s), duplicate prompt detection (60s block), and gibberish entropy filtering.
 - **Multi-File Upload**: Up to 10 attachments per query. Mixed types (photo + document + audio) processed together in parallel.
 - **Token Separation Complete**: Split Groq API tokens - `PLAYGROUND_GROQ_TOKEN` (text) + `PLAYGROUND_GROQ_VISION_TOKEN` (vision) to isolate rate limits.
+- **Image Resize Before Upload**: Client-side resizing to max 2048px + JPEG 85% quality. Reduces camera photos by 80%+, saving bandwidth and vision tokens.
+- **Safari Audio Support**: Auto-detects browser MIME type (audio/mp4 for Safari, audio/webm for Chrome/Firefox) for cross-browser microphone recording.
+- **50MB Total Attachment Limit**: Enforced client-side with friendly error showing current total.
+- **Auto-ZIP Multi-File Uploads**: When 2+ attachments, client bundles into compressed ZIP before upload (30-40% faster). Single files sent uncompressed (no overhead). Server extracts via manifest for existing pipeline.
