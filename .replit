@@ -17,26 +17,22 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "WhatsApp Bridge"
+args = "Nyanbook"
 
 [[workflows.workflow]]
-name = "WhatsApp Bridge"
+name = "Nyanbook"
 author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "node index.js"
 waitForPort = 5000
 
-[[ports]]
-localPort = 5000
-externalPort = 5000
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [[ports]]
-localPort = 36221
+localPort = 5000
 externalPort = 80
 
 [[ports]]
