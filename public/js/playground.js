@@ -12,6 +12,7 @@ const errorToast = document.getElementById('errorToast');
 
 let currentAttachment = null;
 let isProcessing = false;
+let conversationHistory = [];
 
 // ===== DATE/TIME ANIMATION =====
 let lastUpdateSecond = -1;
@@ -189,10 +190,15 @@ async function sendMessage() {
     isProcessing = true;
     sendBtn.disabled = true;
     
-    addMessage('user', message || '(Analyzing attachment)', currentAttachment);
+    const userMessageText = message || '(Analyzing attachment)';
+    addMessage('user', userMessageText, currentAttachment);
+    conversationHistory.push({ role: 'user', content: userMessageText });
     messageInput.value = '';
     
-    const payload = { message };
+    const payload = { 
+        message,
+        history: conversationHistory
+    };
     if (currentAttachment) {
         if (currentAttachment.type === 'photo') {
             payload.photo = currentAttachment.data;
@@ -216,13 +222,17 @@ async function sendMessage() {
         const data = await res.json();
         
         if (!res.ok) {
-            addMessage('assistant', data.reply || 'An error occurred. Please try again.');
+            const reply = data.reply || 'An error occurred. Please try again.';
+            addMessage('assistant', reply);
         } else {
-            addMessage('assistant', data.reply);
+            const reply = data.reply;
+            addMessage('assistant', reply);
+            conversationHistory.push({ role: 'assistant', content: reply });
         }
     } catch (err) {
         removeLoadingMessage();
-        addMessage('assistant', 'Connection error. Please check your internet and try again.');
+        const reply = 'Connection error. Please check your internet and try again.';
+        addMessage('assistant', reply);
     }
     
     isProcessing = false;
