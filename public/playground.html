@@ -376,15 +376,19 @@
             background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
             border: none;
             color: white;
-            padding: 0.75rem 1.5rem;
+            padding: 0;
+            width: 48px;
+            height: 48px;
             border-radius: 0.75rem;
             cursor: pointer;
             font-weight: 600;
-            font-size: 0.9375rem;
+            font-size: 1.5rem;
             transition: all 0.2s;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            justify-content: center;
+            gap: 0;
+            flex-shrink: 0;
         }
         
         .send-btn:hover:not(:disabled) {
@@ -564,10 +568,6 @@
                 flex-shrink: 0;
             }
             
-            /* Swap send button text on mobile */
-            .send-desktop { display: none; }
-            .send-mobile { display: inline; }
-            
             /* Fixed input container at bottom */
             .input-container {
                 position: fixed;
@@ -647,7 +647,7 @@
                     <button class="upload-btn desktop-only" id="photoBtn" title="Upload Photo">📷</button>
                     <button class="upload-btn desktop-only" id="audioBtn" title="Upload Audio">🔊</button>
                     <button class="upload-btn mobile-only" id="attachBtn" title="Attach File">📎</button>
-                    <button class="send-btn" id="sendBtn"><span class="send-desktop">Send →</span><span class="send-mobile" style="display: none;">↑</span></button>
+                    <button class="send-btn" id="sendBtn">↑</button>
                 </div>
             </div>
         </div>
