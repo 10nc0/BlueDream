@@ -547,6 +547,57 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Create ZIP from multiple attachments for bandwidth optimization
+async function createAttachmentsZip(attachmentsList) {
+    if (typeof JSZip === 'undefined') {
+        console.warn('JSZip not loaded, sending uncompressed');
+        return null;
+    }
+    
+    const zip = new JSZip();
+    const manifest = [];
+    
+    attachmentsList.forEach((att, index) => {
+        // Extract base64 data (remove data URL prefix)
+        const base64Match = att.data.match(/^data:([^;]+);base64,(.+)$/);
+        if (!base64Match) return;
+        
+        const mimeType = base64Match[1];
+        const base64Data = base64Match[2];
+        const ext = att.name.split('.').pop() || 'bin';
+        const filename = `${index}_${att.name}`;
+        
+        // Add file to ZIP
+        zip.file(filename, base64Data, { base64: true });
+        
+        // Track metadata for server-side reconstruction
+        manifest.push({
+            filename,
+            type: att.type,
+            originalName: att.name,
+            mimeType
+        });
+    });
+    
+    // Add manifest for server to reconstruct attachments
+    zip.file('manifest.json', JSON.stringify(manifest));
+    
+    // Generate ZIP as base64
+    const zipBlob = await zip.generateAsync({ type: 'base64', compression: 'DEFLATE' });
+    return zipBlob;
+}
+
+// Helper to add attachments without ZIP (single file or fallback)
+function addUncompressedAttachments(payload, attachmentsList) {
+    const photos = attachmentsList.filter(a => a.type === 'photo').map(a => a.data);
+    const audios = attachmentsList.filter(a => a.type === 'audio').map(a => a.data);
+    const documents = attachmentsList.filter(a => a.type === 'document').map(a => ({ data: a.data, name: a.name }));
+    
+    if (photos.length > 0) payload.photos = photos;
+    if (audios.length > 0) payload.audios = audios;
+    if (documents.length > 0) payload.documents = documents;
+}
+
 async function sendMessage() {
     if (isProcessing) return;
     
@@ -571,19 +622,29 @@ async function sendMessage() {
         history: conversationHistory
     };
     
-    // Group attachments by type
-    const photos = attachments.filter(a => a.type === 'photo').map(a => a.data);
-    const audios = attachments.filter(a => a.type === 'audio').map(a => a.data);
-    const documents = attachments.filter(a => a.type === 'document').map(a => ({ data: a.data, name: a.name }));
-    
-    if (photos.length > 0) payload.photos = photos;
-    if (audios.length > 0) payload.audios = audios;
-    if (documents.length > 0) payload.documents = documents;
-    
-    // Save attachments snapshot and clear UI
+    // Save attachments snapshot and clear UI early
     const savedAttachments = [...attachments];
     clearAllAttachments();
     addLoadingMessage();
+    
+    // Use ZIP for 2+ attachments (bandwidth optimization)
+    if (savedAttachments.length >= 2) {
+        try {
+            const zipData = await createAttachmentsZip(savedAttachments);
+            if (zipData) {
+                payload.zipData = zipData;
+            } else {
+                // Fallback to uncompressed if ZIP fails
+                addUncompressedAttachments(payload, savedAttachments);
+            }
+        } catch (zipErr) {
+            console.error('ZIP creation failed:', zipErr);
+            addUncompressedAttachments(payload, savedAttachments);
+        }
+    } else if (savedAttachments.length === 1) {
+        // Single file - no ZIP overhead
+        addUncompressedAttachments(payload, savedAttachments);
+    }
     
     try {
         const res = await fetch('/api/playground', {

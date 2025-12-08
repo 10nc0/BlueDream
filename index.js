@@ -27,6 +27,7 @@ const genesisCounter = require('./server/genesis-counter');
 const Prometheus = require('./prometheus');
 const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document-parser');
 const { identifyFileType, executeExtractionCascade, formatJSONForGroq } = require('./utils/attachment-cascade');
+const JSZip = require('jszip');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
@@ -6353,9 +6354,49 @@ app.post('/api/playground', async (req, res) => {
     capacityManager.recordActivity(clientIp);
     
     try {
-        const { message, photo, audio, document, documentName, photos, audios, documents, history } = req.body;
+        let { message, photo, audio, document, documentName, photos, audios, documents, history, zipData } = req.body;
         let finalPrompt = message || '';
         let extractedContent = [];
+        
+        // Extract attachments from ZIP if present (bandwidth optimization)
+        if (zipData) {
+            try {
+                const zipBuffer = Buffer.from(zipData, 'base64');
+                const zip = await JSZip.loadAsync(zipBuffer);
+                const manifestFile = zip.file('manifest.json');
+                
+                if (manifestFile) {
+                    const manifestContent = await manifestFile.async('string');
+                    const manifest = JSON.parse(manifestContent);
+                    
+                    // Initialize arrays if not present
+                    photos = photos || [];
+                    audios = audios || [];
+                    documents = documents || [];
+                    
+                    // Extract each file based on manifest
+                    for (const entry of manifest) {
+                        const fileContent = await zip.file(entry.filename)?.async('base64');
+                        if (!fileContent) continue;
+                        
+                        const dataUrl = `data:${entry.mimeType};base64,${fileContent}`;
+                        
+                        if (entry.type === 'photo') {
+                            photos.push(dataUrl);
+                        } else if (entry.type === 'audio') {
+                            audios.push(dataUrl);
+                        } else if (entry.type === 'document') {
+                            documents.push({ data: dataUrl, name: entry.originalName });
+                        }
+                    }
+                    
+                    console.log(`📦 Extracted from ZIP: ${photos.length} photos, ${audios.length} audios, ${documents.length} docs`);
+                }
+            } catch (zipErr) {
+                console.error('❌ ZIP extraction failed:', zipErr.message);
+                // Continue with any existing attachments
+            }
+        }
         
         // Abuse detection (burst, duplicate, gibberish)
         const abuseCheck = capacityManager.checkAbuse(clientIp, message);
