@@ -537,8 +537,25 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
                                results.structureContext?.name;
         
         if (wikiSearchName) {
+            // Acronym expansion map - guaranteed first-try match for common compounds
+            const acronymMap = {
+                'THC': 'Tetrahydrocannabinol',
+                'CBD': 'Cannabidiol',
+                'CBG': 'Cannabigerol',
+                'CBN': 'Cannabinol',
+                'CBC': 'Cannabichromene',
+                'LSD': 'Lysergic acid diethylamide',
+                'MDMA': '3,4-Methylenedioxymethamphetamine',
+                'DMT': 'N,N-Dimethyltryptamine',
+                'PCP': 'Phencyclidine',
+                'GHB': 'Gamma-Hydroxybutyric acid'
+            };
+            
+            // Expand acronym if recognized (case-insensitive match)
+            const expandedName = acronymMap[wikiSearchName.toUpperCase()] || wikiSearchName;
+            
             // Clean compound name for Wikipedia URL (remove parenthetical abbreviations)
-            const cleanWikiName = wikiSearchName
+            const cleanWikiName = expandedName
                 .replace(/\s*\([^)]*\)\s*/g, '') // Remove (THC), (CBD), etc.
                 .trim()
                 .replace(/\s+/g, '_'); // Replace spaces with underscores
