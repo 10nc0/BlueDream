@@ -546,25 +546,48 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
             console.log(`📚 Wikipedia API: Fetching full context for "${cleanWikiName}"...`);
             
             try {
+                // Use Action API with prop=extracts for longer content (up to 2000 chars)
+                // REST API only returns ~400 chars, Action API gives full intro section
                 const wikiResponse = await axios.get(
-                    `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanWikiName)}`,
+                    `https://en.wikipedia.org/w/api.php`,
                     { 
                         timeout: 8000,
+                        params: {
+                            action: 'query',
+                            titles: cleanWikiName,
+                            prop: 'extracts|info',
+                            exchars: 2000,           // Up to 2000 chars
+                            exintro: 1,              // First section only (before TOC)
+                            explaintext: 1,          // Plain text, no HTML
+                            inprop: 'url',           // Include page URL
+                            format: 'json',
+                            origin: '*'              // CORS support
+                        },
                         headers: {
                             'User-Agent': 'NyanBook/1.0 (https://nyanbook.com; contact@nyanbook.com)'
                         }
                     }
                 );
                 
-                if (wikiResponse.data && wikiResponse.data.extract) {
-                    wikipediaContext = {
-                        title: wikiResponse.data.title,
-                        description: wikiResponse.data.description || '',
-                        extract: wikiResponse.data.extract, // Full summary (longer than DDG abstract)
-                        source: wikiResponse.data.content_urls?.desktop?.page || 'Wikipedia',
-                        type: wikiResponse.data.type // 'standard', 'disambiguation', etc.
-                    };
-                    console.log(`📚 Wikipedia API: ✓ Retrieved ${wikipediaContext.extract.length} chars for "${wikipediaContext.title}"`);
+                // Parse Action API response structure: { query: { pages: { [pageId]: { ... } } } }
+                const pages = wikiResponse.data?.query?.pages;
+                if (pages) {
+                    const pageId = Object.keys(pages)[0];
+                    const page = pages[pageId];
+                    
+                    // Check for valid page (pageId !== '-1' means page exists)
+                    if (pageId !== '-1' && page.extract) {
+                        wikipediaContext = {
+                            title: page.title,
+                            description: '', // Action API doesn't return description
+                            extract: page.extract, // Full intro section (up to 2000 chars)
+                            source: page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title)}`,
+                            type: 'standard'
+                        };
+                        console.log(`📚 Wikipedia API: ✓ Retrieved ${wikipediaContext.extract.length} chars for "${wikipediaContext.title}"`);
+                    } else {
+                        console.log(`📚 Wikipedia API: Page not found or no extract for "${cleanWikiName}"`);
+                    }
                 }
             } catch (wikiErr) {
                 console.log(`📚 Wikipedia API: Failed - ${wikiErr.message}`);
