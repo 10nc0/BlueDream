@@ -79,6 +79,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Request ID Middleware**: Every HTTP request gets a unique UUID logged at request middleware level. All console logs automatically prefixed with `[request-id]` for easy tracing and debugging. X-Request-ID header returned in responses.
 - **Externalized System Prompts**: NYAN Protocol (1000+ lines) moved from hardcoded inline string to `prompts/nyan-protocol.js`. Cleaner code, easier iteration on prompt tuning, maintains full functionality.
 - **Centralized Constants**: Created `config/constants.js` with all magic numbers grouped by category: TIMEOUTS, CAPACITY, CACHE, SESSION, DISCORD, AI_MODELS, GROQ_RETRY, REPUTATION, FILE_UPLOAD, MISC. Single source of truth for tuning database timeouts, rate limits, cache settings, etc.
+- **Webhook DRY Refactor**: Extracted duplicate media handling logic from `sendToLedger` and `sendToUserOutput` into unified `postPayloadToWebhook` helper. Handles direct buffers, DB media fetches, and text payloads. Eliminates 100+ lines of duplication, single source of truth for webhook POST operations.
 
 **Previous improvements (still active):**
 - **Circuit Breaker**: Persistent abusers (5 events in 1 hour) get 30-minute cooldown. Progressive warnings at 3/5 and 4/5.

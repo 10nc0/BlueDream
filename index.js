@@ -786,6 +786,63 @@ function splitMessageIntoChunks(text, chunkSize = MESSAGE_CHUNK_SIZE) {
     return chunks;
 }
 
+// HELPER: Post to webhook with optional media (eliminates duplicate logic)
+async function postPayloadToWebhook(url, payload, options = {}) {
+    if (!url) throw new Error('Webhook URL required');
+    
+    try {
+        let response;
+        
+        // Handle direct media buffer (from Twilio download)
+        if (options.mediaBuffer) {
+            const FormData = require('form-data');
+            const form = new FormData();
+            form.append('files[0]', options.mediaBuffer, {
+                filename: options.mediaFilename || 'attachment',
+                contentType: options.mediaContentType || 'application/octet-stream'
+            });
+            form.append('payload_json', JSON.stringify(payload));
+            response = await axios.post(url, form, { headers: form.getHeaders() });
+        } 
+        // Handle media from DB buffer table
+        else if (options.isMedia && options.mediaBufferId && options.tenantSchema && options.pool) {
+            const mediaClient = await options.pool.connect();
+            try {
+                const mediaResult = await mediaClient.query(`
+                    SELECT media_data, media_type, filename 
+                    FROM ${options.tenantSchema}.media_buffer 
+                    WHERE id = $1
+                `, [options.mediaBufferId]);
+                
+                if (mediaResult.rows.length === 0) {
+                    throw new Error(`Media buffer ID ${options.mediaBufferId} not found`);
+                }
+                
+                const { media_data, media_type, filename } = mediaResult.rows[0];
+                const FormData = require('form-data');
+                const form = new FormData();
+                form.append('file', media_data, {
+                    filename: filename,
+                    contentType: media_type
+                });
+                form.append('payload_json', JSON.stringify(payload));
+                response = await axios.post(url, form, { headers: form.getHeaders() });
+            } finally {
+                mediaClient.release();
+            }
+        }
+        // Text-only payload
+        else {
+            response = await axios.post(url, payload);
+        }
+        
+        return response;
+    } catch (error) {
+        console.error(`  ❌ Webhook POST failed: ${error.message}`);
+        throw error;
+    }
+}
+
 async function sendToLedger(payload, options = {}, book = null) {
     // WEBHOOK-FIRST: Use webhook URL directly from book object
     let ledgerUrl = book?.output_01_url;
@@ -821,61 +878,16 @@ async function sendToLedger(payload, options = {}, book = null) {
             console.log(`  📍 Targeting channel: ${output.channel_id}`);
         }
 
-        let response;
-        
-        // Handle media vs text - support both direct buffer and media_buffer table
-        if (options.mediaBuffer) {
-            // DISCORD-NATIVE: Direct media buffer from Twilio download
-            const FormData = require('form-data');
-            const form = new FormData();
-            form.append('files[0]', options.mediaBuffer, {
-                filename: options.mediaFilename || 'attachment',
-                contentType: options.mediaContentType || 'application/octet-stream'
-            });
-            form.append('payload_json', JSON.stringify(payload));
-            response = await axios.post(url.toString(), form, { headers: form.getHeaders() });
-        } else if (options.isMedia && options.mediaBufferId) {
-            // LEGACY: Read media from buffer table (retry-safe storage)
-            // CRITICAL: Use schema-qualified queries instead of SET LOCAL search_path
-            const mediaClient = await pool.connect();
-            try {
-                const mediaResult = await mediaClient.query(`
-                    SELECT media_data, media_type, filename 
-                    FROM ${options.tenantSchema}.media_buffer 
-                    WHERE id = $1
-                `, [options.mediaBufferId]);
-                
-                if (mediaResult.rows.length === 0) {
-                    throw new Error(`Media buffer ID ${options.mediaBufferId} not found`);
-                }
-                
-                const { media_data, media_type, filename } = mediaResult.rows[0];
-                const buffer = media_data;
-                
-                const FormData = require('form-data');
-                const form = new FormData();
-                form.append('file', buffer, {
-                    filename: filename,
-                    contentType: media_type
-                });
-                form.append('payload_json', JSON.stringify(payload));
-                response = await axios.post(url.toString(), form, { headers: form.getHeaders() });
-                
-                // Mark as delivered to ledger (schema-qualified)
-                await mediaClient.query(`
-                    UPDATE ${options.tenantSchema}.media_buffer 
-                    SET delivered_to_ledger = true, 
-                        delivery_attempts = delivery_attempts + 1,
-                        last_delivery_attempt = NOW()
-                    WHERE id = $1
-                `, [options.mediaBufferId]);
-                
-            } finally {
-                mediaClient.release();
-            }
-        } else {
-            response = await axios.post(url.toString(), payload);
-        }
+        // Use unified webhook helper
+        const response = await postPayloadToWebhook(url.toString(), payload, {
+            mediaBuffer: options.mediaBuffer,
+            mediaFilename: options.mediaFilename,
+            mediaContentType: options.mediaContentType,
+            isMedia: options.isMedia,
+            mediaBufferId: options.mediaBufferId,
+            tenantSchema: options.tenantSchema,
+            pool
+        });
 
         console.log(`  ✅ Sent to Output #01 (Ledger) - Thread: ${options.threadId || 'channel'}`);
         return response.data?.channel_id || null;
@@ -921,33 +933,7 @@ async function sendToUserOutput(payload, options = {}, book = null) {
         
         console.log(`  📤 Sending to ${webhookList.length} personal webhook(s)...`);
         
-        // CRITICAL: Read media ONCE to avoid connection pool exhaustion
-        let mediaBuffer = null;
-        let mediaType = null;
-        let filename = null;
-        
-        if (options.isMedia && options.mediaBufferId) {
-            const mediaClient = await pool.connect();
-            try {
-                const mediaResult = await mediaClient.query(`
-                    SELECT media_data, media_type, filename 
-                    FROM ${options.tenantSchema}.media_buffer 
-                    WHERE id = $1
-                `, [options.mediaBufferId]);
-                
-                if (mediaResult.rows.length === 0) {
-                    throw new Error(`Media buffer ID ${options.mediaBufferId} not found`);
-                }
-                
-                mediaBuffer = mediaResult.rows[0].media_data;
-                mediaType = mediaResult.rows[0].media_type;
-                filename = mediaResult.rows[0].filename;
-            } finally {
-                mediaClient.release();
-            }
-        }
-        
-        // Send to ALL webhooks in parallel (reusing media buffer)
+        // Send to ALL webhooks in parallel (unified helper handles media)
         const sendPromises = webhookList.map(async (webhook, index) => {
             try {
                 const url = new URL(webhook.url);
@@ -959,19 +945,13 @@ async function sendToUserOutput(payload, options = {}, book = null) {
                     url.searchParams.set('thread_id', output.thread_id);
                 }
                 
-                // Send media or text (using pre-loaded media buffer)
-                if (mediaBuffer) {
-                    const FormData = require('form-data');
-                    const form = new FormData();
-                    form.append('file', mediaBuffer, {
-                        filename: filename,
-                        contentType: mediaType
-                    });
-                    form.append('payload_json', JSON.stringify(payload));
-                    await axios.post(url.toString(), form, { headers: form.getHeaders() });
-                } else {
-                    await axios.post(url.toString(), payload);
-                }
+                // Use unified webhook helper
+                await postPayloadToWebhook(url.toString(), payload, {
+                    isMedia: options.isMedia,
+                    mediaBufferId: options.mediaBufferId,
+                    tenantSchema: options.tenantSchema,
+                    pool
+                });
                 
                 console.log(`    ✅ Sent to "${webhook.name || 'Webhook ' + (index + 1)}"`);
                 return true;
@@ -986,7 +966,7 @@ async function sendToUserOutput(payload, options = {}, book = null) {
         console.log(`  📊 Sent to ${successCount}/${webhookList.length} webhook(s)`);
         
         // Mark media as delivered (only if at least one webhook succeeded)
-        if (mediaBuffer && successCount > 0 && options.mediaBufferId) {
+        if (successCount > 0 && options.isMedia && options.mediaBufferId) {
             const deliveryClient = await pool.connect();
             try {
                 await deliveryClient.query(`
