@@ -76,15 +76,20 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth` (for local processing)
 
 ## Recent Changes (December 8, 2025)
-- **Compound Identification Cascade (H₀ Verified)**: Groq-first, external verification protocol:
-  - **Vision Prompt Update**: Asks Groq for both molecular formula AND "Known as:" common name in a single pass
-  - **Stage 0**: If Groq identified it, use that (most reliable - direct from Vision model)
-  - **Stage 1**: Exact molecular formula search (DDG verification)
-  - **Stage 2**: Multiple DDG query variations (`formula compound`, `formula chemical`, `formula molecule name`, `formula pharmaceutical`, `formula natural product`) - EXPLICIT verification layer
-  - **Stage 3**: Structure-based keyword search (empirical ring types + functional groups from Vision)
-  - **Stage 4**: Fuzzy formula variations (±1 H/C extrapolation, lowest confidence)
-  - All compound IDs tracked with matchType: `groq-known`, `exact`, `verified-ddg`, `structure-based`, `fuzzy`
-  - Protocol prevents hallucination: Groq can't assert a name without Vision supporting it; if uncertain, DDG verifies
+- **DDG Chemistry Enrichment Layer (H₀ Verified)**: For ALL chemistry/chemical structure queries, mandatory DDG knowledge enrichment BEFORE final Groq response:
+  - **enrichChemistryContext()**: Runs 2 parallel DDG queries for every detected chemical structure:
+    - Query 1: Molecular formula search (e.g., "C21H30O2 compound molecule chemical")
+    - Query 2: Structure-based search (e.g., "benzene pyran cyclohexene compound molecule")
+  - **DDG Context Injection**: External knowledge from DDG added to extraction output before final Groq prompt
+  - **Groq deliberates with grounded knowledge**: Cannot hallucinate when DDG provides contradicting facts
+  - **Canonical Formula Extraction**: DDG results mined for correct formula, overriding Vision counting errors
+  - **Both PDF and Word/PPT**: Same enrichment pipeline applied to all document types
+- **Compound Identification Cascade**: 5-stage cascade with matchType tracking:
+  - `ddg-verified`: DDG enrichment found compound (highest reliability)
+  - `groq-known`: Groq Vision identified + DDG fallback
+  - `exact`, `verified-ddg`, `structure-based`, `fuzzy`: Progressive fallback stages
+- **Word/PPT Vision Prompt Update**: Now matches PDF Vision - asks for "Molecular Formula:" and "Known as:" fields
+- **Unified Chemistry Pipeline**: Both `extractPDFVisualContent` and `analyzeDocumentVisuals` now use same DDG enrichment pattern
 - **Request ID Middleware**: Every HTTP request gets a unique UUID logged at request middleware level. All console logs automatically prefixed with `[request-id]` for easy tracing and debugging. X-Request-ID header returned in responses.
 - **Externalized System Prompts**: NYAN Protocol (1000+ lines) moved from hardcoded inline string to `prompts/nyan-protocol.js`. Cleaner code, easier iteration on prompt tuning, maintains full functionality.
 - **Centralized Constants**: Created `config/constants.js` with all magic numbers grouped by category: TIMEOUTS, CAPACITY, CACHE, SESSION, DISCORD, AI_MODELS, GROQ_RETRY, REPUTATION, FILE_UPLOAD, MISC. Single source of truth for tuning database timeouts, rate limits, cache settings, etc.

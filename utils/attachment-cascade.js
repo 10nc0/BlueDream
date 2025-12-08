@@ -247,6 +247,135 @@ async function identifyCompoundByFormula(formula, structureDescription = '', kno
     return null;
 }
 
+// Enrich chemistry context with parallel DDG queries before final Groq response
+async function enrichChemistryContext(formula, structureDescription = '') {
+    const results = { formulaContext: null, structureContext: null };
+    
+    console.log(`🔬 Chemistry Enrichment: Running parallel DDG queries...`);
+    
+    // Build parallel promises
+    const promises = [];
+    
+    // Query 1: Formula-based search
+    if (formula) {
+        const formulaQuery = `${formula} compound molecule chemical`;
+        console.log(`🔬 DDG Query 1: "${formulaQuery}"`);
+        
+        const formulaPromise = axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
+            q: formulaQuery,
+            format: 'json',
+            no_html: 1,
+            skip_disambig: 1,
+            t: 'nyanbook'
+        })}`, { timeout: 5000 }).then(res => {
+            if (res.data.AbstractText) {
+                console.log(`🔬 DDG Query 1: ✓ Found context for formula`);
+                return {
+                    type: 'formula',
+                    name: res.data.Heading || '',
+                    description: res.data.AbstractText,
+                    source: res.data.AbstractURL || 'DuckDuckGo',
+                    formula: formula
+                };
+            }
+            return null;
+        }).catch(err => {
+            console.log(`🔬 DDG Query 1: Failed - ${err.message}`);
+            return null;
+        });
+        
+        promises.push(formulaPromise.then(r => { results.formulaContext = r; }));
+    }
+    
+    // Query 2: Structure-based search
+    if (structureDescription) {
+        const structureTerms = [];
+        if (/benzene|aromatic/i.test(structureDescription)) structureTerms.push('benzene');
+        if (/pyran/i.test(structureDescription)) structureTerms.push('pyran');
+        if (/cyclohexene|cyclohexane/i.test(structureDescription)) structureTerms.push('cyclohexene');
+        if (/cannabin|thc|tetrahydro/i.test(structureDescription)) structureTerms.push('cannabinoid');
+        if (/pentyl|alkyl/i.test(structureDescription)) structureTerms.push('pentyl');
+        if (/hydroxyl|oh group/i.test(structureDescription)) structureTerms.push('hydroxyl');
+        if (/morphine|opioid/i.test(structureDescription)) structureTerms.push('opioid');
+        if (/steroid|cholesterol/i.test(structureDescription)) structureTerms.push('steroid');
+        
+        if (structureTerms.length >= 2) {
+            const structureQuery = `${structureTerms.join(' ')} compound molecule`;
+            console.log(`🔬 DDG Query 2: "${structureQuery}"`);
+            
+            const structurePromise = axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
+                q: structureQuery,
+                format: 'json',
+                no_html: 1,
+                skip_disambig: 1,
+                t: 'nyanbook'
+            })}`, { timeout: 5000 }).then(res => {
+                if (res.data.AbstractText) {
+                    console.log(`🔬 DDG Query 2: ✓ Found context for structure`);
+                    return {
+                        type: 'structure',
+                        name: res.data.Heading || '',
+                        description: res.data.AbstractText,
+                        source: res.data.AbstractURL || 'DuckDuckGo',
+                        searchTerms: structureTerms
+                    };
+                }
+                return null;
+            }).catch(err => {
+                console.log(`🔬 DDG Query 2: Failed - ${err.message}`);
+                return null;
+            });
+            
+            promises.push(structurePromise.then(r => { results.structureContext = r; }));
+        }
+    }
+    
+    // Wait for all queries in parallel
+    await Promise.all(promises);
+    
+    // Format enrichment context for prompt injection
+    let contextText = '';
+    
+    if (results.formulaContext) {
+        contextText += `\n### 🔬 External Knowledge (Formula ${formula}):\n`;
+        contextText += `**${results.formulaContext.name}**: ${results.formulaContext.description}\n`;
+        contextText += `Source: ${results.formulaContext.source}\n`;
+    }
+    
+    if (results.structureContext && results.structureContext.name !== results.formulaContext?.name) {
+        contextText += `\n### 🔬 External Knowledge (Structure):\n`;
+        contextText += `**${results.structureContext.name}**: ${results.structureContext.description}\n`;
+        contextText += `Source: ${results.structureContext.source}\n`;
+    }
+    
+    // Determine verified compound info
+    let verifiedCompound = null;
+    if (results.formulaContext) {
+        verifiedCompound = {
+            name: results.formulaContext.name,
+            description: results.formulaContext.description,
+            source: results.formulaContext.source,
+            matchedFormula: formula,
+            matchType: 'ddg-verified'
+        };
+        // Extract canonical formula from DDG description if present
+        const canonicalMatch = results.formulaContext.description.match(/C\d+H\d+(?:O\d*)?(?:N\d*)?/);
+        if (canonicalMatch) {
+            verifiedCompound.canonicalFormula = canonicalMatch[0];
+            console.log(`🔬 Canonical formula from DDG: ${canonicalMatch[0]}`);
+        }
+    }
+    
+    console.log(`🔬 Chemistry Enrichment: Complete (formula: ${results.formulaContext ? '✓' : '✗'}, structure: ${results.structureContext ? '✓' : '✗'})`);
+    
+    return {
+        contextText,
+        formulaContext: results.formulaContext,
+        structureContext: results.structureContext,
+        verifiedCompound
+    };
+}
+
 // Content-based cache: SHA-256 hash → extraction result
 const extractionCache = new Map();
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
@@ -703,13 +832,25 @@ async function analyzeDocumentVisuals(buffer, fileName, options = {}) {
                             content: [
                                 {
                                     type: 'text',
-                                    text: `Analyze this image from a document. Identify and describe in detail:
-1. If it's a CHEMICAL STRUCTURE: Identify the compound, functional groups, molecular formula if visible
-2. If it's a CHART/GRAPH: Describe the type, axes, data points, trends
-3. If it's a DIAGRAM: Explain what it shows, labels, relationships
-4. If it's other content: Describe what you see
+                                    text: `Analyze this image from a document in detail.
 
-Be specific and technical. This is for scientific/business document analysis.`
+=== IF CHEMICAL STRUCTURE ===
+1. Count atoms carefully: C (carbons), H (hydrogens), O (oxygens), N (nitrogens), etc.
+2. IMPORTANT: For fused ring systems, count shared carbons ONCE, not twice.
+3. Provide MOLECULAR FORMULA: e.g., "Molecular Formula: C21H30O2"
+4. If you recognize the compound, provide: "Known as: [compound name]" (e.g., THC, aspirin, caffeine)
+5. Identify functional groups: -OH, C=O, rings, chains, etc.
+
+=== IF CHART/GRAPH ===
+Describe type, axes, data points, trends.
+
+=== IF DIAGRAM ===
+Explain what it shows, labels, relationships.
+
+=== OTHER CONTENT ===
+Describe what you see.
+
+Be specific and technical. This is for scientific document analysis.`
                                 },
                                 {
                                     type: 'image_url',
@@ -721,7 +862,7 @@ Be specific and technical. This is for scientific/business document analysis.`
                         }
                     ],
                     max_tokens: 1024,
-                    temperature: 0.1
+                    temperature: 0.15
                 },
                 {
                     headers: {
@@ -763,6 +904,38 @@ Be specific and technical. This is for scientific/business document analysis.`
         return { success: false, error: 'No images could be analyzed' };
     }
     
+    // Check for chemical structures and apply DDG enrichment
+    const chemicalStructures = visualDescriptions.filter(vc => vc.contentType === 'chemical');
+    let compoundInfo = null;
+    let chemistryEnrichment = null;
+    
+    if (chemicalStructures.length > 0) {
+        const allDescriptions = chemicalStructures.map(cs => cs.description).join(' ');
+        const { formula, knownName } = extractFormulaAndKnownName(allDescriptions);
+        
+        if (formula) {
+            console.log(`🧪 Detected molecular formula: ${formula}${knownName ? ` (Known as: ${knownName})` : ''}`);
+            
+            // Run DDG enrichment for chemistry queries
+            chemistryEnrichment = await enrichChemistryContext(formula, allDescriptions);
+            
+            if (chemistryEnrichment.verifiedCompound) {
+                compoundInfo = chemistryEnrichment.verifiedCompound;
+                console.log(`🔬 Compound identified via DDG: ${compoundInfo.name}`);
+            } else if (knownName) {
+                // Fall back to Groq's identification if DDG didn't find it
+                compoundInfo = {
+                    name: knownName,
+                    description: `Identified by Groq Vision with formula ${formula}`,
+                    source: 'Groq Vision',
+                    matchedFormula: formula,
+                    matchType: 'groq-known'
+                };
+                console.log(`🔬 Compound identified via Groq: ${knownName}`);
+            }
+        }
+    }
+    
     const formattedVisuals = visualDescriptions.map(vc => {
         const typeLabel = vc.contentType === 'chemical' ? '🧪 Chemical Structure' :
                           vc.contentType === 'chart' ? '📊 Chart/Graph' :
@@ -770,11 +943,27 @@ Be specific and technical. This is for scientific/business document analysis.`
         return `**Image ${vc.index} (${typeLabel}):**\n${vc.description}`;
     }).join('\n\n');
     
+    // Add compound identification section
+    let compoundSection = '';
+    if (compoundInfo && compoundInfo.name) {
+        compoundSection = `\n\n### 🔬 Compound Identification:\n**Name:** ${compoundInfo.name}`;
+        if (compoundInfo.canonicalFormula) {
+            compoundSection += `\n**Formula:** ${compoundInfo.canonicalFormula}`;
+        }
+        compoundSection += `\n**Source:** ${compoundInfo.source}`;
+    }
+    
+    // Add DDG enrichment context
+    const enrichmentSection = chemistryEnrichment?.contextText || '';
+    
     return {
         success: true,
         data: {
-            text: `\n### Visual Content Analysis:\n${formattedVisuals}`,
+            text: `\n### Visual Content Analysis:\n${formattedVisuals}${compoundSection}${enrichmentSection}`,
             visualContent: visualDescriptions,
+            chemicalStructures: chemicalStructures,
+            compoundInfo: compoundInfo,
+            chemistryEnrichment: chemistryEnrichment,
             type: 'doc-vision'
         }
     };
@@ -866,17 +1055,34 @@ async function extractPDFVisualContent(buffer, fileName, options = {}) {
             return { success: false, error: result.error || 'No visual content extracted' };
         }
         
-        // Check for chemical structures and try to identify compounds
+        // Check for chemical structures and apply DDG enrichment
         let compoundInfo = null;
+        let chemistryEnrichment = null;
+        
         if (result.chemicalStructures && result.chemicalStructures.length > 0) {
-            // Extract molecular formula and known name from Vision analysis
             const allDescriptions = result.chemicalStructures.map(cs => cs.description).join(' ');
             const { formula, knownName } = extractFormulaAndKnownName(allDescriptions);
             
             if (formula) {
                 console.log(`🧪 Detected molecular formula: ${formula}${knownName ? ` (Known as: ${knownName})` : ''}`);
-                // Pass known name (from Groq) + structure description for verification
-                compoundInfo = await identifyCompoundByFormula(formula, allDescriptions, knownName);
+                
+                // Run DDG enrichment for chemistry queries
+                chemistryEnrichment = await enrichChemistryContext(formula, allDescriptions);
+                
+                if (chemistryEnrichment.verifiedCompound) {
+                    compoundInfo = chemistryEnrichment.verifiedCompound;
+                    console.log(`🔬 Compound identified via DDG: ${compoundInfo.name}`);
+                } else if (knownName) {
+                    // Fall back to Groq's identification if DDG didn't find it
+                    compoundInfo = {
+                        name: knownName,
+                        description: `Identified by Groq Vision with formula ${formula}`,
+                        source: 'Groq Vision',
+                        matchedFormula: formula,
+                        matchType: 'groq-known'
+                    };
+                    console.log(`🔬 Compound identified via Groq: ${knownName}`);
+                }
             }
         }
         
@@ -888,22 +1094,29 @@ async function extractPDFVisualContent(buffer, fileName, options = {}) {
             return `**Page ${vc.page} (${typeLabel}):**\n${vc.description}`;
         }).join('\n\n');
         
-        // Add compound identification if found
+        // Add compound identification section
         let compoundSection = '';
         if (compoundInfo && compoundInfo.name) {
-            compoundSection = `\n\n### 🔬 Compound Identification:\n**Name:** ${compoundInfo.name}\n**Info:** ${compoundInfo.description}\n**Source:** ${compoundInfo.source}`;
-            console.log(`🔬 Compound identified: ${compoundInfo.name}`);
+            compoundSection = `\n\n### 🔬 Compound Identification:\n**Name:** ${compoundInfo.name}`;
+            if (compoundInfo.canonicalFormula) {
+                compoundSection += `\n**Formula:** ${compoundInfo.canonicalFormula}`;
+            }
+            compoundSection += `\n**Source:** ${compoundInfo.source}`;
         }
+        
+        // Add DDG enrichment context
+        const enrichmentSection = chemistryEnrichment?.contextText || '';
         
         return { 
             success: true, 
             data: { 
-                text: `\n### Visual Content Analysis:\n${visualDescriptions}${compoundSection}`,
+                text: `\n### Visual Content Analysis:\n${visualDescriptions}${compoundSection}${enrichmentSection}`,
                 visualContent: result.visualContent,
                 charts: result.charts,
                 chemicalStructures: result.chemicalStructures,
                 diagrams: result.diagrams,
                 compoundInfo: compoundInfo,
+                chemistryEnrichment: chemistryEnrichment,
                 type: 'pdf-vision'
             }
         };
