@@ -14,6 +14,9 @@ const inputContainer = document.querySelector('.input-container');
 let currentAttachment = null;
 let isProcessing = false;
 let conversationHistory = [];
+let mediaRecorder = null;
+let recordingChunks = [];
+let isRecording = false;
 
 // ===== DATE/TIME ANIMATION =====
 let lastUpdateSecond = -1;
@@ -79,7 +82,56 @@ if (typeof initHopAnimation === 'function') {
 }
 
 attachBtn.addEventListener('click', () => universalInput.click());
-audioBtn.addEventListener('click', () => audioInput.click());
+
+// Audio recording via microphone
+audioBtn.addEventListener('click', async () => {
+    if (isRecording) {
+        // Stop recording
+        mediaRecorder.stop();
+        isRecording = false;
+        audioBtn.textContent = '🎙️';
+        audioBtn.style.opacity = '1';
+    } else {
+        // Start recording
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            recordingChunks = [];
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordingChunks.push(event.data);
+                }
+            };
+            
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(recordingChunks, { type: 'audio/webm' });
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    currentAttachment = {
+                        type: 'audio',
+                        data: event.target.result,
+                        name: `recording-${Date.now()}.webm`
+                    };
+                    attachmentName.textContent = '🎙️ Voice recording';
+                    attachmentPreview.classList.add('visible');
+                };
+                reader.readAsDataURL(audioBlob);
+                
+                // Stop all tracks
+                stream.getTracks().forEach(track => track.stop());
+            };
+            
+            mediaRecorder.start();
+            isRecording = true;
+            audioBtn.textContent = '⏹️';
+            audioBtn.style.opacity = '0.6';
+        } catch (err) {
+            showError('Microphone access denied. Please check browser permissions.');
+            console.error('Microphone error:', err);
+        }
+    }
+});
 
 universalInput.addEventListener('change', handleUniversalFileSelect);
 audioInput.addEventListener('change', handleFileSelect);
@@ -239,6 +291,13 @@ function clearAttachment() {
     attachmentPreview.classList.remove('visible');
     if (universalInput) universalInput.value = '';
     if (audioInput) audioInput.value = '';
+    // Stop any active recording
+    if (isRecording && mediaRecorder) {
+        mediaRecorder.stop();
+        isRecording = false;
+        audioBtn.textContent = '🎙️';
+        audioBtn.style.opacity = '1';
+    }
 }
 
 function showError(msg) {
