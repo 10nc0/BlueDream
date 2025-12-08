@@ -109,10 +109,16 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 - **Audio**: Groq Whisper-large-v3-turbo (Indonesian transcription) → Groq Llama 3.3
 
 **Isolation Architecture:**
-- Uses separate tokens: `PLAYGROUND_GROQ_TOKEN`, `PLAYGROUND_HF_VISION_TOKEN`
+- Uses separate tokens: `PLAYGROUND_GROQ_TOKEN`, `PLAYGROUND_HF_VISION_TOKEN`, `PLAYGROUND_BRAVE_API`
 - Prevents abuse from affecting production Prometheus system
 - Can disable/rate-limit playground without impacting core app
 - 50 requests/hour per IP rate limiting
+
+**Search Cascade (Real-time Knowledge):**
+- **Step 1**: DuckDuckGo Instant Answer API (free, Wikipedia-style facts)
+- **Step 2**: Brave Search API fallback (if DDG returns nothing, for current events/news)
+- Overcomes Groq's December 2023 knowledge cutoff with real-time web data
+- Console logs show search source: `🔍 DDG` or `🦁 Brave`
 
 **Nyan Protocol (Permanent Seed Context):**
 - **Identity:** Origin=0. Nyan (no yes all neither) of nyanbook. Progression=genesis=φ²
