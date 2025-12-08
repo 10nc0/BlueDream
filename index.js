@@ -6293,15 +6293,15 @@ app.post('/api/playground', async (req, res) => {
             }
         }
         
-        // Photo analysis via HuggingFace Qwen2-VL
+        // Photo analysis via Groq Llama 3.2 Vision (primary) + HF Endpoints fallback
         if (photo) {
-            if (!PLAYGROUND_HF_VISION_TOKEN) {
+            if (!PLAYGROUND_GROQ_TOKEN) {
                 return res.status(503).json({ 
                     reply: 'Photo analysis is not configured. Please try text only.' 
                 });
             }
             
-            // Check HF Vision daily quota (40/day, UTC midnight reset)
+            // Check vision daily quota (40/day, UTC midnight reset)
             const quotaCheck = checkHfVisionQuota();
             if (!quotaCheck.allowed) {
                 return res.json({ 
@@ -6309,47 +6309,65 @@ app.post('/api/playground', async (req, res) => {
                 });
             }
             
-            console.log(`🎮 Playground: Analyzing photo for ${clientIp}`);
-            const visionPrompt = 'Extract all text exactly. Describe image factually. No interpretation, only observations.';
+            console.log(`🎮 Playground: Analyzing photo via Groq Vision for ${clientIp}`);
+            
+            // Preserve original MIME type from data URL
+            let imageUrl = photo;
+            if (!photo.startsWith('data:')) {
+                // If raw base64, assume JPEG
+                imageUrl = `data:image/jpeg;base64,${photo}`;
+            }
+            
+            const visionPrompt = message || 'Extract all text exactly from this image. Describe the image factually. If this is a receipt, plate, or sign, output structured text.';
             
             try {
-                const base64Data = photo.split(',')[1] || photo;
-                
+                // Primary: Groq Llama 4 Scout Vision (fast, unified provider)
                 const visionResponse = await axios.post(
-                    'https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct',
+                    'https://api.groq.com/openai/v1/chat/completions',
                     {
-                        inputs: base64Data,
-                        parameters: {
-                            text: visionPrompt,
-                            max_new_tokens: 500,
-                            temperature: H0_TEMPERATURE,
-                            top_p: 0.95
-                        }
+                        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+                        messages: [
+                            { 
+                                role: 'system', 
+                                content: 'You are an expert image analyst. Extract all text exactly. Describe images factually. For Indonesian text (receipts, plates, signs), output structured text with confidence. No hallucinations.' 
+                            },
+                            { 
+                                role: 'user', 
+                                content: [
+                                    { type: 'text', text: visionPrompt },
+                                    { type: 'image_url', image_url: { url: imageUrl } }
+                                ] 
+                            }
+                        ],
+                        temperature: H0_TEMPERATURE,
+                        max_tokens: 500
                     },
                     {
                         headers: {
-                            'Authorization': `Bearer ${PLAYGROUND_HF_VISION_TOKEN}`,
+                            'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`,
                             'Content-Type': 'application/json'
                         },
                         timeout: 30000
                     }
                 );
                 
-                const photoDescription = visionResponse.data[0]?.generated_text || 
-                                         visionResponse.data.generated_text || 
-                                         'Unable to analyze image';
+                const photoDescription = visionResponse.data.choices?.[0]?.message?.content || 'Unable to analyze image';
                 
-                // Consume HF Vision quota on successful analysis
+                // Consume vision quota on successful analysis
                 consumeHfVisionQuota();
                 
                 finalPrompt = `Photo analysis: ${photoDescription}\n\nUser query: ${message || 'Analyze this image.'}`;
                 
             } catch (visionError) {
-                console.error('❌ Playground vision error:', visionError.message);
+                console.error('❌ Playground Groq vision error:', visionError.response?.data || visionError.message);
                 
-                if (visionError.response?.status === 503) {
-                    return res.status(503).json({ 
-                        reply: 'Vision model is warming up. Please try again in 30 seconds.' 
+                // TODO: Add HF Endpoints fallback here when configured
+                // const HF_ENDPOINT_URL = process.env.HF_ENDPOINT_URL;
+                // if (HF_ENDPOINT_URL) { /* fallback to DeepSeek-OCR */ }
+                
+                if (visionError.response?.status === 429) {
+                    return res.status(429).json({ 
+                        reply: 'Vision API rate limited. Please try again in a moment.' 
                     });
                 }
                 
