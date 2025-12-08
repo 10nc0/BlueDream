@@ -5243,15 +5243,57 @@
                 showDownloadStatus('⬇️ Preparing book download...', 'info');
                 console.log('⬇️ Starting download for book:', fractalId);
                 
-                const accessToken = localStorage.getItem('accessToken');
+                let accessToken = localStorage.getItem('accessToken');
                 
                 // Use direct fetch for binary data to avoid JSON header issues
-                const response = await fetch(`/api/books/${fractalId}/export`, {
+                let response = await fetch(`/api/books/${fractalId}/export`, {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${accessToken}`
                     }
                 });
+                
+                // If token expired (401), try to refresh and retry
+                if (response.status === 401) {
+                    console.log('⬇️ Token expired, attempting refresh...');
+                    const refreshToken = localStorage.getItem('refreshToken');
+                    
+                    if (refreshToken) {
+                        const refreshResponse = await fetch('/api/auth/refresh', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ refreshToken })
+                        });
+                        
+                        if (refreshResponse.ok) {
+                            const refreshData = await refreshResponse.json();
+                            localStorage.setItem('accessToken', refreshData.accessToken);
+                            if (refreshData.refreshToken) {
+                                localStorage.setItem('refreshToken', refreshData.refreshToken);
+                            }
+                            accessToken = refreshData.accessToken;
+                            console.log('⬇️ Token refreshed, retrying download...');
+                            
+                            // Retry the download with new token
+                            response = await fetch(`/api/books/${fractalId}/export`, {
+                                method: 'GET',
+                                headers: {
+                                    'Authorization': `Bearer ${accessToken}`
+                                }
+                            });
+                        } else {
+                            // Refresh failed, redirect to login
+                            localStorage.removeItem('accessToken');
+                            localStorage.removeItem('refreshToken');
+                            window.location.href = '/login.html';
+                            return;
+                        }
+                    } else {
+                        // No refresh token, redirect to login
+                        window.location.href = '/login.html';
+                        return;
+                    }
+                }
                 
                 showDownloadStatus('⬇️ Downloading data...', 'info');
                 console.log('⬇️ Response status:', response.status);
