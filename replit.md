@@ -76,21 +76,15 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth` (for local processing)
 
 ## Recent Changes (December 8, 2025)
-- **Circuit Breaker**: Persistent abusers (5 events in 1 hour) get 30-minute cooldown. Progressive warnings at 3/5 and 4/5 so lockout is never sudden. Forgiveness: 1 hour of good behavior resets abuse counter.
-- **Minimum Viable Floor**: Even at extreme scale (500+ users), everyone gets at least 2 queries/hour guaranteed.
-- **Logarithmic Reputation Growth**: Faster early rewards: ~1.09× at day 1, 1.27× at day 7, 1.44× at day 30 (vs linear 1.07×/1.30×). Reaches 1.5× cap at ~100 days.
-- **Friendly Rate Limit Messages**: No explicit rate disclosure (violates "pocket sovereign" principle). Users rest WITH Nyan via tiered cat-themed messages: catnap (1min), sunbeam rest (3-5min), cozy box (6-10min), sacred rest (11-15min), dreamtime (circuit breaker).
-- **Continuous Token Refill**: Upgraded from fixed 60-second refill intervals to proportional refill based on elapsed time. Tokens now trickle in smoothly (minimum 6s interval), eliminating the "59-second penalty" where users had to wait for the next full minute.
-- **Reputation Bonus System**: Returning users get up to +50% cost reduction based on loyalty. Uses PostgreSQL persistence (`core.playground_reputation`) with SHA-256 hashed IPs for privacy.
-- **Groq Retry with Backoff**: Added exponential backoff retry for Groq 429 errors (text: 3 retries, vision: 2 retries). Delays: 1s → 2s → 4s max, respects `retry-after` header when present.
-- **Enhanced Error Logging**: Groq errors now log full rate limit headers (`x-ratelimit-*`), error body, and prompt size estimate for debugging.
-- **Dynamic Capacity Sharing**: Adaptive per-IP capacity system. Global pools (text 240/hr, vision 120/hr, brave 360/hr) distribute evenly among active IPs in 180-min window. When quiet, users get more quota; when busy, limits tighten fairly. Dev IPs fully exempt.
-- **Abuse Prevention System**: Burst throttling (>5 req/15s), duplicate prompt detection (60s block), and gibberish entropy filtering.
-- **Multi-File Upload**: Up to 10 attachments per query. Mixed types (photo + document + audio) processed together in parallel.
-- **Token Separation Complete**: Split Groq API tokens - `PLAYGROUND_GROQ_TOKEN` (text) + `PLAYGROUND_GROQ_VISION_TOKEN` (vision) to isolate rate limits.
-- **Image Resize Before Upload**: Client-side resizing to max 2048px + JPEG 85% quality. Reduces camera photos by 80%+, saving bandwidth and vision tokens.
-- **Safari Audio Support**: Auto-detects browser MIME type (audio/mp4 for Safari, audio/webm for Chrome/Firefox) for cross-browser microphone recording.
-- **50MB Total Attachment Limit**: Enforced client-side with friendly error showing current total.
-- **Auto-ZIP Multi-File Uploads**: When 2+ attachments, client bundles into compressed ZIP before upload (30-40% faster). Single files sent uncompressed (no overhead). Server extracts via manifest for existing pipeline.
-- **DB Query Rate Limiter**: Protects reputation lookup queries (max 1 per IP per minute). Falls back to stale cache or default multiplier if rate limited, preventing DB spam at extreme scale.
-- **Internal Usage Scribe**: `/api/playground/usage` endpoint tracks daily Groq token consumption (requests, prompt_tokens, completion_tokens). Persisted to PostgreSQL (`core.playground_usage`) for historical analysis. No external dashboard dependency.
+- **Request ID Middleware**: Every HTTP request gets a unique UUID logged at request middleware level. All console logs automatically prefixed with `[request-id]` for easy tracing and debugging. X-Request-ID header returned in responses.
+- **Externalized System Prompts**: NYAN Protocol (1000+ lines) moved from hardcoded inline string to `prompts/nyan-protocol.js`. Cleaner code, easier iteration on prompt tuning, maintains full functionality.
+- **Centralized Constants**: Created `config/constants.js` with all magic numbers grouped by category: TIMEOUTS, CAPACITY, CACHE, SESSION, DISCORD, AI_MODELS, GROQ_RETRY, REPUTATION, FILE_UPLOAD, MISC. Single source of truth for tuning database timeouts, rate limits, cache settings, etc.
+
+**Previous improvements (still active):**
+- **Circuit Breaker**: Persistent abusers (5 events in 1 hour) get 30-minute cooldown. Progressive warnings at 3/5 and 4/5.
+- **Logarithmic Reputation Growth**: Reaching 1.5× cost reduction cap at ~100 days.
+- **Friendly Rate Limit Messages**: Cat-themed wellness prompts instead of harsh rejections.
+- **Continuous Token Refill**: Smooth proportional refill (minimum 6s intervals).
+- **Dynamic Capacity Sharing**: Adaptive per-IP quotas among active users.
+- **Abuse Prevention**: Burst throttling, duplicate detection, entropy filtering.
+- **Internal Usage Scribe**: `/api/playground/usage` tracks daily Groq token consumption with PostgreSQL persistence.
