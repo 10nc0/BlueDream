@@ -18,10 +18,12 @@ async function extractTextFromDocument(base64Data, fileName) {
         if (ext === 'pdf') {
             text = await extractPDF(buffer);
         } else if (['xlsx', 'xls'].includes(ext)) {
-            text = await extractExcel(buffer);
-        } else if (['docx', 'doc'].includes(ext)) {
+            text = await extractExcel(buffer, ext);
+        } else if (ext === 'docx') {
             text = await extractWord(buffer);
-        } else if (['txt', 'md', 'rtf'].includes(ext)) {
+        } else if (ext === 'doc') {
+            throw new Error('Legacy .doc format is not supported. Please convert to .docx or PDF first.');
+        } else if (['txt', 'md', 'csv'].includes(ext)) {
             text = buffer.toString('utf-8');
         } else {
             text = buffer.toString('utf-8');
@@ -43,9 +45,18 @@ async function extractPDF(buffer) {
     return data.text || '';
 }
 
-async function extractExcel(buffer) {
+async function extractExcel(buffer, ext) {
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
+    
+    if (ext === 'xlsx') {
+        await workbook.xlsx.load(buffer);
+    } else {
+        try {
+            await workbook.xlsx.load(buffer);
+        } catch (e) {
+            throw new Error('Legacy .xls format may not be fully supported. Please convert to .xlsx');
+        }
+    }
     
     const sheets = [];
     
@@ -53,20 +64,43 @@ async function extractExcel(buffer) {
         const rows = [];
         rows.push(`\n### Sheet: ${sheet.name}\n`);
         
-        let headers = [];
-        sheet.eachRow((row, rowNum) => {
-            const values = row.values.slice(1).map(v => {
-                if (v === null || v === undefined) return '';
-                if (typeof v === 'object' && v.text) return v.text;
-                if (typeof v === 'object' && v.result !== undefined) return v.result;
-                return String(v);
-            });
+        const columnCount = sheet.actualColumnCount || sheet.columnCount || 1;
+        let headerRow = [];
+        
+        sheet.eachRow({ includeEmpty: false }, (row, rowNum) => {
+            const values = [];
+            for (let col = 1; col <= columnCount; col++) {
+                const cell = row.getCell(col);
+                let value = '';
+                
+                if (cell.value === null || cell.value === undefined) {
+                    value = '';
+                } else if (typeof cell.value === 'object') {
+                    if (cell.value.text) {
+                        value = cell.value.text;
+                    } else if (cell.value.result !== undefined) {
+                        value = String(cell.value.result);
+                    } else if (cell.value.formula && cell.result !== undefined) {
+                        value = String(cell.result);
+                    } else {
+                        value = String(cell.text || cell.value);
+                    }
+                } else {
+                    value = String(cell.value);
+                }
+                
+                value = value.replace(/\|/g, '¦').replace(/\n/g, ' ');
+                values.push(value);
+            }
             
             if (rowNum === 1) {
-                headers = values;
+                headerRow = values;
                 rows.push(`| ${values.join(' | ')} |`);
                 rows.push(`| ${values.map(() => '---').join(' | ')} |`);
             } else {
+                while (values.length < headerRow.length) {
+                    values.push('');
+                }
                 rows.push(`| ${values.join(' | ')} |`);
             }
         });

@@ -25,6 +25,7 @@ const fractalId = require('./utils/fractal-id');
 const MetadataExtractor = require('./metadata-extractor');
 const genesisCounter = require('./server/genesis-counter');
 const Prometheus = require('./prometheus');
+const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document-parser');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
@@ -6319,7 +6320,7 @@ app.post('/api/playground', async (req, res) => {
             }
         }
         
-        // Document analysis
+        // Document analysis (PDF, Excel, Word, Text)
         else if (document) {
             if (!PLAYGROUND_GROQ_TOKEN) {
                 return res.status(503).json({ 
@@ -6327,21 +6328,37 @@ app.post('/api/playground', async (req, res) => {
                 });
             }
             
-            console.log(`🎮 Playground: Analyzing document for ${clientIp}`);
-            const docPrompt = 'Extract key information from this document. Provide a structured summary of its contents.';
+            console.log(`🎮 Playground: Analyzing document "${documentName}" for ${clientIp}`);
             
             try {
                 const base64Data = document.split(',')[1] || document;
-                const docBuffer = Buffer.from(base64Data, 'base64');
-                const docText = docBuffer.toString('utf-8');
                 
-                // For documents, include extracted text in the prompt
-                finalPrompt = `Document: ${documentName}\n\nContent:\n${docText}\n\nUser query: ${message || 'Analyze this document.'}`;
+                // Extract text using proper parser (PDF, Excel, Word support)
+                const documentText = await extractTextFromDocument(base64Data, documentName);
+                
+                if (!documentText || documentText.trim().length === 0) {
+                    return res.status(400).json({ 
+                        reply: 'Could not extract text from this document. Please try a different file or paste the text directly.' 
+                    });
+                }
+                
+                // Build document-aware prompt
+                finalPrompt = getDocumentPrompt(documentText, documentName, message);
+                console.log(`📄 Document processed: ${documentText.length} chars extracted from ${documentName}`);
                 
             } catch (docError) {
                 console.error('❌ Playground document error:', docError.message);
+                
+                // Friendly 400 for known unsupported formats
+                if (docError.message.includes('not supported') || 
+                    docError.message.includes('Please convert')) {
+                    return res.status(400).json({ 
+                        reply: docError.message 
+                    });
+                }
+                
                 return res.status(500).json({ 
-                    reply: 'Document analysis failed. Please try with text only.' 
+                    reply: `Document analysis failed: ${docError.message}. Please try a different file format or paste the text directly.` 
                 });
             }
         }
