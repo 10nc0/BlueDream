@@ -34,7 +34,9 @@ function extractFormulaAndKnownName(text) {
         let candidate = knownAsMatch[1].trim();
         // Clean up trailing words like "compound", "molecule", etc.
         candidate = candidate.replace(/\s+(compound|molecule|structure|chemical|acid|analog|derivative)$/i, '').trim();
-        if (candidate && candidate.toLowerCase() !== 'unknown' && candidate.length > 1) {
+        // Reject verbose phrases that aren't actual compound names
+        const verbosePatterns = /^(the\s+(compound|structure|molecule)|this|it|appears|seems|likely|possibly|probably)/i;
+        if (candidate && candidate.toLowerCase() !== 'unknown' && candidate.length > 1 && !verbosePatterns.test(candidate)) {
             knownName = candidate;
         }
     }
