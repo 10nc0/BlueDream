@@ -128,6 +128,50 @@ function getTotalAttachmentSize() {
     return attachments.reduce((sum, att) => sum + getAttachmentSize(att), 0);
 }
 
+// Image resizing to save bandwidth and tokens
+const MAX_IMAGE_DIMENSION = 2048;
+const IMAGE_QUALITY = 0.85; // 85% JPEG quality
+
+function resizeImage(base64Data, callback) {
+    const img = new Image();
+    
+    img.onload = () => {
+        // Check if resizing is needed
+        if (img.width <= MAX_IMAGE_DIMENSION && img.height <= MAX_IMAGE_DIMENSION) {
+            callback(base64Data); // Already small enough
+            return;
+        }
+        
+        // Calculate new dimensions (maintain aspect ratio)
+        let newWidth = img.width;
+        let newHeight = img.height;
+        
+        if (img.width > MAX_IMAGE_DIMENSION || img.height > MAX_IMAGE_DIMENSION) {
+            const ratio = Math.min(MAX_IMAGE_DIMENSION / img.width, MAX_IMAGE_DIMENSION / img.height);
+            newWidth = Math.round(img.width * ratio);
+            newHeight = Math.round(img.height * ratio);
+        }
+        
+        // Draw to canvas and compress
+        const canvas = document.createElement('canvas');
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, newWidth, newHeight);
+        
+        // Export as JPEG with quality setting
+        const resized = canvas.toDataURL('image/jpeg', IMAGE_QUALITY);
+        callback(resized);
+    };
+    
+    img.onerror = () => {
+        console.error('Failed to load image for resizing');
+        callback(base64Data); // Fallback to original
+    };
+    
+    img.src = base64Data;
+}
+
 function addAttachment(attachment) {
     if (attachments.length >= MAX_ATTACHMENTS) {
         showError(`Maximum ${MAX_ATTACHMENTS} attachments allowed.`);
@@ -278,11 +322,22 @@ document.addEventListener('drop', (e) => {
             
             const reader = new FileReader();
             reader.onload = (event) => {
-                addAttachment({
-                    type: isImage ? 'photo' : isAudio ? 'audio' : 'document',
-                    data: event.target.result,
-                    name: file.name
-                });
+                if (isImage) {
+                    // Resize image before adding
+                    resizeImage(event.target.result, (resized) => {
+                        addAttachment({
+                            type: 'photo',
+                            data: resized,
+                            name: file.name
+                        });
+                    });
+                } else {
+                    addAttachment({
+                        type: isAudio ? 'audio' : 'document',
+                        data: event.target.result,
+                        name: file.name
+                    });
+                }
             };
             reader.readAsDataURL(file);
         });
@@ -309,10 +364,13 @@ document.addEventListener('paste', (e) => {
         
         const reader = new FileReader();
         reader.onload = (event) => {
-            addAttachment({
-                type: 'photo',
-                data: event.target.result,
-                name: `pasted-${Date.now()}.png`
+            // Resize image before adding
+            resizeImage(event.target.result, (resized) => {
+                addAttachment({
+                    type: 'photo',
+                    data: resized,
+                    name: `pasted-${Date.now()}.png`
+                });
             });
         };
         reader.readAsDataURL(blob);
@@ -333,19 +391,31 @@ function handleFileSelect(e) {
     const file = e.target.files[0];
     if (!file) return;
     
-    const maxSize = file.type.startsWith('image/') ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+    const isImage = file.type.startsWith('image/');
+    const maxSize = isImage ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
     if (file.size > maxSize) {
-        showError(`File too large. Max ${file.type.startsWith('image/') ? '5' : '10'}MB.`);
+        showError(`File too large. Max ${isImage ? '5' : '10'}MB.`);
         return;
     }
     
     const reader = new FileReader();
     reader.onload = (event) => {
-        addAttachment({
-            type: file.type.startsWith('image/') ? 'photo' : 'audio',
-            data: event.target.result,
-            name: file.name
-        });
+        if (isImage) {
+            // Resize image before adding
+            resizeImage(event.target.result, (resized) => {
+                addAttachment({
+                    type: 'photo',
+                    data: resized,
+                    name: file.name
+                });
+            });
+        } else {
+            addAttachment({
+                type: 'audio',
+                data: event.target.result,
+                name: file.name
+            });
+        }
     };
     reader.readAsDataURL(file);
     audioInput.value = '';
@@ -378,11 +448,22 @@ function handleUniversalFileSelect(e) {
         
         const reader = new FileReader();
         reader.onload = (event) => {
-            addAttachment({
-                type: isImage ? 'photo' : isAudio ? 'audio' : 'document',
-                data: event.target.result,
-                name: file.name
-            });
+            if (isImage) {
+                // Resize image before adding
+                resizeImage(event.target.result, (resized) => {
+                    addAttachment({
+                        type: 'photo',
+                        data: resized,
+                        name: file.name
+                    });
+                });
+            } else {
+                addAttachment({
+                    type: isAudio ? 'audio' : 'document',
+                    data: event.target.result,
+                    name: file.name
+                });
+            }
         };
         reader.readAsDataURL(file);
     });
