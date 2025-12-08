@@ -628,8 +628,8 @@
                         <div class="feature-label">Text Chat</div>
                     </div>
                     <div class="feature">
-                        <div class="feature-icon">📷</div>
-                        <div class="feature-label">Photo Analysis</div>
+                        <div class="feature-icon">📎</div>
+                        <div class="feature-label">File Upload</div>
                     </div>
                     <div class="feature">
                         <div class="feature-icon">🔊</div>
@@ -649,19 +649,16 @@
                     <textarea id="messageInput" placeholder="Drop your file & Ask Nyan AI (all language supported) 🐈‍⬛ nyan~" rows="2"></textarea>
                 </div>
                 <div class="action-buttons">
-                    <button class="upload-btn desktop-only" id="photoBtn" title="Upload Photo">📷</button>
-                    <button class="upload-btn desktop-only" id="audioBtn" title="Upload Audio">🔊</button>
-                    <button class="upload-btn mobile-only" id="attachBtn" title="Attach File">📎</button>
+                    <button class="upload-btn" id="attachBtn" title="Attach File (PDF, Excel, Word, Image, Audio)">📎</button>
+                    <button class="upload-btn desktop-only" id="audioBtn" title="Record Audio">🎙️</button>
                     <button class="send-btn" id="sendBtn">↑</button>
                 </div>
             </div>
         </div>
     </div>
     
-    <input type="file" id="photoInput" class="hidden-input" accept="image/*">
+    <input type="file" id="universalInput" class="hidden-input" accept="image/*,audio/*,.pdf,.xlsx,.xls,.txt,.doc,.docx,.md,.csv">
     <input type="file" id="audioInput" class="hidden-input" accept="audio/*">
-    <input type="file" id="documentInput" class="hidden-input" accept=".pdf,.txt,.doc,.docx,.md,.rtf">
-    <input type="file" id="universalInput" class="hidden-input" accept="image/*,audio/*,.pdf,.txt,.doc,.docx,.md,.rtf">
     
     <div class="error-toast" id="errorToast"></div>
     

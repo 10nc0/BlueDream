@@ -1,13 +1,10 @@
 const messagesEl = document.getElementById('messages');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
-const photoBtn = document.getElementById('photoBtn');
 const audioBtn = document.getElementById('audioBtn');
 const attachBtn = document.getElementById('attachBtn');
-const photoInput = document.getElementById('photoInput');
-const audioInput = document.getElementById('audioInput');
-const documentInput = document.getElementById('documentInput');
 const universalInput = document.getElementById('universalInput');
+const audioInput = document.getElementById('audioInput');
 const attachmentPreview = document.getElementById('attachmentPreview');
 const attachmentName = document.getElementById('attachmentName');
 const removeAttachment = document.getElementById('removeAttachment');
@@ -81,14 +78,11 @@ if (typeof initHopAnimation === 'function') {
     initHopAnimation();
 }
 
-photoBtn.addEventListener('click', () => photoInput.click());
-audioBtn.addEventListener('click', () => audioInput.click());
 attachBtn.addEventListener('click', () => universalInput.click());
+audioBtn.addEventListener('click', () => audioInput.click());
 
-photoInput.addEventListener('change', handleFileSelect);
 universalInput.addEventListener('change', handleUniversalFileSelect);
 audioInput.addEventListener('change', handleFileSelect);
-documentInput.addEventListener('change', handleFileSelect);
 
 removeAttachment.addEventListener('click', clearAttachment);
 
@@ -119,10 +113,10 @@ document.addEventListener('drop', (e) => {
         const file = files[0];
         const isImage = file.type.startsWith('image/');
         const isAudio = file.type.startsWith('audio/');
-        const isDocument = /\.(pdf|txt|doc|docx|md|rtf)$/i.test(file.name);
+        const isDocument = /\.(pdf|xlsx|xls|txt|doc|docx|md|csv)$/i.test(file.name);
         
         if (!isImage && !isAudio && !isDocument) {
-            showError('Unsupported file type. Please upload images, audio, or documents (PDF, TXT, DOC, DOCX, MD, RTF).');
+            showError('Unsupported file type. Please upload images, audio, or documents (PDF, Excel, Word, TXT, CSV).');
             return;
         }
         
