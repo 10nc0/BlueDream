@@ -6305,7 +6305,7 @@ async function searchBrave(query, clientIp = null) {
     
     // Check brave capacity if IP provided
     if (clientIp) {
-        const braveCapacity = capacityManager.consumeToken(clientIp, 'brave');
+        const braveCapacity = await capacityManager.consumeToken(clientIp, 'brave');
         if (!braveCapacity.allowed) {
             console.log(`🦁 Brave: Capacity exhausted for ${clientIp} - ${braveCapacity.reason}`);
             return null;
@@ -6549,7 +6549,7 @@ app.post('/api/playground', async (req, res) => {
                 const photoData = photoList[i];
                 
                 // Check vision capacity (dynamic sharing among active IPs)
-                const visionCapacity = capacityManager.consumeToken(clientIp, 'vision');
+                const visionCapacity = await capacityManager.consumeToken(clientIp, 'vision');
                 if (!visionCapacity.allowed) {
                     extractedContent.push(`[Photo ${i + 1}]: Skipped - ${visionCapacity.reason}`);
                     console.log(`⏸️ Photo ${i + 1} skipped: ${visionCapacity.reason}`);
@@ -6715,7 +6715,7 @@ app.post('/api/playground', async (req, res) => {
         }
         
         // Check text capacity (dynamic sharing among active IPs)
-        const textCapacity = capacityManager.consumeToken(clientIp, 'text');
+        const textCapacity = await capacityManager.consumeToken(clientIp, 'text');
         if (!textCapacity.allowed) {
             console.log(`⏸️ Text generation blocked for ${clientIp}: ${textCapacity.reason}`);
             return res.status(429).json({ 
@@ -6919,6 +6919,10 @@ app.listen(PORT, '0.0.0.0', async () => {
     }
     
     await initializeDatabase();
+    
+    // Initialize capacity manager with database for reputation persistence
+    capacityManager.setDbPool(pool);
+    await capacityManager.initReputationTable();
     
     // Server is now ready for requests
     console.log('✅ Multi-tenant NyanBook~ ready');

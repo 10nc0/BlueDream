@@ -1,5 +1,5 @@
 const ACTIVITY_WINDOW_MS = 180 * 60 * 1000; // 180 minutes (3 hours)
-const REFILL_INTERVAL_MS = 60 * 1000; // Refill tokens every minute
+const REFILL_INTERVAL_MS = 60 * 1000; // Minimum interval between refill checks
 
 const SERVICE_CONFIGS = {
     text: { poolPerHour: 240, costMultiplier: 1 },
@@ -11,11 +11,17 @@ const activeIPs = new Map();
 const ipBuckets = new Map();
 const promptHistory = new Map();
 const burstTrackers = new Map();
+const ipReputation = new Map(); // In-memory cache for reputation data
 
 let exemptIPs = new Set(['127.0.0.1', '::1']);
+let dbPool = null; // Database pool reference for reputation persistence
 
 function setExemptIPs(ips) {
     exemptIPs = new Set(ips);
+}
+
+function setDbPool(pool) {
+    dbPool = pool;
 }
 
 function isExempt(ip) {
@@ -43,6 +49,55 @@ function getActiveIPCount() {
     return Math.max(1, count);
 }
 
+async function getReputationMultiplier(ip) {
+    if (isExempt(ip)) return 1.5; // Exempt IPs get max bonus
+    
+    const cached = ipReputation.get(ip);
+    const now = Date.now();
+    
+    if (cached && (now - cached.cachedAt) < 300000) {
+        return cached.multiplier;
+    }
+    
+    if (!dbPool) {
+        return 1.0;
+    }
+    
+    try {
+        const result = await dbPool.query(
+            `SELECT first_seen FROM core.playground_reputation WHERE ip_hash = $1`,
+            [hashIP(ip)]
+        );
+        
+        let firstSeen;
+        if (result.rows.length === 0) {
+            await dbPool.query(
+                `INSERT INTO core.playground_reputation (ip_hash, first_seen) VALUES ($1, NOW())
+                 ON CONFLICT (ip_hash) DO NOTHING`,
+                [hashIP(ip)]
+            );
+            firstSeen = new Date();
+        } else {
+            firstSeen = result.rows[0].first_seen;
+        }
+        
+        const daysSinceStart = (now - new Date(firstSeen).getTime()) / (24 * 60 * 60 * 1000);
+        const multiplier = Math.min(1.5, 1.0 + daysSinceStart * 0.01);
+        
+        ipReputation.set(ip, { multiplier, cachedAt: now });
+        
+        return multiplier;
+    } catch (error) {
+        console.log(`⚠️ Reputation lookup failed: ${error.message}`);
+        return 1.0;
+    }
+}
+
+function hashIP(ip) {
+    const crypto = require('crypto');
+    return crypto.createHash('sha256').update(ip + '_nyan_salt_v1').digest('hex').substring(0, 32);
+}
+
 function calculateShare(poolPerHour, activeCount) {
     const evenShare = poolPerHour / activeCount;
     if (activeCount <= 10) {
@@ -58,8 +113,8 @@ function getIPBucket(ip, serviceType) {
         const activeCount = getActiveIPCount();
         const tokensPerIP = calculateShare(config.poolPerHour, activeCount);
         ipBuckets.set(key, {
-            tokens: Math.floor(tokensPerIP),
-            maxTokens: Math.floor(tokensPerIP * 2),
+            tokens: tokensPerIP,
+            maxTokens: tokensPerIP * 2,
             lastRefill: Date.now(),
             serviceType
         });
@@ -72,12 +127,14 @@ function refillBuckets() {
     const activeCount = getActiveIPCount();
     
     for (const [key, bucket] of ipBuckets.entries()) {
-        const elapsed = now - bucket.lastRefill;
-        if (elapsed >= REFILL_INTERVAL_MS) {
+        const elapsedMs = now - bucket.lastRefill;
+        const minutesElapsed = elapsedMs / REFILL_INTERVAL_MS;
+        
+        if (minutesElapsed >= 0.1) {
             const config = SERVICE_CONFIGS[bucket.serviceType];
             const sharePerHour = calculateShare(config.poolPerHour, activeCount);
-            const refillAmount = sharePerHour / 60;
-            const maxForUser = Math.floor(sharePerHour * 2);
+            const refillAmount = (sharePerHour / 60) * minutesElapsed;
+            const maxForUser = sharePerHour * 2;
             
             bucket.tokens = Math.min(bucket.tokens + refillAmount, maxForUser);
             bucket.maxTokens = maxForUser;
@@ -86,7 +143,7 @@ function refillBuckets() {
     }
 }
 
-function consumeToken(ip, serviceType) {
+async function consumeToken(ip, serviceType) {
     if (isExempt(ip)) {
         return { allowed: true, exempt: true };
     }
@@ -96,15 +153,18 @@ function consumeToken(ip, serviceType) {
     
     const bucket = getIPBucket(ip, serviceType);
     const config = SERVICE_CONFIGS[serviceType];
-    const cost = config.costMultiplier;
     
-    if (bucket.tokens >= cost) {
-        bucket.tokens -= cost;
+    const reputationMultiplier = await getReputationMultiplier(ip);
+    const effectiveCost = config.costMultiplier / reputationMultiplier;
+    
+    if (bucket.tokens >= effectiveCost) {
+        bucket.tokens -= effectiveCost;
         const activeCount = getActiveIPCount();
         return { 
             allowed: true, 
             remaining: Math.floor(bucket.tokens),
-            activeUsers: activeCount
+            activeUsers: activeCount,
+            reputationBonus: reputationMultiplier > 1.0 ? `${Math.round((reputationMultiplier - 1) * 100)}%` : null
         };
     }
     
@@ -212,6 +272,29 @@ function getCapacityStatus() {
     return status;
 }
 
+async function initReputationTable() {
+    if (!dbPool) {
+        console.log('⚠️ No database pool for reputation table');
+        return false;
+    }
+    
+    try {
+        await dbPool.query(`
+            CREATE TABLE IF NOT EXISTS core.playground_reputation (
+                ip_hash VARCHAR(32) PRIMARY KEY,
+                first_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                total_queries INTEGER DEFAULT 0,
+                last_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+        `);
+        console.log('✅ Playground reputation table initialized');
+        return true;
+    } catch (error) {
+        console.log(`⚠️ Failed to init reputation table: ${error.message}`);
+        return false;
+    }
+}
+
 setInterval(() => {
     const now = Date.now();
     for (const [ip, lastSeen] of activeIPs.entries()) {
@@ -231,7 +314,10 @@ module.exports = {
     getActiveIPCount,
     getCapacityStatus,
     setExemptIPs,
+    setDbPool,
     isExempt,
+    initReputationTable,
+    getReputationMultiplier,
     SERVICE_CONFIGS,
     ACTIVITY_WINDOW_MS
 };

@@ -76,8 +76,11 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth` (for local processing)
 
 ## Recent Changes (December 8, 2025)
-- **Dynamic Capacity Sharing**: Replaced fixed rate limits with adaptive per-IP capacity system. Global pools (text 240/hr, vision 120/hr, brave 360/hr) distribute evenly among active IPs in 180-min window. When quiet, users get more quota; when busy, limits tighten fairly. Dev IPs fully exempt.
-- **Abuse Prevention System**: Added burst throttling (>5 req/15s), duplicate prompt detection (60s block), and gibberish entropy filtering to prevent junk queries without burning global quota.
-- **Multi-File Upload**: Added support for up to 10 attachments per query. Mixed types (photo + document + audio) are processed together in parallel. Frontend displays attachment chips with individual remove buttons.
-- **Token Separation Complete**: Split Groq API tokens - `PLAYGROUND_GROQ_TOKEN` (text) + `PLAYGROUND_GROQ_VISION_TOKEN` (vision) to isolate rate limits and prevent vision from blocking text queries.
-- **Legacy Code Cleanup**: Removed deprecated HuggingFace Vision fallback code (never implemented), eliminated unused HF quota tracking system (~30 lines), simplifying codebase.
+- **Continuous Token Refill**: Upgraded from fixed 60-second refill intervals to proportional refill based on elapsed time. Tokens now trickle in smoothly (minimum 6s interval), eliminating the "59-second penalty" where users had to wait for the next full minute.
+- **Reputation Bonus System**: Returning users get up to +50% cost reduction based on loyalty. Calculation: 1% bonus per day of use, capped at 50% after ~50 days. Uses PostgreSQL persistence (`core.playground_reputation`) with SHA-256 hashed IPs for privacy.
+- **Groq Retry with Backoff**: Added exponential backoff retry for Groq 429 errors (text: 3 retries, vision: 2 retries). Delays: 1s → 2s → 4s max, respects `retry-after` header when present.
+- **Enhanced Error Logging**: Groq errors now log full rate limit headers (`x-ratelimit-*`), error body, and prompt size estimate for debugging.
+- **Dynamic Capacity Sharing**: Adaptive per-IP capacity system. Global pools (text 240/hr, vision 120/hr, brave 360/hr) distribute evenly among active IPs in 180-min window. When quiet, users get more quota; when busy, limits tighten fairly. Dev IPs fully exempt.
+- **Abuse Prevention System**: Burst throttling (>5 req/15s), duplicate prompt detection (60s block), and gibberish entropy filtering.
+- **Multi-File Upload**: Up to 10 attachments per query. Mixed types (photo + document + audio) processed together in parallel.
+- **Token Separation Complete**: Split Groq API tokens - `PLAYGROUND_GROQ_TOKEN` (text) + `PLAYGROUND_GROQ_VISION_TOKEN` (vision) to isolate rate limits.
