@@ -105,9 +105,20 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 
 **Multimodal Support:**
 - **Text**: Groq Llama 3.3 70B Versatile (0.8s response)
-- **Photo**: HuggingFace Qwen2-VL-7B-Instruct (Indonesian OCR) → Groq Llama 3.3
+- **Photo**: HuggingFace Qwen2.5-VL-7B-Instruct (Indonesian OCR, 95% accuracy) → Groq Llama 3.3
 - **Audio**: Groq Whisper-large-v3-turbo (Indonesian transcription) → Groq Llama 3.3
 - **Documents**: PDF (pdf-parse), Excel/XLSX (exceljs), Word/DOCX (mammoth) → text extraction → Groq Llama 3.3
+
+**Input Methods:**
+- Drag & drop files anywhere on page
+- Click attach button (📎) for file picker
+- Click microphone button (🎙️) for audio
+- **Paste images** (Ctrl+V / Cmd+V) directly from clipboard
+
+**Rate Limiting & Quotas:**
+- Per-IP: 50 requests/hour (sliding window)
+- HuggingFace Vision: 40 photos/day (UTC midnight reset, graceful degradation)
+- Search cascade: DDG (unlimited) → Brave fallback (~1.5% usage rate)
 
 **Document Parsing with Cascade Workflow:**
 - Supported formats: PDF, XLSX, DOCX, TXT, MD, CSV, Images (JPG/PNG), Audio (MP3/WAV/WebM)
