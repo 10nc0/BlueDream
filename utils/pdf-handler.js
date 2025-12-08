@@ -150,9 +150,9 @@ async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
     try {
         // Dynamic import for ESM module compatibility
         const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        const { createCanvas, Image } = require('canvas');
+        const { createCanvas } = require('@napi-rs/canvas');
         
-        // Node.js canvas factory for pdfjs-dist compatibility
+        // Node.js canvas factory for pdfjs-dist compatibility (using @napi-rs/canvas)
         const canvasFactory = {
             create: function(width, height) {
                 const canvas = createCanvas(width, height);
