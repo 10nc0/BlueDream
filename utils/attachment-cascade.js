@@ -54,8 +54,7 @@ const EXTRACTION_TOOLS = {
     'buffer-text': { tier: COST_TIERS.FREE_LOCAL, type: 'text', name: 'buffer-utf8' },
     'groq-whisper': { tier: COST_TIERS.CHEAP_API, type: 'audio', name: 'groq-whisper' },
     'groq-pdf-vision': { tier: COST_TIERS.MODERATE_API, type: 'vision', name: 'groq-pdf-vision' },
-    'tesseract-ocr': { tier: COST_TIERS.MODERATE_API, type: 'ocr', name: 'tesseract.js' },
-    'hf-vision': { tier: COST_TIERS.EXPENSIVE_API, type: 'vision', name: 'huggingface-vision' }
+    'tesseract-ocr': { tier: COST_TIERS.MODERATE_API, type: 'ocr', name: 'tesseract.js' }
 };
 
 function identifyFileType(fileName, mimeType) {
@@ -117,7 +116,7 @@ function selectExtractionPipeline(fileType) {
             
         case FILE_TYPES.IMAGE:
             pipeline.push(
-                { tool: 'hf-vision', tier: COST_TIERS.EXPENSIVE_API, purpose: 'image-analysis' }
+                { tool: 'groq-pdf-vision', tier: COST_TIERS.MODERATE_API, purpose: 'image-analysis' }
             );
             break;
             
@@ -222,9 +221,6 @@ async function executeTool(toolName, buffer, fileName, options) {
             
         case 'groq-whisper':
             return await transcribeAudio(buffer, fileName, options);
-            
-        case 'hf-vision':
-            return await analyzeImage(buffer, fileName, options);
             
         case 'groq-pdf-vision':
             return await extractPDFVisualContent(buffer, fileName, options);
@@ -338,43 +334,6 @@ async function transcribeAudio(buffer, fileName, options) {
         );
         
         return { success: true, data: { text: response.data.text || '', type: 'transcription' } };
-    } catch (error) {
-        return { success: false, error: error.message };
-    }
-}
-
-async function analyzeImage(buffer, fileName, options) {
-    const PLAYGROUND_HF_VISION_TOKEN = process.env.PLAYGROUND_HF_VISION_TOKEN;
-    if (!PLAYGROUND_HF_VISION_TOKEN) {
-        return { success: false, error: 'HuggingFace vision token not configured' };
-    }
-    
-    try {
-        const axios = require('axios');
-        const base64 = buffer.toString('base64');
-        
-        const response = await axios.post(
-            'https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct',
-            {
-                inputs: base64,
-                parameters: {
-                    text: options.imagePrompt || "Describe this image in detail. Extract any text, numbers, or data visible. Be precise and factual.",
-                    max_new_tokens: 500,
-                    temperature: 0.1,
-                    top_p: 0.95
-                }
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${PLAYGROUND_HF_VISION_TOKEN}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 60000
-            }
-        );
-        
-        const description = response.data?.[0]?.generated_text || '';
-        return { success: true, data: { text: description, type: 'vision-analysis' } };
     } catch (error) {
         return { success: false, error: error.message };
     }

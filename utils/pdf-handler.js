@@ -2,8 +2,6 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const PLAYGROUND_HF_VISION_TOKEN = process.env.PLAYGROUND_HF_VISION_TOKEN;
-
 // Retry helper with exponential backoff for Groq API calls
 async function groqWithRetry(axiosCall, maxRetries = 3) {
     const axios = require('axios');
@@ -141,41 +139,6 @@ function tableToMarkdown(tableData) {
     }
     
     return rows.join('\n');
-}
-
-async function describeChartWithVision(imageBase64) {
-    if (!PLAYGROUND_HF_VISION_TOKEN) {
-        console.log('⚠️ Vision token not configured, skipping chart description');
-        return null;
-    }
-    
-    try {
-        const axios = require('axios');
-        const response = await axios.post(
-            'https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct',
-            {
-                inputs: {
-                    image: imageBase64,
-                    text: "Describe this chart exactly. Extract: title, axes labels, data values, trends. Be factual and precise."
-                }
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${PLAYGROUND_HF_VISION_TOKEN}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 30000
-            }
-        );
-        
-        if (response.data && response.data[0]?.generated_text) {
-            return response.data[0].generated_text;
-        }
-        return null;
-    } catch (error) {
-        console.error('Vision API error:', error.message);
-        return null;
-    }
 }
 
 // VISUAL PDF ANALYSIS: Render pages as images and analyze with Groq Vision
@@ -427,7 +390,6 @@ function formatPDFResultForPrompt(result, fileName, userQuery) {
 module.exports = {
     parsePDFHybrid,
     extractTablesWithTabula,
-    describeChartWithVision,
     formatPDFResultForPrompt,
     renderPDFPagesToImages,
     analyzePageWithGroqVision,
