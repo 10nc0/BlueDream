@@ -1,9 +1,6 @@
-const pdfParse = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
 const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
-
-// Handle different export patterns of pdf-parse
-const pdf = pdfParse.default || pdfParse;
 
 const MAX_TOKENS = 6000;
 const CHARS_PER_TOKEN = 4;
@@ -44,7 +41,7 @@ async function extractTextFromDocument(base64Data, fileName) {
 }
 
 async function extractPDF(buffer) {
-    const data = await pdf(buffer);
+    const data = await new PDFParse({}, buffer);
     return data.text || '';
 }
 
