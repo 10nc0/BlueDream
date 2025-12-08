@@ -41,7 +41,8 @@ async function extractTextFromDocument(base64Data, fileName) {
 }
 
 async function extractPDF(buffer) {
-    const data = await new PDFParse({}, buffer);
+    const parser = new PDFParse();
+    const data = await parser(buffer);
     return data.text || '';
 }
 
