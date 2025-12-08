@@ -5,13 +5,12 @@ const audioBtn = document.getElementById('audioBtn');
 const attachBtn = document.getElementById('attachBtn');
 const universalInput = document.getElementById('universalInput');
 const audioInput = document.getElementById('audioInput');
-const attachmentPreview = document.getElementById('attachmentPreview');
-const attachmentName = document.getElementById('attachmentName');
-const removeAttachment = document.getElementById('removeAttachment');
+const attachmentsContainer = document.getElementById('attachmentsContainer');
 const errorToast = document.getElementById('errorToast');
 const inputContainer = document.querySelector('.input-container');
 
-let currentAttachment = null;
+const MAX_ATTACHMENTS = 10;
+let attachments = [];
 let isProcessing = false;
 let conversationHistory = [];
 let mediaRecorder = null;
@@ -83,6 +82,70 @@ if (typeof initHopAnimation === 'function') {
 
 attachBtn.addEventListener('click', () => universalInput.click());
 
+// ===== MULTI-ATTACHMENT UI =====
+function renderAttachments() {
+    attachmentsContainer.innerHTML = '';
+    
+    if (attachments.length === 0) {
+        attachmentsContainer.classList.remove('visible');
+        return;
+    }
+    
+    attachments.forEach((att, index) => {
+        const chip = document.createElement('div');
+        chip.className = 'attachment-chip';
+        
+        const icon = att.type === 'photo' ? '📷' : att.type === 'audio' ? '🎙️' : '📄';
+        chip.innerHTML = `
+            <span class="chip-name">${icon} ${att.name}</span>
+            <button class="remove-chip" data-index="${index}">×</button>
+        `;
+        
+        chip.querySelector('.remove-chip').addEventListener('click', () => {
+            removeAttachmentByIndex(index);
+        });
+        
+        attachmentsContainer.appendChild(chip);
+    });
+    
+    // Add count indicator
+    const countEl = document.createElement('span');
+    countEl.className = 'attachments-count';
+    countEl.textContent = `${attachments.length}/${MAX_ATTACHMENTS}`;
+    attachmentsContainer.appendChild(countEl);
+    
+    attachmentsContainer.classList.add('visible');
+}
+
+function addAttachment(attachment) {
+    if (attachments.length >= MAX_ATTACHMENTS) {
+        showError(`Maximum ${MAX_ATTACHMENTS} attachments allowed.`);
+        return false;
+    }
+    attachments.push(attachment);
+    renderAttachments();
+    return true;
+}
+
+function removeAttachmentByIndex(index) {
+    attachments.splice(index, 1);
+    renderAttachments();
+}
+
+function clearAllAttachments() {
+    attachments = [];
+    renderAttachments();
+    if (universalInput) universalInput.value = '';
+    if (audioInput) audioInput.value = '';
+    // Stop any active recording
+    if (isRecording && mediaRecorder) {
+        mediaRecorder.stop();
+        isRecording = false;
+        audioBtn.textContent = '🎙️';
+        audioBtn.style.opacity = '1';
+    }
+}
+
 // Audio recording via microphone
 audioBtn.addEventListener('click', async () => {
     if (isRecording) {
@@ -108,13 +171,11 @@ audioBtn.addEventListener('click', async () => {
                 const audioBlob = new Blob(recordingChunks, { type: 'audio/webm' });
                 const reader = new FileReader();
                 reader.onload = (event) => {
-                    currentAttachment = {
+                    addAttachment({
                         type: 'audio',
                         data: event.target.result,
                         name: `recording-${Date.now()}.webm`
-                    };
-                    attachmentName.textContent = '🎙️ Voice recording';
-                    attachmentPreview.classList.add('visible');
+                    });
                 };
                 reader.readAsDataURL(audioBlob);
                 
@@ -136,8 +197,6 @@ audioBtn.addEventListener('click', async () => {
 universalInput.addEventListener('change', handleUniversalFileSelect);
 audioInput.addEventListener('change', handleFileSelect);
 
-removeAttachment.addEventListener('click', clearAttachment);
-
 // ===== DRAG & DROP (FULL PAGE) =====
 // Listen for drag over entire document
 document.addEventListener('dragover', (e) => {
@@ -154,7 +213,7 @@ document.addEventListener('dragleave', (e) => {
     }
 });
 
-// Handle file drop anywhere on the page
+// Handle file drop anywhere on the page (multi-file support)
 document.addEventListener('drop', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -162,28 +221,31 @@ document.addEventListener('drop', (e) => {
     
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-        const file = files[0];
-        const isImage = file.type.startsWith('image/');
-        const isAudio = file.type.startsWith('audio/');
-        const isDocument = /\.(pdf|xlsx|xls|txt|doc|docx|md|csv)$/i.test(file.name);
-        
-        if (!isImage && !isAudio && !isDocument) {
-            showError('Unsupported file type. Please upload images, audio, or documents (PDF, Excel, Word, TXT, CSV).');
-            return;
-        }
-        
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            currentAttachment = {
-                type: isImage ? 'photo' : isAudio ? 'audio' : 'document',
-                data: event.target.result,
-                name: file.name
+        Array.from(files).forEach(file => {
+            if (attachments.length >= MAX_ATTACHMENTS) {
+                showError(`Maximum ${MAX_ATTACHMENTS} attachments allowed.`);
+                return;
+            }
+            
+            const isImage = file.type.startsWith('image/');
+            const isAudio = file.type.startsWith('audio/');
+            const isDocument = /\.(pdf|xlsx|xls|txt|doc|docx|md|csv)$/i.test(file.name);
+            
+            if (!isImage && !isAudio && !isDocument) {
+                showError(`Unsupported: ${file.name}. Use images, audio, or documents.`);
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                addAttachment({
+                    type: isImage ? 'photo' : isAudio ? 'audio' : 'document',
+                    data: event.target.result,
+                    name: file.name
+                });
             };
-            const icon = isImage ? '📷' : isAudio ? '🔊' : '📄';
-            attachmentName.textContent = `${icon} ${file.name}`;
-            attachmentPreview.classList.add('visible');
-        };
-        reader.readAsDataURL(file);
+            reader.readAsDataURL(file);
+        });
     }
 });
 
@@ -207,13 +269,11 @@ document.addEventListener('paste', (e) => {
         
         const reader = new FileReader();
         reader.onload = (event) => {
-            currentAttachment = {
+            addAttachment({
                 type: 'photo',
                 data: event.target.result,
-                name: 'pasted-image.png'
-            };
-            attachmentName.textContent = '📷 Pasted image';
-            attachmentPreview.classList.add('visible');
+                name: `pasted-${Date.now()}.png`
+            });
         };
         reader.readAsDataURL(blob);
     }
@@ -241,63 +301,52 @@ function handleFileSelect(e) {
     
     const reader = new FileReader();
     reader.onload = (event) => {
-        currentAttachment = {
+        addAttachment({
             type: file.type.startsWith('image/') ? 'photo' : 'audio',
             data: event.target.result,
             name: file.name
-        };
-        attachmentName.textContent = `${currentAttachment.type === 'photo' ? '📷' : '🔊'} ${file.name}`;
-        attachmentPreview.classList.add('visible');
+        });
     };
     reader.readAsDataURL(file);
+    audioInput.value = '';
 }
 
 function handleUniversalFileSelect(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     
-    const isImage = file.type.startsWith('image/');
-    const isAudio = file.type.startsWith('audio/');
-    const isDocument = /\.(pdf|txt|doc|docx|md|rtf)$/i.test(file.name);
-    
-    if (!isImage && !isAudio && !isDocument) {
-        showError('Unsupported file type. Please upload images, audio, or documents.');
-        return;
-    }
-    
-    const maxSize = isImage ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
-    if (file.size > maxSize) {
-        showError(`File too large. Max ${isImage ? '5' : '10'}MB.`);
-        return;
-    }
-    
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        currentAttachment = {
-            type: isImage ? 'photo' : isAudio ? 'audio' : 'document',
-            data: event.target.result,
-            name: file.name
+    Array.from(files).forEach(file => {
+        if (attachments.length >= MAX_ATTACHMENTS) {
+            showError(`Maximum ${MAX_ATTACHMENTS} attachments allowed.`);
+            return;
+        }
+        
+        const isImage = file.type.startsWith('image/');
+        const isAudio = file.type.startsWith('audio/');
+        const isDocument = /\.(pdf|xlsx|xls|txt|doc|docx|md|csv|rtf)$/i.test(file.name);
+        
+        if (!isImage && !isAudio && !isDocument) {
+            showError(`Unsupported: ${file.name}. Use images, audio, or documents.`);
+            return;
+        }
+        
+        const maxSize = isImage ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+        if (file.size > maxSize) {
+            showError(`${file.name} too large. Max ${isImage ? '5' : '10'}MB.`);
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            addAttachment({
+                type: isImage ? 'photo' : isAudio ? 'audio' : 'document',
+                data: event.target.result,
+                name: file.name
+            });
         };
-        const icon = isImage ? '📷' : isAudio ? '🔊' : '📄';
-        attachmentName.textContent = `${icon} ${file.name}`;
-        attachmentPreview.classList.add('visible');
-    };
-    reader.readAsDataURL(file);
+        reader.readAsDataURL(file);
+    });
     universalInput.value = '';
-}
-
-function clearAttachment() {
-    currentAttachment = null;
-    attachmentPreview.classList.remove('visible');
-    if (universalInput) universalInput.value = '';
-    if (audioInput) audioInput.value = '';
-    // Stop any active recording
-    if (isRecording && mediaRecorder) {
-        mediaRecorder.stop();
-        isRecording = false;
-        audioBtn.textContent = '🎙️';
-        audioBtn.style.opacity = '1';
-    }
 }
 
 function showError(msg) {
@@ -306,7 +355,7 @@ function showError(msg) {
     setTimeout(() => errorToast.classList.remove('visible'), 4000);
 }
 
-function addMessage(role, content, attachment = null) {
+function addMessage(role, content, messageAttachments = []) {
     const welcome = messagesEl.querySelector('.welcome');
     if (welcome) welcome.remove();
     
@@ -333,9 +382,15 @@ function addMessage(role, content, attachment = null) {
         html += `<div class="content">${escapeHtml(content)}</div>`;
     }
     
-    if (attachment) {
-        const icon = attachment.type === 'photo' ? '📷' : attachment.type === 'audio' ? '🔊' : '📄';
-        html += `<div class="attachment">${icon} ${attachment.name}</div>`;
+    // Show attachments (support both single and array)
+    const attList = Array.isArray(messageAttachments) ? messageAttachments : (messageAttachments ? [messageAttachments] : []);
+    if (attList.length > 0) {
+        html += '<div class="attachment">';
+        attList.forEach(att => {
+            const icon = att.type === 'photo' ? '📷' : att.type === 'audio' ? '🎙️' : '📄';
+            html += `<span style="margin-right: 0.5rem;">${icon} ${att.name}</span>`;
+        });
+        html += '</div>';
     }
     
     msgEl.innerHTML = html;
@@ -377,7 +432,7 @@ async function sendMessage() {
     if (isProcessing) return;
     
     const message = messageInput.value.trim();
-    if (!message && !currentAttachment) {
+    if (!message && attachments.length === 0) {
         showError('Please enter a message or upload a file.');
         return;
     }
@@ -385,28 +440,30 @@ async function sendMessage() {
     isProcessing = true;
     sendBtn.disabled = true;
     
-    const userMessageText = message || '(Analyzing attachment)';
-    addMessage('user', userMessageText, currentAttachment);
+    const userMessageText = message || `(Analyzing ${attachments.length} attachment${attachments.length > 1 ? 's' : ''})`;
+    addMessage('user', userMessageText, [...attachments]);
     conversationHistory.push({ role: 'user', content: userMessageText });
     messageInput.value = '';
     messageInput.style.height = '44px'; // Reset to min height
     
+    // Build payload with arrays for multi-file support
     const payload = { 
         message,
         history: conversationHistory
     };
-    if (currentAttachment) {
-        if (currentAttachment.type === 'photo') {
-            payload.photo = currentAttachment.data;
-        } else if (currentAttachment.type === 'audio') {
-            payload.audio = currentAttachment.data;
-        } else if (currentAttachment.type === 'document') {
-            payload.document = currentAttachment.data;
-            payload.documentName = currentAttachment.name;
-        }
-    }
     
-    clearAttachment();
+    // Group attachments by type
+    const photos = attachments.filter(a => a.type === 'photo').map(a => a.data);
+    const audios = attachments.filter(a => a.type === 'audio').map(a => a.data);
+    const documents = attachments.filter(a => a.type === 'document').map(a => ({ data: a.data, name: a.name }));
+    
+    if (photos.length > 0) payload.photos = photos;
+    if (audios.length > 0) payload.audios = audios;
+    if (documents.length > 0) payload.documents = documents;
+    
+    // Save attachments snapshot and clear UI
+    const savedAttachments = [...attachments];
+    clearAllAttachments();
     addLoadingMessage();
     
     try {

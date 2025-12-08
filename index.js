@@ -6333,13 +6333,27 @@ app.post('/api/playground', async (req, res) => {
     }
     
     try {
-        const { message, photo, audio, document, documentName, history } = req.body;
+        const { message, photo, audio, document, documentName, photos, audios, documents, history } = req.body;
         let finalPrompt = message || '';
+        let extractedContent = [];
+        
+        // Normalize to arrays (support both single and multi-file)
+        const photoList = photos || (photo ? [photo] : []);
+        const audioList = audios || (audio ? [audio] : []);
+        const docList = documents || (document ? [{ data: document, name: documentName }] : []);
         
         // Validation
-        if (!message?.trim() && !photo && !audio && !document) {
+        if (!message?.trim() && photoList.length === 0 && audioList.length === 0 && docList.length === 0) {
             return res.status(400).json({ 
                 reply: 'Please enter text or upload a photo, audio, or document file.' 
+            });
+        }
+        
+        // Enforce max 10 total attachments
+        const totalAttachments = photoList.length + audioList.length + docList.length;
+        if (totalAttachments > 10) {
+            return res.status(400).json({ 
+                reply: 'Maximum 10 attachments allowed.' 
             });
         }
         
@@ -6424,197 +6438,187 @@ app.post('/api/playground', async (req, res) => {
         }
         
         // File size limits (base64 encoded)
-        if (photo) {
-            const photoSizeKB = (photo.length * 3) / 4 / 1024;
+        for (const p of photoList) {
+            const photoSizeKB = (p.length * 3) / 4 / 1024;
             if (photoSizeKB > 5000) {
                 return res.status(400).json({ 
-                    reply: 'Photo too large. Maximum size is 5MB.' 
+                    reply: 'Photo too large. Maximum size is 5MB per file.' 
                 });
             }
         }
         
-        if (audio) {
-            const audioSizeKB = (audio.length * 3) / 4 / 1024;
+        for (const a of audioList) {
+            const audioSizeKB = (a.length * 3) / 4 / 1024;
             if (audioSizeKB > 10000) {
                 return res.status(400).json({ 
-                    reply: 'Audio too large. Maximum size is 10MB.' 
+                    reply: 'Audio too large. Maximum size is 10MB per file.' 
                 });
             }
         }
         
-        // Photo analysis via Groq Llama 4 Scout Vision
-        if (photo) {
+        // Process all photos via Groq Llama 4 Scout Vision
+        if (photoList.length > 0) {
             if (!PLAYGROUND_GROQ_VISION_TOKEN) {
                 return res.status(503).json({ 
                     reply: 'Photo analysis is not configured. Please try text only.' 
                 });
             }
             
-            console.log(`🎮 Playground: Analyzing photo via Groq Vision for ${clientIp}`);
-            
-            // Preserve original MIME type from data URL
-            let imageUrl = photo;
-            if (!photo.startsWith('data:')) {
-                // If raw base64, assume JPEG
-                imageUrl = `data:image/jpeg;base64,${photo}`;
-            }
-            
+            console.log(`🎮 Playground: Analyzing ${photoList.length} photo(s) via Groq Vision for ${clientIp}`);
             const visionPrompt = message || 'Extract all text exactly from this image. Describe the image factually. If this is a receipt, plate, or sign, output structured text.';
             
-            try {
-                // Primary: Groq Llama 4 Scout Vision (fast, unified provider)
-                const visionResponse = await axios.post(
-                    'https://api.groq.com/openai/v1/chat/completions',
-                    {
-                        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-                        messages: [
-                            { 
-                                role: 'system', 
-                                content: 'You are an expert image analyst. Extract all text exactly. Describe images factually. For Indonesian text (receipts, plates, signs), output structured text with confidence. No hallucinations.' 
-                            },
-                            { 
-                                role: 'user', 
-                                content: [
-                                    { type: 'text', text: visionPrompt },
-                                    { type: 'image_url', image_url: { url: imageUrl } }
-                                ] 
-                            }
-                        ],
-                        temperature: H0_TEMPERATURE,
-                        max_tokens: 500
-                    },
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${PLAYGROUND_GROQ_VISION_TOKEN}`,
-                            'Content-Type': 'application/json'
-                        },
-                        timeout: 30000
-                    }
-                );
+            for (let i = 0; i < photoList.length; i++) {
+                const photoData = photoList[i];
                 
-                const photoDescription = visionResponse.data.choices?.[0]?.message?.content || 'Unable to analyze image';
-                
-                finalPrompt = `Photo analysis: ${photoDescription}\n\nUser query: ${message || 'Analyze this image.'}`;
-                
-            } catch (visionError) {
-                console.error('❌ Playground Groq vision error:', visionError.response?.data || visionError.message);
-                
-                if (visionError.response?.status === 429) {
-                    return res.status(429).json({ 
-                        reply: 'Vision API rate limited. Please try again in a moment.' 
-                    });
+                // Preserve original MIME type from data URL
+                let imageUrl = photoData;
+                if (!photoData.startsWith('data:')) {
+                    imageUrl = `data:image/jpeg;base64,${photoData}`;
                 }
                 
-                return res.status(500).json({ 
-                    reply: 'Photo analysis failed. Please try again.' 
-                });
+                try {
+                    const visionResponse = await axios.post(
+                        'https://api.groq.com/openai/v1/chat/completions',
+                        {
+                            model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+                            messages: [
+                                { 
+                                    role: 'system', 
+                                    content: 'You are an expert image analyst. Extract all text exactly. Describe images factually. For Indonesian text (receipts, plates, signs), output structured text with confidence. No hallucinations.' 
+                                },
+                                { 
+                                    role: 'user', 
+                                    content: [
+                                        { type: 'text', text: visionPrompt },
+                                        { type: 'image_url', image_url: { url: imageUrl } }
+                                    ] 
+                                }
+                            ],
+                            temperature: H0_TEMPERATURE,
+                            max_tokens: 500
+                        },
+                        {
+                            headers: {
+                                'Authorization': `Bearer ${PLAYGROUND_GROQ_VISION_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            },
+                            timeout: 30000
+                        }
+                    );
+                    
+                    const photoDescription = visionResponse.data.choices?.[0]?.message?.content || 'Unable to analyze image';
+                    extractedContent.push(`[Photo ${i + 1}]: ${photoDescription}`);
+                    
+                } catch (visionError) {
+                    console.error(`❌ Photo ${i + 1} vision error:`, visionError.response?.data || visionError.message);
+                    
+                    if (visionError.response?.status === 429) {
+                        extractedContent.push(`[Photo ${i + 1}]: Vision API rate limited`);
+                    } else {
+                        extractedContent.push(`[Photo ${i + 1}]: Analysis failed`);
+                    }
+                }
             }
         }
         
-        // Document analysis with CASCADE WORKFLOW
-        // Flow: Attachment → Identify Type → Select Tools → Execute Cascade (cheap→expensive) → JSON → Groq
-        else if (document) {
+        // Process all documents with CASCADE WORKFLOW
+        if (docList.length > 0) {
             if (!PLAYGROUND_GROQ_TOKEN) {
                 return res.status(503).json({ 
                     reply: 'Document analysis is not configured. Please try text only.' 
                 });
             }
             
-            console.log(`🎮 Playground: Document cascade for "${documentName}" - ${clientIp}`);
+            console.log(`🎮 Playground: Processing ${docList.length} document(s) for ${clientIp}`);
             
-            try {
-                const base64Data = document.split(',')[1] || document;
-                const buffer = Buffer.from(base64Data, 'base64');
+            for (let i = 0; i < docList.length; i++) {
+                const doc = docList[i];
+                const docData = doc.data;
+                const docName = doc.name || `document-${i + 1}`;
                 
-                // STEP 1: Identify file type and data structure
-                const fileType = identifyFileType(documentName);
-                console.log(`📋 Cascade Step 1: Identified ${fileType.type} (${fileType.extension})`);
-                
-                // STEP 2: Execute extraction cascade (tools ordered by cost tier)
-                const cascadeResult = await executeExtractionCascade(buffer, fileType, documentName, {
-                    imagePrompt: message || 'Describe this image in detail. Extract any text, numbers, or data visible.'
-                });
-                
-                // Log cascade execution summary
-                const toolsSummary = cascadeResult.toolsUsed.join(' → ') || 'none';
-                console.log(`📋 Cascade Step 2: Tools executed: ${toolsSummary}`);
-                console.log(`📋 Cascade Step 2: Data structure: ${cascadeResult.dataStructure}`);
-                
-                if (!cascadeResult.success || !cascadeResult.jsonOutput) {
-                    const errors = cascadeResult.cascadeLog
-                        .filter(l => !l.success && !l.skipped)
-                        .map(l => l.error)
-                        .join('; ');
-                    return res.status(400).json({ 
-                        reply: `Could not extract data from this document. ${errors || 'Please try a different file or paste the text directly.'}` 
+                try {
+                    const base64Data = docData.split(',')[1] || docData;
+                    const buffer = Buffer.from(base64Data, 'base64');
+                    
+                    const fileType = identifyFileType(docName);
+                    console.log(`📋 Document ${i + 1}: ${fileType.type} (${fileType.extension})`);
+                    
+                    const cascadeResult = await executeExtractionCascade(buffer, fileType, docName, {
+                        imagePrompt: message || 'Describe this image in detail. Extract any text, numbers, or data visible.'
                     });
+                    
+                    if (cascadeResult.success && cascadeResult.jsonOutput) {
+                        const docContent = formatJSONForGroq(cascadeResult, '');
+                        extractedContent.push(`[Document ${i + 1}: ${docName}]:\n${docContent}`);
+                    } else {
+                        extractedContent.push(`[Document ${i + 1}: ${docName}]: Could not extract content`);
+                    }
+                    
+                } catch (docError) {
+                    console.error(`❌ Document ${i + 1} error:`, docError.message);
+                    extractedContent.push(`[Document ${i + 1}: ${docName}]: ${docError.message}`);
                 }
-                
-                // STEP 3: Format JSON output for Groq reasoning
-                finalPrompt = formatJSONForGroq(cascadeResult, message);
-                console.log(`📋 Cascade Step 3: JSON prepared for Groq (${finalPrompt.length} chars)`);
-                
-            } catch (docError) {
-                console.error('❌ Cascade error:', docError.message);
-                
-                if (docError.message.includes('not supported') || 
-                    docError.message.includes('Please convert')) {
-                    return res.status(400).json({ 
-                        reply: docError.message 
-                    });
-                }
-                
-                return res.status(500).json({ 
-                    reply: `Document analysis failed: ${docError.message}. Please try a different file format or paste the text directly.` 
-                });
             }
         }
         
-        // Audio transcription via Groq Whisper
-        else if (audio) {
+        // Process all audio files via Groq Whisper
+        if (audioList.length > 0) {
             if (!PLAYGROUND_GROQ_TOKEN) {
                 return res.status(503).json({ 
                     reply: 'Audio transcription is not configured. Please try text only.' 
                 });
             }
             
-            console.log(`🎮 Playground: Transcribing audio for ${clientIp}`);
+            console.log(`🎮 Playground: Transcribing ${audioList.length} audio file(s) for ${clientIp}`);
+            const FormData = require('form-data');
             
-            try {
-                const FormData = require('form-data');
-                const base64Data = audio.split(',')[1] || audio;
-                const audioBuffer = Buffer.from(base64Data, 'base64');
+            for (let i = 0; i < audioList.length; i++) {
+                const audioData = audioList[i];
                 
-                const formData = new FormData();
-                formData.append('file', audioBuffer, {
-                    filename: 'audio.webm',
-                    contentType: 'audio/webm'
-                });
-                formData.append('model', 'whisper-large-v3-turbo');
-                // Auto-detect language (Whisper handles multilingual)
-                formData.append('response_format', 'json');
-                
-                const whisperResponse = await axios.post(
-                    'https://api.groq.com/openai/v1/audio/transcriptions',
-                    formData,
-                    {
-                        headers: {
-                            ...formData.getHeaders(),
-                            'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`
-                        },
-                        timeout: 30000
-                    }
-                );
-                
-                const transcript = whisperResponse.data.text || '';
-                finalPrompt = `User said: "${transcript}"\n\nRespond factually to what the user said.`;
-                
-            } catch (audioError) {
-                console.error('❌ Playground audio error:', audioError.message);
-                return res.status(500).json({ 
-                    reply: 'Audio transcription failed. Please try again.' 
-                });
+                try {
+                    const base64Data = audioData.split(',')[1] || audioData;
+                    const audioBuffer = Buffer.from(base64Data, 'base64');
+                    
+                    const formData = new FormData();
+                    formData.append('file', audioBuffer, {
+                        filename: 'audio.webm',
+                        contentType: 'audio/webm'
+                    });
+                    formData.append('model', 'whisper-large-v3-turbo');
+                    formData.append('response_format', 'json');
+                    
+                    const whisperResponse = await axios.post(
+                        'https://api.groq.com/openai/v1/audio/transcriptions',
+                        formData,
+                        {
+                            headers: {
+                                ...formData.getHeaders(),
+                                'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`
+                            },
+                            timeout: 30000
+                        }
+                    );
+                    
+                    const transcript = whisperResponse.data.text || '';
+                    extractedContent.push(`[Audio ${i + 1}]: "${transcript}"`);
+                    
+                } catch (audioError) {
+                    console.error(`❌ Audio ${i + 1} error:`, audioError.message);
+                    extractedContent.push(`[Audio ${i + 1}]: Transcription failed`);
+                }
             }
+        }
+        
+        // Combine all extracted content into final prompt (preserve search context if present)
+        if (extractedContent.length > 0) {
+            const allExtracted = extractedContent.join('\n\n');
+            const searchPart = searchContext ? `Web context:\n${searchContext}\n\n` : '';
+            if (message) {
+                finalPrompt = `${searchPart}Attachments analyzed:\n${allExtracted}\n\nUser query: ${message}`;
+            } else {
+                finalPrompt = `Attachments analyzed:\n${allExtracted}\n\nProvide a comprehensive analysis of all the above content.`;
+            }
+            console.log(`📎 Combined ${extractedContent.length} attachment(s) into prompt${searchContext ? ' (with search context)' : ''}`);
         }
         
         // Final reasoning via Groq Llama 3.3 70B
