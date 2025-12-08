@@ -6448,6 +6448,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const createBtn = e.target.closest('.create-bot-btn');
         const auditBtn = e.target.closest('.audit-type-btn');
         const logoutBtn = e.target.closest('.logout-btn');
+        const aiBtn = e.target.closest('#aiPlaygroundBtn');
+        
+        // AI Playground button
+        if (aiBtn) {
+            window.location.href = '/AI';
+            return;
+        }
         
         // Logout button (desktop header & mobile)
         if (logoutBtn) {
