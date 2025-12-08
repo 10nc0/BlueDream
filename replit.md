@@ -81,6 +81,8 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Centralized Constants**: Created `config/constants.js` with all magic numbers grouped by category: TIMEOUTS, CAPACITY, CACHE, SESSION, DISCORD, AI_MODELS, GROQ_RETRY, REPUTATION, FILE_UPLOAD, MISC. Single source of truth for tuning database timeouts, rate limits, cache settings, etc.
 - **Webhook DRY Refactor**: Extracted duplicate media handling logic from `sendToLedger` and `sendToUserOutput` into unified `postPayloadToWebhook` helper. Handles direct buffers, DB media fetches, and text payloads. Eliminates 100+ lines of duplication, single source of truth for webhook POST operations.
 - **PDF Visual Analysis**: Added `renderPDFPagesToImages()` using pdfjs-dist + canvas to render PDF pages. Routes through Groq Llama 4 Scout Vision for chart, chemical structure, and diagram analysis. Max 5 pages guardrail. Content auto-classified into chemical/chart/diagram/general categories.
+- **Groq Retry Logic**: `groqWithRetry()` helper with exponential backoff (1s→2s→4s→8s cap) for 429/5xx errors. Wired into `analyzePageWithGroqVision()` for resilient Vision API calls.
+- **Extraction Caching**: SHA-256 content hash caching in `executeExtractionCascade()` with 24h TTL and 1000-entry LRU limit. Cache HIT logs and `fromCache` flag in results. 100% savings on duplicate PDF uploads.
 
 **Previous improvements (still active):**
 - **Circuit Breaker**: Persistent abusers (5 events in 1 hour) get 30-minute cooldown. Progressive warnings at 3/5 and 4/5.
