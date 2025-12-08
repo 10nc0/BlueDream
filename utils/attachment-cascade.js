@@ -113,25 +113,49 @@ async function identifyCompoundByFormula(formula, structureDescription = '') {
         return exactResult;
     }
     
-    // Stage 2: Try structure-based search (empirical keyword matching on Vision observations)
-    if (structureDescription) {
-        console.log(`🔬 Compound ID: Stage 2 - Trying structure-based search...`);
+    // Stage 2: Try formula with multiple DDG query variations (empirical verification layer)
+    console.log(`🔬 Compound ID: Stage 2 - Trying alternate DDG queries for formula verification...`);
+    const queryVariations = [
+        `${formula} compound`,
+        `${formula} chemical`,
+        `${formula} molecule name`,
+        `${formula} pharmaceutical`,
+        `${formula} natural product`
+    ];
+    
+    for (const query of queryVariations) {
+        console.log(`🔬 Compound ID: Trying query: "${query}"`);
+        const params = {
+            q: query,
+            format: 'json',
+            no_html: 1,
+            skip_disambig: 1,
+            t: 'nyanbook'
+        };
+        const url = `https://api.duckduckgo.com/?${querystring.stringify(params)}`;
         
-        // Check for canonical compound structures first
-        // Cannabinoid: pyran ring + benzene ring + cyclohexene + C21H30O2
-        if (/pyran/i.test(structureDescription) && /benzene|aromatic/i.test(structureDescription) && 
-            /cyclohexene|cyclohexane/i.test(structureDescription)) {
-            if (formula === 'C21H30O2') {
-                console.log(`🔬 Compound ID: Canonical match - C21H30O2 with pyran+benzene+cyclohexene = THC!`);
+        try {
+            const response = await axios.get(url, { timeout: 5000 });
+            const data = response.data;
+            
+            if (data.AbstractText) {
+                console.log(`🔬 Compound ID: ✓ Found with query "${query}"`);
                 return {
-                    name: 'Δ9-Tetrahydrocannabinol (THC)',
-                    description: 'Primary psychoactive compound in cannabis. Molecular formula C21H30O2 with characteristic tricyclic structure: fused pyran-benzene rings with cyclohexene side chain.',
-                    source: 'Chemical Structure Analysis',
+                    name: data.Heading || '',
+                    description: data.AbstractText.substring(0, 300),
+                    source: data.AbstractURL || 'DuckDuckGo',
                     matchedFormula: formula,
-                    matchType: 'structure-based'
+                    matchType: 'verified-ddg'
                 };
             }
+        } catch (err) {
+            console.log(`🔬 Compound ID: Query failed: ${err.message}`);
         }
+    }
+    
+    // Stage 3: Try structure-based search (empirical keyword matching on Vision observations)
+    if (structureDescription) {
+        console.log(`🔬 Compound ID: Stage 3 - Trying structure-based search...`);
         
         // Extract key structural terms from Vision analysis
         const structureTerms = [];
@@ -175,8 +199,8 @@ async function identifyCompoundByFormula(formula, structureDescription = '') {
         }
     }
     
-    // Stage 3: Try fuzzy formula variations (±1 H, ±1 C - lowest confidence)
-    console.log(`🔬 Compound ID: Stage 3 - Trying fuzzy formula variations...`);
+    // Stage 4: Try fuzzy formula variations (±1 H, ±1 C - lowest confidence)
+    console.log(`🔬 Compound ID: Stage 4 - Trying fuzzy formula variations...`);
     const variations = generateFormulaVariations(formula);
     
     // Skip the first variation (already tried as exact)
@@ -190,7 +214,7 @@ async function identifyCompoundByFormula(formula, structureDescription = '') {
         }
     }
     
-    console.log(`🔬 Compound ID: ✗ No match found after exhausting exact → structure → fuzzy cascade`);
+    console.log(`🔬 Compound ID: ✗ No match found - cascade: exact → verified-ddg → structure → fuzzy exhausted`);
     return null;
 }
 
