@@ -189,7 +189,9 @@ function addMessage(role, content, attachment = null) {
     // Render markdown for AI responses, plain text for user
     if (role === 'assistant' && typeof marked !== 'undefined') {
         try {
-            const renderedMarkdown = marked.parse(content, {
+            // Escape tildes in "nyan~" to prevent strikethrough between instances
+            const safeContent = content.replace(/nyan~/g, 'nyan\\~');
+            const renderedMarkdown = marked.parse(safeContent, {
                 breaks: true,
                 gfm: true
             });
