@@ -276,12 +276,20 @@ Be factual and precise. Extract exact values where visible.`
             contentType = 'diagram';
         }
         
+        // Confidence scoring based on response quality
+        let confidence = 0.95;  // Default high confidence
+        if (lower.includes('unclear') || lower.includes('cannot') || 
+            description.length < 100) {
+          confidence = 0.7;  // Lower confidence for uncertain/brief responses
+        }
+        
         return {
             success: true,
             data: {
                 page: pageNum,
                 description: description,
-                contentType: contentType
+                contentType: contentType,
+                confidence: confidence
             }
         };
     } catch (error) {
