@@ -3491,3 +3491,9 @@ body.desktop-mode .thumbs-zone {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
 }
+
+/* Global Breathing Animation for Date/Time */
+@keyframes breathe-datetime {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}

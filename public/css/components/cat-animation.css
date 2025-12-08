@@ -27,6 +27,12 @@
     white-space: nowrap;
     line-height: 1;
     margin-top: 0.25rem;
+    animation: breathe-datetime 1.5s ease-in-out infinite;
+}
+
+@keyframes breathe-datetime {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
 }
 
 /* Auth Pages: Always centered at 125×125px */
