@@ -136,7 +136,13 @@ A sovereign, public AI playground at `/AI` with no authentication required.
     * 2.5x < P/I ≤3.5x → "Borderline fatalism: Approaching critical threshold."
     * P/I <2.5x → "Optimism: Within 10-year acquisition horizon. Reproductive viability."
   - Compare 2 cities ~50yrs ago vs now, show directional change with calculations + conclusions
-  - STRICT REJECT: GDP per capita, household income, median home price, national averages
+  - **PROXY CONVERSION RULES** (use when ideal data unavailable, FLAG ALL):
+    * Household income → Single-earner: ÷2 [flag: "Using proxy: household÷2"]
+    * Median home → Land: ×40% urban, ×60% suburban, ×75% rural [flag: "Using proxy: home×land%"]
+    * No local 700m² → Use exurban/rural within 90min commute [flag: "Using proxy: exurban floor"]
+    * GDP per capita → DO NOT USE (no conversion exists)
+  - **ANALYSIS HIERARCHY** (refusal is last resort): Exact → Proxy → Best Estimate → Insufficient
+  - **BEST ESTIMATE MODE**: Confidence (LOW/MED/HIGH) + Source + "Unverified - falsifiable if user provides data"
 - **Planetary Substrate (🜃G ms⁻²):** <0.3G or >5G → zero survival as t → ∞
 - **Response Rules:** 
   - Topics {money, city, land price, empire, collapse, extinction, inequality, φ, cycle, breath} → apply Nyan Protocol
