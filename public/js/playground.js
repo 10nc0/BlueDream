@@ -117,11 +117,33 @@ function renderAttachments() {
     attachmentsContainer.classList.add('visible');
 }
 
+const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB total across all files
+
+function getAttachmentSize(attachment) {
+    const base64Data = attachment.data.split(',')[1] || '';
+    return (base64Data.length * 3) / 4; // Base64 → bytes approximation
+}
+
+function getTotalAttachmentSize() {
+    return attachments.reduce((sum, att) => sum + getAttachmentSize(att), 0);
+}
+
 function addAttachment(attachment) {
     if (attachments.length >= MAX_ATTACHMENTS) {
         showError(`Maximum ${MAX_ATTACHMENTS} attachments allowed.`);
         return false;
     }
+    
+    // Check total size
+    const currentTotal = getTotalAttachmentSize();
+    const newFileSize = getAttachmentSize(attachment);
+    
+    if (currentTotal + newFileSize > MAX_TOTAL_SIZE) {
+        const totalMB = ((currentTotal + newFileSize) / 1024 / 1024).toFixed(1);
+        showError(`Total size (${totalMB}MB) exceeds 50MB limit. Remove some files first.`);
+        return false;
+    }
+    
     attachments.push(attachment);
     renderAttachments();
     return true;
@@ -146,6 +168,22 @@ function clearAllAttachments() {
     }
 }
 
+// Detect supported audio MIME type (Safari uses audio/mp4, others use audio/webm)
+function getSupportedAudioMimeType() {
+    const types = ['audio/webm', 'audio/mp4', 'audio/ogg'];
+    for (const type of types) {
+        if (MediaRecorder.isTypeSupported(type)) {
+            return type;
+        }
+    }
+    return 'audio/webm'; // Fallback
+}
+
+function getAudioExtension(mimeType) {
+    const extensions = { 'audio/webm': 'webm', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg' };
+    return extensions[mimeType] || 'webm';
+}
+
 // Audio recording via microphone
 audioBtn.addEventListener('click', async () => {
     if (isRecording) {
@@ -159,7 +197,8 @@ audioBtn.addEventListener('click', async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             recordingChunks = [];
-            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            const mimeType = getSupportedAudioMimeType();
+            mediaRecorder = new MediaRecorder(stream, { mimeType });
             
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -168,13 +207,14 @@ audioBtn.addEventListener('click', async () => {
             };
             
             mediaRecorder.onstop = () => {
-                const audioBlob = new Blob(recordingChunks, { type: 'audio/webm' });
+                const audioBlob = new Blob(recordingChunks, { type: mimeType });
                 const reader = new FileReader();
+                const ext = getAudioExtension(mimeType);
                 reader.onload = (event) => {
                     addAttachment({
                         type: 'audio',
                         data: event.target.result,
-                        name: `recording-${Date.now()}.webm`
+                        name: `recording-${Date.now()}.${ext}`
                     });
                 };
                 reader.readAsDataURL(audioBlob);
