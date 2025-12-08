@@ -524,103 +524,94 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
     // Wait for all queries in parallel
     await Promise.all(promises);
     
-    // === Additional Queries 4 & 5: Uses and Interactions (run after compound identified) ===
-    let usesContext = null;
-    let interactionsContext = null;
+    // === Wikipedia API: Fetch full context if any enrichment succeeded (n > 0) ===
+    // Replaces DDG Query 4-5 with structured Wikipedia JSON
+    let wikipediaContext = null;
     
-    if (results.compoundContext && results.compoundContext.name) {
-        const compoundName = results.compoundContext.name;
-        console.log(`🔬 DDG Query 4-5: Fetching uses & interactions for "${compoundName}"...`);
+    const hasEnrichment = results.formulaContext || results.structureContext || results.compoundContext;
+    
+    if (hasEnrichment) {
+        // Determine best compound name for Wikipedia lookup
+        const wikiSearchName = results.compoundContext?.name || 
+                               results.formulaContext?.name || 
+                               results.structureContext?.name;
         
-        const additionalPromises = [];
-        
-        // Query 4: Uses and applications
-        const usesQuery = `${compoundName} uses applications`;
-        console.log(`🔬 DDG Query 4: "${usesQuery}"`);
-        additionalPromises.push(
-            axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
-                q: usesQuery,
-                format: 'json',
-                no_html: 1,
-                skip_disambig: 1,
-                t: 'nyanbook'
-            })}`, { timeout: 5000 }).then(res => {
-                if (res.data.AbstractText && res.data.AbstractText !== results.compoundContext.description) {
-                    console.log(`🔬 DDG Query 4: ✓ Found uses context`);
-                    usesContext = {
-                        description: res.data.AbstractText,
-                        source: res.data.AbstractURL || 'DuckDuckGo'
+        if (wikiSearchName) {
+            // Clean compound name for Wikipedia URL (remove parenthetical abbreviations)
+            const cleanWikiName = wikiSearchName
+                .replace(/\s*\([^)]*\)\s*/g, '') // Remove (THC), (CBD), etc.
+                .trim()
+                .replace(/\s+/g, '_'); // Replace spaces with underscores
+            
+            console.log(`📚 Wikipedia API: Fetching full context for "${cleanWikiName}"...`);
+            
+            try {
+                const wikiResponse = await axios.get(
+                    `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanWikiName)}`,
+                    { 
+                        timeout: 8000,
+                        headers: {
+                            'User-Agent': 'NyanBook/1.0 (https://nyanbook.com; contact@nyanbook.com)'
+                        }
+                    }
+                );
+                
+                if (wikiResponse.data && wikiResponse.data.extract) {
+                    wikipediaContext = {
+                        title: wikiResponse.data.title,
+                        description: wikiResponse.data.description || '',
+                        extract: wikiResponse.data.extract, // Full summary (longer than DDG abstract)
+                        source: wikiResponse.data.content_urls?.desktop?.page || 'Wikipedia',
+                        type: wikiResponse.data.type // 'standard', 'disambiguation', etc.
                     };
+                    console.log(`📚 Wikipedia API: ✓ Retrieved ${wikipediaContext.extract.length} chars for "${wikipediaContext.title}"`);
                 }
-            }).catch(err => {
-                console.log(`🔬 DDG Query 4: Failed - ${err.message}`);
-            })
-        );
-        
-        // Query 5: Metabolism/interactions/effects
-        const interactionsQuery = `${compoundName} metabolism effects pharmacology`;
-        console.log(`🔬 DDG Query 5: "${interactionsQuery}"`);
-        additionalPromises.push(
-            axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
-                q: interactionsQuery,
-                format: 'json',
-                no_html: 1,
-                skip_disambig: 1,
-                t: 'nyanbook'
-            })}`, { timeout: 5000 }).then(res => {
-                if (res.data.AbstractText && 
-                    res.data.AbstractText !== results.compoundContext.description &&
-                    res.data.AbstractText !== usesContext?.description) {
-                    console.log(`🔬 DDG Query 5: ✓ Found interactions context`);
-                    interactionsContext = {
-                        description: res.data.AbstractText,
-                        source: res.data.AbstractURL || 'DuckDuckGo'
-                    };
-                }
-            }).catch(err => {
-                console.log(`🔬 DDG Query 5: Failed - ${err.message}`);
-            })
-        );
-        
-        await Promise.all(additionalPromises);
+            } catch (wikiErr) {
+                console.log(`📚 Wikipedia API: Failed - ${wikiErr.message}`);
+                // Fallback: Wikipedia context remains null, DDG context still available
+            }
+        }
     }
     
     // Format enrichment context for prompt injection
     let contextText = '';
     
-    // Priority: compound context > formula context > structure context
-    if (results.compoundContext) {
+    // Priority: Wikipedia full context > compound context > formula context > structure context
+    // Wikipedia provides comprehensive info including uses and metabolism
+    if (wikipediaContext && wikipediaContext.extract) {
+        contextText += `\n### 📚 Wikipedia Knowledge (${wikipediaContext.title}):\n`;
+        if (wikipediaContext.description) {
+            contextText += `**${wikipediaContext.description}**\n\n`;
+        }
+        contextText += `${wikipediaContext.extract}\n`;
+        contextText += `Source: ${wikipediaContext.source}\n`;
+        
+        // Wikipedia extract typically contains uses/metabolism - instruct Groq to extract
+        contextText += `\n*Note: Extract medical uses, applications, metabolism, and pharmacology from the above context.*\n`;
+    } else if (results.compoundContext) {
+        // Fallback to DDG compound context if Wikipedia failed
         contextText += `\n### 🔬 External Knowledge (${results.compoundContext.name}):\n`;
         contextText += `${results.compoundContext.description}\n`;
         contextText += `Source: ${results.compoundContext.source}\n`;
     }
     
-    if (results.formulaContext && results.formulaContext.name !== results.compoundContext?.name) {
-        contextText += `\n### 🔬 External Knowledge (Formula ${formula}):\n`;
+    // Add formula context only if different from main compound
+    if (results.formulaContext && 
+        results.formulaContext.name !== results.compoundContext?.name &&
+        results.formulaContext.name !== wikipediaContext?.title) {
+        contextText += `\n### 🔬 Formula Context (${formula}):\n`;
         contextText += `**${results.formulaContext.name}**: ${results.formulaContext.description}\n`;
         contextText += `Source: ${results.formulaContext.source}\n`;
     }
     
+    // Add structure context only if different
     if (results.structureContext && 
         results.structureContext.name !== results.formulaContext?.name &&
-        results.structureContext.name !== results.compoundContext?.name) {
-        contextText += `\n### 🔬 External Knowledge (Structure):\n`;
+        results.structureContext.name !== results.compoundContext?.name &&
+        results.structureContext.name !== wikipediaContext?.title) {
+        contextText += `\n### 🔬 Structure Context:\n`;
         contextText += `**${results.structureContext.name}**: ${results.structureContext.description}\n`;
         contextText += `Source: ${results.structureContext.source}\n`;
-    }
-    
-    // Add uses context (Query 4)
-    if (usesContext) {
-        contextText += `\n### 💊 Common Uses:\n`;
-        contextText += `${usesContext.description}\n`;
-        contextText += `Source: ${usesContext.source}\n`;
-    }
-    
-    // Add interactions/metabolism context (Query 5)
-    if (interactionsContext) {
-        contextText += `\n### ⚗️ Interactions & Effects:\n`;
-        contextText += `${interactionsContext.description}\n`;
-        contextText += `Source: ${interactionsContext.source}\n`;
     }
     
     // Determine verified compound info (compound context has highest priority)
@@ -654,13 +645,15 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         }
     }
     
-    console.log(`🔬 Chemistry Enrichment: Complete (formula: ${results.formulaContext ? '✓' : '✗'}, structure: ${results.structureContext ? '✓' : '✗'}, compound: ${results.compoundContext ? '✓' : '✗'}, uses: ${usesContext ? '✓' : '✗'}, interactions: ${interactionsContext ? '✓' : '✗'})`);
+    console.log(`🔬 Chemistry Enrichment: Complete (formula: ${results.formulaContext ? '✓' : '✗'}, structure: ${results.structureContext ? '✓' : '✗'}, compound: ${results.compoundContext ? '✓' : '✗'}, wikipedia: ${wikipediaContext ? '✓' : '✗'})`);
     
+    // Return enrichment data - context will be cleared after Groq finishes
     return {
         contextText,
         formulaContext: results.formulaContext,
         structureContext: results.structureContext,
         compoundContext: results.compoundContext,
+        wikipediaContext, // Full Wikipedia JSON for reference
         verifiedCompound
     };
 }
