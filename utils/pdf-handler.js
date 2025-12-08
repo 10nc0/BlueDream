@@ -410,5 +410,6 @@ module.exports = {
     extractTablesWithTabula,
     renderPDFPagesToImages,
     analyzePageWithGroqVision,
-    analyzePDFVisualContent
+    analyzePDFVisualContent,
+    groqWithRetry
 };

@@ -1,4 +1,4 @@
-const { parsePDFHybrid, analyzePDFVisualContent } = require('./pdf-handler');
+const { parsePDFHybrid, analyzePDFVisualContent, groqWithRetry } = require('./pdf-handler');
 const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
 const crypto = require('crypto');
@@ -87,13 +87,43 @@ function extractFormulaAndKnownName(text) {
         }
     }
     
-    // Strategy 3: Look for "similar to X" or "appears to be X" patterns
+    // Strategy 3: Look for "similar to X" or "appears to be X" patterns (multi-word support)
     if (!knownName) {
-        const similarMatch = text.match(/(?:similar to|appears to be|identified as|looks like|is likely|could be)\s+([A-Z][a-zA-Z0-9\-]+)/i);
-        if (similarMatch) {
-            const candidate = similarMatch[1].trim();
-            // Validate it's a reasonable compound name (not "The", "This", etc.)
-            if (candidate.length > 2 && !/^(The|This|That|It|An?|Some)$/i.test(candidate)) {
+        // Match compound names that may be multiple words (e.g., "tetrahydrocannabinol", "acetylsalicylic acid")
+        const appearPatterns = [
+            // "appears to be/represent X", "identified as X", etc.
+            /(?:appears to (?:be|represent)|identified as|looks like|is likely|could be|similar to|consistent with|matches)\s+(?:a\s+)?(?:compound\s+(?:called|known as|named)\s+)?([A-Za-z][a-zA-Z0-9\-]+(?:[\s\-][a-zA-Z0-9\-]+){0,3})/i,
+            // "This/The compound/structure is/appears to be/represent X"
+            /(?:This|The)\s+(?:compound|molecule|structure)\s+(?:is|appears to (?:be|represent)|looks like|represents?)\s+([A-Za-z][a-zA-Z0-9\-]+(?:[\s\-][a-zA-Z0-9\-]+){0,3})/i,
+            // "compound name: X"
+            /compound\s+name[:\s]+([A-Za-z][a-zA-Z0-9\-]+(?:[\s\-][a-zA-Z0-9\-]+){0,3})/i,
+            // "This is X" or "represents X" at end of sentence
+            /(?:this is|represents?|which is)\s+([A-Z][a-zA-Z0-9\-]+(?:[\s\-][a-zA-Z0-9\-]+){0,2})(?:\.|,|$)/i,
+        ];
+        
+        for (const pattern of appearPatterns) {
+            const match = text.match(pattern);
+            if (match) {
+                let candidate = match[1].trim();
+                // Remove trailing filler words and parenthetical content
+                candidate = candidate.replace(/\s*\([^)]*\)$/i, '').trim();
+                candidate = candidate.replace(/\s+(compound|molecule|structure|chemical|with|and|or|the|a|an|which|also)$/i, '').trim();
+                // Validate it's a reasonable compound name
+                const invalidWords = /^(The|This|That|It|An?|Some|One|Two|Three|Is|Are|Was|Were|Has|Have|Had|May|Might|Could|Would|Should|Unknown|Unidentified|Unclear|commonly|also|often)$/i;
+                if (candidate.length > 2 && !invalidWords.test(candidate)) {
+                    knownName = candidate;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Strategy 4: Extract from "Formula: X, Name: Y" structured format
+    if (!knownName) {
+        const nameMatch = text.match(/(?:Name|Compound|Identified as)[:\s]+\**([A-Za-z][a-zA-Z0-9\-]+(?:[\s\-][a-zA-Z0-9\-]+){0,3})\**/i);
+        if (nameMatch) {
+            const candidate = nameMatch[1].trim().replace(/\s+(compound|molecule)$/i, '');
+            if (candidate.length > 2) {
                 knownName = candidate;
             }
         }
@@ -1251,40 +1281,159 @@ async function transcribeAudio(buffer, fileName, options) {
 }
 
 async function extractPDFVisualContent(buffer, fileName, options = {}) {
+    const ext = (fileName || '').toLowerCase().split('.').pop();
+    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext);
+    
     try {
-        const result = await analyzePDFVisualContent(buffer, fileName, { maxPages: 5 });
+        let visualContent = [];
         
-        if (!result.success || result.visualContent.length === 0) {
-            return { success: false, error: result.error || 'No visual content extracted' };
+        if (isImage) {
+            // Handle standalone images directly
+            console.log(`🖼️ Image Visual: Analyzing ${fileName} with Groq Vision...`);
+            const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
+            
+            if (!PLAYGROUND_GROQ_VISION_TOKEN) {
+                return { success: false, error: 'Vision token not configured' };
+            }
+            
+            const base64 = buffer.toString('base64');
+            const contentType = ext === 'png' ? 'image/png' : 
+                               ext === 'gif' ? 'image/gif' :
+                               ext === 'webp' ? 'image/webp' : 'image/jpeg';
+            
+            // Analyze standalone image with same prompt as PDF pages
+            const analysisResult = await analyzeImageWithGroqVision(
+                base64, 
+                contentType, 
+                PLAYGROUND_GROQ_VISION_TOKEN,
+                fileName
+            );
+            
+            if (analysisResult) {
+                visualContent.push({
+                    page: 1,
+                    contentType: analysisResult.contentType,
+                    description: analysisResult.description
+                });
+            }
+        } else {
+            // Handle PDFs via page rendering
+            const result = await analyzePDFVisualContent(buffer, fileName, { maxPages: 5 });
+            
+            if (!result.success || result.visualContent.length === 0) {
+                return { success: false, error: result.error || 'No visual content extracted' };
+            }
+            visualContent = result.visualContent;
+        }
+        
+        if (visualContent.length === 0) {
+            return { success: false, error: 'No visual content extracted' };
         }
         
         // Format visual content for merging with text extraction
-        const visualDescriptions = result.visualContent.map(vc => {
+        const visualDescriptions = visualContent.map(vc => {
             const typeLabel = vc.contentType === 'chemical' ? '🧪 Chemical Structure' :
                               vc.contentType === 'chart' ? '📊 Chart/Graph' :
                               vc.contentType === 'diagram' ? '📐 Diagram' : '🖼️ Visual';
-            return `**Page ${vc.page} (${typeLabel}):**\n${vc.description}`;
+            const label = isImage ? 'Image' : `Page ${vc.page}`;
+            return `**${label} (${typeLabel}):**\n${vc.description}`;
         }).join('\n\n');
         
         // Use unified chemistry pipeline (topic-based, not format-based)
-        const chemistryResult = await processChemistryContent(result.visualContent);
+        const chemistryResult = await processChemistryContent(visualContent);
+        
+        const chemicalStructures = visualContent.filter(vc => vc.contentType === 'chemical');
+        const charts = visualContent.filter(vc => vc.contentType === 'chart');
+        const diagrams = visualContent.filter(vc => vc.contentType === 'diagram');
         
         return { 
             success: true, 
             data: { 
                 text: `\n### Visual Content Analysis:\n${visualDescriptions}${chemistryResult?.enrichedText || ''}`,
-                visualContent: result.visualContent,
-                charts: result.charts,
-                chemicalStructures: result.chemicalStructures,
-                diagrams: result.diagrams,
+                visualContent: visualContent,
+                charts: charts,
+                chemicalStructures: chemicalStructures,
+                diagrams: diagrams,
                 compoundInfo: chemistryResult?.compoundInfo || null,
                 chemistryEnrichment: chemistryResult?.chemistryEnrichment || null,
-                type: 'pdf-vision'
+                type: isImage ? 'image-vision' : 'pdf-vision'
             }
         };
     } catch (error) {
-        console.error(`❌ PDF visual extraction error: ${error.message}`);
+        console.error(`❌ ${isImage ? 'Image' : 'PDF'} visual extraction error: ${error.message}`);
         return { success: false, error: error.message };
+    }
+}
+
+// Analyze a single image with Groq Vision (shared by all visual analysis paths)
+async function analyzeImageWithGroqVision(base64, contentType, token, fileName) {
+    const { AI_MODELS, GROQ_RETRY } = require('../config/constants');
+    
+    const systemPrompt = `You are a visual content analyzer specializing in scientific documents.
+Analyze this image and identify:
+1. Chemical structures (molecules, compounds, reactions)
+2. Charts/graphs (data visualizations, plots)
+3. Diagrams (flowcharts, schematics, technical drawings)
+
+For chemical structures, provide:
+- Molecular Formula: (e.g., C21H30O2)
+- Known as: (compound name if recognizable, e.g., THC, caffeine, aspirin)
+- Key functional groups visible
+- Structural features
+
+Respond with a clear description of what you observe.`;
+
+    try {
+        const response = await groqWithRetry(async () => {
+            return await axios.post(
+                'https://api.groq.com/openai/v1/chat/completions',
+                {
+                    model: AI_MODELS.VISION,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        {
+                            role: 'user',
+                            content: [
+                                { type: 'text', text: `Analyze this image from ${fileName}:` },
+                                { type: 'image_url', image_url: { url: `data:${contentType};base64,${base64}` } }
+                            ]
+                        }
+                    ],
+                    temperature: 0.1,
+                    max_tokens: 1024
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 60000
+                }
+            );
+        }, GROQ_RETRY.MAX_RETRIES);
+        
+        const description = response.data.choices?.[0]?.message?.content || '';
+        
+        // Classify content type
+        const descLower = description.toLowerCase();
+        let contentType_result = 'general';
+        if (/chemical|molecule|compound|formula|bond|ring|carbon|hydrogen|oxygen|nitrogen|structure/i.test(descLower)) {
+            contentType_result = 'chemical';
+        } else if (/chart|graph|plot|axis|data|trend|bar|line|pie/i.test(descLower)) {
+            contentType_result = 'chart';
+        } else if (/diagram|flow|schematic|process|step|arrow|box/i.test(descLower)) {
+            contentType_result = 'diagram';
+        }
+        
+        console.log(`🖼️ Image Visual: Classified as ${contentType_result}`);
+        
+        return {
+            description,
+            contentType: contentType_result
+        };
+    } catch (error) {
+        console.error(`❌ Groq Vision error for ${fileName}: ${error.message}`);
+        return null;
     }
 }
 
