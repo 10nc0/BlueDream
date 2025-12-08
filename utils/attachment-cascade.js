@@ -100,34 +100,24 @@ async function searchDDGForFormula(formula) {
     }
 }
 
-// Search DDG for compound name with fuzzy formula matching
+// Search DDG for compound name - cascade: exact → structure-based → fuzzy
 async function identifyCompoundByFormula(formula, structureDescription = '') {
     if (!formula) return null;
     
-    // Try exact formula first, then fuzzy variations
-    const variations = generateFormulaVariations(formula);
-    console.log(`🔬 Compound ID: Trying ${variations.length} formula variations...`);
-    
-    for (let i = 0; i < variations.length; i++) {
-        const variant = variations[i];
-        const result = await searchDDGForFormula(variant);
-        if (result) {
-            // Annotate match type: exact (first variation) vs fuzzy (subsequent)
-            const matchType = (i === 0) ? 'exact' : 'fuzzy';
-            result.matchType = matchType;
-            
-            if (variant !== formula) {
-                console.log(`🔬 Compound ID: Found fuzzy match using ${variant} (original: ${formula})`);
-            } else {
-                console.log(`🔬 Compound ID: Found exact match for ${formula}`);
-            }
-            return result;
-        }
+    // Stage 1: Try exact formula (most reliable - direct from Vision analysis)
+    console.log(`🔬 Compound ID: Stage 1 - Trying exact formula ${formula}...`);
+    const exactResult = await searchDDGForFormula(formula);
+    if (exactResult) {
+        exactResult.matchType = 'exact';
+        console.log(`🔬 Compound ID: ✓ Exact match found for ${formula}`);
+        return exactResult;
     }
     
-    // Fallback: Try structure-based search if we have structural keywords
+    // Stage 2: Try structure-based search (empirical keyword matching on Vision observations)
     if (structureDescription) {
-        // Extract key structural terms
+        console.log(`🔬 Compound ID: Stage 2 - Trying structure-based search...`);
+        
+        // Extract key structural terms from Vision analysis
         const structureTerms = [];
         if (/benzene|aromatic/i.test(structureDescription)) structureTerms.push('benzene');
         if (/pyran/i.test(structureDescription)) structureTerms.push('pyran');
@@ -138,7 +128,7 @@ async function identifyCompoundByFormula(formula, structureDescription = '') {
         
         if (structureTerms.length >= 2) {
             const structureQuery = `${structureTerms.join(' ')} molecule compound`;
-            console.log(`🔬 Compound ID: Trying structure-based search: "${structureQuery}"`);
+            console.log(`🔬 Compound ID: Structure query: "${structureQuery}"`);
             
             const params = {
                 q: structureQuery,
@@ -154,7 +144,7 @@ async function identifyCompoundByFormula(formula, structureDescription = '') {
                 const data = response.data;
                 
                 if (data.AbstractText) {
-                    console.log(`🔬 Compound ID: Structure-based match found!`);
+                    console.log(`🔬 Compound ID: ✓ Structure-based match found!`);
                     return {
                         name: data.Heading || '',
                         description: data.AbstractText.substring(0, 300),
@@ -164,12 +154,27 @@ async function identifyCompoundByFormula(formula, structureDescription = '') {
                     };
                 }
             } catch (err) {
-                // Ignore structure search errors
+                console.log(`🔬 Compound ID: Structure search error: ${err.message}`);
             }
         }
     }
     
-    console.log(`🔬 Compound ID: No match found for ${formula} (tried ${variations.length} variations)`);
+    // Stage 3: Try fuzzy formula variations (±1 H, ±1 C - lowest confidence)
+    console.log(`🔬 Compound ID: Stage 3 - Trying fuzzy formula variations...`);
+    const variations = generateFormulaVariations(formula);
+    
+    // Skip the first variation (already tried as exact)
+    for (let i = 1; i < variations.length; i++) {
+        const variant = variations[i];
+        const result = await searchDDGForFormula(variant);
+        if (result) {
+            result.matchType = 'fuzzy';
+            console.log(`🔬 Compound ID: ✓ Fuzzy match found using ${variant} (original: ${formula})`);
+            return result;
+        }
+    }
+    
+    console.log(`🔬 Compound ID: ✗ No match found after exhausting exact → structure → fuzzy cascade`);
     return null;
 }
 
