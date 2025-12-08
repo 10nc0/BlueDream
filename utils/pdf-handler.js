@@ -143,53 +143,51 @@ function tableToMarkdown(tableData) {
 
 // VISUAL PDF ANALYSIS: Render pages as images and analyze with Groq Vision
 // Unlocks chemical structures, charts, diagrams, and other visual content
-// Uses pdf-poppler (Poppler library) to bypass pdfjs-dist + canvas Path2D bug
+// Uses pdftoppm (Poppler CLI) directly via child_process to bypass canvas bugs
 
 async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
     const images = [];
-    const pdfPoppler = require('pdf-poppler');
+    const { execSync } = require('child_process');
     
     // Create unique temp file paths
     const timestamp = Date.now();
     const tempPdfPath = path.join(os.tmpdir(), `nyan_pdf_${timestamp}.pdf`);
-    const tempPrefix = `nyan_page_${timestamp}`;
+    const tempOutputPrefix = path.join(os.tmpdir(), `nyan_page_${timestamp}`);
     
     try {
-        // Write buffer to temp file (Poppler needs file path)
+        // Write buffer to temp file (pdftoppm needs file path)
         fs.writeFileSync(tempPdfPath, buffer);
         
-        // Get total page count
-        const info = await pdfPoppler.info(tempPdfPath);
-        const totalPages = info.pages || 1;
-        const pagesToRender = Math.min(totalPages, options.maxPages);
+        // Get page count using pdfinfo
+        let totalPages = 1;
+        try {
+            const infoOutput = execSync(`pdfinfo "${tempPdfPath}" 2>/dev/null | grep "^Pages:" | awk '{print $2}'`, { encoding: 'utf8' });
+            totalPages = parseInt(infoOutput.trim()) || 1;
+        } catch (e) {
+            console.log(`⚠️ pdfinfo failed, assuming 1 page`);
+        }
         
+        const pagesToRender = Math.min(totalPages, options.maxPages);
         console.log(`🖼️ PDF Poppler: Rendering ${pagesToRender}/${totalPages} pages...`);
         
-        // Render pages to JPEG
-        const opts = {
-            format: 'jpeg',
-            out_dir: os.tmpdir(),
-            out_prefix: tempPrefix,
-            scale: 2048,  // Max dimension (high-res for vision)
-            page: pagesToRender > 1 ? `1-${pagesToRender}` : null  // null = first page only
-        };
-        
-        await pdfPoppler.convert(tempPdfPath, opts);
+        // Render pages to JPEG using pdftoppm
+        // -jpeg: output format, -r 150: 150 DPI, -f/-l: first/last page
+        const cmd = `pdftoppm -jpeg -r 150 -f 1 -l ${pagesToRender} "${tempPdfPath}" "${tempOutputPrefix}"`;
+        execSync(cmd, { timeout: 30000 });
         
         // Load rendered images as base64
         for (let i = 1; i <= pagesToRender; i++) {
-            // Poppler naming: prefix-1.jpg, prefix-2.jpg, etc (or prefix-01 for multi-page)
+            // pdftoppm naming: prefix-1.jpg or prefix-01.jpg depending on page count
             const possibleNames = [
-                `${tempPrefix}-${i}.jpg`,
-                `${tempPrefix}-${String(i).padStart(2, '0')}.jpg`,
-                `${tempPrefix}-${String(i).padStart(3, '0')}.jpg`
+                `${tempOutputPrefix}-${i}.jpg`,
+                `${tempOutputPrefix}-${String(i).padStart(2, '0')}.jpg`,
+                `${tempOutputPrefix}-${String(i).padStart(3, '0')}.jpg`
             ];
             
             let imgPath = null;
             for (const name of possibleNames) {
-                const fullPath = path.join(os.tmpdir(), name);
-                if (fs.existsSync(fullPath)) {
-                    imgPath = fullPath;
+                if (fs.existsSync(name)) {
+                    imgPath = name;
                     break;
                 }
             }
