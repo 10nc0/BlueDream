@@ -115,10 +115,11 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 - 50 requests/hour per IP rate limiting
 
 **Search Cascade (Real-time Knowledge):**
+- **Step 0**: Query Extraction - Groq extracts core question from long/complex messages (max 10 words)
 - **Step 1**: DuckDuckGo Instant Answer API (free, Wikipedia-style facts)
 - **Step 2**: Brave Search API fallback (if DDG returns nothing, for current events/news)
 - Overcomes Groq's December 2023 knowledge cutoff with real-time web data
-- Console logs show search source: `🔍 DDG` or `🦁 Brave`
+- Console logs show: `🧠 Extracted query`, `🔍 DDG`, `🦁 Brave`
 
 **Nyan Protocol (Permanent Seed Context):**
 - **Identity:** Origin=0. Nyan (no yes all neither) of nyanbook. Progression=genesis=φ²

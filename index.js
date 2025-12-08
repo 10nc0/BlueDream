@@ -6093,6 +6093,50 @@ async function searchDuckDuckGo(query) {
     }
 }
 
+// ===== QUERY EXTRACTION (Compress long messages to core question) =====
+async function extractCoreQuestion(message) {
+    const GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
+    if (!GROQ_TOKEN || message.length < 100) {
+        return message.substring(0, 200);
+    }
+    
+    try {
+        console.log(`🧠 Extracting core question from ${message.length} char message...`);
+        const response = await axios.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            {
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'Extract the core question or topic from the user message. Return ONLY a short search query (max 10 words) that captures what they want to know. No explanation, just the query.'
+                    },
+                    { role: 'user', content: message.substring(0, 1000) }
+                ],
+                temperature: 0.1,
+                max_tokens: 30
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${GROQ_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 3000
+            }
+        );
+        
+        const extractedQuery = response.data?.choices?.[0]?.message?.content?.trim();
+        if (extractedQuery && extractedQuery.length > 3) {
+            console.log(`🧠 Extracted query: "${extractedQuery}"`);
+            return extractedQuery;
+        }
+        return message.substring(0, 200);
+    } catch (err) {
+        console.error('🧠 Query extraction error:', err.message);
+        return message.substring(0, 200);
+    }
+}
+
 // ===== BRAVE SEARCH FUNCTION (Fallback for real-time data) =====
 async function searchBrave(query) {
     const BRAVE_API_KEY = process.env.PLAYGROUND_BRAVE_API;
@@ -6161,25 +6205,20 @@ app.post('/api/playground', async (req, res) => {
             ? history.filter(msg => msg && typeof msg === 'object' && msg.role && msg.content)
             : [];
         
-        // SEARCH CASCADE: DDG first (free), then Brave fallback (API) for real-time data
-        // Skip search for: very long messages (system prompts), or non-question internal context
+        // SEARCH CASCADE: Extract core question → DDG (free) → Brave fallback (API)
         let searchContext = null;
-        const isSearchableQuery = message && 
-            message.length < 300 && 
-            !message.includes('Identity:') && 
-            !message.includes('Ontology:') &&
-            !message.includes('Protocol');
-        
-        if (isSearchableQuery) {
-            console.log(`🔍 Playground: Searching for context: "${message.substring(0, 50)}..."`);
+        if (message) {
+            // Step 0: Extract core question from long/complex messages
+            const searchQuery = await extractCoreQuestion(message);
+            console.log(`🔍 Playground: Searching for: "${searchQuery.substring(0, 50)}..."`);
             
             // Step 1: Try DDG (free, good for Wikipedia-style facts)
-            searchContext = await searchDuckDuckGo(message);
+            searchContext = await searchDuckDuckGo(searchQuery);
             
             // Step 2: If DDG fails, try Brave (API, good for current events/news)
             if (!searchContext) {
                 console.log(`🔄 DDG returned nothing, trying Brave fallback...`);
-                searchContext = await searchBrave(message);
+                searchContext = await searchBrave(searchQuery);
             }
             
             // Inject context if found
@@ -6189,8 +6228,6 @@ app.post('/api/playground', async (req, res) => {
             } else {
                 console.log(`ℹ️ No search results - using Groq's base knowledge (cutoff: Dec 2023)`);
             }
-        } else if (message) {
-            console.log(`⏭️ Skipping search: message too long or contains system context (${message.length} chars)`);
         }
         
         // File size limits (base64 encoded)
