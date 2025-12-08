@@ -6093,6 +6093,48 @@ async function searchDuckDuckGo(query) {
     }
 }
 
+// ===== BRAVE SEARCH FUNCTION (Fallback for real-time data) =====
+async function searchBrave(query) {
+    const BRAVE_API_KEY = process.env.PLAYGROUND_BRAVE_API;
+    if (!BRAVE_API_KEY) {
+        console.log('🦁 Brave: API key not configured, skipping');
+        return null;
+    }
+    
+    try {
+        console.log(`🦁 Brave: Searching for real-time context: "${query.substring(0, 40)}..."`);
+        const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
+            headers: {
+                'Accept': 'application/json',
+                'X-Subscription-Token': BRAVE_API_KEY
+            },
+            params: {
+                q: query,
+                count: 5,
+                text_decorations: false,
+                safesearch: 'moderate'
+            },
+            timeout: 5000
+        });
+        
+        const results = response.data?.web?.results || [];
+        if (results.length === 0) {
+            console.log(`🦁 Brave: No results found for "${query.substring(0, 40)}..."`);
+            return null;
+        }
+        
+        const context = results.slice(0, 5).map((r, i) => 
+            `${i + 1}. ${r.title}\n   ${r.description || ''}`
+        ).join('\n\n');
+        
+        console.log(`🦁 Brave: Found ${results.length} results, injecting top 5 into prompt`);
+        return `🌐 Web search results:\n${context}`;
+    } catch (err) {
+        console.error('🦁 Brave search error:', err.message);
+        return null;
+    }
+}
+
 app.post('/api/playground', async (req, res) => {
     const clientIp = req.ip || req.connection.remoteAddress;
     
@@ -6119,16 +6161,26 @@ app.post('/api/playground', async (req, res) => {
             ? history.filter(msg => msg && typeof msg === 'object' && msg.role && msg.content)
             : [];
         
-        // DDG PRE-GROQ: Always search for real-time context to overcome 2023 knowledge cutoff
-        let ddgContext = null;
+        // SEARCH CASCADE: DDG first (free), then Brave fallback (API) for real-time data
+        let searchContext = null;
         if (message) {
-            console.log(`🔍 Playground: DDG search for real-time context: "${message.substring(0, 50)}..."`);
-            ddgContext = await searchDuckDuckGo(message);
-            if (ddgContext) {
-                finalPrompt = `Context from web search:\n${ddgContext}\n\nUser query: ${message}`;
-                console.log(`✅ DDG context injected into prompt for knowledge augmentation`);
+            console.log(`🔍 Playground: Searching for context: "${message.substring(0, 50)}..."`);
+            
+            // Step 1: Try DDG (free, good for Wikipedia-style facts)
+            searchContext = await searchDuckDuckGo(message);
+            
+            // Step 2: If DDG fails, try Brave (API, good for current events/news)
+            if (!searchContext) {
+                console.log(`🔄 DDG returned nothing, trying Brave fallback...`);
+                searchContext = await searchBrave(message);
+            }
+            
+            // Inject context if found
+            if (searchContext) {
+                finalPrompt = `Context from web search:\n${searchContext}\n\nUser query: ${message}`;
+                console.log(`✅ Search context injected into prompt for knowledge augmentation`);
             } else {
-                console.log(`ℹ️ DDG: No results - using Groq's base knowledge (cutoff: Dec 2023)`);
+                console.log(`ℹ️ No search results - using Groq's base knowledge (cutoff: Dec 2023)`);
             }
         }
         
