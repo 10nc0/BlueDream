@@ -6318,9 +6318,60 @@ app.post('/api/playground', async (req, res) => {
         }
         
         // Normalize to arrays (support both single and multi-file)
-        const photoList = photos || (photo ? [photo] : []);
-        const audioList = audios || (audio ? [audio] : []);
-        const docList = documents || (document ? [{ data: document, name: documentName }] : []);
+        let photoList = photos || (photo ? [photo] : []);
+        let audioList = audios || (audio ? [audio] : []);
+        let docList = documents || (document ? [{ data: document, name: documentName }] : []);
+        
+        // Deduplicate attachments by content hash (saves rate limit tokens)
+        const hashData = (data) => {
+            const sample = typeof data === 'string' ? data.substring(0, 500) + data.length : JSON.stringify(data).substring(0, 500);
+            return sample;
+        };
+        
+        // Dedupe photos by data hash
+        const photoSeen = new Set();
+        const uniquePhotos = [];
+        for (const p of photoList) {
+            const hash = hashData(p);
+            if (!photoSeen.has(hash)) {
+                photoSeen.add(hash);
+                uniquePhotos.push(p);
+            }
+        }
+        if (uniquePhotos.length < photoList.length) {
+            console.log(`📎 Deduped photos: ${photoList.length} → ${uniquePhotos.length}`);
+        }
+        photoList = uniquePhotos;
+        
+        // Dedupe audio by data hash
+        const audioSeen = new Set();
+        const uniqueAudios = [];
+        for (const a of audioList) {
+            const hash = hashData(a);
+            if (!audioSeen.has(hash)) {
+                audioSeen.add(hash);
+                uniqueAudios.push(a);
+            }
+        }
+        if (uniqueAudios.length < audioList.length) {
+            console.log(`📎 Deduped audio: ${audioList.length} → ${uniqueAudios.length}`);
+        }
+        audioList = uniqueAudios;
+        
+        // Dedupe documents by name + data hash
+        const docSeen = new Set();
+        const uniqueDocs = [];
+        for (const d of docList) {
+            const hash = (d.name || '') + ':' + hashData(d.data);
+            if (!docSeen.has(hash)) {
+                docSeen.add(hash);
+                uniqueDocs.push(d);
+            }
+        }
+        if (uniqueDocs.length < docList.length) {
+            console.log(`📎 Deduped docs: ${docList.length} → ${uniqueDocs.length}`);
+        }
+        docList = uniqueDocs;
         
         // Validation
         if (!message?.trim() && photoList.length === 0 && audioList.length === 0 && docList.length === 0) {
