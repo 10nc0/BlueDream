@@ -125,7 +125,7 @@ inputContainer.addEventListener('drop', (e) => {
                 data: event.target.result,
                 name: file.name
             };
-            const icon = isImage ? '📷' : isAudio ? '🎤' : '📄';
+            const icon = isImage ? '📷' : isAudio ? '🔊' : '📄';
             attachmentName.textContent = `${icon} ${file.name}`;
             attachmentPreview.classList.add('visible');
         };
