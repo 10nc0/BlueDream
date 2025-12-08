@@ -6028,6 +6028,26 @@ const RATE_LIMIT_EXEMPT_IPS = [
 capacityManager.setExemptIPs(RATE_LIMIT_EXEMPT_IPS);
 console.log(`🛡️ Capacity exempt IPs: ${RATE_LIMIT_EXEMPT_IPS.length} configured`);
 
+// Exponential backoff retry for Groq 429 (rate limit)
+async function groqWithRetry(axiosConfig, maxRetries = 3) {
+    let lastError;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await axios.post(axiosConfig.url, axiosConfig.data, axiosConfig.config);
+        } catch (error) {
+            lastError = error;
+            if (error.response?.status === 429 && attempt < maxRetries) {
+                const delayMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+                console.log(`⏳ Groq 429: Retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            } else {
+                throw error;
+            }
+        }
+    }
+    throw lastError;
+}
+
 // H₀ PROTOCOL: temperature = 0.15 (sweet spot: 0.1 too rigid, 0.2 hallucinates)
 const H0_TEMPERATURE = 0.15;
 
@@ -6516,9 +6536,9 @@ app.post('/api/playground', async (req, res) => {
                 }
                 
                 try {
-                    const visionResponse = await axios.post(
-                        'https://api.groq.com/openai/v1/chat/completions',
-                        {
+                    const visionResponse = await groqWithRetry({
+                        url: 'https://api.groq.com/openai/v1/chat/completions',
+                        data: {
                             model: 'meta-llama/llama-4-scout-17b-16e-instruct',
                             messages: [
                                 { 
@@ -6536,14 +6556,14 @@ app.post('/api/playground', async (req, res) => {
                             temperature: H0_TEMPERATURE,
                             max_tokens: 500
                         },
-                        {
+                        config: {
                             headers: {
                                 'Authorization': `Bearer ${PLAYGROUND_GROQ_VISION_TOKEN}`,
                                 'Content-Type': 'application/json'
                             },
                             timeout: 30000
                         }
-                    );
+                    }, 2);
                     
                     const photoDescription = visionResponse.data.choices?.[0]?.message?.content || 'Unable to analyze image';
                     extractedContent.push(`[Photo ${i + 1}]: ${photoDescription}`);
@@ -6788,23 +6808,23 @@ End with 🔥 nyan~`
             }
         ];
         
-        const groqResponse = await axios.post(
-            'https://api.groq.com/openai/v1/chat/completions',
-            {
+        const groqResponse = await groqWithRetry({
+            url: 'https://api.groq.com/openai/v1/chat/completions',
+            data: {
                 model: 'llama-3.3-70b-versatile',
                 messages,
                 temperature: 0.15,
                 max_tokens: 1500,
                 top_p: 0.95
             },
-            {
+            config: {
                 headers: {
                     'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`,
                     'Content-Type': 'application/json'
                 },
                 timeout: 15000
             }
-        );
+        });
         
         let reply = groqResponse.data.choices[0]?.message?.content || 'No response generated.';
         
