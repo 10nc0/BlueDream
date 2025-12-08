@@ -150,10 +150,29 @@ async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
     try {
         // Dynamic import for ESM module compatibility
         const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-        const { createCanvas } = require('canvas');
+        const { createCanvas, Image } = require('canvas');
         
-        // Load PDF document
-        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
+        // Node.js canvas factory for pdfjs-dist compatibility
+        const canvasFactory = {
+            create: function(width, height) {
+                const canvas = createCanvas(width, height);
+                return { canvas, context: canvas.getContext('2d') };
+            },
+            reset: function(canvasAndContext, width, height) {
+                canvasAndContext.canvas.width = width;
+                canvasAndContext.canvas.height = height;
+            },
+            destroy: function(canvasAndContext) {
+                canvasAndContext.canvas = null;
+                canvasAndContext.context = null;
+            }
+        };
+        
+        // Load PDF document with canvas factory
+        const loadingTask = pdfjsLib.getDocument({ 
+            data: new Uint8Array(buffer),
+            canvasFactory: canvasFactory
+        });
         const pdf = await loadingTask.promise;
         const totalPages = pdf.numPages;
         const pagesToRender = Math.min(totalPages, options.maxPages);
@@ -168,10 +187,11 @@ async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
                 const canvas = createCanvas(viewport.width, viewport.height);
                 const context = canvas.getContext('2d');
                 
-                // Render page to canvas
+                // Render page to canvas with canvas factory
                 await page.render({
                     canvasContext: context,
-                    viewport: viewport
+                    viewport: viewport,
+                    canvasFactory: canvasFactory
                 }).promise;
                 
                 // Convert to base64 JPEG (smaller than PNG)
