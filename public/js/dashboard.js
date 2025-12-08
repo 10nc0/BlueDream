@@ -1,4 +1,71 @@
         console.log('🚀 Main script loading...');
+        
+        // ===================================================================
+        // UNIFIED AUTH FETCH - Global authenticated fetch with token refresh
+        // Defined at top-level so all functions can use it immediately
+        // ===================================================================
+        window.authFetch = async function(url, options = {}) {
+            let accessToken = localStorage.getItem('accessToken');
+            
+            // Always set Content-Type for JSON requests
+            options.headers = {
+                'Content-Type': 'application/json',
+                ...options.headers
+            };
+            
+            // Add Authorization header if token exists
+            if (accessToken) {
+                options.headers['Authorization'] = `Bearer ${accessToken}`;
+            }
+            
+            let response = await fetch(url, options);
+            
+            // If token expired (401), try to refresh
+            if (response.status === 401 && accessToken) {
+                const refreshToken = localStorage.getItem('refreshToken');
+                
+                if (refreshToken) {
+                    try {
+                        const refreshResponse = await fetch('/api/auth/refresh', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ refreshToken })
+                        });
+                        
+                        if (refreshResponse.ok) {
+                            const refreshData = await refreshResponse.json();
+                            localStorage.setItem('accessToken', refreshData.accessToken);
+                            if (refreshData.refreshToken) {
+                                localStorage.setItem('refreshToken', refreshData.refreshToken);
+                            }
+                            
+                            // Retry original request with new token
+                            options.headers['Authorization'] = `Bearer ${refreshData.accessToken}`;
+                            response = await fetch(url, options);
+                        } else {
+                            // Refresh failed, redirect to login
+                            localStorage.removeItem('accessToken');
+                            localStorage.removeItem('refreshToken');
+                            window.location.href = '/login.html';
+                            return response;
+                        }
+                    } catch (refreshError) {
+                        console.error('Token refresh failed:', refreshError);
+                        localStorage.removeItem('accessToken');
+                        localStorage.removeItem('refreshToken');
+                        window.location.href = '/login.html';
+                        return response;
+                    }
+                } else {
+                    // No refresh token, redirect to login
+                    window.location.href = '/login.html';
+                    return response;
+                }
+            }
+            
+            return response;
+        };
+        
         let books = [];
         let filteredBooks = [];
         let editingBookId = null;
@@ -976,73 +1043,10 @@
                 .replace(/'/g, "&#039;");
         }
 
-        // JWT-enabled fetch wrapper - automatically adds Authorization header
-        async function authFetch(url, options = {}) {
-            const accessToken = localStorage.getItem('accessToken');
-            
-            // Always set Content-Type for JSON requests
-            options.headers = {
-                'Content-Type': 'application/json',
-                ...options.headers
-            };
-            
-            // Add Authorization header if token exists
-            if (accessToken) {
-                options.headers['Authorization'] = `Bearer ${accessToken}`;
-            }
-            
-            // NOTE: Do NOT use credentials: 'include' for JWT auth (that's for cookies only)
-            
-            let response = await fetch(url, options);
-            
-            // If token expired (401), try to refresh
-            if (response.status === 401 && accessToken) {
-                const refreshToken = localStorage.getItem('refreshToken');
-                
-                if (refreshToken) {
-                    try {
-                        // Try to refresh the access token
-                        const refreshResponse = await fetch('/api/auth/refresh', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ refreshToken })
-                        });
-                        
-                        if (refreshResponse.ok) {
-                            const refreshData = await refreshResponse.json();
-                            localStorage.setItem('accessToken', refreshData.accessToken);
-                            
-                            // Retry original request with new token
-                            options.headers['Authorization'] = `Bearer ${refreshData.accessToken}`;
-                            response = await fetch(url, options);
-                        } else {
-                            // Refresh failed, clear tokens and redirect to login
-                            localStorage.removeItem('accessToken');
-                            localStorage.removeItem('refreshToken');
-                            window.location.href = '/login.html';
-                            return response;
-                        }
-                    } catch (refreshError) {
-                        console.error('Token refresh failed:', refreshError);
-                        localStorage.removeItem('accessToken');
-                        localStorage.removeItem('refreshToken');
-                        window.location.href = '/login.html';
-                        return response;
-                    }
-                } else {
-                    // No refresh token, redirect to login
-                    window.location.href = '/login.html';
-                    return response;
-                }
-            }
-            
-            return response;
-        }
-
-        // Check authentication on page load
+        // Check authentication on page load (uses global window.authFetch)
         async function checkAuth() {
             try {
-                const res = await authFetch('/api/auth/status');
+                const res = await window.authFetch('/api/auth/status');
                 const data = await res.json();
                 
                 if (!data.authenticated) {
@@ -1101,7 +1105,7 @@
             console.log('🔓 Logging out...');
             
             try {
-                await authFetch('/api/auth/logout', { method: 'POST' });
+                await window.authFetch('/api/auth/logout', { method: 'POST' });
             } catch (error) {
                 console.error('Logout API error:', error);
             }
@@ -1232,7 +1236,7 @@
         // Book CRUD Functions
         async function loadBooks() {
             try {
-                const response = await authFetch('/api/books');
+                const response = await window.authFetch('/api/books');
                 if (!response.ok) {
                     console.error('❌ Book fetch failed:', response.status, response.statusText);
                     return;
@@ -1274,7 +1278,7 @@
         // Quiet refresh that updates book counts without re-rendering detail panel
         async function loadBooksQuietly() {
             try {
-                const response = await authFetch('/api/books');
+                const response = await window.authFetch('/api/books');
                 const data = await response.json();
                 const rawBooks = data.books || data || [];
                 
@@ -1456,7 +1460,7 @@
             const platform = (book.input_platform || book.platform || '').toLowerCase();
             if (platform === 'whatsapp') {
                 try {
-                    const statusResponse = await authFetch(`/api/books/${book.fractal_id}/status`);
+                    const statusResponse = await window.authFetch(`/api/books/${book.fractal_id}/status`);
                     if (statusResponse.ok) {
                         whatsappStatus = await statusResponse.json();
                     }
@@ -1998,7 +2002,7 @@
             // If there's a search query, also search drops metadata
             if (searchText.trim()) {
                 try {
-                    const response = await authFetch(`/api/drops/search/${bookId}?q=${encodeURIComponent(searchText)}`);
+                    const response = await window.authFetch(`/api/drops/search/${bookId}?q=${encodeURIComponent(searchText)}`);
                     if (response.ok) {
                         const drops = await response.json();
                         // Add all matching message IDs to the set
@@ -2319,7 +2323,7 @@
         // Show media preview with actual image/video
         async function showMediaPreview(messageId) {
             try {
-                const response = await authFetch(`/api/messages/${messageId}/media`);
+                const response = await window.authFetch(`/api/messages/${messageId}/media`);
                 if (!response.ok) {
                     alert('Media not available');
                     return;
@@ -2658,7 +2662,7 @@
             
             try {
                 console.log(`🔮 Prometheus: Sending request with fractalId="${selectedBookFractalId}", bookIds=${JSON.stringify(detectedBookIds.slice(0, 3))}${detectedBookIds.length > 3 ? `... (${detectedBookIds.length} total)` : ''}`);
-                const response = await authFetch('/api/prometheus/check', {
+                const response = await window.authFetch('/api/prometheus/check', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -2780,7 +2784,7 @@
             const paginationDiv = document.getElementById('prometheusHistoryPagination');
             
             try {
-                const response = await authFetch(`/api/prometheus/discord-history?limit=${limit}`);
+                const response = await window.authFetch(`/api/prometheus/discord-history?limit=${limit}`);
                 
                 if (!response.ok) {
                     const text = await response.text();
@@ -3431,7 +3435,7 @@
                 console.log(`🔍 Exhaustive server search for "${searchTerm}" in ${booksToSearch.length} books...`);
                 
                 try {
-                    const response = await authFetch(`/api/search?term=${encodeURIComponent(searchTerm)}&bookIds=${booksToSearch.join(',')}`);
+                    const response = await window.authFetch(`/api/search?term=${encodeURIComponent(searchTerm)}&bookIds=${booksToSearch.join(',')}`);
                     
                     if (response.ok) {
                         const data = await response.json();
@@ -3622,19 +3626,11 @@
                     submitBtn.innerHTML = '<span class="book-loading"></span> Creating book...';
                     
                     try {
-                        const token = localStorage.getItem('accessToken');
-                        if (!token) {
-                            throw new Error('Not authenticated. Please login first.');
-                        }
-                        
                         // 1. CREATE BOOK (webhook optional - add later in Edit tab)
+                        // Uses unified window.authFetch for automatic token refresh
                         console.log('📝 Creating book:', bookName);
-                        const createRes = await fetch('/api/books', {
+                        const createRes = await window.authFetch('/api/books', {
                             method: 'POST',
-                            headers: { 
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            },
                             body: JSON.stringify({
                                 name: bookName,
                                 inputPlatform: platform
@@ -3642,13 +3638,6 @@
                         });
                         
                         if (!createRes.ok) {
-                            // Handle token expiration gracefully
-                            if (createRes.status === 401) {
-                                alert('⏱️ Your session has expired. Please login again.');
-                                window.location.href = '/login.html';
-                                return;
-                            }
-                            
                             // Try to parse error as JSON, fallback to text
                             let errorMessage = 'Failed to create book';
                             try {
@@ -3908,7 +3897,7 @@
                 const url = editingBookId ? `/api/books/${editingBookId}` : '/api/books';
                 const method = editingBookId ? 'PUT' : 'POST';
                 
-                const response = await authFetch(url, {
+                const response = await window.authFetch(url, {
                     method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(botData)
@@ -3980,7 +3969,7 @@
                 const pollQR = async () => {
                     attempts++;
                     
-                    const qrResponse = await authFetch(`/api/books/${bookId}/qr`);
+                    const qrResponse = await window.authFetch(`/api/books/${bookId}/qr`);
                     if (!qrResponse.ok) {
                         showQRError('Server Error', 'Failed to fetch QR code. Please try again.');
                         return;
@@ -4145,7 +4134,7 @@
             
             // Relink first to get fresh QR
             try {
-                const relinkResponse = await authFetch(`/api/books/${bookId}/relink`, {
+                const relinkResponse = await window.authFetch(`/api/books/${bookId}/relink`, {
                     method: 'POST'
                 });
                 
@@ -4166,7 +4155,7 @@
                     await new Promise(resolve => setTimeout(resolve, 500));
                     attempts++;
                     
-                    const statusCheck = await authFetch(`/api/books/${bookId}/qr`);
+                    const statusCheck = await window.authFetch(`/api/books/${bookId}/qr`);
                     if (statusCheck.ok) {
                         const data = await statusCheck.json();
                         
@@ -4233,7 +4222,7 @@
                 
                 try {
                     // Check if QR still exists
-                    const qrResponse = await authFetch(`/api/books/${bookId}/qr`);
+                    const qrResponse = await window.authFetch(`/api/books/${bookId}/qr`);
                     if (!qrResponse.ok) {
                         console.log('Failed to fetch QR during watch');
                         return;
@@ -4290,7 +4279,7 @@
         async function startWhatsApp(bookId) {
             try {
                 console.log('Starting WhatsApp for book:', bookId);
-                const response = await authFetch(`/api/books/${bookId}/start`, {
+                const response = await window.authFetch(`/api/books/${bookId}/start`, {
                     method: 'POST'
                 });
                 
@@ -4320,7 +4309,7 @@
             
             try {
                 console.log('Stopping WhatsApp for book:', bookId);
-                const response = await authFetch(`/api/books/${bookId}/stop`, {
+                const response = await window.authFetch(`/api/books/${bookId}/stop`, {
                     method: 'DELETE'
                 });
                 
@@ -4345,7 +4334,7 @@
             
             try {
                 console.log('Relinking WhatsApp for book:', bookId);
-                const response = await authFetch(`/api/books/${bookId}/relink`, {
+                const response = await window.authFetch(`/api/books/${bookId}/relink`, {
                     method: 'POST'
                 });
                 
@@ -4380,7 +4369,7 @@
             }
             
             try {
-                const response = await authFetch(`/api/books/${fractalId}`, {
+                const response = await window.authFetch(`/api/books/${fractalId}`, {
                     method: 'DELETE'
                 });
                 
@@ -4482,7 +4471,7 @@
                 console.log('📦 Payload:', { messageIds: selectedIds });
                 
                 // Send selected message IDs to backend
-                const response = await authFetch(`/api/books/${fractalId}/export`, {
+                const response = await window.authFetch(`/api/books/${fractalId}/export`, {
                     method: 'POST',
                     body: JSON.stringify({ messageIds: selectedIds })
                 });
@@ -4703,7 +4692,7 @@
                 
                 // SCHEMA SWITCHEROO: Use currentViewSource to pull from correct webhook
                 console.log(`Loading messages for book ${bookId} page ${page} (source: ${currentViewSource})...`);
-                const response = await authFetch(`/api/books/${bookId}/messages?page=${page}&limit=50&source=${currentViewSource}`);
+                const response = await window.authFetch(`/api/books/${bookId}/messages?page=${page}&limit=50&source=${currentViewSource}`);
                 
                 if (!response.ok) {
                     console.error(`API returned ${response.status}: ${response.statusText}`);
@@ -5081,7 +5070,7 @@
                     if (!lastMsgId) return;
                     
                     // Fetch only new messages
-                    const response = await authFetch(`/api/books/${bookId}/messages?after=${lastMsgId}&source=${currentViewSource}`);
+                    const response = await window.authFetch(`/api/books/${bookId}/messages?after=${lastMsgId}&source=${currentViewSource}`);
                     if (!response.ok) return;
                     
                     const data = await response.json();
@@ -5144,7 +5133,7 @@
             if (!previewContainer) return;
             
             try {
-                const response = await authFetch(`/api/messages/${messageId}/media`);
+                const response = await window.authFetch(`/api/messages/${messageId}/media`);
                 if (!response.ok) {
                     previewContainer.innerHTML = '<div class="media-error">Media unavailable</div>';
                     return;
@@ -5399,7 +5388,7 @@
             };
 
             try {
-                const response = await authFetch('/api/users', {
+                const response = await window.authFetch('/api/users', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(userData)
@@ -5422,7 +5411,7 @@
 
         async function changeUserRole(userId, newRole) {
             try {
-                const response = await authFetch(`/api/users/${userId}`, {
+                const response = await window.authFetch(`/api/users/${userId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ role: newRole })
@@ -5443,7 +5432,7 @@
             if (!confirm('Are you sure you want to delete this user?')) return;
             
             try {
-                const response = await authFetch(`/api/users/${userId}`, { method: 'DELETE' });
+                const response = await window.authFetch(`/api/users/${userId}`, { method: 'DELETE' });
                 if (response.ok) {
                     loadAdminCards(); // Updated to use new function
                     loadDevPanelAdmins(); // Also refresh dev panel if visible
@@ -5485,7 +5474,7 @@
             }
 
             try {
-                const response = await authFetch(`/api/users/${userId}/email`, {
+                const response = await window.authFetch(`/api/users/${userId}/email`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: newEmail })
@@ -5540,7 +5529,7 @@
             }
 
             try {
-                const response = await authFetch(`/api/users/${userId}/password`, {
+                const response = await window.authFetch(`/api/users/${userId}/password`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ password: newPassword })
@@ -5577,7 +5566,7 @@
                 params.append('sortBy', sortBy);
                 params.append('sortOrder', sortOrder);
                 
-                const response = await authFetch(`/api/sessions?${params}`);
+                const response = await window.authFetch(`/api/sessions?${params}`);
                 if (!response.ok) {
                     throw new Error(`Failed to load sessions: ${response.status}`);
                 }
@@ -5629,7 +5618,7 @@
             if (!confirm('Are you sure you want to revoke this session? The user will be logged out immediately.')) return;
             
             try {
-                const response = await authFetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+                const response = await window.authFetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
                 if (response.ok) {
                     loadSessions();
                     alert('Session revoked successfully');
@@ -5646,7 +5635,7 @@
             if (!confirm('⚠️ WARNING: This will revoke ALL active sessions except your current one. All other users will be logged out immediately. Are you sure?')) return;
             
             try {
-                const response = await authFetch('/api/sessions/revoke-all', { 
+                const response = await window.authFetch('/api/sessions/revoke-all', { 
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({})
@@ -5673,7 +5662,7 @@
 
             // Load users
             try {
-                const usersResponse = await authFetch('/api/users');
+                const usersResponse = await window.authFetch('/api/users');
                 if (usersResponse.ok) {
                     const users = await usersResponse.json();
                     renderAdminUsers(users);
@@ -5685,7 +5674,7 @@
 
             // Load sessions
             try {
-                const sessionsResponse = await authFetch('/api/sessions');
+                const sessionsResponse = await window.authFetch('/api/sessions');
                 if (sessionsResponse.ok) {
                     const sessions = await sessionsResponse.json();
                     renderAdminSessions(sessions);
@@ -5699,7 +5688,7 @@
             try {
                 const filter = document.getElementById('auditLogFilter')?.value || 'all';
                 const params = filter !== 'all' ? `?action_type=${filter}` : '?limit=50';
-                const auditResponse = await authFetch(`/api/audit-logs${params}`);
+                const auditResponse = await window.authFetch(`/api/audit-logs${params}`);
                 if (auditResponse.ok) {
                     const auditLogs = await auditResponse.json();
                     renderAdminAuditLogs(auditLogs);
@@ -5890,7 +5879,7 @@
         // Load Users tab (tenant user management for all roles including dev)
         async function loadAdminCards() {
             try {
-                const response = await authFetch('/api/users');
+                const response = await window.authFetch('/api/users');
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
@@ -6030,7 +6019,7 @@
         // Load users for Dev Panel
         async function loadDevPanelUsers() {
             try {
-                const response = await authFetch('/api/users');
+                const response = await window.authFetch('/api/users');
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
@@ -6122,7 +6111,7 @@
         async function loadDevPanelBooks() {
             try {
                 console.log('🔧 Dev Panel: Loading system-wide books...');
-                const response = await authFetch('/api/dev/books');
+                const response = await window.authFetch('/api/dev/books');
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
@@ -6921,23 +6910,15 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ============ DROPS API - Personal Cloud OS ============
+// Uses unified window.authFetch for automatic token refresh + retry
+
 // Save a drop (link metadata to Discord message) - APPENDS to existing tags
 async function saveDrop(bookId, messageId, metadataText, section) {
     try {
-        const token = localStorage.getItem('accessToken');
         console.log('💾 Saving drop:', { bookId, messageId, metadataText });
-        console.log('🔑 Token check:', token ? `YES (${token.substring(0, 20)}...)` : 'NO - MISSING!');
         
-        if (!token) {
-            throw new Error('Authentication token missing. Please refresh the page and log in again.');
-        }
-        
-        const response = await fetch('/api/drops', {
+        const response = await window.authFetch('/api/drops', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
             body: JSON.stringify({
                 book_id: bookId,
                 discord_message_id: messageId,
@@ -6950,12 +6931,6 @@ async function saveDrop(bookId, messageId, metadataText, section) {
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             console.error('❌ Save failed:', errorData);
-            
-            // If token expired, suggest refresh
-            if (response.status === 401) {
-                throw new Error('Session expired. Please refresh the page to log in again.');
-            }
-            
             throw new Error(errorData.error || 'Failed to save drop');
         }
         
@@ -6976,20 +6951,10 @@ async function saveDrop(bookId, messageId, metadataText, section) {
 // Remove a specific tag from a message's drop
 async function removeTag(bookId, messageId, tag) {
     try {
-        const token = localStorage.getItem('accessToken');
         console.log('🗑️ Removing tag:', { bookId, messageId, tag });
-        console.log('🔑 Token check:', token ? `YES (${token.substring(0, 20)}...)` : 'NO - MISSING!');
         
-        if (!token) {
-            throw new Error('Authentication token missing. Please refresh the page and log in again.');
-        }
-        
-        const response = await fetch('/api/drops/tag', {
+        const response = await window.authFetch('/api/drops/tag', {
             method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
             body: JSON.stringify({
                 book_id: bookId,
                 discord_message_id: messageId,
@@ -7010,7 +6975,7 @@ async function removeTag(bookId, messageId, tag) {
         // Re-display the drop with updated tags - MUST pass fractal_id
         const section = document.querySelector(`.message-drop-section[data-message-id="${messageId}"][data-book-id="${bookId}"]`);
         if (section && data.drop) {
-            displayDrop(section, data.drop, null, bookId); // Pass fractal_id!
+            displayDrop(section, data.drop, null, bookId);
         }
         
     } catch (error) {
@@ -7024,12 +6989,8 @@ async function removeDate(bookId, messageId, date) {
     try {
         console.log('🗑️ Removing date:', { bookId, messageId, date });
         
-        const response = await fetch('/api/drops/date', {
+        const response = await window.authFetch('/api/drops/date', {
             method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-            },
             body: JSON.stringify({
                 book_id: bookId,
                 discord_message_id: messageId,
@@ -7060,11 +7021,7 @@ async function removeDate(bookId, messageId, date) {
 // Fetch all drops for a book
 async function fetchDrops(bookId) {
     try {
-        const response = await fetch(`/api/drops/${bookId}`, {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-            }
-        });
+        const response = await window.authFetch(`/api/drops/${bookId}`);
         
         if (!response.ok) {
             throw new Error('Failed to fetch drops');
