@@ -6015,7 +6015,6 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
 
 const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;  // Text (Llama 3.3 70B)
 const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_GROQ_TOKEN;  // Vision (Llama 4 Scout) - fallback to text token
-const PLAYGROUND_HF_VISION_TOKEN = process.env.PLAYGROUND_HF_VISION_TOKEN;  // Legacy HuggingFace (deprecated)
 
 // Simple in-memory rate limiter for playground (50 req/hour per IP)
 const playgroundRateLimits = new Map();
@@ -6060,34 +6059,6 @@ setInterval(() => {
         }
     }
 }, 10 * 60 * 1000);
-
-// ===== HuggingFace Vision Daily Quota (40/day, UTC midnight reset) =====
-const HF_VISION_DAILY_CAP = 40;
-let hfVisionQuota = { used: 0, resetDate: new Date().toISOString().split('T')[0] };
-
-function checkHfVisionQuota() {
-    const todayUTC = new Date().toISOString().split('T')[0];
-    
-    // Reset at UTC midnight
-    if (hfVisionQuota.resetDate !== todayUTC) {
-        console.log(`🔄 HF Vision quota reset (new day: ${todayUTC})`);
-        hfVisionQuota = { used: 0, resetDate: todayUTC };
-    }
-    
-    if (hfVisionQuota.used >= HF_VISION_DAILY_CAP) {
-        const now = new Date();
-        const utcMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
-        const hoursUntilReset = Math.ceil((utcMidnight - now) / (1000 * 60 * 60));
-        return { allowed: false, hoursUntilReset };
-    }
-    
-    return { allowed: true };
-}
-
-function consumeHfVisionQuota() {
-    hfVisionQuota.used++;
-    console.log(`📸 HF Vision: ${hfVisionQuota.used}/${HF_VISION_DAILY_CAP} daily quota used`);
-}
 
 // H₀ PROTOCOL: temperature = 0.15 (sweet spot: 0.1 too rigid, 0.2 hallucinates)
 const H0_TEMPERATURE = 0.15;
@@ -6471,19 +6442,11 @@ app.post('/api/playground', async (req, res) => {
             }
         }
         
-        // Photo analysis via Groq Llama 3.2 Vision (primary) + HF Endpoints fallback
+        // Photo analysis via Groq Llama 4 Scout Vision
         if (photo) {
             if (!PLAYGROUND_GROQ_VISION_TOKEN) {
                 return res.status(503).json({ 
                     reply: 'Photo analysis is not configured. Please try text only.' 
-                });
-            }
-            
-            // Check vision daily quota (40/day, UTC midnight reset)
-            const quotaCheck = checkHfVisionQuota();
-            if (!quotaCheck.allowed) {
-                return res.json({ 
-                    reply: `Photo analysis quota preserved for tomorrow (resets in ~${quotaCheck.hoursUntilReset}h at UTC midnight). Text + search still fully available. nyan~` 
                 });
             }
             
@@ -6531,17 +6494,10 @@ app.post('/api/playground', async (req, res) => {
                 
                 const photoDescription = visionResponse.data.choices?.[0]?.message?.content || 'Unable to analyze image';
                 
-                // Consume vision quota on successful analysis
-                consumeHfVisionQuota();
-                
                 finalPrompt = `Photo analysis: ${photoDescription}\n\nUser query: ${message || 'Analyze this image.'}`;
                 
             } catch (visionError) {
                 console.error('❌ Playground Groq vision error:', visionError.response?.data || visionError.message);
-                
-                // TODO: Add HF Endpoints fallback here when configured
-                // const HF_ENDPOINT_URL = process.env.HF_ENDPOINT_URL;
-                // if (HF_ENDPOINT_URL) { /* fallback to DeepSeek-OCR */ }
                 
                 if (visionError.response?.status === 429) {
                     return res.status(429).json({ 

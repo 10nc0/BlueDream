@@ -55,7 +55,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - Sovereign, public AI playground at `/AI` without authentication.
 - **Multimodal Support**: Text (Groq Llama 3.3 70B), Photo (Groq Llama 4 Scout Vision), Audio (Groq Whisper), Documents (PDF, Excel, Word).
 - **Input Methods**: Drag & drop, file picker, microphone, paste images.
-- **Rate Limiting**: Per-IP 50 requests/hour; Vision 40 photos/day.
+- **Rate Limiting**: Per-IP 50 requests/hour; Groq Vision rate-limited per Groq's API quotas.
 - **Query Classification**: Regex-based routing (DDG-first for "what is", Brave-first for "latest/2025", Groq-only for "calculate/solve").
 - **Factual Cache**: 24h TTL for simple facts, NEVER caches Nyan Protocol topics (H₀ compliance), 1000 entry LRU limit.
 - **Smart Retry**: Brave→DDG fallback, core-words DDG retry when all search fails, knowledge cutoff disclaimer when no search context.
@@ -63,12 +63,16 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Search Cascade (Real-time Knowledge)**: Uses DuckDuckGo and Brave Search to overcome Groq's knowledge cutoff.
 - **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis, including a "Price/Income ratio" metric with contextual conclusions, designed to "HUMANIZE EVERY RATIO".
 - **H₀ + Problem-Solving Protocol**: Temperature 0.15, confidence-based extrapolation, strict citation, and zero hallucination.
-- **Isolation Architecture**: Uses separate API tokens to prevent playground abuse from impacting the core app.
+- **Isolation Architecture**: Uses separate API tokens (`PLAYGROUND_GROQ_TOKEN` for text, `PLAYGROUND_GROQ_VISION_TOKEN` for photos) to prevent playground abuse and isolate vision rate limits from text queries.
 
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)
 - **WhatsApp**: Twilio WhatsApp Business API
 - **AI (Production)**: Groq API
-- **AI (Playground)**: Groq API, HuggingFace Vision API
+- **AI (Playground)**: Groq API (text + vision via dedicated tokens)
 - **Search**: DuckDuckGo Instant Answer API, Brave Search API
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth` (for local processing)
+
+## Recent Changes (December 8, 2025)
+- **Token Separation Complete**: Split Groq API tokens - `PLAYGROUND_GROQ_TOKEN` (text) + `PLAYGROUND_GROQ_VISION_TOKEN` (vision) to isolate rate limits and prevent vision from blocking text queries.
+- **Legacy Code Cleanup**: Removed deprecated HuggingFace Vision fallback code (never implemented), eliminated unused HF quota tracking system (~30 lines), simplifying codebase.
