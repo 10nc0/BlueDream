@@ -114,6 +114,11 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 - Unsupported: Legacy .doc/.xls (returns friendly 400 with conversion guidance)
 - Token limit: ~6,000 tokens max (truncates with smart paragraph/sentence breaks)
 - Flow: Upload → Extract text → Chunk if large → Inject as Groq context → AI reasons over document + query
+- **Hybrid PDF Parser** (`utils/pdf-handler.js`):
+  - Text extraction: pdf-parse v2 API (PDFParse class with getText())
+  - Table extraction: tabula-js (requires Java runtime, installed)
+  - Result formatted as markdown tables + raw text for AI context
+  - Future: OCR for scanned PDFs, chart/graph vision analysis (requires PDF-to-image pipeline)
 - Module: `utils/document-parser.js`
 
 **Isolation Architecture:**
