@@ -107,6 +107,14 @@ A sovereign, public AI playground at `/AI` with no authentication required.
 - **Text**: Groq Llama 3.3 70B Versatile (0.8s response)
 - **Photo**: HuggingFace Qwen2-VL-7B-Instruct (Indonesian OCR) → Groq Llama 3.3
 - **Audio**: Groq Whisper-large-v3-turbo (Indonesian transcription) → Groq Llama 3.3
+- **Documents**: PDF (pdf-parse), Excel/XLSX (exceljs), Word/DOCX (mammoth) → text extraction → Groq Llama 3.3
+
+**Document Parsing:**
+- Supported formats: PDF, XLSX, DOCX, TXT, MD, CSV
+- Unsupported: Legacy .doc/.xls (returns friendly 400 with conversion guidance)
+- Token limit: ~6,000 tokens max (truncates with smart paragraph/sentence breaks)
+- Flow: Upload → Extract text → Chunk if large → Inject as Groq context → AI reasons over document + query
+- Module: `utils/document-parser.js`
 
 **Isolation Architecture:**
 - Uses separate tokens: `PLAYGROUND_GROQ_TOKEN`, `PLAYGROUND_HF_VISION_TOKEN`, `PLAYGROUND_BRAVE_API`
