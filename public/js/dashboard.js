@@ -98,10 +98,10 @@
             },
             history: {
                 id: 'history',
-                label: '🧠 History',
+                label: '📜 AI History',
                 icon: '🧠',
                 mobileIcon: '🧠',
-                desktopLabel: '🧠 History',
+                desktopLabel: '📜 AI History',
                 tooltip: 'View audit history',
                 priority: 2.5,
                 showInMobile: true,
