@@ -84,6 +84,9 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Groq Retry Logic**: `groqWithRetry()` helper with exponential backoff (1s→2s→4s→8s cap) for 429/5xx errors. Wired into `analyzePageWithGroqVision()` for resilient Vision API calls.
 - **Extraction Caching**: SHA-256 content hash caching in `executeExtractionCascade()` with 24h TTL and 1000-entry LRU limit. Cache HIT logs and `fromCache` flag in results. 100% savings on duplicate PDF uploads.
 - **HF Vision Purge**: Removed dead HuggingFace Vision code from pdf-handler.js and attachment-cascade.js. Unified on Groq Vision for all image/PDF visual analysis. Image pipeline now uses same cost-optimized Groq Vision as PDF pages.
+- **Dead Code Cleanup**: Removed orphaned `extractPDF()` from document-parser.js, removed unused `EXPENSIVE_API` cost tier from attachment-cascade.js.
+- **Auth Middleware Optimization**: Removed duplicate tenant lookup in `requireRole` - now trusts `req.tenantSchema` already set by `requireAuth`. Saves 1 DB query per role-checked request.
+- **Cache Headers DRY**: Extracted `noCacheHeaders(res)` helper to replace 4× repeated Cache-Control/Pragma/Expires header sets across auth endpoints.
 
 **Previous improvements (still active):**
 - **Circuit Breaker**: Persistent abusers (5 events in 1 hour) get 30-minute cooldown. Progressive warnings at 3/5 and 4/5.
