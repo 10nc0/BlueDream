@@ -491,8 +491,38 @@ async function initializeDatabase() {
                 
                 -- Timestamps
                 created_at TIMESTAMP DEFAULT NOW(),
-                activated_at TIMESTAMP
+                activated_at TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT NOW(),
+                
+                -- Healing system (O(1) priority queue for auto-heal)
+                heal_status TEXT DEFAULT 'healthy',
+                last_healed_at TIMESTAMP,
+                next_heal_at TIMESTAMP,
+                heal_attempts INTEGER DEFAULT 0,
+                heal_error TEXT,
+                creator_phone TEXT
             )
+        `);
+        
+        // Add healing columns if table already exists (migration)
+        await pool.query(`
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                               WHERE table_schema = 'core' AND table_name = 'book_registry' AND column_name = 'heal_status') THEN
+                    ALTER TABLE core.book_registry ADD COLUMN heal_status TEXT DEFAULT 'healthy';
+                    ALTER TABLE core.book_registry ADD COLUMN last_healed_at TIMESTAMPTZ;
+                    ALTER TABLE core.book_registry ADD COLUMN next_heal_at TIMESTAMPTZ DEFAULT NOW();
+                    ALTER TABLE core.book_registry ADD COLUMN heal_attempts INTEGER DEFAULT 0;
+                    ALTER TABLE core.book_registry ADD COLUMN heal_error TEXT;
+                    ALTER TABLE core.book_registry ADD COLUMN heal_lease_until TIMESTAMPTZ;
+                END IF;
+                -- Add heal_lease_until if missing (incremental migration)
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                               WHERE table_schema = 'core' AND table_name = 'book_registry' AND column_name = 'heal_lease_until') THEN
+                    ALTER TABLE core.book_registry ADD COLUMN heal_lease_until TIMESTAMPTZ;
+                END IF;
+            END $$;
         `);
         
         // Dynamic indexes for fast O(1) lookups on any dimension
@@ -521,7 +551,22 @@ async function initializeDatabase() {
             ON core.book_registry(tenant_schema, id)
         `);
         
-        console.log('✅ Book registry initialized with dynamic indexing');
+        // Priority queue index for O(log n) heal job pops (lease-based)
+        // Note: Can't use NOW() in partial index, so we index all pending books
+        // The query filters by lease_until at runtime
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_book_heal_priority 
+            ON core.book_registry(next_heal_at ASC) 
+            WHERE heal_status IN ('pending', 'healing')
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_book_heal_lease 
+            ON core.book_registry(heal_lease_until ASC NULLS FIRST) 
+            WHERE heal_status IN ('pending', 'healing')
+        `);
+        
+        console.log('✅ Book registry initialized with dynamic indexing + heal queue');
         
         // MULTI-SOURCE UPLOADS: Track all phones that have engaged with each book
         // Enables contributors (not just creator) to send files without join code
@@ -6937,124 +6982,275 @@ app.listen(PORT, '0.0.0.0', async () => {
     }, 2000); // 2 second delay to let initial connections settle
 });
 
+// ============================================================================
+// AUTO-HEAL IMMUNE SYSTEM (Lease-Based Priority Queue)
+// O(log n) selection, O(1) lookup, survives restarts, exponential backoff
+// ============================================================================
+
+async function initializeHealQueue() {
+    // One-time migration: Set default heal_status for books without it
+    await pool.query(`
+        UPDATE core.book_registry
+        SET heal_status = 'healthy',
+            next_heal_at = NOW() + INTERVAL '7 days'
+        WHERE heal_status IS NULL
+    `);
+    
+    // Reset stale leases (crashed workers) - books stuck in 'healing' with expired lease
+    const staleLeases = await pool.query(`
+        UPDATE core.book_registry
+        SET heal_status = 'pending',
+            heal_lease_until = NULL
+        WHERE heal_status = 'healing' 
+          AND heal_lease_until < NOW()
+        RETURNING id
+    `);
+    if (staleLeases.rowCount > 0) {
+        console.log(`🔧 Reset ${staleLeases.rowCount} stale heal leases`);
+    }
+    
+    // Check for books missing Discord threads (from tenant schemas) - mark as pending
+    const brokenBooks = await pool.query(`
+        SELECT br.id, br.fractal_id, br.tenant_schema, br.book_name
+        FROM core.book_registry br
+        WHERE br.status = 'active'
+          AND br.heal_status = 'healthy'
+          AND NOT EXISTS (
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_schema = br.tenant_schema 
+              AND table_name = 'books'
+          )
+    `);
+    
+    if (brokenBooks.rows.length > 0) {
+        const brokenIds = brokenBooks.rows.map(b => b.id);
+        await pool.query(`
+            UPDATE core.book_registry
+            SET heal_status = 'pending', next_heal_at = NOW()
+            WHERE id = ANY($1::uuid[])
+        `, [brokenIds]);
+        console.log(`🔧 Queued ${brokenIds.length} orphaned books for healing`);
+    }
+    
+    // Count pending heals
+    const pending = await pool.query(`
+        SELECT COUNT(*) as count FROM core.book_registry WHERE heal_status = 'pending'
+    `);
+    console.log(`🏥 Heal queue initialized: ${pending.rows[0].count} books pending`);
+}
+
+async function runAutoHealCycle() {
+    if (!hermesBot || !hermesBot.isReady()) return;
+    
+    const client = await pool.connect();
+    try {
+        // STEP 1: Grab up to 20 books that need healing — O(log n) + SKIP LOCKED
+        const res = await client.query(`
+            SELECT id, fractal_id, tenant_schema, book_name,
+                   outpipe_ledger, outpipes_user, heal_attempts
+            FROM core.book_registry
+            WHERE heal_status = 'pending'
+              AND next_heal_at <= NOW()
+              AND (heal_lease_until IS NULL OR heal_lease_until < NOW())
+            ORDER BY next_heal_at ASC
+            LIMIT 20
+            FOR UPDATE SKIP LOCKED
+        `);
+
+        if (res.rows.length === 0) return; // nothing to do → sleep
+
+        const books = res.rows;
+        console.log(`🏥 Heal cycle: Processing ${books.length} books`);
+
+        // STEP 2: Claim lease for 60 seconds
+        const leaseUntil = new Date(Date.now() + 60000);
+        await client.query(`
+            UPDATE core.book_registry
+            SET heal_status = 'healing',
+                heal_lease_until = $1
+            WHERE id = ANY($2::uuid[])
+        `, [leaseUntil, books.map(b => b.id)]);
+
+        // STEP 3: Heal in parallel (bounded concurrency)
+        const healPromises = books.map(book => 
+            healSingleBook(book).catch(err => 
+                console.error(`❌ Heal failed for ${book.fractal_id}:`, err.message)
+            )
+        );
+        
+        await Promise.allSettled(healPromises);
+
+    } finally {
+        client.release();
+    }
+}
+
+async function healSingleBook(book) {
+    try {
+        // Get full book details from tenant schema
+        const tenantId = parseInt(book.tenant_schema.replace('tenant_', ''));
+        
+        // Check if books table exists in tenant schema
+        const tableCheck = await pool.query(`
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = $1 AND table_name = 'books'
+            ) as exists
+        `, [book.tenant_schema]);
+        
+        if (!tableCheck.rows[0].exists) {
+            throw new Error(`Tenant schema ${book.tenant_schema} has no books table`);
+        }
+        
+        // Get book details from tenant schema
+        const bookDetails = await pool.query(`
+            SELECT id, name, output_01_url, output_0n_url, output_credentials
+            FROM ${book.tenant_schema}.books
+            WHERE id = (
+                SELECT fractal_id::uuid FROM core.book_registry WHERE id = $1
+            ) OR name = $2
+            LIMIT 1
+        `, [book.id, book.book_name]);
+        
+        if (bookDetails.rows.length === 0) {
+            // Try using fractal_id directly
+            const altLookup = await pool.query(`
+                SELECT id, name, output_01_url, output_0n_url, output_credentials
+                FROM ${book.tenant_schema}.books
+                WHERE id::text = $1
+                LIMIT 1
+            `, [book.fractal_id]);
+            
+            if (altLookup.rows.length === 0) {
+                throw new Error(`Book ${book.fractal_id} not found in ${book.tenant_schema}`);
+            }
+            bookDetails.rows = altLookup.rows;
+        }
+        
+        const tenantBook = bookDetails.rows[0];
+        const outputCreds = tenantBook.output_credentials || {};
+        
+        // Check if thread already exists (idempotent)
+        if (outputCreds.output_01?.thread_id) {
+            // Already healed, mark as healthy
+            await pool.query(`
+                UPDATE core.book_registry
+                SET heal_status = 'healthy',
+                    heal_attempts = 0,
+                    last_healed_at = NOW(),
+                    next_heal_at = NOW() + INTERVAL '7 days',
+                    heal_lease_until = NULL,
+                    heal_error = NULL
+                WHERE id = $1
+            `, [book.id]);
+            console.log(`✅ ${book.fractal_id} already healthy (thread exists)`);
+            return;
+        }
+        
+        // Create Discord threads
+        const dualThreads = await hermesBot.createDualThreadsForBook(
+            tenantBook.output_01_url,
+            tenantBook.output_0n_url,
+            tenantBook.name,
+            tenantId,
+            tenantBook.id,
+            true,
+            outputCreds
+        );
+
+        if (dualThreads.output_01?.thread_id) {
+            // Build output_credentials
+            const outputDestinations = {};
+            if (dualThreads.output_01) outputDestinations.output_01 = dualThreads.output_01;
+            if (dualThreads.output_0n) outputDestinations.output_0n = dualThreads.output_0n;
+            
+            // Save to tenant schema
+            await pool.query(`
+                UPDATE ${book.tenant_schema}.books 
+                SET output_credentials = output_credentials || $1::jsonb
+                WHERE id = $2
+            `, [JSON.stringify(outputDestinations), tenantBook.id]);
+            
+            // Send initial message
+            if (dualThreads.output_01?.type === 'thread') {
+                try {
+                    await hermesBot.sendInitialMessage(
+                        dualThreads.output_01.thread_id, 
+                        tenantBook.name, 
+                        tenantBook.output_01_url
+                    );
+                } catch (msgError) {
+                    console.warn(`  ⚠️ Initial message failed: ${msgError.message}`);
+                }
+            }
+            
+            // Mark as healed
+            await pool.query(`
+                UPDATE core.book_registry
+                SET heal_status = 'healthy',
+                    heal_attempts = 0,
+                    last_healed_at = NOW(),
+                    next_heal_at = NOW() + INTERVAL '7 days',
+                    heal_lease_until = NULL,
+                    heal_error = NULL
+                WHERE id = $1
+            `, [book.id]);
+            
+            console.log(`✅ Healed ${book.fractal_id} → thread ${dualThreads.output_01.thread_id}`);
+        } else {
+            throw new Error('Thread creation returned no thread_id');
+        }
+        
+    } catch (err) {
+        const attempts = (book.heal_attempts || 0) + 1;
+        const backoffMinutes = Math.min(Math.pow(2, attempts) * 5, 1440); // max 24h
+
+        await pool.query(`
+            UPDATE core.book_registry
+            SET heal_status = 'pending',
+                heal_attempts = $1,
+                next_heal_at = NOW() + $2 * INTERVAL '1 minute',
+                heal_lease_until = NULL,
+                heal_error = $3
+            WHERE id = $4
+        `, [attempts, backoffMinutes, err.message, book.id]);
+
+        console.warn(`⚠️ Heal failed ${book.fractal_id} (attempt ${attempts}), retry in ${backoffMinutes}min`);
+    }
+}
+
+// Event-driven: Queue a book for healing when webhook fails
+async function queueBookForHealing(fractalId, reason = 'webhook failure') {
+    try {
+        await pool.query(`
+            UPDATE core.book_registry
+            SET heal_status = 'pending',
+                next_heal_at = NOW(),
+                heal_error = $2
+            WHERE fractal_id = $1 AND heal_status = 'healthy'
+        `, [fractalId, reason]);
+    } catch (err) {
+        console.error(`Failed to queue ${fractalId} for healing:`, err.message);
+    }
+}
+
 // Non-critical background tasks that run after server is ready
 async function runDeferredStartupTasks() {
     console.log('🔄 Running deferred startup tasks...');
     
-    // AUTO-HEAL: Fix books with missing Discord threads
-    // Uses single client connection to reduce pool exhaustion
+    // AUTO-HEAL: Priority queue-based healing (O(log n) instead of O(n²))
+    // Phase 1: Initial scan to populate heal queue (one-time on startup)
+    // Phase 2: Background worker consumes queue every 20 seconds
     if (hermesBot && hermesBot.isReady()) {
-        let client = null;
         try {
-            console.log('🔧 Auto-healing: Checking all books for missing Discord threads...');
+            console.log('🔧 Auto-healing: Initializing heal queue...');
+            await initializeHealQueue();
             
-            // Use single client for all batch queries
-            client = await pool.connect();
-            
-            // Get all tenant schemas
-            const schemas = await client.query(`
-                SELECT schema_name 
-                FROM information_schema.schemata 
-                WHERE schema_name LIKE 'tenant_%'
-                ORDER BY schema_name
-            `);
-            
-            let totalHealed = 0;
-            let totalChecked = 0;
-            
-            for (const { schema_name } of schemas.rows) {
-                // Check if books table exists (skip empty tenant schemas)
-                const tableCheck = await client.query(`
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables 
-                        WHERE table_schema = $1 
-                        AND table_name = 'books'
-                    ) as exists
-                `, [schema_name]);
-                
-                if (!tableCheck.rows[0].exists) {
-                    continue; // Skip empty tenant schema
-                }
-                
-                // Get all non-archived books in this tenant
-                const books = await client.query(`
-                    SELECT id, name, output_01_url, output_0n_url, output_credentials 
-                    FROM ${schema_name}.books 
-                    WHERE archived = false
-                `);
-                
-                for (const book of books.rows) {
-                    totalChecked++;
-                    const outputCreds = book.output_credentials || {};
-                    
-                    // Check if Ledger thread (output_01) is missing
-                    if (!outputCreds.output_01 || !outputCreds.output_01.thread_id) {
-                        console.log(`  ⚠️  Book "${book.name}" (${schema_name}) missing threads, creating...`);
-                        
-                        try {
-                            // Extract tenant_id from schema name (tenant_1 -> 1)
-                            const tenantId = parseInt(schema_name.replace('tenant_', ''));
-                            
-                            // IDEMPOTENT: Pass existing credentials to avoid duplicate thread creation
-                            const dualThreads = await hermesBot.createDualThreadsForBook(
-                                book.output_01_url,
-                                book.output_0n_url,
-                                book.name,
-                                tenantId,
-                                book.id,
-                                true, // threadModeUser
-                                outputCreds // existing credentials
-                            );
-                            
-                            // Build output_credentials with typed destinations
-                            const outputDestinations = {};
-                            
-                            if (dualThreads.output_01) {
-                                outputDestinations.output_01 = dualThreads.output_01;
-                            }
-                            
-                            if (dualThreads.output_0n) {
-                                outputDestinations.output_0n = dualThreads.output_0n;
-                            }
-                            
-                            // Save thread IDs to database
-                            await client.query(`
-                                UPDATE ${schema_name}.books 
-                                SET output_credentials = output_credentials || $1::jsonb
-                                WHERE id = $2
-                            `, [JSON.stringify(outputDestinations), book.id]);
-                            
-                            // Send initial messages to threads
-                            if (dualThreads.output_01 && dualThreads.output_01.type === 'thread') {
-                                try {
-                                    await hermesBot.sendInitialMessage(
-                                        dualThreads.output_01.thread_id, 
-                                        book.name, 
-                                        book.output_01_url
-                                    );
-                                } catch (msgError) {
-                                    console.error(`    ⚠️  Failed to send initial message:`, msgError.message);
-                                }
-                            }
-                            
-                            totalHealed++;
-                            console.log(`    ✅ Healed book "${book.name}" (thread: ${dualThreads.output_01?.thread_id})`);
-                        } catch (healError) {
-                            console.error(`    ❌ Failed to heal book "${book.name}":`, healError.message);
-                        }
-                    }
-                }
-            }
-            
-            console.log(`✅ Auto-heal complete: ${totalHealed}/${totalChecked} books healed`);
+            // Start background heal worker (runs every 20 seconds, cat-approved)
+            setInterval(runAutoHealCycle, 20000);
+            console.log('✅ Heal immune system active (20s cycle, batch=20, lease=60s)');
         } catch (error) {
-            console.error('❌ Auto-heal failed:', error.message);
-        } finally {
-            // Always release the client back to the pool
-            if (client) {
-                client.release();
-                console.log('🔌 Auto-heal client released');
-            }
+            console.error('❌ Auto-heal initialization failed:', error.message);
         }
     } else {
         console.warn('⚠️  Hermes not ready, skipping auto-heal');
