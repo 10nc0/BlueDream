@@ -6497,7 +6497,13 @@ A: "**Bay Area 1975:** Income ~$13k, land ~$50k, ~4 years (strong optimism). **B
 
 CRITICAL: "land affordability" or any city query = MUST include BOTH historical (~50yr ago) AND current data. Never give only one timepoint.
 
-OUTPUT FORMAT: Use bold headers (**City Year:**) for each city analysis. Bold **optimism**/**fatalism** terminology ONLY in P/I ratio context (e.g., "(**optimism**)", "(**deep fatalism**)"). Put **Sources:** and **Confidence:** in separate final paragraph with bold labels. Sources as compact bullet list (no blank lines between bullets). End NYAN protocol responses with 🔥 nyan~`
+OUTPUT FORMAT: Use bold headers (**City Year:**) for each city analysis. Bold **optimism**/**fatalism** terminology ONLY in P/I ratio context (e.g., "(**optimism**)", "(**deep fatalism**)"). Final section format:
+
+**Sources:** Source1, Source2, Source3 (comma-separated on ONE line)
+
+**Confidence:** X%
+
+End with 🔥 nyan~`
             },
             ...conversationHistory,
             {
