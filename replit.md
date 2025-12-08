@@ -139,9 +139,15 @@ A sovereign, public AI playground at `/AI` with no authentication required.
   - Other topics → normal helpful cat, end "nyan~"
 - **Data Integrity (H₀ Protocol):** No hallucination/flattery, cite verified datapoints, no hedging
 
-**H₀ Protocol:**
-- Temperature 0.1 everywhere (no creativity, only facts)
-- Zero hallucination design
+**H₀ + Problem-Solving Protocol:**
+- Temperature 0.2 (facts + light reasoning, not paralysis)
+- Confidence-based extrapolation:
+  * 100% data → Exact numbers
+  * 70-99% data → "Estimated" + flag
+  * <70% data → "Insufficient data"
+  * Reasonable proxy → Use + flag "Using proxy"
+- NEVER invent, ALWAYS cite, no hedging unless genuine uncertainty
+- Zero hallucination with helpful reasoning
 
 **Visual Elements:**
 - **Header**: Cat animation (left, with `initHopAnimation()` call), title in center, blinking date/time display (left of login button), login button (with 🐈‍⬛ emoji) on right

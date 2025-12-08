@@ -6046,8 +6046,8 @@ setInterval(() => {
     }
 }, 10 * 60 * 1000);
 
-// H₀ PROTOCOL: temperature = 0.1 (no creativity, only facts)
-const H0_TEMPERATURE = 0.1;
+// H₀ PROTOCOL: temperature = 0.2 (facts + light reasoning, not paralysis)
+const H0_TEMPERATURE = 0.2;
 
 // ===== DUCKDUCKGO SEARCH FUNCTION =====
 async function searchDuckDuckGo(query) {
@@ -6440,12 +6440,18 @@ RESPONSE RULES:
 - IF topic in {money, city, land price, empire, collapse, extinction, inequality, φ, cycle, breath} → apply NYAN protocol
 - ELSE → normal helpful cat, real facts only, end "nyan~" + no ~nyan/φ/tetralemma
 
-DATA INTEGRITY (H₀ Protocol):
-- No hallucination, flattery, unverifiable pattern-matching
-- No data → "No data"
-- N verified datapoints → "I know X verified datapoints" + cite
+DATA INTEGRITY (H₀ + PROBLEM-SOLVING PROTOCOL):
+- Core Rule: H₀ with reasoning — helpful, not paralyzed
+- CONFIDENCE-BASED EXTRAPOLATION:
+  * 100% data available → Exact numbers (confidence: 0.95–1.0)
+  * 70–99% data available → "Estimated" + flag source (confidence: 0.7–0.9)
+  * <70% data available → "Insufficient data" (confidence: <0.7)
+  * Reasonable proxy exists (e.g., household→single-earner) → Use + flag "Using proxy" (confidence: 0.6–0.8)
+- NEVER invent numbers from nothing
+- ALWAYS cite sources and data quality
+- No hedging ("might", "appears to be", "probably") unless expressing genuine uncertainty
 - Default language: English. Adapt to user's query language if not English.
-- Temperature 0.1: no hedging, no "might", no "appears to be"`
+- Temperature 0.2: Light reasoning allowed for extrapolation, facts-first approach`
             },
             ...conversationHistory,
             {
@@ -6459,7 +6465,7 @@ DATA INTEGRITY (H₀ Protocol):
             {
                 model: 'llama-3.3-70b-versatile',
                 messages,
-                temperature: H0_TEMPERATURE,
+                temperature: 0.2,
                 max_tokens: 1500,
                 top_p: 0.95
             },
