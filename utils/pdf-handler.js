@@ -1,6 +1,3 @@
-const { PDFParse } = require('pdf-parse');
-const tabula = require('tabula-js');
-const Tesseract = require('tesseract.js');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -19,8 +16,9 @@ async function parsePDFHybrid(buffer, fileName) {
     console.log(`📄 Hybrid PDF parser: Processing ${fileName}`);
     
     try {
-        const parser = new PDFParse();
-        const data = await parser(buffer);
+        const { PDFParse, VerbosityLevel } = require('pdf-parse');
+        const parser = new PDFParse({ data: buffer, verbosity: VerbosityLevel.ERRORS });
+        const data = await parser.getText();
         result.text = data.text || '';
         console.log(`📄 Text extraction: ${result.text.length} chars`);
     } catch (textError) {
@@ -39,20 +37,6 @@ async function parsePDFHybrid(buffer, fileName) {
         console.log(`⚠️ Table extraction skipped: ${tableError.message}`);
     }
     
-    if (result.text.length < 50 && result.tables.length === 0) {
-        console.log(`🔍 Low text content detected, attempting OCR...`);
-        try {
-            const ocrText = await performOCR(buffer);
-            if (ocrText && ocrText.length > result.text.length) {
-                result.text = ocrText;
-                result.extractionMethod = 'ocr';
-                console.log(`📷 OCR extraction: ${ocrText.length} chars`);
-            }
-        } catch (ocrError) {
-            console.log(`⚠️ OCR failed: ${ocrError.message}`);
-        }
-    }
-    
     return result;
 }
 
@@ -63,26 +47,48 @@ async function extractTablesWithTabula(buffer) {
     try {
         fs.writeFileSync(tempFile, buffer);
         
-        const extraction = tabula(tempFile);
+        const tabula = require('tabula-js');
+        
         const data = await new Promise((resolve, reject) => {
-            extraction.getData((err, data) => {
+            const t = tabula(tempFile, { pages: 'all' });
+            t.extractCsv((err, data) => {
                 if (err) reject(err);
                 else resolve(data);
             });
         });
         
-        if (data && Array.isArray(data)) {
-            for (const table of data) {
-                if (table && table.length > 0) {
-                    const markdown = tableToMarkdown(table);
-                    tables.push({
-                        markdown: markdown,
-                        rows: table.length,
-                        cols: table[0]?.length || 0
-                    });
-                }
+        if (data && typeof data === 'string' && data.trim().length > 0) {
+            const lines = data.trim().split('\n');
+            if (lines.length > 1) {
+                const tableData = lines.map(line => {
+                    const cells = [];
+                    let current = '';
+                    let inQuotes = false;
+                    
+                    for (const char of line) {
+                        if (char === '"') {
+                            inQuotes = !inQuotes;
+                        } else if (char === ',' && !inQuotes) {
+                            cells.push(current.trim());
+                            current = '';
+                        } else {
+                            current += char;
+                        }
+                    }
+                    cells.push(current.trim());
+                    return cells;
+                });
+                
+                const markdown = tableToMarkdown(tableData);
+                tables.push({
+                    markdown: markdown,
+                    rows: tableData.length,
+                    cols: tableData[0]?.length || 0
+                });
             }
         }
+    } catch (e) {
+        console.log(`⚠️ Tabula extraction error: ${e.message}`);
     } finally {
         try {
             if (fs.existsSync(tempFile)) {
@@ -110,26 +116,6 @@ function tableToMarkdown(tableData) {
     }
     
     return rows.join('\n');
-}
-
-async function performOCR(buffer) {
-    try {
-        const result = await Tesseract.recognize(
-            buffer,
-            'eng+ind',
-            {
-                logger: m => {
-                    if (m.status === 'recognizing text') {
-                        console.log(`🔤 OCR progress: ${Math.round(m.progress * 100)}%`);
-                    }
-                }
-            }
-        );
-        return result.data.text || '';
-    } catch (error) {
-        console.error('OCR error:', error.message);
-        return '';
-    }
 }
 
 async function describeChartWithVision(imageBase64) {
@@ -205,7 +191,6 @@ function formatPDFResultForPrompt(result, fileName, userQuery) {
 module.exports = {
     parsePDFHybrid,
     extractTablesWithTabula,
-    performOCR,
     describeChartWithVision,
     formatPDFResultForPrompt
 };
