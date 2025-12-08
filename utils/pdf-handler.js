@@ -247,8 +247,10 @@ async function analyzePageWithGroqVision(imageBase64, pageNum, GROQ_TOKEN) {
                                 type: 'text',
                                 text: `Page ${pageNum}: Detailed chemical structure analysis. CRITICAL ATOM COUNTING RULES:
 
-=== MOLECULAR FORMULA (Most Important) ===
-Count EVERY atom separately. Final formula: "CxHyOzNw..." with exact counts.
+=== MOLECULAR FORMULA + COMMON NAME (Most Important) ===
+1. Count EVERY atom separately. Final formula: "CxHyOzNw..." with exact counts.
+2. If you recognize this compound, also provide its COMMON/KNOWN NAME (e.g., aspirin, caffeine, THC, morphine, etc.)
+3. Format output: "Molecular Formula: C21H30O2" and "Known as: [name if recognized, or 'unknown' if not]"
 
 FUSED RING SYSTEMS - KEY RULE:
 - At ring fusion points, carbons are SHARED - count them ONCE, not twice

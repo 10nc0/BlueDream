@@ -76,13 +76,15 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth` (for local processing)
 
 ## Recent Changes (December 8, 2025)
-- **Compound Identification Cascade (H₀ Verified)**: Replaced hardcoded compound answers with empirical DDG verification layer maintaining H(0) zero-hallucination principle:
-  - **Stage 1**: Exact molecular formula search (direct Vision count)
-  - **Stage 2**: Multiple DDG query variations (`formula compound`, `formula chemical`, `formula molecule name`, `formula pharmaceutical`, `formula natural product`) - EXPLICIT verification layer for chemistry/chemical queries
+- **Compound Identification Cascade (H₀ Verified)**: Groq-first, external verification protocol:
+  - **Vision Prompt Update**: Asks Groq for both molecular formula AND "Known as:" common name in a single pass
+  - **Stage 0**: If Groq identified it, use that (most reliable - direct from Vision model)
+  - **Stage 1**: Exact molecular formula search (DDG verification)
+  - **Stage 2**: Multiple DDG query variations (`formula compound`, `formula chemical`, `formula molecule name`, `formula pharmaceutical`, `formula natural product`) - EXPLICIT verification layer
   - **Stage 3**: Structure-based keyword search (empirical ring types + functional groups from Vision)
   - **Stage 4**: Fuzzy formula variations (±1 H/C extrapolation, lowest confidence)
-  - All compound identifications tracked with matchType: `exact`, `verified-ddg`, `structure-based`, `fuzzy`
-  - This audit trail serves as verification that AI reasoning was grounded in external sources before accepting identifications
+  - All compound IDs tracked with matchType: `groq-known`, `exact`, `verified-ddg`, `structure-based`, `fuzzy`
+  - Protocol prevents hallucination: Groq can't assert a name without Vision supporting it; if uncertain, DDG verifies
 - **Request ID Middleware**: Every HTTP request gets a unique UUID logged at request middleware level. All console logs automatically prefixed with `[request-id]` for easy tracing and debugging. X-Request-ID header returned in responses.
 - **Externalized System Prompts**: NYAN Protocol (1000+ lines) moved from hardcoded inline string to `prompts/nyan-protocol.js`. Cleaner code, easier iteration on prompt tuning, maintains full functionality.
 - **Centralized Constants**: Created `config/constants.js` with all magic numbers grouped by category: TIMEOUTS, CAPACITY, CACHE, SESSION, DISCORD, AI_MODELS, GROQ_RETRY, REPUTATION, FILE_UPLOAD, MISC. Single source of truth for tuning database timeouts, rate limits, cache settings, etc.

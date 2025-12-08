@@ -6,26 +6,43 @@ const axios = require('axios');
 const querystring = require('querystring');
 
 // ===== COMPOUND IDENTIFICATION =====
-// Extract molecular formula from Vision description (e.g., C21H30O2)
-function extractMolecularFormula(text) {
+// Extract molecular formula and known name from Vision description
+function extractFormulaAndKnownName(text) {
     // Match patterns like C21H30O2, C6H12O6, C15H22N2O, etc.
-    // Preserve original casing for multi-letter elements (Cl, Br, etc.)
     const formulaRegex = /\b(C\d{1,3}H\d{1,3}(?:O\d{0,3})?(?:N\d{0,3})?(?:S\d{0,3})?(?:Cl\d{0,3})?(?:Br\d{0,3})?(?:F\d{0,3})?)\b/g;
     const matches = text.match(formulaRegex);
+    
+    let formula = null;
     if (matches && matches.length > 0) {
         // Return the most likely complete formula (longest match)
-        // Normalize casing: Element symbols uppercase, counts as-is
-        const formula = matches.sort((a, b) => b.length - a.length)[0];
+        formula = matches.sort((a, b) => b.length - a.length)[0];
         // Normalize: C, H, O, N, S, F uppercase; Cl, Br proper case
-        return formula.replace(/([A-Za-z])(\d*)/g, (match, elem, num) => {
-            // Handle two-letter elements (Cl, Br)
+        formula = formula.replace(/([A-Za-z])(\d*)/g, (match, elem, num) => {
             if (elem.toLowerCase() === 'l' || elem.toLowerCase() === 'r') {
-                return match; // Keep as-is (part of Cl/Br)
+                return match;
             }
             return elem.toUpperCase() + (num || '');
         });
     }
-    return null;
+    
+    // Extract "Known as:" name if provided by Groq
+    let knownName = null;
+    const knownAsMatch = text.match(/Known as:\s*([^\n]+?)(?:\n|$)/i);
+    if (knownAsMatch) {
+        const candidate = knownAsMatch[1].trim();
+        // Skip "unknown" or empty answers
+        if (candidate && candidate.toLowerCase() !== 'unknown' && candidate.length > 0) {
+            knownName = candidate;
+        }
+    }
+    
+    return { formula, knownName };
+}
+
+// Legacy function kept for backward compatibility
+function extractMolecularFormula(text) {
+    const { formula } = extractFormulaAndKnownName(text);
+    return formula;
 }
 
 // Generate fuzzy formula variations (±1 on H and C to handle Vision counting errors)
@@ -100,11 +117,23 @@ async function searchDDGForFormula(formula) {
     }
 }
 
-// Search DDG for compound name - cascade: exact → structure-based → fuzzy
-async function identifyCompoundByFormula(formula, structureDescription = '') {
+// Search DDG for compound name - cascade: groq-known → exact → verified-ddg → structure → fuzzy
+async function identifyCompoundByFormula(formula, structureDescription = '', knownName = null) {
     if (!formula) return null;
     
-    // Stage 1: Try exact formula (most reliable - direct from Vision analysis)
+    // Stage 0: If Groq already identified it, use that (most reliable - direct from model)
+    if (knownName) {
+        console.log(`🔬 Compound ID: Stage 0 - Using Groq's known name: ${knownName}`);
+        return {
+            name: knownName,
+            description: `Compound identified by Groq Vision analysis with molecular formula ${formula}`,
+            source: 'Groq Vision',
+            matchedFormula: formula,
+            matchType: 'groq-known'
+        };
+    }
+    
+    // Stage 1: Try exact formula (direct from Vision analysis)
     console.log(`🔬 Compound ID: Stage 1 - Trying exact formula ${formula}...`);
     const exactResult = await searchDDGForFormula(formula);
     if (exactResult) {
@@ -840,14 +869,14 @@ async function extractPDFVisualContent(buffer, fileName, options = {}) {
         // Check for chemical structures and try to identify compounds
         let compoundInfo = null;
         if (result.chemicalStructures && result.chemicalStructures.length > 0) {
-            // Extract molecular formula and structure description from Vision analysis
+            // Extract molecular formula and known name from Vision analysis
             const allDescriptions = result.chemicalStructures.map(cs => cs.description).join(' ');
-            const formula = extractMolecularFormula(allDescriptions);
+            const { formula, knownName } = extractFormulaAndKnownName(allDescriptions);
             
             if (formula) {
-                console.log(`🧪 Detected molecular formula: ${formula}`);
-                // Pass structure description for fallback search if formula variations fail
-                compoundInfo = await identifyCompoundByFormula(formula, allDescriptions);
+                console.log(`🧪 Detected molecular formula: ${formula}${knownName ? ` (Known as: ${knownName})` : ''}`);
+                // Pass known name (from Groq) + structure description for verification
+                compoundInfo = await identifyCompoundByFormula(formula, allDescriptions, knownName);
             }
         }
         
