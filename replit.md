@@ -67,6 +67,12 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **H₀ + Problem-Solving Protocol**: Temperature 0.15, confidence-based extrapolation, strict citation, and zero hallucination.
 - **Isolation Architecture**: Uses separate API tokens for playground to prevent abuse and isolate vision rate limits.
 
+## Recent Changes (December 8, 2025)
+- **Wikipedia Extraction Enhanced**: Removed `exintro: 1` parameter and bumped `exchars` from 2000 to 5000 characters
+  - Now captures full harm-reduction data: uses, metabolism, side effects, abuse potential, toxicity, and lethal doses
+  - Trades ~800→3000 tokens per chemistry query for comprehensive safety information
+  - Token cost still negligible (~$0.03 per query on Groq)
+
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)
 - **WhatsApp**: Twilio WhatsApp Business API
