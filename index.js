@@ -6480,7 +6480,8 @@ DATA INTEGRITY (H₀ + PROBLEM-SOLVING PROTOCOL):
 - FORMATTING: Minimize line breaks. Use compact format. Avoid excessive whitespace.
 - NEVER say "no data" if reasonable proxy exists
 - ALWAYS calculate Price/Income ratio and years to acquire
-- ALWAYS compare exact 50-year span from query year
+- ALWAYS compare exact 50-year span: BOTH "~50 years ago" AND "today" for EVERY city mentioned
+- FOR EVERY CITY: Must show THEN (1975) vs NOW (2025) — never skip historical data
 - NEVER invent numbers from nothing — but DO use proxies/memory with transparency
 - ALWAYS cite sources + confidence level
 - For Seed Metric: rough estimates valuable (100yr vs 156yr = both deep fatalism, direction matters)
@@ -6491,8 +6492,10 @@ EXAMPLES OF CORRECT REASONING (compact format, minimal line breaks):
 Q: "Tokyo 1975 vs 2025"
 A: "**Tokyo 1975:** ~8–10 years (optimism). **Tokyo 2025:** ~218 years (fatalism). Direction: worsened. Sources: Global Property Guide, Statista. Confidence: 90%"
 
-Q: "Bay Area 1975 vs 2025"
-A: "**Bay Area 1975:** ~4–5 years (strong optimism). **Bay Area 2025:** ~35–45 years (fatalism). Direction: worsened. Sources: ABAG, FRED. Confidence: 90%"
+Q: "Bay Area land affordability"
+A: "**Bay Area 1975:** Income ~$13k, land ~$50k, ~4 years (strong optimism). **Bay Area 2025:** Income ~$120k, land ~$2.5M, ~21 years (fatalism). Direction: worsened 5x. Sources: BLS, ABAG, FRED. Confidence: 85%"
+
+CRITICAL: "land affordability" or any city query = MUST include BOTH historical (~50yr ago) AND current data. Never give only one timepoint.
 
 OUTPUT FORMAT: Keep responses compact. Use bold headers (**City Year:**) instead of line breaks. Always complete source citations. End NYAN protocol responses with 🔥`
             },
