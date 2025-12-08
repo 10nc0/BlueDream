@@ -352,45 +352,9 @@ async function analyzePDFVisualContent(buffer, fileName, options = {}) {
     return result;
 }
 
-function formatPDFResultForPrompt(result, fileName, userQuery) {
-    const sections = [];
-    
-    sections.push(`📄 **Document: ${fileName}**\n`);
-    
-    if (result.tables.length > 0) {
-        sections.push('### Tables Found:\n');
-        result.tables.forEach((table, i) => {
-            sections.push(`**Table ${i + 1}** (${table.rows} rows × ${table.cols} columns):`);
-            sections.push(table.markdown);
-            sections.push('');
-        });
-    }
-    
-    if (result.text && result.text.trim().length > 0) {
-        sections.push('### Document Text:\n');
-        const truncatedText = result.text.length > 4000 
-            ? result.text.substring(0, 4000) + '\n[...truncated...]'
-            : result.text;
-        sections.push(truncatedText);
-    }
-    
-    if (result.charts.length > 0) {
-        sections.push('\n### Charts/Graphs:\n');
-        result.charts.forEach((chart, i) => {
-            sections.push(`**Chart ${i + 1}:** ${chart}`);
-        });
-    }
-    
-    sections.push(`\n---\n**User Query:** ${userQuery || 'Analyze this document and provide key insights.'}`);
-    sections.push('\nProvide specific answers based on the document content above. For tables, reference exact cell values. Be precise and cite data points.');
-    
-    return sections.join('\n');
-}
-
 module.exports = {
     parsePDFHybrid,
     extractTablesWithTabula,
-    formatPDFResultForPrompt,
     renderPDFPagesToImages,
     analyzePageWithGroqVision,
     analyzePDFVisualContent

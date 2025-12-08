@@ -1,7 +1,6 @@
-const { PDFParse } = require('pdf-parse');
 const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
-const { parsePDFHybrid, formatPDFResultForPrompt } = require('./pdf-handler');
+const { parsePDFHybrid } = require('./pdf-handler');
 
 const MAX_TOKENS = 6000;
 const CHARS_PER_TOKEN = 4;
