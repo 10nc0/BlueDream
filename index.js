@@ -6497,7 +6497,7 @@ A: "**Bay Area 1975:** Income ~$13k, land ~$50k, ~4 years (strong optimism). **B
 
 CRITICAL: "land affordability" or any city query = MUST include BOTH historical (~50yr ago) AND current data. Never give only one timepoint.
 
-OUTPUT FORMAT: Keep responses compact. Use bold headers (**City Year:**) instead of line breaks. Always complete source citations. End NYAN protocol responses with 🔥 nyan~`
+OUTPUT FORMAT: Use bold headers (**City Year:**) for each city analysis. Put **Sources:** and **Confidence:** in separate final paragraph with bold labels. End NYAN protocol responses with 🔥 nyan~`
             },
             ...conversationHistory,
             {
