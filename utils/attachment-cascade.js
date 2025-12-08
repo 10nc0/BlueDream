@@ -362,6 +362,35 @@ async function identifyCompoundByFormula(formula, structureDescription = '', kno
     return null;
 }
 
+// Chemistry harm-reduction enrichment template (for structured answers)
+function createChemistryEnrichmentTemplate(compoundName) {
+    return `
+### 🧪 HARM-REDUCTION ENRICHMENT TEMPLATE: ${compoundName || 'Compound'}
+
+Please structure your response using these sections (if data unavailable, note "Not enough data"):
+
+**Uses & Applications:**
+(Medical, recreational, research, or other uses)
+
+**Metabolism & Pharmacology:**
+(How the compound is broken down and affects the body)
+
+**Side Effects:**
+(Common adverse effects, contraindications)
+
+**Abuse Potential:**
+(Addictiveness, psychological/physical dependence risk, overdose susceptibility)
+
+**Toxicity & Lethal Doses:**
+(LD50 if available, lethal dose ranges, toxic thresholds)
+
+**Reversal Agents & Treatment:**
+(Naloxone for opioids, flumazenil for benzodiazepines, specific antidotes or supportive care)
+
+---
+`;
+}
+
 // Enrich chemistry context with parallel DDG queries before final Groq response
 async function enrichChemistryContext(formula, structureDescription = '', knownCompoundName = null) {
     const results = { formulaContext: null, structureContext: null, compoundContext: null };
@@ -628,13 +657,16 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         contextText += `${wikipediaContext.extract}\n`;
         contextText += `Source: ${wikipediaContext.source}\n`;
         
-        // Wikipedia extract typically contains uses/metabolism - instruct Groq to extract
-        contextText += `\n*Note: Extract medical uses, applications, metabolism, and pharmacology from the above context.*\n`;
+        // Add structured harm-reduction template for chemistry queries
+        contextText += createChemistryEnrichmentTemplate(wikipediaContext.title);
     } else if (results.compoundContext) {
         // Fallback to DDG compound context if Wikipedia failed
         contextText += `\n### 🔬 External Knowledge (${results.compoundContext.name}):\n`;
         contextText += `${results.compoundContext.description}\n`;
         contextText += `Source: ${results.compoundContext.source}\n`;
+        
+        // Add structured harm-reduction template for chemistry queries (DDG fallback)
+        contextText += createChemistryEnrichmentTemplate(results.compoundContext.name);
     }
     
     // Add formula context only if different from main compound

@@ -72,6 +72,11 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
   - Now captures full harm-reduction data: uses, metabolism, side effects, abuse potential, toxicity, and lethal doses
   - Trades ~800→3000 tokens per chemistry query for comprehensive safety information
   - Token cost still negligible (~$0.03 per query on Groq)
+- **Chemistry Enrichment Template Added**: Structured placeholders for consistent response format
+  - 6-section template: Uses & Applications, Metabolism & Pharmacology, Side Effects, Abuse Potential, Toxicity & Lethal Doses, Reversal Agents & Treatment
+  - Gracefully handles missing data with "Not enough data" disclosure
+  - Applied to both Wikipedia and DDG fallback sources
+  - Ensures conscious effort to inform users of all safety-critical information
 
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)
