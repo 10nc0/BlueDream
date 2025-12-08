@@ -25,14 +25,77 @@ function extractFormulaAndKnownName(text) {
         });
     }
     
-    // Extract "Known as:" name if provided by Groq
+    // Extract compound name using multiple strategies
     let knownName = null;
-    const knownAsMatch = text.match(/Known as:\s*([^\n]+?)(?:\n|$)/i);
+    
+    // Strategy 1: Look for "Known as: CompoundName" (capture full name until punctuation/newline)
+    const knownAsMatch = text.match(/Known as:\s*\**\s*([A-Za-z0-9\-]+(?:[\s\-][A-Za-z0-9\-]+)*)/i);
     if (knownAsMatch) {
-        const candidate = knownAsMatch[1].trim();
-        // Skip "unknown" or empty answers
-        if (candidate && candidate.toLowerCase() !== 'unknown' && candidate.length > 0) {
+        let candidate = knownAsMatch[1].trim();
+        // Clean up trailing words like "compound", "molecule", etc.
+        candidate = candidate.replace(/\s+(compound|molecule|structure|chemical|acid|analog|derivative)$/i, '').trim();
+        if (candidate && candidate.toLowerCase() !== 'unknown' && candidate.length > 1) {
             knownName = candidate;
+        }
+    }
+    
+    // Strategy 2: Look for known compound patterns in verbose text
+    if (!knownName) {
+        // Common compound name patterns
+        const compoundPatterns = [
+            /\b(THC|tetrahydrocannabinol)\b/i,
+            /\b(CBD|cannabidiol)\b/i,
+            /\b(aspirin|acetylsalicylic acid)\b/i,
+            /\b(caffeine)\b/i,
+            /\b(morphine)\b/i,
+            /\b(nicotine)\b/i,
+            /\b(dopamine)\b/i,
+            /\b(serotonin)\b/i,
+            /\b(adrenaline|epinephrine)\b/i,
+            /\b(cholesterol)\b/i,
+            /\b(glucose)\b/i,
+            /\b(ethanol)\b/i,
+            /\b(methanol)\b/i,
+            /\b(acetone)\b/i,
+            /\b(benzene)\b/i,
+            /\b(toluene)\b/i,
+            /\b(phenol)\b/i,
+            /\b(aniline)\b/i,
+            /\b(acetaminophen|paracetamol)\b/i,
+            /\b(ibuprofen)\b/i,
+            /\b(penicillin)\b/i,
+            /\b(insulin)\b/i,
+            /\b(testosterone)\b/i,
+            /\b(estrogen|estradiol)\b/i,
+            /\b(cortisol)\b/i,
+            /\b(melatonin)\b/i,
+            /\b(vitamin [A-E]\d?)\b/i,
+            /\b(retinol)\b/i,
+            /\b(LSD|lysergic acid)\b/i,
+            /\b(MDMA|ecstasy)\b/i,
+            /\b(cocaine)\b/i,
+            /\b(heroin|diacetylmorphine)\b/i,
+            /\b(fentanyl)\b/i,
+        ];
+        
+        for (const pattern of compoundPatterns) {
+            const match = text.match(pattern);
+            if (match) {
+                knownName = match[1];
+                break;
+            }
+        }
+    }
+    
+    // Strategy 3: Look for "similar to X" or "appears to be X" patterns
+    if (!knownName) {
+        const similarMatch = text.match(/(?:similar to|appears to be|identified as|looks like|is likely|could be)\s+([A-Z][a-zA-Z0-9\-]+)/i);
+        if (similarMatch) {
+            const candidate = similarMatch[1].trim();
+            // Validate it's a reasonable compound name (not "The", "This", etc.)
+            if (candidate.length > 2 && !/^(The|This|That|It|An?|Some)$/i.test(candidate)) {
+                knownName = candidate;
+            }
         }
     }
     
@@ -248,10 +311,16 @@ async function identifyCompoundByFormula(formula, structureDescription = '', kno
 }
 
 // Enrich chemistry context with parallel DDG queries before final Groq response
-async function enrichChemistryContext(formula, structureDescription = '') {
-    const results = { formulaContext: null, structureContext: null };
+async function enrichChemistryContext(formula, structureDescription = '', knownCompoundName = null) {
+    const results = { formulaContext: null, structureContext: null, compoundContext: null };
     
-    console.log(`🔬 Chemistry Enrichment: Running parallel DDG queries...`);
+    // Extract compound name from structure description if not provided
+    if (!knownCompoundName && structureDescription) {
+        const { knownName } = extractFormulaAndKnownName(structureDescription);
+        knownCompoundName = knownName;
+    }
+    
+    console.log(`🔬 Chemistry Enrichment: Running parallel DDG queries...${knownCompoundName ? ` (compound hint: ${knownCompoundName})` : ''}`);
     
     // Build parallel promises
     const promises = [];
@@ -330,27 +399,83 @@ async function enrichChemistryContext(formula, structureDescription = '') {
         }
     }
     
+    // Query 3: Direct compound name search (highest success rate with DDG)
+    if (knownCompoundName) {
+        // Clean compound name and create search query
+        const cleanName = knownCompoundName.replace(/[^\w\s-]/g, '').trim();
+        const compoundQuery = `${cleanName} chemical compound`;
+        console.log(`🔬 DDG Query 3: "${compoundQuery}"`);
+        
+        const compoundPromise = axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
+            q: compoundQuery,
+            format: 'json',
+            no_html: 1,
+            skip_disambig: 1,
+            t: 'nyanbook'
+        })}`, { timeout: 5000 }).then(res => {
+            if (res.data.AbstractText) {
+                console.log(`🔬 DDG Query 3: ✓ Found context for compound name`);
+                return {
+                    type: 'compound',
+                    name: res.data.Heading || cleanName,
+                    description: res.data.AbstractText,
+                    source: res.data.AbstractURL || 'DuckDuckGo',
+                    searchedName: cleanName
+                };
+            }
+            return null;
+        }).catch(err => {
+            console.log(`🔬 DDG Query 3: Failed - ${err.message}`);
+            return null;
+        });
+        
+        promises.push(compoundPromise.then(r => { results.compoundContext = r; }));
+    }
+    
     // Wait for all queries in parallel
     await Promise.all(promises);
     
     // Format enrichment context for prompt injection
     let contextText = '';
     
-    if (results.formulaContext) {
+    // Priority: compound context > formula context > structure context
+    if (results.compoundContext) {
+        contextText += `\n### 🔬 External Knowledge (${results.compoundContext.name}):\n`;
+        contextText += `${results.compoundContext.description}\n`;
+        contextText += `Source: ${results.compoundContext.source}\n`;
+    }
+    
+    if (results.formulaContext && results.formulaContext.name !== results.compoundContext?.name) {
         contextText += `\n### 🔬 External Knowledge (Formula ${formula}):\n`;
         contextText += `**${results.formulaContext.name}**: ${results.formulaContext.description}\n`;
         contextText += `Source: ${results.formulaContext.source}\n`;
     }
     
-    if (results.structureContext && results.structureContext.name !== results.formulaContext?.name) {
+    if (results.structureContext && 
+        results.structureContext.name !== results.formulaContext?.name &&
+        results.structureContext.name !== results.compoundContext?.name) {
         contextText += `\n### 🔬 External Knowledge (Structure):\n`;
         contextText += `**${results.structureContext.name}**: ${results.structureContext.description}\n`;
         contextText += `Source: ${results.structureContext.source}\n`;
     }
     
-    // Determine verified compound info
+    // Determine verified compound info (compound context has highest priority)
     let verifiedCompound = null;
-    if (results.formulaContext) {
+    if (results.compoundContext) {
+        verifiedCompound = {
+            name: results.compoundContext.name,
+            description: results.compoundContext.description,
+            source: results.compoundContext.source,
+            matchedFormula: formula,
+            matchType: 'ddg-verified'
+        };
+        // Extract canonical formula from DDG description if present
+        const canonicalMatch = results.compoundContext.description.match(/C\d+H\d+(?:O\d*)?(?:N\d*)?/);
+        if (canonicalMatch) {
+            verifiedCompound.canonicalFormula = canonicalMatch[0];
+            console.log(`🔬 Canonical formula from DDG: ${canonicalMatch[0]}`);
+        }
+    } else if (results.formulaContext) {
         verifiedCompound = {
             name: results.formulaContext.name,
             description: results.formulaContext.description,
@@ -358,7 +483,6 @@ async function enrichChemistryContext(formula, structureDescription = '') {
             matchedFormula: formula,
             matchType: 'ddg-verified'
         };
-        // Extract canonical formula from DDG description if present
         const canonicalMatch = results.formulaContext.description.match(/C\d+H\d+(?:O\d*)?(?:N\d*)?/);
         if (canonicalMatch) {
             verifiedCompound.canonicalFormula = canonicalMatch[0];
@@ -366,12 +490,13 @@ async function enrichChemistryContext(formula, structureDescription = '') {
         }
     }
     
-    console.log(`🔬 Chemistry Enrichment: Complete (formula: ${results.formulaContext ? '✓' : '✗'}, structure: ${results.structureContext ? '✓' : '✗'})`);
+    console.log(`🔬 Chemistry Enrichment: Complete (formula: ${results.formulaContext ? '✓' : '✗'}, structure: ${results.structureContext ? '✓' : '✗'}, compound: ${results.compoundContext ? '✓' : '✗'})`);
     
     return {
         contextText,
         formulaContext: results.formulaContext,
         structureContext: results.structureContext,
+        compoundContext: results.compoundContext,
         verifiedCompound
     };
 }
@@ -913,11 +1038,11 @@ Be specific and technical. This is for scientific document analysis.`
         const allDescriptions = chemicalStructures.map(cs => cs.description).join(' ');
         const { formula, knownName } = extractFormulaAndKnownName(allDescriptions);
         
-        if (formula) {
-            console.log(`🧪 Detected molecular formula: ${formula}${knownName ? ` (Known as: ${knownName})` : ''}`);
+        if (formula || knownName) {
+            console.log(`🧪 Detected molecular formula: ${formula || 'unknown'}${knownName ? ` (Known as: ${knownName})` : ''}`);
             
-            // Run DDG enrichment for chemistry queries
-            chemistryEnrichment = await enrichChemistryContext(formula, allDescriptions);
+            // Run DDG enrichment for chemistry queries - pass compound name for Query 3
+            chemistryEnrichment = await enrichChemistryContext(formula, allDescriptions, knownName);
             
             if (chemistryEnrichment.verifiedCompound) {
                 compoundInfo = chemistryEnrichment.verifiedCompound;
@@ -1063,11 +1188,11 @@ async function extractPDFVisualContent(buffer, fileName, options = {}) {
             const allDescriptions = result.chemicalStructures.map(cs => cs.description).join(' ');
             const { formula, knownName } = extractFormulaAndKnownName(allDescriptions);
             
-            if (formula) {
-                console.log(`🧪 Detected molecular formula: ${formula}${knownName ? ` (Known as: ${knownName})` : ''}`);
+            if (formula || knownName) {
+                console.log(`🧪 Detected molecular formula: ${formula || 'unknown'}${knownName ? ` (Known as: ${knownName})` : ''}`);
                 
-                // Run DDG enrichment for chemistry queries
-                chemistryEnrichment = await enrichChemistryContext(formula, allDescriptions);
+                // Run DDG enrichment for chemistry queries - pass compound name for Query 3
+                chemistryEnrichment = await enrichChemistryContext(formula, allDescriptions, knownName);
                 
                 if (chemistryEnrichment.verifiedCompound) {
                     compoundInfo = chemistryEnrichment.verifiedCompound;
