@@ -6010,11 +6010,12 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
 
 // ===========================
 // AI PLAYGROUND API (Public, No Auth)
-// Isolated tokens: PLAYGROUND_GROQ_TOKEN, PLAYGROUND_HF_VISION_TOKEN
+// Isolated tokens: Text vs Vision separation to prevent rate limit cross-impact
 // ===========================
 
-const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
-const PLAYGROUND_HF_VISION_TOKEN = process.env.PLAYGROUND_HF_VISION_TOKEN;
+const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;  // Text (Llama 3.3 70B)
+const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_GROQ_TOKEN;  // Vision (Llama 4 Scout) - fallback to text token
+const PLAYGROUND_HF_VISION_TOKEN = process.env.PLAYGROUND_HF_VISION_TOKEN;  // Legacy HuggingFace (deprecated)
 
 // Simple in-memory rate limiter for playground (50 req/hour per IP)
 const playgroundRateLimits = new Map();
@@ -6472,7 +6473,7 @@ app.post('/api/playground', async (req, res) => {
         
         // Photo analysis via Groq Llama 3.2 Vision (primary) + HF Endpoints fallback
         if (photo) {
-            if (!PLAYGROUND_GROQ_TOKEN) {
+            if (!PLAYGROUND_GROQ_VISION_TOKEN) {
                 return res.status(503).json({ 
                     reply: 'Photo analysis is not configured. Please try text only.' 
                 });
@@ -6521,7 +6522,7 @@ app.post('/api/playground', async (req, res) => {
                     },
                     {
                         headers: {
-                            'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`,
+                            'Authorization': `Bearer ${PLAYGROUND_GROQ_VISION_TOKEN}`,
                             'Content-Type': 'application/json'
                         },
                         timeout: 30000
