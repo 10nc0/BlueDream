@@ -6055,7 +6055,8 @@ async function searchDuckDuckGo(query) {
         q: query,
         format: 'json',
         no_html: 1,
-        skip_disambig: 1
+        skip_disambig: 1,
+        t: 'nyanbook'
     };
     const url = `https://api.duckduckgo.com/?${querystring.stringify(params)}`;
     
@@ -6066,15 +6067,26 @@ async function searchDuckDuckGo(query) {
         // Extract instant answer + top 3 related topics
         const context = [];
         if (data.AbstractText) {
-            context.push(`Search Result: ${data.AbstractText}`);
+            context.push(`📚 ${data.AbstractText}`);
+            console.log(`🔍 DDG: Found instant answer for "${query.substring(0, 40)}..."`);
         }
         if (data.RelatedTopics && data.RelatedTopics.length > 0) {
-            data.RelatedTopics.slice(0, 3).forEach(topic => {
-                if (topic.Text) context.push(`• ${topic.Text}`);
-            });
+            const relevantTopics = data.RelatedTopics.filter(t => t.Text && !t.FirstURL).slice(0, 3);
+            if (relevantTopics.length > 0) {
+                context.push('Related information:');
+                relevantTopics.forEach(topic => {
+                    if (topic.Text) context.push(`  • ${topic.Text}`);
+                });
+            }
         }
         
-        return context.length > 0 ? context.join('\n') : null;
+        if (context.length > 0) {
+            console.log(`🔍 DDG: Injecting ${context.length} search results into prompt`);
+            return context.join('\n');
+        } else {
+            console.log(`🔍 DDG: No results found for "${query.substring(0, 40)}..." - using base knowledge only`);
+            return null;
+        }
     } catch (err) {
         console.error('🔍 DDG search error:', err.message);
         return null;
