@@ -6048,6 +6048,34 @@ setInterval(() => {
     }
 }, 10 * 60 * 1000);
 
+// ===== HuggingFace Vision Daily Quota (40/day, UTC midnight reset) =====
+const HF_VISION_DAILY_CAP = 40;
+let hfVisionQuota = { used: 0, resetDate: new Date().toISOString().split('T')[0] };
+
+function checkHfVisionQuota() {
+    const todayUTC = new Date().toISOString().split('T')[0];
+    
+    // Reset at UTC midnight
+    if (hfVisionQuota.resetDate !== todayUTC) {
+        console.log(`🔄 HF Vision quota reset (new day: ${todayUTC})`);
+        hfVisionQuota = { used: 0, resetDate: todayUTC };
+    }
+    
+    if (hfVisionQuota.used >= HF_VISION_DAILY_CAP) {
+        const now = new Date();
+        const utcMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0));
+        const hoursUntilReset = Math.ceil((utcMidnight - now) / (1000 * 60 * 60));
+        return { allowed: false, hoursUntilReset };
+    }
+    
+    return { allowed: true };
+}
+
+function consumeHfVisionQuota() {
+    hfVisionQuota.used++;
+    console.log(`📸 HF Vision: ${hfVisionQuota.used}/${HF_VISION_DAILY_CAP} daily quota used`);
+}
+
 // H₀ PROTOCOL: temperature = 0.15 (sweet spot: 0.1 too rigid, 0.2 hallucinates)
 const H0_TEMPERATURE = 0.15;
 
@@ -6273,6 +6301,14 @@ app.post('/api/playground', async (req, res) => {
                 });
             }
             
+            // Check HF Vision daily quota (40/day, UTC midnight reset)
+            const quotaCheck = checkHfVisionQuota();
+            if (!quotaCheck.allowed) {
+                return res.json({ 
+                    reply: `Photo analysis quota preserved for tomorrow (resets in ~${quotaCheck.hoursUntilReset}h at UTC midnight). Text + search still fully available. nyan~` 
+                });
+            }
+            
             console.log(`🎮 Playground: Analyzing photo for ${clientIp}`);
             const visionPrompt = 'Extract all text exactly. Describe image factually. No interpretation, only observations.';
             
@@ -6303,6 +6339,9 @@ app.post('/api/playground', async (req, res) => {
                 const photoDescription = visionResponse.data[0]?.generated_text || 
                                          visionResponse.data.generated_text || 
                                          'Unable to analyze image';
+                
+                // Consume HF Vision quota on successful analysis
+                consumeHfVisionQuota();
                 
                 finalPrompt = `Photo analysis: ${photoDescription}\n\nUser query: ${message || 'Analyze this image.'}`;
                 
