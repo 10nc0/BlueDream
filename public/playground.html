@@ -507,6 +507,15 @@
             .header { padding: 0.5rem 1rem; }
             .header-title h1 { font-size: 1rem; }
             .header-title p { display: none; }
+            
+            /* Swap title text on mobile */
+            .desktop-title { display: none !important; }
+            .mobile-title { display: block !important; }
+            
+            /* Swap login button text on mobile */
+            .desktop-text { display: none; }
+            .mobile-text { display: inline; }
+            
             .chat-container { 
                 padding: 0.5rem; 
                 padding-bottom: 0;
@@ -537,6 +546,28 @@
             .mobile-only { display: flex; }
             .desktop-only { display: none; }
             
+            /* Larger 📎 button on mobile for better ergonomics */
+            #attachBtn {
+                width: 48px;
+                height: 48px;
+                padding: 0;
+                font-size: 1.5rem;
+                flex-shrink: 0;
+            }
+            
+            /* Smaller send button on mobile for up arrow */
+            .send-btn {
+                width: 48px;
+                height: 48px;
+                padding: 0;
+                font-size: 1.25rem;
+                flex-shrink: 0;
+            }
+            
+            /* Swap send button text on mobile */
+            .send-desktop { display: none; }
+            .send-mobile { display: inline; }
+            
             /* Fixed input container at bottom */
             .input-container {
                 position: fixed;
@@ -564,7 +595,8 @@
                 <canvas id="hopCanvas" class="character-canvas" width="100" height="100" style="display: block; margin: 0;"></canvas>
             </div>
             <div class="header-title">
-                <h1>Nyan AI Playground</h1>
+                <h1 class="desktop-title">Nyan AI Playground</h1>
+                <h1 class="mobile-title" style="display: none;">Nyan AI</h1>
                 <p>Nyan AI - Free, fast, sovereign, truth; not dogma</p>
             </div>
         </div>
@@ -575,7 +607,7 @@
             <div id="dateTimeCompact" class="date-time-display" style="display: none;">
                 <span id="currentTimeCompact">2025/12/08 - 3:00:00PM</span>
             </div>
-            <a href="/login.html" class="login-btn">🐈‍⬛ Login to Nyanbook</a>
+            <a href="/login.html" class="login-btn"><span class="desktop-text">🐈‍⬛ Login to Nyanbook</span><span class="mobile-text" style="display: none;">🐈‍⬛ Login</span></a>
         </div>
     </div>
     
@@ -615,7 +647,7 @@
                     <button class="upload-btn desktop-only" id="photoBtn" title="Upload Photo">📷</button>
                     <button class="upload-btn desktop-only" id="audioBtn" title="Upload Audio">🔊</button>
                     <button class="upload-btn mobile-only" id="attachBtn" title="Attach File">📎</button>
-                    <button class="send-btn" id="sendBtn">Send →</button>
+                    <button class="send-btn" id="sendBtn"><span class="send-desktop">Send →</span><span class="send-mobile" style="display: none;">↑</span></button>
                 </div>
             </div>
         </div>
