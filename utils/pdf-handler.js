@@ -171,8 +171,8 @@ async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
         console.log(`🖼️ PDF Poppler: Rendering ${pagesToRender}/${totalPages} pages...`);
         
         // Render pages to JPEG using pdftoppm
-        // -jpeg: output format, -r 150: 150 DPI, -f/-l: first/last page
-        const cmd = `pdftoppm -jpeg -r 150 -f 1 -l ${pagesToRender} "${tempPdfPath}" "${tempOutputPrefix}"`;
+        // -jpeg: output format, -r 225: 225 DPI (high-res for atom clarity), -f/-l: first/last page
+        const cmd = `pdftoppm -jpeg -r 225 -f 1 -l ${pagesToRender} "${tempPdfPath}" "${tempOutputPrefix}"`;
         execSync(cmd, { timeout: 30000 });
         
         // Load rendered images as base64
@@ -245,13 +245,16 @@ async function analyzePageWithGroqVision(imageBase64, pageNum, GROQ_TOKEN) {
                         content: [
                             {
                                 type: 'text',
-                                text: `Page ${pageNum}: Analyze this PDF page. Describe all visual elements:
-- Charts/graphs: type, axes, data points, trends
-- Chemical structures: molecules, formulas, reaction schemes
+                                text: `Page ${pageNum}: Analyze this PDF page in detail. For any chemical structures:
+- Molecular formula: Count EVERY atom carefully. Count carbon atoms (C), hydrogen (H), oxygen (O), nitrogen (N), etc. separately.
+- Fused ring systems: Identify all ring types (benzene, furan, pyran, quinoline, indole, etc.) and count atoms in each ring.
+- Functional groups: OH, NH, C=O, C=C, ethers, esters, etc.
+- Stereochemistry: Wedge/dash bonds, double bond geometry
+- Reaction schemes: reactants, products, arrows
+- Charts/graphs: axes labels, data points, trends
+- Tables: headers and row data
 - Diagrams: flowcharts, schematics, illustrations
-- Tables: if visible, extract key data
-- Equations: mathematical or chemical formulas
-Be factual and precise. Extract exact values where visible.`
+For molecular formulas: List as "CxHyOz..." with exact counts. Double-check by summing atoms visually.`
                             },
                             {
                                 type: 'image_url',
