@@ -2,6 +2,71 @@ const { parsePDFHybrid, analyzePDFVisualContent } = require('./pdf-handler');
 const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
 const crypto = require('crypto');
+const axios = require('axios');
+const querystring = require('querystring');
+
+// ===== COMPOUND IDENTIFICATION =====
+// Extract molecular formula from Vision description (e.g., C21H30O2)
+function extractMolecularFormula(text) {
+    // Match patterns like C21H30O2, C6H12O6, C15H22N2O, etc.
+    const formulaRegex = /\b(C\d{1,3}H\d{1,3}(?:O\d{0,3})?(?:N\d{0,3})?(?:S\d{0,3})?(?:Cl\d{0,3})?(?:Br\d{0,3})?(?:F\d{0,3})?)\b/gi;
+    const matches = text.match(formulaRegex);
+    if (matches && matches.length > 0) {
+        // Return the most likely complete formula (longest match)
+        return matches.sort((a, b) => b.length - a.length)[0].toUpperCase();
+    }
+    return null;
+}
+
+// Search DDG for compound name based on molecular formula
+async function identifyCompoundByFormula(formula) {
+    if (!formula) return null;
+    
+    const query = `${formula} molecule compound name`;
+    const params = {
+        q: query,
+        format: 'json',
+        no_html: 1,
+        skip_disambig: 1,
+        t: 'nyanbook'
+    };
+    const url = `https://api.duckduckgo.com/?${querystring.stringify(params)}`;
+    
+    try {
+        const response = await axios.get(url, { timeout: 5000 });
+        const data = response.data;
+        
+        // Extract compound name from instant answer
+        if (data.AbstractText) {
+            console.log(`🔬 Compound ID: Found info for ${formula}`);
+            // Try to extract specific compound name from the abstract
+            const nameMatch = data.Heading || '';
+            return {
+                name: nameMatch,
+                description: data.AbstractText.substring(0, 300),
+                source: data.AbstractURL || 'DuckDuckGo'
+            };
+        }
+        
+        // Check related topics for compound names
+        if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+            const topic = data.RelatedTopics.find(t => t.Text && t.Text.toLowerCase().includes(formula.toLowerCase()));
+            if (topic) {
+                return {
+                    name: topic.FirstURL ? topic.FirstURL.split('/').pop().replace(/_/g, ' ') : formula,
+                    description: topic.Text.substring(0, 300),
+                    source: topic.FirstURL || 'DuckDuckGo'
+                };
+            }
+        }
+        
+        console.log(`🔬 Compound ID: No match found for ${formula}`);
+        return null;
+    } catch (err) {
+        console.error(`🔬 Compound ID error: ${err.message}`);
+        return null;
+    }
+}
 
 // Content-based cache: SHA-256 hash → extraction result
 const extractionCache = new Map();
@@ -622,6 +687,19 @@ async function extractPDFVisualContent(buffer, fileName, options = {}) {
             return { success: false, error: result.error || 'No visual content extracted' };
         }
         
+        // Check for chemical structures and try to identify compounds
+        let compoundInfo = null;
+        if (result.chemicalStructures && result.chemicalStructures.length > 0) {
+            // Extract molecular formula from descriptions
+            const allDescriptions = result.chemicalStructures.map(cs => cs.description).join(' ');
+            const formula = extractMolecularFormula(allDescriptions);
+            
+            if (formula) {
+                console.log(`🧪 Detected molecular formula: ${formula}`);
+                compoundInfo = await identifyCompoundByFormula(formula);
+            }
+        }
+        
         // Format visual content for merging with text extraction
         const visualDescriptions = result.visualContent.map(vc => {
             const typeLabel = vc.contentType === 'chemical' ? '🧪 Chemical Structure' :
@@ -630,14 +708,22 @@ async function extractPDFVisualContent(buffer, fileName, options = {}) {
             return `**Page ${vc.page} (${typeLabel}):**\n${vc.description}`;
         }).join('\n\n');
         
+        // Add compound identification if found
+        let compoundSection = '';
+        if (compoundInfo && compoundInfo.name) {
+            compoundSection = `\n\n### 🔬 Compound Identification:\n**Name:** ${compoundInfo.name}\n**Info:** ${compoundInfo.description}\n**Source:** ${compoundInfo.source}`;
+            console.log(`🔬 Compound identified: ${compoundInfo.name}`);
+        }
+        
         return { 
             success: true, 
             data: { 
-                text: `\n### Visual Content Analysis:\n${visualDescriptions}`,
+                text: `\n### Visual Content Analysis:\n${visualDescriptions}${compoundSection}`,
                 visualContent: result.visualContent,
                 charts: result.charts,
                 chemicalStructures: result.chemicalStructures,
                 diagrams: result.diagrams,
+                compoundInfo: compoundInfo,
                 type: 'pdf-vision'
             }
         };
