@@ -39,9 +39,10 @@ function extractFormulaAndKnownName(text) {
         }
     }
     
-    // Strategy 2: Look for known compound patterns in verbose text
+    // Strategy 2: Look for recognized compound names (only obvious matches)
+    // Skip verbose "appears to represent X" patterns - let DDG queries find compounds via formula/structure
     if (!knownName) {
-        // Common compound name patterns
+        // Only match explicit, unambiguous compound names
         const compoundPatterns = [
             /\b(THC|tetrahydrocannabinol)\b/i,
             /\b(CBD|cannabidiol)\b/i,
@@ -83,48 +84,6 @@ function extractFormulaAndKnownName(text) {
             if (match) {
                 knownName = match[1];
                 break;
-            }
-        }
-    }
-    
-    // Strategy 3: Look for "similar to X" or "appears to be X" patterns (multi-word support)
-    if (!knownName) {
-        // Match compound names that may be multiple words (e.g., "tetrahydrocannabinol", "acetylsalicylic acid")
-        const appearPatterns = [
-            // "appears to be/represent X", "identified as X", etc.
-            /(?:appears to (?:be|represent)|identified as|looks like|is likely|could be|similar to|consistent with|matches)\s+(?:a\s+)?(?:compound\s+(?:called|known as|named)\s+)?([A-Za-z][a-zA-Z0-9\-]+(?:[\s\-][a-zA-Z0-9\-]+){0,3})/i,
-            // "This/The compound/structure is/appears to be/represent X"
-            /(?:This|The)\s+(?:compound|molecule|structure)\s+(?:is|appears to (?:be|represent)|looks like|represents?)\s+([A-Za-z][a-zA-Z0-9\-]+(?:[\s\-][a-zA-Z0-9\-]+){0,3})/i,
-            // "compound name: X"
-            /compound\s+name[:\s]+([A-Za-z][a-zA-Z0-9\-]+(?:[\s\-][a-zA-Z0-9\-]+){0,3})/i,
-            // "This is X" or "represents X" at end of sentence
-            /(?:this is|represents?|which is)\s+([A-Z][a-zA-Z0-9\-]+(?:[\s\-][a-zA-Z0-9\-]+){0,2})(?:\.|,|$)/i,
-        ];
-        
-        for (const pattern of appearPatterns) {
-            const match = text.match(pattern);
-            if (match) {
-                let candidate = match[1].trim();
-                // Remove trailing filler words and parenthetical content
-                candidate = candidate.replace(/\s*\([^)]*\)$/i, '').trim();
-                candidate = candidate.replace(/\s+(compound|molecule|structure|chemical|with|and|or|the|a|an|which|also)$/i, '').trim();
-                // Validate it's a reasonable compound name
-                const invalidWords = /^(The|This|That|It|An?|Some|One|Two|Three|Is|Are|Was|Were|Has|Have|Had|May|Might|Could|Would|Should|Unknown|Unidentified|Unclear|commonly|also|often)$/i;
-                if (candidate.length > 2 && !invalidWords.test(candidate)) {
-                    knownName = candidate;
-                    break;
-                }
-            }
-        }
-    }
-    
-    // Strategy 4: Extract from "Formula: X, Name: Y" structured format
-    if (!knownName) {
-        const nameMatch = text.match(/(?:Name|Compound|Identified as)[:\s]+\**([A-Za-z][a-zA-Z0-9\-]+(?:[\s\-][a-zA-Z0-9\-]+){0,3})\**/i);
-        if (nameMatch) {
-            const candidate = nameMatch[1].trim().replace(/\s+(compound|molecule)$/i, '');
-            if (candidate.length > 2) {
-                knownName = candidate;
             }
         }
     }
