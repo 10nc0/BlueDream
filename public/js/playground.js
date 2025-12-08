@@ -141,6 +141,16 @@ messageInput.addEventListener('keydown', (e) => {
     }
 });
 
+// Auto-resize textarea based on content
+function autoResizeTextarea() {
+    messageInput.style.height = 'auto';
+    const newHeight = Math.min(messageInput.scrollHeight, 200);
+    messageInput.style.height = newHeight + 'px';
+    // Show scrollbar only when at max height
+    messageInput.style.overflowY = messageInput.scrollHeight > 200 ? 'auto' : 'hidden';
+}
+messageInput.addEventListener('input', autoResizeTextarea);
+
 function handleFileSelect(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -260,6 +270,7 @@ async function sendMessage() {
     addMessage('user', userMessageText, currentAttachment);
     conversationHistory.push({ role: 'user', content: userMessageText });
     messageInput.value = '';
+    messageInput.style.height = '44px'; // Reset to min height
     
     const payload = { 
         message,
