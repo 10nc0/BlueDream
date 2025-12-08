@@ -50,7 +50,7 @@ async function handleSignup(event) {
             showSuccess(data.message || 'Account created! Redirecting...');
             
             setTimeout(() => {
-                window.location.href = '/';
+                window.location.href = '/dashboard';
             }, 1500);
         } else {
             console.error('Signup failed:', data);
@@ -94,7 +94,7 @@ fetch('/api/auth/status')
     .then(res => res.json())
     .then(data => {
         if (data.authenticated) {
-            window.location.href = '/';
+            window.location.href = '/dashboard';
         }
     });
 

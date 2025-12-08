@@ -47,7 +47,7 @@ async function loginWithEmail(e) {
             
             showSuccess('Login successful! Redirecting...');
             setTimeout(() => {
-                window.location.href = '/';
+                window.location.href = '/dashboard';
             }, 1000);
         } else {
             showError(data.error || 'Login failed');
@@ -67,7 +67,7 @@ fetch('/api/auth/status')
     .then(res => res.json())
     .then(data => {
         if (data.authenticated) {
-            window.location.href = '/';
+            window.location.href = '/dashboard';
         }
     });
 

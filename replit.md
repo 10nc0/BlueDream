@@ -95,10 +95,38 @@ The Prometheus module (internal codename) provides AI-powered message verificati
 **Environment:**
 - `GROQ_API_KEY` - Groq API key (required for AI checks)
 
+## AI Playground (Public)
+A sovereign, public AI playground at `/AI` with no authentication required.
+
+**URL Flow:**
+- `nyanbook.replit.app/` → Redirects to `/AI` (public landing page)
+- `/AI` → AI Playground with "Login to Nyanbook" button
+- `/login.html` → Login page → `/dashboard` (authenticated dashboard)
+
+**Multimodal Support:**
+- **Text**: Groq Llama 3.3 70B Versatile (0.8s response)
+- **Photo**: HuggingFace Qwen2-VL-7B-Instruct (Indonesian OCR) → Groq Llama 3.3
+- **Audio**: Groq Whisper-large-v3-turbo (Indonesian transcription) → Groq Llama 3.3
+
+**Isolation Architecture:**
+- Uses separate tokens: `PLAYGROUND_GROQ_TOKEN`, `PLAYGROUND_HF_VISION_TOKEN`
+- Prevents abuse from affecting production Prometheus system
+- Can disable/rate-limit playground without impacting core app
+- 50 requests/hour per IP rate limiting
+
+**H₀ Protocol:**
+- Temperature 0.1 everywhere (no creativity, only facts)
+- Zero hallucination design
+
+**Files:** `public/playground.html`, `public/js/playground.js`
+
+**API Endpoint:** `POST /api/playground` (public, no auth)
+
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase) with RLS configured via Supabase dashboard
 - **WhatsApp**: Twilio WhatsApp Business API
-- **AI**: Groq API (llama-3.3-70b-versatile)
+- **AI (Production)**: Groq API (llama-3.3-70b-versatile) via `GROQ_API_KEY`
+- **AI (Playground)**: Groq API via `PLAYGROUND_GROQ_TOKEN`, HuggingFace via `PLAYGROUND_HF_VISION_TOKEN`
 
 ## Database Notes
 - **RLS Policy**: Row Level Security for `public.sessions` table is configured directly in Supabase SQL editor (not in code). Policy enables backend full access while satisfying Supabase security requirements.

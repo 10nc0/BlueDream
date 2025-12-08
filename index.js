@@ -263,6 +263,13 @@ app.use((req, res, next) => {
     next();
 });
 
+// Serve AI Playground (public, no auth - sovereign gift to the world)
+app.get('/AI', (req, res) => {
+    console.log(`[${getTimestamp()}] 🎮 AI Playground accessed - IP: ${req.ip}`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(__dirname + '/public/playground.html');
+});
+
 // Serve login page without authentication (must come before requireAuth check)
 app.get('/login.html', (req, res) => {
     console.log(`[${getTimestamp()}] 📱 Login page accessed - IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
@@ -291,13 +298,19 @@ app.get('/dev', (req, res) => {
 
 // UAT/Test route removed - use real signup flow for multi-tenant architecture
 
-// Serve main dashboard - client-side JWT auth will handle access control
+// Root redirects to AI Playground (public landing page)
 app.get('/', (req, res) => {
     // Health check support: return 200 for HEAD requests (used by deployment health checks)
     if (req.method === 'HEAD') {
         return res.status(200).end();
     }
     
+    // Redirect to AI Playground as the public landing page
+    res.redirect('/AI');
+});
+
+// Serve main dashboard - client-side JWT auth will handle access control
+app.get('/dashboard', (req, res) => {
     // Cache-busting headers to ensure UI updates are immediately visible
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.setHeader('Pragma', 'no-cache');
@@ -5991,6 +6004,252 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
     }
 });
 
+
+// ===========================
+// AI PLAYGROUND API (Public, No Auth)
+// Isolated tokens: PLAYGROUND_GROQ_TOKEN, PLAYGROUND_HF_VISION_TOKEN
+// ===========================
+
+const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
+const PLAYGROUND_HF_VISION_TOKEN = process.env.PLAYGROUND_HF_VISION_TOKEN;
+
+// Simple in-memory rate limiter for playground (50 req/hour per IP)
+const playgroundRateLimits = new Map();
+const PLAYGROUND_RATE_LIMIT = 50;
+const PLAYGROUND_RATE_WINDOW = 60 * 60 * 1000; // 1 hour
+
+function checkPlaygroundRateLimit(ip) {
+    const now = Date.now();
+    const record = playgroundRateLimits.get(ip);
+    
+    if (!record || now - record.windowStart > PLAYGROUND_RATE_WINDOW) {
+        playgroundRateLimits.set(ip, { count: 1, windowStart: now });
+        return true;
+    }
+    
+    if (record.count >= PLAYGROUND_RATE_LIMIT) {
+        return false;
+    }
+    
+    record.count++;
+    return true;
+}
+
+// Clean up old rate limit records every 10 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, record] of playgroundRateLimits.entries()) {
+        if (now - record.windowStart > PLAYGROUND_RATE_WINDOW) {
+            playgroundRateLimits.delete(ip);
+        }
+    }
+}, 10 * 60 * 1000);
+
+// H₀ PROTOCOL: temperature = 0.1 (no creativity, only facts)
+const H0_TEMPERATURE = 0.1;
+
+app.post('/api/playground', async (req, res) => {
+    const clientIp = req.ip || req.connection.remoteAddress;
+    
+    // Rate limiting
+    if (!checkPlaygroundRateLimit(clientIp)) {
+        return res.status(429).json({ 
+            reply: 'Too many requests. Please wait an hour before trying again.' 
+        });
+    }
+    
+    try {
+        const { message, photo, audio } = req.body;
+        let finalPrompt = message || '';
+        
+        // Validation
+        if (!message?.trim() && !photo && !audio) {
+            return res.status(400).json({ 
+                reply: 'Please enter text or upload a photo/audio file.' 
+            });
+        }
+        
+        // File size limits (base64 encoded)
+        if (photo) {
+            const photoSizeKB = (photo.length * 3) / 4 / 1024;
+            if (photoSizeKB > 5000) {
+                return res.status(400).json({ 
+                    reply: 'Photo too large. Maximum size is 5MB.' 
+                });
+            }
+        }
+        
+        if (audio) {
+            const audioSizeKB = (audio.length * 3) / 4 / 1024;
+            if (audioSizeKB > 10000) {
+                return res.status(400).json({ 
+                    reply: 'Audio too large. Maximum size is 10MB.' 
+                });
+            }
+        }
+        
+        // Photo analysis via HuggingFace Qwen2-VL
+        if (photo) {
+            if (!PLAYGROUND_HF_VISION_TOKEN) {
+                return res.status(503).json({ 
+                    reply: 'Photo analysis is not configured. Please try text only.' 
+                });
+            }
+            
+            console.log(`🎮 Playground: Analyzing photo for ${clientIp}`);
+            const visionPrompt = 'Extract all text exactly. Describe image factually. No interpretation, only observations.';
+            
+            try {
+                const base64Data = photo.split(',')[1] || photo;
+                
+                const visionResponse = await axios.post(
+                    'https://api-inference.huggingface.co/models/Qwen/Qwen2-VL-7B-Instruct',
+                    {
+                        inputs: { image: base64Data, question: visionPrompt },
+                        parameters: {
+                            max_new_tokens: 500,
+                            temperature: H0_TEMPERATURE,
+                            top_p: 0.95,
+                            repetition_penalty: 1.1,
+                            return_full_text: false
+                        }
+                    },
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${PLAYGROUND_HF_VISION_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        },
+                        timeout: 30000
+                    }
+                );
+                
+                const photoDescription = visionResponse.data[0]?.generated_text || 
+                                         visionResponse.data.generated_text || 
+                                         'Unable to analyze image';
+                
+                finalPrompt = `Photo analysis: ${photoDescription}\n\nUser query: ${message || 'Analyze this image.'}`;
+                
+            } catch (visionError) {
+                console.error('❌ Playground vision error:', visionError.message);
+                
+                if (visionError.response?.status === 503) {
+                    return res.status(503).json({ 
+                        reply: 'Vision model is warming up. Please try again in 30 seconds.' 
+                    });
+                }
+                
+                return res.status(500).json({ 
+                    reply: 'Photo analysis failed. Please try again.' 
+                });
+            }
+        }
+        
+        // Audio transcription via Groq Whisper
+        else if (audio) {
+            if (!PLAYGROUND_GROQ_TOKEN) {
+                return res.status(503).json({ 
+                    reply: 'Audio transcription is not configured. Please try text only.' 
+                });
+            }
+            
+            console.log(`🎮 Playground: Transcribing audio for ${clientIp}`);
+            
+            try {
+                const FormData = require('form-data');
+                const base64Data = audio.split(',')[1] || audio;
+                const audioBuffer = Buffer.from(base64Data, 'base64');
+                
+                const formData = new FormData();
+                formData.append('file', audioBuffer, {
+                    filename: 'audio.webm',
+                    contentType: 'audio/webm'
+                });
+                formData.append('model', 'whisper-large-v3-turbo');
+                formData.append('language', 'id'); // Default to Indonesian
+                formData.append('response_format', 'json');
+                
+                const whisperResponse = await axios.post(
+                    'https://api.groq.com/openai/v1/audio/transcriptions',
+                    formData,
+                    {
+                        headers: {
+                            ...formData.getHeaders(),
+                            'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`
+                        },
+                        timeout: 30000
+                    }
+                );
+                
+                const transcript = whisperResponse.data.text || '';
+                finalPrompt = `User said: "${transcript}"\n\nRespond factually to what the user said.`;
+                
+            } catch (audioError) {
+                console.error('❌ Playground audio error:', audioError.message);
+                return res.status(500).json({ 
+                    reply: 'Audio transcription failed. Please try again.' 
+                });
+            }
+        }
+        
+        // Final reasoning via Groq Llama 3.3 70B
+        if (!PLAYGROUND_GROQ_TOKEN) {
+            return res.status(503).json({ 
+                reply: 'AI service is not configured. Please try again later.' 
+            });
+        }
+        
+        console.log(`🎮 Playground: Generating response for ${clientIp}`);
+        
+        const groqResponse = await axios.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            {
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'You are a helpful, factual assistant. ' +
+                                 'Provide accurate, concise answers. ' +
+                                 'If uncertain, say "insufficient data". ' +
+                                 'Respond in the user\'s language (Indonesian or English). ' +
+                                 'No hedging, no "might", no "appears to be".'
+                    },
+                    {
+                        role: 'user',
+                        content: finalPrompt
+                    }
+                ],
+                temperature: H0_TEMPERATURE,
+                max_tokens: 1500,
+                top_p: 0.95
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15000
+            }
+        );
+        
+        const reply = groqResponse.data.choices[0]?.message?.content || 'No response generated.';
+        
+        console.log(`✅ Playground response sent (${reply.length} chars)`);
+        res.json({ reply });
+        
+    } catch (error) {
+        console.error('❌ Playground error:', error.message);
+        
+        if (error.response?.status === 429) {
+            return res.status(429).json({ 
+                reply: 'AI service is busy. Please try again in a few seconds.' 
+            });
+        }
+        
+        res.status(500).json({ 
+            reply: 'An error occurred. Please try again.' 
+        });
+    }
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', async () => {
