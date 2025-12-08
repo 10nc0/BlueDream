@@ -93,6 +93,13 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
   - **PowerPoint (PPTX)**: `convertDocumentToImages()` extracts media from ppt/media folder via JSZip, sends to Groq Vision.
   - **Pipeline Enhancement**: Cascade now passes `extractedImages` between steps via `cascadeOptions`, enabling mammoth-images → groq-doc-vision flow.
   - **libuuid Fix**: Installed system dependency to fix PDF page rendering with pdfjs-dist + canvas.
+- **Lease-Based Auto-Heal System**: Replaced O(n²) linear scan with O(log n) priority queue:
+  - **Schema**: Added heal_status, next_heal_at, heal_attempts, heal_lease_until, last_healed_at to core.book_registry.
+  - **Worker**: 20-second cycle, batch=20, 60-second lease with SELECT FOR UPDATE SKIP LOCKED for concurrent safety.
+  - **Exponential Backoff**: Failed heals retry with 2^attempts × 5min (capped at 24h).
+  - **Stale Lease Recovery**: On startup, expired leases are released back to 'pending' queue.
+  - **Event-Driven**: `queueBookForHealing()` triggers immediate heal on webhook failure.
+  - **Partial Index Fix**: Replaced NOW() in partial index predicate (PostgreSQL IMMUTABLE requirement) with status-based indexing.
 
 **Previous improvements (still active):**
 - **Circuit Breaker**: Persistent abusers (5 events in 1 hour) get 30-minute cooldown. Progressive warnings at 3/5 and 4/5.
