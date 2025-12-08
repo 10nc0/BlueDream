@@ -56,7 +56,8 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Multimodal Support**: Text (Groq Llama 3.3 70B), Photo (Groq Llama 4 Scout Vision), Audio (Groq Whisper), Documents (PDF, Excel, Word).
 - **Multi-File Upload**: Up to 10 attachments per query, mixed types supported (photo + doc + audio processed together).
 - **Input Methods**: Drag & drop, file picker, microphone, paste images - all support multiple files.
-- **Rate Limiting**: Per-IP 50 requests/hour; Groq Vision rate-limited per Groq's API quotas.
+- **Dynamic Capacity Sharing**: Adaptive rate limiting that distributes API quota among active IPs (180-min activity window). Pools: text 240/hr, vision 120/hr, brave 360/hr. When platform is quiet, each user gets more capacity; when busy, limits tighten fairly. Dev IPs (`RATE_LIMIT_EXEMPT_IPS`) bypass all limits.
+- **Abuse Prevention**: Per-IP burst throttling (>5 req/15s), duplicate prompt detection (60s block), gibberish entropy check.
 - **Query Classification**: Regex-based routing (DDG-first for "what is", Brave-first for "latest/2025", Groq-only for "calculate/solve").
 - **Factual Cache**: 24h TTL for simple facts, NEVER caches Nyan Protocol topics (H₀ compliance), 1000 entry LRU limit.
 - **Smart Retry**: Brave→DDG fallback, core-words DDG retry when all search fails, knowledge cutoff disclaimer when no search context.
@@ -75,6 +76,8 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth` (for local processing)
 
 ## Recent Changes (December 8, 2025)
+- **Dynamic Capacity Sharing**: Replaced fixed rate limits with adaptive per-IP capacity system. Global pools (text 240/hr, vision 120/hr, brave 360/hr) distribute evenly among active IPs in 180-min window. When quiet, users get more quota; when busy, limits tighten fairly. Dev IPs fully exempt.
+- **Abuse Prevention System**: Added burst throttling (>5 req/15s), duplicate prompt detection (60s block), and gibberish entropy filtering to prevent junk queries without burning global quota.
 - **Multi-File Upload**: Added support for up to 10 attachments per query. Mixed types (photo + document + audio) are processed together in parallel. Frontend displays attachment chips with individual remove buttons.
 - **Token Separation Complete**: Split Groq API tokens - `PLAYGROUND_GROQ_TOKEN` (text) + `PLAYGROUND_GROQ_VISION_TOKEN` (vision) to isolate rate limits and prevent vision from blocking text queries.
 - **Legacy Code Cleanup**: Removed deprecated HuggingFace Vision fallback code (never implemented), eliminated unused HF quota tracking system (~30 lines), simplifying codebase.
