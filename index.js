@@ -221,8 +221,8 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true })); // For Twilio webhooks
+app.use(bodyParser.json({ limit: '10mb' })); // Increased for image uploads
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' })); // For Twilio webhooks
 
 // PostgreSQL session store with explicit schema to prevent search_path pollution
 const pgSession = connectPg(session);
