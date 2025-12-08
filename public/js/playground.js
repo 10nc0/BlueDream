@@ -213,9 +213,8 @@ function handleUniversalFileSelect(e) {
 function clearAttachment() {
     currentAttachment = null;
     attachmentPreview.classList.remove('visible');
-    universalInput.value = '';
-    photoInput.value = '';
-    audioInput.value = '';
+    if (universalInput) universalInput.value = '';
+    if (audioInput) audioInput.value = '';
 }
 
 function showError(msg) {
