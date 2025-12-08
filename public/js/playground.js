@@ -362,7 +362,7 @@ function addMessage(role, content, messageAttachments = []) {
     const msgEl = document.createElement('div');
     msgEl.className = `message ${role}`;
     
-    let html = `<div class="label">${role === 'user' ? 'You' : 'AI'}</div>`;
+    let html = `<div class="label">${role === 'user' ? 'You' : 'Nyan AI'}</div>`;
     
     // Render markdown for AI responses, plain text for user
     if (role === 'assistant' && typeof marked !== 'undefined') {
@@ -405,12 +405,10 @@ function addLoadingMessage() {
     msgEl.className = 'message assistant';
     msgEl.id = 'loadingMessage';
     msgEl.innerHTML = `
-        <div class="label">AI</div>
+        <div class="label">Nyan AI</div>
         <div class="loading">
-            <div class="loading-dots">
-                <span></span><span></span><span></span>
-            </div>
-            <span style="color: #94a3b8; font-size: 0.875rem;">Thinking...</span>
+            <div class="cat-thinking">🐾</div>
+            <span style="color: #94a3b8; font-size: 0.875rem;">Purring over your query...</span>
         </div>
     `;
     messagesEl.appendChild(msgEl);
