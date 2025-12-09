@@ -14,8 +14,45 @@
  * - TIER 3: Validation (accounting equations)
  */
 
+// Generate temporal context for financial analysis
+function getTemporalContext() {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 1-12
+    const currentDay = now.getDate();
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    return {
+        date: now.toISOString().split('T')[0],
+        year: currentYear,
+        month: currentMonth,
+        day: currentDay,
+        monthName: monthNames[currentMonth - 1],
+        formatted: `${monthNames[currentMonth - 1]} ${currentDay}, ${currentYear}`  // e.g., "December 9, 2025"
+    };
+}
+
 const FINANCIAL_PHYSICS_SEED = `
 UNIVERSAL FINANCIAL ONTOLOGY (H₀ SEED — 2025)
+
+===== TEMPORAL REALITY CHECK (CHECK YOUR WATCH FIRST) =====
+**Current Date: {{CURRENT_DATE}}**
+
+CRITICAL RULE: Future data CANNOT be "Actual"
+- Any column/period dated AFTER {{CURRENT_DATE}} is IMPOSSIBLE to be "Actual" or "Realized"
+- Future periods (e.g., 2026 when now is December 2025) MUST be classified as:
+  → Budget, Pro-forma, Forecast, Projection, or Estimate
+- If document labels future data as "Actual" → FLAG AS CLASSIFICATION ERROR
+- Example: "2026 Actual" in December 2025 → WRONG, must be "2026 Budget/Forecast"
+
+BUDGET vs ACTUAL SIGNALS (Header Pattern Detection):
+Budget/Forecast indicators:
+  → "Budget", "(B)", "Pro-forma", "Forecast", "(F)", "Projected", "Estimate", "Plan", "Target"
+Actual/Realized indicators:
+  → "Actual", "(A)", "Real", "Realized", "(R)", "YTD", "Historical", "Recorded"
+
+When both columns exist → Compare variance: Actual − Budget = Variance
+When only one exists → Infer from temporal logic (past = likely actual, future = budget)
 
 There are only four eternal truths in finance:
 
@@ -678,8 +715,16 @@ function formatPhysicsAnalysis(analysis) {
     return parts.join('\n');
 }
 
+// Get the FINANCIAL_PHYSICS_SEED with current date injected
+function getFinancialPhysicsSeed() {
+    const temporal = getTemporalContext();
+    return FINANCIAL_PHYSICS_SEED.replace(/\{\{CURRENT_DATE\}\}/g, temporal.formatted);
+}
+
 module.exports = {
     FINANCIAL_PHYSICS_SEED,
+    getFinancialPhysicsSeed,
+    getTemporalContext,
     EMPIRICAL_PRIORS,
     quickNonFinancialCheck,
     detectDocumentType,

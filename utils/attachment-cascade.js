@@ -4,7 +4,7 @@ const mammoth = require('mammoth');
 const crypto = require('crypto');
 const axios = require('axios');
 const querystring = require('querystring');
-const { analyzeFinancialDocument, formatPhysicsAnalysis, FINANCIAL_PHYSICS_SEED, quickNonFinancialCheck } = require('./financial-physics');
+const { analyzeFinancialDocument, formatPhysicsAnalysis, getFinancialPhysicsSeed, quickNonFinancialCheck } = require('./financial-physics');
 
 // ===== INTELLIGENT CHUNKING (GroundX-inspired) =====
 // Splits text by sections without cutting mid-table or mid-paragraph
@@ -2175,7 +2175,7 @@ module.exports = {
     selectExtractionPipeline,
     executeExtractionCascade,
     formatJSONForGroq,
-    FINANCIAL_PHYSICS_SEED,
+    getFinancialPhysicsSeed,
     // New functions for multi-doc corporate support
     intelligentChunking,
     buildMultiDocContext

@@ -27,7 +27,7 @@ const MetadataExtractor = require('./metadata-extractor');
 const genesisCounter = require('./server/genesis-counter');
 const Prometheus = require('./prometheus');
 const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document-parser');
-const { identifyFileType, executeExtractionCascade, formatJSONForGroq, FINANCIAL_PHYSICS_SEED, intelligentChunking, buildMultiDocContext } = require('./utils/attachment-cascade');
+const { identifyFileType, executeExtractionCascade, formatJSONForGroq, getFinancialPhysicsSeed, intelligentChunking, buildMultiDocContext } = require('./utils/attachment-cascade');
 const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('./prompts/nyan-protocol');
@@ -7006,9 +7006,10 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         // Build messages array: system prompts + conversation context + current message
         // For financial documents (Excel or PDF): inject FINANCIAL_PHYSICS_SEED FIRST
         // This teaches AI to see flows (+/−), not labels
+        // getFinancialPhysicsSeed() injects current date for temporal reality checks
         const systemMessages = hasFinancialDoc
             ? [
-                { role: 'system', content: FINANCIAL_PHYSICS_SEED },
+                { role: 'system', content: getFinancialPhysicsSeed() },
                 { role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT }
               ]
             : [
