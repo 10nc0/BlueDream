@@ -14,6 +14,43 @@
  * - TIER 3: Validation (accounting equations)
  */
 
+// ===== SHARED HELPER: Recursively extract all string values from nested structures =====
+function flattenToStrings(obj) {
+    if (obj == null) return [];
+    if (typeof obj === 'string') return [obj];
+    if (typeof obj === 'number') return [String(obj)];
+    if (Array.isArray(obj)) return obj.flatMap(flattenToStrings);
+    if (typeof obj === 'object') {
+        if (obj.value !== undefined) return flattenToStrings(obj.value);
+        if (obj.text !== undefined) return flattenToStrings(obj.text);
+        if (obj.displayValue !== undefined) return flattenToStrings(obj.displayValue);
+        return Object.values(obj).flatMap(flattenToStrings);
+    }
+    return [String(obj)];
+}
+
+// ===== CURRENCY DETECTION =====
+function detectCurrency(extractedData) {
+    let text = extractedData.text || '';
+    if (!text && extractedData.tables) {
+        const tables = extractedData.tables || extractedData.sheets || [];
+        text = flattenToStrings(tables.flatMap(t => t.rows || t.data || [])).join(' ');
+    }
+    
+    // Indonesian Rupiah
+    if (/(rp\s*[\d.,]|idr|rupiah|juta|miliar|triliun)/i.test(text)) return 'Rp';
+    // Chinese Yuan (check before Japanese to prioritize CNY markers)
+    if (/(cny|rmb|元|万元|亿元|¥\s*[\d.,])/i.test(text)) return '¥';
+    // Japanese Yen
+    if (/(jpy|円|万円|億円|￥)/i.test(text)) return '¥';
+    // Euro
+    if (/(eur|€)/i.test(text)) return '€';
+    // US Dollar (check last to avoid false positives)
+    if (/(usd|\$\s*[\d.,])/i.test(text)) return '$';
+    
+    return 'LCU'; // Local Currency Units (default)
+}
+
 // Generate temporal context for financial analysis
 function getTemporalContext() {
     const now = new Date();
@@ -157,22 +194,6 @@ Begin.
 
 // ===== 5-LINE GUARD: Skip obvious non-financial data =====
 function quickNonFinancialCheck(extractedData) {
-    // Recursively extract all string values from any nested structure
-    function flattenToStrings(obj) {
-        if (obj == null) return [];
-        if (typeof obj === 'string') return [obj];
-        if (typeof obj === 'number') return [String(obj)];
-        if (Array.isArray(obj)) return obj.flatMap(flattenToStrings);
-        if (typeof obj === 'object') {
-            // Check for common cell value properties
-            if (obj.value !== undefined) return flattenToStrings(obj.value);
-            if (obj.text !== undefined) return flattenToStrings(obj.text);
-            if (obj.displayValue !== undefined) return flattenToStrings(obj.displayValue);
-            return Object.values(obj).flatMap(flattenToStrings);
-        }
-        return [String(obj)];
-    }
-    
     let text = extractedData.text || '';
     if (!text && extractedData.tables) {
         const tables = extractedData.tables || extractedData.sheets || [];
@@ -194,21 +215,6 @@ function quickNonFinancialCheck(extractedData) {
 
 // ===== 15-LINE DOCUMENT TYPE DETECTOR =====
 function detectDocumentType(extractedData) {
-    // Reuse flattenToStrings from guard
-    function flattenToStrings(obj) {
-        if (obj == null) return [];
-        if (typeof obj === 'string') return [obj];
-        if (typeof obj === 'number') return [String(obj)];
-        if (Array.isArray(obj)) return obj.flatMap(flattenToStrings);
-        if (typeof obj === 'object') {
-            if (obj.value !== undefined) return flattenToStrings(obj.value);
-            if (obj.text !== undefined) return flattenToStrings(obj.text);
-            if (obj.displayValue !== undefined) return flattenToStrings(obj.displayValue);
-            return Object.values(obj).flatMap(flattenToStrings);
-        }
-        return [String(obj)];
-    }
-    
     let text = extractedData.text || '';
     if (!text && extractedData.tables) {
         const tables = extractedData.tables || extractedData.sheets || [];
@@ -646,30 +652,42 @@ async function analyzeFinancialDocument(extractedData) {
         allRows = parseTextToRows(extractedData.text);
     }
     
+    // Detect currency from document context
+    const currency = detectCurrency(extractedData);
+    console.log(`💰 Currency detected: ${currency}`);
+    
     // TIER 1: Classify each row by nature (+Income, −Cost, =Profit)
     console.log('🔬 TIER 1: Classifying rows by financial nature...\n');
     const classifiedRows = [];
+    let lowConfidenceCount = 0;
     
     allRows.forEach((row, index) => {
         const classification = classifyRowNature(row, index, allRows.length, docClassification.type);
         
-        if (classification.nature !== 'unknown' && classification.confidence > 0.3) {
-            classifiedRows.push(classification);
+        if (classification.nature !== 'unknown') {
+            if (classification.confidence > 0.6) {
+                classifiedRows.push(classification);
+            } else if (classification.confidence > 0.3) {
+                classifiedRows.push(classification);
+                lowConfidenceCount++;
+            }
         }
     });
     
-    console.log(`✅ Classified ${classifiedRows.length} rows with confidence > 30%\n`);
+    console.log(`✅ Classified ${classifiedRows.length} rows (${lowConfidenceCount} with low confidence 30-60%)\n`);
     
     // TIER 3: Validate physics (Income - Cost = Profit)
     const validation = validateFinancialPhysics(classifiedRows, docClassification.type);
     
     return {
         documentType: docClassification,
+        currency,
         classifications: classifiedRows,
         validation,
         summary: {
             totalRows: allRows.length,
             classifiedRows: classifiedRows.length,
+            lowConfidenceRows: lowConfidenceCount,
             incomeRows: classifiedRows.filter(r => r.nature === 'income').length,
             costRows: classifiedRows.filter(r => r.nature === 'cost').length,
             profitRows: classifiedRows.filter(r => r.nature === 'profit').length
@@ -681,11 +699,16 @@ async function analyzeFinancialDocument(extractedData) {
 function formatPhysicsAnalysis(analysis) {
     if (!analysis || !analysis.documentType) return '';
     
+    const currency = analysis.currency || 'LCU';
     const parts = ['=== FINANCIAL PHYSICS ANALYSIS ==='];
     parts.push(`Document Type: ${analysis.documentType.type} (${(analysis.documentType.confidence * 100).toFixed(0)}% confidence)`);
+    parts.push(`Currency: ${currency}`);
     
     if (analysis.summary) {
         parts.push(`\nClassified: ${analysis.summary.classifiedRows}/${analysis.summary.totalRows} rows`);
+        if (analysis.summary.lowConfidenceRows > 0) {
+            parts.push(`  ⚠️ Low confidence (30-60%): ${analysis.summary.lowConfidenceRows} rows`);
+        }
         parts.push(`  +Income rows: ${analysis.summary.incomeRows}`);
         parts.push(`  −Cost rows: ${analysis.summary.costRows}`);
         parts.push(`  =Profit rows: ${analysis.summary.profitRows}`);
@@ -693,10 +716,10 @@ function formatPhysicsAnalysis(analysis) {
     
     if (analysis.validation && analysis.documentType.type === 'income_statement') {
         parts.push(`\nPhysics Validation: ${analysis.validation.valid ? 'PASS ✓' : 'FAIL ✗'}`);
-        parts.push(`  Total Income: ${analysis.validation.income?.toLocaleString() || 0}`);
-        parts.push(`  Total Cost: ${analysis.validation.cost?.toLocaleString() || 0}`);
-        parts.push(`  Stated Profit: ${analysis.validation.profit?.toLocaleString() || 0}`);
-        parts.push(`  Calculated: ${analysis.validation.calculated_profit?.toLocaleString() || 0}`);
+        parts.push(`  Total Income: ${currency} ${analysis.validation.income?.toLocaleString() || 0}`);
+        parts.push(`  Total Cost: ${currency} ${analysis.validation.cost?.toLocaleString() || 0}`);
+        parts.push(`  Stated Profit: ${currency} ${analysis.validation.profit?.toLocaleString() || 0}`);
+        parts.push(`  Calculated: ${currency} ${analysis.validation.calculated_profit?.toLocaleString() || 0}`);
         parts.push(`  Variance: ${analysis.validation.variance_pct?.toFixed(2) || 0}%`);
     }
     
@@ -708,7 +731,7 @@ function formatPhysicsAnalysis(analysis) {
         
         top10.forEach(c => {
             const symbol = c.nature === 'income' ? '+' : c.nature === 'cost' ? '−' : '=';
-            parts.push(`  ${symbol} ${c.label}: ${c.value.toLocaleString()} (${(c.confidence * 100).toFixed(0)}%)`);
+            parts.push(`  ${symbol} ${c.label}: ${currency} ${c.value.toLocaleString()} (${(c.confidence * 100).toFixed(0)}%)`);
         });
     }
     
@@ -725,6 +748,7 @@ module.exports = {
     FINANCIAL_PHYSICS_SEED,
     getFinancialPhysicsSeed,
     getTemporalContext,
+    detectCurrency,
     EMPIRICAL_PRIORS,
     quickNonFinancialCheck,
     detectDocumentType,
