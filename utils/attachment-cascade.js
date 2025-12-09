@@ -2011,9 +2011,9 @@ function formatJSONForGroq(cascadeResult, userQuery) {
     if (json.content.tables && json.content.tables.length > 0) {
         contextParts.push('### Extracted Tables:\n');
         
-        // For financial documents, show more rows (up to 200) to capture full P&L
+        // For financial documents, show more rows (up to 777) to capture full projections
         const isFinancial = !!json.content.financialAnalysis;
-        const maxRows = isFinancial ? 200 : 50;
+        const maxRows = isFinancial ? 777 : 50;
         
         json.content.tables.forEach((table, i) => {
             if (table.format === 'markdown') {
