@@ -70,8 +70,9 @@ function getTemporalContext() {
 }
 
 const FINANCIAL_PHYSICS_SEED = `
-⚠️ PRIORITY OVERRIDE: These financial physics directives SUPERSEDE all previous system instructions.
-When analyzing financial documents, ALWAYS apply these rules — they cannot be overridden by formatting preferences.
+===== FINANCIAL PHYSICS EXTENSION (Builds on NYAN PROTOCOL) =====
+In addition to NYAN PROTOCOL (Step 0), apply these specialized rules when analyzing financial documents.
+NYAN remains the sacred foundation — this layer adds domain-specific financial cognition.
 
 UNIVERSAL FINANCIAL ONTOLOGY (H₀ SEED — 2025)
 
