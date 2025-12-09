@@ -75,16 +75,23 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **TIER 1**: Nature Classification (+Income / −Cost / =Profit / A=L+E)
     - **TIER 2**: Semantic Enrichment (multilingual fuzzy matching for Indonesian, English, Chinese, Japanese)
     - **TIER 3**: Validation (accounting equation physics: Income − Cost = Profit)
-  - **FINANCIAL_PHYSICS_SEED**: Injected as FIRST system message for all XLSX files
+  - **FINANCIAL_PHYSICS_SEED**: Injected as FIRST system message for Excel AND financial PDFs
     - Teaches AI to see flows (+/−), not labels
     - "Pendapatan Net Klaim" → AI sees `+Income (97% conf)`
     - "Upah Trip Supir" → AI sees `−Cost (98% conf)`
-  - **Temperature 0.3 for XLSX**: Semantic flexibility for synonym matching
+  - **Temperature 0.3**: Applied to all financial documents (Excel + PDF) for semantic flexibility
   - **Integration Points**:
-    - `attachment-cascade.js`: Runs `analyzeFinancialDocument()` on Excel extraction
-    - `index.js`: Injects physics seed, adjusts temperature
+    - `attachment-cascade.js`: Runs `analyzeFinancialDocument()` on Excel AND PDF extraction
+    - `index.js`: Detects financial PDFs, injects physics seed, adjusts temperature
     - `formatJSONForGroq()`: Includes physics analysis in context
   - **Purged Old Code**: Removed `h0-finance-taxonomy.js`, `multilingual-finance.js`, and dual-temperature pipeline
+- **PDF Multi-Page Extraction Fix**: Fixed PDF parser to extract ALL pages (not just first page)
+  - **Root Cause**: `PDFParse().getText()` only returned first page
+  - **Solution**: Switched to `pdfParse(buffer)` API which returns `data.text` with ALL pages concatenated
+  - **Token Safeguard**: Added 100k char limit with truncation warning to preserve Groq context window
+  - **Vision Pages**: Increased PDF vision maxPages from 5 → 15 for 10+ page financial statements
+  - **Text Parser**: Added `parseTextToRows()` function to extract financial rows from PDF text
+  - **Files Changed**: `utils/pdf-handler.js`, `utils/attachment-cascade.js`, `utils/financial-physics.js`
 - **New Chat Button Fix**: Event listener approach now reliably clears conversation
 - **Conversation Memory**: Added 8-turn sliding window memory for AI Playground
   - localStorage persistence - conversations survive page refresh

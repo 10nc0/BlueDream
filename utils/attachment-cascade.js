@@ -1187,10 +1187,29 @@ async function executeTool(toolName, buffer, fileName, options) {
 
 async function extractPDFText(buffer, fileName) {
     try {
-        const { PDFParse, VerbosityLevel } = require('pdf-parse');
-        const parser = new PDFParse({ data: buffer, verbosity: VerbosityLevel.ERRORS });
-        const data = await parser.getText();
-        return { success: true, data: { text: data.text || '' } };
+        // Use hybrid parser which extracts ALL pages (not just first page)
+        const result = await parsePDFHybrid(buffer, fileName);
+        
+        const pdfData = {
+            text: result.text || '',
+            pageCount: result.pageCount || 1,
+            truncated: result.truncated || false
+        };
+        
+        // Run Financial Physics analysis on PDF text for financial documents
+        if (pdfData.text.length > 100) {
+            try {
+                const financialAnalysis = await analyzeFinancialDocument({ text: pdfData.text });
+                if (financialAnalysis && financialAnalysis.documentType?.type !== 'unknown') {
+                    pdfData.financialAnalysis = financialAnalysis;
+                    console.log(`📊 PDF Financial Physics: ${financialAnalysis.documentType.type} detected (${financialAnalysis.classifications?.length || 0} items classified)`);
+                }
+            } catch (finErr) {
+                console.log(`⚠️ PDF Financial Physics skipped: ${finErr.message}`);
+            }
+        }
+        
+        return { success: true, data: pdfData };
     } catch (error) {
         return { success: false, error: error.message };
     }

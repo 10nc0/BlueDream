@@ -6893,12 +6893,18 @@ app.post('/api/playground', async (req, res) => {
             }
         }
         
-        // ===== FINANCIAL PHYSICS: Detect XLSX for seed injection =====
+        // ===== FINANCIAL PHYSICS: Detect financial documents for seed injection =====
         // Revolutionary financial cognition: observe flows (+/−), not labels
-        // Inject FINANCIAL_PHYSICS_SEED as FIRST system message for XLSX files
+        // Inject FINANCIAL_PHYSICS_SEED for Excel OR PDFs with detected financial content
         const hasExcelDoc = docList.some(d => d.name?.match(/\.(xlsx|xls)$/i));
-        if (hasExcelDoc) {
-            console.log('🧠 Financial Physics: Excel detected - will inject physics seed');
+        const hasFinancialPDF = docList.some(d => 
+            d.name?.match(/\.pdf$/i) && 
+            d.extracted?.financialAnalysis?.documentType?.type !== 'unknown' &&
+            d.extracted?.financialAnalysis?.documentType?.confidence > 0.5
+        );
+        const hasFinancialDoc = hasExcelDoc || hasFinancialPDF;
+        if (hasFinancialDoc) {
+            console.log(`🧠 Financial Physics: ${hasExcelDoc ? 'Excel' : 'Financial PDF'} detected - will inject physics seed`);
         }
         
         // Final reasoning via Groq Llama 3.3 70B
@@ -6972,9 +6978,9 @@ app.post('/api/playground', async (req, res) => {
         }
         
         // Build messages array: system prompts + conversation context + current message
-        // For XLSX files: inject FINANCIAL_PHYSICS_SEED FIRST (before NYAN_PROTOCOL)
+        // For financial documents (Excel or PDF): inject FINANCIAL_PHYSICS_SEED FIRST
         // This teaches AI to see flows (+/−), not labels
-        const systemMessages = hasExcelDoc
+        const systemMessages = hasFinancialDoc
             ? [
                 { role: 'system', content: FINANCIAL_PHYSICS_SEED },
                 { role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT }
@@ -6992,9 +6998,9 @@ app.post('/api/playground', async (req, res) => {
             }
         ];
         
-        // Temperature 0.3 for XLSX (semantic flexibility for synonym matching)
+        // Temperature 0.3 for financial documents (semantic flexibility for synonym matching)
         // Temperature 0.15 for everything else (H₀ factual accuracy)
-        const temperature = hasExcelDoc ? 0.3 : 0.15;
+        const temperature = hasFinancialDoc ? 0.3 : 0.15;
         
         const groqResponse = await groqWithRetry({
             url: 'https://api.groq.com/openai/v1/chat/completions',

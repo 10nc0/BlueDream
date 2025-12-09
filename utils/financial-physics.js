@@ -524,12 +524,20 @@ const EMPIRICAL_PRIORS = {
 async function identifyDocumentType(extractedData) {
     console.log('🔍 TIER 0: Identifying financial document type...');
     
+    // Handle both structured tables (Excel) and raw text (PDF)
     const tables = extractedData.tables || extractedData.sheets || [];
-    const allText = tables
-        .flatMap(t => t.rows || t.data || [])
-        .flatMap(r => Array.isArray(r) ? r : Object.values(r))
-        .join(' ')
-        .toLowerCase();
+    let allText = '';
+    
+    if (tables.length > 0) {
+        allText = tables
+            .flatMap(t => t.rows || t.data || [])
+            .flatMap(r => Array.isArray(r) ? r : Object.values(r))
+            .join(' ')
+            .toLowerCase();
+    } else if (extractedData.text) {
+        allText = extractedData.text.toLowerCase();
+        console.log(`📝 TIER 0: Analyzing ${allText.length} chars of PDF text`);
+    }
     
     const scores = {};
     
@@ -698,6 +706,98 @@ function validateFinancialPhysics(classifiedRows, docType) {
     };
 }
 
+function parseTextToRows(text) {
+    const rows = [];
+    const lines = text.split('\n');
+    
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.length < 3) continue;
+        
+        const numMatch = trimmed.match(/^(.+?)\s+([\d,.()[\]-]+(?:\s*[\d,.()[\]-]+)*)$/);
+        if (numMatch) {
+            const label = numMatch[1].trim();
+            const rawValue = numMatch[2];
+            
+            // Detect negative markers: (1,200) or [1,200] or -1,200
+            const isNegative = /^\(.*\)$/.test(rawValue.trim()) || 
+                              /^\[.*\]$/.test(rawValue.trim()) ||
+                              rawValue.includes('-');
+            
+            // Remove parentheses, brackets, dashes, spaces AND commas (thousand separators)
+            // Keep periods only if they're decimal points (last occurrence with 1-2 digits after)
+            let valueStr = rawValue.replace(/[(),[\]\s-]/g, '');
+            // Handle thousand separators: remove commas, treat dots as thousands unless decimal
+            if (valueStr.includes(',') && valueStr.includes('.')) {
+                // European: 1.234.567,89 or US: 1,234,567.89
+                if (valueStr.lastIndexOf(',') > valueStr.lastIndexOf('.')) {
+                    // European format: dots are thousands, comma is decimal
+                    valueStr = valueStr.replace(/\./g, '').replace(',', '.');
+                } else {
+                    // US format: commas are thousands, dot is decimal
+                    valueStr = valueStr.replace(/,/g, '');
+                }
+            } else if (valueStr.includes(',')) {
+                // Only commas: could be European decimal or US thousands
+                const parts = valueStr.split(',');
+                if (parts.length === 2 && parts[1].length <= 2) {
+                    // European decimal: 1234,56
+                    valueStr = valueStr.replace(',', '.');
+                } else {
+                    // US thousands: 1,234,567
+                    valueStr = valueStr.replace(/,/g, '');
+                }
+            } else if (valueStr.includes('.')) {
+                // Only dots: could be decimal or thousands
+                const parts = valueStr.split('.');
+                if (parts.length > 2 || (parts.length === 2 && parts[1].length > 2)) {
+                    // Thousands separator: 1.234.567
+                    valueStr = valueStr.replace(/\./g, '');
+                }
+                // else keep as decimal
+            }
+            let value = parseFloat(valueStr) || 0;
+            
+            // Apply negative sign for costs in parentheses
+            if (isNegative && value > 0) {
+                value = -value;
+            }
+            
+            if (value !== 0 && label.length > 2) {
+                rows.push([label, value]);
+            }
+        } else {
+            // Fallback: find any numbers in the line
+            const numbers = trimmed.match(/[\d,.()-]+/g) || [];
+            if (numbers.length > 0) {
+                const label = trimmed.replace(/[\d,.()-]+/g, '').trim();
+                const lastNum = numbers[numbers.length - 1];
+                
+                const isNegative = /^\(.*\)$/.test(lastNum.trim()) || lastNum.includes('-');
+                // Remove all thousand separators (commas and dots used as thousands)
+                let cleanNum = lastNum.replace(/[(),\s-]/g, '');
+                // If multiple dots or dots followed by 3+ digits, treat as thousands
+                if ((cleanNum.match(/\./g) || []).length > 1) {
+                    cleanNum = cleanNum.replace(/\./g, '');
+                }
+                cleanNum = cleanNum.replace(/,/g, '');
+                let value = parseFloat(cleanNum) || 0;
+                
+                if (isNegative && value > 0) {
+                    value = -value;
+                }
+                
+                if (value !== 0 && label.length > 2) {
+                    rows.push([label, value]);
+                }
+            }
+        }
+    }
+    
+    console.log(`📝 Text Parser: Extracted ${rows.length} potential financial rows from text`);
+    return rows;
+}
+
 async function analyzeFinancialDocument(extractedData) {
     console.log('🧠 FINANCIAL PHYSICS ENGINE: Starting analysis...\n');
     
@@ -707,8 +807,15 @@ async function analyzeFinancialDocument(extractedData) {
     
     console.log('🔬 TIER 1: Classifying rows by financial nature...\n');
     
+    // Handle both structured tables (Excel) and raw text (PDF)
+    let allRows = [];
     const tables = extractedData.tables || extractedData.sheets || [];
-    const allRows = tables.flatMap(table => table.rows || table.data || []);
+    
+    if (tables.length > 0) {
+        allRows = tables.flatMap(table => table.rows || table.data || []);
+    } else if (extractedData.text) {
+        allRows = parseTextToRows(extractedData.text);
+    }
     const classifiedRows = [];
     
     allRows.forEach((row, index) => {

@@ -33,17 +33,34 @@ async function parsePDFHybrid(buffer, fileName) {
         tables: [], 
         charts: [],
         hasStructuredData: false,
-        extractionMethod: 'text'
+        extractionMethod: 'text',
+        pageCount: 0,
+        truncated: false
     };
     
     console.log(`📄 Hybrid PDF parser: Processing ${fileName}`);
     
+    // Token limit safeguard: ~100k chars ≈ 25k tokens (safe for Groq context)
+    const MAX_TEXT_CHARS = 100000;
+    
     try {
-        const { PDFParse, VerbosityLevel } = require('pdf-parse');
-        const parser = new PDFParse({ data: buffer, verbosity: VerbosityLevel.ERRORS });
-        const data = await parser.getText();
-        result.text = data.text || '';
-        console.log(`📄 Text extraction: ${result.text.length} chars`);
+        // Use standard pdfParse(buffer) API - extracts ALL pages automatically
+        const pdfParse = require('pdf-parse');
+        const data = await pdfParse(buffer);
+        
+        result.pageCount = data.numpages || 1;
+        let fullText = data.text || '';
+        
+        console.log(`📄 Text extraction: ${fullText.length} chars from ${result.pageCount} pages`);
+        
+        // Truncate if exceeds token limit (preserve Groq context window)
+        if (fullText.length > MAX_TEXT_CHARS) {
+            result.text = fullText.substring(0, MAX_TEXT_CHARS);
+            result.truncated = true;
+            console.log(`⚠️ PDF truncated: ${fullText.length} → ${MAX_TEXT_CHARS} chars (${result.pageCount} pages)`);
+        } else {
+            result.text = fullText;
+        }
     } catch (textError) {
         console.log(`⚠️ Text extraction failed: ${textError.message}`);
     }
@@ -348,7 +365,8 @@ async function analyzePDFVisualContent(buffer, fileName, options = {}) {
         return { success: false, error: 'Vision token not configured', visualContent: [] };
     }
     
-    const maxPages = options.maxPages || 5;
+    // Increased from 5 to 15 for multi-page financial statements (3 statements × 3-5 pages each)
+    const maxPages = options.maxPages || 15;
     const result = {
         success: false,
         visualContent: [],
