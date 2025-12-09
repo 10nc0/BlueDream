@@ -14,6 +14,7 @@ const MAX_HISTORY_TURNS = 8;  // 8 turns = 16 messages (user + assistant)
 let attachments = [];
 let isProcessing = false;
 let conversationHistory = [];
+let cachedFileHashes = [];  // Store file hashes for follow-up queries (session-scoped)
 let mediaRecorder = null;
 let shouldSkipHydration = false;  // Flag to prevent auto-hydration after manual clear
 
@@ -738,6 +739,12 @@ async function sendMessage() {
         addUncompressedAttachments(payload, savedAttachments);
     }
     
+    // Include cached file hashes for follow-up queries (no need to re-upload)
+    if (savedAttachments.length === 0 && cachedFileHashes.length > 0) {
+        payload.cachedFileHashes = cachedFileHashes;
+        console.log(`📂 Sending ${cachedFileHashes.length} cached file hash(es) for follow-up`);
+    }
+    
     try {
         const res = await fetch('/api/playground', {
             method: 'POST',
@@ -757,6 +764,12 @@ async function sendMessage() {
             addMessage('assistant', reply);
             conversationHistory.push({ role: 'assistant', content: reply });
             saveConversationHistory();  // Persist to localStorage
+            
+            // Store file hashes for follow-up queries (session-scoped attachment retention)
+            if (data.cachedFileHashes && data.cachedFileHashes.length > 0) {
+                cachedFileHashes = data.cachedFileHashes;
+                console.log(`📂 Stored ${cachedFileHashes.length} file hash(es) for follow-up queries`);
+            }
         }
         
         // Enrich history payload with attachment metadata for next turn
@@ -792,9 +805,10 @@ function clearNyanHistory() {
     // Set flag to prevent auto-hydration
     shouldSkipHydration = true;
     
-    // Clear in-memory array
+    // Clear in-memory arrays
     conversationHistory = [];
     attachments = [];
+    cachedFileHashes = [];  // Clear cached file hashes too
     
     // Clear localStorage completely
     try {

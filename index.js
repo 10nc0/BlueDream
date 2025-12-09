@@ -6265,13 +6265,22 @@ setInterval(() => {
     }
 }, 60 * 60 * 1000);
 
-// ===== DOCUMENT CONTEXT CACHE (3-upload threshold) =====
+// ===== DOCUMENT CONTEXT CACHE (Two-Tier: Session + Global) =====
 // Cache expensive document parsing/analysis, NOT the AI response
 // AI output stays fresh; only the extracted context is cached
-const documentContextCache = new Map();    // fileHash -> { extractedData, financialAnalysis, timestamp }
-const documentUploadCounter = new Map();   // fileHash -> upload count
-const DOC_CACHE_TTL = 2 * 60 * 60 * 1000;  // 2 hours (documents change less often)
-const DOC_CACHE_THRESHOLD = 3;              // Only cache after 3 identical uploads
+//
+// SESSION CACHE: Immediate caching per IP (30min TTL) - for follow-up queries
+// GLOBAL CACHE: 3-upload threshold (2h TTL) - for cross-session reuse
+
+// Session cache: IP:fileHash -> context (immediate, 30min TTL)
+const sessionDocumentCache = new Map();
+const SESSION_DOC_TTL = 30 * 60 * 1000;  // 30 minutes of inactivity
+
+// Global cache: fileHash -> context (3-upload threshold, 2h TTL)
+const globalDocumentCache = new Map();
+const documentUploadCounter = new Map();
+const GLOBAL_DOC_TTL = 2 * 60 * 60 * 1000;  // 2 hours
+const GLOBAL_CACHE_THRESHOLD = 3;            // Only global-cache after 3 uploads
 
 function getDocumentHash(docData, docName) {
     // Use SHA-256 of full raw data + filename for collision-free hashing
@@ -6283,6 +6292,10 @@ function getDocumentHash(docData, docName) {
     return hash; // 64-char hex string, unique per document
 }
 
+function getSessionCacheKey(clientIp, fileHash) {
+    return `${clientIp}:${fileHash}`;
+}
+
 function incrementDocumentUpload(fileHash) {
     const current = documentUploadCounter.get(fileHash) || 0;
     const newCount = current + 1;
@@ -6290,58 +6303,111 @@ function incrementDocumentUpload(fileHash) {
     return newCount;
 }
 
-function getCachedDocumentContext(fileHash) {
-    const cached = documentContextCache.get(fileHash);
-    if (cached && Date.now() - cached.timestamp < DOC_CACHE_TTL) {
-        console.log(`📂 Document Cache HIT: "${fileHash.substring(0, 30)}..." (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
-        return cached;
+// Get cached context: check session first, then global
+function getCachedDocumentContext(fileHash, clientIp) {
+    const now = Date.now();
+    
+    // 1. Check session cache first (IP-specific, immediate)
+    if (clientIp) {
+        const sessionKey = getSessionCacheKey(clientIp, fileHash);
+        const sessionCached = sessionDocumentCache.get(sessionKey);
+        if (sessionCached && now - sessionCached.timestamp < SESSION_DOC_TTL) {
+            // Refresh timestamp on access (sliding window)
+            sessionCached.timestamp = now;
+            console.log(`📂 Session Cache HIT: "${fileHash.substring(0, 16)}..." for ${clientIp}`);
+            return sessionCached;
+        }
+        if (sessionCached) {
+            sessionDocumentCache.delete(sessionKey);
+        }
     }
-    if (cached) {
-        // Expired
-        documentContextCache.delete(fileHash);
+    
+    // 2. Check global cache (cross-session, 3-upload threshold)
+    const globalCached = globalDocumentCache.get(fileHash);
+    if (globalCached && now - globalCached.timestamp < GLOBAL_DOC_TTL) {
+        console.log(`📂 Global Cache HIT: "${fileHash.substring(0, 16)}..." (age: ${Math.round((now - globalCached.timestamp) / 60000)}min)`);
+        return globalCached;
+    }
+    if (globalCached) {
+        globalDocumentCache.delete(fileHash);
         documentUploadCounter.delete(fileHash);
     }
+    
     return null;
 }
 
-function setCachedDocumentContext(fileHash, context) {
+// Set cached context: always session (immediate), try global (3-upload threshold)
+function setCachedDocumentContext(fileHash, context, clientIp) {
+    const now = Date.now();
+    
+    // 1. Always cache in session (immediate, per-IP)
+    if (clientIp) {
+        const sessionKey = getSessionCacheKey(clientIp, fileHash);
+        sessionDocumentCache.set(sessionKey, {
+            ...context,
+            timestamp: now,
+            fileHash // Store hash for reference
+        });
+        console.log(`📂 Session Cache SET: "${fileHash.substring(0, 16)}..." for ${clientIp}`);
+        
+        // LRU eviction: max 500 session entries
+        while (sessionDocumentCache.size > 500) {
+            const oldestKey = sessionDocumentCache.keys().next().value;
+            sessionDocumentCache.delete(oldestKey);
+        }
+    }
+    
+    // 2. Try global cache (respects 3-upload threshold)
     const uploadCount = documentUploadCounter.get(fileHash) || 0;
-    if (uploadCount < DOC_CACHE_THRESHOLD) {
-        console.log(`📂 Document Cache SKIP: "${fileHash.substring(0, 30)}..." (${uploadCount}/${DOC_CACHE_THRESHOLD} uploads)`);
-        return false;
+    if (uploadCount >= GLOBAL_CACHE_THRESHOLD) {
+        globalDocumentCache.set(fileHash, {
+            ...context,
+            timestamp: now
+        });
+        console.log(`📂 Global Cache SET: "${fileHash.substring(0, 16)}..." (${uploadCount} uploads)`);
+        
+        // LRU eviction: max 100 global entries
+        while (globalDocumentCache.size > 100) {
+            const oldestKey = globalDocumentCache.keys().next().value;
+            globalDocumentCache.delete(oldestKey);
+            documentUploadCounter.delete(oldestKey);
+        }
     }
     
-    documentContextCache.set(fileHash, {
-        ...context,
-        timestamp: Date.now()
-    });
-    console.log(`📂 Document Cache SET: "${fileHash.substring(0, 30)}..." (cache size: ${documentContextCache.size})`);
-    
-    // LRU eviction: max 100 document contexts
-    while (documentContextCache.size > 100) {
-        const oldestKey = documentContextCache.keys().next().value;
-        documentContextCache.delete(oldestKey);
-        documentUploadCounter.delete(oldestKey);
-        console.log(`📂 Document Cache evicted oldest entry (limit: 100)`);
-    }
     return true;
 }
 
-// Clean up expired document cache entries every 30 minutes
+// Get cached context by hash only (for follow-up queries with cached file reference)
+function getCachedDocumentByHash(fileHash, clientIp) {
+    return getCachedDocumentContext(fileHash, clientIp);
+}
+
+// Clean up expired cache entries
 setInterval(() => {
     const now = Date.now();
-    let evicted = 0;
-    for (const [key, value] of documentContextCache.entries()) {
-        if (now - value.timestamp > DOC_CACHE_TTL) {
-            documentContextCache.delete(key);
-            documentUploadCounter.delete(key);
-            evicted++;
+    let sessionEvicted = 0, globalEvicted = 0;
+    
+    // Clean session cache
+    for (const [key, value] of sessionDocumentCache.entries()) {
+        if (now - value.timestamp > SESSION_DOC_TTL) {
+            sessionDocumentCache.delete(key);
+            sessionEvicted++;
         }
     }
-    if (evicted > 0) {
-        console.log(`📂 Document Cache cleanup: evicted ${evicted} expired entries`);
+    
+    // Clean global cache
+    for (const [key, value] of globalDocumentCache.entries()) {
+        if (now - value.timestamp > GLOBAL_DOC_TTL) {
+            globalDocumentCache.delete(key);
+            documentUploadCounter.delete(key);
+            globalEvicted++;
+        }
     }
-}, 30 * 60 * 1000);
+    
+    if (sessionEvicted > 0 || globalEvicted > 0) {
+        console.log(`📂 Cache cleanup: ${sessionEvicted} session + ${globalEvicted} global entries evicted`);
+    }
+}, 10 * 60 * 1000); // Every 10 minutes
 
 // ===== DUCKDUCKGO SEARCH FUNCTION =====
 async function searchDuckDuckGo(query) {
@@ -6514,9 +6580,12 @@ app.post('/api/playground', async (req, res) => {
     capacityManager.recordActivity(clientIp);
     
     try {
-        let { message, photo, audio, document, documentName, photos, audios, documents, history, zipData, contextAttachments } = req.body;
+        let { message, photo, audio, document, documentName, photos, audios, documents, history, zipData, contextAttachments, cachedFileHashes } = req.body;
         let finalPrompt = message || '';
         let extractedContent = [];
+        
+        // Track file hashes for this response (sent back to client for follow-up queries)
+        const responseFileHashes = [];
         
         // Extract attachments from ZIP if present (bandwidth optimization)
         if (zipData) {
@@ -6853,6 +6922,40 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             }
         }
         
+        // ===== CACHED FILE REFERENCES: Use session cache for follow-up queries =====
+        // If user sends cachedFileHashes without new uploads, retrieve from session cache
+        if (cachedFileHashes && Array.isArray(cachedFileHashes) && cachedFileHashes.length > 0 && docList.length === 0) {
+            console.log(`📂 Follow-up query with ${cachedFileHashes.length} cached file reference(s)`);
+            const extractedDocs = [];
+            
+            for (const fileHash of cachedFileHashes) {
+                const cachedContext = getCachedDocumentByHash(fileHash, clientIp);
+                if (cachedContext) {
+                    extractedDocs.push({
+                        fileName: cachedContext.fileName || 'cached-document',
+                        fileType: cachedContext.fileType,
+                        text: cachedContext.text,
+                        fileHash: fileHash,
+                        fromCache: true
+                    });
+                    responseFileHashes.push(fileHash);
+                    console.log(`📂 Retrieved cached context for hash "${fileHash.substring(0, 16)}..."`);
+                } else {
+                    console.log(`📂 Cache miss for hash "${fileHash.substring(0, 16)}..." - may have expired`);
+                }
+            }
+            
+            if (extractedDocs.length > 0) {
+                if (extractedDocs.length > 1) {
+                    const mergedContext = buildMultiDocContext(extractedDocs);
+                    extractedContent.push(mergedContext);
+                } else {
+                    extractedContent.push(`[Document (cached): ${extractedDocs[0].fileName}]:\n${extractedDocs[0].text}`);
+                }
+                console.log(`📂 Using ${extractedDocs.length} cached document(s) for follow-up query`);
+            }
+        }
+        
         // Process all documents with CASCADE WORKFLOW + CONTEXT CACHING
         // Cache the expensive parsing/analysis; AI output stays fresh
         if (docList.length > 0) {
@@ -6878,15 +6981,18 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 console.log(`📂 Document ${i + 1}: upload #${uploadCount} for hash "${fileHash.substring(0, 25)}..."`);
                 
                 // Check cache first (skip expensive parsing if cached)
-                const cachedContext = getCachedDocumentContext(fileHash);
+                // Session cache (per-IP) is checked first, then global cache
+                const cachedContext = getCachedDocumentContext(fileHash, clientIp);
                 if (cachedContext) {
                     // Use cached context - skip expensive parsing
                     doc.extractedData = cachedContext.extractedData;
                     doc.extracted = cachedContext.extracted; // For financial analysis
+                    doc.fileHash = fileHash; // Store hash for follow-up reference
                     extractedDocs.push({
                         fileName: docName,
                         fileType: cachedContext.fileType,
                         text: cachedContext.text,
+                        fileHash: fileHash,
                         fromCache: true
                     });
                     console.log(`📂 Using cached context for "${docName}"`);
@@ -6912,19 +7018,21 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                         docContent = formatJSONForGroq(cascadeResult, '');
                     }
                     
+                    doc.fileHash = fileHash; // Store hash for follow-up reference
                     extractedDocs.push({
                         fileName: docName,
                         fileType: fileType.type,
-                        text: docContent
+                        text: docContent,
+                        fileHash: fileHash
                     });
                     
-                    // Try to cache the context (respects 5-upload threshold)
+                    // Cache the context: session (immediate) + global (3-upload threshold)
                     setCachedDocumentContext(fileHash, {
                         extractedData: doc.extractedData,
                         extracted: doc.extracted,
                         fileType: fileType.type,
                         text: docContent
-                    });
+                    }, clientIp);
                     
                 } catch (docError) {
                     console.error(`❌ Document ${i + 1} error:`, docError.message);
@@ -6947,6 +7055,11 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 const cacheNote = extractedDocs[0].fromCache ? ' (cached)' : '';
                 extractedContent.push(`[Document 1: ${extractedDocs[0].fileName}${cacheNote}]:\n${extractedDocs[0].text}`);
             }
+            
+            // Collect file hashes for response (client uses these for follow-up queries)
+            extractedDocs.forEach(d => {
+                if (d.fileHash) responseFileHashes.push(d.fileHash);
+            });
         }
         
         // Process all audio files via Groq Whisper
@@ -7189,8 +7302,12 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             setCachedResponse(message, reply, queryClass);
         }
         
-        console.log(`✅ Playground response sent (${reply.length} chars)`);
-        res.json({ reply });
+        console.log(`✅ Playground response sent (${reply.length} chars)${responseFileHashes.length > 0 ? ` + ${responseFileHashes.length} file hash(es)` : ''}`);
+        res.json({ 
+            reply,
+            // Include file hashes for follow-up queries (client stores these)
+            ...(responseFileHashes.length > 0 && { cachedFileHashes: responseFileHashes })
+        });
         
     } catch (error) {
         console.error('❌ Playground error:', error.message);
