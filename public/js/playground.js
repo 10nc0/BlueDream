@@ -485,6 +485,11 @@ function addMessage(role, content, messageAttachments = []) {
     
     let html = `<div class="label">${role === 'user' ? 'You' : 'Nyan AI'}</div>`;
     
+    // Add copy button for AI responses
+    if (role === 'assistant') {
+        html += `<button class="copy-btn" title="Copy to clipboard">📋 Copy</button>`;
+    }
+    
     // Render markdown for AI responses, plain text for user
     if (role === 'assistant' && typeof marked !== 'undefined') {
         try {
@@ -515,6 +520,29 @@ function addMessage(role, content, messageAttachments = []) {
     }
     
     msgEl.innerHTML = html;
+    
+    // Add click handler for copy button
+    if (role === 'assistant') {
+        const copyBtn = msgEl.querySelector('.copy-btn');
+        copyBtn.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(content);
+                copyBtn.textContent = '✓ Copied';
+                copyBtn.classList.add('copied');
+                setTimeout(() => {
+                    copyBtn.textContent = '📋 Copy';
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            } catch (err) {
+                console.error('Copy failed:', err);
+                copyBtn.textContent = '❌ Failed';
+                setTimeout(() => {
+                    copyBtn.textContent = '📋 Copy';
+                }, 2000);
+            }
+        });
+    }
+    
     messagesEl.appendChild(msgEl);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     
