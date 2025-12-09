@@ -56,9 +56,9 @@ function hydrateHistoryToUI() {
     const welcome = messagesEl.querySelector('.welcome');
     if (welcome) welcome.remove();
     
-    // Render all past messages
+    // Render all past messages with their attachment metadata
     conversationHistory.forEach(msg => {
-        addMessage(msg.role === 'user' ? 'user' : 'assistant', msg.content);
+        addMessage(msg.role === 'user' ? 'user' : 'assistant', msg.content, msg.attachments || []);
     });
     
     console.log(`🧠 Memory: Restored ${conversationHistory.length} messages to UI`);
@@ -692,7 +692,17 @@ async function sendMessage() {
     
     const userMessageText = message || `(Analyzing ${attachments.length} attachment${attachments.length > 1 ? 's' : ''})`;
     addMessage('user', userMessageText, [...attachments]);
-    conversationHistory.push({ role: 'user', content: userMessageText });
+    
+    // Store message with attachment metadata for context retention
+    const attachmentMetadata = attachments.map(a => ({
+        name: a.name,
+        type: a.type
+    }));
+    conversationHistory.push({ 
+        role: 'user', 
+        content: userMessageText,
+        attachments: attachmentMetadata.length > 0 ? attachmentMetadata : undefined
+    });
     saveConversationHistory();  // Persist immediately after user message
     messageInput.value = '';
     messageInput.style.height = '44px'; // Reset to min height
@@ -746,6 +756,16 @@ async function sendMessage() {
             addMessage('assistant', reply);
             conversationHistory.push({ role: 'assistant', content: reply });
             saveConversationHistory();  // Persist to localStorage
+        }
+        
+        // Enrich history payload with attachment metadata for next turn
+        if (conversationHistory.length > 0) {
+            payload.contextAttachments = conversationHistory
+                .filter(msg => msg.attachments)
+                .map((msg, idx) => ({
+                    messageIndex: idx,
+                    attachments: msg.attachments
+                }));
         }
     } catch (err) {
         removeLoadingMessage();

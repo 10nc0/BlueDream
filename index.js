@@ -6479,7 +6479,7 @@ app.post('/api/playground', async (req, res) => {
     capacityManager.recordActivity(clientIp);
     
     try {
-        let { message, photo, audio, document, documentName, photos, audios, documents, history, zipData } = req.body;
+        let { message, photo, audio, document, documentName, photos, audios, documents, history, zipData, contextAttachments } = req.body;
         let finalPrompt = message || '';
         let extractedContent = [];
         
@@ -6862,16 +6862,33 @@ app.post('/api/playground', async (req, res) => {
             }
         }
         
+        // Build attachment context for memory (metadata from previous uploads)
+        let attachmentContextPart = '';
+        if (contextAttachments && contextAttachments.length > 0) {
+            const attachmentList = contextAttachments
+                .flatMap(item => item.attachments || [])
+                .map((att, idx) => `${idx + 1}. ${att.name} (${att.type})`)
+                .join('\n');
+            if (attachmentList) {
+                attachmentContextPart = `\nRelevant files from conversation history:\n${attachmentList}`;
+            }
+        }
+        
         // Combine all extracted content into final prompt (preserve search context if present)
         if (extractedContent.length > 0) {
             const allExtracted = extractedContent.join('\n\n');
             const searchPart = searchContext ? `Web context:\n${searchContext}\n\n` : '';
             if (message) {
-                finalPrompt = `${searchPart}Attachments analyzed:\n${allExtracted}\n\nUser query: ${message}`;
+                finalPrompt = `${searchPart}Attachments analyzed:\n${allExtracted}${attachmentContextPart}\n\nUser query: ${message}`;
             } else {
-                finalPrompt = `Attachments analyzed:\n${allExtracted}\n\nProvide a comprehensive analysis of all the above content.`;
+                finalPrompt = `Attachments analyzed:\n${allExtracted}${attachmentContextPart}\n\nProvide a comprehensive analysis of all the above content.`;
             }
-            console.log(`📎 Combined ${extractedContent.length} attachment(s) into prompt${searchContext ? ' (with search context)' : ''}`);
+            console.log(`📎 Combined ${extractedContent.length} attachment(s) into prompt${searchContext ? ' (with search context)' : ''}${attachmentContextPart ? ' + attachment history' : ''}`);
+        } else if (attachmentContextPart) {
+            // Even if no current attachments, include historical context
+            if (message) {
+                finalPrompt = `${message}${attachmentContextPart}`;
+            }
         }
         
         // Final reasoning via Groq Llama 3.3 70B
