@@ -28,7 +28,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Real-time Updates**: Smart polling with `?after={messageId}`, auto-scroll, "New messages" banner, and jump-to-message functionality.
 - **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, providing general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior. Audit results are logged via the Prometheus Trinity Discord bots.
 - **AI Playground**: A sovereign, public AI playground at `/AI` without authentication, offering multimodal support (Text, Photo, Audio, Documents), multi-file upload, dynamic capacity sharing, and abuse prevention. It features query classification, a factual cache, smart retry mechanisms, document parsing, and a search cascade for real-time knowledge. **Closed-loop document analysis** skips web search entirely for financial documents (user's own data needs no external verification). **Temporal Reality Check** injects current date into financial analysis to catch impossible "future actuals".
-- **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis, including a "Price/Income ratio" metric.
+- **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis, including a "Price/Income ratio" metric. **NYAN is Step 0 (sacred, always active)** — all other protocols (Financial Physics, Chemistry) are EXTENSIONS that build on top of NYAN, never override it.
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.
@@ -38,7 +38,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Discord Bot Trinity Architecture**:
     - **Human Trinity (WhatsApp → Discord forwarding):** Hermes (write-only for threads/messages), Thoth (read-only for message history).
     - **Prometheus Trinity (AI Audit Logging):** Idris (write-only for AI log threads/audit results), Horus (read-only for AI audit history).
-- **Financial Physics System**: A 4-tier architecture (`utils/financial-physics.js`) for financial cognition, including document type detection, nature classification, semantic enrichment, and validation, with a specialized `FINANCIAL_PHYSICS_SEED` for AI context.
+- **Financial Physics System**: A 4-tier architecture (`utils/financial-physics.js`) for financial cognition, including document type detection, nature classification, semantic enrichment, and validation, with a specialized `FINANCIAL_PHYSICS_SEED` for AI context. **Financial Physics is an extension of NYAN PROTOCOL** — system message order is always [NYAN first, Financial Physics second] to honor the Step-0 hierarchy.
 
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)
