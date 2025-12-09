@@ -68,6 +68,12 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Isolation Architecture**: Uses separate API tokens for playground to prevent abuse and isolate vision rate limits.
 
 ## Recent Changes (December 9, 2025)
+- **Conversation Memory**: Added 8-turn sliding window memory for AI Playground
+  - localStorage persistence - conversations survive page refresh
+  - UI hydration on page load restores past messages to the chat
+  - Auto-summarization when history exceeds 6 user messages (compresses old context to 2-3 sentences)
+  - "New Chat" button in header to clear history and start fresh
+  - History sent with each request for contextual AI responses
 - **Chemistry Verbose Phrase Fix**: Fixed bug where AI vision returning "- The compound appears to be" was incorrectly used as compound name
   - Added leading punctuation/bullet stripping before verbose pattern detection
   - Expanded verbose patterns to include "appears to", "seems to", "compound appears"
