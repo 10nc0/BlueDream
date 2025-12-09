@@ -786,50 +786,64 @@ async function sendMessage() {
 
 // Clear history handler (can be called from UI or console)
 function clearNyanHistory() {
+    console.log('🧹 Starting conversation clear...');
+    
     // Set flag to prevent auto-hydration
     shouldSkipHydration = true;
     
     // Clear in-memory array
     conversationHistory = [];
+    attachments = [];
     
     // Clear localStorage completely
     try {
         localStorage.clear();
-        console.log('🧹 localStorage.clear() executed');
+        console.log('✅ localStorage cleared');
     } catch (e) {
         console.warn('⚠️ localStorage.clear() failed:', e.message);
-        // Fallback: try removing specific items
         try {
             localStorage.removeItem('nyan_history');
+            console.log('✅ nyan_history removed');
         } catch (e2) {
             console.error('❌ Could not clear localStorage:', e2.message);
         }
     }
     
-    // Clear UI completely
-    messagesEl.innerHTML = `
-        <div class="welcome">
-            <h2>Welcome to Nyan AI Playground</h2>
-            <p>No login required. No data stored. Just purr intelligence.</p>
-            <p>Powered by Groq's blazing-fast Llama 3.3 70B model.</p>
-            <div class="features">
-                <div class="feature"><span class="feature-icon">💬</span><div>Text</div></div>
-                <div class="feature"><span class="feature-icon">📸</span><div>Photo</div></div>
-                <div class="feature"><span class="feature-icon">📎</span><div>Attachment</div></div>
-                <div class="feature"><span class="feature-icon">🎙️</span><div>Audio</div></div>
-            </div>
+    // Explicitly remove all child nodes from messages container
+    while (messagesEl.firstChild) {
+        messagesEl.removeChild(messagesEl.firstChild);
+    }
+    console.log('✅ All DOM children removed');
+    
+    // Create and append fresh welcome message
+    const welcomeDiv = document.createElement('div');
+    welcomeDiv.className = 'welcome';
+    welcomeDiv.innerHTML = `
+        <h2>Welcome to Nyan AI Playground</h2>
+        <p>No login required. No data stored. Just purr intelligence.</p>
+        <p>Powered by Groq's blazing-fast Llama 3.3 70B model.</p>
+        <div class="features">
+            <div class="feature"><span class="feature-icon">💬</span><div>Text</div></div>
+            <div class="feature"><span class="feature-icon">📸</span><div>Photo</div></div>
+            <div class="feature"><span class="feature-icon">📎</span><div>Attachment</div></div>
+            <div class="feature"><span class="feature-icon">🎙️</span><div>Audio</div></div>
         </div>
     `;
+    messagesEl.appendChild(welcomeDiv);
+    console.log('✅ Welcome message re-added');
     
-    // Also clear any attachments
-    attachments = [];
+    // Clear attachments UI
     clearAllAttachments();
     
     // Reset message input
     messageInput.value = '';
     messageInput.style.height = '44px';
     
-    console.log('🧹 Conversation cleared - fresh start!');
+    // Reset processing state
+    isProcessing = false;
+    sendBtn.disabled = false;
+    
+    console.log('🧹 Conversation cleared - fresh start! State completely reset.');
 }
 
 // Hydrate history to UI after DOM is fully loaded
