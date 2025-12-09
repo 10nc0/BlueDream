@@ -92,6 +92,13 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
   - **Vision Pages**: Increased PDF vision maxPages from 5 → 15 for 10+ page financial statements
   - **Text Parser**: Added `parseTextToRows()` function to extract financial rows from PDF text
   - **Files Changed**: `utils/pdf-handler.js`, `utils/attachment-cascade.js`, `utils/financial-physics.js`
+- **Excel Cached Formula Values (H₀ Hybrid Parser)**: Read Excel's pre-computed formula results
+  - **Root Cause**: `calculateFormula: true` is unreliable for complex formulas
+  - **Solution**: Read `cell.value.result` for cached values, fallback to formula text with warning
+  - **Stats Tracking**: `computedValues` count + `formulaWarnings` for uncached formulas
+  - **Groq Context**: Stats injected into context (e.g., "✅ 150 pre-computed values" or "⚠️ 5 formulas without cached values")
+  - **H₀ Benefit**: Groq sees real numbers instead of formula strings → accurate revenue/cost analysis
+  - **Files Changed**: `utils/attachment-cascade.js` (extractExcelData, mergeExtractionResults, formatAsJSON, formatJSONForGroq)
 - **New Chat Button Fix**: Event listener approach now reliably clears conversation
 - **Conversation Memory**: Added 8-turn sliding window memory for AI Playground
   - localStorage persistence - conversations survive page refresh

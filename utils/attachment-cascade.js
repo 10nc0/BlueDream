@@ -1233,13 +1233,18 @@ async function extractExcelData(buffer, fileName) {
         await workbook.xlsx.load(buffer);
         
         const sheets = [];
+        let totalComputedValues = 0;
+        let totalFormulaWarnings = [];
+        
         workbook.eachSheet((sheet) => {
             const sheetData = {
                 name: sheet.name,
                 rows: [],
                 headers: [],
                 structuredRows: [],
-                mergedCells: []
+                mergedCells: [],
+                computedValues: 0,
+                formulaWarnings: []
             };
             
             const mergedRanges = [];
@@ -1265,12 +1270,34 @@ async function extractExcelData(buffer, fileName) {
                     let value = null;
                     let numericValue = null;
                     let displayValue = '';
+                    let isFormula = false;
+                    let isComputed = false;
                     
                     if (cell.value !== null && cell.value !== undefined) {
                         rowHasContent = true;
                         
                         if (typeof cell.value === 'object') {
-                            if (cell.value.result !== undefined) {
+                            // PRIORITY 1: Formula with cached result (Excel computed it)
+                            if (cell.value.formula && cell.value.result !== undefined) {
+                                value = cell.value.result;
+                                numericValue = typeof value === 'number' ? value : null;
+                                isFormula = true;
+                                isComputed = true;
+                                sheetData.computedValues++;
+                            }
+                            // PRIORITY 2: Formula WITHOUT cached result (show as text warning)
+                            else if (cell.value.formula) {
+                                value = `=${cell.value.formula}`;
+                                isFormula = true;
+                                isComputed = false;
+                                sheetData.formulaWarnings.push({
+                                    cell: cell.address,
+                                    formula: cell.value.formula,
+                                    sheet: sheet.name
+                                });
+                            }
+                            // PRIORITY 3: Rich text or hyperlink
+                            else if (cell.value.result !== undefined) {
                                 value = cell.value.result;
                                 numericValue = typeof value === 'number' ? value : null;
                             } else if (cell.value.text !== undefined) {
@@ -1318,6 +1345,8 @@ async function extractExcelData(buffer, fileName) {
                         isBold: isBold,
                         indent: indent,
                         isMerged: isMerged,
+                        isFormula: isFormula,
+                        isComputed: isComputed,
                         col: colNum
                     });
                 });
@@ -1352,10 +1381,28 @@ async function extractExcelData(buffer, fileName) {
                 }
             });
             
+            // Aggregate stats for this sheet
+            totalComputedValues += sheetData.computedValues;
+            totalFormulaWarnings = totalFormulaWarnings.concat(sheetData.formulaWarnings);
+            
             sheets.push(sheetData);
         });
         
-        const excelData = { tables: sheets, type: 'excel', enhanced: true };
+        // Excel stats for Groq context
+        const excelStats = {
+            computedValues: totalComputedValues,
+            formulaWarnings: totalFormulaWarnings,
+            hasUncomputedFormulas: totalFormulaWarnings.length > 0
+        };
+        
+        if (totalComputedValues > 0) {
+            console.log(`✅ Excel: ${totalComputedValues} pre-computed values (cached by Excel)`);
+        }
+        if (totalFormulaWarnings.length > 0) {
+            console.log(`⚠️ Excel: ${totalFormulaWarnings.length} formulas without cached values (shown as text)`);
+        }
+        
+        const excelData = { tables: sheets, type: 'excel', enhanced: true, stats: excelStats };
         
         try {
             const financialAnalysis = await analyzeFinancialDocument({ tables: sheets });
@@ -1855,6 +1902,16 @@ function mergeExtractionResults(existing, newData) {
         merged.type = newData.type;
     }
     
+    // Preserve Excel stats for Groq context
+    if (newData.stats) {
+        merged.stats = newData.stats;
+    }
+    
+    // Preserve financial analysis
+    if (newData.financialAnalysis) {
+        merged.financialAnalysis = newData.financialAnalysis;
+    }
+    
     return merged;
 }
 
@@ -1903,6 +1960,16 @@ function formatAsJSON(result) {
                 return table;
             });
         }
+        
+        // Excel stats for Groq context
+        if (result.extractedData.stats) {
+            json.content.excelStats = result.extractedData.stats;
+        }
+        
+        // Financial analysis
+        if (result.extractedData.financialAnalysis) {
+            json.content.financialAnalysis = result.extractedData.financialAnalysis;
+        }
     }
     
     return json;
@@ -1915,6 +1982,25 @@ function formatJSONForGroq(cascadeResult, userQuery) {
     contextParts.push(`📄 **Document: ${json.metadata.fileName}**`);
     contextParts.push(`**Type:** ${json.metadata.fileType} | **Structure:** ${json.metadata.dataStructure}`);
     contextParts.push(`**Extraction:** ${json.metadata.toolsUsed.join(' → ')}`);
+    
+    // Excel stats: inform Groq about data reliability
+    if (json.content.excelStats) {
+        const stats = json.content.excelStats;
+        if (stats.computedValues > 0) {
+            contextParts.push(`✅ **${stats.computedValues} pre-computed values** (cached by Excel - high reliability)`);
+        }
+        if (stats.hasUncomputedFormulas) {
+            contextParts.push(`⚠️ **${stats.formulaWarnings.length} formulas without cached values** (shown as formula text)`);
+            // Show first 5 warnings
+            const sampleWarnings = stats.formulaWarnings.slice(0, 5);
+            sampleWarnings.forEach(w => {
+                contextParts.push(`   • ${w.cell}: =${w.formula}`);
+            });
+            if (stats.formulaWarnings.length > 5) {
+                contextParts.push(`   ... and ${stats.formulaWarnings.length - 5} more`);
+            }
+        }
+    }
     contextParts.push('---');
     
     if (json.content.financialAnalysis) {
