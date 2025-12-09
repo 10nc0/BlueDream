@@ -717,6 +717,71 @@ async function analyzeFinancialDocument(extractedData) {
         }
     }
     
+    // ===== MULTI-ROW HEADER DETECTION: Year and "Actual" in separate rows, same column =====
+    // Common Excel pattern:
+    //   Row 1: |       | 2025    | 2025    | 2026    | 2026    |
+    //   Row 2: | Label | Actual  | Budget  | Actual  | Budget  |
+    // We need to detect column-based associations, not just same-cell patterns
+    
+    if (tables.length > 0) {
+        tables.forEach((table, tableIdx) => {
+            const rows = table.rows || table.data || table.structuredRows?.map(sr => [sr.label, ...sr.values]) || [];
+            if (rows.length < 2) return; // Need at least 2 rows for multi-row headers
+            
+            // Scan first 5 rows (typical header zone) for column-based year/actual associations
+            const headerRows = rows.slice(0, Math.min(5, rows.length));
+            const maxCols = Math.max(...headerRows.map(r => (r?.length || 0)));
+            
+            // Build column index maps
+            const columnYears = {}; // columnIndex -> year found
+            const columnActuals = {}; // columnIndex -> true if "Actual" found
+            
+            headerRows.forEach((row, rowIdx) => {
+                if (!Array.isArray(row)) return;
+                row.forEach((cell, colIdx) => {
+                    const cellStr = String(cell || '').trim();
+                    if (!cellStr) return;
+                    
+                    // Check for year (2020-2030 range)
+                    const yearMatch = cellStr.match(/\b(20[2-3]\d)\b/);
+                    if (yearMatch) {
+                        const year = parseInt(yearMatch[1]);
+                        // Store the year for this column (prefer later rows if multiple)
+                        if (!columnYears[colIdx] || rowIdx > 0) {
+                            columnYears[colIdx] = year;
+                        }
+                    }
+                    
+                    // Check for "Actual" indicator (case-insensitive)
+                    if (/\b(actual|act|realisasi|realized|real)\b/i.test(cellStr)) {
+                        columnActuals[colIdx] = true;
+                    }
+                });
+            });
+            
+            // Cross-reference: find columns with BOTH future year AND "Actual"
+            Object.keys(columnYears).forEach(colIdx => {
+                const year = columnYears[colIdx];
+                if (year > temporal.year && columnActuals[colIdx]) {
+                    const errorKey = `multirow-col${colIdx}-${year}`;
+                    if (!seenErrors.has(errorKey)) {
+                        seenErrors.add(errorKey);
+                        const warning = `⚠️ TEMPORAL ERROR: Column ${parseInt(colIdx) + 1} has "${year}" + "Actual" in multi-row headers — ${year} data CANNOT be Actual in ${temporal.year}`;
+                        temporalErrors.push(warning);
+                        console.log(warning);
+                    }
+                }
+            });
+            
+            // Log detection summary for debugging
+            const futureYearCols = Object.entries(columnYears).filter(([_, y]) => y > temporal.year);
+            const actualCols = Object.keys(columnActuals);
+            if (futureYearCols.length > 0 || actualCols.length > 0) {
+                console.log(`📊 Table ${tableIdx + 1} header scan: ${futureYearCols.length} future-year columns, ${actualCols.length} Actual-labeled columns`);
+            }
+        });
+    }
+    
     if (temporalErrors.length > 0) {
         console.log(`🚨 Found ${temporalErrors.length} temporal classification error(s)\n`);
     }
