@@ -1,7 +1,7 @@
 # Your Nyanbook~ 🌈
 
 ## Overview
-"Your Nyanbook" is a multi-tenant SaaS messaging book designed to securely forward messages from WhatsApp to Discord. Its primary purpose is to provide permanent message retention via Discord threads and isolated data storage for each user. The project aims for zero-friction onboarding, a highly customizable interface, and offers a secure and efficient way for users to archive WhatsApp conversations, targeting individuals and small businesses needing reliable message retention and easy access.
+"Your Nyanbook" is a multi-tenant SaaS messaging book designed to securely forward messages from WhatsApp to Discord. Its primary purpose is to provide permanent message retention via Discord threads and isolated data storage for each user. The project aims for zero-friction onboarding, a highly customizable interface, and offers a secure and efficient way for users to archive WhatsApp conversations, targeting individuals and small businesses needing reliable message retention and easy access. The project also features an AI Playground for multimodal interaction and an AI Audit System for message verification.
 
 ## User Preferences
 - **Design**: Apple glassmorphism aesthetic with Discord-style message layout
@@ -17,146 +17,28 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 **UI/UX Decisions:**
 - **Adaptive Layout**: Desktop has resizable sidebar/header; mobile has automatic layout, harmonized header, and floating action zone.
 - **Touch Interactions**: Optimized for iPhone with tap-to-zoom, swipe navigation, auto-hide elements, 48px touch targets, and momentum scrolling.
-- **Responsive Components**: UI components adapt for mobile/desktop.
 - **Visual Elements**: Cat animation in header, blinking date/time, Discord-style message layout.
 
 **Technical Implementations:**
 - **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage.
-- **Database**: PostgreSQL with multi-tenant architecture, using isolated schemas per user.
-- **Book Registry**: Centralized global registry (`core.book_registry`) for O(1) join code lookups, storing book metadata.
-- **WhatsApp Integration**: Twilio-based messaging integration using WhatsApp Business API with a join-code-first routing architecture.
-- **Webhook Integration**: Messages are permanently saved to a Ledger with multi-webhook capability.
+- **Database**: PostgreSQL with multi-tenant architecture, using isolated schemas per user and a centralized book registry (`core.book_registry`).
+- **WhatsApp Integration**: Twilio-based messaging using WhatsApp Business API with a join-code-first routing architecture.
 - **Media Handling**: WhatsApp media downloaded from Twilio and uploaded to Discord as native attachments.
 - **Search & Metadata**: Enhanced search across messages and metadata, supporting multilingual text and full-text search indexing.
 - **Real-time Updates**: Smart polling with `?after={messageId}`, auto-scroll, "New messages" banner, and jump-to-message functionality.
-- **Terminology Refactor**: "Bridge" terminology replaced with "book".
+- **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, providing general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior. Audit results are logged via the Prometheus Trinity Discord bots.
+- **AI Playground**: A sovereign, public AI playground at `/AI` without authentication, offering multimodal support (Text, Photo, Audio, Documents), multi-file upload, dynamic capacity sharing, and abuse prevention. It features query classification, a factual cache, smart retry mechanisms, document parsing, and a search cascade for real-time knowledge.
+- **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis, including a "Price/Income ratio" metric.
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.
 - **Zero-Friction Onboarding**: WhatsApp deep link activation.
 - **Scalability & Recovery**: Designed for Replit Autoscale, PostgreSQL stores all book state for recovery.
-- **Security**: Strict webhook validation, JWT security, robust audit logging, Sybil attack prevention, and CSP compliance. Password recovery has been removed.
-
-**Discord Bot Trinity Architecture:**
-- **Human Trinity (WhatsApp → Discord forwarding):**
-    - **Hermes (φ)**: Write-only bot for creating threads and posting messages.
-    - **Thoth (0)**: Read-only bot for fetching message history.
-- **Prometheus Trinity (AI Audit Logging):**
-    - **Idris (ι)**: Write-only bot for creating AI log threads and posting audit results.
-    - **Horus (Ω)**: Read-only bot for fetching AI audit history.
-
-**AI Audit System (Prometheus):**
-- Provides AI-powered message verification using Groq API (llama-3.3-70b-versatile).
-- Features: General Intelligence, H(0) Guard Rails (zero-hallucination), Bilingual Support, Prompt-Directed behavior.
-- UI Integration: AI Audit button and History button in the dashboard.
-- Discord Logging: All AI audit results logged via Prometheus Trinity.
-
-**AI Playground (Public):**
-- Sovereign, public AI playground at `/AI` without authentication.
-- **Multimodal Support**: Text (Groq Llama 3.3 70B), Photo (Groq Llama 4 Scout Vision), Audio (Groq Whisper), Documents (PDF, Excel, Word).
-- **Multi-File Upload**: Up to 10 attachments per query, mixed types supported (photo + doc + audio processed together).
-- **Input Methods**: Drag & drop, file picker, microphone, paste images - all support multiple files.
-- **Dynamic Capacity Sharing**: Adaptive rate limiting that distributes API quota among active IPs.
-- **Abuse Prevention**: Per-IP burst throttling, duplicate prompt detection, gibberish entropy check.
-- **Query Classification**: Regex-based routing (DDG-first, Brave-first, Groq-only).
-- **Factual Cache**: 24h TTL for simple facts, NEVER caches Nyan Protocol topics, 1000 entry LRU limit.
-- **Smart Retry**: Brave→DDG fallback, core-words DDG retry, knowledge cutoff disclaimer.
-- **Document Parsing**: Cascade workflow for various formats, handling token limits.
-- **Search Cascade (Real-time Knowledge)**: Uses DuckDuckGo and Brave Search to overcome Groq's knowledge cutoff.
-- **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis, including a "Price/Income ratio" metric with contextual conclusions, designed to "HUMANIZE EVERY RATIO".
-- **H₀ + Problem-Solving Protocol**: Temperature 0.15, confidence-based extrapolation, strict citation, and zero hallucination.
-- **Isolation Architecture**: Uses separate API tokens for playground to prevent abuse and isolate vision rate limits.
-
-## Recent Changes (December 9, 2025)
-- **Financial Physics Refactor (Final)**: 691 lines (down from 1183 = 42% reduction)
-  - Replaced bloated `isFinancialStatement()` with `quickNonFinancialCheck()` guard
-  - Guard uses recursive `flattenToStrings()` to handle nested Excel/PDF cell structures
-  - Added `detectDocumentType()` for Assumptions vs Income Statement detection
-  - Short-circuits: Log data (timestamps + IDs + no financial keywords) → returns `{ type: 'non_financial' }` immediately
-  - Deleted `DOCUMENT_SIGNATURES`, `FINANCIAL_NATURE`, old TIER -1 bloat
-  - Kept 100% of scripture (FINANCIAL_PHYSICS_SEED), EMPIRICAL_PRIORS, classification logic
-- **LaTeX OCR for Pharmacy/Research Users**: Enhanced vision system prompt for scientific notation
-  - Detects LaTeX equations: `\frac`, `\int`, `\sum`, `\ce{}`, greek letters
-  - Extracts both RAW LaTeX code AND human-readable rendered form
-  - Identifies chemical compounds from molecular formulas
-  - Hand-drawn chemical structures: describes bonds, functional groups, attempts identification
-  - Wrapped in chemistry enrichment seed for harm-reduction context
-- **Intelligent Chunking (GroundX-inspired)**: Section-aware document splitting
-  - Splits by paragraph/section boundaries (double newlines) — never mid-table
-  - Fallback to line-level splitting for oversized sections
-  - Default: 1000 tokens (~4000 chars) per chunk
-  - Function: `intelligentChunking(text, maxTokens)` in `attachment-cascade.js`
-- **Multi-Doc Context Merge (Corporate Multi-Attachment)**: Unified context for 10+ file uploads
-  - Labels each document: `[Document 1: invoice.pdf]`, `[Document 2: PO.xlsx]`
-  - Adds document index at top for easy cross-reference
-  - Applies intelligent chunking to long documents (first 3 sections + count of remaining)
-  - Enables queries like "compare invoice to PO" across multiple attachments
-  - Function: `buildMultiDocContext(extractedItems)` in `attachment-cascade.js`
-- **DeepSeek-Inspired Financial Analyst Prompts**: Structured analysis framework in `FINANCIAL_PHYSICS_SEED`
-  - **Revenue Trends**: YoY growth, seasonality, top 3 drivers by contribution %
-  - **Cost Efficiency**: Cost-to-revenue ratio, cost per unit, variable vs fixed split
-  - **Profitability Metrics**: Gross/Operating/Net margins, breakeven point
-  - **Red Flags**: Variance >15%, negative margins, declining trends, classification errors
-  - **Actionable Recommendations**: Exactly 3 numbered recommendations tied to data points
-- **777 Row Limit for Financial Documents**: Increased from 50 → 200 → 777 rows to capture full projections
-- **Financial Physics System (H₀ Canon 2025)**: Revolutionary financial cognition engine
-  - **Philosophy**: "You are not an accountant. You are a financial physicist. You observe flows, not labels."
-  - **4-Tier Architecture** (`utils/financial-physics.js`):
-    - **TIER 0**: Document Type Detection (4 eternal statements: Assumptions, P&L, Balance Sheet, Cash Flow)
-    - **TIER 1**: Nature Classification (+Income / −Cost / =Profit / A=L+E)
-    - **TIER 2**: Semantic Enrichment (multilingual fuzzy matching for Indonesian, English, Chinese, Japanese)
-    - **TIER 3**: Validation (accounting equation physics: Income − Cost = Profit)
-  - **FINANCIAL_PHYSICS_SEED**: Injected as FIRST system message for Excel AND financial PDFs
-    - Teaches AI to see flows (+/−), not labels
-    - "Pendapatan Net Klaim" → AI sees `+Income (97% conf)`
-    - "Upah Trip Supir" → AI sees `−Cost (98% conf)`
-  - **Temperature 0.3**: Applied to all financial documents (Excel + PDF) for semantic flexibility
-  - **Integration Points**:
-    - `attachment-cascade.js`: Runs `analyzeFinancialDocument()` on Excel AND PDF extraction
-    - `index.js`: Detects financial PDFs, injects physics seed, adjusts temperature
-    - `formatJSONForGroq()`: Includes physics analysis in context
-  - **Purged Old Code**: Removed `h0-finance-taxonomy.js`, `multilingual-finance.js`, and dual-temperature pipeline
-- **PDF Multi-Page Extraction Fix**: Fixed PDF parser to extract ALL pages (not just first page)
-  - **Root Cause**: `PDFParse().getText()` only returned first page
-  - **Solution**: Switched to `pdfParse(buffer)` API which returns `data.text` with ALL pages concatenated
-  - **Token Safeguard**: Added 100k char limit with truncation warning to preserve Groq context window
-  - **Vision Pages**: Increased PDF vision maxPages from 5 → 15 for 10+ page financial statements
-  - **Text Parser**: Added `parseTextToRows()` function to extract financial rows from PDF text
-  - **Files Changed**: `utils/pdf-handler.js`, `utils/attachment-cascade.js`, `utils/financial-physics.js`
-- **Excel Cached Formula Values (H₀ Hybrid Parser)**: Read Excel's pre-computed formula results
-  - **Root Cause**: `calculateFormula: true` is unreliable for complex formulas
-  - **Solution**: Read `cell.value.result` for cached values, fallback to formula text with warning
-  - **Stats Tracking**: `computedValues` count + `formulaWarnings` for uncached formulas
-  - **Groq Context**: Stats injected into context (e.g., "✅ 150 pre-computed values" or "⚠️ 5 formulas without cached values")
-  - **H₀ Benefit**: Groq sees real numbers instead of formula strings → accurate revenue/cost analysis
-  - **Files Changed**: `utils/attachment-cascade.js` (extractExcelData, mergeExtractionResults, formatAsJSON, formatJSONForGroq)
-- **New Chat Button Fix**: Event listener approach now reliably clears conversation
-- **Conversation Memory**: Added 8-turn sliding window memory for AI Playground
-  - localStorage persistence - conversations survive page refresh
-  - UI hydration on page load restores past messages to the chat
-  - Auto-summarization when history exceeds 6 user messages (compresses old context to 2-3 sentences)
-  - "New Chat" button in header to clear history and start fresh
-  - History sent with each request for contextual AI responses
-- **Chemistry Verbose Phrase Fix**: Fixed bug where AI vision returning "- The compound appears to be" was incorrectly used as compound name
-  - Added leading punctuation/bullet stripping before verbose pattern detection
-  - Expanded verbose patterns to include "appears to", "seems to", "compound appears"
-  - Added extra safety check in DDG Query 3 to skip invalid compound names
-- **Autoscale Deployment Fix**: Fixed health endpoint for Autoscale deployments
-  - Added 30-second startup grace period where health returns 200 during initialization
-  - After startup, returns 503 if DB connection fails (honest health reporting)
-  - Added 2-second timeout for DB checks to prevent blocking health responses
-  - Cleaned up extra port mappings (only 5000→80 now, as required by Autoscale)
-
-## Recent Changes (December 8, 2025)
-- **Wikipedia Extraction Enhanced**: Removed `exintro: 1` parameter and bumped `exchars` from 2000 to 5000 characters
-  - Now captures full harm-reduction data: uses, metabolism, side effects, abuse potential, toxicity, and lethal doses
-  - Trades ~800→3000 tokens per chemistry query for comprehensive safety information
-  - Token cost still negligible (~$0.03 per query on Groq)
-- **Chemistry Enrichment Template Added**: Structured placeholders for consistent response format
-  - 6-section template: Uses & Applications, Metabolism & Pharmacology, Side Effects, Abuse Potential, Toxicity & Lethal Doses, Reversal Agents & Treatment
-  - Gracefully handles missing data with "Not enough data" disclosure
-  - Applied to both Wikipedia and DDG fallback sources
-  - Ensures conscious effort to inform users of all safety-critical information
+- **Security**: Strict webhook validation, JWT security, robust audit logging, Sybil attack prevention, and CSP compliance.
+- **Discord Bot Trinity Architecture**:
+    - **Human Trinity (WhatsApp → Discord forwarding):** Hermes (write-only for threads/messages), Thoth (read-only for message history).
+    - **Prometheus Trinity (AI Audit Logging):** Idris (write-only for AI log threads/audit results), Horus (read-only for AI audit history).
+- **Financial Physics System**: A 4-tier architecture (`utils/financial-physics.js`) for financial cognition, including document type detection, nature classification, semantic enrichment, and validation, with a specialized `FINANCIAL_PHYSICS_SEED` for AI context.
 
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)
@@ -164,4 +46,4 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **AI (Production)**: Groq API
 - **AI (Playground)**: Groq API (text + vision via dedicated tokens)
 - **Search**: DuckDuckGo Instant Answer API, Brave Search API
-- **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth` (for local processing)
+- **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth`

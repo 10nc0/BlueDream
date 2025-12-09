@@ -2907,11 +2907,6 @@ app.post('/api/auth/register/public', async (req, res) => {
     }
 });
 
-// Forgot password endpoints removed - use email-based auth for multi-tenant architecture
-// Redirect /forgot-password to 404 (prevent direct URL access to deleted page)
-app.get('/forgot-password.html', (req, res) => {
-    res.status(404).send('Not Found');
-});
 
 // ===========================
 // DEV PANEL API (Admin Role Only)
@@ -3304,28 +3299,6 @@ app.put('/api/users/:id/password', requireAuth, requireRole('admin'), async (req
     }
 });
 
-// Get all active sessions (admin only)
-app.get('/api/sessions', requireRole('admin'), async (req, res) => {
-    try {
-        const result = await pool.query(`
-            SELECT 
-                s.sid,
-                s.sess->>'userId' as user_id,
-                u.email,
-                u.role,
-                s.expire as expires_at,
-                EXTRACT(EPOCH FROM (s.expire - NOW())) as seconds_until_expire
-            FROM sessions s
-            LEFT JOIN users u ON (s.sess->>'userId')::integer = u.id
-            WHERE s.expire > NOW()
-            ORDER BY s.expire DESC
-        `);
-        
-        res.json(result.rows);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
 
 // Get audit logs (admin only)
 app.get('/api/audit-logs', requireRole('admin'), async (req, res) => {
@@ -4212,22 +4185,6 @@ app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'writ
             const bookNameSlug = name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
             joinCode = `${bookNameSlug}-${randomCode}`;
             
-            // LEGACY: Store join code in phone_to_book if table exists (backward compatibility)
-            // NOTE: Join-code-first routing now uses core.book_registry (O(1) lookups)
-            const phoneToBookExists = await client.query(`
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.tables 
-                    WHERE table_schema = $1 AND table_name = 'phone_to_book'
-                )
-            `, [tenantSchema]);
-            
-            if (phoneToBookExists.rows[0].exists) {
-                await client.query(`
-                    INSERT INTO ${tenantSchema}.phone_to_book (phone_number, book_id, join_code)
-                    VALUES (NULL, $1, $2)
-                `, [book.id, joinCode]);
-                console.log(`  📝 Stored join code in legacy phone_to_book table`);
-            }
             
             // Update contact_info with unique join code
             await client.query(`
