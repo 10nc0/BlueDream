@@ -6,6 +6,118 @@ const axios = require('axios');
 const querystring = require('querystring');
 const { analyzeFinancialDocument, formatPhysicsAnalysis, FINANCIAL_PHYSICS_SEED } = require('./financial-physics');
 
+// ===== INTELLIGENT CHUNKING (GroundX-inspired) =====
+// Splits text by sections without cutting mid-table or mid-paragraph
+function intelligentChunking(text, maxTokens = 1000) {
+    if (!text || text.length === 0) return [];
+    
+    // Split by double newlines (paragraph/section boundaries)
+    const sections = text.split(/\n\n+/);
+    const chunks = [];
+    let currentChunk = '';
+    
+    // Approximate: 1 token ≈ 4 characters
+    const maxChars = maxTokens * 4;
+    
+    for (const section of sections) {
+        // If adding this section exceeds limit, save current chunk and start new
+        if ((currentChunk.length + section.length) > maxChars) {
+            if (currentChunk.trim()) {
+                chunks.push(currentChunk.trim());
+            }
+            // If single section is too large, split by single newlines
+            if (section.length > maxChars) {
+                const lines = section.split('\n');
+                currentChunk = '';
+                for (const line of lines) {
+                    if ((currentChunk.length + line.length) > maxChars) {
+                        if (currentChunk.trim()) {
+                            chunks.push(currentChunk.trim());
+                        }
+                        currentChunk = line;
+                    } else {
+                        currentChunk += '\n' + line;
+                    }
+                }
+            } else {
+                currentChunk = section;
+            }
+        } else {
+            currentChunk += '\n\n' + section;
+        }
+    }
+    
+    // Don't forget the last chunk
+    if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+    }
+    
+    console.log(`📦 Chunking: Split into ${chunks.length} chunks (max ${maxTokens} tokens each)`);
+    return chunks;
+}
+
+// ===== MULTI-DOC CONTEXT MERGE (Corporate Multi-Attachment) =====
+// Labels each document for clear reference in AI responses
+function buildMultiDocContext(extractedItems) {
+    if (!extractedItems || extractedItems.length === 0) {
+        return '';
+    }
+    
+    let context = '';
+    const docSummaries = [];
+    
+    extractedItems.forEach((item, idx) => {
+        const docNumber = idx + 1;
+        const fileName = item.fileName || item.name || `Document ${docNumber}`;
+        const label = `[Document ${docNumber}: ${fileName}]`;
+        
+        // Extract text content
+        let textContent = '';
+        if (item.text) {
+            textContent = item.text;
+        } else if (item.summary) {
+            textContent = item.summary;
+        } else if (item.extractedData?.text) {
+            textContent = item.extractedData.text;
+        } else if (typeof item === 'string') {
+            textContent = item;
+        }
+        
+        // Apply intelligent chunking for long documents
+        if (textContent.length > 4000) {
+            const chunks = intelligentChunking(textContent, 800);
+            textContent = chunks.slice(0, 3).join('\n\n[...]\n\n');
+            if (chunks.length > 3) {
+                textContent += `\n\n[${chunks.length - 3} more sections not shown]`;
+            }
+        }
+        
+        context += `\n\n${label}\n`;
+        context += textContent || '[No text extracted]';
+        
+        // Build summary for cross-reference
+        docSummaries.push({
+            number: docNumber,
+            name: fileName,
+            type: item.fileType || item.type || 'document',
+            preview: (textContent || '').substring(0, 100)
+        });
+    });
+    
+    // Add document index at the top for easy reference
+    if (extractedItems.length > 1) {
+        let indexHeader = '📋 **DOCUMENT INDEX:**\n';
+        docSummaries.forEach(doc => {
+            indexHeader += `  ${doc.number}. ${doc.name} (${doc.type})\n`;
+        });
+        indexHeader += '\n---';
+        context = indexHeader + context;
+    }
+    
+    console.log(`📦 Multi-Doc Merge: Combined ${extractedItems.length} documents into unified context`);
+    return context.trim();
+}
+
 // ===== CHEMICAL CONSTANTS (SETTLED SCIENCE) =====
 // 18 compounds with UNIQUE formulas - IUPAC Gold Book 2024
 // Stage 0: Instant recognition (0.4s vs 4.2s DDG)
@@ -2060,5 +2172,8 @@ module.exports = {
     selectExtractionPipeline,
     executeExtractionCascade,
     formatJSONForGroq,
-    FINANCIAL_PHYSICS_SEED
+    FINANCIAL_PHYSICS_SEED,
+    // New functions for multi-doc corporate support
+    intelligentChunking,
+    buildMultiDocContext
 };

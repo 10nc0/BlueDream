@@ -27,7 +27,7 @@ const MetadataExtractor = require('./metadata-extractor');
 const genesisCounter = require('./server/genesis-counter');
 const Prometheus = require('./prometheus');
 const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document-parser');
-const { identifyFileType, executeExtractionCascade, formatJSONForGroq, FINANCIAL_PHYSICS_SEED } = require('./utils/attachment-cascade');
+const { identifyFileType, executeExtractionCascade, formatJSONForGroq, FINANCIAL_PHYSICS_SEED, intelligentChunking, buildMultiDocContext } = require('./utils/attachment-cascade');
 const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('./prompts/nyan-protocol');
@@ -6709,7 +6709,20 @@ app.post('/api/playground', async (req, res) => {
             }
             
             console.log(`🎮 Playground: Analyzing ${photoList.length} photo(s) via Groq Vision for ${clientIp}`);
-            const visionPrompt = message || 'Extract all text exactly from this image. Describe the image factually. If this is a receipt, plate, or sign, output structured text.';
+            
+            // LaTeX OCR Enhancement: Detect and extract equations for pharmacy/research users
+            const LATEX_ENHANCEMENT = `
+IF you see LaTeX math notation (\\frac, \\sum, \\int, \\begin{align}, \\ce{}, chemical formulas, greek letters):
+- Extract the raw LaTeX code exactly as written
+- Also provide the human-readable rendered form
+- Example: \\ce{C21H30O2} → Output both: "LaTeX: \\ce{C21H30O2}" AND "Rendered: C₂₁H₃₀O₂ (Tetrahydrocannabinol)"
+- Example: \\frac{d}{dx} → Output both: "LaTeX: \\frac{d}{dx}" AND "Rendered: d/dx (derivative)"
+- For chemical structures, identify the compound name if recognizable
+`;
+            
+            const visionPrompt = message 
+                ? `${message}\n\n${LATEX_ENHANCEMENT}`
+                : `Extract all text exactly from this image. Describe the image factually. If this is a receipt, plate, or sign, output structured text.\n\n${LATEX_ENHANCEMENT}`;
             
             for (let i = 0; i < photoList.length; i++) {
                 const photoData = photoList[i];
@@ -6737,7 +6750,25 @@ app.post('/api/playground', async (req, res) => {
                             messages: [
                                 { 
                                     role: 'system', 
-                                    content: 'You are an expert image analyst. Extract all text exactly. Describe images factually. For Indonesian text (receipts, plates, signs), output structured text with confidence. No hallucinations.' 
+                                    content: `You are an expert image analyst with special expertise in scientific notation.
+
+CORE DUTIES:
+1. Extract all text exactly as shown
+2. Describe images factually
+3. For Indonesian text (receipts, plates, signs), output structured text
+
+LATEX/CHEMISTRY EXPERTISE:
+- Detect LaTeX equations: \\frac, \\int, \\sum, \\begin{equation}, \\ce{}, greek letters (α, β, γ, Δ)
+- Extract both RAW LaTeX code AND human-readable form
+- Identify chemical compounds: molecular formulas → common names
+- For hand-drawn structures: describe bonds, functional groups, attempt identification
+
+EXAMPLES:
+- "\\ce{C8H10N4O2}" → "Caffeine (C₈H₁₀N₄O₂)"
+- "\\frac{\\partial f}{\\partial x}" → "∂f/∂x (partial derivative)"
+- Benzene ring sketch → "Benzene ring structure (C₆H₆)"
+
+No hallucinations. If uncertain, say "possibly" or "structure resembles".` 
                                 },
                                 { 
                                     role: 'user', 
@@ -6784,6 +6815,9 @@ app.post('/api/playground', async (req, res) => {
             
             console.log(`🎮 Playground: Processing ${docList.length} document(s) for ${clientIp}`);
             
+            // Collect all extracted documents for multi-doc context merge
+            const extractedDocs = [];
+            
             for (let i = 0; i < docList.length; i++) {
                 const doc = docList[i];
                 const docData = doc.data;
@@ -6804,15 +6838,37 @@ app.post('/api/playground', async (req, res) => {
                     
                     if (cascadeResult.success && cascadeResult.jsonOutput) {
                         const docContent = formatJSONForGroq(cascadeResult, '');
-                        extractedContent.push(`[Document ${i + 1}: ${docName}]:\n${docContent}`);
+                        extractedDocs.push({
+                            fileName: docName,
+                            fileType: fileType.type,
+                            text: docContent
+                        });
                     } else {
-                        extractedContent.push(`[Document ${i + 1}: ${docName}]: Could not extract content`);
+                        extractedDocs.push({
+                            fileName: docName,
+                            fileType: fileType.type,
+                            text: '[Could not extract content]'
+                        });
                     }
                     
                 } catch (docError) {
                     console.error(`❌ Document ${i + 1} error:`, docError.message);
-                    extractedContent.push(`[Document ${i + 1}: ${docName}]: ${docError.message}`);
+                    extractedDocs.push({
+                        fileName: docName,
+                        fileType: 'error',
+                        text: `[Error: ${docError.message}]`
+                    });
                 }
+            }
+            
+            // Use multi-doc context merge for corporate multi-attachment queries
+            if (extractedDocs.length > 1) {
+                const mergedContext = buildMultiDocContext(extractedDocs);
+                extractedContent.push(mergedContext);
+                console.log(`📦 Multi-Doc: Merged ${extractedDocs.length} documents into unified context`);
+            } else if (extractedDocs.length === 1) {
+                // Single document - use simple format
+                extractedContent.push(`[Document 1: ${extractedDocs[0].fileName}]:\n${extractedDocs[0].text}`);
             }
         }
         

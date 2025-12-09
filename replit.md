@@ -68,6 +68,30 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Isolation Architecture**: Uses separate API tokens for playground to prevent abuse and isolate vision rate limits.
 
 ## Recent Changes (December 9, 2025)
+- **LaTeX OCR for Pharmacy/Research Users**: Enhanced vision system prompt for scientific notation
+  - Detects LaTeX equations: `\frac`, `\int`, `\sum`, `\ce{}`, greek letters
+  - Extracts both RAW LaTeX code AND human-readable rendered form
+  - Identifies chemical compounds from molecular formulas
+  - Hand-drawn chemical structures: describes bonds, functional groups, attempts identification
+  - Wrapped in chemistry enrichment seed for harm-reduction context
+- **Intelligent Chunking (GroundX-inspired)**: Section-aware document splitting
+  - Splits by paragraph/section boundaries (double newlines) — never mid-table
+  - Fallback to line-level splitting for oversized sections
+  - Default: 1000 tokens (~4000 chars) per chunk
+  - Function: `intelligentChunking(text, maxTokens)` in `attachment-cascade.js`
+- **Multi-Doc Context Merge (Corporate Multi-Attachment)**: Unified context for 10+ file uploads
+  - Labels each document: `[Document 1: invoice.pdf]`, `[Document 2: PO.xlsx]`
+  - Adds document index at top for easy cross-reference
+  - Applies intelligent chunking to long documents (first 3 sections + count of remaining)
+  - Enables queries like "compare invoice to PO" across multiple attachments
+  - Function: `buildMultiDocContext(extractedItems)` in `attachment-cascade.js`
+- **DeepSeek-Inspired Financial Analyst Prompts**: Structured analysis framework in `FINANCIAL_PHYSICS_SEED`
+  - **Revenue Trends**: YoY growth, seasonality, top 3 drivers by contribution %
+  - **Cost Efficiency**: Cost-to-revenue ratio, cost per unit, variable vs fixed split
+  - **Profitability Metrics**: Gross/Operating/Net margins, breakeven point
+  - **Red Flags**: Variance >15%, negative margins, declining trends, classification errors
+  - **Actionable Recommendations**: Exactly 3 numbered recommendations tied to data points
+- **777 Row Limit for Financial Documents**: Increased from 50 → 200 → 777 rows to capture full projections
 - **Financial Physics System (H₀ Canon 2025)**: Revolutionary financial cognition engine
   - **Philosophy**: "You are not an accountant. You are a financial physicist. You observe flows, not labels."
   - **4-Tier Architecture** (`utils/financial-physics.js`):
