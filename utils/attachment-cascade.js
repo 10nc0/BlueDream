@@ -2010,6 +2010,11 @@ function formatJSONForGroq(cascadeResult, userQuery) {
     
     if (json.content.tables && json.content.tables.length > 0) {
         contextParts.push('### Extracted Tables:\n');
+        
+        // For financial documents, show more rows (up to 200) to capture full P&L
+        const isFinancial = !!json.content.financialAnalysis;
+        const maxRows = isFinancial ? 200 : 50;
+        
         json.content.tables.forEach((table, i) => {
             if (table.format === 'markdown') {
                 contextParts.push(`**Table ${i + 1}:**`);
@@ -2021,11 +2026,11 @@ function formatJSONForGroq(cascadeResult, userQuery) {
                     contextParts.push(`| ${table.headers.map(() => '---').join(' | ')} |`);
                 }
                 if (table.rows) {
-                    table.rows.slice(1, 50).forEach(row => {
+                    table.rows.slice(1, maxRows).forEach(row => {
                         contextParts.push(`| ${row.join(' | ')} |`);
                     });
-                    if (table.rows.length > 50) {
-                        contextParts.push(`\n[...${table.rows.length - 50} more rows truncated...]`);
+                    if (table.rows.length > maxRows) {
+                        contextParts.push(`\n[...${table.rows.length - maxRows} more rows truncated...]`);
                     }
                 }
             }
