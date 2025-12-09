@@ -1218,33 +1218,125 @@ async function extractExcelData(buffer, fileName) {
             const sheetData = {
                 name: sheet.name,
                 rows: [],
-                headers: []
+                headers: [],
+                structuredRows: [],
+                mergedCells: []
             };
             
-            sheet.eachRow({ includeEmpty: false }, (row, rowNum) => {
+            const mergedRanges = [];
+            if (sheet.hasMerges) {
+                Object.keys(sheet._merges || {}).forEach(key => {
+                    mergedRanges.push(key);
+                });
+            }
+            sheetData.mergedCells = mergedRanges;
+            
+            let columnHeaders = [];
+            let lastNonEmptyRow = 0;
+            
+            sheet.eachRow({ includeEmpty: true }, (row, rowNum) => {
                 const values = [];
-                row.eachCell({ includeEmpty: true }, (cell) => {
-                    let value = '';
+                const cellDetails = [];
+                let rowHasContent = false;
+                let firstCellValue = '';
+                let firstCellIndent = 0;
+                let firstCellBold = false;
+                
+                row.eachCell({ includeEmpty: true }, (cell, colNum) => {
+                    let value = null;
+                    let numericValue = null;
+                    let displayValue = '';
+                    
                     if (cell.value !== null && cell.value !== undefined) {
+                        rowHasContent = true;
+                        
                         if (typeof cell.value === 'object') {
-                            value = cell.value.text || cell.value.result || String(cell.value);
+                            if (cell.value.result !== undefined) {
+                                value = cell.value.result;
+                                numericValue = typeof value === 'number' ? value : null;
+                            } else if (cell.value.text !== undefined) {
+                                value = cell.value.text;
+                            } else if (cell.value.richText) {
+                                value = cell.value.richText.map(rt => rt.text).join('');
+                            } else {
+                                value = String(cell.value);
+                            }
+                        } else if (typeof cell.value === 'number') {
+                            value = cell.value;
+                            numericValue = cell.value;
                         } else {
                             value = String(cell.value);
                         }
+                        
+                        displayValue = value !== null ? String(value) : '';
                     }
-                    values.push(value);
+                    
+                    const isBold = cell.font?.bold || false;
+                    const indent = cell.alignment?.indent || 0;
+                    const isMerged = mergedRanges.some(range => {
+                        const match = range.match(/([A-Z]+)(\d+):([A-Z]+)(\d+)/);
+                        if (match) {
+                            const startCol = match[1].charCodeAt(0) - 64;
+                            const startRow = parseInt(match[2]);
+                            const endCol = match[3].charCodeAt(0) - 64;
+                            const endRow = parseInt(match[4]);
+                            return rowNum >= startRow && rowNum <= endRow && colNum >= startCol && colNum <= endCol;
+                        }
+                        return false;
+                    });
+                    
+                    if (colNum === 1) {
+                        firstCellValue = displayValue;
+                        firstCellIndent = indent;
+                        firstCellBold = isBold;
+                    }
+                    
+                    values.push(displayValue);
+                    cellDetails.push({
+                        value: value,
+                        numericValue: numericValue,
+                        displayValue: displayValue,
+                        isBold: isBold,
+                        indent: indent,
+                        isMerged: isMerged,
+                        col: colNum
+                    });
                 });
                 
-                if (rowNum === 1) {
-                    sheetData.headers = values;
+                if (rowNum === 1 || (rowNum <= 3 && !columnHeaders.length && rowHasContent)) {
+                    const hasOnlyText = cellDetails.every(c => c.numericValue === null || c.value === '');
+                    if (hasOnlyText && rowHasContent) {
+                        columnHeaders = values.filter(v => v && v.trim());
+                        sheetData.headers = columnHeaders;
+                    }
                 }
+                
+                const isEmptyRow = !rowHasContent || values.every(v => !v || v.trim() === '');
+                const gapFromPrevious = rowNum - lastNonEmptyRow;
+                
                 sheetData.rows.push(values);
+                sheetData.structuredRows.push({
+                    rowNum: rowNum,
+                    label: firstCellValue,
+                    values: values.slice(1),
+                    numericValues: cellDetails.slice(1).map(c => c.numericValue),
+                    isBold: firstCellBold,
+                    indent: firstCellIndent,
+                    isEmpty: isEmptyRow,
+                    gapBefore: gapFromPrevious > 1,
+                    columnHeaders: columnHeaders.slice(1),
+                    cellDetails: cellDetails
+                });
+                
+                if (rowHasContent) {
+                    lastNonEmptyRow = rowNum;
+                }
             });
             
             sheets.push(sheetData);
         });
         
-        return { success: true, data: { tables: sheets, type: 'excel' } };
+        return { success: true, data: { tables: sheets, type: 'excel', enhanced: true } };
     } catch (error) {
         return { success: false, error: error.message };
     }

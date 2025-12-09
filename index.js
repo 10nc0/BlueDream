@@ -28,7 +28,7 @@ const genesisCounter = require('./server/genesis-counter');
 const Prometheus = require('./prometheus');
 const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document-parser');
 const { identifyFileType, executeExtractionCascade, formatJSONForGroq, detectFinancialDocument } = require('./utils/attachment-cascade');
-const { processFinancialDocument } = require('./utils/multilingual-finance');
+const { processFinancialDocument, processStructuredExcel, hasStructuredExcelData } = require('./utils/multilingual-finance');
 const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('./prompts/nyan-protocol');
@@ -6801,6 +6801,8 @@ app.post('/api/playground', async (req, res) => {
                         imagePrompt: message || 'Describe this image in detail. Extract any text, numbers, or data visible.'
                     });
                     
+                    doc.extractedData = cascadeResult.jsonOutput || null;
+                    
                     if (cascadeResult.success && cascadeResult.jsonOutput) {
                         const docContent = formatJSONForGroq(cascadeResult, '');
                         extractedContent.push(`[Document ${i + 1}: ${docName}]:\n${docContent}`);
@@ -6892,42 +6894,80 @@ app.post('/api/playground', async (req, res) => {
             }
         }
         
-        // ===== DUAL-TEMPERATURE FINANCIAL DOCUMENT PROCESSING =====
-        // Detect non-English financial documents and use H₀ pipeline:
-        // Stage 0 (temp 0.3): Internalize messy local terms → universal concepts
-        // Stage 1: Deterministic semantic mapping with confidence
-        // Stage 2 (temp 0.15): Pure H₀ reasoning output
+        // ===== H₀ STRUCTURED FINANCIAL DOCUMENT PROCESSING =====
+        // Uses empirical priors (falsifiable) with H₀ philosophy:
+        // 1. Seed knowledge from Indonesian financial documents
+        // 2. AI can override priors when document context contradicts
+        // 3. Confidence = evidence strength, not certainty
+        // 4. Same pattern applies to all languages
         let financialPipelineUsed = false;
-        if (docList.length > 0 && extractedContent.length > 0) {
-            const allDocContent = extractedContent.join('\n');
-            const financialCheck = detectFinancialDocument({ text: allDocContent });
+        
+        if (docList.length > 0) {
+            const excelDocs = docList.filter(d => d.name?.match(/\.(xlsx|xls)$/i));
             
-            if (financialCheck.isFinancial && financialCheck.detectedLanguage !== 'english') {
-                console.log(`🌐 Financial document detected (${financialCheck.detectedLanguage}) - using dual-temperature pipeline`);
+            if (excelDocs.length > 0 && excelDocs[0].extractedData?.enhanced) {
+                const extractedData = excelDocs[0].extractedData;
+                const financialCheck = detectFinancialDocument(extractedData);
                 
-                try {
-                    const financialResult = await processFinancialDocument(
-                        allDocContent,
-                        message || 'Analyze this financial document and extract key metrics.',
-                        NYAN_PROTOCOL_SYSTEM_PROMPT,
-                        PLAYGROUND_GROQ_TOKEN
-                    );
+                if (financialCheck.isFinancial) {
+                    console.log(`📊 H₀ Pipeline: Financial Excel detected (${financialCheck.detectedLanguage})`);
                     
-                    if (financialResult.success && financialResult.response) {
-                        financialPipelineUsed = true;
-                        const confidenceNote = financialResult.pipeline?.semanticMap?.confidence < 70
-                            ? `\n\n⚠️ *Confidence: ${financialResult.pipeline?.semanticMap?.confidence?.toFixed(1)}% - some terms may need manual verification*`
-                            : '';
+                    try {
+                        const h0Result = await processStructuredExcel(
+                            extractedData,
+                            message || 'Analyze this financial document and compare key metrics.',
+                            NYAN_PROTOCOL_SYSTEM_PROMPT,
+                            PLAYGROUND_GROQ_TOKEN
+                        );
                         
-                        console.log(`✅ Dual-temperature pipeline complete (confidence: ${financialResult.pipeline?.semanticMap?.confidence?.toFixed(1)}%)`);
-                        return res.json({ 
-                            reply: financialResult.response + confidenceNote,
-                            pipeline: 'dual-temperature-finance'
-                        });
+                        if (h0Result.success && h0Result.response) {
+                            financialPipelineUsed = true;
+                            const confidenceNote = h0Result.avgConfidence < 70
+                                ? `\n\n⚠️ *Confidence: ${h0Result.avgConfidence?.toFixed(1)}% - some terms may need manual verification*`
+                                : `\n\n📊 *H₀ Pipeline: ${h0Result.accountsProcessed} accounts analyzed, ${h0Result.avgConfidence?.toFixed(1)}% confidence*`;
+                            
+                            console.log(`✅ H₀ structured pipeline complete: ${h0Result.accountsProcessed} accounts, ${h0Result.avgConfidence?.toFixed(1)}% confidence`);
+                            return res.json({ 
+                                reply: h0Result.response + confidenceNote,
+                                pipeline: 'h0-structured-excel'
+                            });
+                        }
+                    } catch (h0Err) {
+                        console.error('❌ H₀ structured pipeline error, trying legacy pipeline:', h0Err.message);
                     }
-                } catch (finErr) {
-                    console.error('❌ Dual-temperature pipeline error, falling back:', finErr.message);
-                    // Fall through to standard processing
+                }
+            }
+            
+            if (extractedContent.length > 0) {
+                const allDocContent = extractedContent.join('\n');
+                const financialCheck = detectFinancialDocument({ text: allDocContent });
+                
+                if (financialCheck.isFinancial && financialCheck.detectedLanguage !== 'english') {
+                    console.log(`🌐 Financial document detected (${financialCheck.detectedLanguage}) - using dual-temperature pipeline`);
+                    
+                    try {
+                        const financialResult = await processFinancialDocument(
+                            allDocContent,
+                            message || 'Analyze this financial document and extract key metrics.',
+                            NYAN_PROTOCOL_SYSTEM_PROMPT,
+                            PLAYGROUND_GROQ_TOKEN
+                        );
+                        
+                        if (financialResult.success && financialResult.response) {
+                            financialPipelineUsed = true;
+                            const confidenceNote = financialResult.pipeline?.semanticMap?.confidence < 70
+                                ? `\n\n⚠️ *Confidence: ${financialResult.pipeline?.semanticMap?.confidence?.toFixed(1)}% - some terms may need manual verification*`
+                                : '';
+                            
+                            console.log(`✅ Dual-temperature pipeline complete (confidence: ${financialResult.pipeline?.semanticMap?.confidence?.toFixed(1)}%)`);
+                            return res.json({ 
+                                reply: financialResult.response + confidenceNote,
+                                pipeline: 'dual-temperature-finance'
+                            });
+                        }
+                    } catch (finErr) {
+                        console.error('❌ Dual-temperature pipeline error, falling back:', finErr.message);
+                    }
                 }
             }
         }

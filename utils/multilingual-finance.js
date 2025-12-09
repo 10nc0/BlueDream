@@ -1,4 +1,13 @@
 const axios = require('axios');
+const { 
+    H0_TAXONOMY, 
+    classifyTerm, 
+    detectHierarchy, 
+    buildStructuredAccounts,
+    contextOverrideCheck,
+    applyOverrides,
+    normalizeText
+} = require('./h0-finance-taxonomy');
 
 const MULTILINGUAL_ACCOUNTING_MAPPING = `
 UNIVERSAL ACCOUNTING CONCEPT MAPPING (Auto-detect language):
@@ -441,10 +450,217 @@ async function processFinancialDocument(rawData, userQuestion, nyanProtocolPromp
     };
 }
 
+async function processStructuredExcel(extractedData, userQuestion, nyanProtocolPrompt, groqToken) {
+    console.log('📊 H₀ Pipeline: Processing structured Excel with empirical priors...');
+    
+    const tables = extractedData.tables || [];
+    if (tables.length === 0) {
+        return { error: 'No tables found in Excel data', pipeline: 'h0-structured' };
+    }
+    
+    const allAccounts = [];
+    const sheetSummaries = [];
+    
+    for (const sheet of tables) {
+        const sheetName = sheet.name || 'Sheet';
+        const structuredRows = sheet.structuredRows || [];
+        
+        if (structuredRows.length === 0) continue;
+        
+        console.log(`   📄 Processing sheet: ${sheetName} (${structuredRows.length} rows)`);
+        
+        const hierarchicalRows = detectHierarchy(structuredRows);
+        const accounts = buildStructuredAccounts(hierarchicalRows);
+        
+        const categoryCounts = {};
+        let totalConfidence = 0;
+        let classifiedCount = 0;
+        
+        for (const account of accounts) {
+            const cat = account.category || 'Unknown';
+            categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+            if (account.confidence > 0) {
+                totalConfidence += account.confidence;
+                classifiedCount++;
+            }
+        }
+        
+        const avgConfidence = classifiedCount > 0 ? totalConfidence / classifiedCount : 0;
+        
+        sheetSummaries.push({
+            name: sheetName,
+            accountCount: accounts.length,
+            avgConfidence: avgConfidence.toFixed(1),
+            categories: categoryCounts
+        });
+        
+        allAccounts.push(...accounts.map(a => ({ ...a, sheet: sheetName })));
+    }
+    
+    console.log(`   🔬 Classified ${allAccounts.length} accounts across ${tables.length} sheets`);
+    
+    const lowConfidenceCount = allAccounts.filter(a => a.confidence < 70 || a.requiresAIClassification).length;
+    
+    let overrideResult = { overrides: [], checked: 0 };
+    if (lowConfidenceCount > 0 && groqToken) {
+        console.log(`   🔧 Context override check: ${lowConfidenceCount} low-confidence items...`);
+        overrideResult = await contextOverrideCheck(allAccounts, groqToken);
+        
+        if (overrideResult.overrides.length > 0) {
+            console.log(`   ✅ Applied ${overrideResult.overrides.length} AI overrides`);
+            const updatedAccounts = applyOverrides(allAccounts, overrideResult.overrides);
+            allAccounts.length = 0;
+            allAccounts.push(...updatedAccounts);
+        }
+    }
+    
+    const revenueAccounts = allAccounts.filter(a => a.category === 'Revenue');
+    const directCostAccounts = allAccounts.filter(a => a.category === 'Direct Costs');
+    const opexAccounts = allAccounts.filter(a => a.category === 'Operating Expenses');
+    const hoAccounts = allAccounts.filter(a => a.category === 'Head Office Costs');
+    const profitAccounts = allAccounts.filter(a => a.category === 'Profit & Metrics');
+    
+    const structuredContext = {
+        sheets: sheetSummaries,
+        totalAccounts: allAccounts.length,
+        revenue: {
+            accounts: revenueAccounts.slice(0, 10),
+            count: revenueAccounts.length
+        },
+        directCosts: {
+            accounts: directCostAccounts.slice(0, 15),
+            count: directCostAccounts.length
+        },
+        operatingExpenses: {
+            accounts: opexAccounts.slice(0, 10),
+            count: opexAccounts.length
+        },
+        headOfficeCosts: {
+            accounts: hoAccounts.slice(0, 10),
+            count: hoAccounts.length
+        },
+        profitMetrics: {
+            accounts: profitAccounts.slice(0, 10),
+            count: profitAccounts.length
+        },
+        overridesApplied: overrideResult.overrides.length
+    };
+    
+    const avgOverallConfidence = allAccounts.length > 0 
+        ? allAccounts.reduce((s, a) => s + (a.confidence || 0), 0) / allAccounts.length 
+        : 0;
+    
+    console.log(`   📈 Average confidence: ${avgOverallConfidence.toFixed(1)}%`);
+    
+    const formatAccountsForPrompt = (accounts, limit = 10) => {
+        return accounts.slice(0, limit).map(a => {
+            const valStr = Object.entries(a.valuesByPeriod || {})
+                .map(([k, v]) => `${k}: ${typeof v === 'number' ? v.toLocaleString() : v}`)
+                .join(', ');
+            return `• ${a.label} [${a.category}, ${a.confidence}%] ${valStr ? `→ ${valStr}` : ''}`;
+        }).join('\n');
+    };
+    
+    const contextPrompt = `
+H₀ STRUCTURED FINANCIAL CONTEXT (Empirical Priors Applied):
+
+DOCUMENT OVERVIEW:
+- Sheets analyzed: ${sheetSummaries.map(s => `${s.name} (${s.accountCount} accounts, ${s.avgConfidence}% conf)`).join(', ')}
+- Total accounts classified: ${allAccounts.length}
+- AI overrides applied: ${overrideResult.overrides.length}
+- Overall confidence: ${avgOverallConfidence.toFixed(1)}%
+
+REVENUE (${revenueAccounts.length} items):
+${formatAccountsForPrompt(revenueAccounts)}
+
+DIRECT COSTS (${directCostAccounts.length} items):
+${formatAccountsForPrompt(directCostAccounts, 15)}
+
+OPERATING EXPENSES (${opexAccounts.length} items):
+${formatAccountsForPrompt(opexAccounts)}
+
+HEAD OFFICE COSTS (${hoAccounts.length} items):
+${formatAccountsForPrompt(hoAccounts)}
+
+PROFIT & METRICS (${profitAccounts.length} items):
+${formatAccountsForPrompt(profitAccounts)}
+
+NOTE: Classifications are H₀ empirical priors (falsifiable). Evidence strength shown as confidence %.
+`;
+
+    const finalPrompt = `${nyanProtocolPrompt}
+
+${contextPrompt}
+
+USER QUESTION:
+${userQuestion}
+
+INSTRUCTIONS:
+1. Use the ACTUAL NUMERIC VALUES from the accounts above for your analysis
+2. Compare year-over-year: identify which columns represent which periods (Budget 2025, Actual 2025, Budget 2026, etc.)
+3. Calculate variances and trends where data is available
+4. Flag any red flags (expenses growing faster than revenue, margins declining, unusual variances)
+5. Cite specific account names and values in your analysis
+6. If confidence is low for certain items, acknowledge it but proceed with best interpretation
+7. Provide actionable insights, not just data recitation`;
+
+    try {
+        const response = await axios.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            {
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                    { role: 'system', content: nyanProtocolPrompt },
+                    { role: 'user', content: finalPrompt }
+                ],
+                temperature: 0.15,
+                max_tokens: 2500
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${groqToken}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000
+            }
+        );
+
+        return {
+            success: true,
+            response: response.data.choices[0]?.message?.content || 'No response generated.',
+            tokensUsed: response.data.usage?.total_tokens || 0,
+            pipeline: 'h0-structured-excel',
+            structuredContext: structuredContext,
+            avgConfidence: avgOverallConfidence,
+            accountsProcessed: allAccounts.length,
+            overridesApplied: overrideResult.overrides.length
+        };
+    } catch (error) {
+        console.error('❌ H₀ structured reasoning error:', error.message);
+        return {
+            success: false,
+            error: error.message,
+            pipeline: 'h0-structured-excel',
+            structuredContext: structuredContext
+        };
+    }
+}
+
+function hasStructuredExcelData(extractedData) {
+    if (!extractedData || !extractedData.tables) return false;
+    return extractedData.tables.some(t => 
+        t.structuredRows && 
+        t.structuredRows.length > 0 && 
+        t.structuredRows.some(r => r.numericValues?.some(v => v !== null))
+    );
+}
+
 module.exports = {
     detectFinancialDocument,
     isFinancialContent,
     processFinancialDocument,
+    processStructuredExcel,
+    hasStructuredExcelData,
     stage0Internalize,
     stage1SemanticMap,
     stage2Reason,

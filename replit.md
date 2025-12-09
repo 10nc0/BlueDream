@@ -68,17 +68,27 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Isolation Architecture**: Uses separate API tokens for playground to prevent abuse and isolate vision rate limits.
 
 ## Recent Changes (December 9, 2025)
-- **Dual-Temperature Financial Document Processing (H₀ 2025 Canon)**: New multilingual finance pipeline
+- **H₀ Structured Financial Document Processing**: Complete rewrite with empirical priors philosophy
+  - **H₀ Account Taxonomy** (`utils/h0-finance-taxonomy.js`): 168 Indonesian accounting terms as seed knowledge
+    - NOT H(1) dogma - priors are falsifiable by document context
+    - Confidence = evidence strength, not certainty
+    - Same pattern applies to Chinese, Japanese, Korean, Spanish, French, German, Arabic, Portuguese, Thai
+  - **Fuzzy Matching**: Partial token matching, Levenshtein distance, stem patterns
+    - "Pendapatan Net Klaim" → partial match "Pendapatan" → Revenue (85% confidence)
+  - **Context Override**: AI can override priors when document evidence contradicts seed knowledge
+    - Low confidence items (<70%) trigger Groq API verification
+  - **Enhanced Excel Parser**: Now extracts cell VALUES + formatting metadata
+    - Bold/indent detection for section headers
+    - Empty rows as section dividers
+    - Merged cell handling
+    - Numeric values preserved (not just strings)
+  - **Hierarchy Detection**: Main accounts vs sub-accounts based on indent/bold/spacing
+  - **Structured Output**: Each account includes label, category, hierarchyLevel, valuesByPeriod, confidence, evidence
+  - File: `utils/multilingual-finance.js` (processStructuredExcel), `utils/h0-finance-taxonomy.js`
+- **Dual-Temperature Financial Document Processing (Legacy)**: Fallback for non-Excel documents
   - **Stage 0 (temp 0.3)**: Internalize messy local terms → universal accounting concepts
-    - Supports: Indonesian, Chinese, Japanese, Korean, Spanish, French, German, Arabic, Portuguese, Thai
-    - Aggressive synonym expansion for non-English financial terminology
   - **Stage 1 (deterministic)**: Semantic mapping with confidence scoring
-    - Subject vs Object preservation (never conflate "Driver" with "Upah Trip")
-    - Maps local terms: "Pendapatan Net Klaim" → Revenue, "Beban" → Expenses
   - **Stage 2 (temp 0.15)**: Pure H₀ reasoning output with NYAN_PROTOCOL_PROMPT
-  - **Self-healing**: If confidence <70%, triggers clarification with aggressive synonyms
-  - Auto-detects financial documents via multilingual pattern matching
-  - File: `utils/multilingual-finance.js`
 - **New Chat Button Fix**: Event listener approach now reliably clears conversation
 - **Conversation Memory**: Added 8-turn sliding window memory for AI Playground
   - localStorage persistence - conversations survive page refresh
