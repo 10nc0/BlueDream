@@ -15,6 +15,7 @@ let attachments = [];
 let isProcessing = false;
 let conversationHistory = [];
 let mediaRecorder = null;
+let shouldSkipHydration = false;  // Flag to prevent auto-hydration after manual clear
 
 // ===== CONVERSATION MEMORY: localStorage persistence =====
 function loadConversationHistory() {
@@ -50,7 +51,7 @@ function clearConversationHistory() {
 
 // Hydrate UI from saved history on page load
 function hydrateHistoryToUI() {
-    if (conversationHistory.length === 0) return;
+    if (shouldSkipHydration || conversationHistory.length === 0) return;
     
     // Remove welcome message if restoring history
     const welcome = messagesEl.querySelector('.welcome');
@@ -785,9 +786,25 @@ async function sendMessage() {
 
 // Clear history handler (can be called from UI or console)
 function clearNyanHistory() {
-    // Clear in-memory and localStorage first
+    // Set flag to prevent auto-hydration
+    shouldSkipHydration = true;
+    
+    // Clear in-memory array
     conversationHistory = [];
-    localStorage.removeItem('nyan_history');
+    
+    // Clear localStorage completely
+    try {
+        localStorage.clear();
+        console.log('🧹 localStorage.clear() executed');
+    } catch (e) {
+        console.warn('⚠️ localStorage.clear() failed:', e.message);
+        // Fallback: try removing specific items
+        try {
+            localStorage.removeItem('nyan_history');
+        } catch (e2) {
+            console.error('❌ Could not clear localStorage:', e2.message);
+        }
+    }
     
     // Clear UI completely
     messagesEl.innerHTML = `
@@ -807,6 +824,10 @@ function clearNyanHistory() {
     // Also clear any attachments
     attachments = [];
     clearAllAttachments();
+    
+    // Reset message input
+    messageInput.value = '';
+    messageInput.style.height = '44px';
     
     console.log('🧹 Conversation cleared - fresh start!');
 }
