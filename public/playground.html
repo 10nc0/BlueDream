@@ -88,6 +88,23 @@
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
         }
         
+        .clear-btn {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+        
+        .clear-btn:hover {
+            background: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
+        
         .chat-container {
             flex: 1;
             display: flex;
@@ -661,6 +678,7 @@
             <div id="dateTimeCompact" class="date-time-display" style="display: none;">
                 <span id="currentTimeCompact">2025/12/08 - 3:00:00PM</span>
             </div>
+            <button onclick="clearNyanHistory()" class="clear-btn" title="Clear conversation">🗑️ <span class="desktop-text">New Chat</span></button>
             <a href="/login.html" class="login-btn"><span class="desktop-text">🐈‍⬛ Login to Nyanbook</span><span class="mobile-text">🐈‍⬛ Login</span></a>
         </div>
     </div>

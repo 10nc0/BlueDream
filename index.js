@@ -6893,13 +6893,63 @@ app.post('/api/playground', async (req, res) => {
         
         console.log(`🎮 Playground: Generating response for ${clientIp} (${textCapacity.activeUsers} active users)`);
         
-        // Build messages array: system message + conversation history + current message
+        // ===== CONVERSATION MEMORY: 8-turn sliding window with summarization =====
+        const MAX_MESSAGES = 8;        // 8 turns = 16 messages (user + assistant)
+        const SUMMARIZE_AFTER = 6;     // After 6 user messages → trigger summarization
+        
+        // Clean & limit history from client
+        let conversationContext = (history || [])
+            .filter(msg => msg.role && msg.content)
+            .slice(-(MAX_MESSAGES * 2));
+        
+        // Auto-summarize if history is long (preserves H₀ purity)
+        if (conversationContext.length >= SUMMARIZE_AFTER * 2) {
+            try {
+                const oldContext = conversationContext.slice(0, -4);  // everything except last 2 turns
+                const recent = conversationContext.slice(-4);
+                
+                // One-shot summarization call
+                const summaryResponse = await axios.post(
+                    'https://api.groq.com/openai/v1/chat/completions',
+                    {
+                        model: 'llama-3.3-70b-versatile',
+                        messages: [
+                            { role: 'system', content: 'Summarize this conversation in 2-3 sentences. Focus on key facts, compounds discussed, and user intent. Be concise.' },
+                            ...oldContext
+                        ],
+                        temperature: 0.1,
+                        max_tokens: 300
+                    },
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        },
+                        timeout: 10000
+                    }
+                );
+                
+                const summary = summaryResponse.data.choices[0]?.message?.content?.trim() || '';
+                if (summary) {
+                    console.log(`🧠 Memory: Summarized ${oldContext.length} messages → ${summary.length} chars`);
+                    conversationContext = [
+                        { role: 'system', content: `Previous conversation summary: ${summary}` },
+                        ...recent
+                    ];
+                }
+            } catch (summaryErr) {
+                console.log(`⚠️ Summarization skipped: ${summaryErr.message}`);
+                // Continue with truncated history if summarization fails
+            }
+        }
+        
+        // Build messages array: system prompt + conversation context + current message
         const messages = [
             {
                 role: 'system',
                 content: NYAN_PROTOCOL_SYSTEM_PROMPT
             },
-            ...conversationHistory,
+            ...conversationContext,
             {
                 role: 'user',
                 content: finalPrompt

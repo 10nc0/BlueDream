@@ -10,10 +10,62 @@ const errorToast = document.getElementById('errorToast');
 const inputContainer = document.querySelector('.input-container');
 
 const MAX_ATTACHMENTS = 10;
+const MAX_HISTORY_TURNS = 8;  // 8 turns = 16 messages (user + assistant)
 let attachments = [];
 let isProcessing = false;
 let conversationHistory = [];
 let mediaRecorder = null;
+
+// ===== CONVERSATION MEMORY: localStorage persistence =====
+function loadConversationHistory() {
+    try {
+        const saved = localStorage.getItem('nyan_history');
+        if (saved) {
+            conversationHistory = JSON.parse(saved);
+            console.log(`🧠 Memory: Loaded ${conversationHistory.length} messages from storage`);
+        }
+    } catch (e) {
+        console.warn('⚠️ Could not load conversation history:', e.message);
+        conversationHistory = [];
+    }
+}
+
+function saveConversationHistory() {
+    try {
+        // Cap at 8 turns (16 messages) to prevent bloat
+        if (conversationHistory.length > MAX_HISTORY_TURNS * 2) {
+            conversationHistory = conversationHistory.slice(-(MAX_HISTORY_TURNS * 2));
+        }
+        localStorage.setItem('nyan_history', JSON.stringify(conversationHistory));
+    } catch (e) {
+        console.warn('⚠️ Could not save conversation history:', e.message);
+    }
+}
+
+function clearConversationHistory() {
+    conversationHistory = [];
+    localStorage.removeItem('nyan_history');
+    console.log('🧹 Memory: Conversation history cleared');
+}
+
+// Hydrate UI from saved history on page load
+function hydrateHistoryToUI() {
+    if (conversationHistory.length === 0) return;
+    
+    // Remove welcome message if restoring history
+    const welcome = messagesEl.querySelector('.welcome');
+    if (welcome) welcome.remove();
+    
+    // Render all past messages
+    conversationHistory.forEach(msg => {
+        addMessage(msg.role === 'user' ? 'user' : 'assistant', msg.content);
+    });
+    
+    console.log(`🧠 Memory: Restored ${conversationHistory.length} messages to UI`);
+}
+
+// Load history on page load
+loadConversationHistory();
 let recordingChunks = [];
 let isRecording = false;
 
@@ -641,6 +693,7 @@ async function sendMessage() {
     const userMessageText = message || `(Analyzing ${attachments.length} attachment${attachments.length > 1 ? 's' : ''})`;
     addMessage('user', userMessageText, [...attachments]);
     conversationHistory.push({ role: 'user', content: userMessageText });
+    saveConversationHistory();  // Persist immediately after user message
     messageInput.value = '';
     messageInput.style.height = '44px'; // Reset to min height
     
@@ -692,6 +745,7 @@ async function sendMessage() {
             const reply = data.reply;
             addMessage('assistant', reply);
             conversationHistory.push({ role: 'assistant', content: reply });
+            saveConversationHistory();  // Persist to localStorage
         }
     } catch (err) {
         removeLoadingMessage();
@@ -703,3 +757,34 @@ async function sendMessage() {
     sendBtn.disabled = false;
     messageInput.focus();
 }
+
+// Clear history handler (can be called from UI or console)
+window.clearNyanHistory = function() {
+    // Clear in-memory and localStorage first
+    conversationHistory = [];
+    localStorage.removeItem('nyan_history');
+    
+    // Reset UI to welcome state
+    messagesEl.innerHTML = `
+        <div class="welcome">
+            <h2>Welcome to Nyan AI Playground</h2>
+            <p>No login required. No data stored. Just purr intelligence.</p>
+            <p>Powered by Groq's blazing-fast Llama 3.3 70B model.</p>
+            <div class="features">
+                <div class="feature"><span class="feature-icon">💬</span><div>Text</div></div>
+                <div class="feature"><span class="feature-icon">📸</span><div>Photo</div></div>
+                <div class="feature"><span class="feature-icon">📎</span><div>Attachment</div></div>
+                <div class="feature"><span class="feature-icon">🎙️</span><div>Audio</div></div>
+            </div>
+        </div>
+    `;
+    console.log('🧹 Conversation cleared - fresh start!');
+};
+
+// Hydrate history to UI after DOM is fully loaded
+document.addEventListener('DOMContentLoaded', () => {
+    // Small delay to ensure all DOM elements are ready
+    setTimeout(() => {
+        hydrateHistoryToUI();
+    }, 100);
+});
