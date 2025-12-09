@@ -68,11 +68,13 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Isolation Architecture**: Uses separate API tokens for playground to prevent abuse and isolate vision rate limits.
 
 ## Recent Changes (December 9, 2025)
-- **Financial Physics Refactor (Grok/Claude Compromise)**: Pragmatic 652-line version (down from 1183)
-  - Replaced 200-line `isFinancialStatement()` with 5-line `quickNonFinancialCheck()` 
-  - Added 15-line `detectDocumentType()` for Assumptions vs Income Statement
-  - Deleted `DOCUMENT_SIGNATURES`, `FINANCIAL_NATURE`, and old TIER -1 bloat
-  - Kept 100% of scripture (FINANCIAL_PHYSICS_SEED), EMPIRICAL_PRIORS, and classification logic
+- **Financial Physics Refactor (Final)**: 691 lines (down from 1183 = 42% reduction)
+  - Replaced bloated `isFinancialStatement()` with `quickNonFinancialCheck()` guard
+  - Guard uses recursive `flattenToStrings()` to handle nested Excel/PDF cell structures
+  - Added `detectDocumentType()` for Assumptions vs Income Statement detection
+  - Short-circuits: Log data (timestamps + IDs + no financial keywords) → returns `{ type: 'non_financial' }` immediately
+  - Deleted `DOCUMENT_SIGNATURES`, `FINANCIAL_NATURE`, old TIER -1 bloat
+  - Kept 100% of scripture (FINANCIAL_PHYSICS_SEED), EMPIRICAL_PRIORS, classification logic
 - **LaTeX OCR for Pharmacy/Research Users**: Enhanced vision system prompt for scientific notation
   - Detects LaTeX equations: `\frac`, `\int`, `\sum`, `\ce{}`, greek letters
   - Extracts both RAW LaTeX code AND human-readable rendered form
