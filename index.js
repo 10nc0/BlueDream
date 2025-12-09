@@ -6914,10 +6914,11 @@ app.post('/api/playground', async (req, res) => {
         const MAX_MESSAGES = 8;        // 8 turns = 16 messages (user + assistant)
         const SUMMARIZE_AFTER = 6;     // After 6 user messages → trigger summarization
         
-        // Clean & limit history from client
+        // Clean & limit history from client (strip attachments - Groq rejects extra fields)
         let conversationContext = (history || [])
             .filter(msg => msg.role && msg.content)
-            .slice(-(MAX_MESSAGES * 2));
+            .slice(-(MAX_MESSAGES * 2))
+            .map(msg => ({ role: msg.role, content: msg.content }));
         
         // Auto-summarize if history is long (preserves H₀ purity)
         if (conversationContext.length >= SUMMARIZE_AFTER * 2) {
