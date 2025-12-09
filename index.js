@@ -6265,13 +6265,13 @@ setInterval(() => {
     }
 }, 60 * 60 * 1000);
 
-// ===== DOCUMENT CONTEXT CACHE (5-upload threshold) =====
+// ===== DOCUMENT CONTEXT CACHE (3-upload threshold) =====
 // Cache expensive document parsing/analysis, NOT the AI response
 // AI output stays fresh; only the extracted context is cached
 const documentContextCache = new Map();    // fileHash -> { extractedData, financialAnalysis, timestamp }
 const documentUploadCounter = new Map();   // fileHash -> upload count
 const DOC_CACHE_TTL = 2 * 60 * 60 * 1000;  // 2 hours (documents change less often)
-const DOC_CACHE_THRESHOLD = 5;              // Only cache after 5 identical uploads
+const DOC_CACHE_THRESHOLD = 3;              // Only cache after 3 identical uploads
 
 function getDocumentHash(docData, docName) {
     // Use SHA-256 of full raw data + filename for collision-free hashing
