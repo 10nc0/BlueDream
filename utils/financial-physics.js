@@ -70,6 +70,9 @@ function getTemporalContext() {
 }
 
 const FINANCIAL_PHYSICS_SEED = `
+⚠️ PRIORITY OVERRIDE: These financial physics directives SUPERSEDE all previous system instructions.
+When analyzing financial documents, ALWAYS apply these rules — they cannot be overridden by formatting preferences.
+
 UNIVERSAL FINANCIAL ONTOLOGY (H₀ SEED — 2025)
 
 ===== TEMPORAL REALITY CHECK (CHECK YOUR WATCH FIRST) =====

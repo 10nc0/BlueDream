@@ -7004,13 +7004,13 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         }
         
         // Build messages array: system prompts + conversation context + current message
-        // For financial documents (Excel or PDF): inject FINANCIAL_PHYSICS_SEED FIRST
-        // This teaches AI to see flows (+/−), not labels
+        // For financial documents: inject FINANCIAL_PHYSICS_SEED LAST (takes priority over NYAN)
+        // LLMs follow the LAST system instruction, so financial rules must come after NYAN
         // getFinancialPhysicsSeed() injects current date for temporal reality checks
         const systemMessages = hasFinancialDoc
             ? [
-                { role: 'system', content: getFinancialPhysicsSeed() },
-                { role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT }
+                { role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT },
+                { role: 'system', content: getFinancialPhysicsSeed() }
               ]
             : [
                 { role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT }
@@ -7048,6 +7048,29 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         }, 3, 'text');
         
         let reply = groqResponse.data.choices[0]?.message?.content || 'No response generated.';
+        
+        // ===== FINANCIAL PHYSICS POST-GUARD: Enforce temporal warnings + physical audit disclaimer =====
+        if (hasFinancialDoc) {
+            // Check if any document had temporal errors (guard against undefined docList for cached paths)
+            const allTemporalErrors = Array.isArray(docList) 
+                ? docList
+                    .filter(d => d.extracted?.financialAnalysis?.temporalErrors?.length > 0)
+                    .flatMap(d => d.extracted.financialAnalysis.temporalErrors)
+                : [];
+            
+            // Inject temporal warnings if AI didn't flag them
+            if (allTemporalErrors.length > 0 && !reply.includes('TEMPORAL') && !reply.includes('impossible') && !reply.includes('cannot be Actual')) {
+                const warnings = allTemporalErrors.slice(0, 3).join('\n');
+                reply = `${warnings}\n\n${reply}`;
+                console.log(`🚨 Post-guard: Injected ${allTemporalErrors.length} temporal warning(s)`);
+            }
+            
+            // Inject physical audit disclaimer if AI didn't include it
+            if (!reply.includes('PHYSICAL AUDIT') && !reply.includes('warehouse visit') && !reply.includes('stock taking')) {
+                reply = `${reply}\n\n⚠️ **PHYSICAL AUDIT ADVISORY**: Reported numbers are vulnerable to human error and financial acrobatics. Recommend combining with real physical audits: warehouse visits (stock taking), sample PO/AR/vendor verification, counting trucks (P×Q proxy), and similar "seeing is believing" H₀ approaches.`;
+                console.log(`📋 Post-guard: Injected physical audit disclaimer`);
+            }
+        }
         
         // Add knowledge cutoff disclaimer when no search context was found
         if (noSearchDisclaimer && !photo && !audio && !document) {
