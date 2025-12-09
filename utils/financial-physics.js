@@ -868,7 +868,7 @@ function formatPhysicsAnalysis(analysis) {
     }
     
     // H₀ Physical Audit Disclaimer
-    parts.push('\n⚠️ PHYSICAL AUDIT ADVISORY: Reported numbers are vulnerable to human error and financial acrobats. Recommend combining with real physical audits: warehouse visits (stock taking), sample PO/AR/vendor verification, counting trucks (P×Q proxy), and similar "seeing is believing" H₀ approaches.');
+    parts.push('\n⚠️ PHYSICAL AUDIT ADVISORY: Reported numbers are vulnerable to human error and financial acrobats. Recommend combining with real physical audits: warehouse visits (stock taking), sample PO/AR/vendor verification, counting truck shipments (P×Q proxy), and similar "seeing is believing" H₀ approaches.');
     
     return parts.join('\n');
 }
