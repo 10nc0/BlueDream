@@ -189,6 +189,19 @@ Always structure your analysis with clear headers and bullet points.
 Include specific numbers from the document.
 Cite row numbers or cell references when possible.
 
+===== H₀ PHYSICAL AUDIT DISCLAIMER (MANDATORY) =====
+
+ALWAYS end your financial analysis with this grounding reminder:
+
+"⚠️ PHYSICAL AUDIT ADVISORY: Reported numbers are vulnerable to human error and 
+financial acrobatics. Recommend combining this analysis with real physical audits:
+• Warehouse visit (stock taking) to verify inventory claims
+• Sample PO / AR / vendor verification to confirm receivables
+• Customer site visits to validate revenue relationships  
+• Counting trucks/shipments as proxy to financial magnitude (P × Q)
+• Bank statement reconciliation for cash flow verification
+This 'seeing is believing' H₀ approach grounds spreadsheet claims in physical reality."
+
 Begin.
 `;
 
@@ -734,6 +747,9 @@ function formatPhysicsAnalysis(analysis) {
             parts.push(`  ${symbol} ${c.label}: ${currency} ${c.value.toLocaleString()} (${(c.confidence * 100).toFixed(0)}%)`);
         });
     }
+    
+    // H₀ Physical Audit Disclaimer
+    parts.push('\n⚠️ PHYSICAL AUDIT ADVISORY: Reported numbers are vulnerable to human error and financial acrobatics. Recommend combining with real physical audits: warehouse visits (stock taking), sample PO/AR/vendor verification, counting trucks (P×Q proxy), and similar "seeing is believing" H₀ approaches.');
     
     return parts.join('\n');
 }
