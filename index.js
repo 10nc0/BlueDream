@@ -27,8 +27,7 @@ const MetadataExtractor = require('./metadata-extractor');
 const genesisCounter = require('./server/genesis-counter');
 const Prometheus = require('./prometheus');
 const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document-parser');
-const { identifyFileType, executeExtractionCascade, formatJSONForGroq, detectFinancialDocument } = require('./utils/attachment-cascade');
-const { processFinancialDocument, processStructuredExcel, hasStructuredExcelData } = require('./utils/multilingual-finance');
+const { identifyFileType, executeExtractionCascade, formatJSONForGroq, FINANCIAL_PHYSICS_SEED } = require('./utils/attachment-cascade');
 const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('./prompts/nyan-protocol');
@@ -6894,82 +6893,12 @@ app.post('/api/playground', async (req, res) => {
             }
         }
         
-        // ===== H₀ STRUCTURED FINANCIAL DOCUMENT PROCESSING =====
-        // Uses empirical priors (falsifiable) with H₀ philosophy:
-        // 1. Seed knowledge from Indonesian financial documents
-        // 2. AI can override priors when document context contradicts
-        // 3. Confidence = evidence strength, not certainty
-        // 4. Same pattern applies to all languages
-        let financialPipelineUsed = false;
-        
-        if (docList.length > 0) {
-            const excelDocs = docList.filter(d => d.name?.match(/\.(xlsx|xls)$/i));
-            
-            if (excelDocs.length > 0 && excelDocs[0].extractedData?.enhanced) {
-                const extractedData = excelDocs[0].extractedData;
-                const financialCheck = detectFinancialDocument(extractedData);
-                
-                if (financialCheck.isFinancial) {
-                    console.log(`📊 H₀ Pipeline: Financial Excel detected (${financialCheck.detectedLanguage})`);
-                    
-                    try {
-                        const h0Result = await processStructuredExcel(
-                            extractedData,
-                            message || 'Analyze this financial document and compare key metrics.',
-                            NYAN_PROTOCOL_SYSTEM_PROMPT,
-                            PLAYGROUND_GROQ_TOKEN
-                        );
-                        
-                        if (h0Result.success && h0Result.response) {
-                            financialPipelineUsed = true;
-                            const confidenceNote = h0Result.avgConfidence < 70
-                                ? `\n\n⚠️ *Confidence: ${h0Result.avgConfidence?.toFixed(1)}% - some terms may need manual verification*`
-                                : `\n\n📊 *H₀ Pipeline: ${h0Result.accountsProcessed} accounts analyzed, ${h0Result.avgConfidence?.toFixed(1)}% confidence*`;
-                            
-                            console.log(`✅ H₀ structured pipeline complete: ${h0Result.accountsProcessed} accounts, ${h0Result.avgConfidence?.toFixed(1)}% confidence`);
-                            return res.json({ 
-                                reply: h0Result.response + confidenceNote,
-                                pipeline: 'h0-structured-excel'
-                            });
-                        }
-                    } catch (h0Err) {
-                        console.error('❌ H₀ structured pipeline error, trying legacy pipeline:', h0Err.message);
-                    }
-                }
-            }
-            
-            if (extractedContent.length > 0) {
-                const allDocContent = extractedContent.join('\n');
-                const financialCheck = detectFinancialDocument({ text: allDocContent });
-                
-                if (financialCheck.isFinancial && financialCheck.detectedLanguage !== 'english') {
-                    console.log(`🌐 Financial document detected (${financialCheck.detectedLanguage}) - using dual-temperature pipeline`);
-                    
-                    try {
-                        const financialResult = await processFinancialDocument(
-                            allDocContent,
-                            message || 'Analyze this financial document and extract key metrics.',
-                            NYAN_PROTOCOL_SYSTEM_PROMPT,
-                            PLAYGROUND_GROQ_TOKEN
-                        );
-                        
-                        if (financialResult.success && financialResult.response) {
-                            financialPipelineUsed = true;
-                            const confidenceNote = financialResult.pipeline?.semanticMap?.confidence < 70
-                                ? `\n\n⚠️ *Confidence: ${financialResult.pipeline?.semanticMap?.confidence?.toFixed(1)}% - some terms may need manual verification*`
-                                : '';
-                            
-                            console.log(`✅ Dual-temperature pipeline complete (confidence: ${financialResult.pipeline?.semanticMap?.confidence?.toFixed(1)}%)`);
-                            return res.json({ 
-                                reply: financialResult.response + confidenceNote,
-                                pipeline: 'dual-temperature-finance'
-                            });
-                        }
-                    } catch (finErr) {
-                        console.error('❌ Dual-temperature pipeline error, falling back:', finErr.message);
-                    }
-                }
-            }
+        // ===== FINANCIAL PHYSICS: Detect XLSX for seed injection =====
+        // Revolutionary financial cognition: observe flows (+/−), not labels
+        // Inject FINANCIAL_PHYSICS_SEED as FIRST system message for XLSX files
+        const hasExcelDoc = docList.some(d => d.name?.match(/\.(xlsx|xls)$/i));
+        if (hasExcelDoc) {
+            console.log('🧠 Financial Physics: Excel detected - will inject physics seed');
         }
         
         // Final reasoning via Groq Llama 3.3 70B
@@ -7042,12 +6971,20 @@ app.post('/api/playground', async (req, res) => {
             }
         }
         
-        // Build messages array: system prompt + conversation context + current message
+        // Build messages array: system prompts + conversation context + current message
+        // For XLSX files: inject FINANCIAL_PHYSICS_SEED FIRST (before NYAN_PROTOCOL)
+        // This teaches AI to see flows (+/−), not labels
+        const systemMessages = hasExcelDoc
+            ? [
+                { role: 'system', content: FINANCIAL_PHYSICS_SEED },
+                { role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT }
+              ]
+            : [
+                { role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT }
+              ];
+        
         const messages = [
-            {
-                role: 'system',
-                content: NYAN_PROTOCOL_SYSTEM_PROMPT
-            },
+            ...systemMessages,
             ...conversationContext,
             {
                 role: 'user',
@@ -7055,12 +6992,16 @@ app.post('/api/playground', async (req, res) => {
             }
         ];
         
+        // Temperature 0.3 for XLSX (semantic flexibility for synonym matching)
+        // Temperature 0.15 for everything else (H₀ factual accuracy)
+        const temperature = hasExcelDoc ? 0.3 : 0.15;
+        
         const groqResponse = await groqWithRetry({
             url: 'https://api.groq.com/openai/v1/chat/completions',
             data: {
                 model: 'llama-3.3-70b-versatile',
                 messages,
-                temperature: 0.15,
+                temperature,
                 max_tokens: 1500,
                 top_p: 0.95
             },

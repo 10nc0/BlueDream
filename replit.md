@@ -68,27 +68,23 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Isolation Architecture**: Uses separate API tokens for playground to prevent abuse and isolate vision rate limits.
 
 ## Recent Changes (December 9, 2025)
-- **H₀ Structured Financial Document Processing**: Complete rewrite with empirical priors philosophy
-  - **H₀ Account Taxonomy** (`utils/h0-finance-taxonomy.js`): 168 Indonesian accounting terms as seed knowledge
-    - NOT H(1) dogma - priors are falsifiable by document context
-    - Confidence = evidence strength, not certainty
-    - Same pattern applies to Chinese, Japanese, Korean, Spanish, French, German, Arabic, Portuguese, Thai
-  - **Fuzzy Matching**: Partial token matching, Levenshtein distance, stem patterns
-    - "Pendapatan Net Klaim" → partial match "Pendapatan" → Revenue (85% confidence)
-  - **Context Override**: AI can override priors when document evidence contradicts seed knowledge
-    - Low confidence items (<70%) trigger Groq API verification
-  - **Enhanced Excel Parser**: Now extracts cell VALUES + formatting metadata
-    - Bold/indent detection for section headers
-    - Empty rows as section dividers
-    - Merged cell handling
-    - Numeric values preserved (not just strings)
-  - **Hierarchy Detection**: Main accounts vs sub-accounts based on indent/bold/spacing
-  - **Structured Output**: Each account includes label, category, hierarchyLevel, valuesByPeriod, confidence, evidence
-  - File: `utils/multilingual-finance.js` (processStructuredExcel), `utils/h0-finance-taxonomy.js`
-- **Dual-Temperature Financial Document Processing (Legacy)**: Fallback for non-Excel documents
-  - **Stage 0 (temp 0.3)**: Internalize messy local terms → universal accounting concepts
-  - **Stage 1 (deterministic)**: Semantic mapping with confidence scoring
-  - **Stage 2 (temp 0.15)**: Pure H₀ reasoning output with NYAN_PROTOCOL_PROMPT
+- **Financial Physics System (H₀ Canon 2025)**: Revolutionary financial cognition engine
+  - **Philosophy**: "You are not an accountant. You are a financial physicist. You observe flows, not labels."
+  - **4-Tier Architecture** (`utils/financial-physics.js`):
+    - **TIER 0**: Document Type Detection (4 eternal statements: Assumptions, P&L, Balance Sheet, Cash Flow)
+    - **TIER 1**: Nature Classification (+Income / −Cost / =Profit / A=L+E)
+    - **TIER 2**: Semantic Enrichment (multilingual fuzzy matching for Indonesian, English, Chinese, Japanese)
+    - **TIER 3**: Validation (accounting equation physics: Income − Cost = Profit)
+  - **FINANCIAL_PHYSICS_SEED**: Injected as FIRST system message for all XLSX files
+    - Teaches AI to see flows (+/−), not labels
+    - "Pendapatan Net Klaim" → AI sees `+Income (97% conf)`
+    - "Upah Trip Supir" → AI sees `−Cost (98% conf)`
+  - **Temperature 0.3 for XLSX**: Semantic flexibility for synonym matching
+  - **Integration Points**:
+    - `attachment-cascade.js`: Runs `analyzeFinancialDocument()` on Excel extraction
+    - `index.js`: Injects physics seed, adjusts temperature
+    - `formatJSONForGroq()`: Includes physics analysis in context
+  - **Purged Old Code**: Removed `h0-finance-taxonomy.js`, `multilingual-finance.js`, and dual-temperature pipeline
 - **New Chat Button Fix**: Event listener approach now reliably clears conversation
 - **Conversation Memory**: Added 8-turn sliding window memory for AI Playground
   - localStorage persistence - conversations survive page refresh

@@ -4,7 +4,7 @@ const mammoth = require('mammoth');
 const crypto = require('crypto');
 const axios = require('axios');
 const querystring = require('querystring');
-const { detectFinancialDocument, isFinancialContent } = require('./multilingual-finance');
+const { analyzeFinancialDocument, formatPhysicsAnalysis, FINANCIAL_PHYSICS_SEED } = require('./financial-physics');
 
 // ===== CHEMICAL CONSTANTS (SETTLED SCIENCE) =====
 // 18 compounds with UNIQUE formulas - IUPAC Gold Book 2024
@@ -1336,7 +1336,17 @@ async function extractExcelData(buffer, fileName) {
             sheets.push(sheetData);
         });
         
-        return { success: true, data: { tables: sheets, type: 'excel', enhanced: true } };
+        const excelData = { tables: sheets, type: 'excel', enhanced: true };
+        
+        try {
+            const financialAnalysis = await analyzeFinancialDocument({ tables: sheets });
+            console.log(`🧠 Financial Physics: ${financialAnalysis.documentType.type} detected (${(financialAnalysis.documentType.confidence * 100).toFixed(1)}%)`);
+            excelData.financialAnalysis = financialAnalysis;
+        } catch (physicsErr) {
+            console.log(`⚠️ Financial physics skipped: ${physicsErr.message}`);
+        }
+        
+        return { success: true, data: excelData };
     } catch (error) {
         return { success: false, error: error.message };
     }
@@ -1888,6 +1898,11 @@ function formatJSONForGroq(cascadeResult, userQuery) {
     contextParts.push(`**Extraction:** ${json.metadata.toolsUsed.join(' → ')}`);
     contextParts.push('---');
     
+    if (json.content.financialAnalysis) {
+        contextParts.push(formatPhysicsAnalysis(json.content.financialAnalysis));
+        contextParts.push('---');
+    }
+    
     if (json.content.tables && json.content.tables.length > 0) {
         contextParts.push('### Extracted Tables:\n');
         json.content.tables.forEach((table, i) => {
@@ -1935,6 +1950,5 @@ module.exports = {
     selectExtractionPipeline,
     executeExtractionCascade,
     formatJSONForGroq,
-    detectFinancialDocument,
-    isFinancialContent
+    FINANCIAL_PHYSICS_SEED
 };
