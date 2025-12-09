@@ -784,12 +784,12 @@ async function sendMessage() {
 }
 
 // Clear history handler (can be called from UI or console)
-window.clearNyanHistory = function() {
+function clearNyanHistory() {
     // Clear in-memory and localStorage first
     conversationHistory = [];
     localStorage.removeItem('nyan_history');
     
-    // Reset UI to welcome state
+    // Clear UI completely
     messagesEl.innerHTML = `
         <div class="welcome">
             <h2>Welcome to Nyan AI Playground</h2>
@@ -803,8 +803,13 @@ window.clearNyanHistory = function() {
             </div>
         </div>
     `;
+    
+    // Also clear any attachments
+    attachments = [];
+    clearAllAttachments();
+    
     console.log('🧹 Conversation cleared - fresh start!');
-};
+}
 
 // Hydrate history to UI after DOM is fully loaded
 document.addEventListener('DOMContentLoaded', () => {
