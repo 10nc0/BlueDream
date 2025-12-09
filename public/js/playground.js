@@ -753,6 +753,11 @@ async function sendMessage() {
         addMessage('assistant', reply);
     }
     
+    // Auto-scroll to bottom after assistant reply
+    setTimeout(() => {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    }, 100);
+    
     isProcessing = false;
     sendBtn.disabled = false;
     messageInput.focus();
