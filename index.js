@@ -6265,6 +6265,84 @@ setInterval(() => {
     }
 }, 60 * 60 * 1000);
 
+// ===== DOCUMENT CONTEXT CACHE (5-upload threshold) =====
+// Cache expensive document parsing/analysis, NOT the AI response
+// AI output stays fresh; only the extracted context is cached
+const documentContextCache = new Map();    // fileHash -> { extractedData, financialAnalysis, timestamp }
+const documentUploadCounter = new Map();   // fileHash -> upload count
+const DOC_CACHE_TTL = 2 * 60 * 60 * 1000;  // 2 hours (documents change less often)
+const DOC_CACHE_THRESHOLD = 5;              // Only cache after 5 identical uploads
+
+function getDocumentHash(docData, docName) {
+    // Use SHA-256 of full raw data + filename for collision-free hashing
+    const crypto = require('crypto');
+    const rawData = typeof docData === 'string' ? docData : JSON.stringify(docData);
+    const hash = crypto.createHash('sha256')
+        .update(docName + ':' + rawData)
+        .digest('hex');
+    return hash; // 64-char hex string, unique per document
+}
+
+function incrementDocumentUpload(fileHash) {
+    const current = documentUploadCounter.get(fileHash) || 0;
+    const newCount = current + 1;
+    documentUploadCounter.set(fileHash, newCount);
+    return newCount;
+}
+
+function getCachedDocumentContext(fileHash) {
+    const cached = documentContextCache.get(fileHash);
+    if (cached && Date.now() - cached.timestamp < DOC_CACHE_TTL) {
+        console.log(`📂 Document Cache HIT: "${fileHash.substring(0, 30)}..." (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
+        return cached;
+    }
+    if (cached) {
+        // Expired
+        documentContextCache.delete(fileHash);
+        documentUploadCounter.delete(fileHash);
+    }
+    return null;
+}
+
+function setCachedDocumentContext(fileHash, context) {
+    const uploadCount = documentUploadCounter.get(fileHash) || 0;
+    if (uploadCount < DOC_CACHE_THRESHOLD) {
+        console.log(`📂 Document Cache SKIP: "${fileHash.substring(0, 30)}..." (${uploadCount}/${DOC_CACHE_THRESHOLD} uploads)`);
+        return false;
+    }
+    
+    documentContextCache.set(fileHash, {
+        ...context,
+        timestamp: Date.now()
+    });
+    console.log(`📂 Document Cache SET: "${fileHash.substring(0, 30)}..." (cache size: ${documentContextCache.size})`);
+    
+    // LRU eviction: max 100 document contexts
+    while (documentContextCache.size > 100) {
+        const oldestKey = documentContextCache.keys().next().value;
+        documentContextCache.delete(oldestKey);
+        documentUploadCounter.delete(oldestKey);
+        console.log(`📂 Document Cache evicted oldest entry (limit: 100)`);
+    }
+    return true;
+}
+
+// Clean up expired document cache entries every 30 minutes
+setInterval(() => {
+    const now = Date.now();
+    let evicted = 0;
+    for (const [key, value] of documentContextCache.entries()) {
+        if (now - value.timestamp > DOC_CACHE_TTL) {
+            documentContextCache.delete(key);
+            documentUploadCounter.delete(key);
+            evicted++;
+        }
+    }
+    if (evicted > 0) {
+        console.log(`📂 Document Cache cleanup: evicted ${evicted} expired entries`);
+    }
+}, 30 * 60 * 1000);
+
 // ===== DUCKDUCKGO SEARCH FUNCTION =====
 async function searchDuckDuckGo(query) {
     const params = {
@@ -6775,7 +6853,8 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             }
         }
         
-        // Process all documents with CASCADE WORKFLOW
+        // Process all documents with CASCADE WORKFLOW + CONTEXT CACHING
+        // Cache the expensive parsing/analysis; AI output stays fresh
         if (docList.length > 0) {
             if (!PLAYGROUND_GROQ_TOKEN) {
                 return res.status(503).json({ 
@@ -6793,6 +6872,28 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 const docData = doc.data;
                 const docName = doc.name || `document-${i + 1}`;
                 
+                // Compute file hash for caching
+                const fileHash = getDocumentHash(docData, docName);
+                const uploadCount = incrementDocumentUpload(fileHash);
+                console.log(`📂 Document ${i + 1}: upload #${uploadCount} for hash "${fileHash.substring(0, 25)}..."`);
+                
+                // Check cache first (skip expensive parsing if cached)
+                const cachedContext = getCachedDocumentContext(fileHash);
+                if (cachedContext) {
+                    // Use cached context - skip expensive parsing
+                    doc.extractedData = cachedContext.extractedData;
+                    doc.extracted = cachedContext.extracted; // For financial analysis
+                    extractedDocs.push({
+                        fileName: docName,
+                        fileType: cachedContext.fileType,
+                        text: cachedContext.text,
+                        fromCache: true
+                    });
+                    console.log(`📂 Using cached context for "${docName}"`);
+                    continue;
+                }
+                
+                // No cache hit - do expensive parsing
                 try {
                     const base64Data = docData.split(',')[1] || docData;
                     const buffer = Buffer.from(base64Data, 'base64');
@@ -6806,20 +6907,24 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                     
                     doc.extractedData = cascadeResult.jsonOutput || null;
                     
+                    let docContent = '[Could not extract content]';
                     if (cascadeResult.success && cascadeResult.jsonOutput) {
-                        const docContent = formatJSONForGroq(cascadeResult, '');
-                        extractedDocs.push({
-                            fileName: docName,
-                            fileType: fileType.type,
-                            text: docContent
-                        });
-                    } else {
-                        extractedDocs.push({
-                            fileName: docName,
-                            fileType: fileType.type,
-                            text: '[Could not extract content]'
-                        });
+                        docContent = formatJSONForGroq(cascadeResult, '');
                     }
+                    
+                    extractedDocs.push({
+                        fileName: docName,
+                        fileType: fileType.type,
+                        text: docContent
+                    });
+                    
+                    // Try to cache the context (respects 5-upload threshold)
+                    setCachedDocumentContext(fileHash, {
+                        extractedData: doc.extractedData,
+                        extracted: doc.extracted,
+                        fileType: fileType.type,
+                        text: docContent
+                    });
                     
                 } catch (docError) {
                     console.error(`❌ Document ${i + 1} error:`, docError.message);
@@ -6835,10 +6940,12 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             if (extractedDocs.length > 1) {
                 const mergedContext = buildMultiDocContext(extractedDocs);
                 extractedContent.push(mergedContext);
-                console.log(`📦 Multi-Doc: Merged ${extractedDocs.length} documents into unified context`);
+                const cachedCount = extractedDocs.filter(d => d.fromCache).length;
+                console.log(`📦 Multi-Doc: Merged ${extractedDocs.length} documents (${cachedCount} from cache)`);
             } else if (extractedDocs.length === 1) {
                 // Single document - use simple format
-                extractedContent.push(`[Document 1: ${extractedDocs[0].fileName}]:\n${extractedDocs[0].text}`);
+                const cacheNote = extractedDocs[0].fromCache ? ' (cached)' : '';
+                extractedContent.push(`[Document 1: ${extractedDocs[0].fileName}${cacheNote}]:\n${extractedDocs[0].text}`);
             }
         }
         
