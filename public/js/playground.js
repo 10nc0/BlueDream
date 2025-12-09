@@ -853,4 +853,18 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
         hydrateHistoryToUI();
     }, 100);
+    
+    // Attach event listener to clear button
+    const clearBtn = document.querySelector('.clear-btn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('✅ Clear button clicked via event listener');
+            clearNyanHistory();
+        });
+        console.log('✅ Event listener attached to clear button');
+    } else {
+        console.error('❌ Clear button not found in DOM');
+    }
 });
