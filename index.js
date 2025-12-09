@@ -6568,9 +6568,22 @@ app.post('/api/playground', async (req, res) => {
         let queryClass = { type: 'default', skipCache: false, searchStrategy: 'cascade' };
         let noSearchDisclaimer = false;
         
+        // CLOSED-LOOP DETECTION: Skip web search for document analysis
+        // Financial documents (Excel, PDF) contain user's own data - nothing to verify externally
+        const isClosedLoopAnalysis = docList.length > 0;
+        if (isClosedLoopAnalysis) {
+            queryClass.searchStrategy = 'none';
+            console.log(`📎 Document analysis mode: Skipping web search (closed-loop)`);
+        }
+        
         if (message) {
             // Step 0: Classify query to determine optimal routing
             queryClass = classifyQuery(message);
+            
+            // Override: Force 'none' for document analysis (closed-loop)
+            if (isClosedLoopAnalysis) {
+                queryClass.searchStrategy = 'none';
+            }
             console.log(`🎯 Query classified as: ${queryClass.type} (strategy: ${queryClass.searchStrategy})`);
             
             // Step 0.5: Check cache for simple factual queries
@@ -6592,8 +6605,8 @@ app.post('/api/playground', async (req, res) => {
                 console.log(`🔍 Playground: Searching for: "${searchQuery.substring(0, 50)}..."`);
             }
             
-            // Step 2: Execute search based on strategy
-            if (searchQuery) {
+            // Step 2: Execute search based on strategy (skip for 'none' = closed-loop)
+            if (searchQuery && queryClass.searchStrategy !== 'none') {
                 if (queryClass.searchStrategy === 'ddg') {
                     // DDG-first: try DDG, fallback to Brave
                     searchContext = await searchDuckDuckGo(searchQuery);
