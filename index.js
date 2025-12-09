@@ -27,7 +27,8 @@ const MetadataExtractor = require('./metadata-extractor');
 const genesisCounter = require('./server/genesis-counter');
 const Prometheus = require('./prometheus');
 const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document-parser');
-const { identifyFileType, executeExtractionCascade, formatJSONForGroq } = require('./utils/attachment-cascade');
+const { identifyFileType, executeExtractionCascade, formatJSONForGroq, detectFinancialDocument } = require('./utils/attachment-cascade');
+const { processFinancialDocument } = require('./utils/multilingual-finance');
 const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('./prompts/nyan-protocol');
@@ -6888,6 +6889,46 @@ app.post('/api/playground', async (req, res) => {
             // Even if no current attachments, include historical context
             if (message) {
                 finalPrompt = `${message}${attachmentContextPart}`;
+            }
+        }
+        
+        // ===== DUAL-TEMPERATURE FINANCIAL DOCUMENT PROCESSING =====
+        // Detect non-English financial documents and use H₀ pipeline:
+        // Stage 0 (temp 0.3): Internalize messy local terms → universal concepts
+        // Stage 1: Deterministic semantic mapping with confidence
+        // Stage 2 (temp 0.15): Pure H₀ reasoning output
+        let financialPipelineUsed = false;
+        if (docList.length > 0 && extractedContent.length > 0) {
+            const allDocContent = extractedContent.join('\n');
+            const financialCheck = detectFinancialDocument({ text: allDocContent });
+            
+            if (financialCheck.isFinancial && financialCheck.detectedLanguage !== 'english') {
+                console.log(`🌐 Financial document detected (${financialCheck.detectedLanguage}) - using dual-temperature pipeline`);
+                
+                try {
+                    const financialResult = await processFinancialDocument(
+                        allDocContent,
+                        message || 'Analyze this financial document and extract key metrics.',
+                        NYAN_PROTOCOL_SYSTEM_PROMPT,
+                        PLAYGROUND_GROQ_TOKEN
+                    );
+                    
+                    if (financialResult.success && financialResult.response) {
+                        financialPipelineUsed = true;
+                        const confidenceNote = financialResult.pipeline?.semanticMap?.confidence < 70
+                            ? `\n\n⚠️ *Confidence: ${financialResult.pipeline?.semanticMap?.confidence?.toFixed(1)}% - some terms may need manual verification*`
+                            : '';
+                        
+                        console.log(`✅ Dual-temperature pipeline complete (confidence: ${financialResult.pipeline?.semanticMap?.confidence?.toFixed(1)}%)`);
+                        return res.json({ 
+                            reply: financialResult.response + confidenceNote,
+                            pipeline: 'dual-temperature-finance'
+                        });
+                    }
+                } catch (finErr) {
+                    console.error('❌ Dual-temperature pipeline error, falling back:', finErr.message);
+                    // Fall through to standard processing
+                }
             }
         }
         

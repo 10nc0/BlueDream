@@ -4,6 +4,7 @@ const mammoth = require('mammoth');
 const crypto = require('crypto');
 const axios = require('axios');
 const querystring = require('querystring');
+const { detectFinancialDocument, isFinancialContent } = require('./multilingual-finance');
 
 // ===== CHEMICAL CONSTANTS (SETTLED SCIENCE) =====
 // 18 compounds with UNIQUE formulas - IUPAC Gold Book 2024
@@ -1841,5 +1842,7 @@ module.exports = {
     identifyFileType,
     selectExtractionPipeline,
     executeExtractionCascade,
-    formatJSONForGroq
+    formatJSONForGroq,
+    detectFinancialDocument,
+    isFinancialContent
 };

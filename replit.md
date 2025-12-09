@@ -68,6 +68,18 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Isolation Architecture**: Uses separate API tokens for playground to prevent abuse and isolate vision rate limits.
 
 ## Recent Changes (December 9, 2025)
+- **Dual-Temperature Financial Document Processing (H₀ 2025 Canon)**: New multilingual finance pipeline
+  - **Stage 0 (temp 0.3)**: Internalize messy local terms → universal accounting concepts
+    - Supports: Indonesian, Chinese, Japanese, Korean, Spanish, French, German, Arabic, Portuguese, Thai
+    - Aggressive synonym expansion for non-English financial terminology
+  - **Stage 1 (deterministic)**: Semantic mapping with confidence scoring
+    - Subject vs Object preservation (never conflate "Driver" with "Upah Trip")
+    - Maps local terms: "Pendapatan Net Klaim" → Revenue, "Beban" → Expenses
+  - **Stage 2 (temp 0.15)**: Pure H₀ reasoning output with NYAN_PROTOCOL_PROMPT
+  - **Self-healing**: If confidence <70%, triggers clarification with aggressive synonyms
+  - Auto-detects financial documents via multilingual pattern matching
+  - File: `utils/multilingual-finance.js`
+- **New Chat Button Fix**: Event listener approach now reliably clears conversation
 - **Conversation Memory**: Added 8-turn sliding window memory for AI Playground
   - localStorage persistence - conversations survive page refresh
   - UI hydration on page load restores past messages to the chat
