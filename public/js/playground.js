@@ -860,8 +860,10 @@ document.addEventListener('DOMContentLoaded', () => {
         clearBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            console.log('✅ Clear button clicked via event listener');
-            clearNyanHistory();
+            if (confirm('Start a new conversation? This will clear your chat history.')) {
+                console.log('✅ Clear button confirmed via event listener');
+                clearNyanHistory();
+            }
         });
         console.log('✅ Event listener attached to clear button');
     } else {
