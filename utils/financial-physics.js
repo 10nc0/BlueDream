@@ -1,17 +1,17 @@
 /**
  * FINANCIAL PHYSICS SYSTEM (H₀ Canon — 2025)
+ * PRAGMATIC VERSION — ~750 lines
  * 
  * Revolutionary financial cognition engine that understands money
  * as physics, not labels. Works across all languages, industries,
  * and formats by observing flows instead of reading accounts.
  * 
- * Architecture:
- * - TIER 0: Document Type (4 eternal statements)
- * - TIER 1: Nature Classification (+/− flows, A=L+E, cash movement)
+ * Architecture (Simplified):
+ * - GUARD: 5-line quick check for obvious non-financial data
+ * - TIER 0: 15-line document type detector (Assumptions vs P&L)
+ * - TIER 1: Nature Classification (+/− flows)
  * - TIER 2: Semantic Enrichment (multilingual, fuzzy matching)
- * - TIER 3: Validation (accounting equations, falsification)
- * 
- * Deploy this at the top of any financial analysis workflow.
+ * - TIER 3: Validation (accounting equations)
  */
 
 const FINANCIAL_PHYSICS_SEED = `
@@ -118,534 +118,91 @@ Cite row numbers or cell references when possible.
 Begin.
 `;
 
-// ===== TIER -1: IS THIS A FINANCIAL STATEMENT? =====
-// Gate function to determine if Excel/PDF contains financial statements vs regular data
-// Financial statements have: time-period columns, account hierarchy, specific keywords
-// Non-financial data has: ID columns, timestamps, flat structure, log format
-
-const FINANCIAL_STATEMENT_INDICATORS = {
-    // Time-period column headers (x-axis = time)
-    timePeriodPatterns: [
-        // Months (full and abbreviated, multi-language)
-        /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i,
-        /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
-        /\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i,
-        // Quarters
-        /\bq[1-4]\b/i,
-        /\b(quarter|kuartal)\s*[1-4]\b/i,
-        // Years (standalone, not part of timestamp)
-        /\b20[1-3][0-9]\b/,
-        /\bfy\s*20[1-3][0-9]\b/i,
-        // Periods
-        /\b(ytd|mtd|qtd)\b/i,
-        /\b(budget|actual|forecast|proyeksi|anggaran)\b/i
-    ],
-    
-    // Account hierarchy keywords (y-axis = accounts)
-    accountKeywords: [
-        // Income Statement
-        'revenue', 'sales', 'income', 'pendapatan', 'penjualan', 'omzet',
-        'cost', 'expense', 'biaya', 'beban', 'hpp', 'cogs',
-        'profit', 'loss', 'laba', 'rugi', 'margin', 'ebitda', 'ebit',
-        'gross profit', 'net income', 'operating income',
-        // Balance Sheet
-        'assets', 'aset', 'aktiva', 'liabilities', 'kewajiban', 'utang',
-        'equity', 'ekuitas', 'modal', 'retained earnings', 'laba ditahan',
-        'receivables', 'piutang', 'payables', 'hutang', 'inventory', 'persediaan',
-        // Cash Flow
-        'operating activities', 'investing activities', 'financing activities',
-        'cash flow', 'arus kas', 'net change in cash'
-    ],
-    
-    // Structural indicators
-    structuralPatterns: [
-        /\btotal\b/i,
-        /\bsubtotal\b/i,
-        /\bnet\b/i,
-        /\bgross\b/i,
-        /\b%\s*(of|dari)?\s*(revenue|sales|pendapatan)?\b/i
-    ]
-};
-
-const NON_FINANCIAL_INDICATORS = {
-    // ID/Log column patterns (indicates transactional data, not statements)
-    idPatterns: [
-        /\b(id|_id|uuid|guid)\b/i,
-        /\b(created_at|updated_at|timestamp|datetime)\b/i,
-        /\b(user_id|customer_id|order_id|transaction_id)\b/i,
-        /\b(status|state|type|category)\b/i,
-        /\b(event|action|log|entry)\b/i
-    ],
-    
-    // Timestamp patterns (full datetime, not just year/month)
-    timestampPatterns: [
-        /\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/,  // 2024-01-15 14:30
-        /\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}/,  // 01/15/2024 14:30
-        /\d{2}:\d{2}:\d{2}/  // HH:MM:SS
-    ],
-    
-    // Flat structure indicators (no hierarchy)
-    flatStructureKeywords: [
-        'row', 'record', 'entry', 'item', 'line',
-        'name', 'description', 'notes', 'comments',
-        'email', 'phone', 'address', 'url', 'link'
-    ]
-};
-
-function isFinancialStatement(extractedData) {
-    console.log('🎯 TIER -1: Checking if this is a financial statement...');
-    
-    // Get all text content for analysis
-    const tables = extractedData.tables || extractedData.sheets || [];
-    let allText = '';
-    let headers = [];
-    let firstColumnLabels = [];
-    
-    if (tables.length > 0) {
-        tables.forEach(table => {
-            // Also check pre-extracted headers if available
-            if (table.headers && Array.isArray(table.headers)) {
-                headers.push(...table.headers.map(h => String(h || '').toLowerCase()));
-            }
-            
-            const rows = table.rows || table.data || [];
-            if (rows.length > 0) {
-                // Extract headers (first row) if not already extracted
-                if (headers.length === 0 && Array.isArray(rows[0])) {
-                    headers.push(...rows[0].map(h => String(h || '').toLowerCase()));
-                }
-                // Extract first column labels (account names)
-                rows.forEach(row => {
-                    if (Array.isArray(row) && row[0]) {
-                        firstColumnLabels.push(String(row[0]).toLowerCase());
-                    }
-                });
-            }
-            allText += rows.flatMap(r => Array.isArray(r) ? r : Object.values(r)).join(' ').toLowerCase() + ' ';
-        });
-    } else if (extractedData.text) {
-        allText = extractedData.text.toLowerCase();
-        // For PDFs, extract potential headers/labels from first lines
-        const lines = allText.split('\n').slice(0, 50); // First 50 lines for detection
-        firstColumnLabels = lines.filter(l => l.trim().length > 0);
+// ===== 5-LINE GUARD: Skip obvious non-financial data =====
+function quickNonFinancialCheck(extractedData) {
+    // Recursively extract all string values from any nested structure
+    function flattenToStrings(obj) {
+        if (obj == null) return [];
+        if (typeof obj === 'string') return [obj];
+        if (typeof obj === 'number') return [String(obj)];
+        if (Array.isArray(obj)) return obj.flatMap(flattenToStrings);
+        if (typeof obj === 'object') {
+            // Check for common cell value properties
+            if (obj.value !== undefined) return flattenToStrings(obj.value);
+            if (obj.text !== undefined) return flattenToStrings(obj.text);
+            if (obj.displayValue !== undefined) return flattenToStrings(obj.displayValue);
+            return Object.values(obj).flatMap(flattenToStrings);
+        }
+        return [String(obj)];
     }
     
-    const headerText = headers.join(' ');
-    const labelsText = firstColumnLabels.join(' ');
-    
-    // Score financial statement indicators
-    let financialScore = 0;
-    let nonFinancialScore = 0;
-    
-    // Check for time-period columns in headers
-    let timePeriodMatches = 0;
-    FINANCIAL_STATEMENT_INDICATORS.timePeriodPatterns.forEach(pattern => {
-        if (pattern.test(headerText)) {
-            timePeriodMatches++;
-        }
-    });
-    if (timePeriodMatches >= 2) {
-        financialScore += 0.3;
-        console.log(`   ✅ Time-period columns detected (${timePeriodMatches} patterns)`);
-    } else if (timePeriodMatches === 1) {
-        financialScore += 0.15;
+    let text = extractedData.text || '';
+    if (!text && extractedData.tables) {
+        const tables = extractedData.tables || extractedData.sheets || [];
+        text = flattenToStrings(tables.flatMap(t => t.rows || t.data || [])).join(' ');
     }
     
-    // Check for account keywords in first column AND full text (for PDFs)
-    let accountMatches = 0;
-    const searchText = labelsText + ' ' + allText; // Check both labels and full content
-    FINANCIAL_STATEMENT_INDICATORS.accountKeywords.forEach(keyword => {
-        if (searchText.includes(keyword.toLowerCase())) {
-            accountMatches++;
-        }
-    });
-    if (accountMatches >= 8) {
-        financialScore += 0.45;
-        console.log(`   ✅ Account keywords detected (${accountMatches} matches)`);
-    } else if (accountMatches >= 5) {
-        financialScore += 0.35;
-        console.log(`   ✅ Account keywords detected (${accountMatches} matches)`);
-    } else if (accountMatches >= 2) {
-        financialScore += 0.2;
+    const hasTimestamps = /\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}/.test(text);
+    const hasIdColumns = /\b(id|uuid|transaction_id|user_id|order_id|created_at|updated_at)\b/i.test(text);
+    const hasFinancialKeywords = /(pendapatan|revenue|biaya|cost|laba|profit|aset|asset|utang|liability)/gi.test(text);
+    
+    const isLogData = hasTimestamps && hasIdColumns && !hasFinancialKeywords;
+    
+    if (isLogData) {
+        console.log('⏭️  Skipped: Non-financial data (log/transaction format detected)');
     }
     
-    // Also check time periods in full text (for PDFs without explicit headers)
-    if (timePeriodMatches === 0) {
-        FINANCIAL_STATEMENT_INDICATORS.timePeriodPatterns.forEach(pattern => {
-            if (pattern.test(allText)) {
-                timePeriodMatches++;
-            }
-        });
-        if (timePeriodMatches >= 2) {
-            financialScore += 0.25;
-            console.log(`   ✅ Time-period patterns in text (${timePeriodMatches} patterns)`);
-        }
-    }
-    
-    // Check for structural patterns (totals, subtotals)
-    let structuralMatches = 0;
-    FINANCIAL_STATEMENT_INDICATORS.structuralPatterns.forEach(pattern => {
-        if (pattern.test(allText)) {
-            structuralMatches++;
-        }
-    });
-    if (structuralMatches >= 2) {
-        financialScore += 0.2;
-        console.log(`   ✅ Hierarchical structure detected (${structuralMatches} patterns)`);
-    }
-    
-    // Check for NON-financial indicators
-    let idColumnMatches = 0;
-    NON_FINANCIAL_INDICATORS.idPatterns.forEach(pattern => {
-        if (pattern.test(headerText)) {
-            idColumnMatches++;
-        }
-    });
-    if (idColumnMatches >= 2) {
-        nonFinancialScore += 0.4;
-        console.log(`   ⚠️ ID/Log columns detected (${idColumnMatches} patterns) - likely transactional data`);
-    }
-    
-    // Check for timestamps
-    let timestampMatches = 0;
-    NON_FINANCIAL_INDICATORS.timestampPatterns.forEach(pattern => {
-        if (pattern.test(allText)) {
-            timestampMatches++;
-        }
-    });
-    if (timestampMatches >= 1) {
-        nonFinancialScore += 0.25;
-        console.log(`   ⚠️ Timestamps detected - likely log/transaction data`);
-    }
-    
-    // Check for flat structure indicators
-    let flatMatches = 0;
-    NON_FINANCIAL_INDICATORS.flatStructureKeywords.forEach(keyword => {
-        if (headerText.includes(keyword)) {
-            flatMatches++;
-        }
-    });
-    if (flatMatches >= 3) {
-        nonFinancialScore += 0.2;
-        console.log(`   ⚠️ Flat structure keywords in headers (${flatMatches} matches)`);
-    }
-    
-    // Calculate net confidence
-    const netScore = financialScore - nonFinancialScore;
-    const isFinancial = netScore > 0.3;
-    const confidence = Math.min(Math.max(netScore + 0.5, 0), 1); // Normalize to 0-1
-    
-    console.log(`   📊 Financial score: ${(financialScore * 100).toFixed(0)}%`);
-    console.log(`   📊 Non-financial score: ${(nonFinancialScore * 100).toFixed(0)}%`);
-    console.log(`   🎯 TIER -1 Result: ${isFinancial ? 'FINANCIAL STATEMENT' : 'REGULAR DATA'} (confidence: ${(confidence * 100).toFixed(0)}%)`);
-    
-    return {
-        isFinancialStatement: isFinancial,
-        confidence,
-        scores: {
-            financial: financialScore,
-            nonFinancial: nonFinancialScore,
-            net: netScore
-        },
-        details: {
-            timePeriodMatches,
-            accountMatches,
-            structuralMatches,
-            idColumnMatches,
-            timestampMatches,
-            flatMatches
-        }
-    };
+    return isLogData;
 }
 
-const DOCUMENT_SIGNATURES = {
-    assumptions: {
-        name: 'Assumptions/Drivers',
-        description: 'Input variables and unit economics that drive P&L',
-        
-        detection: {
-            keywords: [
-                'asumsi', 'assumptions', 'drivers', 'unit economics',
-                'per trip', 'per unit', 'per km', 'per week',
-                'utilization', 'occupancy', 'growth rate',
-                'price per', 'cost per', 'headcount', 'fleet size'
-            ],
-            structure: [
-                'small tables (< 50 rows)',
-                'formula-heavy (Excel formulas)',
-                'input → calculation → output',
-                'no grand totals or final P&L'
-            ],
-            not_present: [
-                'total revenue', 'net profit', 'total assets',
-                'cash flow from operations'
-            ]
-        },
-        
-        confidence_threshold: 0.7
-    },
-    
-    income_statement: {
-        name: 'Income Statement (P&L)',
-        description: 'Flow of value: money in vs money out',
-        
-        detection: {
-            keywords: [
-                'revenue', 'sales', 'income', 'pendapatan', 'penjualan', 'omzet',
-                'cost', 'expense', 'biaya', 'beban', 'pengeluaran',
-                'profit', 'loss', 'laba', 'rugi', 'margin',
-                'gross profit', 'ebitda', 'ebit', 'net income'
-            ],
-            structure: [
-                'hierarchical (revenue → costs → profit)',
-                'positive numbers at top (income)',
-                'negative or positive numbers middle (costs)',
-                'result at bottom (profit/loss)',
-                'subtotals → grand total'
-            ],
-            physics: [
-                'conservation: income − cost = profit',
-                'sign consistency: revenue positive, costs negative',
-                'hierarchical flow: gross → operating → net'
-            ]
-        },
-        
-        validation: {
-            equation: 'income − cost = profit',
-            tolerance: 0.01
-        },
-        
-        confidence_threshold: 0.85
-    },
-    
-    balance_sheet: {
-        name: 'Balance Sheet',
-        description: 'Conservation of value: assets = liabilities + equity',
-        
-        detection: {
-            keywords: [
-                'assets', 'aset', 'aktiva', 'harta',
-                'cash', 'kas', 'bank', 'receivables', 'piutang',
-                'inventory', 'persediaan', 'equipment', 'peralatan',
-                'liabilities', 'kewajiban', 'liabilitas', 'utang',
-                'payables', 'hutang', 'loans', 'pinjaman',
-                'equity', 'ekuitas', 'modal', 'capital',
-                'retained earnings', 'laba ditahan'
-            ],
-            structure: [
-                'two-sided or vertical sections',
-                'assets section first/top',
-                'liabilities + equity second/bottom',
-                'both sides must balance'
-            ],
-            physics: [
-                'conservation: assets = liabilities + equity',
-                'residual: equity = assets − liabilities'
-            ]
-        },
-        
-        validation: {
-            equation: 'assets = liabilities + equity',
-            tolerance: 0.01
-        },
-        
-        confidence_threshold: 0.90
-    },
-    
-    cash_flow: {
-        name: 'Cash Flow Statement',
-        description: 'Movement of cash: operations, investing, financing',
-        
-        detection: {
-            keywords: [
-                'operating', 'operasi', 'operasional',
-                'receipts', 'penerimaan', 'payments', 'pembayaran',
-                'investing', 'investasi', 'capex', 'purchase of assets',
-                'pembelian aset', 'sale of assets', 'penjualan aset',
-                'financing', 'pendanaan', 'loans', 'pinjaman',
-                'dividends', 'dividen', 'equity', 'ekuitas'
-            ],
-            structure: [
-                'three distinct sections',
-                'operating activities first',
-                'investing activities second',
-                'financing activities third',
-                'net change in cash at bottom'
-            ],
-            physics: [
-                'conservation: net_cf = operating + investing + financing',
-                'reconciliation: ending_cash − beginning_cash = net_cf'
-            ]
-        },
-        
-        validation: {
-            equation: 'net_cf = cf_operating + cf_investing + cf_financing',
-            tolerance: 0.01
-        },
-        
-        confidence_threshold: 0.85
+// ===== 15-LINE DOCUMENT TYPE DETECTOR =====
+function detectDocumentType(extractedData) {
+    // Reuse flattenToStrings from guard
+    function flattenToStrings(obj) {
+        if (obj == null) return [];
+        if (typeof obj === 'string') return [obj];
+        if (typeof obj === 'number') return [String(obj)];
+        if (Array.isArray(obj)) return obj.flatMap(flattenToStrings);
+        if (typeof obj === 'object') {
+            if (obj.value !== undefined) return flattenToStrings(obj.value);
+            if (obj.text !== undefined) return flattenToStrings(obj.text);
+            if (obj.displayValue !== undefined) return flattenToStrings(obj.displayValue);
+            return Object.values(obj).flatMap(flattenToStrings);
+        }
+        return [String(obj)];
     }
-};
-
-const FINANCIAL_NATURE = {
-    income: {
-        symbol: '+',
-        nature: 'positive_cash_flow',
-        description: 'Money flowing IN (any label, any language)',
-        
-        physics: {
-            sign: 'positive (increases equity)',
-            position: 'top of income statement',
-            effect: 'increases assets or decreases liabilities',
-            cash_impact: 'eventually +cash (if collected)'
-        },
-        
-        detection_rules: {
-            primary: [
-                'appears before costs',
-                'positive values (typically)',
-                'increases when business grows',
-                'top 20% of income statement rows'
-            ],
-            contextual: [
-                'labeled with income-like terms (any language)',
-                'largest absolute numbers in statement',
-                'subtotals aggregate upward to total revenue'
-            ],
-            falsification: [
-                'if value is negative AND not labeled "return/discount" → not income',
-                'if appears below profit line → not income',
-                'if decreases equity → not income'
-            ]
-        }
-    },
     
-    cost: {
-        symbol: '−',
-        nature: 'negative_cash_flow',
-        description: 'Money flowing OUT (any label, any language)',
-        
-        physics: {
-            sign: 'negative (decreases equity) or positive absolute',
-            position: 'middle of income statement',
-            effect: 'decreases assets or increases liabilities',
-            cash_impact: 'eventually −cash (if paid)'
-        },
-        
-        detection_rules: {
-            primary: [
-                'appears after revenue',
-                'negative or positive values (absolute)',
-                'increases when activity increases',
-                'middle 60% of income statement rows'
-            ],
-            contextual: [
-                'labeled with cost/expense terms',
-                'hierarchical breakdown (subtotals)',
-                'indented or grouped by category'
-            ],
-            falsification: [
-                'if appears above revenue → not cost',
-                'if increases equity → not cost'
-            ]
-        },
-        
-        subcategories: {
-            direct: {
-                name: 'Direct Cost / COGS',
-                nature: 'variable',
-                keywords: ['cogs', 'hpp', 'direct', 'variable'],
-                physics: 'scales with revenue (volume-dependent)'
-            },
-            operating: {
-                name: 'Operating Expense / OpEx',
-                nature: 'semi_fixed',
-                keywords: ['opex', 'operating', 'overhead', 'sg&a'],
-                physics: 'relatively fixed (step function)'
-            },
-            depreciation: {
-                name: 'Depreciation / Amortization',
-                nature: 'non_cash',
-                keywords: ['depreciation', 'depresiasi', 'amortization'],
-                physics: 'accounting cost, no cash movement'
-            },
-            financial: {
-                name: 'Interest / Tax',
-                nature: 'financial',
-                keywords: ['interest', 'bunga', 'tax', 'pajak'],
-                physics: 'below operating line, financing cost'
-            }
-        }
-    },
-    
-    profit: {
-        symbol: '=',
-        nature: 'residual',
-        description: 'Result of income minus cost',
-        
-        physics: {
-            formula: 'income − cost',
-            sign: 'positive (profit) or negative (loss)',
-            position: 'bottom of income statement',
-            effect: 'net change in equity for period'
-        },
-        
-        detection_rules: {
-            primary: [
-                'appears after all costs',
-                'calculated value (not input)',
-                'bottom 20% of income statement',
-                'often bold or highlighted'
-            ],
-            validation: [
-                'must equal: revenue − expenses',
-                'gross profit = revenue − cogs',
-                'ebitda = gross profit − opex',
-                'net profit = ebitda − d&a − interest − tax'
-            ]
-        }
-    },
-    
-    asset: {
-        symbol: 'A',
-        nature: 'resource_controlled',
-        description: 'What you own or control',
-        
-        physics: {
-            sign: 'positive (debit balance)',
-            position: 'left or top of balance sheet',
-            equation: 'A = L + E',
-            types: ['current (<1 year)', 'fixed (>1 year)']
-        }
-    },
-    
-    liability: {
-        symbol: 'L',
-        nature: 'obligation_owed',
-        description: 'What you owe',
-        
-        physics: {
-            sign: 'positive (credit balance)',
-            position: 'right or middle of balance sheet',
-            equation: 'L = A − E',
-            types: ['current (<1 year)', 'long-term (>1 year)']
-        }
-    },
-    
-    equity: {
-        symbol: 'E',
-        nature: 'residual_ownership',
-        description: 'What you own after debts',
-        
-        physics: {
-            formula: 'assets − liabilities',
-            sign: 'positive (usually)',
-            position: 'bottom right or last',
-            components: ['capital', 'retained earnings', 'current profit']
-        }
+    let text = extractedData.text || '';
+    if (!text && extractedData.tables) {
+        const tables = extractedData.tables || extractedData.sheets || [];
+        text = flattenToStrings(tables.flatMap(t => t.rows || t.data || [])).join(' ');
     }
-};
+    text = text.toLowerCase();
+    
+    // Income Statement: Has income AND cost AND profit keywords
+    const incomeKeywords = (text.match(/(pendapatan|revenue|omzet|sales|penjualan|income)/gi) || []).length;
+    const costKeywords = (text.match(/(biaya|cost|expense|beban|pengeluaran|cogs|opex)/gi) || []).length;
+    const profitKeywords = (text.match(/(laba|profit|margin|ebitda|ebit)/gi) || []).length;
+    
+    if (incomeKeywords >= 2 && costKeywords >= 2 && profitKeywords >= 1) {
+        console.log(`📋 Document Type: income_statement (income=${incomeKeywords}, cost=${costKeywords}, profit=${profitKeywords})`);
+        return { type: 'income_statement', confidence: 0.85 };
+    }
+    
+    // Assumptions: Has drivers but minimal totals
+    const driverKeywords = (text.match(/(per trip|per unit|per km|asumsi|assumptions|fleet|truck|driver|utilization)/gi) || []).length;
+    const totalKeywords = (text.match(/(total|subtotal|net|gross)/gi) || []).length;
+    
+    if (driverKeywords >= 3 && totalKeywords < 2) {
+        console.log(`📋 Document Type: assumptions (drivers=${driverKeywords}, totals=${totalKeywords})`);
+        return { type: 'assumptions', confidence: 0.75 };
+    }
+    
+    console.log(`📋 Document Type: unknown (trying classification anyway)`);
+    return { type: 'unknown', confidence: 0.5 };
+}
 
+// ===== EMPIRICAL PRIORS (Multilingual Pattern Matching) =====
 const EMPIRICAL_PRIORS = {
     indonesian: {
         income: {
@@ -808,58 +365,7 @@ const EMPIRICAL_PRIORS = {
     }
 };
 
-async function identifyDocumentType(extractedData) {
-    console.log('🔍 TIER 0: Identifying financial document type...');
-    
-    // Handle both structured tables (Excel) and raw text (PDF)
-    const tables = extractedData.tables || extractedData.sheets || [];
-    let allText = '';
-    
-    if (tables.length > 0) {
-        allText = tables
-            .flatMap(t => t.rows || t.data || [])
-            .flatMap(r => Array.isArray(r) ? r : Object.values(r))
-            .join(' ')
-            .toLowerCase();
-    } else if (extractedData.text) {
-        allText = extractedData.text.toLowerCase();
-        console.log(`📝 TIER 0: Analyzing ${allText.length} chars of PDF text`);
-    }
-    
-    const scores = {};
-    
-    for (const [type, signature] of Object.entries(DOCUMENT_SIGNATURES)) {
-        let score = 0;
-        
-        const keywords = signature.detection.keywords;
-        const matches = keywords.filter(kw => allText.includes(kw.toLowerCase())).length;
-        score += (matches / keywords.length) * 0.5;
-        
-        if (signature.detection.not_present) {
-            const notPresent = signature.detection.not_present.filter(term => 
-                !allText.includes(term.toLowerCase())
-            ).length;
-            score += (notPresent / signature.detection.not_present.length) * 0.3;
-        }
-        
-        score += 0.2;
-        
-        scores[type] = Math.min(score, 1.0);
-    }
-    
-    const [docType, confidence] = Object.entries(scores)
-        .sort(([, a], [, b]) => b - a)[0];
-    
-    console.log(`✅ TIER 0: ${docType} (${(confidence * 100).toFixed(1)}%)`);
-    
-    return {
-        type: docType,
-        confidence,
-        scores,
-        signature: DOCUMENT_SIGNATURES[docType]
-    };
-}
-
+// ===== ROW CLASSIFICATION (The Core Physics) =====
 function classifyRowNature(row, rowIndex, totalRows, docType) {
     const rowArray = Array.isArray(row) ? row : (row.cells || Object.values(row));
     const label = String(rowArray[0] || '').toLowerCase().trim();
@@ -874,17 +380,20 @@ function classifyRowNature(row, rowIndex, totalRows, docType) {
         }
     }
     
-    if (!label || docType !== 'income_statement') {
+    // Skip classification for assumptions sheets or empty labels
+    if (!label || docType === 'assumptions') {
         return { nature: 'unknown', confidence: 0, label, value };
     }
     
     let scores = { income: 0, cost: 0, profit: 0 };
     
+    // Position heuristic (top = income, middle = cost, bottom = profit)
     const positionRatio = rowIndex / totalRows;
     if (positionRatio < 0.2) scores.income += 0.3;
     if (positionRatio >= 0.2 && positionRatio < 0.8) scores.cost += 0.3;
     if (positionRatio >= 0.8) scores.profit += 0.3;
     
+    // Sign heuristic
     if (value > 0) {
         scores.income += 0.2;
         scores.profit += 0.1;
@@ -892,6 +401,7 @@ function classifyRowNature(row, rowIndex, totalRows, docType) {
         scores.cost += 0.3;
     }
     
+    // Multilingual keyword matching
     for (const [lang, priors] of Object.entries(EMPIRICAL_PRIORS)) {
         if (priors.income?.patterns) {
             for (const pattern of priors.income.patterns) {
@@ -917,6 +427,7 @@ function classifyRowNature(row, rowIndex, totalRows, docType) {
             }
         }
         
+        // Fuzzy rules
         if (priors.income?.fuzzy_rules) {
             for (const [rule, conf] of Object.entries(priors.income.fuzzy_rules)) {
                 if (rule.startsWith('starts_') && label.startsWith(rule.replace('starts_', ''))) {
@@ -955,6 +466,7 @@ function classifyRowNature(row, rowIndex, totalRows, docType) {
     };
 }
 
+// ===== VALIDATION (Physics Check: Income - Cost = Profit) =====
 function validateFinancialPhysics(classifiedRows, docType) {
     if (docType !== 'income_statement') {
         return { valid: true, note: 'Validation only for income statements' };
@@ -993,6 +505,7 @@ function validateFinancialPhysics(classifiedRows, docType) {
     };
 }
 
+// ===== TEXT TO ROWS PARSER (for PDFs) =====
 function parseTextToRows(text) {
     const rows = [];
     const lines = text.split('\n');
@@ -1006,46 +519,32 @@ function parseTextToRows(text) {
             const label = numMatch[1].trim();
             const rawValue = numMatch[2];
             
-            // Detect negative markers: (1,200) or [1,200] or -1,200
             const isNegative = /^\(.*\)$/.test(rawValue.trim()) || 
                               /^\[.*\]$/.test(rawValue.trim()) ||
                               rawValue.includes('-');
             
-            // Remove parentheses, brackets, dashes, spaces AND commas (thousand separators)
-            // Keep periods only if they're decimal points (last occurrence with 1-2 digits after)
             let valueStr = rawValue.replace(/[(),[\]\s-]/g, '');
-            // Handle thousand separators: remove commas, treat dots as thousands unless decimal
             if (valueStr.includes(',') && valueStr.includes('.')) {
-                // European: 1.234.567,89 or US: 1,234,567.89
                 if (valueStr.lastIndexOf(',') > valueStr.lastIndexOf('.')) {
-                    // European format: dots are thousands, comma is decimal
                     valueStr = valueStr.replace(/\./g, '').replace(',', '.');
                 } else {
-                    // US format: commas are thousands, dot is decimal
                     valueStr = valueStr.replace(/,/g, '');
                 }
             } else if (valueStr.includes(',')) {
-                // Only commas: could be European decimal or US thousands
                 const parts = valueStr.split(',');
                 if (parts.length === 2 && parts[1].length <= 2) {
-                    // European decimal: 1234,56
                     valueStr = valueStr.replace(',', '.');
                 } else {
-                    // US thousands: 1,234,567
                     valueStr = valueStr.replace(/,/g, '');
                 }
             } else if (valueStr.includes('.')) {
-                // Only dots: could be decimal or thousands
                 const parts = valueStr.split('.');
                 if (parts.length > 2 || (parts.length === 2 && parts[1].length > 2)) {
-                    // Thousands separator: 1.234.567
                     valueStr = valueStr.replace(/\./g, '');
                 }
-                // else keep as decimal
             }
             let value = parseFloat(valueStr) || 0;
             
-            // Apply negative sign for costs in parentheses
             if (isNegative && value > 0) {
                 value = -value;
             }
@@ -1054,16 +553,13 @@ function parseTextToRows(text) {
                 rows.push([label, value]);
             }
         } else {
-            // Fallback: find any numbers in the line
             const numbers = trimmed.match(/[\d,.()-]+/g) || [];
             if (numbers.length > 0) {
                 const label = trimmed.replace(/[\d,.()-]+/g, '').trim();
                 const lastNum = numbers[numbers.length - 1];
                 
                 const isNegative = /^\(.*\)$/.test(lastNum.trim()) || lastNum.includes('-');
-                // Remove all thousand separators (commas and dots used as thousands)
                 let cleanNum = lastNum.replace(/[(),\s-]/g, '');
-                // If multiple dots or dots followed by 3+ digits, treat as thousands
                 if ((cleanNum.match(/\./g) || []).length > 1) {
                     cleanNum = cleanNum.replace(/\./g, '');
                 }
@@ -1085,16 +581,25 @@ function parseTextToRows(text) {
     return rows;
 }
 
+// ===== MAIN ENTRY POINT =====
 async function analyzeFinancialDocument(extractedData) {
-    console.log('🧠 FINANCIAL PHYSICS ENGINE: Starting analysis...\n');
+    console.log('🧠 FINANCIAL PHYSICS ENGINE: Starting analysis...');
     
-    const docClassification = await identifyDocumentType(extractedData);
-    console.log(`\n📋 Document Type: ${docClassification.type}`);
-    console.log(`   Confidence: ${(docClassification.confidence * 100).toFixed(1)}%\n`);
+    // GUARD: Skip obvious non-financial data (5-line check)
+    if (quickNonFinancialCheck(extractedData)) {
+        return {
+            documentType: { type: 'non_financial', confidence: 0.99 },
+            classifications: [],
+            validation: { valid: true, note: 'Skipped: Log/transaction data' },
+            summary: { totalRows: 0, classifiedRows: 0 }
+        };
+    }
     
-    console.log('🔬 TIER 1: Classifying rows by financial nature...\n');
+    // TIER 0: Detect document type (15-line check)
+    const docClassification = detectDocumentType(extractedData);
+    console.log('');
     
-    // Handle both structured tables (Excel) and raw text (PDF)
+    // Get all rows from tables or text
     let allRows = [];
     const tables = extractedData.tables || extractedData.sheets || [];
     
@@ -1103,66 +608,71 @@ async function analyzeFinancialDocument(extractedData) {
     } else if (extractedData.text) {
         allRows = parseTextToRows(extractedData.text);
     }
+    
+    // TIER 1: Classify each row by nature (+Income, −Cost, =Profit)
+    console.log('🔬 TIER 1: Classifying rows by financial nature...\n');
     const classifiedRows = [];
     
     allRows.forEach((row, index) => {
         const classification = classifyRowNature(row, index, allRows.length, docClassification.type);
         
-        if (classification.nature !== 'unknown' && classification.confidence > 0.6) {
+        if (classification.nature !== 'unknown' && classification.confidence > 0.3) {
             classifiedRows.push(classification);
-            console.log(`   ${classification.symbol} ${classification.nature.toUpperCase()}: "${classification.label}" = ${classification.value.toFixed(0)} (${(classification.confidence * 100).toFixed(0)}%)`);
         }
     });
     
-    console.log(`\n⚖️  TIER 3: Validating financial physics...\n`);
-    const validation = validateFinancialPhysics(classifiedRows, docClassification.type);
+    console.log(`✅ Classified ${classifiedRows.length} rows with confidence > 30%\n`);
     
-    console.log(`\n✅ ANALYSIS COMPLETE\n`);
-    console.log(`Document Type: ${docClassification.type}`);
-    console.log(`Rows Classified: ${classifiedRows.length}`);
-    console.log(`Physics Valid: ${validation.valid ? 'YES ✓' : 'NO ✗'}`);
+    // TIER 3: Validate physics (Income - Cost = Profit)
+    const validation = validateFinancialPhysics(classifiedRows, docClassification.type);
     
     return {
         documentType: docClassification,
         classifications: classifiedRows,
         validation,
-        physics_seed: FINANCIAL_PHYSICS_SEED
+        summary: {
+            totalRows: allRows.length,
+            classifiedRows: classifiedRows.length,
+            incomeRows: classifiedRows.filter(r => r.nature === 'income').length,
+            costRows: classifiedRows.filter(r => r.nature === 'cost').length,
+            profitRows: classifiedRows.filter(r => r.nature === 'profit').length
+        }
     };
 }
 
+// ===== FORMAT PHYSICS ANALYSIS FOR GROQ CONTEXT =====
 function formatPhysicsAnalysis(analysis) {
-    const parts = [];
+    if (!analysis || !analysis.documentType) return '';
     
-    parts.push(`\n### 🧠 Financial Physics Analysis:`);
-    parts.push(`**Document Type:** ${analysis.documentType.type} (${(analysis.documentType.confidence * 100).toFixed(1)}% confidence)`);
+    const parts = ['=== FINANCIAL PHYSICS ANALYSIS ==='];
+    parts.push(`Document Type: ${analysis.documentType.type} (${(analysis.documentType.confidence * 100).toFixed(0)}% confidence)`);
     
-    if (analysis.classifications.length > 0) {
-        parts.push(`\n**Classifications Found:**`);
-        
-        const byNature = {};
-        for (const row of analysis.classifications) {
-            if (!byNature[row.nature]) byNature[row.nature] = [];
-            byNature[row.nature].push(row);
-        }
-        
-        for (const [nature, rows] of Object.entries(byNature)) {
-            const symbol = nature === 'income' ? '+' : nature === 'cost' ? '−' : '=';
-            parts.push(`\n**${nature.toUpperCase()} (${symbol}):**`);
-            rows.slice(0, 10).forEach(r => {
-                parts.push(`  - ${r.label}: ${r.value.toLocaleString()} (${(r.confidence * 100).toFixed(0)}%)`);
-            });
-            if (rows.length > 10) {
-                parts.push(`  - ... and ${rows.length - 10} more`);
-            }
-        }
+    if (analysis.summary) {
+        parts.push(`\nClassified: ${analysis.summary.classifiedRows}/${analysis.summary.totalRows} rows`);
+        parts.push(`  +Income rows: ${analysis.summary.incomeRows}`);
+        parts.push(`  −Cost rows: ${analysis.summary.costRows}`);
+        parts.push(`  =Profit rows: ${analysis.summary.profitRows}`);
     }
     
-    if (analysis.validation && analysis.validation.income !== undefined) {
-        parts.push(`\n**Physics Validation:**`);
-        parts.push(`  Income: ${analysis.validation.income.toLocaleString()}`);
-        parts.push(`  Cost: ${analysis.validation.cost.toLocaleString()}`);
-        parts.push(`  Profit: ${analysis.validation.profit.toLocaleString()}`);
-        parts.push(`  Equation Check: ${analysis.validation.valid ? '✓ PASS' : '✗ FAIL'} (variance: ${analysis.validation.variance_pct.toFixed(2)}%)`);
+    if (analysis.validation && analysis.documentType.type === 'income_statement') {
+        parts.push(`\nPhysics Validation: ${analysis.validation.valid ? 'PASS ✓' : 'FAIL ✗'}`);
+        parts.push(`  Total Income: ${analysis.validation.income?.toLocaleString() || 0}`);
+        parts.push(`  Total Cost: ${analysis.validation.cost?.toLocaleString() || 0}`);
+        parts.push(`  Stated Profit: ${analysis.validation.profit?.toLocaleString() || 0}`);
+        parts.push(`  Calculated: ${analysis.validation.calculated_profit?.toLocaleString() || 0}`);
+        parts.push(`  Variance: ${analysis.validation.variance_pct?.toFixed(2) || 0}%`);
+    }
+    
+    if (analysis.classifications && analysis.classifications.length > 0) {
+        parts.push('\nTop Classifications:');
+        const top10 = analysis.classifications
+            .sort((a, b) => b.confidence - a.confidence)
+            .slice(0, 10);
+        
+        top10.forEach(c => {
+            const symbol = c.nature === 'income' ? '+' : c.nature === 'cost' ? '−' : '=';
+            parts.push(`  ${symbol} ${c.label}: ${c.value.toLocaleString()} (${(c.confidence * 100).toFixed(0)}%)`);
+        });
     }
     
     return parts.join('\n');
@@ -1170,14 +680,12 @@ function formatPhysicsAnalysis(analysis) {
 
 module.exports = {
     FINANCIAL_PHYSICS_SEED,
-    DOCUMENT_SIGNATURES,
-    FINANCIAL_NATURE,
     EMPIRICAL_PRIORS,
-    identifyDocumentType,
+    quickNonFinancialCheck,
+    detectDocumentType,
     classifyRowNature,
     validateFinancialPhysics,
     analyzeFinancialDocument,
     formatPhysicsAnalysis,
-    // TIER -1: Gate function to check if data is a financial statement
-    isFinancialStatement
+    parseTextToRows
 };
