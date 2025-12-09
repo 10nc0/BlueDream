@@ -786,7 +786,8 @@ async function sendMessage() {
 
 // Clear history handler (can be called from UI or console)
 function clearNyanHistory() {
-    console.log('🧹 Starting conversation clear...');
+    console.log('🧹 CLEARHISTORY CALLED - Starting conversation clear...');
+    alert('🧹 Clearing conversation...');  // Visual feedback so you know it worked
     
     // Set flag to prevent auto-hydration
     shouldSkipHydration = true;
