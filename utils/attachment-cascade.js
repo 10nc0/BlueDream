@@ -4,7 +4,7 @@ const mammoth = require('mammoth');
 const crypto = require('crypto');
 const axios = require('axios');
 const querystring = require('querystring');
-const { analyzeFinancialDocument, formatPhysicsAnalysis, FINANCIAL_PHYSICS_SEED } = require('./financial-physics');
+const { analyzeFinancialDocument, formatPhysicsAnalysis, FINANCIAL_PHYSICS_SEED, isFinancialStatement } = require('./financial-physics');
 
 // ===== INTELLIGENT CHUNKING (GroundX-inspired) =====
 // Splits text by sections without cutting mid-table or mid-paragraph
@@ -1308,13 +1308,20 @@ async function extractPDFText(buffer, fileName) {
             truncated: result.truncated || false
         };
         
-        // Run Financial Physics analysis on PDF text for financial documents
+        // TIER -1: Check if PDF contains financial statements before running physics engine
         if (pdfData.text.length > 100) {
             try {
-                const financialAnalysis = await analyzeFinancialDocument({ text: pdfData.text });
-                if (financialAnalysis && financialAnalysis.documentType?.type !== 'unknown') {
-                    pdfData.financialAnalysis = financialAnalysis;
-                    console.log(`📊 PDF Financial Physics: ${financialAnalysis.documentType.type} detected (${financialAnalysis.classifications?.length || 0} items classified)`);
+                const tier1Check = isFinancialStatement({ text: pdfData.text });
+                
+                if (tier1Check.isFinancialStatement) {
+                    // Only run full Financial Physics for actual financial statements
+                    const financialAnalysis = await analyzeFinancialDocument({ text: pdfData.text });
+                    if (financialAnalysis && financialAnalysis.documentType?.type !== 'unknown') {
+                        pdfData.financialAnalysis = financialAnalysis;
+                        console.log(`📊 PDF Financial Physics: ${financialAnalysis.documentType.type} detected (${financialAnalysis.classifications?.length || 0} items classified)`);
+                    }
+                } else {
+                    console.log(`📄 PDF TIER -1: Regular document (not financial statement) - skipping physics engine`);
                 }
             } catch (finErr) {
                 console.log(`⚠️ PDF Financial Physics skipped: ${finErr.message}`);
@@ -1516,10 +1523,19 @@ async function extractExcelData(buffer, fileName) {
         
         const excelData = { tables: sheets, type: 'excel', enhanced: true, stats: excelStats };
         
+        // TIER -1: Check if Excel contains financial statements before running physics engine
         try {
-            const financialAnalysis = await analyzeFinancialDocument({ tables: sheets });
-            console.log(`🧠 Financial Physics: ${financialAnalysis.documentType.type} detected (${(financialAnalysis.documentType.confidence * 100).toFixed(1)}%)`);
-            excelData.financialAnalysis = financialAnalysis;
+            const tier1Check = isFinancialStatement({ tables: sheets });
+            
+            if (tier1Check.isFinancialStatement) {
+                // Only run full Financial Physics for actual financial statements
+                const financialAnalysis = await analyzeFinancialDocument({ tables: sheets });
+                console.log(`🧠 Financial Physics: ${financialAnalysis.documentType.type} detected (${(financialAnalysis.documentType.confidence * 100).toFixed(1)}%)`);
+                excelData.financialAnalysis = financialAnalysis;
+            } else {
+                console.log(`📊 Excel TIER -1: Regular table data (not financial statement) - skipping physics engine`);
+                console.log(`   Financial score: ${(tier1Check.scores.financial * 100).toFixed(0)}%, Non-financial: ${(tier1Check.scores.nonFinancial * 100).toFixed(0)}%`);
+            }
         } catch (physicsErr) {
             console.log(`⚠️ Financial physics skipped: ${physicsErr.message}`);
         }

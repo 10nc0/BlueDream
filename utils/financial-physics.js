@@ -118,6 +118,246 @@ Cite row numbers or cell references when possible.
 Begin.
 `;
 
+// ===== TIER -1: IS THIS A FINANCIAL STATEMENT? =====
+// Gate function to determine if Excel/PDF contains financial statements vs regular data
+// Financial statements have: time-period columns, account hierarchy, specific keywords
+// Non-financial data has: ID columns, timestamps, flat structure, log format
+
+const FINANCIAL_STATEMENT_INDICATORS = {
+    // Time-period column headers (x-axis = time)
+    timePeriodPatterns: [
+        // Months (full and abbreviated, multi-language)
+        /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i,
+        /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
+        /\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i,
+        // Quarters
+        /\bq[1-4]\b/i,
+        /\b(quarter|kuartal)\s*[1-4]\b/i,
+        // Years (standalone, not part of timestamp)
+        /\b20[1-3][0-9]\b/,
+        /\bfy\s*20[1-3][0-9]\b/i,
+        // Periods
+        /\b(ytd|mtd|qtd)\b/i,
+        /\b(budget|actual|forecast|proyeksi|anggaran)\b/i
+    ],
+    
+    // Account hierarchy keywords (y-axis = accounts)
+    accountKeywords: [
+        // Income Statement
+        'revenue', 'sales', 'income', 'pendapatan', 'penjualan', 'omzet',
+        'cost', 'expense', 'biaya', 'beban', 'hpp', 'cogs',
+        'profit', 'loss', 'laba', 'rugi', 'margin', 'ebitda', 'ebit',
+        'gross profit', 'net income', 'operating income',
+        // Balance Sheet
+        'assets', 'aset', 'aktiva', 'liabilities', 'kewajiban', 'utang',
+        'equity', 'ekuitas', 'modal', 'retained earnings', 'laba ditahan',
+        'receivables', 'piutang', 'payables', 'hutang', 'inventory', 'persediaan',
+        // Cash Flow
+        'operating activities', 'investing activities', 'financing activities',
+        'cash flow', 'arus kas', 'net change in cash'
+    ],
+    
+    // Structural indicators
+    structuralPatterns: [
+        /\btotal\b/i,
+        /\bsubtotal\b/i,
+        /\bnet\b/i,
+        /\bgross\b/i,
+        /\b%\s*(of|dari)?\s*(revenue|sales|pendapatan)?\b/i
+    ]
+};
+
+const NON_FINANCIAL_INDICATORS = {
+    // ID/Log column patterns (indicates transactional data, not statements)
+    idPatterns: [
+        /\b(id|_id|uuid|guid)\b/i,
+        /\b(created_at|updated_at|timestamp|datetime)\b/i,
+        /\b(user_id|customer_id|order_id|transaction_id)\b/i,
+        /\b(status|state|type|category)\b/i,
+        /\b(event|action|log|entry)\b/i
+    ],
+    
+    // Timestamp patterns (full datetime, not just year/month)
+    timestampPatterns: [
+        /\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/,  // 2024-01-15 14:30
+        /\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}/,  // 01/15/2024 14:30
+        /\d{2}:\d{2}:\d{2}/  // HH:MM:SS
+    ],
+    
+    // Flat structure indicators (no hierarchy)
+    flatStructureKeywords: [
+        'row', 'record', 'entry', 'item', 'line',
+        'name', 'description', 'notes', 'comments',
+        'email', 'phone', 'address', 'url', 'link'
+    ]
+};
+
+function isFinancialStatement(extractedData) {
+    console.log('🎯 TIER -1: Checking if this is a financial statement...');
+    
+    // Get all text content for analysis
+    const tables = extractedData.tables || extractedData.sheets || [];
+    let allText = '';
+    let headers = [];
+    let firstColumnLabels = [];
+    
+    if (tables.length > 0) {
+        tables.forEach(table => {
+            // Also check pre-extracted headers if available
+            if (table.headers && Array.isArray(table.headers)) {
+                headers.push(...table.headers.map(h => String(h || '').toLowerCase()));
+            }
+            
+            const rows = table.rows || table.data || [];
+            if (rows.length > 0) {
+                // Extract headers (first row) if not already extracted
+                if (headers.length === 0 && Array.isArray(rows[0])) {
+                    headers.push(...rows[0].map(h => String(h || '').toLowerCase()));
+                }
+                // Extract first column labels (account names)
+                rows.forEach(row => {
+                    if (Array.isArray(row) && row[0]) {
+                        firstColumnLabels.push(String(row[0]).toLowerCase());
+                    }
+                });
+            }
+            allText += rows.flatMap(r => Array.isArray(r) ? r : Object.values(r)).join(' ').toLowerCase() + ' ';
+        });
+    } else if (extractedData.text) {
+        allText = extractedData.text.toLowerCase();
+        // For PDFs, extract potential headers/labels from first lines
+        const lines = allText.split('\n').slice(0, 50); // First 50 lines for detection
+        firstColumnLabels = lines.filter(l => l.trim().length > 0);
+    }
+    
+    const headerText = headers.join(' ');
+    const labelsText = firstColumnLabels.join(' ');
+    
+    // Score financial statement indicators
+    let financialScore = 0;
+    let nonFinancialScore = 0;
+    
+    // Check for time-period columns in headers
+    let timePeriodMatches = 0;
+    FINANCIAL_STATEMENT_INDICATORS.timePeriodPatterns.forEach(pattern => {
+        if (pattern.test(headerText)) {
+            timePeriodMatches++;
+        }
+    });
+    if (timePeriodMatches >= 2) {
+        financialScore += 0.3;
+        console.log(`   ✅ Time-period columns detected (${timePeriodMatches} patterns)`);
+    } else if (timePeriodMatches === 1) {
+        financialScore += 0.15;
+    }
+    
+    // Check for account keywords in first column AND full text (for PDFs)
+    let accountMatches = 0;
+    const searchText = labelsText + ' ' + allText; // Check both labels and full content
+    FINANCIAL_STATEMENT_INDICATORS.accountKeywords.forEach(keyword => {
+        if (searchText.includes(keyword.toLowerCase())) {
+            accountMatches++;
+        }
+    });
+    if (accountMatches >= 8) {
+        financialScore += 0.45;
+        console.log(`   ✅ Account keywords detected (${accountMatches} matches)`);
+    } else if (accountMatches >= 5) {
+        financialScore += 0.35;
+        console.log(`   ✅ Account keywords detected (${accountMatches} matches)`);
+    } else if (accountMatches >= 2) {
+        financialScore += 0.2;
+    }
+    
+    // Also check time periods in full text (for PDFs without explicit headers)
+    if (timePeriodMatches === 0) {
+        FINANCIAL_STATEMENT_INDICATORS.timePeriodPatterns.forEach(pattern => {
+            if (pattern.test(allText)) {
+                timePeriodMatches++;
+            }
+        });
+        if (timePeriodMatches >= 2) {
+            financialScore += 0.25;
+            console.log(`   ✅ Time-period patterns in text (${timePeriodMatches} patterns)`);
+        }
+    }
+    
+    // Check for structural patterns (totals, subtotals)
+    let structuralMatches = 0;
+    FINANCIAL_STATEMENT_INDICATORS.structuralPatterns.forEach(pattern => {
+        if (pattern.test(allText)) {
+            structuralMatches++;
+        }
+    });
+    if (structuralMatches >= 2) {
+        financialScore += 0.2;
+        console.log(`   ✅ Hierarchical structure detected (${structuralMatches} patterns)`);
+    }
+    
+    // Check for NON-financial indicators
+    let idColumnMatches = 0;
+    NON_FINANCIAL_INDICATORS.idPatterns.forEach(pattern => {
+        if (pattern.test(headerText)) {
+            idColumnMatches++;
+        }
+    });
+    if (idColumnMatches >= 2) {
+        nonFinancialScore += 0.4;
+        console.log(`   ⚠️ ID/Log columns detected (${idColumnMatches} patterns) - likely transactional data`);
+    }
+    
+    // Check for timestamps
+    let timestampMatches = 0;
+    NON_FINANCIAL_INDICATORS.timestampPatterns.forEach(pattern => {
+        if (pattern.test(allText)) {
+            timestampMatches++;
+        }
+    });
+    if (timestampMatches >= 1) {
+        nonFinancialScore += 0.25;
+        console.log(`   ⚠️ Timestamps detected - likely log/transaction data`);
+    }
+    
+    // Check for flat structure indicators
+    let flatMatches = 0;
+    NON_FINANCIAL_INDICATORS.flatStructureKeywords.forEach(keyword => {
+        if (headerText.includes(keyword)) {
+            flatMatches++;
+        }
+    });
+    if (flatMatches >= 3) {
+        nonFinancialScore += 0.2;
+        console.log(`   ⚠️ Flat structure keywords in headers (${flatMatches} matches)`);
+    }
+    
+    // Calculate net confidence
+    const netScore = financialScore - nonFinancialScore;
+    const isFinancial = netScore > 0.3;
+    const confidence = Math.min(Math.max(netScore + 0.5, 0), 1); // Normalize to 0-1
+    
+    console.log(`   📊 Financial score: ${(financialScore * 100).toFixed(0)}%`);
+    console.log(`   📊 Non-financial score: ${(nonFinancialScore * 100).toFixed(0)}%`);
+    console.log(`   🎯 TIER -1 Result: ${isFinancial ? 'FINANCIAL STATEMENT' : 'REGULAR DATA'} (confidence: ${(confidence * 100).toFixed(0)}%)`);
+    
+    return {
+        isFinancialStatement: isFinancial,
+        confidence,
+        scores: {
+            financial: financialScore,
+            nonFinancial: nonFinancialScore,
+            net: netScore
+        },
+        details: {
+            timePeriodMatches,
+            accountMatches,
+            structuralMatches,
+            idColumnMatches,
+            timestampMatches,
+            flatMatches
+        }
+    };
+}
+
 const DOCUMENT_SIGNATURES = {
     assumptions: {
         name: 'Assumptions/Drivers',
@@ -937,5 +1177,7 @@ module.exports = {
     classifyRowNature,
     validateFinancialPhysics,
     analyzeFinancialDocument,
-    formatPhysicsAnalysis
+    formatPhysicsAnalysis,
+    // TIER -1: Gate function to check if data is a financial statement
+    isFinancialStatement
 };

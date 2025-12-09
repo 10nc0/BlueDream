@@ -68,6 +68,11 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Isolation Architecture**: Uses separate API tokens for playground to prevent abuse and isolate vision rate limits.
 
 ## Recent Changes (December 9, 2025)
+- **TIER -1 Financial Statement Gate**: New detection layer before Financial Physics engine
+  - Distinguishes financial statements (time-period columns, account hierarchy) from regular data (ID columns, timestamps, logs)
+  - Financial score vs Non-financial score with confidence threshold (>0.3 net = financial)
+  - Skips physics engine for product lists, inventory logs, transaction records
+  - Function: `isFinancialStatement(extractedData)` in `financial-physics.js`
 - **LaTeX OCR for Pharmacy/Research Users**: Enhanced vision system prompt for scientific notation
   - Detects LaTeX equations: `\frac`, `\int`, `\sum`, `\ce{}`, greek letters
   - Extracts both RAW LaTeX code AND human-readable rendered form
