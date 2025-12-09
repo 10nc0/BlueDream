@@ -27,7 +27,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Search & Metadata**: Enhanced search across messages and metadata, supporting multilingual text and full-text search indexing.
 - **Real-time Updates**: Smart polling with `?after={messageId}`, auto-scroll, "New messages" banner, and jump-to-message functionality.
 - **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, providing general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior. Audit results are logged via the Prometheus Trinity Discord bots.
-- **AI Playground**: A sovereign, public AI playground at `/AI` without authentication, offering multimodal support (Text, Photo, Audio, Documents), multi-file upload, dynamic capacity sharing, and abuse prevention. It features query classification, a factual cache, smart retry mechanisms, document parsing, and a search cascade for real-time knowledge.
+- **AI Playground**: A sovereign, public AI playground at `/AI` without authentication, offering multimodal support (Text, Photo, Audio, Documents), multi-file upload, dynamic capacity sharing, and abuse prevention. It features query classification, a factual cache, smart retry mechanisms, document parsing, and a search cascade for real-time knowledge. **Closed-loop document analysis** skips web search entirely for financial documents (user's own data needs no external verification).
 - **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis, including a "Price/Income ratio" metric.
 
 **System Design Choices:**
