@@ -669,30 +669,52 @@ async function analyzeFinancialDocument(extractedData) {
     const currency = detectCurrency(extractedData);
     console.log(`💰 Currency detected: ${currency}`);
     
-    // ===== TEMPORAL VALIDATION: Check for future "Actual" columns =====
+    // ===== TEMPORAL VALIDATION: Check for future "Actual" data =====
     const temporal = getTemporalContext();
     console.log(`📅 Temporal context: ${temporal.formatted}\n`);
     
     const temporalErrors = [];
-    tables.forEach((table, tableIdx) => {
-        if (table.headers && Array.isArray(table.headers)) {
-            table.headers.forEach((header, colIdx) => {
-                const headerStr = String(header).toLowerCase();
-                const yearMatch = String(header).match(/20\d{2}/);
-                if (yearMatch) {
-                    const year = parseInt(yearMatch[0]);
-                    if (year > temporal.year && /actual/i.test(headerStr)) {
-                        const warning = `⚠️ TEMPORAL ERROR (Table ${tableIdx + 1}, Col ${colIdx + 1}): "${header}" is year ${year} but labeled Actual (current year: ${temporal.year})`;
-                        temporalErrors.push(warning);
-                        console.log(warning);
-                    }
+    const seenErrors = new Set(); // Deduplicate errors
+    
+    // Scan ALL data (headers + rows) for future "Actual" patterns
+    const allDataStrings = flattenToStrings(tables);
+    allDataStrings.forEach((cell, idx) => {
+        const cellStr = String(cell);
+        const yearMatch = cellStr.match(/20\d{2}/);
+        if (yearMatch) {
+            const year = parseInt(yearMatch[0]);
+            // Check if this cell contains both a future year AND "Actual" indicator
+            if (year > temporal.year && /\bactual\b/i.test(cellStr)) {
+                const errorKey = `${year}-actual`;
+                if (!seenErrors.has(errorKey)) {
+                    seenErrors.add(errorKey);
+                    const warning = `⚠️ TEMPORAL ERROR: "${cellStr.slice(0, 50)}" references year ${year} as Actual (current: ${temporal.year}) — IMPOSSIBLE`;
+                    temporalErrors.push(warning);
+                    console.log(warning);
                 }
-            });
+            }
         }
     });
     
+    // Also scan for column headers like "2026 Actual" or "Actual 2026"
+    const columnHeaderPattern = /(20\d{2})\s*(actual|act|a)|actual\s*(20\d{2})/gi;
+    const fullText = allDataStrings.join(' ');
+    let match;
+    while ((match = columnHeaderPattern.exec(fullText)) !== null) {
+        const year = parseInt(match[1] || match[3]);
+        if (year > temporal.year) {
+            const errorKey = `header-${year}`;
+            if (!seenErrors.has(errorKey)) {
+                seenErrors.add(errorKey);
+                const warning = `⚠️ TEMPORAL ERROR: Column header "${match[0]}" is future year ${year} labeled as Actual`;
+                temporalErrors.push(warning);
+                console.log(warning);
+            }
+        }
+    }
+    
     if (temporalErrors.length > 0) {
-        console.log(`🚨 Found ${temporalErrors.length} temporal classification errors\n`);
+        console.log(`🚨 Found ${temporalErrors.length} temporal classification error(s)\n`);
     }
     
     // TIER 1: Classify each row by nature (+Income, −Cost, =Profit)
