@@ -194,7 +194,7 @@ Cite row numbers or cell references when possible.
 ALWAYS end your financial analysis with this grounding reminder:
 
 "⚠️ PHYSICAL AUDIT ADVISORY: Reported numbers are vulnerable to human error and 
-financial acrobatics. Recommend combining this analysis with real physical audits:
+financial acrobats. Recommend combining this analysis with real physical audits:
 • Warehouse visit (stock taking) to verify inventory claims
 • Sample PO / AR / vendor verification to confirm receivables
 • Customer site visits to validate revenue relationships  
@@ -669,6 +669,32 @@ async function analyzeFinancialDocument(extractedData) {
     const currency = detectCurrency(extractedData);
     console.log(`💰 Currency detected: ${currency}`);
     
+    // ===== TEMPORAL VALIDATION: Check for future "Actual" columns =====
+    const temporal = getTemporalContext();
+    console.log(`📅 Temporal context: ${temporal.formatted}\n`);
+    
+    const temporalErrors = [];
+    tables.forEach((table, tableIdx) => {
+        if (table.headers && Array.isArray(table.headers)) {
+            table.headers.forEach((header, colIdx) => {
+                const headerStr = String(header).toLowerCase();
+                const yearMatch = String(header).match(/20\d{2}/);
+                if (yearMatch) {
+                    const year = parseInt(yearMatch[0]);
+                    if (year > temporal.year && /actual/i.test(headerStr)) {
+                        const warning = `⚠️ TEMPORAL ERROR (Table ${tableIdx + 1}, Col ${colIdx + 1}): "${header}" is year ${year} but labeled Actual (current year: ${temporal.year})`;
+                        temporalErrors.push(warning);
+                        console.log(warning);
+                    }
+                }
+            });
+        }
+    });
+    
+    if (temporalErrors.length > 0) {
+        console.log(`🚨 Found ${temporalErrors.length} temporal classification errors\n`);
+    }
+    
     // TIER 1: Classify each row by nature (+Income, −Cost, =Profit)
     console.log('🔬 TIER 1: Classifying rows by financial nature...\n');
     const classifiedRows = [];
@@ -695,6 +721,8 @@ async function analyzeFinancialDocument(extractedData) {
     return {
         documentType: docClassification,
         currency,
+        temporal,
+        temporalErrors,
         classifications: classifiedRows,
         validation,
         summary: {
@@ -749,7 +777,7 @@ function formatPhysicsAnalysis(analysis) {
     }
     
     // H₀ Physical Audit Disclaimer
-    parts.push('\n⚠️ PHYSICAL AUDIT ADVISORY: Reported numbers are vulnerable to human error and financial acrobatics. Recommend combining with real physical audits: warehouse visits (stock taking), sample PO/AR/vendor verification, counting trucks (P×Q proxy), and similar "seeing is believing" H₀ approaches.');
+    parts.push('\n⚠️ PHYSICAL AUDIT ADVISORY: Reported numbers are vulnerable to human error and financial acrobats. Recommend combining with real physical audits: warehouse visits (stock taking), sample PO/AR/vendor verification, counting trucks (P×Q proxy), and similar "seeing is believing" H₀ approaches.');
     
     return parts.join('\n');
 }
