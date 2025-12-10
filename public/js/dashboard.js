@@ -318,14 +318,8 @@
                 catCanvas.style.height = '75px';
             }
             
-            // Move date/time to center title section
-            const dateTimeCompact = document.getElementById('dateTimeCompact');
-            const titleSection = document.querySelector('.header > div > div:nth-child(2)');
-            
-            if (dateTimeCompact && titleSection && !titleSection.contains(dateTimeCompact)) {
-                // Move dateTimeCompact from right section to center title section
-                titleSection.appendChild(dateTimeCompact);
-            }
+            // Date/time visibility toggled by updateDateTimePosition() based on header height
+            // No DOM movement - just visibility toggle like playground
             
             // Hide resizers on mobile
             const sidebarResizer = document.getElementById('sidebarResizer');
@@ -361,14 +355,8 @@
                 catCanvas.style.height = '100px';
             }
             
-            // Restore date/time to right section (original position)
-            const dateTimeCompact = document.getElementById('dateTimeCompact');
-            const rightSection = document.querySelector('.header > div > div:last-child');
-            
-            if (dateTimeCompact && rightSection && !rightSection.contains(dateTimeCompact)) {
-                // Move dateTimeCompact back to right section (before user info)
-                rightSection.insertBefore(dateTimeCompact, rightSection.firstChild);
-            }
+            // Date/time visibility toggled by updateDateTimePosition() based on header height
+            // No DOM movement needed - elements stay in place
             
             // Show resizers on desktop
             const sidebarResizer = document.getElementById('sidebarResizer');
