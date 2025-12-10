@@ -277,12 +277,27 @@
         // ===================================================================
         
         /**
-         * Mobile Detection: Portrait orientation on small screens
+         * Mobile Detection: Portrait orientation OR extreme aspect ratio (foldable devices)
          * - Portrait: width < 768 && height > width → Mobile mode
+         * - Extreme aspect ratio: height/width > 1.4 (very tall) → Mobile mode (catches Z Fold 7 folded)
          * - Landscape (iPhone rotated): Desktop mode with resizers
+         * - Foldables unfolded: Detected via width >= 768 with normal aspect ratio → Desktop mode
          */
         const isMobile = () => {
-            return window.innerWidth < 768 && window.innerHeight > window.innerWidth;
+            const aspectRatio = window.innerHeight / window.innerWidth;
+            
+            // Standard mobile: width < 768 AND portrait orientation
+            if (window.innerWidth < 768 && window.innerHeight > window.innerWidth) {
+                return true;
+            }
+            
+            // Foldable Z Fold 7 folded: Very tall & narrow (aspect ratio > 1.4)
+            // This catches folded state even if width is slightly larger than 768px
+            if (aspectRatio > 1.4) {
+                return true;
+            }
+            
+            return false;
         };
 
         /**
@@ -838,24 +853,46 @@
 
         /**
          * Detect mode on load and orientation change
+         * Handles foldable device fold/unfold transitions
          */
         function initMobileDetection() {
+            // Log initial state for debugging (esp. Z Fold 7)
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            const ar = (h / w).toFixed(2);
+            console.log(`📐 Screen: ${w}x${h}px (aspect ratio: ${ar})`);
+            
             // Apply initial mode
             if (isMobile()) {
+                console.log('📱 Mobile mode: aspect ratio or width < 768px detected');
                 applyMobileMode();
             } else {
+                console.log('💻 Desktop mode: aspect ratio <= 1.4 and width >= 768px');
                 applyDesktopMode();
             }
             
             // Listen for orientation/resize changes
             let resizeTimeout;
+            let lastMode = isMobile() ? 'mobile' : 'desktop';
+            
             window.addEventListener('resize', () => {
                 clearTimeout(resizeTimeout);
                 resizeTimeout = setTimeout(() => {
-                    if (isMobile()) {
-                        applyMobileMode();
-                    } else {
-                        applyDesktopMode();
+                    const w = window.innerWidth;
+                    const h = window.innerHeight;
+                    const ar = (h / w).toFixed(2);
+                    const currentMode = isMobile() ? 'mobile' : 'desktop';
+                    
+                    // Only log and switch if mode changed
+                    if (currentMode !== lastMode) {
+                        console.log(`📐 Fold/Unfold detected: ${w}x${h}px (aspect ratio: ${ar}) → ${currentMode} mode`);
+                        lastMode = currentMode;
+                        
+                        if (isMobile()) {
+                            applyMobileMode();
+                        } else {
+                            applyDesktopMode();
+                        }
                     }
                 }, 150);
             });
