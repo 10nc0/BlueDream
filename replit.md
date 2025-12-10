@@ -18,6 +18,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Adaptive Layout**: Desktop has resizable sidebar/header; mobile has automatic layout, harmonized header, and floating action zone.
 - **Touch Interactions**: Optimized for iPhone with tap-to-zoom, swipe navigation, auto-hide elements, 48px touch targets, and momentum scrolling.
 - **Visual Elements**: Cat animation in header, blinking date/time, Discord-style message layout.
+- **Cat Animation Module** (`public/js/ui/cat-animation.js`): Self-initializing module that auto-starts both cat canvas animation and date/time ticker on DOMContentLoaded. Uses singleton guards to prevent double-initialization. Auth pages simply include the script — no manual init code required.
 
 **Technical Implementations:**
 - **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage. **Password Recovery** via WhatsApp: users verify identity with email + creator phone number, receive secure reset link (15-minute expiry) via WhatsApp, with automatic session revocation on password change.
