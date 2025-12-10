@@ -244,28 +244,32 @@ function initHopAnimation() {
 }
 
 // ========================================
-// DATE/TIME TICKER (Two Modes)
+// DATE/TIME TICKER (Auth Pages Only)
 // ========================================
-// SINGLE LINE: Auth pages (cat-animation component)
-// DOUBLE LINE: Playground & main index HTML
+// SINGLE LINE FORMAT for auth pages (cat-animation component)
+// Playground & main index have their own time updaters in their JS files
 
-let _dateTimeSingleLineInitialized = false;
-let _dateTimeDoubleLineInitialized = false;
+let _dateTimeInitialized = false;
 
-// SINGLE LINE FORMAT: "12/10/2025 - 09:30:25 AM" (used in cat-animation.html)
-function initDateTimeTickerSingleLine() {
-    if (_dateTimeSingleLineInitialized) return; // Singleton guard
+function initDateTimeTicker() {
+    if (_dateTimeInitialized) return; // Singleton guard
     
     const timeEl = document.getElementById('currentTime');
     const timeElCompact = document.getElementById('currentTimeCompact');
     
-    // Only run if we're in cat-animation component (single line context)
-    const inCatComponent = (timeEl && timeEl.parentElement?.id === 'dateTimeDefault') || 
-                          (timeElCompact && timeElCompact.parentElement?.id === 'dateTimeCompact');
+    if (!timeEl && !timeElCompact) return;
     
-    if (!inCatComponent || (!timeEl && !timeElCompact)) return;
+    // Skip if playground.js or dashboard.js will handle time (detected by .date-time-display class)
+    const hasPlaygroundTimeDisplay = (timeEl && timeEl.parentElement?.classList?.contains('date-time-display')) ||
+                                    (timeElCompact && timeElCompact.parentElement?.classList?.contains('date-time-display'));
     
-    _dateTimeSingleLineInitialized = true;
+    if (hasPlaygroundTimeDisplay) {
+        console.log('⏰ Skipping cat-animation time updater (playground/dashboard handles its own)');
+        return;
+    }
+    
+    _dateTimeInitialized = true;
+    console.log('⏰ Initializing single-line date/time ticker for auth pages');
     
     function updateTime() {
         const now = new Date();
@@ -285,54 +289,6 @@ function initDateTimeTickerSingleLine() {
     
     updateTime();
     setInterval(updateTime, 1000);
-}
-
-// DOUBLE LINE FORMAT: Date on line 1, Time on line 2 (used in playground.html & index.html)
-function initDateTimeTickerDoubleLine() {
-    if (_dateTimeDoubleLineInitialized) return; // Singleton guard
-    
-    const timeEl = document.getElementById('currentTime');
-    const timeElCompact = document.getElementById('currentTimeCompact');
-    
-    // Only run if we're in playground/main context (double line context)
-    const inDoubleLineContext = (timeEl && timeEl.parentElement?.classList?.contains('date-time-display')) ||
-                               (timeElCompact && timeElCompact.parentElement?.classList?.contains('date-time-display'));
-    
-    if (!inDoubleLineContext || (!timeEl && !timeElCompact)) return;
-    
-    _dateTimeDoubleLineInitialized = true;
-    
-    function updateTime() {
-        const now = new Date();
-        const dateStr = now.toLocaleString('en-US', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-        });
-        const timeStr = now.toLocaleString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        });
-        
-        // Format as two-line: date on top, time on bottom
-        if (timeEl) {
-            timeEl.innerHTML = `${dateStr}<br>${timeStr}`;
-        }
-        if (timeElCompact) {
-            timeElCompact.innerHTML = `${dateStr}<br>${timeStr}`;
-        }
-    }
-    
-    updateTime();
-    setInterval(updateTime, 1000);
-}
-
-// Legacy wrapper for backward compatibility
-function initDateTimeTicker() {
-    initDateTimeTickerSingleLine();
-    initDateTimeTickerDoubleLine();
 }
 
 // ========================================
