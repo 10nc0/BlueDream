@@ -40,6 +40,7 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            flex: 1;
         }
         
         #catContainer {
@@ -80,12 +81,32 @@
             font-size: 0.875rem;
             transition: all 0.2s;
             text-decoration: none;
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
         }
         
         .login-btn:hover {
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        
+        .date-time-display {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            line-height: 1.2;
+            flex-shrink: 0;
+            animation: breathe-datetime 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes breathe-datetime {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
         }
         
         .clear-btn {
@@ -98,6 +119,10 @@
             font-weight: 600;
             font-size: 0.875rem;
             transition: all 0.2s;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
         
         .clear-btn:hover {

@@ -3529,8 +3529,8 @@ body.desktop-mode .thumbs-zone {
     }
 }
 
-/* Tablet-to-Mobile: Fade out title section (1000px → 999px) */
-@media (max-width: 999px) {
+/* Tablet-to-Mobile: Fade out title section only below 700px */
+@media (max-width: 699px) {
     #headerTitle {
         opacity: 0;
         visibility: hidden;

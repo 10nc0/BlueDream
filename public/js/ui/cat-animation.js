@@ -273,15 +273,16 @@ function initDateTimeTicker() {
     
     function updateTime() {
         const now = new Date();
-        const formatted = now.toLocaleString('en-US', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        }).replace(',', ' -');
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+        const displayHours = now.getHours() % 12 || 12;
+        
+        const formatted = `${year}/${month}/${day} - ${String(displayHours).padStart(2, '0')}:${minutes}:${seconds}${ampm}`;
         
         if (timeEl) timeEl.textContent = formatted;
         if (timeElCompact) timeElCompact.textContent = formatted;
