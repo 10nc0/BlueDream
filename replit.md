@@ -20,7 +20,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Visual Elements**: Cat animation in header, blinking date/time, Discord-style message layout.
 - **Cat Animation Module** (`public/js/ui/cat-animation.js`): Self-initializing module that auto-starts cat canvas animation and dual-mode date/time ticker on DOMContentLoaded. Uses singleton guards to prevent double-initialization. **Two distinct formats**: (1) Single-line for auth pages (cat-animation component): "12/10/2025 - 09:30:25 AM"; (2) Double-line for playground & main index: date on line 1, time on line 2. Context-aware routing detects parent element class/ID to apply correct formatter. **Mobile Optimization**: Cat snaps to top-left (0,0) with no margins on mobile; header height reduced to 50px; buttons compressed to 36×36 px on mobile to maximize message real estate.
 - **Mobile Real Estate Optimization (Dec 10, 2025)**:
-  - **Playground**: Header 70px → 50px. Buttons: attachment/audio 40×40 → 36×36px, send 44×40 → 52×40px (larger primary action to avoid mistaps). Input padding 1rem → 0.5rem. Cat margin/top eliminated.
+  - **Playground**: Header 70px → 50px. Button layout reorganized: 📎🎙️ stacked vertically on LEFT (left-thumb zone), send button (52×80px) on RIGHT. Input padding 1rem → 0.5rem. Cat margin/top eliminated. One-handed thumb-friendly layout prevents mistaps.
   - **Dashboard**: Header 70px → 55px. Cat 75×75 → 60×60px, snapped to top-left (zero margins). All filter buttons: 44px height → 28px, padding reduced to 0.2rem. Font sizes compressed to 0.65rem. Header buttons (AI, Logout, Create): all 28px. Message card buttons (Jump, Tag): 20px. Goal: maximize message display area, minimize UI chrome.
 
 **Technical Implementations:**

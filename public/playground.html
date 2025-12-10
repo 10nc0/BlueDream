@@ -362,6 +362,13 @@
             align-items: flex-end;
         }
         
+        .action-buttons-left {
+            display: none;
+            flex-direction: column;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+        
         .input-wrapper {
             flex: 1;
             display: flex;
@@ -646,10 +653,10 @@
             .mobile-only { display: flex; }
             .desktop-only { display: none; }
             
-            /* Compact 3-button layout on mobile: 📎🎙️↑ */
-            /* Keep buttons visible but compact to maximize query window */
-            .action-buttons {
-                display: flex;
+            /* Mobile layout: vertical buttons on left, send on right */
+            .action-buttons-left {
+                display: flex !important;
+                flex-direction: column;
                 gap: 0.375rem;
                 flex-shrink: 0;
             }
@@ -662,13 +669,18 @@
                 flex-shrink: 0;
             }
             
-            /* Send button significantly larger for primary action - avoid mistaps */
+            /* Send button: large primary action on right */
             .send-btn {
                 width: 52px;
-                height: 40px;
+                height: 80px;
                 padding: 0;
-                font-size: 1.25rem;
+                font-size: 1.5rem;
                 flex-shrink: 0;
+                align-self: flex-end;
+            }
+            
+            .input-row {
+                gap: 0.375rem;
             }
             
             /* Reduce input container padding */
@@ -755,14 +767,14 @@
         <div class="input-container">
             <div class="attachments-container" id="attachmentsContainer"></div>
             <div class="input-row">
+                <div class="action-buttons-left">
+                    <button class="upload-btn" id="attachBtn" title="Attach File (PDF, Excel, Word, Image, Audio)">📎</button>
+                    <button class="upload-btn" id="audioBtn" title="Record Audio">🎙️</button>
+                </div>
                 <div class="input-wrapper">
                     <textarea id="messageInput" placeholder="Drop your file & Ask Nyan AI (all language supported) 🐈‍⬛ nyan~" rows="2"></textarea>
                 </div>
-                <div class="action-buttons">
-                    <button class="upload-btn" id="attachBtn" title="Attach File (PDF, Excel, Word, Image, Audio)">📎</button>
-                    <button class="upload-btn" id="audioBtn" title="Record Audio">🎙️</button>
-                    <button class="send-btn" id="sendBtn">↑</button>
-                </div>
+                <button class="send-btn" id="sendBtn">↑</button>
             </div>
         </div>
     </div>
