@@ -621,21 +621,28 @@
             .mobile-only { display: flex; }
             .desktop-only { display: none; }
             
-            /* Larger 📎 button on mobile for better ergonomics */
-            #attachBtn {
-                width: 48px;
-                height: 48px;
-                padding: 0;
-                font-size: 1.5rem;
+            /* Compact 3-button layout on mobile: 📎🎙️↑ */
+            /* Keep buttons visible but compact to maximize query window */
+            .action-buttons {
+                display: flex;
+                gap: 0.375rem;
                 flex-shrink: 0;
             }
             
-            /* Smaller send button on mobile for up arrow */
-            .send-btn {
-                width: 48px;
-                height: 48px;
+            #attachBtn, #audioBtn {
+                width: 40px;
+                height: 40px;
                 padding: 0;
                 font-size: 1.25rem;
+                flex-shrink: 0;
+            }
+            
+            /* Send button slightly larger for primary action */
+            .send-btn {
+                width: 44px;
+                height: 40px;
+                padding: 0;
+                font-size: 1.15rem;
                 flex-shrink: 0;
             }
             
@@ -717,7 +724,7 @@
                 </div>
                 <div class="action-buttons">
                     <button class="upload-btn" id="attachBtn" title="Attach File (PDF, Excel, Word, Image, Audio)">📎</button>
-                    <button class="upload-btn desktop-only" id="audioBtn" title="Record Audio">🎙️</button>
+                    <button class="upload-btn" id="audioBtn" title="Record Audio">🎙️</button>
                     <button class="send-btn" id="sendBtn">↑</button>
                 </div>
             </div>
