@@ -513,6 +513,7 @@ body::before {
   
   .book-sidebar {
     width: var(--sidebar-width);
+    max-width: 30%; /* Prevent book list from dominating (esp. Z Fold 7 unfolded) */
   }
 }
 
@@ -524,6 +525,7 @@ body::before {
   
   .book-sidebar {
     width: var(--sidebar-width);
+    max-width: 30%; /* Prevent book list from dominating (esp. Z Fold 7 unfolded) */
   }
 }
 
@@ -656,7 +658,7 @@ body::before {
 
 .book-detail {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 60%; /* Guarantee message pane always visible on desktop/tablet */
   background: var(--color-surface);
   backdrop-filter: blur(10px);
   border: 1px solid var(--color-border);
