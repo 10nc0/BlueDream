@@ -28,7 +28,14 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Real-time Updates**: Smart polling with `?after={messageId}`, auto-scroll, "New messages" banner, and jump-to-message functionality.
 - **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, providing general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior. Audit results are logged via the Prometheus Trinity Discord bots.
 - **AI Playground**: A sovereign, public AI playground at `/AI` without authentication, offering multimodal support (Text, Photo, Audio, Documents), multi-file upload, dynamic capacity sharing, and abuse prevention. It features query classification, a factual cache, smart retry mechanisms, document parsing, and a search cascade for real-time knowledge. **Closed-loop document analysis** skips web search entirely for financial documents (user's own data needs no external verification). **Temporal Reality Check** injects current date into financial analysis to catch impossible "future actuals".
-- **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis, including a "Price/Income ratio" metric. **NYAN is Step 0 (sacred, always active)** — all other protocols (Financial Physics, Chemistry) are EXTENSIONS that build on top of NYAN, never override it.
+- **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis using the **Seed Metric** (P/I ratio: years to buy 700m² land). **NYAN is Step 0 (sacred, always active)** — all other protocols (Financial Physics, Chemistry) are EXTENSIONS that build on top of NYAN, never override it.
+  - **P/I Ratio Thresholds**: >3.5x = Fatalism, 2.5-3.5x = Borderline, <2.5x = Optimism
+  - **Seed Metric Proxy Rules** (H₀ — no circular reasoning):
+    1. **Direct land price** (95% conf): Direct 700m² residential land price from government/real estate boards
+    2. **Per m² proxy** (80% conf): Published land price per m² → multiply by 700
+    3. **Exurban fallback** (60% conf): Within 90-min commute, MIN $100/m² floor → multiply by 700
+    4. **Income proxy**: 2000+ divide household by 2 (dual-earner); pre-1980 use as-is (single-earner era)
+    5. **Forbidden**: Never derive land price from home price, GDP per capita, Gini, or national averages
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.
