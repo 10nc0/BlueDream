@@ -63,6 +63,14 @@ async function loginWithEmail(e) {
 
 document.getElementById('loginForm').addEventListener('submit', loginWithEmail);
 
+// AI Playground button navigation
+const aiPlaygroundBtn = document.getElementById('aiPlaygroundBtn');
+if (aiPlaygroundBtn) {
+    aiPlaygroundBtn.addEventListener('click', () => {
+        window.location.href = '/playground.html';
+    });
+}
+
 fetch('/api/auth/status')
     .then(res => res.json())
     .then(data => {
