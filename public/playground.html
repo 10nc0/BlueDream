@@ -567,14 +567,11 @@
             text-align: center;
             color: #94a3b8;
             font-size: 0.7rem;
-            white-space: nowrap;
-            line-height: 1;
-            animation: breathe-date 1.5s ease-in-out infinite;
-        }
-        
-        @keyframes breathe-date {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
+            line-height: 1.2;
+            width: 80px;
+            flex-shrink: 0;
+            word-break: break-word;
+            overflow: hidden;
         }
         
         @media (max-width: 640px) {

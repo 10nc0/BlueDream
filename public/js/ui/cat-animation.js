@@ -263,18 +263,25 @@ function initDateTimeTicker() {
     
     function updateTime() {
         const now = new Date();
-        const formatted = now.toLocaleString('en-US', {
+        const dateStr = now.toLocaleString('en-US', {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
+        });
+        const timeStr = now.toLocaleString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit',
             hour12: true
-        }).replace(',', ' -');
+        });
         
-        if (timeEl) timeEl.textContent = formatted;
-        if (timeElCompact) timeElCompact.textContent = formatted;
+        // Format as two-line: date on top, time on bottom
+        if (timeEl) {
+            timeEl.innerHTML = `${dateStr}<br>${timeStr}`;
+        }
+        if (timeElCompact) {
+            timeElCompact.innerHTML = `${dateStr}<br>${timeStr}`;
+        }
     }
     
     updateTime();
