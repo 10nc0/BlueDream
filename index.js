@@ -273,6 +273,11 @@ app.use(cors({
             return callback(null, true);
         }
         
+        // Allow custom domain (nyanbook.io)
+        if (origin.includes('nyanbook.io')) {
+            return callback(null, true);
+        }
+        
         // Check against whitelist (if configured)
         if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) {
             return callback(null, true);
