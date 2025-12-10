@@ -7161,7 +7161,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         
         // ===== FINANCE TEXT DETECTION: Detect commercial/investment topics in text (no file required) =====
         // This ensures post-guard (confidence + physical audit) runs for text-based finance queries
-        const financeTextPatterns = /\b(stock|stocks|shares|equity|earnings|revenue|EPS|GMV|TPV|NPL|EBITDA|profit|margin|dividend|valuation|PE ratio|P\/E|market cap|quarterly|quarterly results|fiscal|analyst|investor|portfolio|fintech|IPO|YoY|QoQ|FX|forex|trading|securities|hedge fund|mutual fund|ETF|bond|yield|interest rate|credit rating|balance sheet|income statement|cash flow|assets under management|AUM|loan|debt|capital|ROE|ROI|NPV|IRR|DCF|free cash flow|FCF|operating income|net income|gross margin|operating margin|CAGR|compound annual|venture capital|private equity|M&A|merger|acquisition|buyout|SPAC|guidance|beat estimates|miss estimates|consensus|Wall Street|market share|take rate|NIMAL|NIM)\b/i;
+        const financeTextPatterns = /\b(stock|stocks|shares|equity|earnings|revenue|EPS|GMV|TPV|NPL|EBITDA|profit|margin|dividend|valuation|PE ratio|P\/E|market cap|quarterly|fiscal|analyst|investor|portfolio|fintech|IPO|YoY|QoQ|yield|credit rating|balance sheet|income statement|cash flow|loan|debt|capital|operating income|net income|gross margin|operating margin|venture capital|private equity|M&A|merger|acquisition|buyout|IPO|SPAC)\b/i;
         const hasFinanceText = message && financeTextPatterns.test(message);
         const hasFinanceContext = hasFinancialDoc || hasFinanceText;
         if (hasFinanceText && !hasFinancialDoc) {
