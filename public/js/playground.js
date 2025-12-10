@@ -282,6 +282,13 @@ function getAudioExtension(mimeType) {
     return extensions[mimeType] || 'webm';
 }
 
+// Check if browser supports audio recording
+function isAudioRecordingSupported() {
+    return typeof navigator !== 'undefined' && 
+           typeof navigator.mediaDevices !== 'undefined' && 
+           typeof navigator.mediaDevices.getUserMedia !== 'function';
+}
+
 // Audio recording via microphone
 audioBtn.addEventListener('click', async () => {
     if (isRecording) {
@@ -293,6 +300,12 @@ audioBtn.addEventListener('click', async () => {
     } else {
         // Start recording
         try {
+            // Check for browser support
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showError('Voice recording not supported on this browser. Try uploading audio files instead, or use a modern browser on desktop/Android.');
+                return;
+            }
+            
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             recordingChunks = [];
             const mimeType = getSupportedAudioMimeType();
@@ -312,7 +325,8 @@ audioBtn.addEventListener('click', async () => {
                     addAttachment({
                         type: 'audio',
                         data: event.target.result,
-                        name: `recording-${Date.now()}.${ext}`
+                        name: `recording-${Date.now()}.${ext}`,
+                        source: 'recorded'
                     });
                 };
                 reader.readAsDataURL(audioBlob);
@@ -326,8 +340,16 @@ audioBtn.addEventListener('click', async () => {
             audioBtn.textContent = '⏹️';
             audioBtn.style.opacity = '0.6';
         } catch (err) {
-            showError('Microphone access denied. Please check browser permissions.');
-            console.error('Microphone error:', err);
+            if (err.name === 'NotAllowedError') {
+                showError('Microphone access denied. Check Settings > Privacy > Microphone.');
+            } else if (err.name === 'NotFoundError') {
+                showError('No microphone found. Please connect a microphone or upload audio files.');
+            } else if (err.name === 'NotReadableError') {
+                showError('Microphone is in use by another app. Close other apps and try again.');
+            } else {
+                showError('Microphone error: ' + err.message);
+            }
+            console.error('🎙️ Microphone error:', err);
         }
     }
 });
@@ -389,7 +411,8 @@ document.addEventListener('drop', (e) => {
                     addAttachment({
                         type: isAudio ? 'audio' : 'document',
                         data: event.target.result,
-                        name: file.name
+                        name: file.name,
+                        source: isAudio ? 'uploaded' : undefined
                     });
                 }
             };
@@ -467,7 +490,8 @@ function handleFileSelect(e) {
             addAttachment({
                 type: 'audio',
                 data: event.target.result,
-                name: file.name
+                name: file.name,
+                source: 'uploaded'
             });
         }
     };
@@ -515,7 +539,8 @@ function handleUniversalFileSelect(e) {
                 addAttachment({
                     type: isAudio ? 'audio' : 'document',
                     data: event.target.result,
-                    name: file.name
+                    name: file.name,
+                    source: isAudio ? 'uploaded' : undefined
                 });
             }
         };
@@ -657,7 +682,8 @@ async function createAttachmentsZip(attachmentsList) {
             filename,
             type: att.type,
             originalName: att.name,
-            mimeType
+            mimeType,
+            source: att.source
         });
     });
     
@@ -672,7 +698,10 @@ async function createAttachmentsZip(attachmentsList) {
 // Helper to add attachments without ZIP (single file or fallback)
 function addUncompressedAttachments(payload, attachmentsList) {
     const photos = attachmentsList.filter(a => a.type === 'photo').map(a => a.data);
-    const audios = attachmentsList.filter(a => a.type === 'audio').map(a => a.data);
+    const audios = attachmentsList.filter(a => a.type === 'audio').map(a => ({ 
+        data: a.data, 
+        source: a.source 
+    }));
     const documents = attachmentsList.filter(a => a.type === 'document').map(a => ({ data: a.data, name: a.name }));
     
     if (photos.length > 0) payload.photos = photos;

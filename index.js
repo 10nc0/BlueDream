@@ -6619,7 +6619,7 @@ app.post('/api/playground', async (req, res) => {
                         if (entry.type === 'photo') {
                             photos.push(dataUrl);
                         } else if (entry.type === 'audio') {
-                            audios.push(dataUrl);
+                            audios.push({ data: dataUrl, source: entry.source });
                         } else if (entry.type === 'document') {
                             documents.push({ data: dataUrl, name: entry.originalName });
                         }
@@ -7069,6 +7069,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         }
         
         // Process all audio files via Groq Whisper
+        let recordedAudioTranscript = ''; // Capture transcript from recorded audio
         if (audioList.length > 0) {
             if (!PLAYGROUND_GROQ_TOKEN) {
                 return res.status(503).json({ 
@@ -7080,7 +7081,9 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             const FormData = require('form-data');
             
             for (let i = 0; i < audioList.length; i++) {
-                const audioData = audioList[i];
+                const audioItem = audioList[i];
+                const audioData = typeof audioItem === 'string' ? audioItem : audioItem.data;
+                const audioSource = typeof audioItem === 'object' ? audioItem.source : undefined;
                 
                 try {
                     const base64Data = audioData.split(',')[1] || audioData;
@@ -7107,11 +7110,21 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                     );
                     
                     const transcript = whisperResponse.data.text || '';
-                    extractedContent.push(`[Audio ${i + 1}]: "${transcript}"`);
+                    
+                    // ACCESSIBILITY FIX: Recorded audio (from mic button) becomes the user's query
+                    // Uploaded audio files are treated as context
+                    if (audioSource === 'recorded') {
+                        recordedAudioTranscript = transcript;
+                        console.log(`🎙️ Recorded audio transcript → query: "${transcript}"`);
+                    } else {
+                        extractedContent.push(`[Audio ${i + 1}]: "${transcript}"`);
+                    }
                     
                 } catch (audioError) {
                     console.error(`❌ Audio ${i + 1} error:`, audioError.message);
-                    extractedContent.push(`[Audio ${i + 1}]: Transcription failed`);
+                    if (audioSource !== 'recorded') {
+                        extractedContent.push(`[Audio ${i + 1}]: Transcription failed`);
+                    }
                 }
             }
         }
@@ -7128,21 +7141,26 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             }
         }
         
+        // Use recorded audio transcript as the query (accessibility for non-writers)
+        const effectiveMessage = recordedAudioTranscript || message;
+        
         // Combine all extracted content into final prompt (preserve search context if present)
         if (extractedContent.length > 0) {
             const allExtracted = extractedContent.join('\n\n');
             const searchPart = searchContext ? `Web context:\n${searchContext}\n\n` : '';
-            if (message) {
-                finalPrompt = `${searchPart}Attachments analyzed:\n${allExtracted}${attachmentContextPart}\n\nUser query: ${message}`;
+            if (effectiveMessage) {
+                finalPrompt = `${searchPart}Attachments analyzed:\n${allExtracted}${attachmentContextPart}\n\nUser query: ${effectiveMessage}`;
             } else {
                 finalPrompt = `Attachments analyzed:\n${allExtracted}${attachmentContextPart}\n\nProvide a comprehensive analysis of all the above content.`;
             }
             console.log(`📎 Combined ${extractedContent.length} attachment(s) into prompt${searchContext ? ' (with search context)' : ''}${attachmentContextPart ? ' + attachment history' : ''}`);
         } else if (attachmentContextPart) {
             // Even if no current attachments, include historical context
-            if (message) {
-                finalPrompt = `${message}${attachmentContextPart}`;
+            if (effectiveMessage) {
+                finalPrompt = `${effectiveMessage}${attachmentContextPart}`;
             }
+        } else if (effectiveMessage) {
+            finalPrompt = effectiveMessage;
         }
         
         // ===== FINANCIAL PHYSICS: Detect financial documents for seed injection =====
