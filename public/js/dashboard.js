@@ -6401,7 +6401,7 @@
             
             // Compact view: Single-line with dash separator (before user info)
             const currentTimeCompactEl = document.getElementById('currentTimeCompact');
-            if (currentTimeCompactEl) currentTimeCompactEl.textContent = `${year}/${month}/${day} - ${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
+            if (currentTimeCompactEl) currentTimeCompactEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
             
             // Update book count in compact indicators only
             const bookCountEl = document.getElementById('bookCountCompact');

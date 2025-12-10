@@ -3180,10 +3180,12 @@ body.mobile-mode .header > div > div:nth-child(2) > div[style*="0.875rem"] {
 /* Date/Time - Show in compact position (center, below title) */
 body.mobile-mode #dateTimeCompact {
     display: block !important;
-    font-size: 0.6rem !important;
+    font-size: 0.65rem !important;
     color: #94a3b8;
-    line-height: 1;
-    margin-top: -2px;
+    line-height: 1.1;
+    margin-top: 0;
+    white-space: normal;
+    overflow: visible;
 }
 
 /* 3. Logout Section (Right Column) - Hide user info, show logout only */
