@@ -27,12 +27,36 @@
     white-space: nowrap;
     line-height: 1;
     margin-top: 0.25rem;
-    animation: breathe-datetime 1.5s ease-in-out infinite;
+    /* Fixed dimensions to prevent flex reflow oscillation */
+    min-width: 160px;
+    max-width: 160px;
+    flex-shrink: 0;
 }
 
-@keyframes breathe-datetime {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+/* Time blink effect - controlled by JS class toggle (not per-frame style changes) */
+#currentTime,
+#currentTimeCompact {
+    transition: opacity 0.1s ease-out;
+    font-variant-numeric: tabular-nums; /* Monospace digits for stable width */
+    color: #94a3b8; /* Base color - works on both light/dark backgrounds */
+}
+
+#currentTime.blink-active,
+#currentTimeCompact.blink-active {
+    opacity: 1; /* Fully visible */
+}
+
+#currentTime.blink-idle,
+#currentTimeCompact.blink-idle {
+    opacity: 0.4; /* Dimmed */
+}
+
+/* Playground date-time-display - stable dimensions to prevent flex oscillation */
+.date-time-display {
+    white-space: nowrap;
+    min-width: 160px;
+    flex-shrink: 0;
+    text-align: center;
 }
 
 /* Auth Pages: Always centered at 125×125px */

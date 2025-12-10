@@ -55,6 +55,7 @@ function initHopAnimation() {
     let catY = CANVAS_HEIGHT / 2;
     let lastTouchTime = 0;
     let lastInteractionTime = 0;
+    let _lastBlinkState = null; // Track blink state to avoid per-frame DOM mutations
     const TOUCH_COOLDOWN = 100; // ms - prevent ghost/rapid-fire taps
     const IDLE_RESET_TIME = 2000; // ms - reset to center after 2s of no interaction
     
@@ -214,18 +215,24 @@ function initHopAnimation() {
         }
         
         // Alternate time color with cat animation (black vs white)
+        // Use class toggle instead of per-frame style.color to avoid layout thrashing
         const isJump = Math.floor(frame / CAT_CONFIG.JUMP_FRAME_INTERVAL) % 2 === 0;
-        const blinkColor = isJump ? CAT_CONFIG.COLORS.TIME_ACTIVE : CAT_CONFIG.COLORS.TIME_IDLE;
+        const shouldBeActive = isJump;
         
-        const timeEl = document.getElementById('currentTime');
-        if (timeEl) {
-            timeEl.style.color = blinkColor;
-        }
-        
-        // Also apply blinking to compact position
-        const timeElCompact = document.getElementById('currentTimeCompact');
-        if (timeElCompact) {
-            timeElCompact.style.color = blinkColor;
+        // Only toggle class when state changes (not every frame)
+        if (shouldBeActive !== _lastBlinkState) {
+            _lastBlinkState = shouldBeActive;
+            const timeEl = document.getElementById('currentTime');
+            const timeElCompact = document.getElementById('currentTimeCompact');
+            
+            if (timeEl) {
+                timeEl.classList.toggle('blink-active', shouldBeActive);
+                timeEl.classList.toggle('blink-idle', !shouldBeActive);
+            }
+            if (timeElCompact) {
+                timeElCompact.classList.toggle('blink-active', shouldBeActive);
+                timeElCompact.classList.toggle('blink-idle', !shouldBeActive);
+            }
         }
         
         drawPixelCat(frame, offsetX, offsetY, fleeing);
