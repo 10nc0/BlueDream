@@ -7666,56 +7666,76 @@ async function runDeferredStartupTasks() {
     genesisCounter.start();
     console.log('🔢 Genesis counter started (cat + φ breath tiers)');
     
-    // === PERSISTENT PHI BREATHE COUNTER (ETERNAL + MULTI-INSTANCE SAFE) ===
-    // Uses atomic database increment to prevent duplicates when dev/prod share same DB
-    // or when Autoscale runs multiple instances
+    // === PHI BREATHE COUNTER: PROD (ETERNAL DB) vs DEV (FRESH MEMORY) ===
     const PHI = 1.618033988749895;
     const BASE_BREATH = 4000; // ms
 
-    async function atomicPhiBreathe() {
+    if (isProd) {
+        // PRODUCTION: Atomic DB increment for eternal count (multi-instance safe)
+        async function atomicPhiBreathe() {
+            try {
+                // Atomic increment: UPDATE ... RETURNING ensures no race conditions
+                // Each instance gets a unique, sequential count from the database
+                const res = await pool.query(
+                    `INSERT INTO core.system_counters (key, value) 
+                     VALUES ('phi_breathe_count', 1)
+                     ON CONFLICT (key) DO UPDATE 
+                     SET value = core.system_counters.value + 1, updated_at = NOW()
+                     RETURNING value`
+                );
+                
+                const phiBreatheCount = parseInt(res.rows[0].value, 10);
+                const isInhale = phiBreatheCount % 2 === 1;
+                const duration = isInhale ? BASE_BREATH : Math.round(BASE_BREATH * PHI);
+                const type = isInhale ? 'inhale' : 'exhale';
+                const multiplier = isInhale ? '' : '(φ×1.618)';
+
+                console.log(`🌬️  phi breathe #${phiBreatheCount} ${type} ${duration}ms ${multiplier}`);
+
+                // Schedule next breath
+                setTimeout(atomicPhiBreathe, duration);
+                
+            } catch (err) {
+                console.error('❌ Phi breathe error:', err.message);
+                // Retry after a delay on error
+                setTimeout(atomicPhiBreathe, BASE_BREATH);
+            }
+        }
+
+        // Log current genesis count and begin eternal breath
         try {
-            // Atomic increment: UPDATE ... RETURNING ensures no race conditions
-            // Each instance gets a unique, sequential count from the database
             const res = await pool.query(
-                `INSERT INTO core.system_counters (key, value) 
-                 VALUES ('phi_breathe_count', 1)
-                 ON CONFLICT (key) DO UPDATE 
-                 SET value = core.system_counters.value + 1, updated_at = NOW()
-                 RETURNING value`
+                `SELECT value FROM core.system_counters WHERE key = 'phi_breathe_count'`
             );
-            
-            const phiBreatheCount = parseInt(res.rows[0].value, 10);
+            if (res.rows[0]) {
+                console.log(`✨ Genesis restored: phi breathe #${res.rows[0].value} (eternal count since genesis)`);
+            }
+        } catch (err) {
+            console.log('⚠️  Phi counter table not ready yet, will initialize on first breath');
+        }
+        
+        // Begin eternal breath (atomic increment handles multi-instance safety)
+        atomicPhiBreathe();
+    } else {
+        // DEVELOPMENT: In-memory counter (resets on refresh, no DB writes)
+        let phiBreatheCount = 0;
+
+        function devPhiBreathe() {
+            phiBreatheCount++;
             const isInhale = phiBreatheCount % 2 === 1;
             const duration = isInhale ? BASE_BREATH : Math.round(BASE_BREATH * PHI);
             const type = isInhale ? 'inhale' : 'exhale';
             const multiplier = isInhale ? '' : '(φ×1.618)';
 
-            console.log(`🌬️  phi breathe #${phiBreatheCount} ${type} ${duration}ms ${multiplier}`);
+            console.log(`🌬️  phi breathe #${phiBreatheCount} ${type} ${duration}ms ${multiplier} (dev mode)`);
 
             // Schedule next breath
-            setTimeout(atomicPhiBreathe, duration);
-            
-        } catch (err) {
-            console.error('❌ Phi breathe error:', err.message);
-            // Retry after a delay on error
-            setTimeout(atomicPhiBreathe, BASE_BREATH);
+            setTimeout(devPhiBreathe, duration);
         }
-    }
 
-    // Log current genesis count and begin eternal breath
-    try {
-        const res = await pool.query(
-            `SELECT value FROM core.system_counters WHERE key = 'phi_breathe_count'`
-        );
-        if (res.rows[0]) {
-            console.log(`✨ Genesis restored: phi breathe #${res.rows[0].value} (eternal count since genesis)`);
-        }
-    } catch (err) {
-        console.log('⚠️  Phi counter table not ready yet, will initialize on first breath');
+        console.log(`🔄 Dev mode: phi breathe starts fresh (in-memory, resets on refresh)`);
+        devPhiBreathe();
     }
-    
-    // Begin eternal breath (atomic increment handles multi-instance safety)
-    atomicPhiBreathe();
     
     // 3-DAY MEDIA PURGE: Clean up old media from buffer
     // Nyanbook Ledger has permanent copy, so buffer only needed for retry safety
