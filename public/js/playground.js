@@ -718,6 +718,11 @@ async function sendMessage() {
         return;
     }
     
+    // Auto-collapse keyboard on mobile (Android UX improvement)
+    if (messageInput.blur) {
+        messageInput.blur();
+    }
+    
     isProcessing = true;
     sendBtn.disabled = true;
     
