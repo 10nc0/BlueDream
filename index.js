@@ -1930,7 +1930,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
             const resend = new Resend(process.env.RESEND_API_KEY);
             
             await resend.emails.send({
-                from: 'Nyanbook <noreply@nyanbook.io>',
+                from: 'Nyan <nyan@nyanbook.io>',
                 to: normalizedEmail,
                 subject: '🔑 Reset Your Nyanbook Password',
                 html: `

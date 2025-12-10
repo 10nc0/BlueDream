@@ -54,7 +54,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)
 - **WhatsApp**: Twilio WhatsApp Business API
-- **Email**: Resend API (for password reset emails, from noreply@nyanbook.io)
+- **Email**: Resend API (for password reset emails, from nyan@nyanbook.io)
 - **AI (Production)**: Groq API
 - **AI (Playground)**: Groq API (text + vision via dedicated tokens)
 - **Search**: DuckDuckGo Instant Answer API, Brave Search API
