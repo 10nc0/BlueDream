@@ -214,26 +214,8 @@ function initHopAnimation() {
             }
         }
         
-        // Alternate time color with cat animation (black vs white)
-        // Use class toggle instead of per-frame style.color to avoid layout thrashing
-        const isJump = Math.floor(frame / CAT_CONFIG.JUMP_FRAME_INTERVAL) % 2 === 0;
-        const shouldBeActive = isJump;
-        
-        // Only toggle class when state changes (not every frame)
-        if (shouldBeActive !== _lastBlinkState) {
-            _lastBlinkState = shouldBeActive;
-            const timeEl = document.getElementById('currentTime');
-            const timeElCompact = document.getElementById('currentTimeCompact');
-            
-            if (timeEl) {
-                timeEl.classList.toggle('blink-active', shouldBeActive);
-                timeEl.classList.toggle('blink-idle', !shouldBeActive);
-            }
-            if (timeElCompact) {
-                timeElCompact.classList.toggle('blink-active', shouldBeActive);
-                timeElCompact.classList.toggle('blink-idle', !shouldBeActive);
-            }
-        }
+        // Date/time breathing animation is now handled purely by CSS (breathe-datetime keyframes)
+        // No more JS-controlled rapid blink toggling - gentler, consistent tempo
         
         drawPixelCat(frame, offsetX, offsetY, fleeing);
         frame++;

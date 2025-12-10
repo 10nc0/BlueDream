@@ -33,22 +33,17 @@
     flex-shrink: 0;
 }
 
-/* Time blink effect - controlled by JS class toggle (not per-frame style changes) */
+/* Gentle breathing animation for all date/time elements - globally consistent tempo */
+@keyframes breathe-datetime {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 #currentTime,
 #currentTimeCompact {
-    transition: opacity 0.1s ease-out;
     font-variant-numeric: tabular-nums; /* Monospace digits for stable width */
     color: #94a3b8; /* Base color - works on both light/dark backgrounds */
-}
-
-#currentTime.blink-active,
-#currentTimeCompact.blink-active {
-    opacity: 1; /* Fully visible */
-}
-
-#currentTime.blink-idle,
-#currentTimeCompact.blink-idle {
-    opacity: 0.4; /* Dimmed */
+    animation: breathe-datetime 2s ease-in-out infinite;
 }
 
 /* Playground date-time-display - tight width to snap to buttons while preventing digit-change jitter */
