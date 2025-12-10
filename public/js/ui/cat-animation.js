@@ -236,5 +236,66 @@ function initHopAnimation() {
     animate();
 }
 
-// Note: initHopAnimation is called from index.html after authentication check
-// This ensures the cat animation only runs for authenticated users
+// ========================================
+// DATE/TIME TICKER (Independent Module)
+// ========================================
+// Updates #currentTime and #currentTimeCompact elements every second
+// Works independently of cat animation - can exist in any layout position
+
+let _dateTimeInitialized = false;
+
+function initDateTimeTicker() {
+    if (_dateTimeInitialized) return; // Singleton guard
+    
+    const timeEl = document.getElementById('currentTime');
+    const timeElCompact = document.getElementById('currentTimeCompact');
+    
+    if (!timeEl && !timeElCompact) return; // No time elements found
+    
+    _dateTimeInitialized = true;
+    
+    function updateTime() {
+        const now = new Date();
+        const formatted = now.toLocaleString('en-US', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        }).replace(',', ' -');
+        
+        if (timeEl) timeEl.textContent = formatted;
+        if (timeElCompact) timeElCompact.textContent = formatted;
+    }
+    
+    updateTime();
+    setInterval(updateTime, 1000);
+}
+
+// ========================================
+// AUTO-INITIALIZATION (Self-Starting)
+// ========================================
+// Both cat animation and date/time ticker auto-start on DOMContentLoaded
+// Each detects its own elements independently
+
+let _catInitialized = false;
+
+// Wrap original initHopAnimation with singleton guard
+const _originalInitHopAnimation = initHopAnimation;
+initHopAnimation = function() {
+    if (_catInitialized) return; // Prevent double-init
+    _catInitialized = true;
+    _originalInitHopAnimation();
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Auto-init cat animation if canvas exists
+    if (document.getElementById('hopCanvas')) {
+        initHopAnimation();
+    }
+    
+    // Auto-init date/time ticker if time elements exist
+    initDateTimeTicker();
+});

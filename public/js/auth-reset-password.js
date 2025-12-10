@@ -1,31 +1,4 @@
-// Initialize cat animation on page load
-document.addEventListener('DOMContentLoaded', () => {
-    if (typeof initHopAnimation === 'function') {
-        initHopAnimation();
-    }
-    
-    // Update time display
-    function updateTime() {
-        const now = new Date();
-        const formatted = now.toLocaleString('en-US', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        }).replace(',', ' -');
-        
-        const timeElement = document.getElementById('currentTime');
-        if (timeElement) {
-            timeElement.textContent = formatted;
-        }
-    }
-    
-    updateTime();
-    setInterval(updateTime, 1000);
-});
+// Cat animation & date/time now auto-initialize via cat-animation.js
 
 const form = document.getElementById('resetForm');
 const errorMessage = document.getElementById('errorMessage');
