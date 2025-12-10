@@ -45,7 +45,9 @@
         
         #catContainer {
             position: relative;
-            top: 10px;
+            top: 0;
+            left: 0;
+            margin: 0;
             z-index: 20;
         }
         
@@ -600,8 +602,11 @@
         }
         
         @media (max-width: 640px) {
-            .header { padding: 0.5rem 1rem; }
-            .header-title h1 { font-size: 1rem; }
+            .header { 
+                padding: 0.25rem 0.5rem;
+                height: 50px;
+            }
+            .header-title h1 { font-size: 0.875rem; }
             .header-title p { display: none; }
             
             /* Swap title text on mobile */
@@ -650,20 +655,29 @@
             }
             
             #attachBtn, #audioBtn {
-                width: 40px;
-                height: 40px;
+                width: 36px;
+                height: 36px;
                 padding: 0;
-                font-size: 1.25rem;
+                font-size: 1.15rem;
                 flex-shrink: 0;
             }
             
             /* Send button slightly larger for primary action */
             .send-btn {
-                width: 44px;
-                height: 40px;
+                width: 40px;
+                height: 36px;
                 padding: 0;
-                font-size: 1.15rem;
+                font-size: 1rem;
                 flex-shrink: 0;
+            }
+            
+            /* Reduce input container padding */
+            .input-container {
+                padding: 0.5rem !important;
+            }
+            
+            .input-row {
+                gap: 0.375rem;
             }
             
             /* Fixed input container at bottom */
