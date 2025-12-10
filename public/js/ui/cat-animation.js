@@ -244,22 +244,63 @@ function initHopAnimation() {
 }
 
 // ========================================
-// DATE/TIME TICKER (Independent Module)
+// DATE/TIME TICKER (Two Modes)
 // ========================================
-// Updates #currentTime and #currentTimeCompact elements every second
-// Works independently of cat animation - can exist in any layout position
+// SINGLE LINE: Auth pages (cat-animation component)
+// DOUBLE LINE: Playground & main index HTML
 
-let _dateTimeInitialized = false;
+let _dateTimeSingleLineInitialized = false;
+let _dateTimeDoubleLineInitialized = false;
 
-function initDateTimeTicker() {
-    if (_dateTimeInitialized) return; // Singleton guard
+// SINGLE LINE FORMAT: "12/10/2025 - 09:30:25 AM" (used in cat-animation.html)
+function initDateTimeTickerSingleLine() {
+    if (_dateTimeSingleLineInitialized) return; // Singleton guard
     
     const timeEl = document.getElementById('currentTime');
     const timeElCompact = document.getElementById('currentTimeCompact');
     
-    if (!timeEl && !timeElCompact) return; // No time elements found
+    // Only run if we're in cat-animation component (single line context)
+    const inCatComponent = (timeEl && timeEl.parentElement?.id === 'dateTimeDefault') || 
+                          (timeElCompact && timeElCompact.parentElement?.id === 'dateTimeCompact');
     
-    _dateTimeInitialized = true;
+    if (!inCatComponent || (!timeEl && !timeElCompact)) return;
+    
+    _dateTimeSingleLineInitialized = true;
+    
+    function updateTime() {
+        const now = new Date();
+        const formatted = now.toLocaleString('en-US', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        }).replace(',', ' -');
+        
+        if (timeEl) timeEl.textContent = formatted;
+        if (timeElCompact) timeElCompact.textContent = formatted;
+    }
+    
+    updateTime();
+    setInterval(updateTime, 1000);
+}
+
+// DOUBLE LINE FORMAT: Date on line 1, Time on line 2 (used in playground.html & index.html)
+function initDateTimeTickerDoubleLine() {
+    if (_dateTimeDoubleLineInitialized) return; // Singleton guard
+    
+    const timeEl = document.getElementById('currentTime');
+    const timeElCompact = document.getElementById('currentTimeCompact');
+    
+    // Only run if we're in playground/main context (double line context)
+    const inDoubleLineContext = (timeEl && timeEl.parentElement?.classList?.contains('date-time-display')) ||
+                               (timeElCompact && timeElCompact.parentElement?.classList?.contains('date-time-display'));
+    
+    if (!inDoubleLineContext || (!timeEl && !timeElCompact)) return;
+    
+    _dateTimeDoubleLineInitialized = true;
     
     function updateTime() {
         const now = new Date();
@@ -286,6 +327,12 @@ function initDateTimeTicker() {
     
     updateTime();
     setInterval(updateTime, 1000);
+}
+
+// Legacy wrapper for backward compatibility
+function initDateTimeTicker() {
+    initDateTimeTickerSingleLine();
+    initDateTimeTickerDoubleLine();
 }
 
 // ========================================
