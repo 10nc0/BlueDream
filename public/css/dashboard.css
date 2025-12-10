@@ -3580,7 +3580,7 @@ body.desktop-mode .thumbs-zone {
 /* Ensure 🧠 AI button stays visible on mobile */
 body.mobile-mode #aiPlaygroundBtn {
     display: flex !important;
-    height: 32px;
+    height: 28px;
     padding: 0.25rem 0.5rem !important;
     font-size: 0.7rem !important;
     flex-shrink: 0;
