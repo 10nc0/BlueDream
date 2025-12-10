@@ -7159,6 +7159,15 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             console.log(`🧠 Financial Physics: ${hasExcelDoc ? 'Excel' : 'Financial PDF'} detected - will inject physics seed`);
         }
         
+        // ===== FINANCE TEXT DETECTION: Detect commercial/investment topics in text (no file required) =====
+        // This ensures post-guard (confidence + physical audit) runs for text-based finance queries
+        const financeTextPatterns = /\b(stock|stocks|shares|equity|earnings|revenue|EPS|GMV|TPV|NPL|EBITDA|profit|margin|dividend|valuation|PE ratio|P\/E|market cap|quarterly|fiscal|analyst|investor|portfolio|fintech|IPO|YoY|QoQ|FX|forex|trading|securities|hedge fund|mutual fund|ETF|bond|yield|interest rate|credit rating|balance sheet|income statement|cash flow|assets under management|AUM|loan|debt|capital|ROE|ROI|NPV|IRR|DCF|free cash flow|FCF|operating income|net income|gross margin|operating margin|CAGR|compound annual|venture capital|private equity|M&A|merger|acquisition|buyout|IPO|SPAC)\b/i;
+        const hasFinanceText = message && financeTextPatterns.test(message);
+        const hasFinanceContext = hasFinancialDoc || hasFinanceText;
+        if (hasFinanceText && !hasFinancialDoc) {
+            console.log(`💰 Finance Text: Commercial/investment topic detected in query text`);
+        }
+        
         // Final reasoning via Groq Llama 3.3 70B
         if (!PLAYGROUND_GROQ_TOKEN) {
             return res.status(503).json({ 
@@ -7276,7 +7285,8 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         let reply = groqResponse.data.choices[0]?.message?.content || 'No response generated.';
         
         // ===== FINANCIAL PHYSICS POST-GUARD: Enforce temporal warnings + physical audit disclaimer =====
-        if (hasFinancialDoc) {
+        // Runs for BOTH uploaded financial docs AND text-based finance queries
+        if (hasFinanceContext) {
             // Check if any document had temporal errors (guard against undefined docList for cached paths)
             const allTemporalErrors = Array.isArray(docList) 
                 ? docList
