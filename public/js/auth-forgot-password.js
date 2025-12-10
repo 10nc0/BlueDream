@@ -49,7 +49,7 @@ form.addEventListener('submit', async (e) => {
         const data = await response.json();
         
         if (response.ok) {
-            showSuccess('You will receive a password reset link via WhatsApp if email & phone are correct.');
+            showSuccess('You will receive a password reset link via email if email & phone are correct.');
             form.reset();
         } else {
             showError(data.error || 'Something went wrong. Please try again.');

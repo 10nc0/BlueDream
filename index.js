@@ -1849,10 +1849,10 @@ app.post('/api/auth/signup', async (req, res) => {
 });
 
 // ===========================
-// PASSWORD RESET API (WhatsApp-based)
+// PASSWORD RESET API (Email-based via Resend)
 // ===========================
 
-// Forgot Password - Request reset link via WhatsApp
+// Forgot Password - Request reset link via Email
 app.post('/api/auth/forgot-password', async (req, res) => {
     const { email, phone } = req.body;
     
@@ -1885,7 +1885,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
         if (mappingResult.rows.length === 0) {
             // Don't reveal if email exists
             console.log(`[${getTimestamp()}] ⚠️ Password reset: Email not found - ${email}`);
-            return res.json({ success: true, message: 'If your details match, you will receive a reset link via WhatsApp.' });
+            return res.json({ success: true, message: 'If your details match, you will receive a reset link via email.' });
         }
         
         const { tenant_schema } = mappingResult.rows[0];
@@ -1903,7 +1903,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
         if (phoneCheck.rows.length === 0) {
             // Don't reveal if phone doesn't match
             console.log(`[${getTimestamp()}] ⚠️ Password reset: Phone mismatch for ${email} - tried ${standardizedPhone}`);
-            return res.json({ success: true, message: 'If your details match, you will receive a reset link via WhatsApp.' });
+            return res.json({ success: true, message: 'If your details match, you will receive a reset link via email.' });
         }
         
         // Step 3: Generate secure reset token (expires in 15 minutes)
@@ -1921,28 +1921,48 @@ app.post('/api/auth/forgot-password', async (req, res) => {
             VALUES ($1, $2, $3, $4, $5)
         `, [resetToken, normalizedEmail, tenant_schema, standardizedPhone, expiresAt]);
         
-        // Step 4: Send reset link via WhatsApp
-        const domain = process.env.REPLIT_DOMAINS?.split(',')[0] || 'nyanbook.replit.app';
+        // Step 4: Send reset link via Email (Resend)
+        const domain = process.env.REPLIT_DOMAINS?.split(',')[0] || 'nyanbook.io';
         const resetLink = `https://${domain}/reset-password.html?token=${resetToken}`;
         
         try {
-            const twilioHelper = require('./twilio-client');
-            const twilioClient = await twilioHelper.getTwilioClient();
-            const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+            const { Resend } = require('resend');
+            const resend = new Resend(process.env.RESEND_API_KEY);
             
-            await twilioClient.messages.create({
-                from: `whatsapp:${twilioNumber}`,
-                to: `whatsapp:${standardizedPhone}`,
-                body: `🔑 Your Nyanbook password reset link:\n\n${resetLink}\n\nThis link expires in 15 minutes. If you didn't request this, ignore this message.`
+            await resend.emails.send({
+                from: 'Nyanbook <noreply@nyanbook.io>',
+                to: normalizedEmail,
+                subject: '🔑 Reset Your Nyanbook Password',
+                html: `
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                        <h2 style="color: #333;">Reset Your Password</h2>
+                        <p style="color: #666; font-size: 16px;">
+                            You requested a password reset for your Nyanbook account. Click the button below to set a new password:
+                        </p>
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="${resetLink}" style="background-color: #7c3aed; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">
+                                Reset Password
+                            </a>
+                        </div>
+                        <p style="color: #999; font-size: 14px;">
+                            This link expires in 15 minutes. If you didn't request this, you can safely ignore this email.
+                        </p>
+                        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+                        <p style="color: #999; font-size: 12px;">
+                            If the button doesn't work, copy and paste this link:<br>
+                            <a href="${resetLink}" style="color: #7c3aed;">${resetLink}</a>
+                        </p>
+                    </div>
+                `
             });
             
-            console.log(`[${getTimestamp()}] ✅ Password reset link sent to ${standardizedPhone} for ${email}`);
-        } catch (twilioError) {
-            console.error(`[${getTimestamp()}] ❌ Failed to send WhatsApp reset link:`, twilioError.message);
-            return res.status(500).json({ error: 'Failed to send reset link. Please try again.' });
+            console.log(`[${getTimestamp()}] ✅ Password reset email sent to ${normalizedEmail}`);
+        } catch (emailError) {
+            console.error(`[${getTimestamp()}] ❌ Failed to send reset email:`, emailError.message);
+            return res.status(500).json({ error: 'Failed to send reset email. Please try again.' });
         }
         
-        res.json({ success: true, message: 'Reset link sent to your WhatsApp!' });
+        res.json({ success: true, message: 'Reset link sent to your email!' });
         
     } catch (error) {
         console.error(`[${getTimestamp()}] ❌ Password reset error:`, error.message);

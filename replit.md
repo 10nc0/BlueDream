@@ -21,7 +21,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Cat Animation Module** (`public/js/ui/cat-animation.js`): Self-initializing module that auto-starts cat canvas animation and dual-mode date/time ticker on DOMContentLoaded. Uses singleton guards to prevent double-initialization. **Two distinct formats**: (1) Single-line for auth pages (cat-animation component): "12/10/2025 - 09:30:25 AM"; (2) Double-line for playground & main index: date on line 1, time on line 2. Context-aware routing detects parent element class/ID to apply correct formatter.
 
 **Technical Implementations:**
-- **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage. **Password Recovery** via WhatsApp: users verify identity with email + creator phone number, receive secure reset link (15-minute expiry) via WhatsApp, with automatic session revocation on password change.
+- **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage. **Password Recovery** via Email: users verify identity with email + creator phone number, receive secure reset link (15-minute expiry) via Resend email, with automatic session revocation on password change.
 - **Database**: PostgreSQL with multi-tenant architecture, using isolated schemas per user and a centralized book registry (`core.book_registry`).
 - **WhatsApp Integration**: Twilio-based messaging using WhatsApp Business API with a join-code-first routing architecture.
 - **Media Handling**: WhatsApp media downloaded from Twilio and uploaded to Discord as native attachments.
@@ -54,6 +54,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)
 - **WhatsApp**: Twilio WhatsApp Business API
+- **Email**: Resend API (for password reset emails, from noreply@nyanbook.io)
 - **AI (Production)**: Groq API
 - **AI (Playground)**: Groq API (text + vision via dedicated tokens)
 - **Search**: DuckDuckGo Instant Answer API, Brave Search API
