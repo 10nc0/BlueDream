@@ -699,13 +699,15 @@
             </div>
         </div>
         <div style="display: flex; align-items: center; gap: 0.75rem; margin-left: auto;">
-            <div id="dateTimeDefault" class="date-time-display">
-                <span id="currentTime">2025/12/08 - 3:00:00PM</span>
+            <div style="display: flex; align-items: center; gap: 0.25rem;">
+                <div id="dateTimeDefault" class="date-time-display">
+                    <span id="currentTime">2025/12/08 - 3:00:00PM</span>
+                </div>
+                <div id="dateTimeCompact" class="date-time-display" style="display: none;">
+                    <span id="currentTimeCompact">2025/12/08 - 3:00:00PM</span>
+                </div>
+                <button onclick="clearNyanHistory()" class="clear-btn" title="Clear conversation">🗑️ <span class="desktop-text">New Chat</span></button>
             </div>
-            <div id="dateTimeCompact" class="date-time-display" style="display: none;">
-                <span id="currentTimeCompact">2025/12/08 - 3:00:00PM</span>
-            </div>
-            <button onclick="clearNyanHistory()" class="clear-btn" title="Clear conversation">🗑️ <span class="desktop-text">New Chat</span></button>
             <a href="/login.html" class="login-btn"><span class="desktop-text">🐈‍⬛ Login to Nyanbook</span><span class="mobile-text">🐈‍⬛ Login</span></a>
         </div>
     </div>
