@@ -49,10 +49,10 @@ form.addEventListener('submit', async (e) => {
         const data = await response.json();
         
         if (response.ok) {
-            showSuccess('Reset link sent to your WhatsApp! Check your messages.');
+            showSuccess('You will receive a password reset link via WhatsApp if email & phone are correct.');
             form.reset();
         } else {
-            showError(data.error || 'Failed to send reset link. Please check your details.');
+            showError(data.error || 'Something went wrong. Please try again.');
         }
     } catch (err) {
         showError('Network error. Please try again.');
