@@ -20,7 +20,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Visual Elements**: Cat animation in header, blinking date/time, Discord-style message layout.
 
 **Technical Implementations:**
-- **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage.
+- **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage. **Password Recovery** via WhatsApp: users verify identity with email + creator phone number, receive secure reset link (15-minute expiry) via WhatsApp, with automatic session revocation on password change.
 - **Database**: PostgreSQL with multi-tenant architecture, using isolated schemas per user and a centralized book registry (`core.book_registry`).
 - **WhatsApp Integration**: Twilio-based messaging using WhatsApp Business API with a join-code-first routing architecture.
 - **Media Handling**: WhatsApp media downloaded from Twilio and uploaded to Discord as native attachments.
