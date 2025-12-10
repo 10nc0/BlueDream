@@ -634,6 +634,32 @@ async function initializeDatabase() {
         
         console.log('✅ Book engaged phones table initialized');
         
+        // PASSWORD RESET TOKENS: Secure tokens for forgot password flow via WhatsApp
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS core.password_reset_tokens (
+                id SERIAL PRIMARY KEY,
+                token TEXT UNIQUE NOT NULL,
+                user_email TEXT NOT NULL,
+                tenant_schema TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                used BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token 
+            ON core.password_reset_tokens(token)
+        `);
+        
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_email 
+            ON core.password_reset_tokens(user_email)
+        `);
+        
+        console.log('✅ Password reset tokens table initialized');
+        
         // MIGRATION TRACKING: Create table to track completed migrations
         await pool.query(`
             CREATE TABLE IF NOT EXISTS core.migrations (
@@ -1819,6 +1845,183 @@ app.post('/api/auth/signup', async (req, res) => {
     } catch (error) {
         console.error('Signup error:', error);
         res.status(500).json({ error: 'Signup failed: ' + error.message });
+    }
+});
+
+// ===========================
+// PASSWORD RESET API (WhatsApp-based)
+// ===========================
+
+// Forgot Password - Request reset link via WhatsApp
+app.post('/api/auth/forgot-password', async (req, res) => {
+    const { email, phone } = req.body;
+    
+    console.log(`[${getTimestamp()}] 🔑 Password reset request - Email: ${email}, Phone: ${phone}, IP: ${req.ip}`);
+    
+    try {
+        if (!email || !phone) {
+            return res.status(400).json({ error: 'Email and phone number are required' });
+        }
+        
+        const normalizedEmail = email.toLowerCase().trim();
+        
+        // Standardize phone format to E.164 (remove spaces, handle country codes)
+        let standardizedPhone = phone.replace(/[\s\-\(\)\.]/g, '');
+        // Only add +62 default if starts with 0 (Indonesian local format)
+        if (standardizedPhone.startsWith('0')) {
+            standardizedPhone = '+62' + standardizedPhone.substring(1);
+        }
+        // Only add + prefix if no + present at all (avoid ++1234...)
+        if (!standardizedPhone.startsWith('+') && /^\d/.test(standardizedPhone)) {
+            standardizedPhone = '+' + standardizedPhone;
+        }
+        
+        // Step 1: Find user by email
+        const mappingResult = await pool.query(
+            'SELECT tenant_id, tenant_schema, user_id FROM core.user_email_to_tenant WHERE LOWER(email) = $1',
+            [normalizedEmail]
+        );
+        
+        if (mappingResult.rows.length === 0) {
+            // Don't reveal if email exists
+            console.log(`[${getTimestamp()}] ⚠️ Password reset: Email not found - ${email}`);
+            return res.json({ success: true, message: 'If your details match, you will receive a reset link via WhatsApp.' });
+        }
+        
+        const { tenant_schema } = mappingResult.rows[0];
+        
+        // Step 2: Find books owned by this tenant where phone is_creator = TRUE
+        // Use case-insensitive email comparison (tenant_email stored as-is at signup)
+        const phoneCheck = await pool.query(`
+            SELECT ep.phone, br.tenant_email
+            FROM core.book_engaged_phones ep
+            JOIN core.book_registry br ON br.id = ep.book_registry_id
+            WHERE LOWER(br.tenant_email) = $1 AND ep.is_creator = TRUE AND ep.phone = $2
+            LIMIT 1
+        `, [normalizedEmail, standardizedPhone]);
+        
+        if (phoneCheck.rows.length === 0) {
+            // Don't reveal if phone doesn't match
+            console.log(`[${getTimestamp()}] ⚠️ Password reset: Phone mismatch for ${email} - tried ${standardizedPhone}`);
+            return res.json({ success: true, message: 'If your details match, you will receive a reset link via WhatsApp.' });
+        }
+        
+        // Step 3: Generate secure reset token (expires in 15 minutes)
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+        
+        // Invalidate any existing tokens for this email
+        await pool.query(`
+            UPDATE core.password_reset_tokens SET used = TRUE WHERE user_email = $1 AND used = FALSE
+        `, [normalizedEmail]);
+        
+        // Store new token
+        await pool.query(`
+            INSERT INTO core.password_reset_tokens (token, user_email, tenant_schema, phone, expires_at)
+            VALUES ($1, $2, $3, $4, $5)
+        `, [resetToken, normalizedEmail, tenant_schema, standardizedPhone, expiresAt]);
+        
+        // Step 4: Send reset link via WhatsApp
+        const domain = process.env.REPLIT_DOMAINS?.split(',')[0] || 'nyanbook.replit.app';
+        const resetLink = `https://${domain}/reset-password.html?token=${resetToken}`;
+        
+        try {
+            const twilioHelper = require('./twilio-client');
+            const twilioClient = await twilioHelper.getTwilioClient();
+            const twilioNumber = await twilioHelper.getTwilioFromPhoneNumber();
+            
+            await twilioClient.messages.create({
+                from: `whatsapp:${twilioNumber}`,
+                to: `whatsapp:${standardizedPhone}`,
+                body: `🔑 Your Nyanbook password reset link:\n\n${resetLink}\n\nThis link expires in 15 minutes. If you didn't request this, ignore this message.`
+            });
+            
+            console.log(`[${getTimestamp()}] ✅ Password reset link sent to ${standardizedPhone} for ${email}`);
+        } catch (twilioError) {
+            console.error(`[${getTimestamp()}] ❌ Failed to send WhatsApp reset link:`, twilioError.message);
+            return res.status(500).json({ error: 'Failed to send reset link. Please try again.' });
+        }
+        
+        res.json({ success: true, message: 'Reset link sent to your WhatsApp!' });
+        
+    } catch (error) {
+        console.error(`[${getTimestamp()}] ❌ Password reset error:`, error.message);
+        res.status(500).json({ error: 'Password reset failed. Please try again.' });
+    }
+});
+
+// Reset Password - Set new password using token
+app.post('/api/auth/reset-password', async (req, res) => {
+    const { token, password } = req.body;
+    
+    console.log(`[${getTimestamp()}] 🔓 Password reset attempt - Token: ${token?.substring(0, 8)}...`);
+    
+    try {
+        if (!token || !password) {
+            return res.status(400).json({ error: 'Token and password are required' });
+        }
+        
+        if (password.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        }
+        
+        // Step 1: Validate token
+        const tokenResult = await pool.query(`
+            SELECT id, user_email, tenant_schema, expires_at, used
+            FROM core.password_reset_tokens
+            WHERE token = $1
+        `, [token]);
+        
+        if (tokenResult.rows.length === 0) {
+            console.log(`[${getTimestamp()}] ⚠️ Password reset: Invalid token`);
+            return res.status(400).json({ error: 'Invalid or expired reset link' });
+        }
+        
+        const tokenData = tokenResult.rows[0];
+        
+        if (tokenData.used) {
+            console.log(`[${getTimestamp()}] ⚠️ Password reset: Token already used - ${tokenData.user_email}`);
+            return res.status(400).json({ error: 'This reset link has already been used' });
+        }
+        
+        if (new Date() > new Date(tokenData.expires_at)) {
+            console.log(`[${getTimestamp()}] ⚠️ Password reset: Token expired - ${tokenData.user_email}`);
+            return res.status(400).json({ error: 'This reset link has expired. Please request a new one.' });
+        }
+        
+        // Step 2: Update password in tenant schema
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const normalizedEmail = tokenData.user_email.toLowerCase();
+        
+        await pool.query(`
+            UPDATE ${tokenData.tenant_schema}.users 
+            SET password_hash = $1, updated_at = NOW()
+            WHERE LOWER(email) = $2
+        `, [hashedPassword, normalizedEmail]);
+        
+        // Step 3: Mark token as used AND invalidate all other tokens for this user
+        await pool.query(`
+            UPDATE core.password_reset_tokens SET used = TRUE WHERE user_email = $1
+        `, [normalizedEmail]);
+        
+        // Step 4: Revoke all existing refresh tokens (force re-login everywhere)
+        try {
+            await pool.query(`
+                DELETE FROM ${tokenData.tenant_schema}.refresh_tokens 
+                WHERE user_id = (SELECT id FROM ${tokenData.tenant_schema}.users WHERE LOWER(email) = $1)
+            `, [normalizedEmail]);
+            console.log(`[${getTimestamp()}] 🔒 Revoked all sessions for ${tokenData.user_email}`);
+        } catch (revokeError) {
+            console.warn(`[${getTimestamp()}] ⚠️ Could not revoke sessions (non-fatal):`, revokeError.message);
+        }
+        
+        console.log(`[${getTimestamp()}] ✅ Password reset successful for ${tokenData.user_email}`);
+        
+        res.json({ success: true, message: 'Password updated successfully!' });
+        
+    } catch (error) {
+        console.error(`[${getTimestamp()}] ❌ Password reset error:`, error.message);
+        res.status(500).json({ error: 'Password reset failed. Please try again.' });
     }
 });
 
