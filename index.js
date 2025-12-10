@@ -2566,13 +2566,20 @@ app.post('/api/twilio/webhook', async (req, res) => {
             console.log(`🔗 Activated book ${bookRecord.fractal_id} (book_id: ${bookId}) for phone ${phone}`);
             
             // MULTI-SOURCE: Add creator to engaged phones (is_creator = true)
+            // GENESIS BOOTSTRAP: First book activation automatically sets creator phone for password reset
+            const genesisCheck = await pool.query(`
+                SELECT COUNT(*) as book_count FROM core.book_registry 
+                WHERE tenant_schema = $1 AND status IN ('active', 'archived')
+            `, [tenantSchema]);
+            const isGenesisBook = genesisCheck.rows[0].book_count === 1; // Only this book is active/archived
+            
             await pool.query(`
                 INSERT INTO core.book_engaged_phones (book_registry_id, phone, is_creator, first_engaged_at, last_engaged_at)
                 VALUES ($1, $2, TRUE, NOW(), NOW())
                 ON CONFLICT (book_registry_id, phone) DO UPDATE 
                 SET last_engaged_at = NOW(), is_creator = TRUE
             `, [bookRecord.id, phone]);
-            console.log(`📱 Added ${phone} as creator to engaged phones for book ${bookRecord.fractal_id}`);
+            console.log(`📱 Added ${phone} as creator to engaged phones for book ${bookRecord.fractal_id}${isGenesisBook ? ' [GENESIS BOOTSTRAP]' : ''}`);
             
             // HERMES: Create Discord thread now that book is activated
             if (hermesBot && hermesBot.isReady()) {
