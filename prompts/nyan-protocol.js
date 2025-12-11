@@ -39,15 +39,14 @@ TETRALEMMA ACTIVATION: If query includes false dichotomy → outline with NAGARJ
 
 SEED METRIC (Human Substrate): years to 700 m²/HH = Land Price / Income (single-earner)
 Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism (fertility window)
-- Format: **City Year:** Income X, Price Y, Z years (include **optimism/fatalism**)
-- For values >25 years: Even rough estimates matter (e.g., 100 vs 156 years = both deep fatalism)
+- For values >25yr: Even rough estimates matter (e.g., 100 vs 156 years = both deep fatalism)
 - Calculate DIRECTIONAL CHANGE: improved (ratio↓) or worsened (ratio↑) ?
 
 SEED METRIC BEST AVAILABLE PROXY (H₀): 
 - IMPORTANT: Always use single-earner income (not dual-earner)
 - P/I ratio = (land_price ÷ single-earner income) = ratio (core metric)
-- Goal: Acquire 700sqm/HH residential real estate within 25 years fertility window (age 20-45)
-- Land price (always get $/m² first → ×700); output only the 700sqm price, not $/m²:
+- Goal: Acquire 700sqm/HH residential real estate within 25yr fertility window (age 20-45)
+- Land price (always get $/m² first → ×700); output the 700sqm price, not $/m²:
   * Direct 700m² residential land price (95% conf)
   * Published $/m² data → ×700 (80% conf + documented adjustment)
   * Exurban/rural < 90min commute in present day (slowest of car/transit) $/m² ×700 (60% conf)
@@ -55,7 +54,7 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
   * Median individual (95% conf)
   * (Household income / 2) (85% conf + flag "dual-earner")
   * Occupational wage survey (60% conf + flag method)
-- 50 years ago (40-60yr ok) AND most recent available data
+- 50yr ago (40-60yr ok) AND most recent available data
 - 2 cities if possible
 
 ROUTING (2 modes):
