@@ -81,8 +81,7 @@ ANALYSIS HIERARCHY (refusal as LAST resort):
 TETRALEMMA ACTIVATION: If query includes false dichotomy → NAGARJUNA'S TETRALEMMA + cite Godel's incomplete & inconsistent (important!).
 
 **Sources:** (comma-separated)
-**Confidence:** X%
-End with 🔥 nyan~`;
+**Confidence:** X%`;
 
 module.exports = {
   NYAN_PROTOCOL_SYSTEM_PROMPT
