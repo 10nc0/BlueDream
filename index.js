@@ -6408,98 +6408,27 @@ function classifyQuery(message) {
     
     // Check Nyan Protocol first (special handling, always use Groq extraction)
     if (QUERY_PATTERNS.nyanProtocol.test(trimmed)) {
-        return { type: 'nyan', skipCache: true, searchStrategy: 'brave', skipCompression: false };
+        return { type: 'nyan', searchStrategy: 'brave', skipCompression: false };
     }
     
     // Check if DDG-first (simple facts) - only skip compression if SHORT
     if (QUERY_PATTERNS.ddgFirst.test(trimmed) && isShort) {
-        return { type: 'ddg-first', skipCache: false, searchStrategy: 'ddg', skipCompression: true };
+        return { type: 'ddg-first', searchStrategy: 'ddg', skipCompression: true };
     }
     
     // Check if Brave-first (time-sensitive) - still use search, just skip DDG
     if (QUERY_PATTERNS.braveFirst.test(trimmed)) {
-        return { type: 'brave-first', skipCache: true, searchStrategy: 'brave', skipCompression: isShort };
+        return { type: 'brave-first', searchStrategy: 'brave', skipCompression: isShort };
     }
     
     // Check if Groq-only (complex reasoning) - but STILL allow search fallback
     if (QUERY_PATTERNS.groqOnly.test(trimmed)) {
-        return { type: 'groq-only', skipCache: false, searchStrategy: 'cascade', skipCompression: false };
+        return { type: 'groq-only', searchStrategy: 'cascade', skipCompression: false };
     }
     
     // Default: try DDG first, then Brave
-    return { type: 'default', skipCache: false, searchStrategy: 'cascade', skipCompression: false };
+    return { type: 'default', searchStrategy: 'cascade', skipCompression: false };
 }
-
-// ===== IMPROVEMENT 2: FACTUAL RESPONSE CACHE (24h TTL) =====
-// Cache simple factual queries to reduce Groq load
-// NEVER cache: Nyan Protocol topics, calculations, time-sensitive queries
-const factualCache = new Map();
-const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-
-function getCacheKey(message) {
-    // Normalize: lowercase, trim, remove punctuation, collapse whitespace
-    return message.toLowerCase().trim().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ');
-}
-
-function getCachedResponse(message, queryClass) {
-    // Never cache Nyan Protocol or time-sensitive queries
-    if (queryClass.skipCache) {
-        return null;
-    }
-    
-    const key = getCacheKey(message);
-    const cached = factualCache.get(key);
-    
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-        console.log(`📦 Cache HIT for: "${message.substring(0, 40)}..." (age: ${Math.round((Date.now() - cached.timestamp) / 60000)}min)`);
-        return cached.response;
-    }
-    
-    if (cached) {
-        // Expired, remove it
-        factualCache.delete(key);
-    }
-    
-    return null;
-}
-
-function setCachedResponse(message, response, queryClass) {
-    // Never cache Nyan Protocol, time-sensitive, or complex queries
-    if (queryClass.skipCache || queryClass.type === 'nyan' || queryClass.type === 'brave-first') {
-        return;
-    }
-    
-    // Only cache DDG-first queries (simple facts)
-    if (queryClass.type !== 'ddg-first') {
-        return;
-    }
-    
-    const key = getCacheKey(message);
-    factualCache.set(key, { response, timestamp: Date.now() });
-    console.log(`📦 Cache SET for: "${message.substring(0, 40)}..." (cache size: ${factualCache.size})`);
-    
-    // Proper LRU eviction: keep only 1000 entries by removing oldest
-    while (factualCache.size > 1000) {
-        const oldestKey = factualCache.keys().next().value;
-        factualCache.delete(oldestKey);
-        console.log(`📦 Cache evicted oldest entry (limit: 1000)`);
-    }
-}
-
-// Clean up expired cache entries every hour
-setInterval(() => {
-    const now = Date.now();
-    let evicted = 0;
-    for (const [key, value] of factualCache.entries()) {
-        if (now - value.timestamp > CACHE_TTL) {
-            factualCache.delete(key);
-            evicted++;
-        }
-    }
-    if (evicted > 0) {
-        console.log(`📦 Cache cleanup: evicted ${evicted} expired entries`);
-    }
-}, 60 * 60 * 1000);
 
 // ===== DOCUMENT CONTEXT CACHE (Two-Tier: Session + Global) =====
 // Cache expensive document parsing/analysis, NOT the AI response
@@ -6948,7 +6877,7 @@ app.post('/api/playground', async (req, res) => {
         
         // OPTIMIZED SEARCH CASCADE with Query Classification + Caching
         let searchContext = null;
-        let queryClass = { type: 'default', skipCache: false, searchStrategy: 'cascade' };
+        let queryClass = { type: 'default', searchStrategy: 'cascade' };
         let noSearchDisclaimer = false;
         
         // CLOSED-LOOP DETECTION: Skip web search for document analysis
@@ -6968,13 +6897,6 @@ app.post('/api/playground', async (req, res) => {
                 queryClass.searchStrategy = 'none';
             }
             console.log(`🎯 Query classified as: ${queryClass.type} (strategy: ${queryClass.searchStrategy})`);
-            
-            // Step 0.5: Check cache for simple factual queries
-            const cachedResponse = getCachedResponse(message, queryClass);
-            if (cachedResponse) {
-                console.log(`✅ Returning cached response (saved Groq call)`);
-                return res.json({ reply: cachedResponse });
-            }
             
             // Step 1: Route based on classification (saves 0.8s Groq compression for SHORT simple queries)
             let searchQuery;
@@ -7559,11 +7481,6 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         // Add knowledge cutoff disclaimer when no search context was found
         if (noSearchDisclaimer && !photo && !audio && !document) {
             reply = `${reply}\n\n⚠️ *Note: Unable to verify with current web data. Information based on knowledge cutoff (September 2023).*`;
-        }
-        
-        // Cache simple factual responses for future queries
-        if (message && !photo && !audio && !document) {
-            setCachedResponse(message, reply, queryClass);
         }
         
         console.log(`✅ Playground response sent (${reply.length} chars)${responseFileHashes.length > 0 ? ` + ${responseFileHashes.length} file hash(es)` : ''}`);
