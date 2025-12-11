@@ -6396,7 +6396,7 @@ const QUERY_PATTERNS = {
     braveFirst: /\b(latest|recent|today|yesterday|this week|this month|2024|2025|breaking|current|now|news|update|price today)\b/i,
     
     // Groq-only: Complex reasoning, calculations, or creative tasks (skip search entirely)
-    groqOnly: /\b(calculate|compute|analyze|compare|summarize|write|create|generate|explain how|step by step|think about|reason|help me|code|program|solve)\b/i,
+    groqOnly: /\b(analyze|compare|summarize|write|create|generate|explain how|step by step|think about|reason|help me|code|program|solve)\b/i,
     
     // Nyan Protocol: Land/price/affordability topics (special handling, never cache)
     nyanProtocol: /\b(land price|price.*income|income.*price|affordability|housing cost|fertility|700.*m²|land.*afford|city.*collapse|empire|extinction|inequality|φ|cycle|breath|fatalism|optimism)\b/i
