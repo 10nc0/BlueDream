@@ -39,6 +39,10 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **Stage Hierarchy**: Stage 0 (NYAN) always audited; Stage 1+ (Financial Physics, Legal Analysis, Chemistry) only if used
     - **Verdicts**: APPROVED (🟢), CORRECTED (🟡), REJECTED (🔴), BYPASS (⚪)
     - **UI**: Verification badge with confidence % shown on each response
+    - **Dual-Mode Audit (Dec 12, 2025)**: Calibrated audit strictness based on query type:
+      - **STRICT MODE** (default): For document-based analysis (Legal, Financial uploads) — requires source material quotes, no external knowledge
+      - **RESEARCH MODE**: For NYAN/Seed Metric queries without documents — allows LLM knowledge + web search for land/income data, requires proxy tier disclosure, **still verifies math correctness**
+      - Detection: `seedMetricPatterns` regex matches P/I ratio, seed metric, land affordability, etc. + no documents attached → triggers research mode
   - **Audio Accessibility**: Mic button recordings (🎙️) are automatically treated as user queries (not context), enabling low-literacy users to interact via voice alone. Uploaded audio files are treated as supporting context. Clear iOS/Safari error messages when recording is unavailable. Note: Safari/iOS does not support MediaRecorder API for audio recording; users on iPhone must type.
   - **Mobile UX**: Android/mobile keyboard auto-collapses on send for better readability of nyan's response. **Fixed scroll layout (Dec 11, 2025)**: Header fixed at top, input fixed at bottom, only message area scrolls — classic chat app pattern.
   - **Foldable Device Support**: Galaxy Z Fold 7 and similar foldables are detected via aspect ratio (>1.4 = mobile mode). Unfolded tablet mode uses desktop two-pane layout with book-sidebar capped at 30% width to ensure message pane visibility.
