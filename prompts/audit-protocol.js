@@ -85,6 +85,37 @@ LEGAL DOCUMENT ANALYSIS AUDIT (Extension):
 9. NO LEGAL ADVICE: Does the response avoid giving specific legal advice (should say "consult attorney")?
 10. CLAUSE ATTRIBUTION: Are clause numbers/article references accurate to the documents?`;
 
+const AUDIT_SEED_METRIC = `
+SEED METRIC AUDIT (Extension for ~nyan responses):
+6. HISTORICAL DATA: Is data from ~50 years ago (40-60yr acceptable) included?
+7. CURRENT DATA: Is recent/current data included?
+8. DIRECTIONAL CHANGE: Is comparison between historical and current explicitly stated?
+9. TWO CITIES: Are 2+ cities/locations analyzed (if applicable)?
+10. HUMANIZED RATIOS: Are P/I ratios explained in human-readable terms (years, fertility window)?
+
+CRITICAL RED FLAGS (instant FAIL):
+- Missing historical data when Seed Metric analysis was claimed (~nyan ending)
+- Missing current data comparison
+- No directional change analysis (improved/worsened)
+- Only one city when question asks for comparison
+- P/I ratios not humanized (should explain in years/decades, not just raw numbers)`;
+
+const AUDIT_SEED_METRIC_TOPICS = [
+  'housing affordability',
+  'land affordability', 
+  'seed metric',
+  'P/I ratio',
+  'fertility',
+  'empire',
+  'collapse',
+  'extinction',
+  'inequality',
+  'φ',
+  'cycle',
+  'breath',
+  'city comparison'
+];
+
 const AUDIT_OUTPUT_SCHEMA = `
 OUTPUT FORMAT (JSON only, no markdown):
 {
@@ -133,6 +164,7 @@ function buildAuditPrompt(options = {}) {
     usesFinancialPhysics = false,
     usesChemistry = false,
     usesLegalAnalysis = false,
+    isSeedMetric = false,
     auditMode = 'STRICT', // 'RESEARCH' | 'STRICT'
     currentDate = new Date().toISOString().split('T')[0]
   } = options;
@@ -148,7 +180,7 @@ function buildAuditPrompt(options = {}) {
   }
   
   // Extension audits only apply in STRICT mode (document analysis)
-  // Research mode has its own focused checks
+  // EXCEPT: Seed Metric extension applies in RESEARCH mode when isSeedMetric flag is set
   if (auditMode === 'STRICT') {
     if (usesFinancialPhysics) {
       prompt += '\n' + AUDIT_FINANCIAL_PHYSICS.replace('today\'s date', currentDate);
@@ -161,6 +193,11 @@ function buildAuditPrompt(options = {}) {
     if (usesLegalAnalysis) {
       prompt += '\n' + AUDIT_LEGAL_ANALYSIS;
     }
+  }
+  
+  // Seed Metric extension: applies when response ends with ~nyan
+  if (isSeedMetric) {
+    prompt += '\n' + AUDIT_SEED_METRIC;
   }
   
   prompt += '\n\n' + AUDIT_OUTPUT_SCHEMA;
@@ -182,6 +219,8 @@ module.exports = {
   AUDIT_FINANCIAL_PHYSICS,
   AUDIT_CHEMISTRY,
   AUDIT_LEGAL_ANALYSIS,
+  AUDIT_SEED_METRIC,
+  AUDIT_SEED_METRIC_TOPICS,
   AUDIT_OUTPUT_SCHEMA,
   CORRECTIVE_TEMPLATE,
   buildAuditPrompt,

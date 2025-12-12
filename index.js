@@ -7502,6 +7502,9 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         
         const hasNoDocuments = extractedContent.length === 0;
         
+        // Detect Seed Metric analysis from draft ending (LLM signals via ~nyan)
+        const isSeedMetricAnalysis = reply.includes('~nyan');
+        
         // TWO-MODE AUDIT ROUTING (simplified):
         // - STRICT: Only when user uploads documents (PDF/Word/Excel) - requires source quotes
         // - RESEARCH: Everything else (news, Seed Metric, tetralemma, philosophy, general) - allows web search + LLM knowledge
@@ -7511,7 +7514,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         let auditBadge = 'unverified';
         
         try {
-            console.log(`🔍 Two-Pass: Running verification audit (${auditMode} mode)...`);
+            console.log(`🔍 Two-Pass: Running verification audit (${auditMode} mode)${isSeedMetricAnalysis ? ' 🐱 Seed Metric' : ''}...`);
             const verificationResult = await runVerifiedAnswer({
                 groqToken: PLAYGROUND_GROQ_TOKEN,
                 draftAnswer: reply,
@@ -7520,6 +7523,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 usesFinancialPhysics: hasFinanceContext, // Both doc uploads AND text-based finance queries
                 usesChemistry: false, // TODO: detect chemistry queries
                 usesLegalAnalysis: hasLegalContext, // Word/PDF with legal keywords
+                isSeedMetric: isSeedMetricAnalysis, // Detected from ~nyan ending
                 auditMode, // RESEARCH | STRICT
                 maxTokens, // Pass through for correction pass to match original response limit
                 timeout: 12000
