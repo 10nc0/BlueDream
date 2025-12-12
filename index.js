@@ -30,7 +30,7 @@ const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document
 const { identifyFileType, executeExtractionCascade, formatJSONForGroq, getFinancialPhysicsSeed, intelligentChunking, buildMultiDocContext } = require('./utils/attachment-cascade');
 const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
-const { NYAN_PROTOCOL_SYSTEM_PROMPT, isNonNormalCat } = require('./prompts/nyan-protocol');
+const { NYAN_PROTOCOL_SYSTEM_PROMPT, isNonNormalCat, hasSeedMetricAnalysis } = require('./prompts/nyan-protocol');
 const { getLegalAnalysisSeed, detectLegalDocument, LEGAL_KEYWORDS_REGEX } = require('./prompts/legal-analysis');
 const { runVerifiedAnswer, formatAuditBadge } = require('./utils/two-pass-verification');
 
@@ -7494,19 +7494,22 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         // Stage 0: NYAN Protocol checks (always)
         // Stage 1+: Extension checks (if Financial Physics or Chemistry was used)
         
-        // ===== CAT BEHAVIOR ROUTING (PUSH) =====
-        // Non-normal cat (SEED_METRIC_TOPICS) → Research mode audit (math verification, allows LLM knowledge)
-        // Normal cat OR documents present → Strict mode audit (requires source quotes)
-        // Detection happens ONCE here, flag is pushed to audit (not pulled)
-        const catMode = isNonNormalCat(effectiveMessage || '');
+        // ===== CAT BEHAVIOR ROUTING (PUSH-BASED) =====
+        // FULCRUM: Check draft OUTPUT for Seed Metric analysis (not input query)
+        // If draft CONTAINS Seed Metric analysis patterns → Research mode audit
+        // Research mode: Allows LLM knowledge + web search, verifies math correctness
+        // Strict mode: Requires source quotes (default for documents)
+        const draftHasSeedMetric = hasSeedMetricAnalysis(reply);
         const hasNoDocuments = extractedContent.length === 0;
-        // Research mode: Non-normal cat AND no documents (documents always require strict quote verification)
-        const isResearchMode = catMode && hasNoDocuments;
+        // Research mode: Draft contains Seed Metric analysis AND no documents
+        const isResearchMode = draftHasSeedMetric && hasNoDocuments;
         
-        if (catMode && hasNoDocuments) {
-            console.log(`🐱 Non-normal cat: SEED_METRIC_TOPICS detected (no docs) → Research mode audit`);
-        } else if (catMode && !hasNoDocuments) {
-            console.log(`🐱 Non-normal cat: SEED_METRIC_TOPICS detected BUT documents present → Strict mode audit`);
+        if (draftHasSeedMetric && hasNoDocuments) {
+            console.log(`🐱 Seed Metric analysis detected in draft (no docs) → Research mode audit`);
+        } else if (draftHasSeedMetric && !hasNoDocuments) {
+            console.log(`🐱 Seed Metric analysis in draft BUT documents present → Strict mode audit`);
+        } else if (!draftHasSeedMetric) {
+            console.log(`🐱 Normal cat: No Seed Metric patterns in draft → Strict mode audit`);
         }
         
         let auditMetadata = null;

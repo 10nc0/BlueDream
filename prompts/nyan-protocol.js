@@ -121,8 +121,37 @@ ${ROUTING_SECTION}
 **Sources:** (comma-separated)
 **Confidence:** X%`;
 
+/**
+ * Detect Seed Metric analysis in draft OUTPUT (not input query)
+ * Fulcrum: If response CONTAINS Seed Metric analysis → RESEARCH mode audit
+ * @param {string} draftAnswer - AI-generated response to check
+ * @returns {boolean} - true if draft contains Seed Metric analysis patterns
+ */
+function hasSeedMetricAnalysis(draftAnswer) {
+  if (!draftAnswer || typeof draftAnswer !== 'string') return false;
+  
+  const lowerDraft = draftAnswer.toLowerCase();
+  
+  // Seed Metric output patterns
+  const patterns = [
+    /p\/i\s+ratio/i,                    // P/I ratio
+    /\d+\s*years?\s+to\s+/i,            // "10 years to acquire"
+    /700\s*m²|700\s*sqm|700\s*square/i, // 700m² (land quantum)
+    /affordability\s+index/i,           // affordability analysis
+    /land price|residential price/i,    // land/real estate pricing
+    /(\d+)\s*\$.*m²|(\d+)\s*per\s*m²/i, // Price per m²
+    /fertility\s+window|age\s+20-45/i,  // fertility window threshold
+    /optimism|borderline|fatalism/i,    // Threshold language
+    /single-earner|dual-earner/i,       // Income classification
+    /seed metric|p\/i\s+metric/i        // Explicit mentions
+  ];
+  
+  return patterns.some(pattern => pattern.test(draftAnswer));
+}
+
 module.exports = {
   NYAN_PROTOCOL_SYSTEM_PROMPT,
   SEED_METRIC_TOPICS,
-  isNonNormalCat
+  isNonNormalCat,
+  hasSeedMetricAnalysis
 };
