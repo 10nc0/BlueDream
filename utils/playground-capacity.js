@@ -248,6 +248,11 @@ function normalizePrompt(text) {
 // Circuit breaker: track abuse events and block persistent abusers
 // Returns { blocked, warning, count } for progressive warnings
 function recordAbuseEvent(ip) {
+    // Development environment: don't track abuse events
+    if (process.env.NODE_ENV === 'development') {
+        return { blocked: false, warning: null, count: 0 };
+    }
+    
     const now = Date.now();
     
     if (!circuitBreakers.has(ip)) {
@@ -313,6 +318,11 @@ function isCircuitBreakerActive(ip) {
 }
 
 function checkAbuse(ip, prompt) {
+    // Development environment: skip all abuse checks
+    if (process.env.NODE_ENV === 'development') {
+        return { abusive: false, exempt: true, devMode: true };
+    }
+    
     if (isExempt(ip)) {
         return { abusive: false, exempt: true };
     }
