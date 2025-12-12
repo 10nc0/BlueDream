@@ -7493,11 +7493,24 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         // Inspired by Replit's Architect review pattern
         // Stage 0: NYAN Protocol checks (always)
         // Stage 1+: Extension checks (if Financial Physics or Chemistry was used)
+        
+        // ===== RESEARCH MODE DETECTION =====
+        // Research mode: NYAN/Seed Metric queries WITHOUT document uploads
+        // These use LLM knowledge + web search for land/income data, not document quotes
+        const seedMetricPatterns = /\b(seed metric|P\/I ratio|price.?to.?income|land affordability|land price|700\s?(sqm|m²)|single.?earner income|fatalism|median income|residential land|exurban|real estate comparison|property comparison|城市对比|土地价格)\b/i;
+        const isResearchQuery = (effectiveMessage || '').match(seedMetricPatterns);
+        const hasNoDocuments = extractedContent.length === 0;
+        const isResearchMode = isResearchQuery && hasNoDocuments;
+        
+        if (isResearchMode) {
+            console.log(`🔬 Research Mode: NYAN/Seed Metric query without documents - using relaxed audit`);
+        }
+        
         let auditMetadata = null;
         let auditBadge = 'unverified';
         
         try {
-            console.log(`🔍 Two-Pass: Running verification audit...`);
+            console.log(`🔍 Two-Pass: Running verification audit${isResearchMode ? ' (RESEARCH MODE)' : ''}...`);
             const verificationResult = await runVerifiedAnswer({
                 groqToken: PLAYGROUND_GROQ_TOKEN,
                 draftAnswer: reply,
@@ -7506,6 +7519,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 usesFinancialPhysics: hasFinanceContext, // Both doc uploads AND text-based finance queries
                 usesChemistry: false, // TODO: detect chemistry queries
                 usesLegalAnalysis: hasLegalContext, // Word/PDF with legal keywords
+                isResearchMode, // NYAN research queries use relaxed audit (math verification, no quote requirement)
                 maxTokens, // Pass through for correction pass to match original response limit
                 timeout: 12000
             });

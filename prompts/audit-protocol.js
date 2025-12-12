@@ -8,7 +8,9 @@
  * Stage 1+: Extension checks (conditional - only if used in Pass 1)
  */
 
-const AUDIT_STAGE_0_NYAN = `You are a VERIFICATION AUDITOR for an AI assistant called Nyan.
+// STRICT MODE: For document-based analysis (Legal, Financial with uploads)
+// Requires quotes from source material
+const AUDIT_STAGE_0_STRICT = `You are a VERIFICATION AUDITOR for an AI assistant called Nyan.
 
 YOUR SOLE PURPOSE: Detect hallucination, fabrication, and context leakage in the draft answer.
 
@@ -25,6 +27,35 @@ CRITICAL RED FLAGS (instant FAIL):
 - Numbers that seem too precise for the data available
 - Claims about current events beyond knowledge cutoff
 - Answering questions that weren't asked`;
+
+// RESEARCH MODE: For NYAN Protocol research queries (P/I ratio, Seed Metric, historical comparisons)
+// Allows LLM knowledge + web search, requires proxy transparency and math verification
+const AUDIT_STAGE_0_RESEARCH = `You are a VERIFICATION AUDITOR for an AI assistant called Nyan.
+
+YOUR SOLE PURPOSE: Verify research quality for land affordability analysis (Seed Metric / P/I ratio).
+
+RESEARCH AUDIT CHECKLIST (this is a RESEARCH query using LLM knowledge + web search):
+1. MATH CORRECTNESS: Are all arithmetic calculations correct? (P/I = land price ÷ annual income)
+2. UNIT CONSISTENCY: Are land areas in consistent units (sqm, sqft)? Are currencies consistent?
+3. PROXY TRANSPARENCY: If using proxies (per m² × 700, exurban estimates), is confidence level disclosed?
+4. SEED METRIC VALIDITY: Is P/I ratio calculated from LAND price (not home price) and INCOME (not GDP)?
+5. PLAUSIBILITY CHECK: Are the numbers in a reasonable range for the location and time period?
+
+ACCEPTABLE IN RESEARCH MODE:
+- Using LLM training data for historical prices (1970s land values aren't in current web search)
+- Using web search results for current estimates
+- Using proxy calculations: per m² price × 700 (with 80% confidence disclosure)
+- Using exurban fallback with $100/m² floor (with 60% confidence disclosure)
+
+CRITICAL RED FLAGS (instant FAIL):
+- Math errors (wrong division, wrong multiplication, unit conversion errors)
+- Circular reasoning: deriving land price from home price, GDP, or national averages
+- Mixing up median household income with single-earner income without adjustment
+- P/I ratios that don't match the numbers shown (e.g., showing 5:1 but numbers suggest 3:1)
+- Claiming certainty without disclosing proxy tier`;
+
+// Alias for backward compatibility
+const AUDIT_STAGE_0_NYAN = AUDIT_STAGE_0_STRICT;
 
 const AUDIT_FINANCIAL_PHYSICS = `
 FINANCIAL PHYSICS AUDIT (Extension):
@@ -96,21 +127,27 @@ function buildAuditPrompt(options = {}) {
     usesFinancialPhysics = false,
     usesChemistry = false,
     usesLegalAnalysis = false,
+    isResearchMode = false, // NYAN research queries (no documents) vs document analysis
     currentDate = new Date().toISOString().split('T')[0]
   } = options;
 
-  let prompt = AUDIT_STAGE_0_NYAN;
+  // Choose base audit: Research mode for NYAN/Seed Metric queries, Strict for document analysis
+  let prompt = isResearchMode ? AUDIT_STAGE_0_RESEARCH : AUDIT_STAGE_0_STRICT;
   
-  if (usesFinancialPhysics) {
-    prompt += '\n' + AUDIT_FINANCIAL_PHYSICS.replace('today\'s date', currentDate);
-  }
-  
-  if (usesChemistry) {
-    prompt += '\n' + AUDIT_CHEMISTRY;
-  }
-  
-  if (usesLegalAnalysis) {
-    prompt += '\n' + AUDIT_LEGAL_ANALYSIS;
+  // Extension audits only apply in STRICT mode (document analysis)
+  // Research mode already has its own comprehensive checks
+  if (!isResearchMode) {
+    if (usesFinancialPhysics) {
+      prompt += '\n' + AUDIT_FINANCIAL_PHYSICS.replace('today\'s date', currentDate);
+    }
+    
+    if (usesChemistry) {
+      prompt += '\n' + AUDIT_CHEMISTRY;
+    }
+    
+    if (usesLegalAnalysis) {
+      prompt += '\n' + AUDIT_LEGAL_ANALYSIS;
+    }
   }
   
   prompt += '\n\n' + AUDIT_OUTPUT_SCHEMA;
@@ -127,6 +164,8 @@ function buildCorrectivePrompt(originalQuery, draftAnswer, auditIssues) {
 
 module.exports = {
   AUDIT_STAGE_0_NYAN,
+  AUDIT_STAGE_0_STRICT,
+  AUDIT_STAGE_0_RESEARCH,
   AUDIT_FINANCIAL_PHYSICS,
   AUDIT_CHEMISTRY,
   AUDIT_LEGAL_ANALYSIS,

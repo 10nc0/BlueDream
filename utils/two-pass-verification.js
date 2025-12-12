@@ -27,6 +27,7 @@ async function runVerifiedAnswer(options) {
     usesFinancialPhysics = false,
     usesChemistry = false,
     usesLegalAnalysis = false,
+    isResearchMode = false, // NYAN research queries (no documents) vs document analysis
     maxTokens = 1500, // Match original response limit for correction pass
     timeout = 15000
   } = options;
@@ -46,6 +47,7 @@ async function runVerifiedAnswer(options) {
   if (usesFinancialPhysics) auditMetadata.extensionsVerified.push('FINANCIAL_PHYSICS');
   if (usesChemistry) auditMetadata.extensionsVerified.push('CHEMISTRY');
   if (usesLegalAnalysis) auditMetadata.extensionsVerified.push('LEGAL_ANALYSIS');
+  if (isResearchMode) auditMetadata.extensionsVerified.push('RESEARCH_MODE');
 
   try {
     const auditResult = await runAuditPass(
@@ -53,7 +55,7 @@ async function runVerifiedAnswer(options) {
       draftAnswer,
       originalQuery,
       userContext,
-      { usesFinancialPhysics, usesChemistry, usesLegalAnalysis },
+      { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, isResearchMode },
       timeout
     );
 
@@ -96,7 +98,7 @@ async function runVerifiedAnswer(options) {
         correctedAnswer,
         originalQuery,
         userContext,
-        { usesFinancialPhysics, usesChemistry, usesLegalAnalysis },
+        { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, isResearchMode },
         timeout
       );
 
@@ -155,6 +157,7 @@ async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, 
     usesFinancialPhysics: extensions.usesFinancialPhysics,
     usesChemistry: extensions.usesChemistry,
     usesLegalAnalysis: extensions.usesLegalAnalysis,
+    isResearchMode: extensions.isResearchMode,
     currentDate: new Date().toISOString().split('T')[0]
   });
 
