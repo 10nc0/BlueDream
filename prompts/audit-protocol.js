@@ -54,6 +54,31 @@ CRITICAL RED FLAGS (instant FAIL):
 - P/I ratios that don't match the numbers shown (e.g., showing 5:1 but numbers suggest 3:1)
 - Claiming certainty without disclosing proxy tier`;
 
+// GENERAL MODE: For philosophical, tetralemma, and general knowledge queries (no documents, not Seed Metric)
+// Light audit - just check logic and no fabrication
+const AUDIT_STAGE_0_GENERAL = `You are a VERIFICATION AUDITOR for an AI assistant called Nyan.
+
+YOUR SOLE PURPOSE: Verify the answer is logically sound and doesn't fabricate information.
+
+GENERAL AUDIT CHECKLIST (light verification for general knowledge queries):
+1. QUESTION ADDRESSED: Does the answer actually address what was asked?
+2. LOGICAL CONSISTENCY: Is the reasoning internally consistent (no contradictions)?
+3. NO FABRICATION: Are there invented statistics, fake sources, or made-up facts?
+4. APPROPRIATE SCOPE: Does the answer stay within the bounds of the question?
+5. CONFIDENCE HONEST: If confidence is stated, is it appropriate for the claim type?
+
+ACCEPTABLE IN GENERAL MODE:
+- Using LLM training knowledge for general facts
+- Philosophical reasoning and logical frameworks (tetralemma, dialectics)
+- Opinions clearly marked as opinions
+- Historical knowledge from training data
+
+CRITICAL RED FLAGS (instant FAIL):
+- Answering a completely different question than what was asked
+- Inventing specific statistics or citations that don't exist
+- Self-contradictory logic
+- Claiming certainty on inherently uncertain topics`;
+
 // Alias for backward compatibility
 const AUDIT_STAGE_0_NYAN = AUDIT_STAGE_0_STRICT;
 
@@ -127,16 +152,26 @@ function buildAuditPrompt(options = {}) {
     usesFinancialPhysics = false,
     usesChemistry = false,
     usesLegalAnalysis = false,
-    isResearchMode = false, // NYAN research queries (no documents) vs document analysis
+    auditMode = 'STRICT', // 'RESEARCH' | 'STRICT' | 'GENERAL'
     currentDate = new Date().toISOString().split('T')[0]
   } = options;
 
-  // Choose base audit: Research mode for NYAN/Seed Metric queries, Strict for document analysis
-  let prompt = isResearchMode ? AUDIT_STAGE_0_RESEARCH : AUDIT_STAGE_0_STRICT;
+  // Choose base audit based on mode:
+  // - RESEARCH: Seed Metric queries (P/I ratio, land affordability)
+  // - STRICT: Document analysis (requires source quotes)
+  // - GENERAL: Philosophical/tetralemma/general knowledge (light logic check)
+  let prompt;
+  if (auditMode === 'RESEARCH') {
+    prompt = AUDIT_STAGE_0_RESEARCH;
+  } else if (auditMode === 'GENERAL') {
+    prompt = AUDIT_STAGE_0_GENERAL;
+  } else {
+    prompt = AUDIT_STAGE_0_STRICT;
+  }
   
   // Extension audits only apply in STRICT mode (document analysis)
-  // Research mode already has its own comprehensive checks
-  if (!isResearchMode) {
+  // Research and General modes have their own focused checks
+  if (auditMode === 'STRICT') {
     if (usesFinancialPhysics) {
       prompt += '\n' + AUDIT_FINANCIAL_PHYSICS.replace('today\'s date', currentDate);
     }
@@ -166,6 +201,7 @@ module.exports = {
   AUDIT_STAGE_0_NYAN,
   AUDIT_STAGE_0_STRICT,
   AUDIT_STAGE_0_RESEARCH,
+  AUDIT_STAGE_0_GENERAL,
   AUDIT_FINANCIAL_PHYSICS,
   AUDIT_CHEMISTRY,
   AUDIT_LEGAL_ANALYSIS,
