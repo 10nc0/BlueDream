@@ -9,30 +9,65 @@
  * Model: Groq Llama 3.3 70B Versatile
  */
 
-// SEED_METRIC_TOPICS detection - triggers "non-normal cat" mode
-// STRICT PATTERNS: Multi-word phrases to avoid false positives (not single words like "housing" alone)
-// Based on NYAN Protocol routing: {housing affordability, land affordability, fertility, empire, collapse, extinction, inequality, φ, cycle, breath}
-// Plus explicit Seed Metric phrases and P/I ratio patterns
-const SEED_METRIC_TOPICS_REGEX = /\b(housing\s+affordability|land\s+affordability|seed\s+metric|P\/I\s+ratio|price[\s\-]+to[\s\-]+income|real\s+estate\s+comparison|property\s+comparison|land\s+price\s+vs|700\s*(sqm|m²)|single[\s\-]+earner\s+income|fatalism\s+threshold|fertility\s+window|empire\s+collapse|城市对比|土地价格|residential\s+land\s+price)\b/i;
-
-// Secondary patterns: Topic keywords detected separately from comparison keywords
-// Allows cross-sentence patterns like "What about fertility? Can you compare the ratios?"
-const SEED_METRIC_TOPIC_KEYWORDS = /\b(fertility|empire|collapse|extinction|inequality|φ|phi|cycle|breath)\b/i;
-const SEED_METRIC_COMPARISON_KEYWORDS = /\b(vs|versus|compare|comparison|ratio|threshold|metric|analyze)\b/i;
+// ===== CANONICAL SOURCE: SEED_METRIC_TOPICS =====
+// Single source of truth for both prompt generation and host-side routing
+// Host-side isNonNormalCat() runs in parallel with LLM Stage 0 for audit mode selection
+// Sorted: multi-word phrases first (more specific), then single words
+const SEED_METRIC_TOPICS = [
+  // Multi-word phrases (check first for precision)
+  'housing affordability',
+  'land affordability',
+  'seed metric',
+  'P/I ratio',
+  'price-to-income',
+  'price to income',
+  // Single-word topics
+  'housing',
+  'land',
+  'fertility',
+  'empire',
+  'collapse',
+  'extinction',
+  'inequality',
+  'φ',
+  'phi',  // ASCII variant for keyboards without φ symbol
+  'cycle',
+  'breath'
+];
 
 /**
- * Detect if query triggers "non-normal cat" mode (Seed Metric analysis)
+ * Host-side pre-pass: Detect if query triggers "non-normal cat" mode (Seed Metric analysis)
+ * Runs in parallel with LLM processing to determine audit mode (STRICT vs RESEARCH)
  * @param {string} query - User's query text
  * @returns {boolean} - true if Seed Metric topics detected (non-normal cat), false for normal cat
  */
 function isNonNormalCat(query) {
   if (!query || typeof query !== 'string') return false;
-  // Primary: explicit Seed Metric phrases
-  if (SEED_METRIC_TOPICS_REGEX.test(query)) return true;
-  // Secondary: topic keyword + comparison keyword (anywhere in query, handles cross-sentence)
-  if (SEED_METRIC_TOPIC_KEYWORDS.test(query) && SEED_METRIC_COMPARISON_KEYWORDS.test(query)) return true;
+  const lowerQuery = query.toLowerCase();
+  
+  // Check each topic with word-boundary matching
+  // Multi-word phrases checked first (more specific), then single words
+  for (const topic of SEED_METRIC_TOPICS) {
+    // Handle φ symbol specially (exact match)
+    if (topic === 'φ' && query.includes('φ')) return true;
+    
+    // Word-boundary regex for each topic
+    const escaped = topic.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\\b${escaped}\\b`, 'i');
+    if (regex.test(query)) return true;
+  }
+  
   return false;
 }
+
+// Generate ROUTING section dynamically from SEED_METRIC_TOPICS (single source of truth)
+const ROUTING_SECTION = `ROUTING + isNonNormalCat decision tree:
+1. SEED_METRIC_TOPICS {${SEED_METRIC_TOPICS.join(', ')}}
+  → isNonNormalCat = true
+  → Full analysis & SEED METRIC: ~50yr ago vs now, 2 cities, humanize ratios, end "🔥 ~nyan"
+2. ALL OTHER {finance, stocks, default}
+  → isNonNormalCat = false
+  → Normal cat: facts only, **Confidence: X%**, end "🔥 nyan~", NO SEED METRIC`;
 
 const NYAN_PROTOCOL_SYSTEM_PROMPT = `Nagarjuna's NYAN Protocol φ12φ ♡ 🜁 ◯ Nov'25 - Nine lives. This is the first.
 
@@ -81,17 +116,13 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
 - 2 cities if possible
 - DO NOT USE GDP, Gini, national averages
 
-ROUTING (2 modes):
-1. SEED_METRIC_TOPICS {housing, land, housing affordability, land affordability, fertility, empire, collapse, extinction, inequality, φ, cycle, breath}
-   → Full analysis & SEED METRIC: ~50yr ago vs now, 2 cities, humanize ratios, end "🔥 ~nyan"
-2. ALL OTHER {finance, stocks, default}
-   → Normal cat: facts only, **Confidence: X%**, end "🔥 nyan~", NO SEED METRIC
+${ROUTING_SECTION}
 
 **Sources:** (comma-separated)
 **Confidence:** X%`;
 
 module.exports = {
   NYAN_PROTOCOL_SYSTEM_PROMPT,
-  SEED_METRIC_TOPICS_REGEX,
+  SEED_METRIC_TOPICS,
   isNonNormalCat
 };
