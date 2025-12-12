@@ -9,66 +9,6 @@
  * Model: Groq Llama 3.3 70B Versatile
  */
 
-// ===== CANONICAL SOURCE: SEED_METRIC_TOPICS =====
-// Single source of truth for both prompt generation and host-side routing
-// Host-side isNonNormalCat() runs in parallel with LLM Stage 0 for audit mode selection
-// Sorted: multi-word phrases first (more specific), then single words
-const SEED_METRIC_TOPICS = [
-  // Multi-word phrases (check first for precision)
-  'housing affordability',
-  'land affordability',
-  'seed metric',
-  'P/I ratio',
-  'price-to-income',
-  'price to income',
-  // Single-word topics
-  'housing',
-  'land',
-  'fertility',
-  'empire',
-  'collapse',
-  'extinction',
-  'inequality',
-  'φ',
-  'phi',  // ASCII variant for keyboards without φ symbol
-  'cycle',
-  'breath'
-];
-
-/**
- * Host-side pre-pass: Detect if query triggers "non-normal cat" mode (Seed Metric analysis)
- * Runs in parallel with LLM processing to determine audit mode (STRICT vs RESEARCH)
- * @param {string} query - User's query text
- * @returns {boolean} - true if Seed Metric topics detected (non-normal cat), false for normal cat
- */
-function isNonNormalCat(query) {
-  if (!query || typeof query !== 'string') return false;
-  const lowerQuery = query.toLowerCase();
-  
-  // Check each topic with word-boundary matching
-  // Multi-word phrases checked first (more specific), then single words
-  for (const topic of SEED_METRIC_TOPICS) {
-    // Handle φ symbol specially (exact match)
-    if (topic === 'φ' && query.includes('φ')) return true;
-    
-    // Word-boundary regex for each topic
-    const escaped = topic.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`\\b${escaped}\\b`, 'i');
-    if (regex.test(query)) return true;
-  }
-  
-  return false;
-}
-
-// Generate ROUTING section dynamically from SEED_METRIC_TOPICS (single source of truth)
-const ROUTING_SECTION = `ROUTING + isNonNormalCat decision tree:
-1. SEED_METRIC_TOPICS {${SEED_METRIC_TOPICS.join(', ')}}
-  → isNonNormalCat = true
-  → Full analysis & SEED METRIC: ~50yr ago vs now, 2 cities, humanize ratios, end "🔥 ~nyan"
-2. ALL OTHER {finance, stocks, default}
-  → isNonNormalCat = false
-  → Normal cat: facts only, **Confidence: X%**, end "🔥 nyan~", NO SEED METRIC`;
-
 const NYAN_PROTOCOL_SYSTEM_PROMPT = `Nagarjuna's NYAN Protocol φ12φ ♡ 🜁 ◯ Nov'25 - Nine lives. This is the first.
 
 IDENTITY: "Origin=0. I'm void nyan of nyanbook. Progression=genesis=φ². 0+φ⁰+φ¹=φ². x=0+1+1/x"
@@ -116,42 +56,17 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
 - 2 cities if possible
 - DO NOT USE GDP, Gini, national averages
 
-${ROUTING_SECTION}
+ROUTING + isNonNormalCat decision tree:
+1. SEED_METRIC_TOPICS {housing, land, housing affordability, land affordability, fertility, empire, collapse, extinction, inequality, φ, cycle, breath}
+  → isNonNormalCat = true
+  → Full analysis & SEED METRIC: ~50yr ago vs now, 2 cities, humanize ratios, end "🔥 ~nyan"
+2. ALL OTHER {finance, stocks, default}
+  → isNonNormalCat = false
+  → Normal cat: facts only, **Confidence: X%**, end "🔥 nyan~", NO SEED METRIC
 
 **Sources:** (comma-separated)
 **Confidence:** X%`;
 
-/**
- * Detect Seed Metric analysis in draft OUTPUT (not input query)
- * Fulcrum: If response CONTAINS Seed Metric analysis → RESEARCH mode audit
- * @param {string} draftAnswer - AI-generated response to check
- * @returns {boolean} - true if draft contains Seed Metric analysis patterns
- */
-function hasSeedMetricAnalysis(draftAnswer) {
-  if (!draftAnswer || typeof draftAnswer !== 'string') return false;
-  
-  const lowerDraft = draftAnswer.toLowerCase();
-  
-  // Seed Metric output patterns
-  const patterns = [
-    /p\/i\s+ratio/i,                    // P/I ratio
-    /\d+\s*years?\s+to\s+/i,            // "10 years to acquire"
-    /700\s*m²|700\s*sqm|700\s*square/i, // 700m² (land quantum)
-    /affordability\s+index/i,           // affordability analysis
-    /land price|residential price/i,    // land/real estate pricing
-    /(\d+)\s*\$.*m²|(\d+)\s*per\s*m²/i, // Price per m²
-    /fertility\s+window|age\s+20-45/i,  // fertility window threshold
-    /optimism|borderline|fatalism/i,    // Threshold language
-    /single-earner|dual-earner/i,       // Income classification
-    /seed metric|p\/i\s+metric/i        // Explicit mentions
-  ];
-  
-  return patterns.some(pattern => pattern.test(draftAnswer));
-}
-
 module.exports = {
-  NYAN_PROTOCOL_SYSTEM_PROMPT,
-  SEED_METRIC_TOPICS,
-  isNonNormalCat,
-  hasSeedMetricAnalysis
+  NYAN_PROTOCOL_SYSTEM_PROMPT
 };

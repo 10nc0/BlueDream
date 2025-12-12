@@ -30,7 +30,7 @@ const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document
 const { identifyFileType, executeExtractionCascade, formatJSONForGroq, getFinancialPhysicsSeed, intelligentChunking, buildMultiDocContext } = require('./utils/attachment-cascade');
 const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
-const { NYAN_PROTOCOL_SYSTEM_PROMPT, isNonNormalCat, hasSeedMetricAnalysis } = require('./prompts/nyan-protocol');
+const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('./prompts/nyan-protocol');
 const { getLegalAnalysisSeed, detectLegalDocument, LEGAL_KEYWORDS_REGEX } = require('./prompts/legal-analysis');
 const { runVerifiedAnswer, formatAuditBadge } = require('./utils/two-pass-verification');
 
@@ -7491,26 +7491,12 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         
         // ===== TWO-PASS VERIFICATION: O(1) + audit(O(1)) =====
         // Inspired by Replit's Architect review pattern
-        // Stage 0: NYAN Protocol checks (always)
-        // Stage 1+: Extension checks (if Financial Physics or Chemistry was used)
+        // NYAN Protocol guides LLM routing decision (ROUTING section in system prompt)
+        // LLM decides isNonNormalCat internally via SEED_METRIC_TOPICS analysis
         
-        // ===== CAT BEHAVIOR ROUTING (PUSH-BASED) =====
-        // FULCRUM: Check draft OUTPUT for Seed Metric analysis (not input query)
-        // If draft CONTAINS Seed Metric analysis patterns → Research mode audit
-        // Research mode: Allows LLM knowledge + web search, verifies math correctness
-        // Strict mode: Requires source quotes (default for documents)
-        const draftHasSeedMetric = hasSeedMetricAnalysis(reply);
         const hasNoDocuments = extractedContent.length === 0;
-        // Research mode: Draft contains Seed Metric analysis AND no documents
-        const isResearchMode = draftHasSeedMetric && hasNoDocuments;
-        
-        if (draftHasSeedMetric && hasNoDocuments) {
-            console.log(`🐱 Seed Metric analysis detected in draft (no docs) → Research mode audit`);
-        } else if (draftHasSeedMetric && !hasNoDocuments) {
-            console.log(`🐱 Seed Metric analysis in draft BUT documents present → Strict mode audit`);
-        } else if (!draftHasSeedMetric) {
-            console.log(`🐱 Normal cat: No Seed Metric patterns in draft → Strict mode audit`);
-        }
+        // Research mode: No documents (LLM handles Seed Metric routing internally)
+        const isResearchMode = hasNoDocuments;
         
         let auditMetadata = null;
         let auditBadge = 'unverified';
