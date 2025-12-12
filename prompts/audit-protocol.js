@@ -191,40 +191,84 @@ function buildAuditPrompt(options = {}) {
     currentDate = new Date().toISOString().split('T')[0]
   } = options;
 
-  // Choose base audit based on mode:
-  // - RESEARCH: All non-document queries (news, Seed Metric, tetralemma, philosophy, general - allows web search + LLM knowledge)
-  // - STRICT: Document analysis only (requires source quotes from uploaded files)
-  let prompt;
-  if (auditMode === 'RESEARCH') {
-    prompt = AUDIT_STAGE_0_RESEARCH;
-  } else {
-    prompt = AUDIT_STAGE_0_STRICT;
+  // REORDERED CASCADE: Extensions first (strict checks), base mode last (fallback)
+  // This ensures protocol checks run BEFORE "ALWAYS APPROVE IF" rules can override them
+  
+  let prompt = `You are a VERIFICATION AUDITOR for an AI assistant called Nyan.
+
+YOUR SOLE PURPOSE: Detect hallucination, fabrication, and context leakage in the draft answer.
+
+`;
+
+  // ===== STEP 1: EXTENSION CHECKS FIRST (Strict protocols) =====
+  // These override base mode rules if triggered
+  const extensionsActive = [];
+  
+  if (isSeedMetric) {
+    prompt += AUDIT_SEED_METRIC + '\n\n';
+    extensionsActive.push('SEED_METRIC');
   }
   
-  // Extension audits only apply in STRICT mode (document analysis)
-  // EXCEPT: Seed Metric and Tetralemma extensions apply in RESEARCH mode when flags are set
+  if (isTetralemma) {
+    prompt += AUDIT_TETRALEMMA + '\n\n';
+    extensionsActive.push('TETRALEMMA');
+  }
+  
   if (auditMode === 'STRICT') {
     if (usesFinancialPhysics) {
-      prompt += '\n' + AUDIT_FINANCIAL_PHYSICS.replace('today\'s date', currentDate);
+      prompt += AUDIT_FINANCIAL_PHYSICS.replace('today\'s date', currentDate) + '\n\n';
+      extensionsActive.push('FINANCIAL_PHYSICS');
     }
     
     if (usesChemistry) {
-      prompt += '\n' + AUDIT_CHEMISTRY;
+      prompt += AUDIT_CHEMISTRY + '\n\n';
+      extensionsActive.push('CHEMISTRY');
     }
     
     if (usesLegalAnalysis) {
-      prompt += '\n' + AUDIT_LEGAL_ANALYSIS;
+      prompt += AUDIT_LEGAL_ANALYSIS + '\n\n';
+      extensionsActive.push('LEGAL_ANALYSIS');
     }
   }
   
-  // Seed Metric extension: applies when response ends with ~nyan
-  if (isSeedMetric) {
-    prompt += '\n' + AUDIT_SEED_METRIC;
+  // ===== STEP 2: EXTENSION PRIORITY OVERRIDE =====
+  // Explicit instruction: if any extension is active, DO NOT use "ALWAYS APPROVE" fallback
+  if (extensionsActive.length > 0) {
+    prompt += `⚠️ EXTENSION PRIORITY RULE ⚠️
+The following extensions are ACTIVE: ${extensionsActive.join(', ')}
+
+IF ANY EXTENSION IS ACTIVE: You MUST apply the CRITICAL checks for that extension.
+→ IGNORE the "ALWAYS APPROVE IF" rules below
+→ Extensions take ABSOLUTE priority over base audit fallback
+→ Mark as FIXABLE if extension checks fail, even if base rules would approve
+
+`;
   }
   
-  // Tetralemma extension: applies when query contains false dichotomy
-  if (isTetralemma) {
-    prompt += '\n' + AUDIT_TETRALEMMA;
+  // ===== STEP 3: BASE AUDIT MODE (Fallback only if no extensions triggered) =====
+  // For RESEARCH mode: permissive fallback
+  // For STRICT mode: strict checks
+  if (auditMode === 'RESEARCH' && extensionsActive.length === 0) {
+    prompt += AUDIT_STAGE_0_RESEARCH;
+  } else if (auditMode === 'STRICT') {
+    prompt += AUDIT_STAGE_0_STRICT;
+  } else {
+    // RESEARCH mode with extensions: use research base ONLY as fallback
+    prompt += `BASE RESEARCH MODE (Fallback - only used if no extension checks apply):
+
+RESEARCH AUDIT CHECKLIST (PERMISSIVE - allow web search + LLM knowledge):
+1. QUESTION ADDRESSED: Does the answer attempt to address what was asked?
+2. WEB SEARCH USED: If web search results were provided in CONTEXT, does the answer USE them?
+3. NO OBVIOUS FABRICATION: Are there completely invented statistics with fake sources?
+4. MATH CHECK: If any arithmetic is shown, is it correct?
+5. LOGICAL CONSISTENCY: Is the reasoning internally consistent?
+
+DO NOT FAIL FOR (only if NO extensions are active):
+- Missing confidence percentages
+- Missing proxy tier disclosure
+- Using LLM knowledge instead of web search
+- Imprecise or estimated numbers
+- General statements like "typically" or "usually"`;
   }
   
   prompt += '\n\n' + AUDIT_OUTPUT_SCHEMA;
