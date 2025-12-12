@@ -7303,23 +7303,25 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         // Use recorded audio transcript as the query (accessibility for non-writers)
         const effectiveMessage = recordedAudioTranscript || message;
         
+        // Prepare search context prefix (available for all branches)
+        const searchPart = searchContext ? `REAL-TIME WEB SEARCH RESULTS (USE THIS DATA - it overrides your knowledge cutoff):\n${searchContext}\n\n` : '';
+        
         // Combine all extracted content into final prompt (preserve search context if present)
         if (extractedContent.length > 0) {
             const allExtracted = extractedContent.join('\n\n');
-            const searchPart = searchContext ? `Web context:\n${searchContext}\n\n` : '';
             if (effectiveMessage) {
                 finalPrompt = `${searchPart}Attachments analyzed:\n${allExtracted}${attachmentContextPart}\n\nUser query: ${effectiveMessage}`;
             } else {
-                finalPrompt = `Attachments analyzed:\n${allExtracted}${attachmentContextPart}\n\nProvide a comprehensive analysis of all the above content.`;
+                finalPrompt = `${searchPart}Attachments analyzed:\n${allExtracted}${attachmentContextPart}\n\nProvide a comprehensive analysis of all the above content.`;
             }
             console.log(`📎 Combined ${extractedContent.length} attachment(s) into prompt${searchContext ? ' (with search context)' : ''}${attachmentContextPart ? ' + attachment history' : ''}`);
         } else if (attachmentContextPart) {
-            // Even if no current attachments, include historical context
+            // Even if no current attachments, include historical context + search
             if (effectiveMessage) {
-                finalPrompt = `${effectiveMessage}${attachmentContextPart}`;
+                finalPrompt = `${searchPart}${effectiveMessage}${attachmentContextPart}`;
             }
         } else if (effectiveMessage) {
-            finalPrompt = effectiveMessage;
+            finalPrompt = `${searchPart}${effectiveMessage}`;
         }
         
         // ===== DOCUMENT ANALYSIS: Detect any document upload for extended response length =====
