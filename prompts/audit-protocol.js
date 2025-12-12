@@ -76,11 +76,14 @@ ACCEPTABLE IN GENERAL MODE:
 - Using web search snippets from CONTEXT PROVIDED as real-time data
 
 CRITICAL RED FLAGS (instant FAIL):
-- Answering a completely different question than what was asked
 - Inventing specific statistics or citations that don't exist
 - Self-contradictory logic
 - Claiming certainty on inherently uncertain topics
-- Claiming "no data" or "knowledge cutoff" when web search results were provided in context`;
+
+MAJOR ISSUES (FIXABLE - trigger correction pass):
+- Answering a completely different question than what was asked
+- Claiming "no data" or "knowledge cutoff" when web search results were provided in context
+- Not extracting relevant facts from provided web search context`;
 
 // Alias for backward compatibility
 const AUDIT_STAGE_0_NYAN = AUDIT_STAGE_0_STRICT;
