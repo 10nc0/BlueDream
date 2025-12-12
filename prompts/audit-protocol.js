@@ -101,7 +101,7 @@ SEED METRIC AUDIT (MANDATORY for ~nyan responses):
 10. HUMANIZED RATIOS: Are P/I ratios explained in human-readable terms (years to afford, fertility window impact)?
 11. P/I THRESHOLD LABELS (CRITICAL): Each P/I ratio MUST have a label:
    - <10yr = "Optimism" (healthy affordability, family formation possible)
-   - 10-25yr = "Borderline" (stretched but manageable)
+   - 10-25yr = "Extraction" (stretched but manageable)
    - >25yr = "Fatalism" (extraction economy, fertility suppression)
    - Look for these exact words OR equivalent descriptions near each P/I number
 
@@ -202,7 +202,7 @@ FOR SEED METRIC (~nyan) CORRECTIONS:
 - Show directional change: "improved from X to Y" or "worsened from X to Y"
 - ALWAYS label each P/I ratio with its threshold category:
   * <10 years = "Optimism" (healthy affordability)
-  * 10-25 years = "Borderline" (stretched but manageable)  
+  * 10-25 years = "Extraction" (stretched but manageable)  
   * >25 years = "Fatalism" (extraction economy, fertility suppression)
 
 FOR TETRALEMMA CORRECTIONS:

@@ -55,7 +55,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
   - **Mobile UX**: Android/mobile keyboard auto-collapses on send for better readability of nyan's response. **Fixed scroll layout (Dec 11, 2025)**: Header fixed at top, input fixed at bottom, only message area scrolls — classic chat app pattern.
   - **Foldable Device Support**: Galaxy Z Fold 7 and similar foldables are detected via aspect ratio (>1.4 = mobile mode). Unfolded tablet mode uses desktop two-pane layout with book-sidebar capped at 30% width to ensure message pane visibility.
 - **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis using the **Seed Metric** (P/I ratio: years to buy 700m² land). **NYAN is Step 0 (sacred, always active)** — all other protocols (Financial Physics, Legal Analysis, Chemistry) are EXTENSIONS that build on top of NYAN, never override it.
-  - **P/I Ratio Thresholds**: <10yr = Optimism, 10-25yr = Borderline, >25yr = Fatalism
+  - **P/I Ratio Thresholds**: <10yr = Optimism, 10-25yr = Extraction, >25yr = Fatalism
   - **Seed Metric Proxy Rules** (H₀ — no circular reasoning):
     1. **Direct land price** (95% conf): Direct 700m² residential land price from government/real estate boards
     2. **Per m² proxy** (80% conf): Published land price per m² → multiply by 700
