@@ -438,6 +438,7 @@ body::before {
   min-height: 28px;
   display: flex;
   align-items: center;
+  justify-content: center;
 }
 
 .create-bot-btn:hover {
