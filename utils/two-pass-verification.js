@@ -26,6 +26,7 @@ async function runVerifiedAnswer(options) {
     userContext,
     usesFinancialPhysics = false,
     usesChemistry = false,
+    usesLegalAnalysis = false,
     maxTokens = 1500, // Match original response limit for correction pass
     timeout = 15000
   } = options;
@@ -44,6 +45,7 @@ async function runVerifiedAnswer(options) {
 
   if (usesFinancialPhysics) auditMetadata.extensionsVerified.push('FINANCIAL_PHYSICS');
   if (usesChemistry) auditMetadata.extensionsVerified.push('CHEMISTRY');
+  if (usesLegalAnalysis) auditMetadata.extensionsVerified.push('LEGAL_ANALYSIS');
 
   try {
     const auditResult = await runAuditPass(
@@ -51,7 +53,7 @@ async function runVerifiedAnswer(options) {
       draftAnswer,
       originalQuery,
       userContext,
-      { usesFinancialPhysics, usesChemistry },
+      { usesFinancialPhysics, usesChemistry, usesLegalAnalysis },
       timeout
     );
 
@@ -94,7 +96,7 @@ async function runVerifiedAnswer(options) {
         correctedAnswer,
         originalQuery,
         userContext,
-        { usesFinancialPhysics, usesChemistry },
+        { usesFinancialPhysics, usesChemistry, usesLegalAnalysis },
         timeout
       );
 
@@ -152,6 +154,7 @@ async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, 
   const auditPrompt = buildAuditPrompt({
     usesFinancialPhysics: extensions.usesFinancialPhysics,
     usesChemistry: extensions.usesChemistry,
+    usesLegalAnalysis: extensions.usesLegalAnalysis,
     currentDate: new Date().toISOString().split('T')[0]
   });
 

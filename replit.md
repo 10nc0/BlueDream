@@ -36,13 +36,13 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **Pass 1 (Generate)**: Draft answer using NYAN Protocol + extensions
     - **Pass 2 (Audit)**: Structured verification checking H₀ logic, fabrication, context bleeding
     - **Pass 1.5 (Correct)**: If fixable issues found, regenerate with audit feedback
-    - **Stage Hierarchy**: Stage 0 (NYAN) always audited; Stage 1+ (Financial Physics, Chemistry) only if used
+    - **Stage Hierarchy**: Stage 0 (NYAN) always audited; Stage 1+ (Financial Physics, Legal Analysis, Chemistry) only if used
     - **Verdicts**: APPROVED (🟢), CORRECTED (🟡), REJECTED (🔴), BYPASS (⚪)
     - **UI**: Verification badge with confidence % shown on each response
   - **Audio Accessibility**: Mic button recordings (🎙️) are automatically treated as user queries (not context), enabling low-literacy users to interact via voice alone. Uploaded audio files are treated as supporting context. Clear iOS/Safari error messages when recording is unavailable. Note: Safari/iOS does not support MediaRecorder API for audio recording; users on iPhone must type.
   - **Mobile UX**: Android/mobile keyboard auto-collapses on send for better readability of nyan's response. **Fixed scroll layout (Dec 11, 2025)**: Header fixed at top, input fixed at bottom, only message area scrolls — classic chat app pattern.
   - **Foldable Device Support**: Galaxy Z Fold 7 and similar foldables are detected via aspect ratio (>1.4 = mobile mode). Unfolded tablet mode uses desktop two-pane layout with book-sidebar capped at 30% width to ensure message pane visibility.
-- **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis using the **Seed Metric** (P/I ratio: years to buy 700m² land). **NYAN is Step 0 (sacred, always active)** — all other protocols (Financial Physics, Chemistry) are EXTENSIONS that build on top of NYAN, never override it.
+- **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis using the **Seed Metric** (P/I ratio: years to buy 700m² land). **NYAN is Step 0 (sacred, always active)** — all other protocols (Financial Physics, Legal Analysis, Chemistry) are EXTENSIONS that build on top of NYAN, never override it.
   - **P/I Ratio Thresholds**: >3.5x = Fatalism, 2.5-3.5x = Borderline, <2.5x = Optimism
   - **Seed Metric Proxy Rules** (H₀ — no circular reasoning):
     1. **Direct land price** (95% conf): Direct 700m² residential land price from government/real estate boards
@@ -60,6 +60,15 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **Human Trinity (WhatsApp → Discord forwarding):** Hermes (write-only for threads/messages), Thoth (read-only for message history).
     - **Prometheus Trinity (AI Audit Logging):** Idris (write-only for AI log threads/audit results), Horus (read-only for AI audit history).
 - **Financial Physics System**: A 4-tier architecture (`utils/financial-physics.js`) for financial cognition, including document type detection, nature classification, semantic enrichment, and validation, with a specialized `FINANCIAL_PHYSICS_SEED` for AI context. **Financial Physics is an extension of NYAN PROTOCOL** — system message order is always [NYAN first, Financial Physics second] to honor the Step-0 hierarchy.
+- **Legal Document Analysis System** (`prompts/legal-analysis.js`): Stage 1+ extension for contract/agreement analysis. Auto-triggers when Word/PDF documents contain legal keywords (perjanjian, kontrak, agreement, contract, NDA, employment, lease, etc.). Provides a universal 7-section template structure:
+    1. **Executive Summary**: Jurisdiction, governing law, document nature, key dates
+    2. **Parties & Definitions**: Party identification, key terms defined
+    3. **Material Changes**: Tracked differences when comparing document versions
+    4. **Obligations & Restrictions**: Rights, duties, constraints, prohibitions
+    5. **Risk Assessment**: Red flags, missing clauses, unusual terms, liability exposure
+    6. **Timeline Differences**: Commencement, termination, notice periods, renewals
+    7. **Recommendations / Action Items**: Negotiation points, clarification requests, approval status
+  - **Audit Checks (AUDIT_LEGAL_ANALYSIS)**: 6 verification rules — quoted accuracy, interpretation grounding, balanced risk assessment, no over-generalization, temporal consistency, evidence-based recommendations
 
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)

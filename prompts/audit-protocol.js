@@ -40,6 +40,14 @@ CHEMISTRY ENRICHMENT AUDIT (Extension):
 7. COMPOUND IDENTIFICATION: Are compound names matched correctly to formulas?
 8. SAFETY WARNINGS: Are any hazard/safety notes included where appropriate?`;
 
+const AUDIT_LEGAL_ANALYSIS = `
+LEGAL DOCUMENT ANALYSIS AUDIT (Extension):
+6. STRUCTURE COMPLIANCE: Does the response follow the 8-section legal analysis format?
+7. QUOTE ACCURACY: Are quoted contract provisions exact text from the documents?
+8. BALANCED ANALYSIS: Are risks identified for BOTH parties, not just one-sided?
+9. NO LEGAL ADVICE: Does the response avoid giving specific legal advice (should say "consult attorney")?
+10. CLAUSE ATTRIBUTION: Are clause numbers/article references accurate to the documents?`;
+
 const AUDIT_OUTPUT_SCHEMA = `
 OUTPUT FORMAT (JSON only, no markdown):
 {
@@ -87,6 +95,7 @@ function buildAuditPrompt(options = {}) {
   const { 
     usesFinancialPhysics = false,
     usesChemistry = false,
+    usesLegalAnalysis = false,
     currentDate = new Date().toISOString().split('T')[0]
   } = options;
 
@@ -98,6 +107,10 @@ function buildAuditPrompt(options = {}) {
   
   if (usesChemistry) {
     prompt += '\n' + AUDIT_CHEMISTRY;
+  }
+  
+  if (usesLegalAnalysis) {
+    prompt += '\n' + AUDIT_LEGAL_ANALYSIS;
   }
   
   prompt += '\n\n' + AUDIT_OUTPUT_SCHEMA;
@@ -116,6 +129,7 @@ module.exports = {
   AUDIT_STAGE_0_NYAN,
   AUDIT_FINANCIAL_PHYSICS,
   AUDIT_CHEMISTRY,
+  AUDIT_LEGAL_ANALYSIS,
   AUDIT_OUTPUT_SCHEMA,
   CORRECTIVE_TEMPLATE,
   buildAuditPrompt,

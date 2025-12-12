@@ -31,6 +31,7 @@ const { identifyFileType, executeExtractionCascade, formatJSONForGroq, getFinanc
 const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('./prompts/nyan-protocol');
+const { getLegalAnalysisSeed, detectLegalDocument, LEGAL_KEYWORDS_REGEX } = require('./prompts/legal-analysis');
 const { runVerifiedAnswer, formatAuditBadge } = require('./utils/two-pass-verification');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
@@ -7349,6 +7350,22 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             console.log(`💰 Finance Text: Commercial/investment topic detected in query text`);
         }
         
+        // ===== LEGAL DOCUMENT ANALYSIS: Detect contracts/agreements for structured legal review =====
+        // Extension layer (parallel with Financial Physics & Chemistry)
+        // Triggers ONLY when: Word/PDF attached with legal keywords in filename or content
+        // Text-only legal queries do NOT trigger (audit requires source material for quotation checks)
+        const hasLegalDoc = docList.some(d => {
+            const isTextDoc = d.name?.match(/\.(docx|doc|pdf)$/i);
+            if (!isTextDoc) return false;
+            const nameMatch = LEGAL_KEYWORDS_REGEX.test(d.name || '');
+            const contentMatch = LEGAL_KEYWORDS_REGEX.test((d.extracted?.text || '').substring(0, 2000));
+            return nameMatch || contentMatch;
+        });
+        const hasLegalContext = hasLegalDoc; // Only documents trigger legal analysis (not text queries)
+        if (hasLegalContext) {
+            console.log(`⚖️ Legal Analysis: Contract document detected - will inject legal template`);
+        }
+        
         // Final reasoning via Groq Llama 3.3 70B
         if (!PLAYGROUND_GROQ_TOKEN) {
             return res.status(503).json({ 
@@ -7420,17 +7437,20 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         }
         
         // Build messages array: system prompts + conversation context + current message
-        // For financial documents: inject FINANCIAL_PHYSICS_SEED LAST (takes priority over NYAN)
-        // LLMs follow the LAST system instruction, so financial rules must come after NYAN
-        // getFinancialPhysicsSeed() injects current date for temporal reality checks
-        const systemMessages = hasFinancialDoc
-            ? [
-                { role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT },
-                { role: 'system', content: getFinancialPhysicsSeed() }
-              ]
-            : [
-                { role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT }
-              ];
+        // Stage 0: NYAN Protocol (always active, non-negotiable)
+        // Stage 1+: Extensions (parallel layer - Financial Physics, Legal Analysis, Chemistry)
+        // LLMs follow the LAST system instruction, so extensions come after NYAN
+        const systemMessages = [
+            { role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT }
+        ];
+        
+        // Inject extension seeds as needed (parallel layer)
+        if (hasFinancialDoc) {
+            systemMessages.push({ role: 'system', content: getFinancialPhysicsSeed() });
+        }
+        if (hasLegalContext) {
+            systemMessages.push({ role: 'system', content: getLegalAnalysisSeed() });
+        }
         
         const messages = [
             ...systemMessages,
@@ -7485,6 +7505,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 userContext: extractedContent.length > 0 ? extractedContent.join('\n') : searchContext,
                 usesFinancialPhysics: hasFinanceContext, // Both doc uploads AND text-based finance queries
                 usesChemistry: false, // TODO: detect chemistry queries
+                usesLegalAnalysis: hasLegalContext, // Word/PDF with legal keywords
                 maxTokens, // Pass through for correction pass to match original response limit
                 timeout: 12000
             });
