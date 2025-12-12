@@ -58,9 +58,9 @@ function hydrateHistoryToUI() {
     const welcome = messagesEl.querySelector('.welcome');
     if (welcome) welcome.remove();
     
-    // Render all past messages with their attachment metadata
+    // Render all past messages with their attachment metadata and audit data
     conversationHistory.forEach(msg => {
-        addMessage(msg.role === 'user' ? 'user' : 'assistant', msg.content, msg.attachments || []);
+        addMessage(msg.role === 'user' ? 'user' : 'assistant', msg.content, msg.attachments || [], msg.audit || null);
     });
     
     console.log(`🧠 Memory: Restored ${conversationHistory.length} messages to UI`);
@@ -555,7 +555,7 @@ function showError(msg) {
     setTimeout(() => errorToast.classList.remove('visible'), 4000);
 }
 
-function addMessage(role, content, messageAttachments = []) {
+function addMessage(role, content, messageAttachments = [], auditData = null) {
     const welcome = messagesEl.querySelector('.welcome');
     if (welcome) welcome.remove();
     
@@ -563,6 +563,26 @@ function addMessage(role, content, messageAttachments = []) {
     msgEl.className = `message ${role}`;
     
     let html = `<div class="label">${role === 'user' ? 'You' : 'Nyan AI'}</div>`;
+    
+    // Add verification badge for AI responses (Two-Pass Verification)
+    if (role === 'assistant' && auditData) {
+        const badgeColors = {
+            verified: { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 0.4)', icon: '🟢', text: 'Verified' },
+            corrected: { bg: 'rgba(234, 179, 8, 0.2)', border: 'rgba(234, 179, 8, 0.4)', icon: '🟡', text: 'Corrected' },
+            refused: { bg: 'rgba(239, 68, 68, 0.2)', border: 'rgba(239, 68, 68, 0.4)', icon: '🔴', text: 'Refused' },
+            unverified: { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.4)', icon: '⚪', text: 'Unverified' },
+            bypass: { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.4)', icon: '⚪', text: 'Bypass' }
+        };
+        const badge = badgeColors[auditData.badge] || badgeColors.unverified;
+        const confidence = auditData.confidence || 0;
+        const extensions = auditData.extensionsVerified?.join(', ') || 'NYAN';
+        
+        html += `<div class="audit-badge" style="background: ${badge.bg}; border: 1px solid ${badge.border}; border-radius: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 0.25rem; margin-bottom: 0.5rem; cursor: pointer;" title="Confidence: ${confidence}% | Extensions: ${extensions} | Passes: ${auditData.passCount || 1}">
+            <span>${badge.icon}</span>
+            <span>${badge.text}</span>
+            <span style="opacity: 0.7;">(${confidence}%)</span>
+        </div>`;
+    }
     
     // Add copy button for AI responses
     if (role === 'assistant') {
@@ -792,12 +812,18 @@ async function sendMessage() {
         
         if (!res.ok) {
             const reply = data.reply || 'An error occurred. Please try again.';
-            addMessage('assistant', reply);
+            addMessage('assistant', reply, [], data.audit || null);
         } else {
             const reply = data.reply;
-            addMessage('assistant', reply);
-            conversationHistory.push({ role: 'assistant', content: reply });
+            const auditData = data.audit || null;
+            addMessage('assistant', reply, [], auditData);
+            conversationHistory.push({ role: 'assistant', content: reply, audit: auditData });
             saveConversationHistory();  // Persist to localStorage
+            
+            // Log verification result
+            if (auditData) {
+                console.log(`🔍 Two-Pass: ${auditData.verdict} (${auditData.confidence}% confidence, ${auditData.passCount} passes)`);
+            }
             
             // Store file hashes for follow-up queries (session-scoped attachment retention)
             if (data.cachedFileHashes && data.cachedFileHashes.length > 0) {

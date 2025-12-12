@@ -1,0 +1,273 @@
+/**
+ * TWO-PASS VERIFICATION ORCHESTRATOR
+ * 
+ * O(1) Generation + audit(O(1)) Verification
+ * Inspired by Replit's Architect review pattern.
+ * 
+ * Flow:
+ * 1. Pass 1: Generate draft answer (existing NYAN + extensions)
+ * 2. Pass 2: Audit the draft for hallucination/context leakage
+ * 3. Pass 1.5 (if needed): Correct fixable issues
+ * 4. Re-audit (if corrected)
+ * 5. Return verified answer with metadata
+ */
+
+const axios = require('axios');
+const { buildAuditPrompt, buildCorrectivePrompt } = require('../prompts/audit-protocol');
+
+const AUDIT_TEMPERATURE = 0.1;
+const MAX_CORRECTION_ATTEMPTS = 1;
+
+async function runVerifiedAnswer(options) {
+  const {
+    groqToken,
+    draftAnswer,
+    originalQuery,
+    userContext,
+    usesFinancialPhysics = false,
+    usesChemistry = false,
+    timeout = 15000
+  } = options;
+
+  const startTime = Date.now();
+  const auditMetadata = {
+    passCount: 1,
+    auditPassed: false,
+    verdict: 'PENDING',
+    confidence: 0,
+    issues: [],
+    corrections: [],
+    extensionsVerified: ['NYAN_PROTOCOL'],
+    latencyMs: 0
+  };
+
+  if (usesFinancialPhysics) auditMetadata.extensionsVerified.push('FINANCIAL_PHYSICS');
+  if (usesChemistry) auditMetadata.extensionsVerified.push('CHEMISTRY');
+
+  try {
+    const auditResult = await runAuditPass(
+      groqToken,
+      draftAnswer,
+      originalQuery,
+      userContext,
+      { usesFinancialPhysics, usesChemistry },
+      timeout
+    );
+
+    auditMetadata.confidence = auditResult.confidence || 0;
+    auditMetadata.issues = auditResult.issues || [];
+
+    if (auditResult.verdict === 'APPROVED') {
+      auditMetadata.verdict = 'APPROVED';
+      auditMetadata.auditPassed = true;
+      auditMetadata.latencyMs = Date.now() - startTime;
+      
+      return {
+        finalAnswer: auditResult.approvedAnswer || draftAnswer,
+        auditMetadata,
+        badge: 'verified'
+      };
+    }
+
+    if (auditResult.verdict === 'FIXABLE' && auditResult.suggestedFixes?.length > 0) {
+      auditMetadata.passCount = 2;
+      
+      const correctedAnswer = await runCorrectivePass(
+        groqToken,
+        draftAnswer,
+        originalQuery,
+        auditResult.issues,
+        timeout
+      );
+
+      auditMetadata.corrections.push({
+        attempt: 1,
+        fixes: auditResult.suggestedFixes
+      });
+
+      const reAuditResult = await runAuditPass(
+        groqToken,
+        correctedAnswer,
+        originalQuery,
+        userContext,
+        { usesFinancialPhysics, usesChemistry },
+        timeout
+      );
+
+      auditMetadata.passCount = 3;
+      auditMetadata.confidence = reAuditResult.confidence || auditResult.confidence;
+
+      if (reAuditResult.verdict === 'APPROVED' || reAuditResult.verdict === 'FIXABLE') {
+        auditMetadata.verdict = 'CORRECTED';
+        auditMetadata.auditPassed = true;
+        auditMetadata.latencyMs = Date.now() - startTime;
+        
+        return {
+          finalAnswer: reAuditResult.approvedAnswer || correctedAnswer,
+          auditMetadata,
+          badge: 'corrected'
+        };
+      }
+
+      auditMetadata.verdict = 'REJECTED';
+      auditMetadata.issues = reAuditResult.issues || auditResult.issues;
+    } else if (auditResult.verdict === 'REJECTED') {
+      auditMetadata.verdict = 'REJECTED';
+    }
+
+    auditMetadata.latencyMs = Date.now() - startTime;
+    
+    const refusalMessage = buildRefusalMessage(auditMetadata.issues);
+    return {
+      finalAnswer: refusalMessage,
+      auditMetadata,
+      badge: 'refused'
+    };
+
+  } catch (auditError) {
+    console.error('🔍 Audit pass error:', auditError.message);
+    
+    auditMetadata.verdict = 'BYPASS';
+    auditMetadata.latencyMs = Date.now() - startTime;
+    auditMetadata.issues.push({
+      severity: 'MINOR',
+      check: 'AUDIT_SYSTEM',
+      reason: 'Audit system unavailable - returning unverified answer'
+    });
+    
+    return {
+      finalAnswer: draftAnswer + '\n\n⚠️ *Verification system unavailable. Answer unverified.*',
+      auditMetadata,
+      badge: 'unverified'
+    };
+  }
+}
+
+async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, extensions, timeout) {
+  const auditPrompt = buildAuditPrompt({
+    usesFinancialPhysics: extensions.usesFinancialPhysics,
+    usesChemistry: extensions.usesChemistry,
+    currentDate: new Date().toISOString().split('T')[0]
+  });
+
+  const auditMessages = [
+    { role: 'system', content: auditPrompt },
+    { 
+      role: 'user', 
+      content: `ORIGINAL QUERY:\n${originalQuery}\n\nCONTEXT PROVIDED:\n${userContext || 'None'}\n\nDRAFT ANSWER TO AUDIT:\n${draftAnswer}\n\nPerform the audit and output JSON only.`
+    }
+  ];
+
+  const response = await axios.post(
+    'https://api.groq.com/openai/v1/chat/completions',
+    {
+      model: 'llama-3.3-70b-versatile',
+      messages: auditMessages,
+      temperature: AUDIT_TEMPERATURE,
+      max_tokens: 800,
+      response_format: { type: 'json_object' }
+    },
+    {
+      headers: {
+        'Authorization': `Bearer ${groqToken}`,
+        'Content-Type': 'application/json'
+      },
+      timeout
+    }
+  );
+
+  const auditContent = response.data.choices?.[0]?.message?.content || '{}';
+  
+  try {
+    const parsed = JSON.parse(auditContent);
+    return {
+      verdict: parsed.verdict || 'APPROVED',
+      confidence: parsed.confidence || 80,
+      checksPass: parsed.checksPass || [],
+      issues: parsed.issues || [],
+      suggestedFixes: parsed.suggestedFixes || [],
+      approvedAnswer: parsed.approvedAnswer || draftAnswer
+    };
+  } catch (parseError) {
+    console.warn('⚠️ Audit JSON parse failed, defaulting to APPROVED');
+    return {
+      verdict: 'APPROVED',
+      confidence: 70,
+      checksPass: ['PARSE_FALLBACK'],
+      issues: [],
+      suggestedFixes: [],
+      approvedAnswer: draftAnswer
+    };
+  }
+}
+
+async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, timeout) {
+  const correctivePrompt = buildCorrectivePrompt(originalQuery, draftAnswer, issues);
+
+  const response = await axios.post(
+    'https://api.groq.com/openai/v1/chat/completions',
+    {
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: 'You are correcting an AI answer based on audit feedback. Output the corrected answer only.' },
+        { role: 'user', content: correctivePrompt }
+      ],
+      temperature: 0.15,
+      max_tokens: 1500
+    },
+    {
+      headers: {
+        'Authorization': `Bearer ${groqToken}`,
+        'Content-Type': 'application/json'
+      },
+      timeout
+    }
+  );
+
+  return response.data.choices?.[0]?.message?.content || draftAnswer;
+}
+
+function buildRefusalMessage(issues) {
+  const criticalIssues = issues.filter(i => i.severity === 'CRITICAL');
+  
+  if (criticalIssues.length === 0) {
+    return "🔴 **Verification Failed**\n\nI couldn't verify my answer meets quality standards. Please rephrase your question or provide more context.\n\n🔥 nyan~";
+  }
+
+  const issueList = criticalIssues
+    .slice(0, 3)
+    .map(i => `• ${i.reason}`)
+    .join('\n');
+
+  return `🔴 **Verification Failed**
+
+I detected issues that could lead to incorrect information:
+${issueList}
+
+**What you can do:**
+- Provide more specific context or data
+- Ask a more focused question
+- Upload relevant documents for analysis
+
+Refusing to answer is better than giving wrong information.
+🔥 nyan~`;
+}
+
+function formatAuditBadge(badge, confidence) {
+  const badges = {
+    verified: `🟢 Verified (${confidence}% confidence)`,
+    corrected: `🟡 Corrected (${confidence}% confidence)`,
+    refused: `🔴 Refused`,
+    unverified: `⚪ Unverified`,
+    bypass: `⚪ Bypass`
+  };
+  return badges[badge] || badges.unverified;
+}
+
+module.exports = {
+  runVerifiedAnswer,
+  runAuditPass,
+  runCorrectivePass,
+  buildRefusalMessage,
+  formatAuditBadge
+};

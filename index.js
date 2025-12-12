@@ -31,6 +31,7 @@ const { identifyFileType, executeExtractionCascade, formatJSONForGroq, getFinanc
 const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('./prompts/nyan-protocol');
+const { runVerifiedAnswer, formatAuditBadge } = require('./utils/two-pass-verification');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
@@ -7454,6 +7455,42 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         
         let reply = groqResponse.data.choices[0]?.message?.content || 'No response generated.';
         
+        // ===== TWO-PASS VERIFICATION: O(1) + audit(O(1)) =====
+        // Inspired by Replit's Architect review pattern
+        // Stage 0: NYAN Protocol checks (always)
+        // Stage 1+: Extension checks (if Financial Physics or Chemistry was used)
+        let auditMetadata = null;
+        let auditBadge = 'unverified';
+        
+        try {
+            console.log(`🔍 Two-Pass: Running verification audit...`);
+            const verificationResult = await runVerifiedAnswer({
+                groqToken: PLAYGROUND_GROQ_TOKEN,
+                draftAnswer: reply,
+                originalQuery: effectiveMessage || finalPrompt,
+                userContext: extractedContent.length > 0 ? extractedContent.join('\n') : searchContext,
+                usesFinancialPhysics: hasFinanceContext, // Both doc uploads AND text-based finance queries
+                usesChemistry: false, // TODO: detect chemistry queries
+                timeout: 12000
+            });
+            
+            reply = verificationResult.finalAnswer;
+            auditMetadata = verificationResult.auditMetadata;
+            auditBadge = verificationResult.badge;
+            
+            console.log(`🔍 Two-Pass: ${auditMetadata.verdict} (${auditMetadata.confidence}% conf, ${auditMetadata.passCount} pass${auditMetadata.passCount > 1 ? 'es' : ''}, ${auditMetadata.latencyMs}ms)`);
+        } catch (verifyError) {
+            console.error('⚠️ Two-Pass verification error:', verifyError.message);
+            // Continue with unverified answer on verification failure
+            auditMetadata = {
+                verdict: 'BYPASS',
+                confidence: 0,
+                issues: [{ severity: 'MINOR', reason: 'Verification unavailable' }],
+                extensionsVerified: ['NYAN_PROTOCOL'],
+                latencyMs: 0
+            };
+        }
+        
         // ===== FINANCIAL PHYSICS POST-GUARD: Enforce temporal warnings + physical audit disclaimer =====
         // Runs for BOTH uploaded financial docs AND text-based finance queries
         if (hasFinanceContext) {
@@ -7483,11 +7520,21 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             reply = `${reply}\n\n⚠️ *Note: Unable to verify with current web data. Information based on knowledge cutoff (September 2023).*`;
         }
         
-        console.log(`✅ Playground response sent (${reply.length} chars)${responseFileHashes.length > 0 ? ` + ${responseFileHashes.length} file hash(es)` : ''}`);
+        console.log(`✅ Playground response sent (${reply.length} chars)${responseFileHashes.length > 0 ? ` + ${responseFileHashes.length} file hash(es)` : ''} [${auditBadge}]`);
         res.json({ 
             reply,
             // Include file hashes for follow-up queries (client stores these)
-            ...(responseFileHashes.length > 0 && { cachedFileHashes: responseFileHashes })
+            ...(responseFileHashes.length > 0 && { cachedFileHashes: responseFileHashes }),
+            // Two-Pass Verification metadata
+            audit: auditMetadata ? {
+                badge: auditBadge,
+                verdict: auditMetadata.verdict,
+                confidence: auditMetadata.confidence,
+                passCount: auditMetadata.passCount || 1,
+                extensionsVerified: auditMetadata.extensionsVerified,
+                latencyMs: auditMetadata.latencyMs,
+                issues: auditMetadata.issues?.length > 0 ? auditMetadata.issues.slice(0, 3) : []
+            } : null
         });
         
     } catch (error) {
