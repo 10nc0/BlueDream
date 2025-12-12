@@ -54,9 +54,10 @@ OUTPUT FORMAT (JSON only, no markdown):
       "reason": "why this is a problem"
     }
   ],
-  "suggestedFixes": ["specific edits to make if FIXABLE"],
-  "approvedAnswer": "the verified answer text (only if APPROVED or FIXABLE with fixes applied)"
+  "suggestedFixes": ["specific edits to make if FIXABLE"]
 }
+
+IMPORTANT: Do NOT include the original answer in your response. Only output the audit verdict and findings.
 
 VERDICT RULES:
 - APPROVED: All checks pass, confidence ≥80%

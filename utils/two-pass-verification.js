@@ -63,8 +63,10 @@ async function runVerifiedAnswer(options) {
       auditMetadata.auditPassed = true;
       auditMetadata.latencyMs = Date.now() - startTime;
       
+      // CRITICAL: Always use original draftAnswer when APPROVED
+      // The audit only verifies, it doesn't regenerate the answer
       return {
-        finalAnswer: auditResult.approvedAnswer || draftAnswer,
+        finalAnswer: draftAnswer,
         auditMetadata,
         badge: 'verified'
       };
@@ -104,8 +106,9 @@ async function runVerifiedAnswer(options) {
         auditMetadata.auditPassed = true;
         auditMetadata.latencyMs = Date.now() - startTime;
         
+        // Use the correctedAnswer from the correction pass (not from audit)
         return {
-          finalAnswer: reAuditResult.approvedAnswer || correctedAnswer,
+          finalAnswer: correctedAnswer,
           auditMetadata,
           badge: 'corrected'
         };
@@ -187,8 +190,8 @@ async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, 
       confidence: parsed.confidence || 80,
       checksPass: parsed.checksPass || [],
       issues: parsed.issues || [],
-      suggestedFixes: parsed.suggestedFixes || [],
-      approvedAnswer: parsed.approvedAnswer || draftAnswer
+      suggestedFixes: parsed.suggestedFixes || []
+      // Note: approvedAnswer removed - we always use original draftAnswer when APPROVED
     };
   } catch (parseError) {
     console.warn('⚠️ Audit JSON parse failed, defaulting to APPROVED');
@@ -197,8 +200,7 @@ async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, 
       confidence: 70,
       checksPass: ['PARSE_FALLBACK'],
       issues: [],
-      suggestedFixes: [],
-      approvedAnswer: draftAnswer
+      suggestedFixes: []
     };
   }
 }
