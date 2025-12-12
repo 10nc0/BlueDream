@@ -99,16 +99,23 @@ SEED METRIC AUDIT (MANDATORY for ~nyan responses):
    - FAIL: "cannot determine directional change", "directional change is unverified"
 9. TWO CITIES: Are 2+ cities/locations analyzed when the question asks for comparison?
 10. HUMANIZED RATIOS: Are P/I ratios explained in human-readable terms (years to afford, fertility window impact)?
+11. P/I THRESHOLD LABELS (CRITICAL): Each P/I ratio MUST have a label:
+   - <2.5x = "Optimism" (healthy affordability, family formation possible)
+   - 2.5-3.5x = "Borderline" (stretched but manageable)
+   - >3.5x = "Fatalism" (extraction economy, fertility suppression)
+   - Look for these exact words OR equivalent descriptions near each P/I number
 
 ⛔ INSTANT FAIL PATTERNS (mark as FIXABLE immediately if found):
 - "unverified historical" or "historical data is unverified" → FIXABLE
 - "cannot determine directional change" or "cannot accurately determine" → FIXABLE
 - "no historical data available" or "lack of historical data" → FIXABLE
 - Missing any mention of ~50yr ago timeframe (1970s, 1975, etc.) → FIXABLE
+- P/I ratios shown WITHOUT threshold labels (Optimism/Borderline/Fatalism) → FIXABLE
 
 CRITICAL: If the response ADMITS it lacks historical data, that is an INSTANT FIXABLE.
-The correction must ESTIMATE historical data using proxy methods (economic records, inflation adjustments).
-DO NOT accept responses that only analyze current data without ~50yr historical comparison.`;
+The correction must ESTIMATE historical data using proxy methods (economic records from 1970s-1980s).
+DO NOT accept responses that only analyze current data without ~50yr historical comparison.
+Each P/I ratio MUST be labeled with its threshold category.`;
 
 const AUDIT_TETRALEMMA = `
 ⚠️ TETRALEMMA EXTENSION ACTIVATED - For false dichotomy queries ⚠️
@@ -190,9 +197,13 @@ SPECIAL CORRECTION RULES:
 FOR SEED METRIC (~nyan) CORRECTIONS:
 - If audit says "missing historical data" → You MUST add ~50yr historical estimates
 - Use proxy methods: historical records from 1970s-1980s (use land price + income from the SAME year - P/I ratio is dimensionless)
-- Example: "In 1975, Singapore land was ~$X/sqm, median income ~$Y/year, P/I ratio was ~3x. Today it's ~15x. This represents a 5x worsening."
+- Example: "In 1975, Singapore land was ~$X/sqm, median income ~$Y/year, P/I ratio was ~3x (Borderline). Today it's ~15x (Fatalism). This represents a 5x worsening."
 - NEVER say "cannot determine" or "unverified" for historical data. ESTIMATE using available proxies.
 - Show directional change: "improved from X to Y" or "worsened from X to Y"
+- ALWAYS label each P/I ratio with its threshold category:
+  * <2.5x = "Optimism" (healthy affordability)
+  * 2.5-3.5x = "Borderline" (stretched but manageable)  
+  * >3.5x = "Fatalism" (extraction economy, fertility suppression)
 
 FOR TETRALEMMA CORRECTIONS:
 - If audit says "missing resolution" → You MUST explicitly choose (11) Both or (00) Neither
