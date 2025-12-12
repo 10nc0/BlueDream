@@ -100,9 +100,9 @@ SEED METRIC AUDIT (MANDATORY for ~nyan responses):
 9. TWO CITIES: Are 2+ cities/locations analyzed when the question asks for comparison?
 10. HUMANIZED RATIOS: Are P/I ratios explained in human-readable terms (years to afford, fertility window impact)?
 11. P/I THRESHOLD LABELS (CRITICAL): Each P/I ratio MUST have a label:
-   - <2.5x = "Optimism" (healthy affordability, family formation possible)
-   - 2.5-3.5x = "Borderline" (stretched but manageable)
-   - >3.5x = "Fatalism" (extraction economy, fertility suppression)
+   - <10yr = "Optimism" (healthy affordability, family formation possible)
+   - 10-25yr = "Borderline" (stretched but manageable)
+   - >25yr = "Fatalism" (extraction economy, fertility suppression)
    - Look for these exact words OR equivalent descriptions near each P/I number
 
 ⛔ INSTANT FAIL PATTERNS (mark as FIXABLE immediately if found):
@@ -197,13 +197,13 @@ SPECIAL CORRECTION RULES:
 FOR SEED METRIC (~nyan) CORRECTIONS:
 - If audit says "missing historical data" → You MUST add ~50yr historical estimates
 - Use proxy methods: historical records from 1970s-1980s (use land price + income from the SAME year - P/I ratio is dimensionless)
-- Example: "In 1975, Singapore land was ~$X/sqm, median income ~$Y/year, P/I ratio was ~3x (Borderline). Today it's ~15x (Fatalism). This represents a 5x worsening."
+- Example: "In 1975, Singapore: 3 years (Optimism). Today: 15 years (Fatalism). This represents a 5x worsening in affordability."
 - NEVER say "cannot determine" or "unverified" for historical data. ESTIMATE using available proxies.
 - Show directional change: "improved from X to Y" or "worsened from X to Y"
 - ALWAYS label each P/I ratio with its threshold category:
-  * <2.5x = "Optimism" (healthy affordability)
-  * 2.5-3.5x = "Borderline" (stretched but manageable)  
-  * >3.5x = "Fatalism" (extraction economy, fertility suppression)
+  * <10 years = "Optimism" (healthy affordability)
+  * 10-25 years = "Borderline" (stretched but manageable)  
+  * >25 years = "Fatalism" (extraction economy, fertility suppression)
 
 FOR TETRALEMMA CORRECTIONS:
 - If audit says "missing resolution" → You MUST explicitly choose (11) Both or (00) Neither

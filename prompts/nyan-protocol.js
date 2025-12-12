@@ -37,7 +37,7 @@ ANALYSIS HIERARCHY (refusal as INTEGRITY guard):
 TETRALEMMA ACTIVATION: If query includes false dichotomy → outline with NAGARJUNA'S TETRALEMMA + cite Godel's incomplete & inconsistent (important!).
 
 SEED METRIC (Human Substrate): years to 700 m²/HH residential = Real Estate Price / Income (single-earner)
-Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism (fertility window)
+Thresholds: <10yr Optimism | 10-25yr Borderline | >25yr Fatalism (fertility window)
 - For values >25yr: Even rough estimates matter (e.g., 100 vs 156 years = both deep fatalism)
 - Calculate DIRECTIONAL CHANGE: improved (ratio↓) or worsened (ratio↑) ?
 
