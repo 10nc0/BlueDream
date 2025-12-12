@@ -30,7 +30,7 @@ const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document
 const { identifyFileType, executeExtractionCascade, formatJSONForGroq, getFinancialPhysicsSeed, intelligentChunking, buildMultiDocContext } = require('./utils/attachment-cascade');
 const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
-const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('./prompts/nyan-protocol');
+const { NYAN_PROTOCOL_SYSTEM_PROMPT, isNonNormalCat } = require('./prompts/nyan-protocol');
 const { getLegalAnalysisSeed, detectLegalDocument, LEGAL_KEYWORDS_REGEX } = require('./prompts/legal-analysis');
 const { runVerifiedAnswer, formatAuditBadge } = require('./utils/two-pass-verification');
 
@@ -7494,23 +7494,26 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         // Stage 0: NYAN Protocol checks (always)
         // Stage 1+: Extension checks (if Financial Physics or Chemistry was used)
         
-        // ===== RESEARCH MODE DETECTION =====
-        // Research mode: NYAN/Seed Metric queries WITHOUT document uploads
-        // These use LLM knowledge + web search for land/income data, not document quotes
-        const seedMetricPatterns = /\b(seed metric|P\/I ratio|price.?to.?income|land affordability|land price|700\s?(sqm|m²)|single.?earner income|fatalism|median income|residential land|exurban|real estate comparison|property comparison|城市对比|土地价格)\b/i;
-        const isResearchQuery = (effectiveMessage || '').match(seedMetricPatterns);
+        // ===== CAT BEHAVIOR ROUTING (PUSH) =====
+        // Non-normal cat (SEED_METRIC_TOPICS) → Research mode audit (math verification, allows LLM knowledge)
+        // Normal cat OR documents present → Strict mode audit (requires source quotes)
+        // Detection happens ONCE here, flag is pushed to audit (not pulled)
+        const catMode = isNonNormalCat(effectiveMessage || '');
         const hasNoDocuments = extractedContent.length === 0;
-        const isResearchMode = isResearchQuery && hasNoDocuments;
+        // Research mode: Non-normal cat AND no documents (documents always require strict quote verification)
+        const isResearchMode = catMode && hasNoDocuments;
         
-        if (isResearchMode) {
-            console.log(`🔬 Research Mode: NYAN/Seed Metric query without documents - using relaxed audit`);
+        if (catMode && hasNoDocuments) {
+            console.log(`🐱 Non-normal cat: SEED_METRIC_TOPICS detected (no docs) → Research mode audit`);
+        } else if (catMode && !hasNoDocuments) {
+            console.log(`🐱 Non-normal cat: SEED_METRIC_TOPICS detected BUT documents present → Strict mode audit`);
         }
         
         let auditMetadata = null;
         let auditBadge = 'unverified';
         
         try {
-            console.log(`🔍 Two-Pass: Running verification audit${isResearchMode ? ' (RESEARCH MODE)' : ''}...`);
+            console.log(`🔍 Two-Pass: Running verification audit${catMode ? ' (🐱 NON-NORMAL CAT)' : ''}...`);
             const verificationResult = await runVerifiedAnswer({
                 groqToken: PLAYGROUND_GROQ_TOKEN,
                 draftAnswer: reply,
@@ -7519,7 +7522,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 usesFinancialPhysics: hasFinanceContext, // Both doc uploads AND text-based finance queries
                 usesChemistry: false, // TODO: detect chemistry queries
                 usesLegalAnalysis: hasLegalContext, // Word/PDF with legal keywords
-                isResearchMode, // NYAN research queries use relaxed audit (math verification, no quote requirement)
+                isResearchMode, // Non-normal cat → relaxed audit (math verification, no quote requirement)
                 maxTokens, // Pass through for correction pass to match original response limit
                 timeout: 12000
             });

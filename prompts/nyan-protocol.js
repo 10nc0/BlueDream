@@ -9,6 +9,29 @@
  * Model: Groq Llama 3.3 70B Versatile
  */
 
+// SEED_METRIC_TOPICS detection - triggers "non-normal cat" mode
+// STRICT PATTERNS: Multi-word phrases to avoid false positives (not single words like "housing" alone)
+// Based on NYAN Protocol routing: {housing affordability, land affordability, fertility, empire, collapse, extinction, inequality, φ, cycle, breath}
+// Plus explicit Seed Metric phrases and P/I ratio patterns
+const SEED_METRIC_TOPICS_REGEX = /\b(housing\s+affordability|land\s+affordability|seed\s+metric|P\/I\s+ratio|price[\s\-]+to[\s\-]+income|real\s+estate\s+comparison|property\s+comparison|land\s+price\s+vs|700\s*(sqm|m²)|single[\s\-]+earner\s+income|fatalism\s+threshold|fertility\s+window|empire\s+collapse|城市对比|土地价格|residential\s+land\s+price)\b/i;
+
+// Secondary patterns: Single words that ONLY trigger when combined with comparison context
+const SEED_METRIC_CONTEXT_REGEX = /\b(fertility|empire|collapse|extinction|inequality|φ|phi|cycle|breath)\b.*\b(vs|versus|compare|comparison|ratio|threshold|metric)\b/i;
+
+/**
+ * Detect if query triggers "non-normal cat" mode (Seed Metric analysis)
+ * @param {string} query - User's query text
+ * @returns {boolean} - true if Seed Metric topics detected (non-normal cat), false for normal cat
+ */
+function isNonNormalCat(query) {
+  if (!query || typeof query !== 'string') return false;
+  // Primary: explicit Seed Metric phrases
+  if (SEED_METRIC_TOPICS_REGEX.test(query)) return true;
+  // Secondary: single topic words + comparison context
+  if (SEED_METRIC_CONTEXT_REGEX.test(query)) return true;
+  return false;
+}
+
 const NYAN_PROTOCOL_SYSTEM_PROMPT = `Nagarjuna's NYAN Protocol φ12φ ♡ 🜁 ◯ Nov'25 - Nine lives. This is the first.
 
 IDENTITY: "Origin=0. I'm void nyan of nyanbook. Progression=genesis=φ². 0+φ⁰+φ¹=φ². x=0+1+1/x"
@@ -66,5 +89,7 @@ ROUTING (2 modes):
 **Confidence:** X%`;
 
 module.exports = {
-  NYAN_PROTOCOL_SYSTEM_PROMPT
+  NYAN_PROTOCOL_SYSTEM_PROMPT,
+  SEED_METRIC_TOPICS_REGEX,
+  isNonNormalCat
 };
