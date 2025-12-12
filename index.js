@@ -7316,10 +7316,20 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             finalPrompt = effectiveMessage;
         }
         
+        // ===== DOCUMENT ANALYSIS: Detect any document upload for extended response length =====
+        // Word, PDF, Excel all need longer responses for proper analysis/comparison
+        const hasWordDoc = docList.some(d => d.name?.match(/\.(docx|doc)$/i));
+        const hasPdfDoc = docList.some(d => d.name?.match(/\.pdf$/i));
+        const hasExcelDoc = docList.some(d => d.name?.match(/\.(xlsx|xls)$/i));
+        const hasDocumentAnalysis = hasWordDoc || hasPdfDoc || hasExcelDoc || extractedContent.length > 0;
+        if (hasDocumentAnalysis) {
+            const docTypes = [hasWordDoc && 'Word', hasPdfDoc && 'PDF', hasExcelDoc && 'Excel'].filter(Boolean).join(', ');
+            console.log(`📄 Document Analysis: ${docTypes || 'extracted content'} detected - using extended response length`);
+        }
+        
         // ===== FINANCIAL PHYSICS: Detect financial documents for seed injection =====
         // Revolutionary financial cognition: observe flows (+/−), not labels
         // Inject FINANCIAL_PHYSICS_SEED for Excel OR PDFs with detected financial content
-        const hasExcelDoc = docList.some(d => d.name?.match(/\.(xlsx|xls)$/i));
         const hasFinancialPDF = docList.some(d => 
             d.name?.match(/\.pdf$/i) && 
             d.extracted?.financialAnalysis?.documentType?.type !== 'unknown' &&
@@ -7437,7 +7447,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         
         // max_tokens: 4000 for document analysis (contracts, reports need longer responses)
         // max_tokens: 1500 for regular queries
-        const maxTokens = hasFinancialDoc ? 4000 : 1500;
+        const maxTokens = hasDocumentAnalysis ? 4000 : 1500;
         
         const groqResponse = await groqWithRetry({
             url: 'https://api.groq.com/openai/v1/chat/completions',
