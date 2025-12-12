@@ -90,36 +90,45 @@ const AUDIT_SEED_METRIC = `
 This response ends with ~nyan (Seed Metric analysis). Apply STRICT checks below:
 
 SEED METRIC AUDIT (MANDATORY for ~nyan responses):
-6. HISTORICAL DATA (CRITICAL): Is data from ~50 years ago (40-60yr acceptable) included? Look for phrases like "in 1970s", "50 years ago", "historically".
+6. HISTORICAL DATA (CRITICAL): Is data from ~50 years ago (40-60yr acceptable) included?
+   - PASS: Look for "in 1970s", "50 years ago", "in 1975", "historically was X, now is Y"
+   - FAIL: Phrases like "unverified historical", "no historical data", "cannot determine"
 7. CURRENT DATA (CRITICAL): Is recent/current data included? Look for "today", "2024/2025", "currently", "now".
-8. DIRECTIONAL CHANGE (CRITICAL): Is comparison between historical and current explicitly stated? Look for "improved", "worsened", "increased", "decreased", "from X to Y".
+8. DIRECTIONAL CHANGE (CRITICAL): Is comparison between historical and current explicitly stated?
+   - PASS: "improved from X to Y", "worsened", "increased by", "decreased by", "was 3x, now 15x"
+   - FAIL: "cannot determine directional change", "directional change is unverified"
 9. TWO CITIES: Are 2+ cities/locations analyzed when the question asks for comparison?
 10. HUMANIZED RATIOS: Are P/I ratios explained in human-readable terms (years to afford, fertility window impact)?
 
-CRITICAL RED FLAGS - INSTANT FIXABLE (not APPROVED):
-- NO historical data (~50yr ago) = FIXABLE, ask to add historical comparison
-- NO current data = FIXABLE, ask to add current data
-- NO directional change = FIXABLE, ask to state if affordability improved or worsened
-- Only one city when question asks for comparison = FIXABLE
-- Raw P/I ratios without humanization = MINOR (acceptable)
+⛔ INSTANT FAIL PATTERNS (mark as FIXABLE immediately if found):
+- "unverified historical" or "historical data is unverified" → FIXABLE
+- "cannot determine directional change" or "cannot accurately determine" → FIXABLE
+- "no historical data available" or "lack of historical data" → FIXABLE
+- Missing any mention of ~50yr ago timeframe (1970s, 1975, etc.) → FIXABLE
 
-DO NOT APPROVE Seed Metric responses that lack historical comparison. Mark as FIXABLE.`;
+CRITICAL: If the response ADMITS it lacks historical data, that is an INSTANT FIXABLE.
+The correction must ESTIMATE historical data using proxy methods (economic records, inflation adjustments).
+DO NOT accept responses that only analyze current data without ~50yr historical comparison.`;
 
 const AUDIT_TETRALEMMA = `
 ⚠️ TETRALEMMA EXTENSION ACTIVATED - For false dichotomy queries ⚠️
 The query presents a binary choice (A or B, either/or). Apply Nagarjuna's tetralemma.
 
 TETRALEMMA AUDIT (MANDATORY for false dichotomy queries):
-6. TETRALEMMA FRAMEWORK: Does the answer outline the four positions? (Yes/No/Both/Neither)
-7. GODEL CITATION: Does the answer cite Godel's incompleteness & inconsistency?
-8. FALSE DICHOTOMY RESOLUTION: Does the answer resolve to (11) Both or (00) Neither?
+6. TETRALEMMA FRAMEWORK: Does the answer outline all four positions? (10=A only, 01=B only, 11=Both, 00=Neither)
+7. GODEL CITATION: Does the answer cite Godel's incompleteness & inconsistency theorems?
+8. EXPLICIT RESOLUTION: Does the answer EXPLICITLY choose (11) Both or (00) Neither as the final answer?
+   - Look for phrases like "the answer is Both (11)", "resolve to Neither", "both are true", "neither is correct"
+   - Just LISTING the 4 options without picking one = FAIL
+   - Picking side A or B alone = FAIL (that's not resolving a false dichotomy)
 
 CRITICAL RED FLAGS - INSTANT FIXABLE:
 - Answering binary question without tetralemma framework = FIXABLE
 - Missing Godel citation when resolving false dichotomy = FIXABLE
-- Taking one side of a false dichotomy without exploring alternatives = FIXABLE
+- Just listing 4 options WITHOUT explicitly choosing (11) or (00) = FIXABLE (must resolve!)
+- Taking one side of a false dichotomy (10 or 01) without exploring alternatives = FIXABLE
 
-Classic false dichotomies to detect: chicken/egg, nature/nurture, good/evil, mind/body, free will/determinism`;
+Classic false dichotomies: chicken/egg, nature/nurture, good/evil, mind/body, free will/determinism`;
 
 const AUDIT_SEED_METRIC_TOPICS = [
   'housing affordability',
@@ -173,10 +182,22 @@ AUDIT FEEDBACK:
 
 INSTRUCTIONS:
 1. Fix ONLY the specific issues identified
-2. Do NOT add new information
-3. If a claim cannot be verified, remove it or add "unverified"
-4. Maintain the same tone and structure
-5. Keep confidence levels honest
+2. Maintain the same tone and structure
+3. Keep confidence levels honest
+
+SPECIAL CORRECTION RULES:
+
+FOR SEED METRIC (~nyan) CORRECTIONS:
+- If audit says "missing historical data" → You MUST add ~50yr historical estimates
+- Use proxy methods: inflation-adjusted historical records, economic data from 1970s-1980s
+- Example: "In 1975, Singapore land was ~$X/sqm (inflation-adjusted), P/I ratio was ~3x. Today it's ~15x. This represents a 5x worsening."
+- NEVER say "cannot determine" or "unverified" for historical data. ESTIMATE using available proxies.
+- Show directional change: "improved from X to Y" or "worsened from X to Y"
+
+FOR TETRALEMMA CORRECTIONS:
+- If audit says "missing resolution" → You MUST explicitly choose (11) Both or (00) Neither
+- Example: "Resolving this false dichotomy: the answer is (11) Both - the chicken and egg co-evolved."
+- NEVER just list the 4 options without picking one. You must RESOLVE.
 
 OUTPUT: The corrected answer only (no meta-commentary).`;
 
