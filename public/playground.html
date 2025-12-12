@@ -30,10 +30,15 @@
             background: rgba(30, 41, 59, 0.8);
             backdrop-filter: blur(10px);
             border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-            flex-shrink: 0;
-            z-index: 10;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
             height: 70px;
+            z-index: 1000;
             overflow: visible;
+            box-sizing: border-box;
         }
         
         .header-left {
@@ -137,7 +142,7 @@
             display: flex;
             flex-direction: column;
             width: calc(100% - 4rem);
-            margin: 0 2rem;
+            margin: 70px 2rem 0 2rem;
             min-height: 0;
             overflow: hidden;
         }
@@ -613,15 +618,8 @@
         
         @media (max-width: 1024px) {
             .header { 
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                width: 100%;
                 padding: 0.25rem 0.5rem;
                 height: 50px;
-                z-index: 999;
-                box-sizing: border-box;
             }
             .header-title h1 { font-size: 0.875rem; }
             .header-title p { display: none; }
@@ -636,10 +634,9 @@
             
             .chat-container { 
                 width: 100%;
-                margin: 0;
+                margin: 50px 0 0 0;
                 padding: 0.25rem;
                 padding-bottom: 0;
-                margin-top: 50px;
             }
             .messages {
                 padding: 0.5rem 0.25rem;
