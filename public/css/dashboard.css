@@ -446,6 +446,15 @@ body::before {
   box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 
+.audit-type-btn,
+.audit-history-btn {
+  height: 28px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* ===================================================================
    SEARCH & FILTERS - RESPONSIVE
    =================================================================== */
