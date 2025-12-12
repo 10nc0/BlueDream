@@ -189,8 +189,8 @@ SPECIAL CORRECTION RULES:
 
 FOR SEED METRIC (~nyan) CORRECTIONS:
 - If audit says "missing historical data" → You MUST add ~50yr historical estimates
-- Use proxy methods: inflation-adjusted historical records, economic data from 1970s-1980s
-- Example: "In 1975, Singapore land was ~$X/sqm (inflation-adjusted), P/I ratio was ~3x. Today it's ~15x. This represents a 5x worsening."
+- Use proxy methods: historical records from 1970s-1980s (use land price + income from the SAME year - P/I ratio is dimensionless)
+- Example: "In 1975, Singapore land was ~$X/sqm, median income ~$Y/year, P/I ratio was ~3x. Today it's ~15x. This represents a 5x worsening."
 - NEVER say "cannot determine" or "unverified" for historical data. ESTIMATE using available proxies.
 - Show directional change: "improved from X to Y" or "worsened from X to Y"
 
