@@ -7435,13 +7435,17 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         // Temperature 0.15 for everything else (H₀ factual accuracy)
         const temperature = hasFinancialDoc ? 0.3 : 0.15;
         
+        // max_tokens: 4000 for document analysis (contracts, reports need longer responses)
+        // max_tokens: 1500 for regular queries
+        const maxTokens = hasFinancialDoc ? 4000 : 1500;
+        
         const groqResponse = await groqWithRetry({
             url: 'https://api.groq.com/openai/v1/chat/completions',
             data: {
                 model: 'llama-3.3-70b-versatile',
                 messages,
                 temperature,
-                max_tokens: 1500,
+                max_tokens: maxTokens,
                 top_p: 0.95
             },
             config: {
@@ -7471,6 +7475,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 userContext: extractedContent.length > 0 ? extractedContent.join('\n') : searchContext,
                 usesFinancialPhysics: hasFinanceContext, // Both doc uploads AND text-based finance queries
                 usesChemistry: false, // TODO: detect chemistry queries
+                maxTokens, // Pass through for correction pass to match original response limit
                 timeout: 12000
             });
             

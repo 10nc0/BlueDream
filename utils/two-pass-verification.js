@@ -26,6 +26,7 @@ async function runVerifiedAnswer(options) {
     userContext,
     usesFinancialPhysics = false,
     usesChemistry = false,
+    maxTokens = 1500, // Match original response limit for correction pass
     timeout = 15000
   } = options;
 
@@ -77,6 +78,7 @@ async function runVerifiedAnswer(options) {
         draftAnswer,
         originalQuery,
         auditResult.issues,
+        maxTokens,
         timeout
       );
 
@@ -201,7 +203,7 @@ async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, 
   }
 }
 
-async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, timeout) {
+async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, maxTokens, timeout) {
   const correctivePrompt = buildCorrectivePrompt(originalQuery, draftAnswer, issues);
 
   const response = await axios.post(
@@ -213,7 +215,7 @@ async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, 
         { role: 'user', content: correctivePrompt }
       ],
       temperature: 0.15,
-      max_tokens: 1500
+      max_tokens: maxTokens // Match original response limit
     },
     {
       headers: {
