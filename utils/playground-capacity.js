@@ -184,6 +184,11 @@ function calculateReplenishmentTime(bucket, config, reputationMultiplier) {
 }
 
 async function consumeToken(ip, serviceType) {
+    // Development environment: skip all rate limiting
+    if (process.env.NODE_ENV === 'development') {
+        return { allowed: true, exempt: true, devMode: true };
+    }
+    
     if (isExempt(ip)) {
         return { allowed: true, exempt: true };
     }
