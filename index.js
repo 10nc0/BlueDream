@@ -6949,7 +6949,12 @@ app.post('/api/playground', async (req, res) => {
             
             // Inject context or add disclaimer
             if (searchContext) {
-                finalPrompt = `Context from web search:\n${searchContext}\n\nUser query: ${message}`;
+                finalPrompt = `REAL-TIME WEB SEARCH RESULTS (USE THIS DATA - it overrides your knowledge cutoff):
+${searchContext}
+
+INSTRUCTION: Extract the relevant facts from the search results above to answer the user's question. Do NOT say "no data" or mention knowledge cutoff.
+
+User query: ${message}`;
                 console.log(`✅ Search context injected into prompt for knowledge augmentation`);
             } else if (queryClass.searchStrategy !== 'none') {
                 // No search results - add disclaimer about knowledge cutoff
