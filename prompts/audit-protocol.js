@@ -66,18 +66,21 @@ GENERAL AUDIT CHECKLIST (light verification for general knowledge queries):
 3. NO FABRICATION: Are there invented statistics, fake sources, or made-up facts?
 4. APPROPRIATE SCOPE: Does the answer stay within the bounds of the question?
 5. CONFIDENCE HONEST: If confidence is stated, is it appropriate for the claim type?
+6. WEB SEARCH USED: If CONTEXT PROVIDED includes web search results, the answer MUST use them (not claim "no data" or "knowledge cutoff")
 
 ACCEPTABLE IN GENERAL MODE:
 - Using LLM training knowledge for general facts
 - Philosophical reasoning and logical frameworks (tetralemma, dialectics)
 - Opinions clearly marked as opinions
 - Historical knowledge from training data
+- Using web search snippets from CONTEXT PROVIDED as real-time data
 
 CRITICAL RED FLAGS (instant FAIL):
 - Answering a completely different question than what was asked
 - Inventing specific statistics or citations that don't exist
 - Self-contradictory logic
-- Claiming certainty on inherently uncertain topics`;
+- Claiming certainty on inherently uncertain topics
+- Claiming "no data" or "knowledge cutoff" when web search results were provided in context`;
 
 // Alias for backward compatibility
 const AUDIT_STAGE_0_NYAN = AUDIT_STAGE_0_STRICT;
