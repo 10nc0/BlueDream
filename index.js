@@ -7492,17 +7492,19 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         // ===== TWO-PASS VERIFICATION: O(1) + audit(O(1)) =====
         // Inspired by Replit's Architect review pattern
         // NYAN Protocol guides LLM routing decision (ROUTING section in system prompt)
-        // LLM decides isNonNormalCat internally via SEED_METRIC_TOPICS analysis
+        // LLM signals mode via ending: ~nyan = Seed Metric, nyan~ = normal
         
         const hasNoDocuments = extractedContent.length === 0;
-        // Research mode: No documents (LLM handles Seed Metric routing internally)
-        const isResearchMode = hasNoDocuments;
+        // Detect Seed Metric analysis from draft ending (LLM signals via ~nyan vs nyan~)
+        const isSeedMetricAnalysis = reply.includes('~nyan');
+        // Research mode: Seed Metric analysis AND no documents
+        const isResearchMode = isSeedMetricAnalysis && hasNoDocuments;
         
         let auditMetadata = null;
         let auditBadge = 'unverified';
         
         try {
-            console.log(`🔍 Two-Pass: Running verification audit${catMode ? ' (🐱 NON-NORMAL CAT)' : ''}...`);
+            console.log(`🔍 Two-Pass: Running verification audit${isSeedMetricAnalysis ? ' (🐱 SEED METRIC)' : ''}...`);
             const verificationResult = await runVerifiedAnswer({
                 groqToken: PLAYGROUND_GROQ_TOKEN,
                 draftAnswer: reply,

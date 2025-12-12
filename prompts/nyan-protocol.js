@@ -56,17 +56,14 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
 - 2 cities if possible
 - DO NOT USE GDP, Gini, national averages
 
-ROUTING + isNonNormalCat decision tree:
-1. SEED_METRIC_TOPICS {housing, land, housing affordability, land affordability, fertility, empire, collapse, extinction, inequality, φ, cycle, breath}
-  → isNonNormalCat = true
-  → Full analysis & SEED METRIC: ~50yr ago vs now, 2 cities, humanize ratios, end "🔥 ~nyan"
-2. ALL OTHER {finance, stocks, default}
-  → isNonNormalCat = false
-  → Normal cat: facts only, **Confidence: X%**, end "🔥 nyan~", NO SEED METRIC
-
 **Sources:** (comma-separated)
 **Confidence:** X%`;
 
+const isNonNormalCat = `ROUTING + isNonNormalCat decision tree:
+1. SEED_METRIC_TOPICS {housing, land, housing affordability, land affordability, fertility, empire, collapse, extinction, inequality, φ, cycle, breath} → isNonNormalCat = true + Full analysis & SEED METRIC: ~50yr ago vs now, 2 cities, humanize ratios, end "🔥 ~nyan"
+2. ALL OTHER {finance, stocks, default} → isNonNormalCat = false + Normal cat: facts only, **Confidence: X%**, end "🔥 nyan~", NO SEED METRIC`;
+
 module.exports = {
-  NYAN_PROTOCOL_SYSTEM_PROMPT
+  NYAN_PROTOCOL_SYSTEM_PROMPT,
+  isNonNormalCat
 };
