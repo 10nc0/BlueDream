@@ -54,37 +54,6 @@ CRITICAL RED FLAGS (instant FAIL):
 - P/I ratios that don't match the numbers shown (e.g., showing 5:1 but numbers suggest 3:1)
 - Claiming certainty without disclosing proxy tier`;
 
-// GENERAL MODE: For philosophical, tetralemma, and general knowledge queries (no documents, not Seed Metric)
-// Light audit - just check logic and no fabrication
-const AUDIT_STAGE_0_GENERAL = `You are a VERIFICATION AUDITOR for an AI assistant called Nyan.
-
-YOUR SOLE PURPOSE: Verify the answer is logically sound and doesn't fabricate information.
-
-GENERAL AUDIT CHECKLIST (light verification for general knowledge queries):
-1. QUESTION ADDRESSED: Does the answer actually address what was asked?
-2. LOGICAL CONSISTENCY: Is the reasoning internally consistent (no contradictions)?
-3. NO FABRICATION: Are there invented statistics, fake sources, or made-up facts?
-4. APPROPRIATE SCOPE: Does the answer stay within the bounds of the question?
-5. CONFIDENCE HONEST: If confidence is stated, is it appropriate for the claim type?
-6. WEB SEARCH USED: If CONTEXT PROVIDED includes web search results, the answer MUST use them (not claim "no data" or "knowledge cutoff")
-
-ACCEPTABLE IN GENERAL MODE:
-- Using LLM training knowledge for general facts
-- Philosophical reasoning and logical frameworks (tetralemma, dialectics)
-- Opinions clearly marked as opinions
-- Historical knowledge from training data
-- Using web search snippets from CONTEXT PROVIDED as real-time data
-
-CRITICAL RED FLAGS (instant FAIL):
-- Inventing specific statistics or citations that don't exist
-- Self-contradictory logic
-- Claiming certainty on inherently uncertain topics
-
-MAJOR ISSUES (FIXABLE - trigger correction pass):
-- Answering a completely different question than what was asked
-- Claiming "no data" or "knowledge cutoff" when web search results were provided in context
-- Not extracting relevant facts from provided web search context`;
-
 // Alias for backward compatibility
 const AUDIT_STAGE_0_NYAN = AUDIT_STAGE_0_STRICT;
 
@@ -158,25 +127,22 @@ function buildAuditPrompt(options = {}) {
     usesFinancialPhysics = false,
     usesChemistry = false,
     usesLegalAnalysis = false,
-    auditMode = 'STRICT', // 'RESEARCH' | 'STRICT' | 'GENERAL'
+    auditMode = 'STRICT', // 'RESEARCH' | 'STRICT'
     currentDate = new Date().toISOString().split('T')[0]
   } = options;
 
   // Choose base audit based on mode:
-  // - RESEARCH: Seed Metric queries (P/I ratio, land affordability)
-  // - STRICT: Document analysis (requires source quotes)
-  // - GENERAL: Philosophical/tetralemma/general knowledge (light logic check)
+  // - RESEARCH: All non-document queries (news, Seed Metric, tetralemma, philosophy, general - allows web search + LLM knowledge)
+  // - STRICT: Document analysis only (requires source quotes from uploaded files)
   let prompt;
   if (auditMode === 'RESEARCH') {
     prompt = AUDIT_STAGE_0_RESEARCH;
-  } else if (auditMode === 'GENERAL') {
-    prompt = AUDIT_STAGE_0_GENERAL;
   } else {
     prompt = AUDIT_STAGE_0_STRICT;
   }
   
   // Extension audits only apply in STRICT mode (document analysis)
-  // Research and General modes have their own focused checks
+  // Research mode has its own focused checks
   if (auditMode === 'STRICT') {
     if (usesFinancialPhysics) {
       prompt += '\n' + AUDIT_FINANCIAL_PHYSICS.replace('today\'s date', currentDate);
@@ -207,7 +173,6 @@ module.exports = {
   AUDIT_STAGE_0_NYAN,
   AUDIT_STAGE_0_STRICT,
   AUDIT_STAGE_0_RESEARCH,
-  AUDIT_STAGE_0_GENERAL,
   AUDIT_FINANCIAL_PHYSICS,
   AUDIT_CHEMISTRY,
   AUDIT_LEGAL_ANALYSIS,

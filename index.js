@@ -7497,28 +7497,19 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         // ===== TWO-PASS VERIFICATION: O(1) + audit(O(1)) =====
         // Inspired by Replit's Architect review pattern
         // NYAN Protocol guides LLM routing decision (ROUTING section in system prompt)
-        // LLM signals mode via ending: ~nyan = Seed Metric, nyan~ = normal
         
         const hasNoDocuments = extractedContent.length === 0;
-        // Detect Seed Metric analysis from draft ending (LLM signals via ~nyan vs nyan~)
-        const isSeedMetricAnalysis = reply.includes('~nyan');
         
-        // THREE-MODE AUDIT ROUTING:
-        // 1. ~nyan (Seed Metric) → RESEARCH (check P/I math, allow LLM knowledge)
-        // 2. nyan~ + documents → STRICT (require source quotes)
-        // 3. nyan~ + no documents → GENERAL (light logic check for tetralemma/general)
-        let auditMode = 'STRICT'; // default
-        if (isSeedMetricAnalysis) {
-            auditMode = 'RESEARCH';
-        } else if (hasNoDocuments) {
-            auditMode = 'GENERAL';
-        }
+        // TWO-MODE AUDIT ROUTING (simplified):
+        // - STRICT: Only when user uploads documents (PDF/Word/Excel) - requires source quotes
+        // - RESEARCH: Everything else (news, Seed Metric, tetralemma, philosophy, general) - allows web search + LLM knowledge
+        let auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
         
         let auditMetadata = null;
         let auditBadge = 'unverified';
         
         try {
-            console.log(`🔍 Two-Pass: Running verification audit (${auditMode} mode)${isSeedMetricAnalysis ? ' 🐱' : ''}...`);
+            console.log(`🔍 Two-Pass: Running verification audit (${auditMode} mode)...`);
             const verificationResult = await runVerifiedAnswer({
                 groqToken: PLAYGROUND_GROQ_TOKEN,
                 draftAnswer: reply,
@@ -7527,7 +7518,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 usesFinancialPhysics: hasFinanceContext, // Both doc uploads AND text-based finance queries
                 usesChemistry: false, // TODO: detect chemistry queries
                 usesLegalAnalysis: hasLegalContext, // Word/PDF with legal keywords
-                auditMode, // RESEARCH | STRICT | GENERAL
+                auditMode, // RESEARCH | STRICT
                 maxTokens, // Pass through for correction pass to match original response limit
                 timeout: 12000
             });

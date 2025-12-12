@@ -27,7 +27,7 @@ async function runVerifiedAnswer(options) {
     usesFinancialPhysics = false,
     usesChemistry = false,
     usesLegalAnalysis = false,
-    auditMode = 'STRICT', // 'RESEARCH' | 'STRICT' | 'GENERAL'
+    auditMode = 'STRICT', // 'RESEARCH' | 'STRICT'
     maxTokens = 1500, // Match original response limit for correction pass
     timeout = 15000
   } = options;
