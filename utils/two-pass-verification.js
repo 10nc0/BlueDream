@@ -28,6 +28,7 @@ async function runVerifiedAnswer(options) {
     usesChemistry = false,
     usesLegalAnalysis = false,
     isSeedMetric = false,
+    isTetralemma = false,
     auditMode = 'STRICT', // 'RESEARCH' | 'STRICT'
     maxTokens = 1500, // Match original response limit for correction pass
     timeout = 15000
@@ -49,6 +50,7 @@ async function runVerifiedAnswer(options) {
   if (usesChemistry) auditMetadata.extensionsVerified.push('CHEMISTRY');
   if (usesLegalAnalysis) auditMetadata.extensionsVerified.push('LEGAL_ANALYSIS');
   if (isSeedMetric) auditMetadata.extensionsVerified.push('SEED_METRIC');
+  if (isTetralemma) auditMetadata.extensionsVerified.push('TETRALEMMA');
   auditMetadata.extensionsVerified.push(`AUDIT_MODE_${auditMode}`);
 
   try {
@@ -57,7 +59,7 @@ async function runVerifiedAnswer(options) {
       draftAnswer,
       originalQuery,
       userContext,
-      { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, isSeedMetric, auditMode },
+      { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, isSeedMetric, isTetralemma, auditMode },
       timeout
     );
 
@@ -100,7 +102,7 @@ async function runVerifiedAnswer(options) {
         correctedAnswer,
         originalQuery,
         userContext,
-        { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, isSeedMetric, auditMode },
+        { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, isSeedMetric, isTetralemma, auditMode },
         timeout
       );
 
@@ -160,6 +162,7 @@ async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, 
     usesChemistry: extensions.usesChemistry,
     usesLegalAnalysis: extensions.usesLegalAnalysis,
     isSeedMetric: extensions.isSeedMetric,
+    isTetralemma: extensions.isTetralemma,
     auditMode: extensions.auditMode,
     currentDate: new Date().toISOString().split('T')[0]
   });

@@ -7505,6 +7505,10 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         // Detect Seed Metric analysis from draft ending (LLM signals via ~nyan)
         const isSeedMetricAnalysis = reply.includes('~nyan');
         
+        // Detect false dichotomy queries for tetralemma audit
+        const { isFalseDichotomy } = require('./prompts/audit-protocol');
+        const isTetralemmaQuery = isFalseDichotomy(effectiveMessage || message);
+        
         // TWO-MODE AUDIT ROUTING (simplified):
         // - STRICT: Only when user uploads documents (PDF/Word/Excel) - requires source quotes
         // - RESEARCH: Everything else (news, Seed Metric, tetralemma, philosophy, general) - allows web search + LLM knowledge
@@ -7514,7 +7518,10 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         let auditBadge = 'unverified';
         
         try {
-            console.log(`🔍 Two-Pass: Running verification audit (${auditMode} mode)${isSeedMetricAnalysis ? ' 🐱 Seed Metric' : ''}...`);
+            const auditExtensions = [];
+            if (isSeedMetricAnalysis) auditExtensions.push('🐱 Seed Metric');
+            if (isTetralemmaQuery) auditExtensions.push('☯️ Tetralemma');
+            console.log(`🔍 Two-Pass: Running verification audit (${auditMode} mode)${auditExtensions.length ? ' ' + auditExtensions.join(' ') : ''}...`);
             const verificationResult = await runVerifiedAnswer({
                 groqToken: PLAYGROUND_GROQ_TOKEN,
                 draftAnswer: reply,
@@ -7524,6 +7531,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 usesChemistry: false, // TODO: detect chemistry queries
                 usesLegalAnalysis: hasLegalContext, // Word/PDF with legal keywords
                 isSeedMetric: isSeedMetricAnalysis, // Detected from ~nyan ending
+                isTetralemma: isTetralemmaQuery, // Detected from false dichotomy patterns
                 auditMode, // RESEARCH | STRICT
                 maxTokens, // Pass through for correction pass to match original response limit
                 timeout: 12000

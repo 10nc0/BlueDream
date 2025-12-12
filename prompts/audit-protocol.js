@@ -86,19 +86,40 @@ LEGAL DOCUMENT ANALYSIS AUDIT (Extension):
 10. CLAUSE ATTRIBUTION: Are clause numbers/article references accurate to the documents?`;
 
 const AUDIT_SEED_METRIC = `
-SEED METRIC AUDIT (Extension for ~nyan responses):
-6. HISTORICAL DATA: Is data from ~50 years ago (40-60yr acceptable) included?
-7. CURRENT DATA: Is recent/current data included?
-8. DIRECTIONAL CHANGE: Is comparison between historical and current explicitly stated?
-9. TWO CITIES: Are 2+ cities/locations analyzed (if applicable)?
-10. HUMANIZED RATIOS: Are P/I ratios explained in human-readable terms (years, fertility window)?
+⚠️ SEED METRIC EXTENSION ACTIVATED - OVERRIDES "ALWAYS APPROVE IF" RULES ⚠️
+This response ends with ~nyan (Seed Metric analysis). Apply STRICT checks below:
 
-CRITICAL RED FLAGS (instant FAIL):
-- Missing historical data when Seed Metric analysis was claimed (~nyan ending)
-- Missing current data comparison
-- No directional change analysis (improved/worsened)
-- Only one city when question asks for comparison
-- P/I ratios not humanized (should explain in years/decades, not just raw numbers)`;
+SEED METRIC AUDIT (MANDATORY for ~nyan responses):
+6. HISTORICAL DATA (CRITICAL): Is data from ~50 years ago (40-60yr acceptable) included? Look for phrases like "in 1970s", "50 years ago", "historically".
+7. CURRENT DATA (CRITICAL): Is recent/current data included? Look for "today", "2024/2025", "currently", "now".
+8. DIRECTIONAL CHANGE (CRITICAL): Is comparison between historical and current explicitly stated? Look for "improved", "worsened", "increased", "decreased", "from X to Y".
+9. TWO CITIES: Are 2+ cities/locations analyzed when the question asks for comparison?
+10. HUMANIZED RATIOS: Are P/I ratios explained in human-readable terms (years to afford, fertility window impact)?
+
+CRITICAL RED FLAGS - INSTANT FIXABLE (not APPROVED):
+- NO historical data (~50yr ago) = FIXABLE, ask to add historical comparison
+- NO current data = FIXABLE, ask to add current data
+- NO directional change = FIXABLE, ask to state if affordability improved or worsened
+- Only one city when question asks for comparison = FIXABLE
+- Raw P/I ratios without humanization = MINOR (acceptable)
+
+DO NOT APPROVE Seed Metric responses that lack historical comparison. Mark as FIXABLE.`;
+
+const AUDIT_TETRALEMMA = `
+⚠️ TETRALEMMA EXTENSION ACTIVATED - For false dichotomy queries ⚠️
+The query presents a binary choice (A or B, either/or). Apply Nagarjuna's tetralemma.
+
+TETRALEMMA AUDIT (MANDATORY for false dichotomy queries):
+6. TETRALEMMA FRAMEWORK: Does the answer outline the four positions? (Yes/No/Both/Neither)
+7. GODEL CITATION: Does the answer cite Godel's incompleteness & inconsistency?
+8. FALSE DICHOTOMY RESOLUTION: Does the answer resolve to (11) Both or (00) Neither?
+
+CRITICAL RED FLAGS - INSTANT FIXABLE:
+- Answering binary question without tetralemma framework = FIXABLE
+- Missing Godel citation when resolving false dichotomy = FIXABLE
+- Taking one side of a false dichotomy without exploring alternatives = FIXABLE
+
+Classic false dichotomies to detect: chicken/egg, nature/nurture, good/evil, mind/body, free will/determinism`;
 
 const AUDIT_SEED_METRIC_TOPICS = [
   'housing affordability',
@@ -165,6 +186,7 @@ function buildAuditPrompt(options = {}) {
     usesChemistry = false,
     usesLegalAnalysis = false,
     isSeedMetric = false,
+    isTetralemma = false,
     auditMode = 'STRICT', // 'RESEARCH' | 'STRICT'
     currentDate = new Date().toISOString().split('T')[0]
   } = options;
@@ -180,7 +202,7 @@ function buildAuditPrompt(options = {}) {
   }
   
   // Extension audits only apply in STRICT mode (document analysis)
-  // EXCEPT: Seed Metric extension applies in RESEARCH mode when isSeedMetric flag is set
+  // EXCEPT: Seed Metric and Tetralemma extensions apply in RESEARCH mode when flags are set
   if (auditMode === 'STRICT') {
     if (usesFinancialPhysics) {
       prompt += '\n' + AUDIT_FINANCIAL_PHYSICS.replace('today\'s date', currentDate);
@@ -200,6 +222,11 @@ function buildAuditPrompt(options = {}) {
     prompt += '\n' + AUDIT_SEED_METRIC;
   }
   
+  // Tetralemma extension: applies when query contains false dichotomy
+  if (isTetralemma) {
+    prompt += '\n' + AUDIT_TETRALEMMA;
+  }
+  
   prompt += '\n\n' + AUDIT_OUTPUT_SCHEMA;
   
   return prompt;
@@ -212,6 +239,26 @@ function buildCorrectivePrompt(originalQuery, draftAnswer, auditIssues) {
     .replace('{{AUDIT_ISSUES}}', JSON.stringify(auditIssues, null, 2));
 }
 
+// False dichotomy patterns for tetralemma detection
+const FALSE_DICHOTOMY_PATTERNS = [
+  /\b(chicken|egg)\b.*\b(first|came)\b/i,
+  /\bwhich came first\b/i,
+  /\b(either|or)\b.*\b(either|or)\b/i,
+  /\bnature\s+(vs?\.?|versus|or)\s+nurture\b/i,
+  /\bgood\s+(vs?\.?|versus|or)\s+evil\b/i,
+  /\bmind\s+(vs?\.?|versus|or)\s+body\b/i,
+  /\bfree will\s+(vs?\.?|versus|or)\s+determinism\b/i,
+  /\bis\s+\w+\s+(good|bad|right|wrong)\s+or\s+(good|bad|right|wrong)\b/i,
+  /\bA\s+or\s+B\b/i,
+  /\bfalse\s+dichotomy\b/i,
+  /\bbinary\s+choice\b/i
+];
+
+function isFalseDichotomy(query) {
+  if (!query) return false;
+  return FALSE_DICHOTOMY_PATTERNS.some(pattern => pattern.test(query));
+}
+
 module.exports = {
   AUDIT_STAGE_0_NYAN,
   AUDIT_STAGE_0_STRICT,
@@ -221,6 +268,9 @@ module.exports = {
   AUDIT_LEGAL_ANALYSIS,
   AUDIT_SEED_METRIC,
   AUDIT_SEED_METRIC_TOPICS,
+  AUDIT_TETRALEMMA,
+  FALSE_DICHOTOMY_PATTERNS,
+  isFalseDichotomy,
   AUDIT_OUTPUT_SCHEMA,
   CORRECTIVE_TEMPLATE,
   buildAuditPrompt,
