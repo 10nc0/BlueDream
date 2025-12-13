@@ -1,22 +1,27 @@
 /**
- * TWO-PASS VERIFICATION ORCHESTRATOR
+ * THREE-PASS VERIFICATION ORCHESTRATOR
  * 
- * O(1) Generation + audit(O(1)) Verification
+ * O(1) Generation + audit(O(1)) + personality(O(1))
  * Inspired by Replit's Architect review pattern.
  * 
  * Flow:
- * 1. Pass 1: Generate draft answer (existing NYAN + extensions)
- * 2. Pass 2: Audit the draft for hallucination/context leakage
- * 3. Pass 1.5 (if needed): Correct fixable issues
- * 4. Re-audit (if corrected)
- * 5. Return verified answer with metadata
+ * 1. Pass 1 (Generate): Draft answer using NYAN + extensions
+ * 2. Pass 2 (Audit): Verify for hallucination/context leakage
+ * 3. Pass 1.5 (Correct): Fix issues if FIXABLE verdict
+ * 4. Pass 3 (Personality): Reformat verified answer for readability
+ *    - Presentation-only layer (runs AFTER verification)
+ *    - Preserves all data, calculations, citations exactly
+ *    - Only adjusts formatting, tone, and structure
+ * 5. Return formatted answer with verification metadata
  */
 
 const axios = require('axios');
 const { buildAuditPrompt, buildCorrectivePrompt } = require('../prompts/audit-protocol');
+const { buildPersonalityPrompt, buildPersonalityUserMessage } = require('../prompts/personality-format');
 
 const AUDIT_TEMPERATURE = 0.1;
 const MAX_CORRECTION_ATTEMPTS = 1;
+const PERSONALITY_TEMPERATURE = 0.4;
 
 async function runVerifiedAnswer(options) {
   const {
@@ -31,7 +36,8 @@ async function runVerifiedAnswer(options) {
     isTetralemma = false,
     auditMode = 'STRICT', // 'RESEARCH' | 'STRICT'
     maxTokens = 1500, // Match original response limit for correction pass
-    timeout = 15000
+    timeout = 15000,
+    enablePersonality = true // Pass 3: Personality formatting (can be disabled)
   } = options;
 
   const startTime = Date.now();
@@ -69,12 +75,17 @@ async function runVerifiedAnswer(options) {
     if (auditResult.verdict === 'APPROVED') {
       auditMetadata.verdict = 'APPROVED';
       auditMetadata.auditPassed = true;
-      auditMetadata.latencyMs = Date.now() - startTime;
       
-      // CRITICAL: Always use original draftAnswer when APPROVED
-      // The audit only verifies, it doesn't regenerate the answer
+      // Pass 3: Personality formatting (presentation-only, after verification)
+      let finalOutput = draftAnswer;
+      if (enablePersonality) {
+        auditMetadata.passCount++;
+        finalOutput = await runPersonalityPass(groqToken, draftAnswer, originalQuery, timeout);
+      }
+      
+      auditMetadata.latencyMs = Date.now() - startTime;
       return {
-        finalAnswer: draftAnswer,
+        finalAnswer: finalOutput,
         auditMetadata,
         badge: 'verified'
       };
@@ -112,11 +123,17 @@ async function runVerifiedAnswer(options) {
       if (reAuditResult.verdict === 'APPROVED' || reAuditResult.verdict === 'FIXABLE') {
         auditMetadata.verdict = 'CORRECTED';
         auditMetadata.auditPassed = true;
-        auditMetadata.latencyMs = Date.now() - startTime;
         
-        // Use the correctedAnswer from the correction pass (not from audit)
+        // Pass 3: Personality formatting (presentation-only, after verification)
+        let finalOutput = correctedAnswer;
+        if (enablePersonality) {
+          auditMetadata.passCount++;
+          finalOutput = await runPersonalityPass(groqToken, correctedAnswer, originalQuery, timeout);
+        }
+        
+        auditMetadata.latencyMs = Date.now() - startTime;
         return {
-          finalAnswer: correctedAnswer,
+          finalAnswer: finalOutput,
           auditMetadata,
           badge: 'corrected'
         };
@@ -243,6 +260,46 @@ async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, 
   return response.data.choices?.[0]?.message?.content || draftAnswer;
 }
 
+async function runPersonalityPass(groqToken, verifiedAnswer, originalQuery, timeout = 12000) {
+  try {
+    const personalityPrompt = buildPersonalityPrompt();
+    const userMessage = buildPersonalityUserMessage(verifiedAnswer, originalQuery);
+
+    const response = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: personalityPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: PERSONALITY_TEMPERATURE,
+        max_tokens: 2000
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${groqToken}`,
+          'Content-Type': 'application/json'
+        },
+        timeout
+      }
+    );
+
+    const formatted = response.data.choices?.[0]?.message?.content;
+    
+    if (!formatted || formatted.length < verifiedAnswer.length * 0.5) {
+      console.warn('⚠️ Personality pass returned unusually short response, using original');
+      return verifiedAnswer;
+    }
+
+    console.log('✨ Pass 3 (Personality): Reformatted response for readability');
+    return formatted;
+  } catch (error) {
+    console.warn('⚠️ Personality pass failed, using verified answer as-is:', error.message);
+    return verifiedAnswer;
+  }
+}
+
 function buildRefusalMessage(issues) {
   const criticalIssues = issues.filter(i => i.severity === 'CRITICAL');
   
@@ -284,6 +341,7 @@ module.exports = {
   runVerifiedAnswer,
   runAuditPass,
   runCorrectivePass,
+  runPersonalityPass,
   buildRefusalMessage,
   formatAuditBadge
 };
