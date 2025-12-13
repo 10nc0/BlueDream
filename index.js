@@ -6423,13 +6423,14 @@ function classifyQuery(message) {
         return { type: 'brave-first', searchStrategy: 'brave', skipCompression: isShort };
     }
     
-    // Check if Groq-only (complex reasoning) - but STILL allow search fallback
+    // Check if Groq-only (complex reasoning) - NO search, LLM answers directly
     if (QUERY_PATTERNS.groqOnly.test(trimmed)) {
-        return { type: 'groq-only', searchStrategy: 'cascade', skipCompression: false };
+        return { type: 'groq-only', searchStrategy: 'none', skipCompression: false };
     }
     
-    // Default: try DDG first, then Brave
-    return { type: 'default', searchStrategy: 'cascade', skipCompression: false };
+    // Default: Groq-first (no search) - LLM decides if it needs external data
+    // Only time-sensitive patterns (braveFirst) and nyanProtocol trigger search
+    return { type: 'default', searchStrategy: 'none', skipCompression: false };
 }
 
 // ===== DOCUMENT CONTEXT CACHE (Two-Tier: Session + Global) =====
