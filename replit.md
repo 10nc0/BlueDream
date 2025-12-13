@@ -38,10 +38,15 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **Detection**: `isSeedMetricQuery()` uses `SEED_METRIC_TOPICS` array (housing affordability, land affordability, P/I ratio, etc.)
     - **Retry Logic**: If audit REJECTED and was groq-first → trigger search cascade → regenerate with context → re-audit
     - **Closed-Loop**: Document uploads skip all search (user's own data needs no external verification)
-  - **Two-Pass Verification (Dec 12, 2025)**: Inspired by Replit's Architect review pattern. O(1) + audit(O(1)) architecture prevents hallucination via context leakage:
+  - **Three-Pass Verification (Dec 13, 2025)**: Inspired by Replit's Architect review pattern. O(1) + audit(O(1)) + personality(O(1)) architecture:
     - **Pass 1 (Generate)**: Draft answer using NYAN Protocol + extensions
     - **Pass 2 (Audit)**: Structured verification checking H₀ logic, fabrication, context bleeding
     - **Pass 1.5 (Correct)**: If fixable issues found, regenerate with audit feedback
+    - **Pass 3 (Personality)**: Reformat verified answer for readability — presentation-only layer
+      - Preserves ALL data, calculations, citations, and conclusions exactly
+      - Only adjusts formatting (headers, bullets, bold), tone (warm, curious), and structure
+      - Adds ~nyan signature and cat-themed personality touches
+      - Defined in `prompts/personality-format.js`
     - **Stage Hierarchy**: Stage 0 (NYAN) always audited; Stage 1+ (Financial Physics, Legal Analysis, Chemistry) only if used
     - **Verdicts**: APPROVED (🟢), CORRECTED (🟡), REJECTED (🔴), BYPASS (⚪)
     - **UI**: Verification badge with confidence % shown on each response

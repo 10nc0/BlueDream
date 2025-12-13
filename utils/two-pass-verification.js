@@ -75,11 +75,12 @@ async function runVerifiedAnswer(options) {
     if (auditResult.verdict === 'APPROVED') {
       auditMetadata.verdict = 'APPROVED';
       auditMetadata.auditPassed = true;
+      auditMetadata.passCount = 2; // Generation (1) + Audit (2)
       
       // Pass 3: Personality formatting (presentation-only, after verification)
       let finalOutput = draftAnswer;
       if (enablePersonality) {
-        auditMetadata.passCount++;
+        auditMetadata.passCount = 3; // + Personality (3)
         finalOutput = await runPersonalityPass(groqToken, draftAnswer, originalQuery, timeout);
       }
       
@@ -117,7 +118,7 @@ async function runVerifiedAnswer(options) {
         timeout
       );
 
-      auditMetadata.passCount = 3;
+      auditMetadata.passCount = 4; // Generation (1) + Correction (2) + Re-Audit (3) + Audit result (4)
       auditMetadata.confidence = reAuditResult.confidence || auditResult.confidence;
 
       if (reAuditResult.verdict === 'APPROVED' || reAuditResult.verdict === 'FIXABLE') {
@@ -127,7 +128,7 @@ async function runVerifiedAnswer(options) {
         // Pass 3: Personality formatting (presentation-only, after verification)
         let finalOutput = correctedAnswer;
         if (enablePersonality) {
-          auditMetadata.passCount++;
+          auditMetadata.passCount = 5; // + Personality (5)
           finalOutput = await runPersonalityPass(groqToken, correctedAnswer, originalQuery, timeout);
         }
         
@@ -143,6 +144,11 @@ async function runVerifiedAnswer(options) {
       auditMetadata.issues = reAuditResult.issues || auditResult.issues;
     } else if (auditResult.verdict === 'REJECTED') {
       auditMetadata.verdict = 'REJECTED';
+      auditMetadata.passCount = 2; // Generation (1) + Audit (2)
+    } else if (auditResult.verdict === 'FIXABLE') {
+      // FIXABLE but no suggested fixes - treat as rejection
+      auditMetadata.verdict = 'REJECTED';
+      auditMetadata.passCount = 2; // Generation (1) + Audit (2)
     }
 
     auditMetadata.latencyMs = Date.now() - startTime;
