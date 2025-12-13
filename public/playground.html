@@ -249,13 +249,27 @@
             padding-left: 1.5rem;
         }
         
+        .message.assistant .content ul ul,
+        .message.assistant .content ul ol,
+        .message.assistant .content ol ul,
+        .message.assistant .content ol ol {
+            margin: 0;
+            padding-left: 1.25rem;
+        }
+        
         .message.assistant .content li {
             margin: 0;
-            padding: 0.1rem 0;
+            padding: 0;
+            line-height: 1.5;
         }
         
         .message.assistant .content li + li {
             margin-top: 0;
+        }
+        
+        .message.assistant .content li p {
+            margin: 0;
+            display: inline;
         }
         
         .message.assistant .content table {
