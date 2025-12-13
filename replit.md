@@ -32,6 +32,12 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Real-time Updates**: Smart polling with `?after={messageId}`, auto-scroll, "New messages" banner, and jump-to-message functionality.
 - **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, providing general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior. Audit results are logged via the Prometheus Trinity Discord bots.
 - **AI Playground**: A sovereign, public AI playground at `/AI` without authentication, offering multimodal support (Text, Photo, Audio, Documents), multi-file upload, dynamic capacity sharing, and abuse prevention. It features query classification, smart retry mechanisms, document parsing, and a search cascade for real-time knowledge. **No response caching** — every query runs fresh through the LLM to ensure data integrity (Dec 11, 2025: removed factual cache that was injecting stale/hallucinated data). **Closed-loop document analysis** skips web search entirely for financial documents (user's own data needs no external verification). **Temporal Reality Check** injects current date into financial analysis to catch impossible "future actuals".
+  - **Groq-First Architecture (Dec 13, 2025)**: Result-based routing instead of topic-based. Let Groq prove competence via audit, not pattern matching.
+    - **Flow**: Generate (no search) → Audit → APPROVED/FIXABLE? Done : Search → Regenerate → Audit
+    - **Exception**: Seed Metric (~nyan) queries need fresh data → Search FIRST, then generate
+    - **Detection**: `isSeedMetricQuery()` uses `SEED_METRIC_TOPICS` array (housing affordability, land affordability, P/I ratio, etc.)
+    - **Retry Logic**: If audit REJECTED and was groq-first → trigger search cascade → regenerate with context → re-audit
+    - **Closed-Loop**: Document uploads skip all search (user's own data needs no external verification)
   - **Two-Pass Verification (Dec 12, 2025)**: Inspired by Replit's Architect review pattern. O(1) + audit(O(1)) architecture prevents hallucination via context leakage:
     - **Pass 1 (Generate)**: Draft answer using NYAN Protocol + extensions
     - **Pass 2 (Audit)**: Structured verification checking H₀ logic, fabrication, context bleeding
@@ -41,16 +47,10 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **UI**: Verification badge with confidence % shown on each response
     - **Dual-Mode Audit (Dec 12, 2025)**: Calibrated audit strictness based on query type:
       - **STRICT MODE** (default): For document-based analysis (Legal, Financial uploads) — requires source material quotes, no external knowledge
-      - **RESEARCH MODE**: For NYAN/Seed Metric queries without documents — allows LLM knowledge + web search for land/income data, requires proxy tier disclosure, **still verifies math correctness**
-      - **Push-Based Cat Routing**: `isNonNormalCat()` in nyan-protocol.js detects Seed Metric topics ONCE, flag is pushed to audit (not pulled with separate detection). Research mode = non-normal cat AND no documents.
-      - **Single Source of Truth (Dec 12, 2025)**: `SEED_METRIC_TOPICS` array is the canonical source for both ROUTING prompt section (template interpolation) AND host-side `isNonNormalCat()` detection. Multi-word phrases prioritized (housing affordability, land affordability, seed metric, P/I ratio, price-to-income). Includes both φ symbol and ASCII "phi" variant for keyboard compatibility.
-    - **Audit Cascade Reordering (Dec 12, 2025 - Post-Session Fixes)**:
-      - **FIXED**: Extensions run FIRST with strict checks, base RESEARCH mode runs LAST as fallback only
-      - **⚠️ EXTENSION PRIORITY RULE**: If any extension is active (Seed Metric, Tetralemma, Financial Physics, etc.), "ALWAYS APPROVE IF" rules are IGNORED
-      - **SEED METRIC INSTANT FAIL PATTERNS**: "unverified historical", "cannot determine directional change", "no historical data available" trigger FIXABLE (not APPROVED)
-      - **SEED METRIC HISTORICAL**: P/I ratio is dimensionless (Price÷Income within SAME year) — NO inflation adjustment needed, just requires both datapoints from same year (e.g., "1975: land $X, income $Y, P/I=3x. Today: $Z, P/I=15x")
-      - **TETRALEMMA RESOLUTION**: Must explicitly choose (11) Both or (00) Neither, not just list 4 options. Requires Godel incompleteness citation.
-      - **CORRECTIVE PROMPT**: Instructs LLM to ESTIMATE historical data using proxy methods (historical records from 1970s-1980s), never say "cannot determine"
+      - **RESEARCH MODE**: For all other queries without documents — allows LLM knowledge + web search, still verifies math correctness
+    - **Audit Cascade**: Extensions (Seed Metric, Tetralemma, Financial Physics) run FIRST with strict checks; base RESEARCH mode is fallback only
+    - **SEED METRIC HISTORICAL**: P/I ratio is dimensionless (Price÷Income within SAME year) — requires both datapoints from same year
+    - **TETRALEMMA RESOLUTION**: Must explicitly choose (11) Both or (00) Neither. Requires Godel incompleteness citation
   - **Audio Accessibility**: Mic button recordings (🎙️) are automatically treated as user queries (not context), enabling low-literacy users to interact via voice alone. Uploaded audio files are treated as supporting context. Clear iOS/Safari error messages when recording is unavailable. Note: Safari/iOS does not support MediaRecorder API for audio recording; users on iPhone must type.
   - **Mobile UX**: Android/mobile keyboard auto-collapses on send for better readability of nyan's response. **Fixed scroll layout (Dec 11, 2025)**: Header fixed at top, input fixed at bottom, only message area scrolls — classic chat app pattern.
   - **Foldable Device Support**: Galaxy Z Fold 7 and similar foldables are detected via aspect ratio (>1.4 = mobile mode). Unfolded tablet mode uses desktop two-pane layout with book-sidebar capped at 30% width to ensure message pane visibility.

@@ -6388,51 +6388,64 @@ async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') 
 // H₀ PROTOCOL: temperature = 0.15 (sweet spot: 0.1 too rigid, 0.2 hallucinates)
 const H0_TEMPERATURE = 0.15;
 
-// ===== IMPROVEMENT 1: QUERY CLASSIFICATION (saves 0.8s latency) =====
-// Regex patterns to route queries directly without Groq compression
-const QUERY_PATTERNS = {
-    // DDG-first: Simple factual queries (Wikipedia-style)
-    ddgFirst: /^(what is|who is|what are|who are|define|meaning of|definition of|explain what|tell me about)\s/i,
-    
-    // Brave-first: Time-sensitive queries (skip DDG, go straight to Brave)
-    braveFirst: /\b(latest|recent|today|yesterday|this week|this month|2024|2025|breaking|current|now|news|update|price today)\b/i,
-    
-    // Groq-only: Complex reasoning, calculations, math, or creative tasks (skip search entirely)
-    groqOnly: /\b(analyze|compare|summarize|write|create|generate|explain how|step by step|think about|reason|help me|code|program|solve|integral|derivative|calculus|equation|formula|calculate|sin|cos|tan|log|sqrt|matrix|vector|probability|statistics)\b/i,
-    
-    // Nyan Protocol: Land/price/affordability topics (special handling, never cache)
-    nyanProtocol: /\b(land price|price.*income|income.*price|affordability|housing cost|fertility|700.*m²|land.*afford|city.*collapse|empire|extinction|inequality|φ|cycle|breath|fatalism|optimism)\b/i
-};
+// ===== GROQ-FIRST ARCHITECTURE =====
+// Philosophy: Let Groq answer first, audit the result, only search if audit REJECTED
+// Exception: Seed Metric (~nyan) queries need fresh data - search FIRST
+//
+// Flow:
+// 1. Is Seed Metric topic? → Search first → Generate → Audit
+// 2. Everything else → Generate (no search) → Audit →
+//    APPROVED/FIXABLE → Done
+//    REJECTED → Search → Regenerate → Audit → Done
+
+// Seed Metric topics (SINGLE SOURCE OF TRUTH - also used in nyan-protocol.js ROUTING section)
+const SEED_METRIC_TOPICS = [
+    'housing affordability',
+    'land affordability',
+    'seed metric',
+    'P/I ratio',
+    'price-to-income',
+    'price to income',
+    'fertility rate',
+    'fertility window',
+    'land price',
+    'price.*income',
+    'income.*price',
+    'housing cost',
+    '700.*m²',
+    'land.*afford',
+    'city.*collapse',
+    'empire.*collapse',
+    'extinction',
+    'fatalism',
+    'optimism.*land',
+    'φ',
+    'phi ratio'
+];
+
+// Build regex from topics (case insensitive)
+const SEED_METRIC_REGEX = new RegExp(
+    SEED_METRIC_TOPICS.map(t => `\\b${t.replace(/\s+/g, '\\s+')}\\b`).join('|'),
+    'i'
+);
+
+function isSeedMetricQuery(message) {
+    if (!message) return false;
+    return SEED_METRIC_REGEX.test(message);
+}
 
 function classifyQuery(message) {
     const trimmed = message.trim();
-    const isShort = trimmed.length < 80; // Only bypass compression for short queries
     
-    // Check Nyan Protocol first (special handling, always use Groq extraction)
-    if (QUERY_PATTERNS.nyanProtocol.test(trimmed)) {
-        return { type: 'nyan', searchStrategy: 'brave', skipCompression: false };
+    // ONLY exception: Seed Metric needs fresh data (land prices, income) - search first
+    if (isSeedMetricQuery(trimmed)) {
+        return { type: 'seed-metric', searchStrategy: 'brave', skipCompression: false };
     }
     
-    // Check Groq-only SECOND (math, reasoning, code) - NO search, LLM answers directly
-    // Must come BEFORE ddgFirst to catch "What is integral..." style math questions
-    if (QUERY_PATTERNS.groqOnly.test(trimmed)) {
-        return { type: 'groq-only', searchStrategy: 'none', skipCompression: false };
-    }
-    
-    // Check if Brave-first (time-sensitive) - still use search, just skip DDG
-    if (QUERY_PATTERNS.braveFirst.test(trimmed)) {
-        return { type: 'brave-first', searchStrategy: 'brave', skipCompression: isShort };
-    }
-    
-    // Check if DDG-first (simple facts) - only skip compression if SHORT
-    // Now checked AFTER groqOnly so math questions don't trigger search
-    if (QUERY_PATTERNS.ddgFirst.test(trimmed) && isShort) {
-        return { type: 'ddg-first', searchStrategy: 'ddg', skipCompression: true };
-    }
-    
-    // Default: Groq-first (no search) - LLM decides if it needs external data
-    // Only time-sensitive patterns (braveFirst) and nyanProtocol trigger search
-    return { type: 'default', searchStrategy: 'none', skipCompression: false };
+    // EVERYTHING ELSE: Groq-first (no search)
+    // Audit will tell us if the answer is good enough
+    // If REJECTED, we'll trigger search and regenerate
+    return { type: 'groq-first', searchStrategy: 'none', skipCompression: false };
 }
 
 // ===== DOCUMENT CONTEXT CACHE (Two-Tier: Session + Global) =====
@@ -6880,77 +6893,59 @@ app.post('/api/playground', async (req, res) => {
             ? history.filter(msg => msg && typeof msg === 'object' && msg.role && msg.content)
             : [];
         
-        // OPTIMIZED SEARCH CASCADE with Query Classification + Caching
+        // ===== GROQ-FIRST ARCHITECTURE =====
+        // Philosophy: Let Groq answer first, audit the result, only search if audit REJECTED
+        // Exception: Seed Metric (~nyan) queries need fresh data - search FIRST
         let searchContext = null;
-        let queryClass = { type: 'default', searchStrategy: 'cascade' };
+        let queryClass = { type: 'groq-first', searchStrategy: 'none' };
         let noSearchDisclaimer = false;
+        let searchQuery = null; // Store for potential retry after audit rejection
+        let wasGroqFirstQuery = false; // Track original routing for retry logic (preserved before mutations)
         
         // CLOSED-LOOP DETECTION: Skip web search for document analysis
         // Financial documents (Excel, PDF) contain user's own data - nothing to verify externally
         const isClosedLoopAnalysis = docList.length > 0;
         if (isClosedLoopAnalysis) {
-            queryClass.searchStrategy = 'none';
-            console.log(`📎 Document analysis mode: Skipping web search (closed-loop)`);
+            console.log(`📎 Document analysis mode: Closed-loop (no search needed)`);
         }
         
         if (message) {
-            // Step 0: Classify query to determine optimal routing
+            // Step 0: Classify query - only Seed Metric gets search upfront
             queryClass = classifyQuery(message);
+            
+            // PRESERVE original classification before any mutations
+            wasGroqFirstQuery = (queryClass.type === 'groq-first');
             
             // Override: Force 'none' for document analysis (closed-loop)
             if (isClosedLoopAnalysis) {
                 queryClass.searchStrategy = 'none';
+                queryClass.type = 'closed-loop';
+                wasGroqFirstQuery = false; // Closed-loop should never retry with search
             }
-            console.log(`🎯 Query classified as: ${queryClass.type} (strategy: ${queryClass.searchStrategy})`);
+            console.log(`🎯 Query classified as: ${queryClass.type} (initial strategy: ${queryClass.searchStrategy}, groq-first: ${wasGroqFirstQuery})`);
             
-            // Step 1: Route based on classification (saves 0.8s Groq compression for SHORT simple queries)
-            let searchQuery;
-            if (queryClass.skipCompression) {
-                // Direct routing for short simple queries
-                searchQuery = message.substring(0, 200);
-                console.log(`⚡ Direct routing (skipped Groq compression): "${searchQuery.substring(0, 50)}..."`);
-            } else {
-                // Use Groq extraction for long/complex queries
-                searchQuery = await extractCoreQuestion(message);
-                console.log(`🔍 Playground: Searching for: "${searchQuery.substring(0, 50)}..."`);
-            }
+            // Extract search query for Seed Metric OR for potential retry
+            searchQuery = await extractCoreQuestion(message);
+            console.log(`🔍 Search query prepared: "${searchQuery.substring(0, 50)}..."`);
             
-            // Step 2: Execute search based on strategy (skip for 'none' = closed-loop)
-            if (searchQuery && queryClass.searchStrategy !== 'none') {
-                if (queryClass.searchStrategy === 'ddg') {
-                    // DDG-first: try DDG, fallback to Brave
+            // Step 1: ONLY Seed Metric gets search upfront (needs fresh land/income data)
+            // All other queries: Groq answers first, search only if audit REJECTED
+            if (queryClass.type === 'seed-metric' && searchQuery) {
+                console.log(`🌱 Seed Metric detected: Search FIRST (needs fresh data)`);
+                searchContext = await searchBrave(searchQuery, clientIp);
+                if (!searchContext) {
+                    console.log(`🔄 Brave returned nothing, trying DDG fallback...`);
                     searchContext = await searchDuckDuckGo(searchQuery);
-                    if (!searchContext) {
-                        console.log(`🔄 DDG returned nothing, trying Brave fallback...`);
-                        searchContext = await searchBrave(searchQuery, clientIp);
-                    }
-                } else if (queryClass.searchStrategy === 'brave') {
-                    // Brave-first: skip DDG for time-sensitive/Nyan queries
-                    console.log(`⚡ Brave-first mode (${queryClass.type})`);
-                    searchContext = await searchBrave(searchQuery, clientIp);
-                    // Smart retry: if Brave returned nothing, try DDG
-                    if (!searchContext) {
-                        console.log(`🔄 Brave returned nothing, trying DDG fallback...`);
-                        searchContext = await searchDuckDuckGo(searchQuery);
-                    }
-                } else {
-                    // Default cascade: DDG → Brave
-                    searchContext = await searchDuckDuckGo(searchQuery);
-                    if (!searchContext) {
-                        console.log(`🔄 DDG returned nothing, trying Brave fallback...`);
-                        searchContext = await searchBrave(searchQuery, clientIp);
-                    }
                 }
-                
-                // Smart retry: if all search failed, try simplified query on DDG
                 if (!searchContext) {
                     const coreWords = searchQuery.split(/\s+/).slice(0, 5).join(' ');
                     console.log(`🔄 All search failed, trying DDG with core words: "${coreWords}"`);
                     searchContext = await searchDuckDuckGo(coreWords);
                 }
             }
+            // For groq-first: NO search here - will search only if audit rejects
             
-            // Inject context or add disclaimer
+            // Inject context if we have it (Seed Metric path)
             if (searchContext) {
                 finalPrompt = `REAL-TIME WEB SEARCH RESULTS (USE THIS DATA - it overrides your knowledge cutoff):
 ${searchContext}
@@ -6959,11 +6954,8 @@ INSTRUCTION: Extract the relevant facts from the search results above to answer 
 
 User query: ${message}`;
                 console.log(`✅ Search context injected into prompt for knowledge augmentation`);
-            } else if (queryClass.searchStrategy !== 'none') {
-                // No search results - add disclaimer about knowledge cutoff
-                noSearchDisclaimer = true;
-                console.log(`⚠️ No search results - will add knowledge cutoff disclaimer`);
             }
+            // For groq-first: finalPrompt stays as original message
         }
         
         // File size limits (base64 encoded)
@@ -7499,9 +7491,8 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         
         let reply = groqResponse.data.choices[0]?.message?.content || 'No response generated.';
         
-        // ===== TWO-PASS VERIFICATION: O(1) + audit(O(1)) =====
-        // Inspired by Replit's Architect review pattern
-        // NYAN Protocol guides LLM routing decision (ROUTING section in system prompt)
+        // ===== GROQ-FIRST TWO-PASS VERIFICATION =====
+        // Flow: Generate → Audit → if REJECTED & groq-first → Search → Regenerate → Audit
         
         const hasNoDocuments = extractedContent.length === 0;
         
@@ -7512,42 +7503,134 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         const { isFalseDichotomy } = require('./prompts/audit-protocol');
         const isTetralemmaQuery = isFalseDichotomy(effectiveMessage || message);
         
-        // TWO-MODE AUDIT ROUTING (simplified):
+        // TWO-MODE AUDIT ROUTING:
         // - STRICT: Only when user uploads documents (PDF/Word/Excel) - requires source quotes
-        // - RESEARCH: Everything else (news, Seed Metric, tetralemma, philosophy, general) - allows web search + LLM knowledge
+        // - RESEARCH: Everything else - allows web search + LLM knowledge
         let auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
         
         let auditMetadata = null;
         let auditBadge = 'unverified';
+        let didSearchRetry = false; // Track if we've already done search retry
         
         try {
             const auditExtensions = [];
             if (isSeedMetricAnalysis) auditExtensions.push('🐱 Seed Metric');
             if (isTetralemmaQuery) auditExtensions.push('☯️ Tetralemma');
             console.log(`🔍 Two-Pass: Running verification audit (${auditMode} mode)${auditExtensions.length ? ' ' + auditExtensions.join(' ') : ''}...`);
-            const verificationResult = await runVerifiedAnswer({
+            
+            let verificationResult = await runVerifiedAnswer({
                 groqToken: PLAYGROUND_GROQ_TOKEN,
                 draftAnswer: reply,
                 originalQuery: effectiveMessage || finalPrompt,
                 userContext: extractedContent.length > 0 ? extractedContent.join('\n') : searchContext,
-                usesFinancialPhysics: hasFinanceContext, // Both doc uploads AND text-based finance queries
-                usesChemistry: false, // TODO: detect chemistry queries
-                usesLegalAnalysis: hasLegalContext, // Word/PDF with legal keywords
-                isSeedMetric: isSeedMetricAnalysis, // Detected from ~nyan ending
-                isTetralemma: isTetralemmaQuery, // Detected from false dichotomy patterns
-                auditMode, // RESEARCH | STRICT
-                maxTokens, // Pass through for correction pass to match original response limit
+                usesFinancialPhysics: hasFinanceContext,
+                usesChemistry: false,
+                usesLegalAnalysis: hasLegalContext,
+                isSeedMetric: isSeedMetricAnalysis,
+                isTetralemma: isTetralemmaQuery,
+                auditMode,
+                maxTokens,
                 timeout: 12000
             });
+            
+            // ===== GROQ-FIRST RETRY LOGIC =====
+            // If REJECTED and this was originally a groq-first query (no prior search), try with search
+            // Uses preserved flag wasGroqFirstQuery (set before any mutations to queryClass)
+            const wasRejected = verificationResult.auditMetadata?.verdict === 'REJECTED';
+            const canRetry = wasGroqFirstQuery && wasRejected && searchQuery && !isClosedLoopAnalysis;
+            
+            if (canRetry) {
+                console.log(`🔄 Groq-First REJECTED: Triggering search retry...`);
+                didSearchRetry = true;
+                
+                // Execute search cascade
+                let retrySearchContext = await searchBrave(searchQuery, clientIp);
+                if (!retrySearchContext) {
+                    console.log(`🔄 Brave returned nothing, trying DDG fallback...`);
+                    retrySearchContext = await searchDuckDuckGo(searchQuery);
+                }
+                if (!retrySearchContext) {
+                    const coreWords = searchQuery.split(/\s+/).slice(0, 5).join(' ');
+                    console.log(`🔄 All search failed, trying DDG with core words: "${coreWords}"`);
+                    retrySearchContext = await searchDuckDuckGo(coreWords);
+                }
+                
+                if (retrySearchContext) {
+                    console.log(`✅ Search context found (${retrySearchContext.length} chars) - Regenerating...`);
+                    searchContext = retrySearchContext;
+                    
+                    // Rebuild prompt with search context
+                    const retryPrompt = `REAL-TIME WEB SEARCH RESULTS (USE THIS DATA - it overrides your knowledge cutoff):
+${retrySearchContext}
+
+INSTRUCTION: Extract the relevant facts from the search results above to answer the user's question. Do NOT say "no data" or mention knowledge cutoff.
+
+User query: ${message}`;
+                    
+                    // Regenerate with search context
+                    const retryMessages = [
+                        ...systemMessages,
+                        ...conversationContext,
+                        { role: 'user', content: retryPrompt }
+                    ];
+                    
+                    const retryResponse = await groqWithRetry({
+                        url: 'https://api.groq.com/openai/v1/chat/completions',
+                        data: {
+                            model: 'llama-3.3-70b-versatile',
+                            messages: retryMessages,
+                            temperature,
+                            max_tokens: maxTokens,
+                            top_p: 0.95
+                        },
+                        config: {
+                            headers: {
+                                'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            },
+                            timeout: 15000
+                        }
+                    }, 3, 'text');
+                    
+                    const retryReply = retryResponse.data.choices[0]?.message?.content || reply;
+                    console.log(`🔄 Regenerated answer (${retryReply.length} chars) - Re-auditing...`);
+                    
+                    // Re-audit the regenerated answer
+                    const retrySeedMetric = retryReply.includes('~nyan');
+                    verificationResult = await runVerifiedAnswer({
+                        groqToken: PLAYGROUND_GROQ_TOKEN,
+                        draftAnswer: retryReply,
+                        originalQuery: effectiveMessage || retryPrompt,
+                        userContext: retrySearchContext,
+                        usesFinancialPhysics: hasFinanceContext,
+                        usesChemistry: false,
+                        usesLegalAnalysis: hasLegalContext,
+                        isSeedMetric: retrySeedMetric,
+                        isTetralemma: isTetralemmaQuery,
+                        auditMode,
+                        maxTokens,
+                        timeout: 12000
+                    });
+                    
+                    console.log(`🔍 Retry audit: ${verificationResult.auditMetadata?.verdict} (${verificationResult.auditMetadata?.confidence}% conf)`);
+                } else {
+                    console.log(`⚠️ Search retry failed - no results found`);
+                    noSearchDisclaimer = true;
+                }
+            }
             
             reply = verificationResult.finalAnswer;
             auditMetadata = verificationResult.auditMetadata;
             auditBadge = verificationResult.badge;
             
-            console.log(`🔍 Two-Pass: ${auditMetadata.verdict} (${auditMetadata.confidence}% conf, ${auditMetadata.passCount} pass${auditMetadata.passCount > 1 ? 'es' : ''}, ${auditMetadata.latencyMs}ms)`);
+            // Add retry flag to metadata
+            if (didSearchRetry) {
+                auditMetadata.didSearchRetry = true;
+            }
+            
+            console.log(`🔍 Two-Pass: ${auditMetadata.verdict} (${auditMetadata.confidence}% conf, ${auditMetadata.passCount} pass${auditMetadata.passCount > 1 ? 'es' : ''}, ${auditMetadata.latencyMs}ms)${didSearchRetry ? ' [+search retry]' : ''}`);
         } catch (verifyError) {
             console.error('⚠️ Two-Pass verification error:', verifyError.message);
-            // Continue with unverified answer on verification failure
             auditMetadata = {
                 verdict: 'BYPASS',
                 confidence: 0,
