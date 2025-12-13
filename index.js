@@ -6397,8 +6397,8 @@ const QUERY_PATTERNS = {
     // Brave-first: Time-sensitive queries (skip DDG, go straight to Brave)
     braveFirst: /\b(latest|recent|today|yesterday|this week|this month|2024|2025|breaking|current|now|news|update|price today)\b/i,
     
-    // Groq-only: Complex reasoning, calculations, or creative tasks (skip search entirely)
-    groqOnly: /\b(analyze|compare|summarize|write|create|generate|explain how|step by step|think about|reason|help me|code|program|solve)\b/i,
+    // Groq-only: Complex reasoning, calculations, math, or creative tasks (skip search entirely)
+    groqOnly: /\b(analyze|compare|summarize|write|create|generate|explain how|step by step|think about|reason|help me|code|program|solve|integral|derivative|calculus|equation|formula|calculate|sin|cos|tan|log|sqrt|matrix|vector|probability|statistics)\b/i,
     
     // Nyan Protocol: Land/price/affordability topics (special handling, never cache)
     nyanProtocol: /\b(land price|price.*income|income.*price|affordability|housing cost|fertility|700.*m²|land.*afford|city.*collapse|empire|extinction|inequality|φ|cycle|breath|fatalism|optimism)\b/i
@@ -6413,9 +6413,10 @@ function classifyQuery(message) {
         return { type: 'nyan', searchStrategy: 'brave', skipCompression: false };
     }
     
-    // Check if DDG-first (simple facts) - only skip compression if SHORT
-    if (QUERY_PATTERNS.ddgFirst.test(trimmed) && isShort) {
-        return { type: 'ddg-first', searchStrategy: 'ddg', skipCompression: true };
+    // Check Groq-only SECOND (math, reasoning, code) - NO search, LLM answers directly
+    // Must come BEFORE ddgFirst to catch "What is integral..." style math questions
+    if (QUERY_PATTERNS.groqOnly.test(trimmed)) {
+        return { type: 'groq-only', searchStrategy: 'none', skipCompression: false };
     }
     
     // Check if Brave-first (time-sensitive) - still use search, just skip DDG
@@ -6423,9 +6424,10 @@ function classifyQuery(message) {
         return { type: 'brave-first', searchStrategy: 'brave', skipCompression: isShort };
     }
     
-    // Check if Groq-only (complex reasoning) - NO search, LLM answers directly
-    if (QUERY_PATTERNS.groqOnly.test(trimmed)) {
-        return { type: 'groq-only', searchStrategy: 'none', skipCompression: false };
+    // Check if DDG-first (simple facts) - only skip compression if SHORT
+    // Now checked AFTER groqOnly so math questions don't trigger search
+    if (QUERY_PATTERNS.ddgFirst.test(trimmed) && isShort) {
+        return { type: 'ddg-first', searchStrategy: 'ddg', skipCompression: true };
     }
     
     // Default: Groq-first (no search) - LLM decides if it needs external data
