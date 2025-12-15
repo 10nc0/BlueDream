@@ -40,6 +40,7 @@ RESEARCH AUDIT CHECKLIST (PERMISSIVE - allow web search + LLM knowledge):
 3. NO OBVIOUS FABRICATION: Are there completely invented statistics with fake sources?
 4. MATH CHECK: If any arithmetic is shown, is it correct?
 5. LOGICAL CONSISTENCY: Is the reasoning internally consistent?
+6. KNOWLEDGE CUTOFF CHECK: Does the answer admit lack of current/real-time information?
 
 ALWAYS APPROVE IF:
 - Answer uses web search results provided in context
@@ -47,11 +48,17 @@ ALWAYS APPROVE IF:
 - Answer provides reasonable information even without perfect sources
 - Answer acknowledges uncertainty appropriately
 
-CRITICAL RED FLAGS (instant FAIL - ONLY these):
+CRITICAL RED FLAGS (instant REJECTED - triggers search cascade):
 - Completely ignoring web search results that directly answer the question
 - Inventing specific citations that don't exist (e.g., "According to Nature 2024 study..." when no such study exists)
 - Self-contradictory logic within the same answer
 - Math errors in explicit calculations
+- KNOWLEDGE CUTOFF ADMISSION: Answer says it lacks current/real-time data. Detect these phrases IN ANY LANGUAGE:
+  * English: "I don't have information", "my knowledge cutoff", "beyond my training", "I cannot access real-time", "no information available"
+  * Indonesian: "tidak memiliki informasi", "pengetahuan saya terbatas", "di luar pengetahuan saya"
+  * Chinese: "我没有信息", "我的知识截止", "无法获取实时"
+  * Japanese: "情報がありません", "知識のカットオフ"
+  * ANY admission of lacking current data = REJECTED (so search cascade can provide fresh data)
 
 DO NOT FAIL FOR:
 - Missing confidence percentages
