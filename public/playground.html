@@ -357,6 +357,38 @@
             color: #22c55e;
         }
         
+        .message.streaming .streaming-content {
+            min-height: 1.5rem;
+        }
+        
+        .typing-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 1.1em;
+            background: linear-gradient(135deg, #a78bfa, #3b82f6);
+            border-radius: 2px;
+            margin-left: 2px;
+            animation: blink 0.8s ease-in-out infinite;
+            vertical-align: text-bottom;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.2; }
+        }
+        
+        @media (max-width: 640px) {
+            .typing-cursor {
+                width: 6px;
+                height: 1em;
+            }
+        }
+        
+        .audit-badge-placeholder {
+            height: 0;
+            margin: 0;
+        }
+        
         .message .attachment {
             margin-top: 0.5rem;
             padding: 0.5rem;

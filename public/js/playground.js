@@ -668,6 +668,118 @@ function removeLoadingMessage() {
     if (loading) loading.remove();
 }
 
+let streamingTextBuffer = '';
+
+function addStreamingMessage() {
+    const welcome = messagesEl.querySelector('.welcome');
+    if (welcome) welcome.remove();
+    
+    streamingTextBuffer = '';
+    
+    const msgEl = document.createElement('div');
+    msgEl.className = 'message assistant streaming';
+    msgEl.id = 'streamingMessage';
+    msgEl.innerHTML = `
+        <div class="label">Nyan AI</div>
+        <div class="audit-badge-placeholder"></div>
+        <button class="copy-btn" title="Copy to clipboard">📋 Copy</button>
+        <div class="content streaming-content"><span class="typing-cursor"></span></div>
+    `;
+    messagesEl.appendChild(msgEl);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return msgEl;
+}
+
+function updateStreamingContent(token) {
+    const streamingEl = document.getElementById('streamingMessage');
+    if (!streamingEl) return;
+    
+    const contentEl = streamingEl.querySelector('.streaming-content');
+    if (!contentEl) return;
+    
+    streamingTextBuffer += token;
+    
+    const textNode = document.createTextNode(streamingTextBuffer);
+    const cursorSpan = document.createElement('span');
+    cursorSpan.className = 'typing-cursor';
+    
+    contentEl.innerHTML = '';
+    contentEl.appendChild(textNode);
+    contentEl.appendChild(cursorSpan);
+    
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function finalizeStreamingMessage(fullContent, auditData) {
+    const streamingEl = document.getElementById('streamingMessage');
+    if (!streamingEl) return;
+    
+    streamingEl.classList.remove('streaming');
+    streamingEl.id = '';
+    streamingTextBuffer = '';
+    
+    const contentEl = streamingEl.querySelector('.streaming-content');
+    contentEl.innerHTML = '';
+    
+    if (contentEl && typeof marked !== 'undefined') {
+        try {
+            const safeContent = fullContent.replace(/nyan~/g, 'nyan\\~');
+            contentEl.innerHTML = marked.parse(safeContent, { breaks: true, gfm: true });
+        } catch (err) {
+            contentEl.textContent = fullContent;
+        }
+    }
+    
+    if (auditData) {
+        const badgePlaceholder = streamingEl.querySelector('.audit-badge-placeholder');
+        if (badgePlaceholder) {
+            const badgeColors = {
+                verified: { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 0.4)', icon: '🟢', text: 'Verified' },
+                corrected: { bg: 'rgba(234, 179, 8, 0.2)', border: 'rgba(234, 179, 8, 0.4)', icon: '🟡', text: 'Corrected' },
+                refused: { bg: 'rgba(239, 68, 68, 0.2)', border: 'rgba(239, 68, 68, 0.4)', icon: '🔴', text: 'Refused' },
+                unverified: { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.4)', icon: '⚪', text: 'Unverified' },
+                bypass: { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.4)', icon: '⚪', text: 'Bypass' }
+            };
+            const badge = badgeColors[auditData.badge] || badgeColors.unverified;
+            const confidence = auditData.confidence || 0;
+            
+            badgePlaceholder.outerHTML = `<div class="audit-badge" style="background: ${badge.bg}; border: 1px solid ${badge.border}; border-radius: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 0.25rem; margin-bottom: 0.5rem;">
+                <span>${badge.icon}</span>
+                <span>${badge.text}</span>
+                <span style="opacity: 0.7;">(${confidence}%)</span>
+            </div>`;
+        }
+    }
+    
+    const copyBtn = streamingEl.querySelector('.copy-btn');
+    if (copyBtn) {
+        copyBtn.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(fullContent);
+                copyBtn.textContent = '✓ Copied';
+                copyBtn.classList.add('copied');
+                setTimeout(() => {
+                    copyBtn.textContent = '📋 Copy';
+                    copyBtn.classList.remove('copied');
+                }, 2000);
+            } catch (err) {
+                copyBtn.textContent = '❌ Failed';
+                setTimeout(() => copyBtn.textContent = '📋 Copy', 2000);
+            }
+        });
+    }
+}
+
+function updateThinkingStage(stage) {
+    const streamingEl = document.getElementById('streamingMessage');
+    if (!streamingEl) return;
+    
+    const contentEl = streamingEl.querySelector('.streaming-content');
+    if (contentEl && contentEl.textContent.trim() === '') {
+        contentEl.innerHTML = `<span style="color: #94a3b8; font-size: 0.875rem;">${stage}</span><span class="typing-cursor"></span>`;
+    }
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -738,7 +850,6 @@ async function sendMessage() {
         return;
     }
     
-    // Auto-collapse keyboard on mobile (Android UX improvement)
     if (messageInput.blur) {
         messageInput.blur();
     }
@@ -749,7 +860,6 @@ async function sendMessage() {
     const userMessageText = message || `(Analyzing ${attachments.length} attachment${attachments.length > 1 ? 's' : ''})`;
     addMessage('user', userMessageText, [...attachments]);
     
-    // Store message with attachment metadata for context retention
     const attachmentMetadata = attachments.map(a => ({
         name: a.name,
         type: a.type
@@ -759,29 +869,24 @@ async function sendMessage() {
         content: userMessageText,
         attachments: attachmentMetadata.length > 0 ? attachmentMetadata : undefined
     });
-    saveConversationHistory();  // Persist immediately after user message
+    saveConversationHistory();
     messageInput.value = '';
-    messageInput.style.height = '44px'; // Reset to min height
+    messageInput.style.height = '44px';
     
-    // Build payload with arrays for multi-file support
     const payload = { 
         message,
         history: conversationHistory
     };
     
-    // Save attachments snapshot and clear UI early
     const savedAttachments = [...attachments];
     clearAllAttachments();
-    addLoadingMessage();
     
-    // Use ZIP for 2+ attachments (bandwidth optimization)
     if (savedAttachments.length >= 2) {
         try {
             const zipData = await createAttachmentsZip(savedAttachments);
             if (zipData) {
                 payload.zipData = zipData;
             } else {
-                // Fallback to uncompressed if ZIP fails
                 addUncompressedAttachments(payload, savedAttachments);
             }
         } catch (zipErr) {
@@ -789,65 +894,91 @@ async function sendMessage() {
             addUncompressedAttachments(payload, savedAttachments);
         }
     } else if (savedAttachments.length === 1) {
-        // Single file - no ZIP overhead
         addUncompressedAttachments(payload, savedAttachments);
     }
     
-    // Include cached file hashes for follow-up queries (no need to re-upload)
     if (savedAttachments.length === 0 && cachedFileHashes.length > 0) {
         payload.cachedFileHashes = cachedFileHashes;
         console.log(`📂 Sending ${cachedFileHashes.length} cached file hash(es) for follow-up`);
     }
     
+    addStreamingMessage();
+    
     try {
-        const res = await fetch('/api/playground', {
+        const res = await fetch('/api/playground/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         
-        removeLoadingMessage();
-        
-        const data = await res.json();
-        
         if (!res.ok) {
-            const reply = data.reply || 'An error occurred. Please try again.';
-            addMessage('assistant', reply, [], data.audit || null);
-        } else {
-            const reply = data.reply;
-            const auditData = data.audit || null;
-            addMessage('assistant', reply, [], auditData);
-            conversationHistory.push({ role: 'assistant', content: reply, audit: auditData });
-            saveConversationHistory();  // Persist to localStorage
+            const streamingEl = document.getElementById('streamingMessage');
+            if (streamingEl) streamingEl.remove();
+            const errorData = await res.json().catch(() => ({}));
+            addMessage('assistant', errorData.reply || 'An error occurred. Please try again.');
+            isProcessing = false;
+            sendBtn.disabled = false;
+            return;
+        }
+        
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullContent = '';
+        let auditData = null;
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
             
-            // Log verification result
-            if (auditData) {
-                console.log(`🔍 Two-Pass: ${auditData.verdict} (${auditData.confidence}% confidence, ${auditData.passCount} passes)`);
-            }
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
             
-            // Store file hashes for follow-up queries (session-scoped attachment retention)
-            if (data.cachedFileHashes && data.cachedFileHashes.length > 0) {
-                cachedFileHashes = data.cachedFileHashes;
-                console.log(`📂 Stored ${cachedFileHashes.length} file hash(es) for follow-up queries`);
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const jsonStr = line.slice(6).trim();
+                    if (!jsonStr || jsonStr === '[DONE]') continue;
+                    
+                    try {
+                        const data = JSON.parse(jsonStr);
+                        
+                        if (data.type === 'thinking') {
+                            updateThinkingStage(data.stage);
+                        } else if (data.type === 'audit') {
+                            auditData = data.audit;
+                        } else if (data.type === 'token') {
+                            updateStreamingContent(data.content);
+                            fullContent += data.content;
+                        } else if (data.type === 'done') {
+                            fullContent = data.fullContent || fullContent;
+                            finalizeStreamingMessage(fullContent, auditData);
+                            
+                            conversationHistory.push({ role: 'assistant', content: fullContent, audit: auditData });
+                            saveConversationHistory();
+                            
+                            if (auditData) {
+                                console.log(`🌊 Streaming: ${auditData.verdict} (${auditData.confidence}% confidence, ${auditData.passCount} passes)`);
+                            }
+                        } else if (data.type === 'error') {
+                            const streamingEl = document.getElementById('streamingMessage');
+                            if (streamingEl) streamingEl.remove();
+                            addMessage('assistant', data.message || 'An error occurred.');
+                        }
+                    } catch (e) {
+                        console.warn('SSE parse error:', e);
+                    }
+                }
             }
         }
         
-        // Enrich history payload with attachment metadata for next turn
-        if (conversationHistory.length > 0) {
-            payload.contextAttachments = conversationHistory
-                .filter(msg => msg.attachments)
-                .map((msg, idx) => ({
-                    messageIndex: idx,
-                    attachments: msg.attachments
-                }));
-        }
     } catch (err) {
-        removeLoadingMessage();
-        const reply = 'Connection error. Please check your internet and try again.';
-        addMessage('assistant', reply);
+        console.error('Streaming error:', err);
+        const streamingEl = document.getElementById('streamingMessage');
+        if (streamingEl) streamingEl.remove();
+        addMessage('assistant', 'Connection error. Please check your internet and try again.');
     }
     
-    // Auto-scroll to bottom after assistant reply
     setTimeout(() => {
         messagesEl.scrollTop = messagesEl.scrollHeight;
     }, 100);

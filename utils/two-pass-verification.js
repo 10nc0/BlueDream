@@ -306,6 +306,125 @@ async function runPersonalityPass(groqToken, verifiedAnswer, originalQuery, time
   }
 }
 
+/**
+ * Streaming Personality Pass - sends tokens as they're generated via SSE
+ * @param {object} res - Express response object (SSE-enabled)
+ * @param {string} groqToken - Groq API token
+ * @param {string} verifiedAnswer - Verified answer to reformat
+ * @param {string} originalQuery - Original user query
+ * @param {object} auditMetadata - Audit metadata to send before streaming
+ * @returns {Promise<string>} - Complete formatted response
+ */
+async function runStreamingPersonalityPass(res, groqToken, verifiedAnswer, originalQuery, auditMetadata, isClientDisconnected = () => false) {
+  const personalityPrompt = buildPersonalityPrompt();
+  const userMessage = buildPersonalityUserMessage(verifiedAnswer, originalQuery);
+
+  try {
+    const response = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: personalityPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: PERSONALITY_TEMPERATURE,
+        max_tokens: 2000,
+        stream: true
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${groqToken}`,
+          'Content-Type': 'application/json'
+        },
+        responseType: 'stream',
+        timeout: 60000
+      }
+    );
+
+    let fullContent = '';
+    
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
+    }
+
+    return new Promise((resolve, reject) => {
+      let buffer = '';
+      let destroyed = false;
+      
+      const cleanup = () => {
+        if (!destroyed) {
+          destroyed = true;
+          try { response.data.destroy(); } catch (e) {}
+        }
+      };
+      
+      res.on('close', () => {
+        console.log('🌊 Client closed connection, cleaning up Groq stream');
+        cleanup();
+        resolve(fullContent);
+      });
+      
+      response.data.on('data', (chunk) => {
+        if (destroyed || isClientDisconnected() || res.writableEnded) {
+          cleanup();
+          return;
+        }
+        
+        buffer += chunk.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+            
+            try {
+              const parsed = JSON.parse(data);
+              const delta = parsed.choices?.[0]?.delta?.content;
+              if (delta && !res.writableEnded && !destroyed) {
+                fullContent += delta;
+                res.write(`data: ${JSON.stringify({ type: 'token', content: delta })}\n\n`);
+              }
+            } catch (e) {
+              // Skip malformed JSON chunks
+            }
+          }
+        }
+      });
+
+      response.data.on('end', () => {
+        if (!res.writableEnded && !destroyed) {
+          res.write(`data: ${JSON.stringify({ type: 'done', fullContent })}\n\n`);
+          res.end();
+        }
+        console.log(`✨ Pass 3 (Streaming Personality): ${fullContent.length} chars streamed`);
+        resolve(fullContent);
+      });
+
+      response.data.on('error', (err) => {
+        console.error('⚠️ Streaming personality error:', err.message);
+        cleanup();
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ type: 'error', message: err.message })}\n\n`);
+          res.end();
+        }
+        reject(err);
+      });
+    });
+  } catch (error) {
+    console.warn('⚠️ Streaming personality failed, sending unformatted:', error.message);
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
+      res.end();
+    }
+    return verifiedAnswer;
+  }
+}
+
 function buildRefusalMessage(issues) {
   const criticalIssues = issues.filter(i => i.severity === 'CRITICAL');
   
@@ -348,6 +467,7 @@ module.exports = {
   runAuditPass,
   runCorrectivePass,
   runPersonalityPass,
+  runStreamingPersonalityPass,
   buildRefusalMessage,
   formatAuditBadge
 };

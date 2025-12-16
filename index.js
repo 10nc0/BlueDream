@@ -32,7 +32,7 @@ const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('./prompts/nyan-protocol');
 const { getLegalAnalysisSeed, detectLegalDocument, LEGAL_KEYWORDS_REGEX } = require('./prompts/legal-analysis');
-const { runVerifiedAnswer, formatAuditBadge } = require('./utils/two-pass-verification');
+const { runVerifiedAnswer, formatAuditBadge, runStreamingPersonalityPass, runAuditPass } = require('./utils/two-pass-verification');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
@@ -7698,6 +7698,267 @@ User query: ${message}`;
         res.status(500).json({ 
             reply: 'An error occurred. Please try again.' 
         });
+    }
+});
+
+// ============================================================================
+// STREAMING PLAYGROUND ENDPOINT (SSE)
+// Streams tokens as they're generated for "watching it think" UX
+// ============================================================================
+app.post('/api/playground/stream', async (req, res) => {
+    const clientIp = req.ip || req.connection.remoteAddress;
+    
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    let isClientDisconnected = false;
+    res.on('close', () => {
+        isClientDisconnected = true;
+        console.log(`🌊 Client disconnected: ${clientIp}`);
+    });
+
+    capacityManager.recordActivity(clientIp);
+    
+    try {
+        let { message, photos, audios, documents, history, zipData } = req.body;
+        let finalPrompt = message || '';
+        let extractedContent = [];
+        
+        // Extract attachments from ZIP if present
+        if (zipData) {
+            try {
+                const zipBuffer = Buffer.from(zipData, 'base64');
+                const zip = await JSZip.loadAsync(zipBuffer);
+                const manifestFile = zip.file('manifest.json');
+                
+                if (manifestFile) {
+                    const manifestContent = await manifestFile.async('string');
+                    const manifest = JSON.parse(manifestContent);
+                    photos = photos || [];
+                    audios = audios || [];
+                    documents = documents || [];
+                    
+                    for (const entry of manifest) {
+                        const fileContent = await zip.file(entry.filename)?.async('base64');
+                        if (!fileContent) continue;
+                        const dataUrl = `data:${entry.mimeType};base64,${fileContent}`;
+                        if (entry.type === 'photo') photos.push(dataUrl);
+                        else if (entry.type === 'audio') audios.push({ data: dataUrl, source: entry.source });
+                        else if (entry.type === 'document') documents.push({ data: dataUrl, name: entry.originalName });
+                    }
+                }
+            } catch (zipErr) {
+                console.error('❌ ZIP extraction failed:', zipErr.message);
+            }
+        }
+        
+        // Normalize to arrays
+        const photoList = photos || [];
+        const audioList = audios || [];
+        const docList = documents || [];
+        
+        // Validation
+        if (!message?.trim() && photoList.length === 0 && audioList.length === 0 && docList.length === 0) {
+            res.write(`data: ${JSON.stringify({ type: 'error', message: 'Please enter text or upload a file.' })}\n\n`);
+            return res.end();
+        }
+        
+        // Check capacity
+        const textCapacity = await capacityManager.consumeToken(clientIp, 'text');
+        if (!textCapacity.allowed) {
+            res.write(`data: ${JSON.stringify({ type: 'error', message: capacityManager.getNyanRestMessage(textCapacity.replenishMinutes || 1) })}\n\n`);
+            return res.end();
+        }
+        
+        console.log(`🌊 Streaming: Request from ${clientIp}`);
+        
+        // Send thinking indicator
+        res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Generating response...' })}\n\n`);
+        
+        // Process photos (simplified for streaming - first photo only for vision)
+        if (photoList.length > 0 && PLAYGROUND_GROQ_VISION_TOKEN) {
+            try {
+                const photoData = photoList[0];
+                const visionResponse = await axios.post(
+                    'https://api.groq.com/openai/v1/chat/completions',
+                    {
+                        model: 'llama-4-scout-17b-16e-instruct',
+                        messages: [{
+                            role: 'user',
+                            content: [
+                                { type: 'text', text: message || 'Describe this image in detail.' },
+                                { type: 'image_url', image_url: { url: photoData } }
+                            ]
+                        }],
+                        temperature: 0.15,
+                        max_tokens: 1500
+                    },
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${PLAYGROUND_GROQ_VISION_TOKEN}`,
+                            'Content-Type': 'application/json'
+                        },
+                        timeout: 20000
+                    }
+                );
+                extractedContent.push(`[Image analysis]: ${visionResponse.data.choices[0]?.message?.content || ''}`);
+            } catch (visionErr) {
+                console.error('❌ Vision error:', visionErr.message);
+            }
+        }
+        
+        // Process documents
+        if (docList.length > 0) {
+            for (const doc of docList) {
+                try {
+                    const docName = doc.name || 'document';
+                    const base64Data = doc.data.split(',')[1] || doc.data;
+                    const buffer = Buffer.from(base64Data, 'base64');
+                    const fileType = detectDocumentType(buffer, docName);
+                    const cascadeResult = await extractDocumentWithCascade(buffer, fileType.type, fileType.mimeType, docName);
+                    if (cascadeResult.success && cascadeResult.jsonOutput) {
+                        extractedContent.push(`[Document: ${docName}]: ${formatJSONForGroq(cascadeResult, '')}`);
+                    }
+                } catch (docErr) {
+                    console.error('❌ Doc error:', docErr.message);
+                }
+            }
+        }
+        
+        // Build conversation context
+        const conversationContext = (history || [])
+            .filter(msg => msg.role && msg.content)
+            .slice(-16)
+            .map(msg => ({ role: msg.role, content: msg.content }));
+        
+        // Combine extracted content
+        if (extractedContent.length > 0) {
+            finalPrompt = `Attachments analyzed:\n${extractedContent.join('\n\n')}\n\nUser query: ${message || 'Analyze this content.'}`;
+        }
+        
+        const hasDocumentAnalysis = docList.length > 0 || extractedContent.length > 0;
+        const hasFinancialDoc = docList.some(d => d.name?.match(/\.(xlsx|xls)$/i));
+        const hasLegalDoc = docList.some(d => LEGAL_KEYWORDS_REGEX.test(d.name || ''));
+        
+        // Build messages
+        const systemMessages = [{ role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT }];
+        if (hasFinancialDoc) systemMessages.push({ role: 'system', content: getFinancialPhysicsSeed() });
+        if (hasLegalDoc) systemMessages.push({ role: 'system', content: getLegalAnalysisSeed() });
+        
+        const messages = [
+            ...systemMessages,
+            ...conversationContext,
+            { role: 'user', content: finalPrompt }
+        ];
+        
+        res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Processing with AI...' })}\n\n`);
+        
+        // Generate draft (non-streaming)
+        const groqResponse = await groqWithRetry({
+            url: 'https://api.groq.com/openai/v1/chat/completions',
+            data: {
+                model: 'llama-3.3-70b-versatile',
+                messages,
+                temperature: hasFinancialDoc ? 0.3 : 0.15,
+                max_tokens: hasDocumentAnalysis ? 4000 : 1500,
+                top_p: 0.95
+            },
+            config: {
+                headers: {
+                    'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15000
+            }
+        }, 3, 'text');
+        
+        const draftAnswer = groqResponse.data.choices[0]?.message?.content || 'No response generated.';
+        
+        res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Verifying response...' })}\n\n`);
+        
+        // Run audit pass
+        const hasNoDocuments = extractedContent.length === 0;
+        const isSeedMetricAnalysis = draftAnswer.includes('~nyan');
+        const { isFalseDichotomy } = require('./prompts/audit-protocol');
+        const isTetralemmaQuery = isFalseDichotomy(message);
+        const auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
+        
+        let auditResult;
+        try {
+            auditResult = await runAuditPass(
+                PLAYGROUND_GROQ_TOKEN,
+                draftAnswer,
+                message || finalPrompt,
+                extractedContent.length > 0 ? extractedContent.join('\n') : null,
+                {
+                    usesFinancialPhysics: hasFinancialDoc,
+                    usesChemistry: false,
+                    usesLegalAnalysis: hasLegalDoc,
+                    isSeedMetric: isSeedMetricAnalysis,
+                    isTetralemma: isTetralemmaQuery,
+                    auditMode
+                },
+                12000
+            );
+        } catch (auditErr) {
+            console.error('⚠️ Audit error:', auditErr.message);
+            auditResult = { verdict: 'BYPASS', confidence: 70 };
+        }
+        
+        // Determine badge and prepare metadata
+        let badge = 'unverified';
+        let verifiedAnswer = draftAnswer;
+        let passCount = 2;
+        
+        if (auditResult.verdict === 'APPROVED') {
+            badge = 'verified';
+        } else if (auditResult.verdict === 'REJECTED') {
+            badge = 'refused';
+            verifiedAnswer = `🔴 **Verification Failed**\n\nI couldn't verify my answer meets quality standards. Please rephrase your question or provide more context.\n\n🔥 nyan~`;
+        } else if (auditResult.verdict === 'BYPASS') {
+            badge = 'unverified';
+        }
+        
+        const auditMetadata = {
+            badge,
+            verdict: auditResult.verdict || 'BYPASS',
+            confidence: auditResult.confidence || 70,
+            passCount: badge === 'verified' ? 3 : passCount,
+            extensionsVerified: ['NYAN_PROTOCOL'],
+            latencyMs: 0
+        };
+        
+        // Stream personality pass for approved/bypass responses
+        if (badge === 'verified' || badge === 'unverified') {
+            if (isClientDisconnected) return;
+            res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Adding personality...' })}\n\n`);
+            
+            await runStreamingPersonalityPass(
+                res,
+                PLAYGROUND_GROQ_TOKEN,
+                verifiedAnswer,
+                message || finalPrompt,
+                auditMetadata,
+                () => isClientDisconnected
+            );
+        } else {
+            // For refused responses, send as-is
+            res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
+            res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
+            res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
+            res.end();
+        }
+        
+        console.log(`🌊 Streaming complete for ${clientIp} [${badge}]`);
+        
+    } catch (error) {
+        console.error('❌ Streaming error:', error.message);
+        res.write(`data: ${JSON.stringify({ type: 'error', message: 'An error occurred. Please try again.' })}\n\n`);
+        res.end();
     }
 });
 
