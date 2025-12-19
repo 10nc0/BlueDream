@@ -269,11 +269,6 @@ function extractFormulaAndKnownName(text) {
     return { formula, knownName };
 }
 
-// Legacy function kept for backward compatibility
-function extractMolecularFormula(text) {
-    const { formula } = extractFormulaAndKnownName(text);
-    return formula;
-}
 
 // Generate fuzzy formula variations (±1 on H and C to handle Vision counting errors)
 function generateFormulaVariations(formula) {

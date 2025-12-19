@@ -3858,7 +3858,7 @@
             }
             // No password required for new book creation (genesis)
             
-            // CRITICAL FIX: When editing, preserve existing output_credentials structure
+            // Preserve existing output_credentials structure when editing (keeps Ledger thread)
             let outputCredentials;
             if (editingBookId) {
                 // Find the existing book to preserve its Ledger thread (output_01)
@@ -4166,8 +4166,7 @@
                     return;
                 }
                 
-                // CRITICAL FIX: Poll for client readiness after relink
-                // Relink destroys and recreates the client, need to wait for initialization
+                // Poll for client readiness after relink (wait for re-initialization)
                 console.log('⏳ Waiting for WhatsApp client to initialize after relink...');
                 
                 let attempts = 0;

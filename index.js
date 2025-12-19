@@ -1158,46 +1158,27 @@ app.get('/api/genesis', (req, res) => {
  * 
  * FRACTALIZED ID VERSION: Parses fractal_id to extract tenant (no database query needed!)
  */
-async function getBookTenantSchema(fractalIdOrLegacyId) {
+async function getBookTenantSchema(fractalIdInput) {
     try {
-        // Try parsing as fractalized ID first (e.g., book_t6_abc123 or dev_book_t1_abc123)
-        const parsed = fractalId.parse(fractalIdOrLegacyId);
+        const parsed = fractalId.parse(fractalIdInput);
         if (parsed && parsed.tenantId) {
             const tenantSchema = `tenant_${parsed.tenantId}`;
             console.log(`✅ Parsed fractal_id: Book belongs to ${tenantSchema}`);
             return tenantSchema;
         }
         
-        // Fallback: Legacy numeric ID - query database (slow path for backward compatibility)
-        const legacyId = parseInt(fractalIdOrLegacyId);
-        if (!isNaN(legacyId)) {
-            console.warn(`⚠️ Using legacy book ID ${legacyId} - querying database (slow)`);
-            const schemasResult = await pool.query(`
-                SELECT schema_name 
-                FROM information_schema.schemata 
-                WHERE schema_name LIKE 'tenant_%'
-                ORDER BY schema_name
-            `);
-            
-            for (const row of schemasResult.rows) {
-                const schema = row.schema_name;
-                const bookCheck = await pool.query(`
-                    SELECT id FROM ${schema}.books WHERE id = $1
-                `, [legacyId]);
-                
-                if (bookCheck.rows.length > 0) {
-                    console.log(`✅ Legacy book ${legacyId} belongs to ${schema}`);
-                    return schema;
-                }
-            }
+        // Detect legacy numeric IDs and reject explicitly
+        const numericId = parseInt(fractalIdInput);
+        if (!isNaN(numericId)) {
+            console.error(`❌ DEPRECATED: Numeric book ID ${numericId} rejected. Use fractal_id instead.`);
+            throw new Error(`Legacy numeric book ID not supported. Use fractal_id format.`);
         }
         
-        // Fallback to public if not found (shouldn't happen)
-        console.warn(`⚠️ Book ${fractalIdOrLegacyId} not found, defaulting to public`);
+        console.warn(`⚠️ Invalid fractal_id format: ${fractalIdInput}`);
         return 'public';
     } catch (error) {
-        console.error(`❌ Error finding tenant for book ${fractalIdOrLegacyId}:`, error);
-        return 'public';
+        console.error(`❌ Error resolving tenant for book ${fractalIdInput}:`, error.message);
+        throw error;
     }
 }
 
@@ -1205,17 +1186,6 @@ async function getBookTenantSchema(fractalIdOrLegacyId) {
 // The old createTenantAwareMessageHandler() has been removed - Twilio webhook handles inbound messages.
 // See /api/twilio/webhook endpoint below for message routing.
 
-// Legacy compatibility: Remove old session directory if it exists
-function cleanupLegacySession() {
-    const legacyPath = './.wwebjs_auth/session';
-    if (fs.existsSync(legacyPath)) {
-        console.log('🧹 Cleaning up legacy session...');
-        fs.rmSync(legacyPath, { recursive: true, force: true });
-        console.log('✅ Legacy session cleaned');
-    }
-}
-
-cleanupLegacySession();
 
 // OLD initializeWhatsAppClient() function removed - replaced with per-book management
 // See book-level API endpoints below: POST /api/books/:id/start, DELETE /api/books/:id/stop, etc.
@@ -4319,10 +4289,7 @@ app.get('/api/books', requireAuth, async (req, res) => {
             }
         }
         
-        // PHASE 2 TRANSITION: Include both id and fractal_id during migration period
-        // TODO: Remove raw id once ALL endpoints and frontend are migrated to fractal_id
         const booksWithFractalIds = books.map(book => {
-            // Generate fractal_id if missing (for backward compatibility)
             if (!book.fractal_id) {
                 book.fractal_id = fractalId.generate('book', tenantId, book.id, book.created_by_admin_id);
             }
@@ -5123,9 +5090,8 @@ app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => 
         const internalBookId = bookResult.rows[0].id;
         console.log('✅ Internal book ID:', internalBookId);
         
-        // CRITICAL FIX: Remove tag from BOTH extracted_tags array AND metadata_text string
-        // This prevents deleted tags from reappearing when new tags are added
-        // Escape regex metacharacters in JavaScript before passing to SQL
+        // Remove tag from both extracted_tags array AND metadata_text string
+        // Escape regex metacharacters before passing to SQL
         const escapedTag = tag.replace(/[.+*?[\](){}|\\^$]/g, '\\$&');
         
         const dropResult = await client.query(`
@@ -5201,9 +5167,8 @@ app.delete('/api/drops/date', requireAuth, setTenantContext, async (req, res) =>
         const internalBookId = bookResult.rows[0].id;
         console.log('✅ Internal book ID:', internalBookId);
         
-        // CRITICAL FIX: Remove date from BOTH extracted_dates array AND metadata_text string
-        // This prevents deleted dates from reappearing when new tags are added
-        // Escape regex metacharacters in JavaScript before passing to SQL
+        // Remove date from both extracted_dates array AND metadata_text string
+        // Escape regex metacharacters before passing to SQL
         const escapedDate = date.replace(/[.+*?[\](){}|\\^$]/g, '\\$&');
         
         const dropResult = await client.query(`
