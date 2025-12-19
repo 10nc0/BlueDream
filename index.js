@@ -6431,6 +6431,17 @@ const IDENTITY_PATTERNS = [
     /(?:so\s+)?you\s+are\s+(?:like|a|some|just)\s+/i,  // "so you are like..." "are you just..."
     /what\s+makes?\s+you\s+(?:different|unique)/i,  // "what makes you different?"
     /how\s+(?:are|do)\s+you\s+(?:differ|compare)/i,  // "how do you compare?"
+    
+    // Conversational meta-questions (about chat context, not external facts)
+    /(?:our|this)\s+(?:chat|conversation|dialogue|history)/i,  // "our chat history", "this conversation"
+    /what\s+(?:have\s+)?we\s+(?:discussed|talked|covered)/i,  // "what have we discussed?"
+    /describe\s+me\s+from\s+(?:our|this)/i,     // "describe me from our..."
+    /what\s+do\s+you\s+know\s+about\s+me/i,     // "what do you know about me?"
+    /from\s+(?:our|this)\s+(?:chat|conversation)/i,  // "from our conversation"
+    /summarize\s+(?:our|this)\s+(?:chat|conversation)/i,  // "summarize our chat"
+    /remember\s+(?:me|what|our)/i,              // "remember me?", "do you remember..."
+    /(?:in|during)\s+(?:this|our)\s+(?:chat|conversation)/i,  // "in this chat", "during our conversation"
+    /can\s+you\s+(?:recap|review|recall|remind)\s+/i,  // "can you recap...", "remind me..."
 ];
 
 
