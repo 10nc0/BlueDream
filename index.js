@@ -6399,6 +6399,30 @@ function isSeedMetricQuery(message) {
     return SEED_METRIC_REGEX.test(message);
 }
 
+// Identity/Meta question detection - bypass audit for self-reference questions
+// Nyan's identity is defined in NYAN_PROTOCOL_SEED, no external verification needed
+const IDENTITY_PATTERNS = [
+    /who\s+(?:are|is)\s+(?:you|nyan)/i,
+    /what\s+(?:are|is)\s+(?:you|nyan)/i,
+    /are\s+you\s+(?:related|connected|linked)\s+to/i,
+    /who\s+(?:made|created|built)\s+(?:you|nyan|this)/i,
+    /your\s+(?:creator|origin|source|developer)/i,
+    /tell\s+me\s+about\s+(?:yourself|nyan)/i,
+    /introduce\s+yourself/i,
+    /what\s+is\s+nyan.*protocol/i,
+    /nyan.*protocol.*what/i,
+    /github\.com\/.*nyan/i,
+    /10nc0/i,
+    /void\s*nyan/i,
+    /nyanbook.*(?:what|who|origin|about)/i
+];
+
+function isIdentityQuery(message) {
+    if (!message) return false;
+    const trimmed = message.trim().toLowerCase();
+    return IDENTITY_PATTERNS.some(pattern => pattern.test(trimmed));
+}
+
 function classifyQuery(message) {
     const trimmed = message.trim();
     
@@ -7477,13 +7501,32 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         let auditBadge = 'unverified';
         let didSearchRetry = false; // Track if we've already done search retry
         
+        // Identity/meta questions bypass audit (self-reference answers from NYAN_PROTOCOL_SEED)
+        const isIdentity = isIdentityQuery(effectiveMessage || message);
+        
+        if (isIdentity) {
+            console.log(`🐱 Identity query detected - bypassing audit (self-reference from NYAN Protocol)`);
+            auditMetadata = { 
+                verdict: 'BYPASS', 
+                confidence: 95, 
+                passCount: 1,
+                extensionsVerified: ['NYAN_PROTOCOL'],
+                latencyMs: 0,
+                reason: 'Identity/meta question - answer from NYAN_PROTOCOL_SEED'
+            };
+            auditBadge = 'unverified'; // BYPASS badge (gray) - trusted but not audited
+        }
+        
         try {
-            const auditExtensions = [];
-            if (isSeedMetricAnalysis) auditExtensions.push('🐱 Seed Metric');
-            if (isTetralemmaQuery) auditExtensions.push('☯️ Tetralemma');
-            console.log(`🔍 Two-Pass: Running verification audit (${auditMode} mode)${auditExtensions.length ? ' ' + auditExtensions.join(' ') : ''}...`);
+            // Skip full verification for identity queries
+            if (!isIdentity) {
+                const auditExtensions = [];
+                if (isSeedMetricAnalysis) auditExtensions.push('🐱 Seed Metric');
+                if (isTetralemmaQuery) auditExtensions.push('☯️ Tetralemma');
+                console.log(`🔍 Two-Pass: Running verification audit (${auditMode} mode)${auditExtensions.length ? ' ' + auditExtensions.join(' ') : ''}...`);
+            }
             
-            let verificationResult = await runVerifiedAnswer({
+            let verificationResult = isIdentity ? null : await runVerifiedAnswer({
                 groqToken: PLAYGROUND_GROQ_TOKEN,
                 draftAnswer: reply,
                 originalQuery: effectiveMessage || finalPrompt,
@@ -7501,8 +7544,9 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             // ===== GROQ-FIRST RETRY LOGIC =====
             // If REJECTED and this was originally a groq-first query (no prior search), try with search
             // Uses preserved flag wasGroqFirstQuery (set before any mutations to queryClass)
-            const wasRejected = verificationResult.auditMetadata?.verdict === 'REJECTED';
-            const canRetry = wasGroqFirstQuery && wasRejected && searchQuery && !isClosedLoopAnalysis;
+            // Skip retry for identity queries (already bypassed audit)
+            const wasRejected = verificationResult?.auditMetadata?.verdict === 'REJECTED';
+            const canRetry = !isIdentity && wasGroqFirstQuery && wasRejected && searchQuery && !isClosedLoopAnalysis;
             
             if (canRetry) {
                 console.log(`🔄 Groq-First REJECTED: Triggering search retry...`);
@@ -7584,16 +7628,22 @@ User query: ${message}`;
                 }
             }
             
-            reply = verificationResult.finalAnswer;
-            auditMetadata = verificationResult.auditMetadata;
-            auditBadge = verificationResult.badge;
-            
-            // Add retry flag to metadata
-            if (didSearchRetry) {
-                auditMetadata.didSearchRetry = true;
+            // Only update from verificationResult if we ran verification (not identity bypass)
+            if (verificationResult) {
+                reply = verificationResult.finalAnswer;
+                auditMetadata = verificationResult.auditMetadata;
+                auditBadge = verificationResult.badge;
+                
+                // Add retry flag to metadata
+                if (didSearchRetry) {
+                    auditMetadata.didSearchRetry = true;
+                }
+                
+                console.log(`🔍 Two-Pass: ${auditMetadata.verdict} (${auditMetadata.confidence}% conf, ${auditMetadata.passCount} pass${auditMetadata.passCount > 1 ? 'es' : ''}, ${auditMetadata.latencyMs}ms)${didSearchRetry ? ' [+search retry]' : ''}`);
+            } else {
+                // Identity query - reply stays as original draft, auditMetadata/Badge already set above
+                console.log(`🐱 Identity bypass: Returning original response without audit`);
             }
-            
-            console.log(`🔍 Two-Pass: ${auditMetadata.verdict} (${auditMetadata.confidence}% conf, ${auditMetadata.passCount} pass${auditMetadata.passCount > 1 ? 'es' : ''}, ${auditMetadata.latencyMs}ms)${didSearchRetry ? ' [+search retry]' : ''}`);
         } catch (verifyError) {
             console.error('⚠️ Two-Pass verification error:', verifyError.message);
             auditMetadata = {
@@ -7845,33 +7895,41 @@ app.post('/api/playground/stream', async (req, res) => {
         
         res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Verifying response...' })}\n\n`);
         
-        // Run audit pass
-        const hasNoDocuments = extractedContent.length === 0;
-        const isSeedMetricAnalysis = draftAnswer.includes('~nyan');
-        const { isFalseDichotomy } = require('./prompts/audit-protocol');
-        const isTetralemmaQuery = isFalseDichotomy(message);
-        const auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
+        // Identity/meta questions bypass audit (self-reference answers from NYAN_PROTOCOL_SEED)
+        const isIdentity = isIdentityQuery(message);
         
         let auditResult;
-        try {
-            auditResult = await runAuditPass(
-                PLAYGROUND_GROQ_TOKEN,
-                draftAnswer,
-                message || finalPrompt,
-                extractedContent.length > 0 ? extractedContent.join('\n') : null,
-                {
-                    usesFinancialPhysics: hasFinancialDoc,
-                    usesChemistry: false,
-                    usesLegalAnalysis: hasLegalDoc,
-                    isSeedMetric: isSeedMetricAnalysis,
-                    isTetralemma: isTetralemmaQuery,
-                    auditMode
-                },
-                12000
-            );
-        } catch (auditErr) {
-            console.error('⚠️ Audit error:', auditErr.message);
-            auditResult = { verdict: 'BYPASS', confidence: 70 };
+        if (isIdentity) {
+            console.log(`🐱 Identity query detected - bypassing audit (self-reference from NYAN Protocol)`);
+            auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Identity/meta question - answer from NYAN_PROTOCOL_SEED' };
+        } else {
+            // Run audit pass for non-identity queries
+            const hasNoDocuments = extractedContent.length === 0;
+            const isSeedMetricAnalysis = draftAnswer.includes('~nyan');
+            const { isFalseDichotomy } = require('./prompts/audit-protocol');
+            const isTetralemmaQuery = isFalseDichotomy(message);
+            const auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
+            
+            try {
+                auditResult = await runAuditPass(
+                    PLAYGROUND_GROQ_TOKEN,
+                    draftAnswer,
+                    message || finalPrompt,
+                    extractedContent.length > 0 ? extractedContent.join('\n') : null,
+                    {
+                        usesFinancialPhysics: hasFinancialDoc,
+                        usesChemistry: false,
+                        usesLegalAnalysis: hasLegalDoc,
+                        isSeedMetric: isSeedMetricAnalysis,
+                        isTetralemma: isTetralemmaQuery,
+                        auditMode
+                    },
+                    12000
+                );
+            } catch (auditErr) {
+                console.error('⚠️ Audit error:', auditErr.message);
+                auditResult = { verdict: 'BYPASS', confidence: 70 };
+            }
         }
         
         // Determine badge and prepare metadata
