@@ -3598,3 +3598,46 @@ body.mobile-mode #aiPlaygroundBtn {
     font-size: 0.7rem !important;
     flex-shrink: 0;
 }
+
+/* ===================================================================
+   BOOK LIST ITEM HOVER STYLES (CSP-compliant, no inline JS)
+   =================================================================== */
+.book-list-item:not(.selected):hover {
+    background: rgba(148, 163, 184, 0.05) !important;
+}
+
+/* Modal action button hover styles (CSP-compliant) */
+.book-action-btn:hover {
+    border-color: currentColor !important;
+}
+.book-action-btn[data-action="info"]:hover {
+    background: rgba(59, 130, 246, 0.15) !important;
+    border-color: #3b82f6 !important;
+}
+.book-action-btn[data-action="fan"]:hover {
+    background: rgba(16, 185, 129, 0.15) !important;
+    border-color: #10b981 !important;
+}
+.book-action-btn[data-action="regenerate-qr"]:hover {
+    background: rgba(168, 85, 247, 0.15) !important;
+    border-color: #a855f7 !important;
+}
+.book-action-btn[data-action="edit"]:hover {
+    background: rgba(245, 158, 11, 0.15) !important;
+    border-color: #f59e0b !important;
+}
+.book-action-btn[data-action="delete"]:hover {
+    background: rgba(239, 68, 68, 0.15) !important;
+    border-color: #ef4444 !important;
+}
+
+/* Modal button hover styles (CSP-compliant) */
+.modal-btn-cancel:hover {
+    background: rgba(71, 85, 105, 0.4) !important;
+}
+.modal-btn-confirm:hover {
+    background: rgba(59, 130, 246, 0.3) !important;
+}
+.modal-btn-danger:hover {
+    background: rgba(239, 68, 68, 0.3) !important;
+}

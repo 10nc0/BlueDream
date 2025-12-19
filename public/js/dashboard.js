@@ -1359,9 +1359,7 @@
                         border-bottom: 1px solid rgba(148, 163, 184, 0.08); 
                         transition: background 0.12s ease;
                         user-select: none;
-                    "
-                    onmouseover="if (!this.classList.contains('selected')) this.style.background='rgba(148, 163, 184, 0.05)'"
-                    onmouseout="if (!this.classList.contains('selected')) this.style.background='transparent'">
+                    ">
                     ${hasSearchMatch ? `<div style="flex-shrink: 0; width: 1.25rem; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;"><span style="color: #22c55e; font-weight: 700; font-size: 0.875rem;">✓</span></div>` : ''}
                     <div style="flex: 1; min-width: 0;">
                         <div style="
@@ -1426,9 +1424,7 @@
                         border-bottom: 1px solid rgba(148, 163, 184, 0.08); 
                         transition: background 0.12s ease;
                         user-select: none;
-                    "
-                    onmouseover="if (!this.classList.contains('selected')) this.style.background='rgba(148, 163, 184, 0.05)'"
-                    onmouseout="if (!this.classList.contains('selected')) this.style.background='transparent'">
+                    ">
                     ${hasSearchMatch ? `<div style="flex-shrink: 0; width: 1.25rem; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;"><span style="color: #22c55e; font-weight: 700; font-size: 0.875rem;">✓</span></div>` : ''}
                     <div style="flex: 1; min-width: 0;">
                         <div style="
@@ -1553,7 +1549,7 @@
                                         <a href="https://wa.me/14155238886?text=${encodeURIComponent(book.contact_info || 'join baby-ability')}" target="_blank" rel="noopener noreferrer" style="background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
                                             📱 Open WhatsApp
                                         </a>
-                                        <button onclick="navigator.clipboard.writeText('${(book.contact_info || 'join baby-ability').replace(/'/g, "\\'")}'); this.innerHTML = '✅ Copied!'; setTimeout(() => this.innerHTML = '📋 Copy Code', 1500);" style="background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #cbd5e1; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap;">
+                                        <button class="copy-code-btn" data-copy-text="${(book.contact_info || 'join baby-ability').replace(/"/g, '&quot;')}" style="background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #cbd5e1; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap;">
                                             📋 Copy Code
                                         </button>
                                     </div>
@@ -2450,7 +2446,7 @@
                             align-items: center;
                             gap: 0.75rem;
                             transition: all 0.2s ease;
-                        " onmouseover="this.style.background='rgba(${action.color === '#a855f7' ? '168, 85, 247' : action.color === '#3b82f6' ? '59, 130, 246' : action.color === '#10b981' ? '16, 185, 129' : action.color === '#f59e0b' ? '245, 158, 11' : '239, 68, 68'}, 0.15)'; this.style.borderColor='${action.color}';" onmouseout="this.style.background='rgba(15, 23, 42, 0.6)'; this.style.borderColor='rgba(148, 163, 184, 0.2)';">
+                        ">
                             <span style="font-size: 1.5rem;">${action.icon}</span>
                             <span style="flex: 1; text-align: left;">${action.label}</span>
                             <span style="opacity: 0.5;">→</span>
@@ -3326,7 +3322,8 @@
         // SECURITY: bookId MUST be fractal_id to maintain tenant isolation
         function getMessageSearchText(bookId) {
             // SECURITY: Validate fractal_id format before cache access
-            if (!bookId || !/^(dev|prod)_(bridge|book)_t\d+_[a-f0-9]+$/.test(bookId)) {
+            // Format: [dev_](bridge|book|msg)_t{N}_{HASH} or twilio_book_{PHONE}_{TIMESTAMP}
+            if (!bookId || !/^(?:dev_)?(bridge|book|msg)_t\d+_[a-f0-9]+$|^twilio_book_\d+_\d+$/.test(bookId)) {
                 console.error('🚨 SECURITY: Attempted cache access with invalid book ID');
                 return '';
             }
@@ -4087,7 +4084,7 @@
                         </div>
                         
                         <div style="display: flex; gap: 0.75rem;">
-                            <button id="cancelRelink" style="
+                            <button id="cancelRelink" class="modal-btn-cancel" style="
                                 flex: 1;
                                 padding: 0.875rem 1.5rem;
                                 background: rgba(71, 85, 105, 0.3);
@@ -4098,10 +4095,10 @@
                                 cursor: pointer;
                                 font-size: 1rem;
                                 transition: all 0.2s;
-                            " onmouseover="this.style.background='rgba(71, 85, 105, 0.4)'" onmouseout="this.style.background='rgba(71, 85, 105, 0.3)'">
+                            ">
                                 Cancel
                             </button>
-                            <button id="confirmRelink" style="
+                            <button id="confirmRelink" class="modal-btn-confirm" style="
                                 flex: 1;
                                 padding: 0.875rem 1.5rem;
                                 background: rgba(59, 130, 246, 0.2);
@@ -4112,7 +4109,7 @@
                                 cursor: pointer;
                                 font-size: 1rem;
                                 transition: all 0.2s;
-                            " onmouseover="this.style.background='rgba(59, 130, 246, 0.3)'" onmouseout="this.style.background='rgba(59, 130, 246, 0.2)'">
+                            ">
                                 🔗 Generate QR
                             </button>
                         </div>
@@ -4700,8 +4697,8 @@
         async function loadBookMessages(bookId, page = 1, append = false) {
             try {
                 // SECURITY: Validate bookId is a fractal_id (tenant-scoped, non-enumerable)
-                // Format: [dev_|prod_](bridge|book)_t{N}_{HASH} or (bridge|book)_t{N}_{HASH} or twilio_book_{PHONE}_{TIMESTAMP}
-                if (!bookId || !/^((dev|prod)_)?(bridge|book|twilio_book)_(t\d+_[a-f0-9]+|\d+_\d+)$/.test(bookId)) {
+                // Format: [dev_](bridge|book|msg)_t{N}_{HASH} or twilio_book_{PHONE}_{TIMESTAMP}
+                if (!bookId || !/^(?:dev_)?(bridge|book|msg)_t\d+_[a-f0-9]+$|^twilio_book_\d+_\d+$/.test(bookId)) {
                     console.error('🚨 SECURITY: Invalid book ID format:', bookId);
                     throw new Error('Invalid book ID');
                 }
@@ -6571,6 +6568,20 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (auditBtn) {
             executeAction('audit');
+            return;
+        }
+        
+        // Copy code button (CSP-compliant replacement for inline onclick)
+        const copyBtn = e.target.closest('.copy-code-btn');
+        if (copyBtn && copyBtn.dataset.copyText) {
+            navigator.clipboard.writeText(copyBtn.dataset.copyText).then(() => {
+                const originalText = copyBtn.innerHTML;
+                copyBtn.innerHTML = '✅ Copied!';
+                setTimeout(() => copyBtn.innerHTML = originalText, 1500);
+            }).catch(err => {
+                console.error('Copy failed:', err);
+                showToast('Failed to copy', 'error');
+            });
             return;
         }
     });

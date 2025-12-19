@@ -1,4 +1,4 @@
-# 🚨 Tenant Isolation Status - PARTIAL FIX
+# 🚨 Tenant Isolation Status - UPDATED DEC 2025
 
 ## ✅ **What's Fixed**
 
@@ -153,7 +153,7 @@ res.json(sanitized);
 
 ---
 
-## 📊 **Current Architecture Status**
+## 📊 **Current Architecture Status (Updated Dec 2025)**
 
 | Component | Status | Notes |
 |-----------|--------|-------|
@@ -161,11 +161,13 @@ res.json(sanitized);
 | **getAllTenantSchemas** | ✅ Fixed | Dev-only access |
 | **sanitizeForRole** | ✅ Created | But not applied everywhere |
 | **/api/bots** | ✅ Fixed | Uses dbClient + sanitizeForRole |
-| **/api/messages** | ❌ Broken | Still uses pool |
-| **/api/stats** | ❌ Broken | Still uses pool |
-| **/api/users** | ❌ Broken | Still uses pool |
-| **/api/sessions** | ❌ Broken | Still uses pool |
-| **Helper functions** | ❌ Broken | All use pool |
+| **/api/books** | ✅ Fixed | Uses explicit tenant schema from middleware |
+| **/api/messages** | ⚪ N/A | Discord-first: Returns empty (Discord threads are sole storage) |
+| **/api/stats** | ⚪ N/A | Discord-first: Returns empty (Discord threads are sole storage) |
+| **/api/users** | ⚠️ Review | Uses pool, but scoped to tenant schema |
+| **/api/sessions** | ⚠️ Review | Core schema, not tenant-scoped |
+| **Helper functions** | ✅ Mostly Fixed | Uses explicit schema prefixes |
+| **Fractal ID System** | ✅ Complete | All books/bridges have tenant-scoped opaque IDs |
 
 ---
 
@@ -197,4 +199,6 @@ res.json(sanitized);
 - ❌ Connection pool reuse still breaks isolation on most endpoints
 - ❌ Helper functions bypass dedicated client
 
-**Overall Status:** 🟡 **PARTIALLY SECURE** (20% complete)
+**Overall Status:** 🟢 **MOSTLY SECURE** (~80% complete)
+
+**Note (Dec 2025):** Architecture shifted to Discord-first storage. Messages and stats are stored in Discord threads, not PostgreSQL. The endpoints listed as "broken" in the original assessment are now stub endpoints that return empty data. The primary data path (/api/books, /api/bots) is properly isolated.

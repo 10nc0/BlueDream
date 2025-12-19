@@ -8,7 +8,7 @@
  */
 
 const { Pool } = require('pg');
-const fractalId = require('./utils/fractal-id');
+const fractalId = require('../utils/fractal-id');
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
