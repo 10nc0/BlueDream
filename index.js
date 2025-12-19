@@ -6402,6 +6402,7 @@ function isSeedMetricQuery(message) {
 // Identity/Meta question detection - bypass audit for self-reference questions
 // Nyan's identity is defined in NYAN_PROTOCOL_SEED, no external verification needed
 const IDENTITY_PATTERNS = [
+    // Direct identity questions
     /who\s+(?:are|is)\s+(?:you|nyan)/i,
     /what\s+(?:are|is)\s+(?:you|nyan)/i,
     /are\s+you\s+(?:related|connected|linked)\s+to/i,
@@ -6414,8 +6415,24 @@ const IDENTITY_PATTERNS = [
     /github\.com\/.*nyan/i,
     /10nc0/i,
     /void\s*nyan/i,
-    /nyanbook.*(?:what|who|origin|about)/i
+    /nyanbook.*(?:what|who|origin|about)/i,
+    
+    // Existence/presence questions (epistemologically fixed - not search-dependent)
+    /(?:any\s+)?trace.*(?:on|in|at|from)\s+/i,  // "any trace on twitter?" etc
+    /where\s+(?:can\s+I\s+)?find\s+you/i,       // "where can I find you?"
+    /your\s+(?:presence|account|profile|website|handle)/i,  // "your presence"
+    /do\s+you\s+(?:exist|have\s+a|are\s+on)/i,  // "do you have a twitter?"
+    
+    // Comparison/positioning questions (about Nyan's nature)
+    /like\s+(?:perplexity|chatgpt|claude|copilot|gemini)/i,  // "like perplexity?"
+    /similar\s+to\s+(?:perplexity|chatgpt|claude)/i,  // "similar to..."
+    /compared\s+to\s+/i,                         // "compared to..."
+    /competitor\s+(?:to|of)\s+/i,               // "competitor to..."
+    /(?:so\s+)?you\s+are\s+(?:like|a|some|just)\s+/i,  // "so you are like..." "are you just..."
+    /what\s+makes?\s+you\s+(?:different|unique)/i,  // "what makes you different?"
+    /how\s+(?:are|do)\s+you\s+(?:differ|compare)/i,  // "how do you compare?"
 ];
+
 
 function isIdentityQuery(message) {
     if (!message) return false;
