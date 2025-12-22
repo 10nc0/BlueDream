@@ -83,29 +83,51 @@ function zScore(value, arr) {
  * - Leading values (indices 0 to period-2) are linearly interpolated from data[0] to EMA[period-1]
  * - Short series (data.length < period) are fully interpolated from data[0] to data[last]
  * - Creates smooth chart lines without gaps for visualization/tables
+ * - Tracks interpolation status in metadata
  * 
  * RAW MODE (interpolate=false):
  * - Returns null for indices before period-1 (original behavior)
  * - Short series return all nulls
+ * - All non-null values marked as non-interpolated
  * 
  * @param {number[]} data - Time series data
  * @param {number} period - EMA period (Fibonacci: 13, 21, 34, 55)
  * @param {Object} options - Optional configuration
  * @param {boolean} options.interpolate - If true (default), linearly interpolate leading values for charting
- * @returns {number[]} EMA values (interpolated for indices < period-1 when options.interpolate=true)
+ * @param {boolean} options.markInterpolation - If true, flag interpolated values with metadata
+ * @returns {number[]|Object} EMA values, or { values, interpolated } if markInterpolation=true
+ *   - values: EMA array
+ *   - interpolated: boolean array (true if value was interpolated)
  */
-function calculateEMA(data, period, options = { interpolate: true }) {
-  if (!data || data.length === 0) return [];
+function calculateEMA(data, period, options = { interpolate: true, markInterpolation: true }) {
+  if (!data || data.length === 0) {
+    if (options.markInterpolation) {
+      return { values: [], interpolated: [] };
+    }
+    return [];
+  }
+  
+  const interpolationFlags = new Array(data.length).fill(false);
+  
   if (data.length < period) {
     // Not enough data for valid EMA
     if (options.interpolate && data.length >= 2) {
       // Linear interpolation across entire array from first to last value
       const start = data[0];
       const end = data[data.length - 1];
-      return data.map((_, i) => start + (end - start) * (i / (data.length - 1)));
+      const values = data.map((_, i) => start + (end - start) * (i / (data.length - 1)));
+      interpolationFlags.fill(true); // All interpolated
+      if (options.markInterpolation) {
+        return { values, interpolated: interpolationFlags };
+      }
+      return values;
     }
     // Return nulls if no interpolation
-    return data.map(() => null);
+    const values = data.map(() => null);
+    if (options.markInterpolation) {
+      return { values, interpolated: interpolationFlags };
+    }
+    return values;
   }
   
   const k = 2 / (period + 1);
@@ -114,10 +136,12 @@ function calculateEMA(data, period, options = { interpolate: true }) {
   // Seed EMA at index (period-1) with SMA of first 'period' values
   const firstSMA = mean(data.slice(0, period));
   ema[period - 1] = firstSMA;
+  interpolationFlags[period - 1] = false; // Seeded value is "real"
   
   // Calculate EMA for remaining values starting at index 'period'
   for (let i = period; i < data.length; i++) {
     ema[i] = data[i] * k + ema[i - 1] * (1 - k);
+    interpolationFlags[i] = false; // Calculated values are "real"
   }
   
   // Linear interpolation for leading values (indices 0 to period-2)
@@ -129,14 +153,19 @@ function calculateEMA(data, period, options = { interpolate: true }) {
     for (let i = 0; i < period - 1; i++) {
       // Linear interpolation: start + (end - start) * (i / steps)
       ema[i] = startValue + (endValue - startValue) * (i / steps);
+      interpolationFlags[i] = true; // Flagged as interpolated
     }
   } else {
     // Fill with nulls if no interpolation
     for (let i = 0; i < period - 1; i++) {
       ema[i] = null;
+      interpolationFlags[i] = false; // Nulls are not interpolated
     }
   }
   
+  if (options.markInterpolation) {
+    return { values: ema, interpolated: interpolationFlags };
+  }
   return ema;
 }
 
@@ -313,8 +342,10 @@ function interpretPhase(theta) {
  * @returns {Object} Phase analysis with signals
  */
 function analyzePhase(phases) {
-  const ema34 = calculateEMA(phases, FIB_PERIODS.FAST_THETA);
-  const ema55 = calculateEMA(phases, FIB_PERIODS.SLOW_THETA);
+  const ema34Result = calculateEMA(phases, FIB_PERIODS.FAST_THETA);
+  const ema55Result = calculateEMA(phases, FIB_PERIODS.SLOW_THETA);
+  const ema34 = ema34Result.values;
+  const ema55 = ema55Result.values;
   const crossover = detectCrossover(ema34, ema55);
   
   const currentPhase = phases[phases.length - 1];
@@ -332,7 +363,9 @@ function analyzePhase(phases) {
     signal: crossover.signal,
     raw: phases,
     emaFast: ema34,
-    emaSlow: ema55
+    emaSlow: ema55,
+    ema34Interpolated: ema34Result.interpolated,
+    ema55Interpolated: ema55Result.interpolated
   };
 }
 
@@ -418,8 +451,10 @@ function getAnomalyAlert(z) {
  * @returns {Object} Anomaly analysis with signals
  */
 function analyzeAnomaly(zFlows) {
-  const ema21 = calculateEMA(zFlows, FIB_PERIODS.FAST_Z);
-  const ema34 = calculateEMA(zFlows, FIB_PERIODS.SLOW_Z);
+  const ema21Result = calculateEMA(zFlows, FIB_PERIODS.FAST_Z);
+  const ema34Result = calculateEMA(zFlows, FIB_PERIODS.SLOW_Z);
+  const ema21 = ema21Result.values;
+  const ema34 = ema34Result.values;
   const crossover = detectCrossover(ema21, ema34);
   
   const currentZ = zFlows[zFlows.length - 1];
@@ -438,6 +473,8 @@ function analyzeAnomaly(zFlows) {
     raw: zFlows,
     emaFast: ema21,
     emaSlow: ema34,
+    ema21Interpolated: ema21Result.interpolated,
+    ema34Interpolated: ema34Result.interpolated,
     thresholds: {
       normal: `±${THRESHOLDS.ANOMALY_NORMAL}σ`,
       alert: `±${THRESHOLDS.ANOMALY_ALERT}σ`,
@@ -586,8 +623,10 @@ function analyzeConvergence(absRatios) {
     return { error: 'No ratio data' };
   }
   
-  const ema13 = calculateEMA(absRatios, FIB_PERIODS.FAST_R);
-  const ema21 = calculateEMA(absRatios, FIB_PERIODS.SLOW_R);
+  const ema13Result = calculateEMA(absRatios, FIB_PERIODS.FAST_R);
+  const ema21Result = calculateEMA(absRatios, FIB_PERIODS.SLOW_R);
+  const ema13 = ema13Result.values;
+  const ema21 = ema21Result.values;
   const crossover = detectCrossover(ema13, ema21);
   
   const currentR = absRatios[absRatios.length - 1];
@@ -608,7 +647,9 @@ function analyzeConvergence(absRatios) {
     signal: phiAlert.action,
     raw: absRatios,
     emaFast: ema13,
-    emaSlow: ema21
+    emaSlow: ema21,
+    ema13Interpolated: ema13Result.interpolated,
+    ema21Interpolated: ema21Result.interpolated
   };
 }
 
