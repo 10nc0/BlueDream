@@ -48,6 +48,13 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
   - **PsiEMADashboard Class**: Complete analysis with composite signals
   - **Keyword Triggers**: 'fourier', 'φ', 'ψ', 'psi', 'phi', 'ema', 'crossover', 'golden cross', 'wave', 'fibonacci'
   - **Audit Protocol**: AUDIT_PSI_EMA extension accepts Ψ-EMA framework terminology
+  - **Real-Time Stock Integration** (Dec 22, 2025):
+    - `utils/fetch-stock-prices.py`: Python script using yfinance for 90-day closing prices
+    - `utils/stock-fetcher.js`: Node.js wrapper with ticker detection and price fetching
+    - **Ticker Detection**: Known tickers list + regex filtering (excludes EMA, USD, EUR, etc.)
+    - **Auto-Trigger**: "psi ema for NVDA" → fetch prices → PsiEMADashboard analysis → inject context
+    - **Three-Tier Graceful Degradation**: Fetch fails → ticker-only context; <55 points → limited context; Analysis fails → data-count context
+    - **Safe Formatting**: safeFixed() helper with parseFloat fallback prevents .toFixed() crashes
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.
