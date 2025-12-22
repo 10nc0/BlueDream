@@ -37,6 +37,11 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - Stock data fetching via yfinance
     - Returns `PreflightResult` contract for downstream consumption
     - `buildSystemContext(preflight, nyanProtocol)` maps preflight to system messages
+  - **Pipeline Orchestrator** (`utils/pipeline-orchestrator.js`): State machine for AI processing (Dec 22, 2025):
+    - **6-Step State Machine**: S0(Preflight) → S1(Context Build) → S2(Reasoning) → S3(Audit) → S4(Retry) → S5(Output)
+    - **PipelineState class**: Tracks current step, preflight result, audit result, retry count, and system messages
+    - **Separation of Concerns**: NYAN=reasoning principles, Pipeline=orchestration, Routing=mode detection
+    - **Automatic retry**: If audit rejects, steps back to reasoning with corrections (max 2 retries)
   - **Pipeline Flow**: Preflight → Reasoning → Audit → Personality
   - **Groq-First Architecture**: Result-based routing where Groq proves competence via audit.
   - **Three-Pass Verification**: Draft, Audit (with potential correction), and Personality formatting for responses. Includes dual-mode auditing (Strict for documents, Research for general queries).
