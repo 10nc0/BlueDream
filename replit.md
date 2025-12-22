@@ -53,8 +53,16 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
   - **Real-Time Stock Integration** (Dec 22, 2025):
     - `utils/fetch-stock-prices.py`: Python script using yfinance for 90-day closing prices
     - `utils/stock-fetcher.js`: Node.js wrapper with ticker detection and price fetching
-    - **Ticker Detection**: Known tickers list + regex filtering (excludes EMA, USD, EUR, etc.)
-    - **Auto-Trigger**: "psi ema for NVDA" → fetch prices → PsiEMADashboard analysis → inject context
+    - **Smart Ticker Detection** (3-tier):
+      1. **$TICKER format**: Always matches (e.g., $META, $COST) - for ambiguous tickers
+      2. **Known tickers**: Case-insensitive match for whitelisted tickers (nvda, NVDA, Nvda)
+      3. **AI fallback**: Groq extracts ticker from company names ("meta stock" → META)
+    - **AI Ticker Extraction** (`extractTickerWithAI`):
+      - Uses llama-3.1-8b-instant for fast company→ticker mapping
+      - Handles commodities (gold, oil), crypto (bitcoin), private companies → returns null
+      - Validates ticker format (1-5 uppercase letters only)
+    - **Company Name Triggers**: shouldTriggerPsiEMA activates for common company names (meta, ford, costco, etc.) with price keywords
+    - **Auto-Trigger**: "price analysis on meta stock" → AI extracts META → yfinance fetch → Ψ-EMA analysis
     - **Three-Tier Graceful Degradation**: Fetch fails → ticker-only context; <55 points → limited context; Analysis fails → data-count context
     - **Safe Formatting**: safeFixed() helper with parseFloat fallback prevents .toFixed() crashes
     - **Data Recency Timestamping**: Each analysis timestamped to most recent close date with age flags:
