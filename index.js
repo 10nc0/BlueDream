@@ -7712,7 +7712,15 @@ app.post('/api/playground/stream', async (req, res) => {
         };
         
         // Stream personality pass for approved/bypass responses
-        if (badge === 'verified' || badge === 'unverified') {
+        // FAST-PATH: Skip personality LLM if fastPath flag is set (no-data message already crafted)
+        if (pipelineResult.fastPath) {
+            console.log(`⚡ Fast-path: Skipping personality pass (pre-crafted message)`);
+            auditMetadata.passCount = 0;  // No LLM passes for fast-path
+            res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
+            res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
+            res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
+            res.end();
+        } else if (badge === 'verified' || badge === 'unverified') {
             if (isClientDisconnected) return;
             res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Adding personality...' })}\n\n`);
             

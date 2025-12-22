@@ -89,6 +89,25 @@ class PipelineOrchestrator {
         await this.stepPreflight(state, input);
       }
       
+      // FAST-PATH: Ψ-EMA mode but no ticker found → return "no data" message (saves tokens)
+      if (state.mode === 'psi-ema' && !state.preflight.ticker) {
+        console.log(`⚡ Fast-path: Ψ-EMA mode but no ticker - returning no-data message`);
+        state.finalAnswer = `📊 **No Stock Data Available**\n\nI detected a financial analysis request, but couldn't identify a valid public stock ticker.\n\n**Tips:**\n• Use explicit ticker format: "$AAPL", "$NVDA", "$META"\n• Note: Some companies are private (e.g., Bloomberg LP) and have no public stock data\n• Commodities (gold, oil) and crypto require different analysis tools\n\n🔥 ~nyan`;
+        state.auditResult = { verdict: 'BYPASS', confidence: 100, reason: 'No ticker - fast path' };
+        state.transition(PIPELINE_STEPS.OUTPUT);
+        
+        return {
+          success: true,
+          answer: state.finalAnswer,
+          mode: state.mode,
+          preflight: state.preflight,
+          auditResult: state.auditResult,
+          didSearch: false,
+          retryCount: 0,
+          fastPath: true
+        };
+      }
+      
       await this.stepContextBuild(state, input);
       await this.stepReasoning(state, input);
       await this.stepAudit(state, input);
