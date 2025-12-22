@@ -7677,10 +7677,16 @@ Note: Ψ-EMA analysis could not be completed. Please provide general analysis ba
                                 const convergence = analysis.dimensions.convergence;
                                 const composite = analysis.compositeSignal;
                                 
+                                // Build tetralemma alert if φ² crossed
+                                const tetralemmaAlert = analysis.renewal?.tetralemma 
+                                    ? `\n${analysis.renewal.tetralemma.warning}\nTetralemma: (10)Bubble (01)Breakthrough (11)Both (00)Neither - Investigate fundamentals.`
+                                    : '';
+                                
                                 const analysisContext = `
 [USE THIS Ψ-EMA DATA - computed from yfinance]
 ## Ψ-EMA Analysis for ${stockTicker} (${stockData.name || stockTicker})
 Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} | Data: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
+EMA Fidelity: ${analysis.summary.fidelity || 'N/A'}
 ${dataAge.isStale ? `⚠️ Data is ${dataAge.daysOld} day(s) old` : ''}
 
 **Summary:** ${analysis.summary.phaseSignal} | ${analysis.summary.anomalyLevel} | ${analysis.summary.regime}
@@ -7689,7 +7695,7 @@ ${dataAge.isStale ? `⚠️ Data is ${dataAge.daysOld} day(s) old` : ''}
 Phase θ: ${phase?.interpretation?.phase || 'N/A'} ${phase?.interpretation?.emoji || ''} | Signal: ${phase?.signal || 'N/A'} | Crossover: ${phase?.crossover?.type || 'NONE'}
 Anomaly z: ${typeof anomaly?.current === 'number' ? anomaly.current.toFixed(2) + 'σ' : 'N/A'} ${anomaly?.alert?.emoji || ''} | ${anomaly?.alert?.level || 'N/A'}
 Convergence R: ${typeof convergence?.current === 'number' ? convergence.current.toFixed(3) : 'N/A'} | ${convergence?.regime?.regime || 'N/A'} ${convergence?.regime?.emoji || ''}
-
+${tetralemmaAlert}
 **Action:** ${composite?.action || 'N/A'} ${composite?.emoji || ''} (Score: ${composite?.netScore ?? 'N/A'})
 
 ${analysis.interpretation || ''}
@@ -8177,10 +8183,16 @@ Note: Ψ-EMA analysis could not be completed. Please provide general analysis ba
                                 const convergence = analysis.dimensions.convergence;
                                 const composite = analysis.compositeSignal;
                                 
+                                // Build tetralemma alert if φ² crossed (streaming)
+                                const tetralemmaAlert = analysis.renewal?.tetralemma 
+                                    ? `\n${analysis.renewal.tetralemma.warning}\nTetralemma: (10)Bubble (01)Breakthrough (11)Both (00)Neither - Investigate fundamentals.`
+                                    : '';
+                                
                                 const analysisContext = `
 [USE THIS Ψ-EMA DATA - computed from yfinance]
 ## Ψ-EMA Analysis for ${stockTicker} (${stockData.name || stockTicker})
 Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} | Data: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
+EMA Fidelity: ${analysis.summary.fidelity || 'N/A'}
 ${dataAge.isStale ? `⚠️ Data is ${dataAge.daysOld} day(s) old` : ''}
 
 **Summary:** ${analysis.summary.phaseSignal} | ${analysis.summary.anomalyLevel} | ${analysis.summary.regime}
@@ -8189,7 +8201,7 @@ ${dataAge.isStale ? `⚠️ Data is ${dataAge.daysOld} day(s) old` : ''}
 Phase θ: ${phase?.interpretation?.phase || 'N/A'} ${phase?.interpretation?.emoji || ''} | Signal: ${phase?.signal || 'N/A'} | Crossover: ${phase?.crossover?.type || 'NONE'}
 Anomaly z: ${typeof anomaly?.current === 'number' ? anomaly.current.toFixed(2) + 'σ' : 'N/A'} ${anomaly?.alert?.emoji || ''} | ${anomaly?.alert?.level || 'N/A'}
 Convergence R: ${typeof convergence?.current === 'number' ? convergence.current.toFixed(3) : 'N/A'} | ${convergence?.regime?.regime || 'N/A'} ${convergence?.regime?.emoji || ''}
-
+${tetralemmaAlert}
 **Action:** ${composite?.action || 'N/A'} ${composite?.emoji || ''} (Score: ${composite?.netScore ?? 'N/A'})
 
 ${analysis.interpretation || ''}

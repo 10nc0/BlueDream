@@ -68,6 +68,39 @@ function zScore(value, arr) {
   return (value - avg) / std;
 }
 
+/**
+ * Calculate EMA fidelity (% of real vs interpolated data)
+ * @param {boolean[][]} interpolatedArrays - Array of interpolation flag arrays from EMA calculations
+ * @returns {Object} Fidelity metrics
+ */
+function calculateFidelity(...interpolatedArrays) {
+  let totalPoints = 0;
+  let interpolatedPoints = 0;
+  
+  for (const arr of interpolatedArrays) {
+    if (!arr || !Array.isArray(arr)) continue;
+    for (const isInterpolated of arr) {
+      totalPoints++;
+      if (isInterpolated) interpolatedPoints++;
+    }
+  }
+  
+  if (totalPoints === 0) return { ratio: 1, percent: 100, interpolated: 0, real: 0, total: 0, grade: 'N/A', description: 'No EMA data' };
+  
+  const realPoints = totalPoints - interpolatedPoints;
+  const ratio = realPoints / totalPoints;
+  
+  return {
+    ratio,
+    percent: Math.round(ratio * 100),
+    interpolated: interpolatedPoints,
+    real: realPoints,
+    total: totalPoints,
+    grade: ratio >= 0.9 ? 'A' : ratio >= 0.75 ? 'B' : ratio >= 0.5 ? 'C' : 'D',
+    description: ratio >= 0.9 ? 'Excellent' : ratio >= 0.75 ? 'Good' : ratio >= 0.5 ? 'Limited' : 'Insufficient'
+  };
+}
+
 // ============================================================================
 // PART 1: EXPONENTIAL MOVING AVERAGE (Fibonacci-based)
 // ============================================================================
@@ -746,9 +779,17 @@ function estimatePeriodsToEquilibrium(z) {
 }
 
 /**
- * Detect φ² renewal cycle
+ * Detect φ² renewal cycle with Nagarjuna's Tetralemma framing
+ * When R > φ² (2.618), applies tetralemma to avoid eschatological flattening
+ * (binary bubble/breakthrough thinking)
+ * 
+ * TETRALEMMA STATES:
+ * - (10) No/Bubble: Speculative excess without fundamental support
+ * - (01) Yes/Breakthrough: Genuine phase transition, sustainable transformation
+ * - (11) Both: Real innovation overlaid with speculative premium
+ * - (00) Neither: Insufficient data to determine, withhold judgment
  */
-function detectPhiSquaredRenewal(stocks) {
+function detectPhiSquaredRenewal(stocks, convergenceR = null) {
   if (!stocks || stocks.length < 3) {
     return { error: 'Insufficient data' };
   }
@@ -771,6 +812,25 @@ function detectPhiSquaredRenewal(stocks) {
   const distanceFromPhi = Math.abs(recentAvg - PHI);
   const distanceFromPhiSquared = Math.abs(recentAvg - PHI_SQUARED);
   
+  const crossedPhiSquared = recentAvg > PHI_SQUARED || (convergenceR !== null && convergenceR > PHI_SQUARED);
+  
+  let tetralemma = null;
+  if (crossedPhiSquared) {
+    tetralemma = {
+      crossed: true,
+      threshold: PHI_SQUARED.toFixed(3),
+      value: convergenceR !== null ? convergenceR.toFixed(3) : recentAvg.toFixed(3),
+      states: {
+        no_bubble: '(10) Bubble only - speculative excess, no fundamental support',
+        yes_breakthrough: '(01) Breakthrough only - genuine phase transition, sustainable',
+        both: '(11) Both - real innovation with speculative overlay (most common)',
+        neither: '(00) Neither - insufficient data, withhold judgment'
+      },
+      warning: '⚡ φ² THRESHOLD CROSSED - Apply tetralemma lens to avoid binary prediction',
+      guidance: 'Investigate fundamentals before classifying as bubble OR breakthrough'
+    };
+  }
+  
   return {
     growthRates,
     averageGrowthRate: avgGrowthRate,
@@ -779,11 +839,13 @@ function detectPhiSquaredRenewal(stocks) {
     distanceFromPhiSquared,
     inPhiRenewal: distanceFromPhi < 0.3,
     inPhiSquaredRenewal: distanceFromPhiSquared < 0.5,
+    crossedPhiSquared,
+    tetralemma,
     renewalStatus: distanceFromPhiSquared < 0.5 ? 'φ²-Renewal Active' : 
                    distanceFromPhi < 0.3 ? 'φ-Growth Zone' : 
-                   recentAvg > PHI_SQUARED ? 'Unsustainable Acceleration' : 'Below Renewal Threshold',
+                   crossedPhiSquared ? 'φ²-Threshold (Tetralemma Required)' : 'Below Renewal Threshold',
     sustainability: (distanceFromPhi < 0.3 || distanceFromPhiSquared < 0.5) ? 'SUSTAINABLE' : 
-                    recentAvg > PHI_SQUARED ? 'BUBBLE' : 'STAGNANT'
+                    crossedPhiSquared ? 'TETRALEMMA' : 'STAGNANT'
   };
 }
 
@@ -837,14 +899,25 @@ class PsiEMADashboard {
       ? analyzeConvergence(convergenceResult.absRatios)
       : { error: 'Insufficient convergence data' };
     
+    // Calculate EMA fidelity (% real vs interpolated data)
+    const fidelity = calculateFidelity(
+      phaseAnalysis.ema34Interpolated,
+      phaseAnalysis.ema55Interpolated,
+      anomalyAnalysis.ema21Interpolated,
+      anomalyAnalysis.ema34Interpolated,
+      convergenceAnalysis.ema13Interpolated,
+      convergenceAnalysis.ema21Interpolated
+    );
+    
     // Calculate derivatives
     const derivatives = calculateDerivatives(stocks);
     
     // φ-correction prediction
     const correction = predictPhiCorrection(zFlowResult.currentZ || 0);
     
-    // φ² renewal detection
-    const renewal = detectPhiSquaredRenewal(stocks);
+    // φ² renewal detection (pass convergence R for tetralemma check)
+    const convergenceR = convergenceAnalysis.current;
+    const renewal = detectPhiSquaredRenewal(stocks, convergenceR);
     
     // Generate composite signal
     const compositeSignal = this._generateCompositeSignal(
@@ -860,13 +933,15 @@ class PsiEMADashboard {
         anomalyLevel: anomalyAnalysis.alert?.level,
         regime: convergenceAnalysis.regime?.regime || 'UNKNOWN',
         compositeSignal: compositeSignal.action,
-        compositeConfidence: compositeSignal.confidence
+        compositeConfidence: compositeSignal.confidence,
+        fidelity: `${fidelity.percent}% real (Grade ${fidelity.grade})`
       },
       dimensions: {
         phase: phaseAnalysis,
         anomaly: anomalyAnalysis,
         convergence: convergenceAnalysis
       },
+      fidelity,
       derivatives,
       correction,
       renewal,
@@ -1132,6 +1207,7 @@ module.exports = {
   mean,
   stdDev,
   zScore,
+  calculateFidelity,
   
   // Main dashboard class
   PsiEMADashboard,
