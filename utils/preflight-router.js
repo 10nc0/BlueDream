@@ -159,16 +159,37 @@ async function preflightRouter(options) {
 
 /**
  * Build full Ψ-EMA stock context for system message injection
+ * Maps PsiEMADashboard.analyze() output to LLM-readable format
  */
 function buildStockContext(preflight) {
   const { ticker, stockData, psiEmaAnalysis, dataAge } = preflight;
   if (!stockData || !psiEmaAnalysis) return null;
   
   const ageFlag = dataAge?.flag || '⚠️';
-  const phase = psiEmaAnalysis.dimensions?.phase;
-  const anomaly = psiEmaAnalysis.dimensions?.anomaly;
-  const convergence = psiEmaAnalysis.dimensions?.convergence;
-  const composite = psiEmaAnalysis.compositeSignal;
+  
+  // Correctly map PsiEMADashboard output structure:
+  // - summary: aggregated signals (phaseSignal, anomalyLevel, regime, compositeSignal)
+  // - dimensions: detailed analysis (phase.current, anomaly.currentZ, convergence.currentR)
+  // - compositeSignal: action, confidence, emoji
+  // - fidelity: grade, percent
+  const summary = psiEmaAnalysis.summary || {};
+  const phase = psiEmaAnalysis.dimensions?.phase || {};
+  const anomaly = psiEmaAnalysis.dimensions?.anomaly || {};
+  const convergence = psiEmaAnalysis.dimensions?.convergence || {};
+  const composite = psiEmaAnalysis.compositeSignal || {};
+  const fidelity = psiEmaAnalysis.fidelity || {};
+  
+  // Extract values with correct property names
+  const phaseTheta = phase.current;  // theta angle in degrees (e.g., 359.76)
+  const phaseSignal = phase.signal || summary.phaseSignal || 'N/A';
+  const anomalyZ = anomaly.currentZ;  // z-score (e.g., 0.5)
+  const anomalyLevel = summary.anomalyLevel || anomaly.alertLevel || 'N/A';
+  const convergenceR = convergence.currentR;  // R value (e.g., 1.2)
+  const regimeLabel = summary.regime || convergence.regime || 'N/A';
+  
+  // Composite signal
+  const action = composite.action || summary.compositeSignal || 'HOLD';
+  const confidence = composite.confidence ?? summary.compositeConfidence ?? 'N/A';
   
   // Build tetralemma alert if φ² crossed
   const tetralemmaAlert = psiEmaAnalysis.renewal?.tetralemma 
@@ -177,23 +198,23 @@ function buildStockContext(preflight) {
   
   return `
 ## Ψ-EMA REAL-TIME ANALYSIS: ${ticker} (${stockData.name || ticker})
-**Data Source**: yfinance (VERIFIED)
+**Data Source**: yfinance (VERIFIED - REAL PRICES)
 **Data Timestamp**: ${ageFlag} ${dataAge?.timestamp} (${dataAge?.age})
 **Current Price**: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
 **Analysis Period**: ${stockData.periodDays || stockData.closes?.length} trading days
 
-### THREE-DIMENSIONAL STATE:
-**Phase θ (Cycle)**: ${safeFixed(phase?.theta)}° — ${phase?.signal || 'N/A'} (EMA-${phase?.fastPeriod || 34}/${phase?.slowPeriod || 55})
-**Anomaly z (Deviation)**: ${safeFixed(anomaly?.z)}σ — ${anomaly?.alert || 'N/A'} (EMA-${anomaly?.fastPeriod || 21}/${anomaly?.slowPeriod || 34})
-**Convergence R (Sustainability)**: ${safeFixed(convergence?.R)} — ${convergence?.regime || 'N/A'} (EMA-${convergence?.fastPeriod || 13}/${convergence?.slowPeriod || 21})
+### THREE-DIMENSIONAL STATE (computed from real closing prices):
+**Phase θ (Cycle)**: ${safeFixed(phaseTheta)}° — ${phaseSignal} (EMA-34/EMA-55)
+**Anomaly z (Deviation)**: ${safeFixed(anomalyZ)}σ — ${anomalyLevel} (EMA-21/EMA-34)
+**Convergence R (Sustainability)**: ${safeFixed(convergenceR)} — ${regimeLabel} (EMA-13/EMA-21)
 
-### COMPOSITE SIGNAL: ${composite?.action || 'HOLD'} (Strength: ${composite?.strength || 'N/A'})
+### COMPOSITE SIGNAL: ${action} (Confidence: ${confidence}%)
 ${tetralemmaAlert}
 
 ### DATA FIDELITY:
-${psiEmaAnalysis.fidelity ? `Grade ${psiEmaAnalysis.fidelity.grade} (${psiEmaAnalysis.fidelity.percent}% real data)` : 'N/A'}
+${fidelity.grade ? `Grade ${fidelity.grade} (${fidelity.percent}% real data)` : 'N/A'}
 
-**⚠️ IMPORTANT**: This analysis uses VERIFIED yfinance data through ${dataAge?.timestamp}. ${dataAge?.isStale ? 'Data is stale - use with caution.' : 'Data is fresh.'}
+**⚠️ CRITICAL INSTRUCTION**: The values above are COMPUTED from REAL yfinance data. Quote these exact values in your response. Do NOT hallucinate different numbers. Data is fresh through ${dataAge?.timestamp}.
 **End with "🔥 ~nyan" to indicate verified Ψ-EMA output.**
 `;
 }
