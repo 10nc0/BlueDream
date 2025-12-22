@@ -59,6 +59,10 @@ CRITICAL RED FLAGS (instant REJECTED - triggers search cascade):
   * Chinese: "我没有信息", "我的知识截止", "无法获取实时"
   * Japanese: "情報がありません", "知識のカットオフ"
   * ANY admission of lacking current data = REJECTED (so search cascade can provide fresh data)
+- UNDATED FINANCIAL CLAIMS (FIXABLE): Any stock price, moving average, P/E ratio, market cap, or financial metric MUST include a timestamp or date:
+  * BAD: "50-day MA: $450" (no date = hallucinated)
+  * GOOD: "50-day MA: $450 (as of Dec 20, 2025)" or "based on Dec 2025 data"
+  * If financial numbers appear without dates, mark as FIXABLE with suggested fix: "Add timestamps to all financial metrics"
 
 DO NOT FAIL FOR:
 - Missing confidence percentages

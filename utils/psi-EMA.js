@@ -1325,37 +1325,51 @@ function shouldTriggerPsiEMA(query, tickerDetector = null) {
     return true;
   }
   
-  // Stock price/analysis query detection
-  // If query has price/analysis keywords AND a valid stock ticker, trigger Ψ-EMA
-  const priceAnalysisKeywords = [
-    'price', 'stock', 'analysis', 'analyze', 'analyse', 'chart',
-    'technical', 'trading', 'trend', 'momentum', 'bullish', 'bearish',
-    'outlook', 'forecast', 'prediction', 'performance', 'volatility'
+  // GRAMMAR: Object + (Verb OR Adjective) → attempt Ψ-EMA
+  // Object = potential ticker (AI extracts actual ticker)
+  // Verb = action words (analyze, predict, forecast)
+  // Adjective = descriptors (price, trend, sentiment)
+  
+  // Object indicators (potential ticker reference)
+  const objectIndicators = [
+    'stock', 'stocks', 'share', 'shares', 'ticker', 'equity', 'equities'
   ];
   
-  const hasPriceKeyword = priceAnalysisKeywords.some(kw => lowerQuery.includes(kw));
+  // Verb indicators (analysis actions)
+  const verbIndicators = [
+    'analyze', 'analyse', 'analysis', 'predict', 'forecast', 'evaluate',
+    'assess', 'review', 'check', 'examine', 'view', 'outlook', 'opinion'
+  ];
   
-  if (hasPriceKeyword) {
-    // Use the provided ticker detector (robust, handles ambiguous tickers)
-    if (tickerDetector) {
-      const ticker = tickerDetector(query);
-      if (ticker) return true;
-    }
-    
-    // Also check for common company names that map to ambiguous tickers
-    // These will be resolved by AI ticker extraction later
-    const companyNames = [
-      'meta', 'facebook', 'ford', 'costco', 'shopify', 'snap', 'snapchat',
-      'servicenow', 'cloudflare', 'visa', 'mastercard', 'att', 'at&t',
-      'tesla', 'apple', 'google', 'amazon', 'nvidia', 'microsoft', 'netflix',
-      'uber', 'paypal', 'salesforce', 'adobe', 'intel', 'amd', 'oracle',
-      'ibm', 'disney', 'starbucks', 'boeing', 'caterpillar', 'walmart',
-      'jpmorgan', 'bank of america', 'wells fargo', 'goldman', 'morgan stanley'
+  // Adjective indicators (what aspect)
+  const adjectiveIndicators = [
+    'price', 'trend', 'sentiment', 'momentum', 'performance', 'valuation',
+    'bullish', 'bearish', 'volatile', 'stable', 'growth', 'value'
+  ];
+  
+  const hasObject = objectIndicators.some(kw => lowerQuery.includes(kw));
+  const hasVerb = verbIndicators.some(kw => lowerQuery.includes(kw));
+  const hasAdjective = adjectiveIndicators.some(kw => lowerQuery.includes(kw));
+  
+  // Trigger if: Object + (Verb OR Adjective)
+  if (hasObject && (hasVerb || hasAdjective)) {
+    // Exclude obvious non-financial uses
+    const nonFinancialPatterns = [
+      /\b(chicken|beef|vegetable|bone|fish)\s*stock/i,
+      /\bstock\s*(photo|image|footage|video|music)/i,
+      /\b(in|out\s*of)\s*stock/i,
+      /\bstock\s*(room|pile|up)\b/i
     ];
     
-    if (companyNames.some(name => lowerQuery.includes(name))) {
-      return true;  // Will use AI ticker extraction to resolve
+    if (!nonFinancialPatterns.some(p => p.test(lowerQuery))) {
+      return true;  // Trigger AI ticker extraction attempt
     }
+  }
+  
+  // Also trigger if tickerDetector finds something
+  if (tickerDetector) {
+    const ticker = tickerDetector(query);
+    if (ticker) return true;
   }
   
   return false;
