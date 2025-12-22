@@ -18,56 +18,27 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Adaptive Layout**: Desktop has resizable sidebar/header; mobile has automatic layout, harmonized header, and floating action zone.
 - **Touch Interactions**: Optimized for iPhone with tap-to-zoom, swipe navigation, auto-hide elements, 48px touch targets, and momentum scrolling.
 - **Visual Elements**: Cat animation in header, blinking date/time, Discord-style message layout.
-- **Cat Animation Module** (`public/js/ui/cat-animation.js`): Self-initializing module that auto-starts cat canvas animation and dual-mode date/time ticker on DOMContentLoaded. Uses singleton guards to prevent double-initialization. **Two distinct formats**: (1) Single-line for auth pages (cat-animation component): "12/10/2025 - 09:30:25 AM"; (2) Double-line for playground & main index: date on line 1, time on line 2. Context-aware routing detects parent element class/ID to apply correct formatter. **Mobile Optimization**: Cat snaps to top-left (0,0) with no margins on mobile; header height reduced to 50px; buttons compressed to 36×36 px on mobile to maximize message real estate.
-- **Mobile Real Estate Optimization (Dec 10, 2025)**:
-  - **Playground**: Header 70px → 50px. Button layout reorganized: 📎🎙️ stacked vertically on LEFT (left-thumb zone), send button (52×80px) on RIGHT. Input padding 1rem → 0.5rem. Cat margin/top eliminated. One-handed thumb-friendly layout prevents mistaps.
-  - **Dashboard**: Header 70px → 55px. Cat 75×75 → 60×60px, snapped to top-left (zero margins). All filter buttons: 44px height → 28px, padding reduced to 0.2rem. Font sizes compressed to 0.65rem. Header buttons (AI, Logout, Create): all 28px. Message card buttons (Jump, Tag): 20px. Goal: maximize message display area, minimize UI chrome.
+- **Mobile Optimization**: Optimized for mobile real estate, especially in the Playground and Dashboard, to maximize message display area and minimize UI chrome.
+- **Fixed Scroll Layout**: Header fixed at top, input fixed at bottom, only message area scrolls.
+- **Foldable Device Support**: Detects foldable devices and adjusts layout for unfolded tablet mode.
 
 **Technical Implementations:**
-- **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage. **Password Recovery** via Email: users verify identity with email + creator phone number, receive secure reset link (15-minute expiry) via Resend email, with automatic session revocation on password change.
-- **Database**: PostgreSQL with multi-tenant architecture, using isolated schemas per user and a centralized book registry (`core.book_registry`).
+- **Authentication**: Email/password authentication using JWT tokens, role-based access control, and isolated user data storage, with secure password recovery via email.
+- **Database**: PostgreSQL with multi-tenant architecture, using isolated schemas per user.
 - **WhatsApp Integration**: Twilio-based messaging using WhatsApp Business API with a join-code-first routing architecture.
 - **Media Handling**: WhatsApp media downloaded from Twilio and uploaded to Discord as native attachments.
 - **Search & Metadata**: Enhanced search across messages and metadata, supporting multilingual text and full-text search indexing.
 - **Real-time Updates**: Smart polling with `?after={messageId}`, auto-scroll, "New messages" banner, and jump-to-message functionality.
 - **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, providing general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior. Audit results are logged via the Prometheus Trinity Discord bots.
-- **AI Playground**: A sovereign, public AI playground at `/AI` without authentication, offering multimodal support (Text, Photo, Audio, Documents), multi-file upload, dynamic capacity sharing, and abuse prevention. It features query classification, smart retry mechanisms, document parsing, and a search cascade for real-time knowledge. **No response caching** — every query runs fresh through the LLM to ensure data integrity (Dec 11, 2025: removed factual cache that was injecting stale/hallucinated data). **Closed-loop document analysis** skips web search entirely for financial documents (user's own data needs no external verification). **Temporal Reality Check** injects current date into financial analysis to catch impossible "future actuals".
-  - **Groq-First Architecture (Dec 13, 2025)**: Result-based routing instead of topic-based. Let Groq prove competence via audit, not pattern matching.
-    - **Flow**: Generate (no search) → Audit → APPROVED/FIXABLE? Done : Search → Regenerate → Audit
-    - **Exception**: Seed Metric (~nyan) queries need fresh data → Search FIRST, then generate
-    - **Detection**: `isSeedMetricQuery()` uses `SEED_METRIC_TOPICS` array (housing affordability, land affordability, P/I ratio, etc.)
-    - **Retry Logic**: If audit REJECTED and was groq-first → trigger search cascade → regenerate with context → re-audit
-    - **Closed-Loop**: Document uploads skip all search (user's own data needs no external verification)
-  - **Three-Pass Verification (Dec 13, 2025)**: Inspired by Replit's Architect review pattern. O(1) + audit(O(1)) + personality(O(1)) architecture:
-    - **Pass 1 (Generate)**: Draft answer using NYAN Protocol + extensions
-    - **Pass 2 (Audit)**: Structured verification checking H₀ logic, fabrication, context bleeding
-    - **Pass 1.5 (Correct)**: If fixable issues found, regenerate with audit feedback
-    - **Pass 3 (Personality)**: Reformat verified answer for readability — presentation-only layer
-      - Preserves ALL data, calculations, citations, and conclusions exactly
-      - Only adjusts formatting (headers, bullets, bold), tone (warm, curious), and structure
-      - Adds ~nyan signature and cat-themed personality touches
-      - Defined in `prompts/personality-format.js`
-    - **Stage Hierarchy**: Stage 0 (NYAN) always audited; Stage 1+ (Financial Physics, Legal Analysis, Chemistry) only if used
-    - **Verdicts**: APPROVED (🟢), CORRECTED (🟡), REJECTED (🔴), BYPASS (⚪)
-    - **UI**: Verification badge with confidence % shown on each response
-    - **Dual-Mode Audit (Dec 12, 2025)**: Calibrated audit strictness based on query type:
-      - **STRICT MODE** (default): For document-based analysis (Legal, Financial uploads) — requires source material quotes, no external knowledge
-      - **RESEARCH MODE**: For all other queries without documents — allows LLM knowledge + web search, still verifies math correctness
-    - **Audit Cascade**: Extensions (Seed Metric, Tetralemma, Financial Physics) run FIRST with strict checks; base RESEARCH mode is fallback only
-    - **SEED METRIC HISTORICAL**: P/I ratio is dimensionless (Price÷Income within SAME year) — requires both datapoints from same year
-    - **TETRALEMMA RESOLUTION**: Must explicitly choose (11) Both or (00) Neither. Requires Godel incompleteness citation
-  - **Audio Accessibility**: Mic button recordings (🎙️) are automatically treated as user queries (not context), enabling low-literacy users to interact via voice alone. Uploaded audio files are treated as supporting context. Clear iOS/Safari error messages when recording is unavailable. Note: Safari/iOS does not support MediaRecorder API for audio recording; users on iPhone must type.
-  - **Mobile UX**: Android/mobile keyboard auto-collapses on send for better readability of nyan's response. **Fixed scroll layout (Dec 11, 2025)**: Header fixed at top, input fixed at bottom, only message area scrolls — classic chat app pattern.
-  - **Streaming Token Output (Dec 16, 2025)**: Real-time SSE streaming of personality pass for "watching it think" UX. Uses text buffer accumulation (no markdown during stream) with single render on finalize. Robust client disconnect handling via `res.on('close')` with Groq stream cleanup. Responsive typing cursor scales for mobile/desktop.
-  - **Foldable Device Support**: Galaxy Z Fold 7 and similar foldables are detected via aspect ratio (>1.4 = mobile mode). Unfolded tablet mode uses desktop two-pane layout with book-sidebar capped at 30% width to ensure message pane visibility.
-- **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis using the **Seed Metric** (P/I ratio: years to buy 700m² land). **NYAN is Step 0 (sacred, always active)** — all other protocols (Financial Physics, Legal Analysis, Chemistry) are EXTENSIONS that build on top of NYAN, never override it.
-  - **P/I Ratio Thresholds**: <10yr = Optimism, 10-25yr = Extraction, >25yr = Fatalism
-  - **Seed Metric Proxy Rules** (H₀ — no circular reasoning):
-    1. **Direct land price** (95% conf): Direct 700m² residential land price from government/real estate boards
-    2. **Per m² proxy** (80% conf): Published land price per m² → multiply by 700
-    3. **Exurban fallback** (60% conf): Within 90-min commute, MIN $100/m² floor → multiply by 700
-    4. **Income proxy**: 2000+ divide household by 2 (dual-earner); pre-1980 use as-is (single-earner era)
-    5. **Forbidden**: Never derive land price from home price, GDP per capita, Gini, or national averages
+- **AI Playground**: A sovereign, public AI playground at `/AI` without authentication, offering multimodal support (Text, Photo, Audio, Documents), multi-file upload, dynamic capacity sharing, and abuse prevention. It features query classification, smart retry mechanisms, document parsing, and a search cascade for real-time knowledge.
+  - **Groq-First Architecture**: Result-based routing where Groq proves competence via audit.
+  - **Three-Pass Verification**: Draft, Audit (with potential correction), and Personality formatting for responses. Includes dual-mode auditing (Strict for documents, Research for general queries).
+  - **Audio Accessibility**: Mic button recordings are treated as user queries, enabling low-literacy users to interact via voice.
+  - **Streaming Token Output**: Real-time SSE streaming of the personality pass for "watching it think" UX.
+- **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis using the **Seed Metric** (P/I ratio: years to buy 700m² land). NYAN is a sacred, always active Step 0 protocol.
+- **Financial Physics System**: A 4-tier architecture for financial cognition, including document type detection, nature classification, semantic enrichment, and validation. It's an extension of the NYAN Protocol.
+- **Legal Document Analysis System**: Stage 1+ extension for contract/agreement analysis, auto-triggered by legal keywords in documents. Provides a universal 7-section template structure for analysis.
+- **φ-Dynamics System**: Financial Wave Function Analysis module implementing the Financial Quantum Mechanics framework for time series analysis and regime classification.
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.
@@ -75,24 +46,13 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Scalability & Recovery**: Designed for Replit Autoscale, PostgreSQL stores all book state for recovery.
 - **Security**: Strict webhook validation, JWT security, robust audit logging, Sybil attack prevention, and CSP compliance.
 - **Discord Bot Trinity Architecture**:
-    - **Human Trinity (WhatsApp → Discord forwarding):** Hermes (write-only for threads/messages), Thoth (read-only for message history).
-    - **Prometheus Trinity (AI Audit Logging):** Idris (write-only for AI log threads/audit results), Horus (read-only for AI audit history).
-- **Financial Physics System**: A 4-tier architecture (`utils/financial-physics.js`) for financial cognition, including document type detection, nature classification, semantic enrichment, and validation, with a specialized `FINANCIAL_PHYSICS_SEED` for AI context. **Financial Physics is an extension of NYAN PROTOCOL** — system message order is always [NYAN first, Financial Physics second] to honor the Step-0 hierarchy.
-- **Legal Document Analysis System** (`prompts/legal-analysis.js`): Stage 1+ extension for contract/agreement analysis. Auto-triggers when Word/PDF documents contain legal keywords (perjanjian, kontrak, agreement, contract, NDA, employment, lease, etc.). Provides a universal 7-section template structure:
-    1. **Executive Summary**: Jurisdiction, governing law, document nature, key dates
-    2. **Parties & Definitions**: Party identification, key terms defined
-    3. **Material Changes**: Tracked differences when comparing document versions
-    4. **Obligations & Restrictions**: Rights, duties, constraints, prohibitions
-    5. **Risk Assessment**: Red flags, missing clauses, unusual terms, liability exposure
-    6. **Timeline Differences**: Commencement, termination, notice periods, renewals
-    7. **Recommendations / Action Items**: Negotiation points, clarification requests, approval status
-  - **Audit Checks (AUDIT_LEGAL_ANALYSIS)**: 6 verification rules — quoted accuracy, interpretation grounding, balanced risk assessment, no over-generalization, temporal consistency, evidence-based recommendations
+    - **Human Trinity**: Hermes (write-only for threads/messages), Thoth (read-only for message history).
+    - **Prometheus Trinity**: Idris (write-only for AI log threads/audit results), Horus (read-only for AI audit history).
 
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)
 - **WhatsApp**: Twilio WhatsApp Business API
-- **Email**: Resend API (for password reset emails, from nyan@nyanbook.io)
-- **AI (Production)**: Groq API
-- **AI (Playground)**: Groq API (text + vision via dedicated tokens)
+- **Email**: Resend API
+- **AI**: Groq API
 - **Search**: DuckDuckGo Instant Answer API, Brave Search API
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth`

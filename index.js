@@ -6471,8 +6471,20 @@ function containsNotFoundClaim(answer) {
     return NOT_FOUND_PATTERNS.some(pattern => pattern.test(answer));
 }
 
+// φ-Dynamics detection (Fourier Financial Wave analysis)
+const { shouldTriggerPhiDynamics, getPhiDynamicsContext } = require('./utils/phi-dynamics');
+
+function isPhiDynamicsQuery(message) {
+    return shouldTriggerPhiDynamics(message);
+}
+
 function classifyQuery(message) {
     const trimmed = message.trim();
+    
+    // φ-Dynamics: Fourier/wave/series analysis
+    if (isPhiDynamicsQuery(trimmed)) {
+        return { type: 'phi-dynamics', searchStrategy: 'none', skipCompression: false };
+    }
     
     // ONLY exception: Seed Metric needs fresh data (land prices, income) - search first
     if (isSeedMetricQuery(trimmed)) {
@@ -7572,6 +7584,11 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         if (hasLegalContext) {
             systemMessages.push({ role: 'system', content: getLegalAnalysisSeed() });
         }
+        // φ-Dynamics context for Fourier/wave/series analysis
+        if (queryClass.type === 'phi-dynamics') {
+            systemMessages.push({ role: 'system', content: getPhiDynamicsContext() });
+            console.log(`📊 φ-Dynamics context injected for wave function analysis`);
+        }
         
         const messages = [
             ...systemMessages,
@@ -7961,6 +7978,13 @@ app.post('/api/playground/stream', async (req, res) => {
         const systemMessages = [{ role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT }];
         if (hasFinancialDoc) systemMessages.push({ role: 'system', content: getFinancialPhysicsSeed() });
         if (hasLegalDoc) systemMessages.push({ role: 'system', content: getLegalAnalysisSeed() });
+        
+        // φ-Dynamics context for Fourier/wave/series analysis
+        const nonStreamQueryClass = classifyQuery(message || '');
+        if (nonStreamQueryClass.type === 'phi-dynamics') {
+            systemMessages.push({ role: 'system', content: getPhiDynamicsContext() });
+            console.log(`📊 φ-Dynamics context injected for wave function analysis (non-streaming)`);
+        }
         
         const messages = [
             ...systemMessages,
