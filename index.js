@@ -6762,6 +6762,88 @@ async function searchBrave(query, clientIp = null) {
     }
 }
 
+// ===== UNIFIED SEARCH RETRY CASCADE =====
+// Shared function for both streaming and non-streaming endpoints
+// Called when audit REJECTS a groq-first query (no prior search)
+async function executeSearchRetryCascade({
+    searchQuery,
+    clientIp,
+    groqToken,
+    originalMessage,
+    systemMessages,
+    conversationContext,
+    temperature = 0.15,
+    maxTokens = 1500
+}) {
+    console.log(`🔄 Groq-First REJECTED: Triggering search retry...`);
+    
+    // Execute search cascade: Brave → DDG → DDG core words
+    let searchContext = await searchBrave(searchQuery, clientIp);
+    if (!searchContext) {
+        console.log(`🔄 Brave returned nothing, trying DDG fallback...`);
+        searchContext = await searchDuckDuckGo(searchQuery);
+    }
+    if (!searchContext) {
+        const coreWords = searchQuery.split(/\s+/).slice(0, 5).join(' ');
+        console.log(`🔄 All search failed, trying DDG with core words: "${coreWords}"`);
+        searchContext = await searchDuckDuckGo(coreWords);
+    }
+    
+    if (!searchContext) {
+        console.log(`⚠️ Search retry failed - no results found`);
+        return { success: false, searchContext: null, regeneratedAnswer: null };
+    }
+    
+    console.log(`✅ Search context found (${searchContext.length} chars) - Regenerating...`);
+    
+    // Rebuild prompt with search context
+    const retryPrompt = `REAL-TIME WEB SEARCH RESULTS (USE THIS DATA - it overrides your knowledge cutoff):
+${searchContext}
+
+INSTRUCTION: Extract the relevant facts from the search results above to answer the user's question. Do NOT say "no data" or mention knowledge cutoff.
+
+User query: ${originalMessage}`;
+    
+    // Regenerate with search context
+    const retryMessages = [
+        ...systemMessages,
+        ...conversationContext,
+        { role: 'user', content: retryPrompt }
+    ];
+    
+    try {
+        const retryResponse = await groqWithRetry({
+            url: 'https://api.groq.com/openai/v1/chat/completions',
+            data: {
+                model: 'llama-3.3-70b-versatile',
+                messages: retryMessages,
+                temperature,
+                max_tokens: maxTokens,
+                top_p: 0.95
+            },
+            config: {
+                headers: {
+                    'Authorization': `Bearer ${groqToken}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15000
+            }
+        }, 3, 'text');
+        
+        const regeneratedAnswer = retryResponse.data.choices[0]?.message?.content || null;
+        console.log(`🔄 Regenerated answer (${regeneratedAnswer?.length || 0} chars)`);
+        
+        return { 
+            success: true, 
+            searchContext, 
+            regeneratedAnswer 
+        };
+    } catch (err) {
+        console.error('⚠️ Search retry regeneration error:', err.message);
+        return { success: false, searchContext, regeneratedAnswer: null };
+    }
+}
+
 // Internal scribe: Token usage visibility (no auth required - dev tool)
 app.get('/api/playground/usage', (req, res) => {
     try {
@@ -7577,68 +7659,31 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             const canRetry = !isIdentity && wasGroqFirstQuery && wasRejected && searchQuery && !isClosedLoopAnalysis;
             
             if (canRetry) {
-                console.log(`🔄 Groq-First REJECTED: Triggering search retry...`);
                 didSearchRetry = true;
                 
-                // Execute search cascade
-                let retrySearchContext = await searchBrave(searchQuery, clientIp);
-                if (!retrySearchContext) {
-                    console.log(`🔄 Brave returned nothing, trying DDG fallback...`);
-                    retrySearchContext = await searchDuckDuckGo(searchQuery);
-                }
-                if (!retrySearchContext) {
-                    const coreWords = searchQuery.split(/\s+/).slice(0, 5).join(' ');
-                    console.log(`🔄 All search failed, trying DDG with core words: "${coreWords}"`);
-                    retrySearchContext = await searchDuckDuckGo(coreWords);
-                }
+                // Use unified search retry cascade
+                const retryResult = await executeSearchRetryCascade({
+                    searchQuery,
+                    clientIp,
+                    groqToken: PLAYGROUND_GROQ_TOKEN,
+                    originalMessage: message,
+                    systemMessages,
+                    conversationContext,
+                    temperature,
+                    maxTokens
+                });
                 
-                if (retrySearchContext) {
-                    console.log(`✅ Search context found (${retrySearchContext.length} chars) - Regenerating...`);
-                    searchContext = retrySearchContext;
-                    
-                    // Rebuild prompt with search context
-                    const retryPrompt = `REAL-TIME WEB SEARCH RESULTS (USE THIS DATA - it overrides your knowledge cutoff):
-${retrySearchContext}
-
-INSTRUCTION: Extract the relevant facts from the search results above to answer the user's question. Do NOT say "no data" or mention knowledge cutoff.
-
-User query: ${message}`;
-                    
-                    // Regenerate with search context
-                    const retryMessages = [
-                        ...systemMessages,
-                        ...conversationContext,
-                        { role: 'user', content: retryPrompt }
-                    ];
-                    
-                    const retryResponse = await groqWithRetry({
-                        url: 'https://api.groq.com/openai/v1/chat/completions',
-                        data: {
-                            model: 'llama-3.3-70b-versatile',
-                            messages: retryMessages,
-                            temperature,
-                            max_tokens: maxTokens,
-                            top_p: 0.95
-                        },
-                        config: {
-                            headers: {
-                                'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`,
-                                'Content-Type': 'application/json'
-                            },
-                            timeout: 15000
-                        }
-                    }, 3, 'text');
-                    
-                    const retryReply = retryResponse.data.choices[0]?.message?.content || reply;
-                    console.log(`🔄 Regenerated answer (${retryReply.length} chars) - Re-auditing...`);
+                if (retryResult.success && retryResult.regeneratedAnswer) {
+                    searchContext = retryResult.searchContext;
                     
                     // Re-audit the regenerated answer
-                    const retrySeedMetric = retryReply.includes('~nyan');
+                    console.log(`🔍 Re-auditing regenerated answer...`);
+                    const retrySeedMetric = retryResult.regeneratedAnswer.includes('~nyan');
                     verificationResult = await runVerifiedAnswer({
                         groqToken: PLAYGROUND_GROQ_TOKEN,
-                        draftAnswer: retryReply,
-                        originalQuery: effectiveMessage || retryPrompt,
-                        userContext: retrySearchContext,
+                        draftAnswer: retryResult.regeneratedAnswer,
+                        originalQuery: effectiveMessage || message,
+                        userContext: retryResult.searchContext,
                         usesFinancialPhysics: hasFinanceContext,
                         usesChemistry: false,
                         usesLegalAnalysis: hasLegalContext,
@@ -7651,7 +7696,6 @@ User query: ${message}`;
                     
                     console.log(`🔍 Retry audit: ${verificationResult.auditMetadata?.verdict} (${verificationResult.auditMetadata?.confidence}% conf)`);
                 } else {
-                    console.log(`⚠️ Search retry failed - no results found`);
                     noSearchDisclaimer = true;
                 }
             }
@@ -7960,9 +8004,68 @@ app.post('/api/playground/stream', async (req, res) => {
             }
         }
         
+        // ===== GROQ-FIRST RETRY LOGIC (Streaming) =====
+        // If REJECTED and no documents (groq-first), trigger search retry cascade
+        let verifiedAnswer = draftAnswer;
+        let didSearchRetry = false;
+        const hasNoDocuments = extractedContent.length === 0;
+        const canRetry = !isIdentity && hasNoDocuments && auditResult.verdict === 'REJECTED' && message;
+        
+        if (canRetry) {
+            if (isClientDisconnected) return;
+            res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Searching for better data...' })}\n\n`);
+            
+            // Use unified search retry cascade
+            const retryResult = await executeSearchRetryCascade({
+                searchQuery: message,
+                clientIp,
+                groqToken: PLAYGROUND_GROQ_TOKEN,
+                originalMessage: message,
+                systemMessages,
+                conversationContext,
+                temperature: hasFinancialDoc ? 0.3 : 0.15,
+                maxTokens: hasDocumentAnalysis ? 4000 : 1500
+            });
+            
+            if (retryResult.success && retryResult.regeneratedAnswer) {
+                didSearchRetry = true;
+                
+                // Re-audit the regenerated answer
+                if (isClientDisconnected) return;
+                res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Re-verifying...' })}\n\n`);
+                
+                const isSeedMetricAnalysis = retryResult.regeneratedAnswer.includes('~nyan');
+                const { isFalseDichotomy } = require('./prompts/audit-protocol');
+                const isTetralemmaQuery = isFalseDichotomy(message);
+                
+                try {
+                    auditResult = await runAuditPass(
+                        PLAYGROUND_GROQ_TOKEN,
+                        retryResult.regeneratedAnswer,
+                        message || finalPrompt,
+                        retryResult.searchContext,
+                        {
+                            usesFinancialPhysics: hasFinancialDoc,
+                            usesChemistry: false,
+                            usesLegalAnalysis: hasLegalDoc,
+                            isSeedMetric: isSeedMetricAnalysis,
+                            isTetralemma: isTetralemmaQuery,
+                            auditMode: 'RESEARCH'
+                        },
+                        12000
+                    );
+                    verifiedAnswer = retryResult.regeneratedAnswer;
+                    console.log(`🔍 Retry audit: ${auditResult.verdict} (${auditResult.confidence}% conf)`);
+                } catch (reauditErr) {
+                    console.error('⚠️ Re-audit error:', reauditErr.message);
+                    auditResult = { verdict: 'BYPASS', confidence: 70 };
+                    verifiedAnswer = retryResult.regeneratedAnswer;
+                }
+            }
+        }
+        
         // Determine badge and prepare metadata
         let badge = 'unverified';
-        let verifiedAnswer = draftAnswer;
         let passCount = 2;
         
         if (auditResult.verdict === 'APPROVED') {
@@ -7980,7 +8083,8 @@ app.post('/api/playground/stream', async (req, res) => {
             confidence: auditResult.confidence || 70,
             passCount: badge === 'verified' ? 3 : passCount,
             extensionsVerified: ['NYAN_PROTOCOL'],
-            latencyMs: 0
+            latencyMs: 0,
+            didSearchRetry
         };
         
         // Stream personality pass for approved/bypass responses
@@ -8004,7 +8108,7 @@ app.post('/api/playground/stream', async (req, res) => {
             res.end();
         }
         
-        console.log(`🌊 Streaming complete for ${clientIp} [${badge}]`);
+        console.log(`🌊 Streaming complete for ${clientIp} [${badge}]${didSearchRetry ? ' [+search retry]' : ''}`);
         
     } catch (error) {
         console.error('❌ Streaming error:', error.message);
