@@ -6472,7 +6472,8 @@ function containsNotFoundClaim(answer) {
 }
 
 // Ψ-EMA detection (Fourier Financial Wave analysis)
-const { shouldTriggerPsiEMA, getPsiEMAContext } = require('./utils/psi-EMA');
+const { shouldTriggerPsiEMA, getPsiEMAContext, PsiEMADashboard } = require('./utils/psi-EMA');
+const { detectStockTicker, isPsiEMAStockQuery, fetchStockPrices } = require('./utils/stock-fetcher');
 
 function isPsiEMAQuery(message) {
     return shouldTriggerPsiEMA(message);
@@ -7585,9 +7586,70 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             systemMessages.push({ role: 'system', content: getLegalAnalysisSeed() });
         }
         // Ψ-EMA context for Fourier/wave/series/EMA analysis
+        let stockPsiEMAAnalysis = null;
         if (queryClass.type === 'psi-ema') {
             systemMessages.push({ role: 'system', content: getPsiEMAContext() });
             console.log(`📊 Ψ-EMA context injected for wave function analysis`);
+            
+            // Check if this is a stock-specific Ψ-EMA query (e.g., "psi ema for NVDA")
+            const stockTicker = detectStockTicker(effectiveMessage || message);
+            if (stockTicker) {
+                console.log(`📈 Stock ticker detected: ${stockTicker} - fetching price history via yfinance...`);
+                try {
+                    const stockData = await fetchStockPrices(stockTicker, 90);
+                    console.log(`📈 Fetched ${stockData.periodDays} days of ${stockTicker} data (${stockData.startDate} to ${stockData.endDate})`);
+                    
+                    // Run Ψ-EMA analysis on the stock data
+                    const dashboard = new PsiEMADashboard();
+                    const analysis = dashboard.analyze({ stocks: stockData.closes });
+                    
+                    stockPsiEMAAnalysis = {
+                        ticker: stockTicker,
+                        name: stockData.name,
+                        currency: stockData.currency,
+                        currentPrice: stockData.currentPrice,
+                        periodDays: stockData.periodDays,
+                        dateRange: `${stockData.startDate} to ${stockData.endDate}`,
+                        analysis
+                    };
+                    
+                    // Inject the analysis as context for the LLM
+                    const analysisContext = `
+## Ψ-EMA Analysis for ${stockTicker} (${stockData.name})
+Current Price: ${stockData.currency} ${stockData.currentPrice?.toFixed(2)}
+Period: ${stockData.periodDays} trading days (${stockData.startDate} to ${stockData.endDate})
+
+### 3-Dimensional Wave Function State:
+${JSON.stringify(analysis.summary, null, 2)}
+
+### Phase θ (Cycle Position):
+- Current Phase: ${analysis.phase?.interpretation?.phase} ${analysis.phase?.interpretation?.emoji}
+- Signal: ${analysis.phase?.crossover?.signal} (${analysis.phase?.crossover?.type})
+- EMA-34: ${analysis.phase?.ema34?.toFixed(2)}°, EMA-55: ${analysis.phase?.ema55?.toFixed(2)}°
+
+### Anomaly z (Deviation Strength):
+- Current z-score: ${analysis.anomaly?.current?.toFixed(2)}σ ${analysis.anomaly?.alert?.emoji}
+- Alert Level: ${analysis.anomaly?.alert?.level}
+- Action: ${analysis.anomaly?.alert?.action}
+
+### Convergence R (Sustainability → φ):
+- Current R: ${analysis.convergence?.current?.toFixed(3)}
+- Regime: ${analysis.convergence?.regime?.regime} ${analysis.convergence?.regime?.emoji}
+- φ-Deviation: ${analysis.convergence?.phiAlert?.deviation}
+
+### Composite Signal:
+${analysis.compositeSignal?.recommendation || 'N/A'}
+Confidence: ${analysis.compositeSignal?.confidence || 'N/A'}%
+
+Use this real-time Ψ-EMA analysis to answer the user's query about ${stockTicker}.
+`;
+                    systemMessages.push({ role: 'system', content: analysisContext });
+                    console.log(`📊 Ψ-EMA stock analysis injected: ${analysis.summary?.phaseSignal} | ${analysis.summary?.anomalyLevel} | ${analysis.summary?.regimeStatus}`);
+                } catch (stockErr) {
+                    console.log(`⚠️ Stock fetch failed for ${stockTicker}: ${stockErr.message}`);
+                    // Continue without stock data - LLM will use general knowledge
+                }
+            }
         }
         
         const messages = [
@@ -7988,7 +8050,52 @@ app.post('/api/playground/stream', async (req, res) => {
         const nonStreamQueryClass = classifyQuery(message || '');
         if (nonStreamQueryClass.type === 'psi-ema') {
             systemMessages.push({ role: 'system', content: getPsiEMAContext() });
-            console.log(`📊 Ψ-EMA context injected for wave function analysis (non-streaming)`);
+            console.log(`📊 Ψ-EMA context injected for wave function analysis (streaming)`);
+            
+            // Check if this is a stock-specific Ψ-EMA query
+            const stockTicker = detectStockTicker(message || '');
+            if (stockTicker) {
+                console.log(`📈 Stock ticker detected: ${stockTicker} - fetching price history via yfinance...`);
+                res.write(`data: ${JSON.stringify({ type: 'thinking', stage: `Fetching ${stockTicker} price history...` })}\n\n`);
+                try {
+                    const stockData = await fetchStockPrices(stockTicker, 90);
+                    console.log(`📈 Fetched ${stockData.periodDays} days of ${stockTicker} data`);
+                    
+                    const dashboard = new PsiEMADashboard();
+                    const analysis = dashboard.analyze({ stocks: stockData.closes });
+                    
+                    const analysisContext = `
+## Ψ-EMA Analysis for ${stockTicker} (${stockData.name})
+Current Price: ${stockData.currency} ${stockData.currentPrice?.toFixed(2)}
+Period: ${stockData.periodDays} trading days (${stockData.startDate} to ${stockData.endDate})
+
+### 3-Dimensional Wave Function State:
+${JSON.stringify(analysis.summary, null, 2)}
+
+### Phase θ (Cycle Position):
+- Current Phase: ${analysis.phase?.interpretation?.phase} ${analysis.phase?.interpretation?.emoji}
+- Signal: ${analysis.phase?.crossover?.signal} (${analysis.phase?.crossover?.type})
+
+### Anomaly z (Deviation Strength):
+- Current z-score: ${analysis.anomaly?.current?.toFixed(2)}σ ${analysis.anomaly?.alert?.emoji}
+- Alert Level: ${analysis.anomaly?.alert?.level}
+
+### Convergence R (Sustainability → φ):
+- Current R: ${analysis.convergence?.current?.toFixed(3)}
+- Regime: ${analysis.convergence?.regime?.regime} ${analysis.convergence?.regime?.emoji}
+
+### Composite Signal:
+${analysis.compositeSignal?.recommendation || 'N/A'}
+Confidence: ${analysis.compositeSignal?.confidence || 'N/A'}%
+
+Use this real-time Ψ-EMA analysis to answer the user's query about ${stockTicker}.
+`;
+                    systemMessages.push({ role: 'system', content: analysisContext });
+                    console.log(`📊 Ψ-EMA stock analysis injected: ${analysis.summary?.phaseSignal}`);
+                } catch (stockErr) {
+                    console.log(`⚠️ Stock fetch failed: ${stockErr.message}`);
+                }
+            }
         }
         
         const messages = [
