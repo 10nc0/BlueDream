@@ -6739,87 +6739,17 @@ async function searchBrave(query, clientIp = null) {
     }
 }
 
-// ===== UNIFIED SEARCH RETRY CASCADE =====
-// Shared function for both streaming and non-streaming endpoints
-// Called when audit REJECTS a groq-first query (no prior search)
-async function executeSearchRetryCascade({
-    searchQuery,
-    clientIp,
-    groqToken,
-    originalMessage,
-    systemMessages,
-    conversationContext,
-    temperature = 0.15,
-    maxTokens = 1500
-}) {
-    console.log(`🔄 Groq-First REJECTED: Triggering search retry...`);
-    
-    // Execute search cascade: Brave → DDG → DDG core words
-    let searchContext = await searchBrave(searchQuery, clientIp);
-    if (!searchContext) {
-        console.log(`🔄 Brave returned nothing, trying DDG fallback...`);
-        searchContext = await searchDuckDuckGo(searchQuery);
-    }
-    if (!searchContext) {
-        const coreWords = searchQuery.split(/\s+/).slice(0, 5).join(' ');
-        console.log(`🔄 All search failed, trying DDG with core words: "${coreWords}"`);
-        searchContext = await searchDuckDuckGo(coreWords);
-    }
-    
-    if (!searchContext) {
-        console.log(`⚠️ Search retry failed - no results found`);
-        return { success: false, searchContext: null, regeneratedAnswer: null };
-    }
-    
-    console.log(`✅ Search context found (${searchContext.length} chars) - Regenerating...`);
-    
-    // Rebuild prompt with search context
-    const retryPrompt = `REAL-TIME WEB SEARCH RESULTS (USE THIS DATA - it overrides your knowledge cutoff):
-${searchContext}
-
-INSTRUCTION: Extract the relevant facts from the search results above to answer the user's question. Do NOT say "no data" or mention knowledge cutoff.
-
-User query: ${originalMessage}`;
-    
-    // Regenerate with search context
-    const retryMessages = [
-        ...systemMessages,
-        ...conversationContext,
-        { role: 'user', content: retryPrompt }
-    ];
-    
-    try {
-        const retryResponse = await groqWithRetry({
-            url: 'https://api.groq.com/openai/v1/chat/completions',
-            data: {
-                model: 'llama-3.3-70b-versatile',
-                messages: retryMessages,
-                temperature,
-                max_tokens: maxTokens,
-                top_p: 0.95
-            },
-            config: {
-                headers: {
-                    'Authorization': `Bearer ${groqToken}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 15000
-            }
-        }, 3, 'text');
-        
-        const regeneratedAnswer = retryResponse.data.choices[0]?.message?.content || null;
-        console.log(`🔄 Regenerated answer (${regeneratedAnswer?.length || 0} chars)`);
-        
-        return { 
-            success: true, 
-            searchContext, 
-            regeneratedAnswer 
-        };
-    } catch (err) {
-        console.error('⚠️ Search retry regeneration error:', err.message);
-        return { success: false, searchContext, regeneratedAnswer: null };
-    }
-}
+// ===== PIPELINE ORCHESTRATOR SETUP =====
+// Configure orchestrator with all required dependencies
+const orchestrator = createPipelineOrchestrator({
+    groqToken: process.env.PLAYGROUND_GROQ_TOKEN,
+    groqVisionToken: process.env.PLAYGROUND_GROQ_VISION_TOKEN,
+    searchBrave,
+    searchDuckDuckGo,
+    extractCoreQuestion,
+    isIdentityQuery,
+    groqWithRetry
+});
 
 // Internal scribe: Token usage visibility (no auth required - dev tool)
 app.get('/api/playground/usage', (req, res) => {
