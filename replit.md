@@ -68,8 +68,9 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
   - **Audit Protocol**: AUDIT_PSI_EMA extension accepts Ψ-EMA framework terminology
   - **~nyan Search Bypass**: Responses ending with ~nyan skip web search retry (pre-verified data)
   - **Real-Time Stock Integration** (Dec 22, 2025):
-    - `utils/fetch-stock-prices.py`: Python script using yfinance for 90-day closing prices
+    - `utils/fetch-stock-prices.py`: Python script using yfinance for 180-day closing prices (~125 trading days for high EMA-55 fidelity)
     - `utils/stock-fetcher.js`: Node.js wrapper with ticker detection and price fetching
+    - **Confidence Breakdown**: Output displays Data Fidelity (% real data), Signal Strength, and Combined Confidence separately
     - **Smart Ticker Detection** (Grammar-based + 3-tier):
       - **Trigger Grammar**: Object + (Verb OR Adjective) → attempt Ψ-EMA
         - Object: stock, stocks, share, shares, ticker, equity
