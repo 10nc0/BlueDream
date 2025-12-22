@@ -6471,19 +6471,19 @@ function containsNotFoundClaim(answer) {
     return NOT_FOUND_PATTERNS.some(pattern => pattern.test(answer));
 }
 
-// φ-Dynamics detection (Fourier Financial Wave analysis)
-const { shouldTriggerPhiDynamics, getPhiDynamicsContext } = require('./utils/phi-dynamics');
+// Ψ-EMA detection (Fourier Financial Wave analysis)
+const { shouldTriggerPsiEMA, getPsiEMAContext } = require('./utils/psi-EMA');
 
-function isPhiDynamicsQuery(message) {
-    return shouldTriggerPhiDynamics(message);
+function isPsiEMAQuery(message) {
+    return shouldTriggerPsiEMA(message);
 }
 
 function classifyQuery(message) {
     const trimmed = message.trim();
     
-    // φ-Dynamics: Fourier/wave/series analysis
-    if (isPhiDynamicsQuery(trimmed)) {
-        return { type: 'phi-dynamics', searchStrategy: 'none', skipCompression: false };
+    // Ψ-EMA: Fourier/wave/series/EMA analysis
+    if (isPsiEMAQuery(trimmed)) {
+        return { type: 'psi-ema', searchStrategy: 'none', skipCompression: false };
     }
     
     // ONLY exception: Seed Metric needs fresh data (land prices, income) - search first
@@ -7584,10 +7584,10 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         if (hasLegalContext) {
             systemMessages.push({ role: 'system', content: getLegalAnalysisSeed() });
         }
-        // φ-Dynamics context for Fourier/wave/series analysis
-        if (queryClass.type === 'phi-dynamics') {
-            systemMessages.push({ role: 'system', content: getPhiDynamicsContext() });
-            console.log(`📊 φ-Dynamics context injected for wave function analysis`);
+        // Ψ-EMA context for Fourier/wave/series/EMA analysis
+        if (queryClass.type === 'psi-ema') {
+            systemMessages.push({ role: 'system', content: getPsiEMAContext() });
+            console.log(`📊 Ψ-EMA context injected for wave function analysis`);
         }
         
         const messages = [
@@ -7673,6 +7673,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 console.log(`🔍 Two-Pass: Running verification audit (${auditMode} mode)${auditExtensions.length ? ' ' + auditExtensions.join(' ') : ''}...`);
             }
             
+            const isPsiEMAStreaming = queryClass.type === 'psi-ema';
             let verificationResult = isIdentity ? null : await runVerifiedAnswer({
                 groqToken: PLAYGROUND_GROQ_TOKEN,
                 draftAnswer: reply,
@@ -7681,6 +7682,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 usesFinancialPhysics: hasFinanceContext,
                 usesChemistry: false,
                 usesLegalAnalysis: hasLegalContext,
+                usesPsiEMA: isPsiEMAStreaming,
                 isSeedMetric: isSeedMetricAnalysis,
                 isTetralemma: isTetralemmaQuery,
                 auditMode,
@@ -7720,7 +7722,9 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                     searchContext = retryResult.searchContext;
                     
                     // Re-audit the regenerated answer
-                    console.log(`🔍 Re-auditing regenerated answer...`);
+                    // Mirror auditMode from original: STRICT if documents present, RESEARCH otherwise
+                    const retryAuditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
+                    console.log(`🔍 Re-auditing regenerated answer (${retryAuditMode} mode)...`);
                     const retrySeedMetric = retryResult.regeneratedAnswer.includes('~nyan');
                     verificationResult = await runVerifiedAnswer({
                         groqToken: PLAYGROUND_GROQ_TOKEN,
@@ -7730,9 +7734,10 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                         usesFinancialPhysics: hasFinanceContext,
                         usesChemistry: false,
                         usesLegalAnalysis: hasLegalContext,
+                        usesPsiEMA: isPsiEMAStreaming,
                         isSeedMetric: retrySeedMetric,
                         isTetralemma: isTetralemmaQuery,
-                        auditMode,
+                        auditMode: retryAuditMode,
                         maxTokens,
                         timeout: 12000
                     });
@@ -7979,11 +7984,11 @@ app.post('/api/playground/stream', async (req, res) => {
         if (hasFinancialDoc) systemMessages.push({ role: 'system', content: getFinancialPhysicsSeed() });
         if (hasLegalDoc) systemMessages.push({ role: 'system', content: getLegalAnalysisSeed() });
         
-        // φ-Dynamics context for Fourier/wave/series analysis
+        // Ψ-EMA context for Fourier/wave/series/EMA analysis
         const nonStreamQueryClass = classifyQuery(message || '');
-        if (nonStreamQueryClass.type === 'phi-dynamics') {
-            systemMessages.push({ role: 'system', content: getPhiDynamicsContext() });
-            console.log(`📊 φ-Dynamics context injected for wave function analysis (non-streaming)`);
+        if (nonStreamQueryClass.type === 'psi-ema') {
+            systemMessages.push({ role: 'system', content: getPsiEMAContext() });
+            console.log(`📊 Ψ-EMA context injected for wave function analysis (non-streaming)`);
         }
         
         const messages = [
@@ -8033,6 +8038,7 @@ app.post('/api/playground/stream', async (req, res) => {
             const auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
             
             try {
+                const isPsiEMA = nonStreamQueryClass.type === 'psi-ema';
                 auditResult = await runAuditPass(
                     PLAYGROUND_GROQ_TOKEN,
                     draftAnswer,
@@ -8042,6 +8048,7 @@ app.post('/api/playground/stream', async (req, res) => {
                         usesFinancialPhysics: hasFinancialDoc,
                         usesChemistry: false,
                         usesLegalAnalysis: hasLegalDoc,
+                        usesPsiEMA: isPsiEMA,
                         isSeedMetric: isSeedMetricAnalysis,
                         isTetralemma: isTetralemmaQuery,
                         auditMode
@@ -8097,6 +8104,7 @@ app.post('/api/playground/stream', async (req, res) => {
                 const isTetralemmaQuery = isFalseDichotomy(message);
                 
                 try {
+                    const isPsiEMARetry = nonStreamQueryClass.type === 'psi-ema';
                     auditResult = await runAuditPass(
                         PLAYGROUND_GROQ_TOKEN,
                         retryResult.regeneratedAnswer,
@@ -8106,6 +8114,7 @@ app.post('/api/playground/stream', async (req, res) => {
                             usesFinancialPhysics: hasFinancialDoc,
                             usesChemistry: false,
                             usesLegalAnalysis: hasLegalDoc,
+                            usesPsiEMA: isPsiEMARetry,
                             isSeedMetric: isSeedMetricAnalysis,
                             isTetralemma: isTetralemmaQuery,
                             auditMode: 'RESEARCH'

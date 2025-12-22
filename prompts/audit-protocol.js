@@ -92,6 +92,31 @@ LEGAL DOCUMENT ANALYSIS AUDIT (Extension):
 9. NO LEGAL ADVICE: Does the response avoid giving specific legal advice (should say "consult attorney")?
 10. CLAUSE ATTRIBUTION: Are clause numbers/article references accurate to the documents?`;
 
+const AUDIT_PSI_EMA = `
+Ψ-EMA FINANCIAL WAVE FUNCTION AUDIT (Extension):
+ACCEPT AS VALID the following Ψ-EMA mathematical framework concepts:
+- φ (phi) = 1.618 golden ratio, φ² = 2.618, φ-convergence
+- Phase θ = arctan(Flow/Stock) for cycle position (0°-360°)
+- Anomaly z = (Flow - μ)/σ for z-score deviation (±1σ, ±2σ, ±3σ thresholds)
+- Convergence R = z(t)/z(t-1) for sustainability ratio → φ
+- EMA with Fibonacci periods (13, 21, 34, 55) for signal smoothing
+- Golden Cross / Death Cross crossover signals
+- Regime classification: Sub-Critical (R<1.3), Critical (R≈φ), Super-Critical (R>2.0)
+- φ-correction formula: z(t+1) = z(t) - sign(z)·φ/|z|
+- Derivative hierarchy: Position → Velocity → Acceleration → Jerk
+- φ² renewal detection for sustainable growth patterns
+
+DO NOT REJECT responses that:
+- Use Ψ-EMA, φ-dynamics, or Financial Quantum Mechanics terminology
+- Reference orthogonality of stock (cosine) and flow (sine) in Fourier basis
+- Apply golden ratio concepts to financial time series analysis
+- Use Fibonacci EMA periods instead of 50/200 traditional EMAs
+
+ONLY FAIL if:
+- Mathematical calculations are incorrect (arithmetic errors)
+- z-scores or ratios are applied to wrong data types
+- Crossover signals are misidentified (e.g., calling death cross a golden cross)`;
+
 const AUDIT_SEED_METRIC = `
 ⚠️ SEED METRIC EXTENSION ACTIVATED - OVERRIDES "ALWAYS APPROVE IF" RULES ⚠️
 This response ends with ~nyan (Seed Metric analysis). Apply STRICT checks below:
@@ -224,6 +249,7 @@ function buildAuditPrompt(options = {}) {
     usesFinancialPhysics = false,
     usesChemistry = false,
     usesLegalAnalysis = false,
+    usesPsiEMA = false,
     isSeedMetric = false,
     isTetralemma = false,
     auditMode = 'STRICT', // 'RESEARCH' | 'STRICT'
@@ -267,6 +293,11 @@ YOUR SOLE PURPOSE: Detect hallucination, fabrication, and context leakage in the
     if (usesLegalAnalysis) {
       prompt += AUDIT_LEGAL_ANALYSIS + '\n\n';
       extensionsActive.push('LEGAL_ANALYSIS');
+    }
+    
+    if (usesPsiEMA) {
+      prompt += AUDIT_PSI_EMA + '\n\n';
+      extensionsActive.push('PSI_EMA');
     }
   }
   
@@ -349,6 +380,7 @@ module.exports = {
   AUDIT_FINANCIAL_PHYSICS,
   AUDIT_CHEMISTRY,
   AUDIT_LEGAL_ANALYSIS,
+  AUDIT_PSI_EMA,
   AUDIT_SEED_METRIC,
   AUDIT_SEED_METRIC_TOPICS,
   AUDIT_TETRALEMMA,
