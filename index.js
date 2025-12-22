@@ -34,6 +34,7 @@ const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('./prompts/nyan-protocol');
 const { getLegalAnalysisSeed, detectLegalDocument, LEGAL_KEYWORDS_REGEX } = require('./prompts/legal-analysis');
 const { runVerifiedAnswer, formatAuditBadge, runStreamingPersonalityPass, runAuditPass } = require('./utils/two-pass-verification');
 const { preflightRouter, buildSystemContext } = require('./utils/preflight-router');
+const { createPipelineOrchestrator, PIPELINE_STEPS } = require('./utils/pipeline-orchestrator');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
