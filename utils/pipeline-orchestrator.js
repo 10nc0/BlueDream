@@ -68,7 +68,27 @@ class PipelineOrchestrator {
     const state = new PipelineState();
     
     try {
-      await this.stepPreflight(state, input);
+      // Support pre-computed preflight (avoids duplicate calls when endpoint already ran it)
+      if (input.preComputedPreflight) {
+        state.preflight = input.preComputedPreflight;
+        state.mode = state.preflight.mode;
+        console.log(`📊 Preflight (pre-computed): mode=${state.mode}, ticker=${state.preflight.ticker || 'none'}`);
+        
+        // Still do seed-metric search if needed
+        const safeDocContext = input.docContext || {};
+        if (state.mode === 'seed-metric' && input.query && !safeDocContext.isClosedLoop) {
+          const searchQuery = await this.extractCoreQuestion(input.query);
+          console.log(`🌱 Seed Metric: Search FIRST for fresh data`);
+          state.searchContext = await this.searchBrave(searchQuery, input.clientIp);
+          if (!state.searchContext) {
+            state.searchContext = await this.searchDuckDuckGo(searchQuery);
+          }
+          state.didSearch = !!state.searchContext;
+        }
+      } else {
+        await this.stepPreflight(state, input);
+      }
+      
       await this.stepContextBuild(state, input);
       await this.stepReasoning(state, input);
       await this.stepAudit(state, input);

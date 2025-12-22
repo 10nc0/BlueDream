@@ -6899,21 +6899,14 @@ app.post('/api/playground', async (req, res) => {
             ? history.filter(msg => msg && typeof msg === 'object' && msg.role && msg.content)
             : [];
         
-        // ===== GROQ-FIRST ARCHITECTURE (Preflight-Driven) =====
-        // Philosophy: Let Groq answer first, audit the result, only search if audit REJECTED
-        // Exception: Seed Metric (~nyan) queries need fresh data - search FIRST
-        let searchContext = null;
-        let noSearchDisclaimer = false;
-        let searchQuery = null; // Store for potential retry after audit rejection
-        
-        // CLOSED-LOOP DETECTION: Skip web search for document analysis
+        // ===== EARLY PREFLIGHT (Stage 0+1) =====
+        // Run preflight FIRST to classify query and fetch any needed data (stock prices, etc.)
+        // Full reasoning/audit/retry is handled by orchestrator.run()
         const isClosedLoopAnalysis = docList.length > 0;
         if (isClosedLoopAnalysis) {
             console.log(`📎 Document analysis mode: Closed-loop (no search needed)`);
         }
         
-        // ===== EARLY PREFLIGHT (Stage 0+1) =====
-        // Run preflight FIRST to classify query and fetch any needed data
         const hasFinancialDoc = docList.some(d => d.name?.match(/\.(xlsx|xls)$/i));
         const hasLegalContext = docList.some(d => LEGAL_KEYWORDS_REGEX.test(d.name || ''));
         
@@ -6922,56 +6915,9 @@ app.post('/api/playground', async (req, res) => {
             attachments: [...photoList.map(p => ({ type: 'photo', name: p.name || 'image.jpg' })), ...docList],
             docContext: { hasFinancialDoc, hasLegalDoc: hasLegalContext }
         });
+        console.log(`🎯 Preflight: mode=${earlyPreflight.mode}, ticker=${earlyPreflight.ticker || 'none'}`);
         
-        // Derive queryClass from preflight result
-        let queryClass = { 
-            type: earlyPreflight.mode, 
-            searchStrategy: earlyPreflight.searchStrategy || 'none',
-            skipCompression: false 
-        };
-        
-        // Track original routing for retry logic
-        let wasGroqFirstQuery = (earlyPreflight.mode === 'general');
-        
-        // Override: Force closed-loop for document analysis
-        if (isClosedLoopAnalysis) {
-            queryClass.searchStrategy = 'none';
-            queryClass.type = 'closed-loop';
-            wasGroqFirstQuery = false;
-        }
-        console.log(`🎯 Preflight: mode=${earlyPreflight.mode}, ticker=${earlyPreflight.ticker || 'none'}, search=${queryClass.searchStrategy}`);
-        
-        if (message) {
-            // Extract search query for potential retry
-            searchQuery = await extractCoreQuestion(message);
-            console.log(`🔍 Search query prepared: "${searchQuery.substring(0, 50)}..."`);
-            
-            // Seed Metric: search upfront (needs fresh land/income data)
-            if (earlyPreflight.mode === 'seed-metric' && searchQuery && !isClosedLoopAnalysis) {
-                console.log(`🌱 Seed Metric detected: Search FIRST (needs fresh data)`);
-                searchContext = await searchBrave(searchQuery, clientIp);
-                if (!searchContext) {
-                    console.log(`🔄 Brave returned nothing, trying DDG fallback...`);
-                    searchContext = await searchDuckDuckGo(searchQuery);
-                }
-                if (!searchContext) {
-                    const coreWords = searchQuery.split(/\s+/).slice(0, 5).join(' ');
-                    console.log(`🔄 All search failed, trying DDG with core words: "${coreWords}"`);
-                    searchContext = await searchDuckDuckGo(coreWords);
-                }
-            }
-            
-            // Inject search context if we have it (Seed Metric path)
-            if (searchContext) {
-                finalPrompt = `REAL-TIME WEB SEARCH RESULTS (USE THIS DATA - it overrides your knowledge cutoff):
-${searchContext}
-
-INSTRUCTION: Extract the relevant facts from the search results above to answer the user's question. Do NOT say "no data" or mention knowledge cutoff.
-
-User query: ${message}`;
-                console.log(`✅ Search context injected into prompt for knowledge augmentation`);
-            }
-        }
+        // NOTE: Seed Metric search and retry logic handled by orchestrator.stepPreflight()
         
         // File size limits (base64 encoded)
         for (const p of photoList) {
@@ -7443,36 +7389,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             }
         }
         
-        // ===== USE EARLY PREFLIGHT RESULTS =====
-        // earlyPreflight was called at the start of the handler
-        // Build system messages using those results
-        const systemMessages = buildSystemContext(earlyPreflight, NYAN_PROTOCOL_SYSTEM_PROMPT);
-        
-        // Store preflight analysis for downstream use (audit flags, etc.)
-        let stockPsiEMAAnalysis = null;
-        if (earlyPreflight.psiEmaAnalysis && earlyPreflight.stockData) {
-            stockPsiEMAAnalysis = {
-                ticker: earlyPreflight.ticker,
-                name: earlyPreflight.stockData.name,
-                currency: earlyPreflight.stockData.currency,
-                currentPrice: earlyPreflight.stockData.currentPrice,
-                periodDays: earlyPreflight.stockData.periodDays,
-                dateRange: `${earlyPreflight.stockData.startDate} to ${earlyPreflight.stockData.endDate}`,
-                dataAge: earlyPreflight.dataAge,
-                analysis: earlyPreflight.psiEmaAnalysis
-            };
-            console.log(`📊 Ψ-EMA stock analysis ready: ${earlyPreflight.ticker} (via preflight router)`);
-        }
-        
-        const messages = [
-            ...systemMessages,
-            ...conversationContext,
-            {
-                role: 'user',
-                content: finalPrompt
-            }
-        ];
-        
+        // ===== PIPELINE ORCHESTRATOR: Unified reasoning/audit/retry =====
         // Temperature 0.3 for financial documents (semantic flexibility for synonym matching)
         // Temperature 0.15 for everything else (H₀ factual accuracy)
         const temperature = hasFinancialDoc ? 0.3 : 0.15;
@@ -7481,173 +7398,54 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         // max_tokens: 1500 for regular queries
         const maxTokens = hasDocumentAnalysis ? 4000 : 1500;
         
-        const groqResponse = await groqWithRetry({
-            url: 'https://api.groq.com/openai/v1/chat/completions',
-            data: {
-                model: 'llama-3.3-70b-versatile',
-                messages,
-                temperature,
-                max_tokens: maxTokens,
-                top_p: 0.95
+        // Run the unified pipeline (preflight → reasoning → audit → retry → output)
+        const pipelineResult = await orchestrator.run({
+            query: effectiveMessage || message,
+            preComputedPreflight: earlyPreflight,
+            docContext: { 
+                hasFinancialDoc, 
+                hasLegalDoc: hasLegalContext,
+                isClosedLoop: isClosedLoopAnalysis 
             },
-            config: {
-                headers: {
-                    'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 15000
-            }
-        }, 3, 'text');
+            clientIp,
+            conversationHistory: conversationContext,
+            extractedContent,
+            temperature,
+            maxTokens
+        });
         
-        let reply = groqResponse.data.choices[0]?.message?.content || 'No response generated.';
+        // Extract results from orchestrator
+        let reply, auditMetadata, auditBadge;
         
-        // ===== GROQ-FIRST TWO-PASS VERIFICATION =====
-        // Flow: Generate → Audit → if REJECTED & groq-first → Search → Regenerate → Audit
-        
-        const hasNoDocuments = extractedContent.length === 0;
-        
-        // Detect Seed Metric analysis from draft ending (LLM signals via ~nyan)
-        const isSeedMetricAnalysis = reply.includes('~nyan');
-        
-        // Detect false dichotomy queries for tetralemma audit
-        const { isFalseDichotomy } = require('./prompts/audit-protocol');
-        const isTetralemmaQuery = isFalseDichotomy(effectiveMessage || message);
-        
-        // TWO-MODE AUDIT ROUTING:
-        // - STRICT: Only when user uploads documents (PDF/Word/Excel) - requires source quotes
-        // - RESEARCH: Everything else - allows web search + LLM knowledge
-        let auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
-        
-        let auditMetadata = null;
-        let auditBadge = 'unverified';
-        let didSearchRetry = false; // Track if we've already done search retry
-        
-        // Identity/meta questions bypass audit (self-reference answers from NYAN_PROTOCOL_SEED)
-        const isIdentity = isIdentityQuery(effectiveMessage || message);
-        
-        if (isIdentity) {
-            console.log(`🐱 Identity query detected - bypassing audit (self-reference from NYAN Protocol)`);
-            auditMetadata = { 
-                verdict: 'BYPASS', 
-                confidence: 95, 
-                passCount: 1,
-                extensionsVerified: ['NYAN_PROTOCOL'],
-                latencyMs: 0,
-                reason: 'Identity/meta question - answer from NYAN_PROTOCOL_SEED'
-            };
-            auditBadge = 'unverified'; // BYPASS badge (gray) - trusted but not audited
-        }
-        
-        try {
-            // Skip full verification for identity queries
-            if (!isIdentity) {
-                const auditExtensions = [];
-                if (isSeedMetricAnalysis) auditExtensions.push('🐱 Seed Metric');
-                if (isTetralemmaQuery) auditExtensions.push('☯️ Tetralemma');
-                console.log(`🔍 Two-Pass: Running verification audit (${auditMode} mode)${auditExtensions.length ? ' ' + auditExtensions.join(' ') : ''}...`);
-            }
+        if (pipelineResult.success) {
+            reply = pipelineResult.answer;
+            auditMetadata = pipelineResult.auditResult || { verdict: 'BYPASS', confidence: 0 };
             
-            const isPsiEMAStreaming = queryClass.type === 'psi-ema';
-            let verificationResult = isIdentity ? null : await runVerifiedAnswer({
-                groqToken: PLAYGROUND_GROQ_TOKEN,
-                draftAnswer: reply,
-                originalQuery: effectiveMessage || finalPrompt,
-                userContext: extractedContent.length > 0 ? extractedContent.join('\n') : searchContext,
-                usesFinancialPhysics: hasFinanceContext,
-                usesChemistry: false,
-                usesLegalAnalysis: hasLegalContext,
-                usesPsiEMA: isPsiEMAStreaming,
-                isSeedMetric: isSeedMetricAnalysis,
-                isTetralemma: isTetralemmaQuery,
-                auditMode,
-                maxTokens,
-                timeout: 12000
-            });
-            
-            // ===== GROQ-FIRST RETRY LOGIC =====
-            // Trigger search retry if:
-            // 1. REJECTED by audit, OR
-            // 2. Answer claims "not found" but we haven't searched yet (must verify before accepting ignorance)
-            // Uses preserved flag wasGroqFirstQuery (set before any mutations to queryClass)
-            // Skip retry for identity queries (already bypassed audit)
-            const wasRejected = verificationResult?.auditMetadata?.verdict === 'REJECTED';
-            const hasNotFoundClaim = containsNotFoundClaim(reply);
-            const needsSearchVerification = wasRejected || (hasNotFoundClaim && !didSearchRetry);
-            const canRetry = !isIdentity && wasGroqFirstQuery && needsSearchVerification && searchQuery && !isClosedLoopAnalysis;
-            
-            if (canRetry) {
-                const retryReason = wasRejected ? 'REJECTED' : 'NOT_FOUND_CLAIM';
-                console.log(`🔄 Groq-First ${retryReason}: Triggering search retry...`);
-                didSearchRetry = true;
-                
-                // Use unified search retry cascade
-                const retryResult = await executeSearchRetryCascade({
-                    searchQuery,
-                    clientIp,
-                    groqToken: PLAYGROUND_GROQ_TOKEN,
-                    originalMessage: message,
-                    systemMessages,
-                    conversationContext,
-                    temperature,
-                    maxTokens
-                });
-                
-                if (retryResult.success && retryResult.regeneratedAnswer) {
-                    searchContext = retryResult.searchContext;
-                    
-                    // Re-audit the regenerated answer
-                    // Mirror auditMode from original: STRICT if documents present, RESEARCH otherwise
-                    const retryAuditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
-                    console.log(`🔍 Re-auditing regenerated answer (${retryAuditMode} mode)...`);
-                    const retrySeedMetric = retryResult.regeneratedAnswer.includes('~nyan');
-                    verificationResult = await runVerifiedAnswer({
-                        groqToken: PLAYGROUND_GROQ_TOKEN,
-                        draftAnswer: retryResult.regeneratedAnswer,
-                        originalQuery: effectiveMessage || message,
-                        userContext: retryResult.searchContext,
-                        usesFinancialPhysics: hasFinanceContext,
-                        usesChemistry: false,
-                        usesLegalAnalysis: hasLegalContext,
-                        usesPsiEMA: isPsiEMAStreaming,
-                        isSeedMetric: retrySeedMetric,
-                        isTetralemma: isTetralemmaQuery,
-                        auditMode: retryAuditMode,
-                        maxTokens,
-                        timeout: 12000
-                    });
-                    
-                    console.log(`🔍 Retry audit: ${verificationResult.auditMetadata?.verdict} (${verificationResult.auditMetadata?.confidence}% conf)`);
-                } else {
-                    noSearchDisclaimer = true;
-                }
-            }
-            
-            // Only update from verificationResult if we ran verification (not identity bypass)
-            if (verificationResult) {
-                reply = verificationResult.finalAnswer;
-                auditMetadata = verificationResult.auditMetadata;
-                auditBadge = verificationResult.badge;
-                
-                // Add retry flag to metadata
-                if (didSearchRetry) {
-                    auditMetadata.didSearchRetry = true;
-                }
-                
-                console.log(`🔍 Two-Pass: ${auditMetadata.verdict} (${auditMetadata.confidence}% conf, ${auditMetadata.passCount} pass${auditMetadata.passCount > 1 ? 'es' : ''}, ${auditMetadata.latencyMs}ms)${didSearchRetry ? ' [+search retry]' : ''}`);
+            // Map audit verdicts to badges: APPROVED/FIXABLE → verified, REJECTED → refused, BYPASS → unverified
+            if (auditMetadata.verdict === 'APPROVED' || auditMetadata.verdict === 'FIXABLE') {
+                auditBadge = 'verified';
+            } else if (auditMetadata.verdict === 'REJECTED') {
+                auditBadge = 'refused';
             } else {
-                // Identity query - reply stays as original draft, auditMetadata/Badge already set above
-                console.log(`🐱 Identity bypass: Returning original response without audit`);
+                auditBadge = 'unverified';
             }
-        } catch (verifyError) {
-            console.error('⚠️ Two-Pass verification error:', verifyError.message);
-            auditMetadata = {
-                verdict: 'BYPASS',
-                confidence: 0,
-                issues: [{ severity: 'MINOR', reason: 'Verification unavailable' }],
-                extensionsVerified: ['NYAN_PROTOCOL'],
-                latencyMs: 0
-            };
+            
+            // Add retry flag if orchestrator retried
+            if (pipelineResult.retryCount > 0) {
+                auditMetadata.didSearchRetry = true;
+            }
+            
+            console.log(`✅ Pipeline: ${pipelineResult.mode} mode, ${auditMetadata.verdict} (${auditMetadata.confidence}% conf)${pipelineResult.didSearch ? ' [+search]' : ''}`);
+        } else {
+            // Pipeline failed - return error gracefully
+            console.error(`❌ Pipeline failed at ${pipelineResult.step}: ${pipelineResult.error}`);
+            reply = 'I encountered an issue processing your request. Please try again.';
+            auditMetadata = { verdict: 'BYPASS', confidence: 0, issues: [{ severity: 'CRITICAL', reason: pipelineResult.error }] };
+            auditBadge = 'unverified';
         }
+        
+        // Track if we need search disclaimer (general query without search results)
+        const noSearchDisclaimer = !pipelineResult.didSearch && pipelineResult.mode === 'general' && auditBadge !== 'verified';
         
         // ===== FINANCIAL PHYSICS POST-GUARD: Enforce temporal warnings + physical audit disclaimer =====
         // Runs for BOTH uploaded financial docs AND text-based finance queries
@@ -7853,186 +7651,61 @@ app.post('/api/playground/stream', async (req, res) => {
         const hasFinancialDoc = docList.some(d => d.name?.match(/\.(xlsx|xls)$/i));
         const hasLegalDoc = docList.some(d => LEGAL_KEYWORDS_REGEX.test(d.name || ''));
         
-        // ===== PREFLIGHT ROUTER (Stage 0+1) for Streaming =====
-        // Send thinking stage while preflight runs
+        // ===== PIPELINE ORCHESTRATOR: Unified reasoning/audit/retry for Streaming =====
         res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Analyzing query...' })}\n\n`);
         
-        const preflight = await preflightRouter({
-            query: message || '',
-            attachments: [...photoList.map(p => ({ type: 'photo', name: 'image.jpg' })), ...docList],
-            docContext: { hasFinancialDoc, hasLegalDoc }
+        // Run the unified pipeline (preflight → reasoning → audit → retry → output)
+        const pipelineResult = await orchestrator.run({
+            query: message,
+            docContext: { 
+                hasFinancialDoc, 
+                hasLegalDoc,
+                isClosedLoop: docList.length > 0 
+            },
+            clientIp,
+            conversationHistory: conversationContext,
+            extractedContent,
+            temperature: hasFinancialDoc ? 0.3 : 0.15,
+            maxTokens: hasDocumentAnalysis ? 4000 : 1500
         });
         
-        if (preflight.ticker) {
-            res.write(`data: ${JSON.stringify({ type: 'thinking', stage: `Fetched ${preflight.ticker} price history` })}\n\n`);
-        }
+        if (isClientDisconnected) return;
         
-        // Build system messages using preflight results
-        const systemMessages = buildSystemContext(preflight, NYAN_PROTOCOL_SYSTEM_PROMPT);
-        console.log(`📊 Streaming: Preflight complete - mode=${preflight.mode}, ticker=${preflight.ticker || 'none'}`);
+        // Handle pipeline result
+        let verifiedAnswer, auditResult, didSearchRetry;
         
-        const messages = [
-            ...systemMessages,
-            ...conversationContext,
-            { role: 'user', content: finalPrompt }
-        ];
-        
-        res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Processing with AI...' })}\n\n`);
-        
-        // Generate draft (non-streaming)
-        const groqResponse = await groqWithRetry({
-            url: 'https://api.groq.com/openai/v1/chat/completions',
-            data: {
-                model: 'llama-3.3-70b-versatile',
-                messages,
-                temperature: hasFinancialDoc ? 0.3 : 0.15,
-                max_tokens: hasDocumentAnalysis ? 4000 : 1500,
-                top_p: 0.95
-            },
-            config: {
-                headers: {
-                    'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 15000
+        if (pipelineResult.success) {
+            verifiedAnswer = pipelineResult.answer;
+            auditResult = pipelineResult.auditResult || { verdict: 'BYPASS', confidence: 70 };
+            didSearchRetry = pipelineResult.retryCount > 0;
+            
+            if (pipelineResult.preflight?.ticker) {
+                res.write(`data: ${JSON.stringify({ type: 'thinking', stage: `Analyzed ${pipelineResult.preflight.ticker} price history` })}\n\n`);
             }
-        }, 3, 'text');
-        
-        const draftAnswer = groqResponse.data.choices[0]?.message?.content || 'No response generated.';
-        
-        res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Verifying response...' })}\n\n`);
-        
-        // Identity/meta questions bypass audit (self-reference answers from NYAN_PROTOCOL_SEED)
-        const isIdentity = isIdentityQuery(message);
-        
-        let auditResult;
-        if (isIdentity) {
-            console.log(`🐱 Identity query detected - bypassing audit (self-reference from NYAN Protocol)`);
-            auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Identity/meta question - answer from NYAN_PROTOCOL_SEED' };
+            
+            console.log(`✅ Streaming Pipeline: ${pipelineResult.mode} mode, ${auditResult.verdict} (${auditResult.confidence}% conf)${pipelineResult.didSearch ? ' [+search]' : ''}`);
         } else {
-            // Run audit pass for non-identity queries
-            const hasNoDocuments = extractedContent.length === 0;
-            const isSeedMetricAnalysis = draftAnswer.includes('~nyan');
-            const { isFalseDichotomy } = require('./prompts/audit-protocol');
-            const isTetralemmaQuery = isFalseDichotomy(message);
-            const auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
-            
-            try {
-                const isPsiEMA = preflight.mode === 'psi-ema';
-                auditResult = await runAuditPass(
-                    PLAYGROUND_GROQ_TOKEN,
-                    draftAnswer,
-                    message || finalPrompt,
-                    extractedContent.length > 0 ? extractedContent.join('\n') : null,
-                    {
-                        usesFinancialPhysics: hasFinancialDoc,
-                        usesChemistry: false,
-                        usesLegalAnalysis: hasLegalDoc,
-                        usesPsiEMA: isPsiEMA,
-                        isSeedMetric: isSeedMetricAnalysis,
-                        isTetralemma: isTetralemmaQuery,
-                        auditMode
-                    },
-                    12000
-                );
-            } catch (auditErr) {
-                console.error('⚠️ Audit error:', auditErr.message);
-                auditResult = { verdict: 'BYPASS', confidence: 70 };
-            }
+            console.error(`❌ Streaming Pipeline failed at ${pipelineResult.step}: ${pipelineResult.error}`);
+            verifiedAnswer = 'I encountered an issue processing your request. Please try again.';
+            auditResult = { verdict: 'BYPASS', confidence: 0 };
+            didSearchRetry = false;
         }
         
-        // ===== GROQ-FIRST RETRY LOGIC (Streaming) =====
-        // Trigger search retry if:
-        // 1. REJECTED by audit, OR
-        // 2. Answer claims "not found" but we haven't searched yet (must verify before accepting ignorance)
-        // EXCEPTION: Skip retry for Ψ-EMA (yfinance data is pre-verified before LLM call)
-        // NOTE: Seed Metric (~nyan) should NOT skip - proxy cascade hasn't been attempted yet in streaming
-        let verifiedAnswer = draftAnswer;
-        let didSearchRetry = false;
-        const hasNoDocuments = extractedContent.length === 0;
-        const wasRejected = auditResult.verdict === 'REJECTED';
-        const hasNotFoundClaim = containsNotFoundClaim(draftAnswer);
-        // Only trigger "not found" retry if we haven't searched yet - prevents infinite loops
-        const needsSearchVerification = wasRejected || (hasNotFoundClaim && !didSearchRetry);
-        // Only skip retry for Ψ-EMA (has pre-verified yfinance data); Seed Metric needs proxy cascade
-        const isPsiEMAQuery = preflight.mode === 'psi-ema';
-        const canRetry = !isIdentity && hasNoDocuments && needsSearchVerification && message && !isPsiEMAQuery;
-        
-        if (canRetry) {
-            const retryReason = wasRejected ? 'REJECTED' : 'NOT_FOUND_CLAIM';
-            console.log(`🔄 Groq-First ${retryReason}: Triggering search retry...`);
-            if (isClientDisconnected) return;
-            res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Searching for better data...' })}\n\n`);
-            
-            // Use unified search retry cascade
-            const retryResult = await executeSearchRetryCascade({
-                searchQuery: message,
-                clientIp,
-                groqToken: PLAYGROUND_GROQ_TOKEN,
-                originalMessage: message,
-                systemMessages,
-                conversationContext,
-                temperature: hasFinancialDoc ? 0.3 : 0.15,
-                maxTokens: hasDocumentAnalysis ? 4000 : 1500
-            });
-            
-            if (retryResult.success && retryResult.regeneratedAnswer) {
-                didSearchRetry = true;
-                
-                // Re-audit the regenerated answer
-                if (isClientDisconnected) return;
-                res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Re-verifying...' })}\n\n`);
-                
-                const isSeedMetricAnalysis = retryResult.regeneratedAnswer.includes('~nyan');
-                const { isFalseDichotomy } = require('./prompts/audit-protocol');
-                const isTetralemmaQuery = isFalseDichotomy(message);
-                
-                try {
-                    const isPsiEMARetry = nonStreamQueryClass.type === 'psi-ema';
-                    auditResult = await runAuditPass(
-                        PLAYGROUND_GROQ_TOKEN,
-                        retryResult.regeneratedAnswer,
-                        message || finalPrompt,
-                        retryResult.searchContext,
-                        {
-                            usesFinancialPhysics: hasFinancialDoc,
-                            usesChemistry: false,
-                            usesLegalAnalysis: hasLegalDoc,
-                            usesPsiEMA: isPsiEMARetry,
-                            isSeedMetric: isSeedMetricAnalysis,
-                            isTetralemma: isTetralemmaQuery,
-                            auditMode: 'RESEARCH'
-                        },
-                        12000
-                    );
-                    verifiedAnswer = retryResult.regeneratedAnswer;
-                    console.log(`🔍 Retry audit: ${auditResult.verdict} (${auditResult.confidence}% conf)`);
-                } catch (reauditErr) {
-                    console.error('⚠️ Re-audit error:', reauditErr.message);
-                    auditResult = { verdict: 'BYPASS', confidence: 70 };
-                    verifiedAnswer = retryResult.regeneratedAnswer;
-                }
-            }
-        }
-        
-        // Determine badge and prepare metadata
+        // Determine badge: Map audit verdicts to badges
+        // APPROVED/FIXABLE → verified, REJECTED → refused, BYPASS → unverified
         let badge = 'unverified';
-        let passCount = 2;
-        
-        if (auditResult.verdict === 'APPROVED') {
+        if (auditResult.verdict === 'APPROVED' || auditResult.verdict === 'FIXABLE') {
             badge = 'verified';
         } else if (auditResult.verdict === 'REJECTED') {
             badge = 'refused';
             verifiedAnswer = `🔴 **Verification Failed**\n\nI couldn't verify my answer meets quality standards. Please rephrase your question or provide more context.\n\n🔥 nyan~`;
-        } else if (auditResult.verdict === 'BYPASS') {
-            badge = 'unverified';
         }
         
         const auditMetadata = {
             badge,
             verdict: auditResult.verdict || 'BYPASS',
             confidence: auditResult.confidence || 70,
-            passCount: badge === 'verified' ? 3 : passCount,
+            passCount: badge === 'verified' ? 3 : 2,
             extensionsVerified: ['NYAN_PROTOCOL'],
             latencyMs: 0,
             didSearchRetry
