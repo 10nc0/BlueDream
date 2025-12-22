@@ -55,6 +55,13 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **Auto-Trigger**: "psi ema for NVDA" → fetch prices → PsiEMADashboard analysis → inject context
     - **Three-Tier Graceful Degradation**: Fetch fails → ticker-only context; <55 points → limited context; Analysis fails → data-count context
     - **Safe Formatting**: safeFixed() helper with parseFloat fallback prevents .toFixed() crashes
+    - **Data Recency Timestamping**: Each analysis timestamped to most recent close date with age flags:
+      - **Today** (✅ green) → fresh data from today's close
+      - **Yesterday/1 day old** (⚠️ yellow) → expected for weekend data
+      - **2-3 days old** (⚠️ yellow) → stale warning
+      - **4+ days old** (🚩 red) → data is significantly stale, not reliable
+    - **Inline Disclaimers**: Analysis context includes "LIMITED TO DATA THROUGH {date}" and data cutoff warnings
+    - **Stale Data Flags**: Automatic warning injection when data > 1 day old
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.

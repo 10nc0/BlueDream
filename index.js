@@ -6473,7 +6473,7 @@ function containsNotFoundClaim(answer) {
 
 // Ψ-EMA detection (Fourier Financial Wave analysis)
 const { shouldTriggerPsiEMA, getPsiEMAContext, PsiEMADashboard } = require('./utils/psi-EMA');
-const { detectStockTicker, isPsiEMAStockQuery, fetchStockPrices } = require('./utils/stock-fetcher');
+const { detectStockTicker, isPsiEMAStockQuery, fetchStockPrices, calculateDataAge } = require('./utils/stock-fetcher');
 
 function isPsiEMAQuery(message) {
     return shouldTriggerPsiEMA(message);
@@ -7616,6 +7616,9 @@ Note: Unable to fetch real-time stock data for ${stockTicker}. Please provide ge
                 
                 if (stockData) {
                     // Validate stock data before analysis
+                    const dataAge = calculateDataAge(stockData.endDate);
+                    const ageFlag = dataAge.flag;
+                    
                     if (!stockData.closes || !Array.isArray(stockData.closes) || stockData.closes.length === 0) {
                         console.log(`⚠️ Invalid stock data returned for ${stockTicker}`);
                         stockPsiEMAAnalysis = null;
@@ -7625,12 +7628,13 @@ Note: Unable to fetch real-time stock data for ${stockTicker}. Please provide ge
                         const limitedContext = `
 ## Stock Data for ${stockTicker} (${stockData.name || stockTicker})
 Current Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
+Data Timestamp: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
 Note: Only ${stockData.closes.length} trading days of data available. Full Ψ-EMA analysis requires 55+ days for EMA-55 calculation.
-Please provide general analysis based on available data.
+**⚠️ IMPORTANT: This analysis is limited and is based on incomplete data from ${dataAge.age}. Do NOT rely on it for trading decisions.**
 `;
                         systemMessages.push({ role: 'system', content: limitedContext });
                     } else {
-                        console.log(`📈 Fetched ${stockData.periodDays || stockData.closes.length} days of ${stockTicker} data`);
+                        console.log(`📈 Fetched ${stockData.periodDays || stockData.closes.length} days of ${stockTicker} data (${dataAge.age})`);
                         
                         // Run Ψ-EMA analysis with separate error handling
                         let analysis = null;
@@ -7642,6 +7646,7 @@ Please provide general analysis based on available data.
                             const analysisFailContext = `
 ## Stock Data for ${stockTicker} (${stockData.name || stockTicker})
 Current Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
+Data Timestamp: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
 Data Points: ${stockData.closes.length} trading days
 Note: Ψ-EMA analysis could not be completed. Please provide general analysis based on the stock data.
 `;
@@ -7662,6 +7667,7 @@ Note: Ψ-EMA analysis could not be completed. Please provide general analysis ba
                                     currentPrice: stockData.currentPrice,
                                     periodDays: stockData.periodDays,
                                     dateRange: `${stockData.startDate} to ${stockData.endDate}`,
+                                    dataAge,
                                     analysis
                                 };
                                 
@@ -7674,7 +7680,9 @@ Note: Ψ-EMA analysis could not be completed. Please provide general analysis ba
                                 const analysisContext = `
 ## Ψ-EMA Analysis for ${stockTicker} (${stockData.name || stockTicker})
 Current Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
+Data Timestamp: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
 Period: ${stockData.periodDays || stockData.closes.length} trading days (${stockData.startDate || 'N/A'} to ${stockData.endDate || 'N/A'})
+${dataAge.isStale ? `\n⚠️ **DATA RECENCY WARNING**: Data is ${dataAge.daysOld} day(s) old. Ψ-EMA signals are only valid for the period through ${dataAge.timestamp}.` : ''}
 
 ### Summary:
 - Phase Signal: ${analysis.summary.phaseSignal || 'N/A'}
@@ -7704,10 +7712,12 @@ Net Score: ${composite?.netScore ?? 'N/A'} | Confidence: ${composite?.confidence
 
 ${analysis.interpretation || ''}
 
-Use this real-time Ψ-EMA analysis to answer the user's query about ${stockTicker}.
+**📋 IMPORTANT DISCLAIMER**: This Ψ-EMA analysis is LIMITED TO DATA THROUGH ${dataAge.timestamp}. Price action after this date is NOT reflected in the indicators. Always verify with current market prices before making decisions.
+
+Use this real-time Ψ-EMA analysis to answer the user's query about ${stockTicker}, but remind them of the data cutoff date.
 `;
                                 systemMessages.push({ role: 'system', content: analysisContext });
-                                console.log(`📊 Ψ-EMA stock analysis injected: ${analysis.summary.phaseSignal} | ${analysis.summary.anomalyLevel} | ${analysis.summary.regime}`);
+                                console.log(`📊 Ψ-EMA stock analysis injected: ${analysis.summary.phaseSignal} | ${analysis.summary.anomalyLevel} | ${analysis.summary.regime} (data: ${dataAge.age})`);
                             } else {
                                 stockPsiEMAAnalysis = null;
                             }
@@ -8143,6 +8153,9 @@ Note: Unable to fetch real-time stock data for ${stockTicker}. Please provide ge
                 
                 if (stockData) {
                     // Validate stock data before analysis
+                    const dataAge = calculateDataAge(stockData.endDate);
+                    const ageFlag = dataAge.flag;
+                    
                     if (!stockData.closes || !Array.isArray(stockData.closes) || stockData.closes.length === 0) {
                         console.log(`⚠️ Invalid stock data returned for ${stockTicker}`);
                     } else if (stockData.closes.length < 55) {
@@ -8150,12 +8163,13 @@ Note: Unable to fetch real-time stock data for ${stockTicker}. Please provide ge
                         const limitedContext = `
 ## Stock Data for ${stockTicker} (${stockData.name || stockTicker})
 Current Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
+Data Timestamp: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
 Note: Only ${stockData.closes.length} trading days of data available. Full Ψ-EMA analysis requires 55+ days for EMA-55 calculation.
-Please provide general analysis based on available data.
+**⚠️ IMPORTANT: This analysis is limited and is based on incomplete data from ${dataAge.age}. Do NOT rely on it for trading decisions.**
 `;
                         systemMessages.push({ role: 'system', content: limitedContext });
                     } else {
-                        console.log(`📈 Fetched ${stockData.periodDays || stockData.closes.length} days of ${stockTicker} data`);
+                        console.log(`📈 Fetched ${stockData.periodDays || stockData.closes.length} days of ${stockTicker} data (${dataAge.age})`);
                         
                         // Run Ψ-EMA analysis with separate error handling
                         let analysis = null;
@@ -8167,6 +8181,7 @@ Please provide general analysis based on available data.
                             const analysisFailContext = `
 ## Stock Data for ${stockTicker} (${stockData.name || stockTicker})
 Current Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
+Data Timestamp: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
 Data Points: ${stockData.closes.length} trading days
 Note: Ψ-EMA analysis could not be completed. Please provide general analysis based on the stock data.
 `;
@@ -8186,7 +8201,9 @@ Note: Ψ-EMA analysis could not be completed. Please provide general analysis ba
                                 const analysisContext = `
 ## Ψ-EMA Analysis for ${stockTicker} (${stockData.name || stockTicker})
 Current Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
+Data Timestamp: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
 Period: ${stockData.periodDays || stockData.closes.length} trading days (${stockData.startDate || 'N/A'} to ${stockData.endDate || 'N/A'})
+${dataAge.isStale ? `\n⚠️ **DATA RECENCY WARNING**: Data is ${dataAge.daysOld} day(s) old. Ψ-EMA signals are only valid for the period through ${dataAge.timestamp}.` : ''}
 
 ### Summary:
 - Phase Signal: ${analysis.summary.phaseSignal || 'N/A'}
@@ -8214,10 +8231,12 @@ Net Score: ${composite?.netScore ?? 'N/A'} | Confidence: ${composite?.confidence
 
 ${analysis.interpretation || ''}
 
-Use this real-time Ψ-EMA analysis to answer the user's query about ${stockTicker}.
+**📋 IMPORTANT DISCLAIMER**: This Ψ-EMA analysis is LIMITED TO DATA THROUGH ${dataAge.timestamp}. Price action after this date is NOT reflected in the indicators. Always verify with current market prices before making decisions.
+
+Use this real-time Ψ-EMA analysis to answer the user's query about ${stockTicker}, but remind them of the data cutoff date.
 `;
                                 systemMessages.push({ role: 'system', content: analysisContext });
-                                console.log(`📊 Ψ-EMA stock analysis injected: ${analysis.summary.phaseSignal}`);
+                                console.log(`📊 Ψ-EMA stock analysis injected: ${analysis.summary.phaseSignal} (data: ${dataAge.age})`);
                             }
                         }
                     }

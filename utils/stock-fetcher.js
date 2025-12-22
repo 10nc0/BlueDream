@@ -111,10 +111,61 @@ function fetchStockPrices(ticker, days = 90) {
   });
 }
 
+/**
+ * Calculate the age of stock data (most recent close date)
+ * Returns { age, daysOld, isStale, timestamp, flag }
+ */
+function calculateDataAge(endDate) {
+  if (!endDate || typeof endDate !== 'string') {
+    return { age: 'UNKNOWN', daysOld: null, isStale: false, timestamp: endDate, flag: '⚠️' };
+  }
+  
+  try {
+    const dataDate = new Date(endDate);
+    const now = new Date();
+    
+    // Normalize to midnight UTC for accurate day counting
+    const dataTime = new Date(dataDate.getFullYear(), dataDate.getMonth(), dataDate.getDate());
+    const nowTime = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    const diffMs = nowTime - dataTime;
+    const daysOld = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    let ageLabel, flag, isStale = false;
+    if (daysOld === 0) {
+      ageLabel = 'TODAY';
+      flag = '✅';
+    } else if (daysOld === 1) {
+      ageLabel = 'YESTERDAY (1 day old)';
+      flag = '⚠️';
+      isStale = true;  // Weekend data might be expected, but note it
+    } else if (daysOld <= 3) {
+      ageLabel = `${daysOld} DAYS OLD`;
+      flag = '⚠️';
+      isStale = true;
+    } else {
+      ageLabel = `${daysOld} DAYS OLD (STALE)`;
+      flag = '🚩';
+      isStale = true;
+    }
+    
+    return {
+      age: ageLabel,
+      daysOld,
+      isStale,
+      timestamp: endDate,
+      flag
+    };
+  } catch (err) {
+    return { age: 'ERROR', daysOld: null, isStale: false, timestamp: endDate, flag: '❌' };
+  }
+}
+
 module.exports = {
   detectStockTicker,
   isPsiEMAStockQuery,
   fetchStockPrices,
+  calculateDataAge,
   KNOWN_TICKERS,
   COMMON_NON_TICKERS
 };
