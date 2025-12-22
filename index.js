@@ -6473,7 +6473,7 @@ function containsNotFoundClaim(answer) {
 
 // Ψ-EMA detection (Fourier Financial Wave analysis)
 const { shouldTriggerPsiEMA, getPsiEMAContext, PsiEMADashboard } = require('./utils/psi-EMA');
-const { detectStockTicker, isPsiEMAStockQuery, fetchStockPrices, calculateDataAge } = require('./utils/stock-fetcher');
+const { detectStockTicker, isPsiEMAStockQuery, fetchStockPrices, calculateDataAge, smartDetectTicker } = require('./utils/stock-fetcher');
 
 function isPsiEMAQuery(message) {
     return shouldTriggerPsiEMA(message, detectStockTicker);
@@ -7591,8 +7591,8 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             systemMessages.push({ role: 'system', content: getPsiEMAContext() });
             console.log(`📊 Ψ-EMA context injected for wave function analysis`);
             
-            // Check if this is a stock-specific Ψ-EMA query (e.g., "psi ema for NVDA")
-            const stockTicker = detectStockTicker(effectiveMessage || message);
+            // Smart ticker detection: rule-based first, then AI fallback for company names
+            const stockTicker = await smartDetectTicker(effectiveMessage || message);
             if (stockTicker) {
                 console.log(`📈 Stock ticker detected: ${stockTicker} - fetching price history via yfinance...`);
                 
@@ -8112,8 +8112,8 @@ app.post('/api/playground/stream', async (req, res) => {
             systemMessages.push({ role: 'system', content: getPsiEMAContext() });
             console.log(`📊 Ψ-EMA context injected for wave function analysis (streaming)`);
             
-            // Check if this is a stock-specific Ψ-EMA query
-            const stockTicker = detectStockTicker(message || '');
+            // Smart ticker detection: rule-based first, then AI fallback for company names
+            const stockTicker = await smartDetectTicker(message || '');
             if (stockTicker) {
                 console.log(`📈 Stock ticker detected: ${stockTicker} - fetching price history via yfinance...`);
                 res.write(`data: ${JSON.stringify({ type: 'thinking', stage: `Fetching ${stockTicker} price history...` })}\n\n`);

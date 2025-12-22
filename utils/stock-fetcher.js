@@ -5,6 +5,7 @@
 
 const { spawn } = require('child_process');
 const path = require('path');
+const axios = require('axios');
 
 const STOCK_TICKER_REGEX = /\b([A-Z]{1,5})\b/g;
 const DOLLAR_TICKER_REGEX = /\$([A-Z]{1,5})\b/gi;
@@ -186,11 +187,125 @@ function calculateDataAge(endDate) {
   }
 }
 
+/**
+ * AI-powered ticker extraction for company names
+ * Uses fast Groq call to map "meta" → "META", "ford" → "F", etc.
+ * Returns: { ticker: string, confidence: 'high'|'medium'|'low', reason: string } or null
+ */
+async function extractTickerWithAI(query) {
+  if (!query || typeof query !== 'string') return null;
+  if (!process.env.GROQ_API_KEY) {
+    console.log('⚠️ AI ticker extraction skipped: No GROQ_API_KEY');
+    return null;
+  }
+  
+  try {
+    const response = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a stock ticker extraction assistant. Extract the stock ticker symbol from the user's query.
+
+RULES:
+1. Return ONLY a JSON object: {"ticker": "SYMBOL", "confidence": "high|medium|low", "reason": "brief explanation"}
+2. For US stocks, return the NYSE/NASDAQ ticker (e.g., "meta" → "META", "ford" → "F", "apple" → "AAPL")
+3. If query mentions commodities (gold, oil, silver), crypto (bitcoin, ethereum), or private companies → return {"ticker": null, "confidence": "high", "reason": "not a public stock"}
+4. If unclear or no company mentioned → return {"ticker": null, "confidence": "low", "reason": "no company detected"}
+5. confidence: "high" = certain match, "medium" = likely match, "low" = guess
+
+EXAMPLES:
+- "price analysis on meta stock" → {"ticker": "META", "confidence": "high", "reason": "Meta Platforms Inc"}
+- "how is ford doing" → {"ticker": "F", "confidence": "high", "reason": "Ford Motor Company"}
+- "gold price forecast" → {"ticker": null, "confidence": "high", "reason": "commodity, not a stock"}
+- "what's the weather" → {"ticker": null, "confidence": "high", "reason": "no company mentioned"}`
+          },
+          { role: 'user', content: query }
+        ],
+        temperature: 0,
+        max_tokens: 100
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 5000
+      }
+    );
+    
+    const content = response.data.choices[0]?.message?.content?.trim() || '';
+    
+    // Parse JSON response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.log(`⚠️ AI ticker extraction: No JSON in response`);
+      return null;
+    }
+    
+    const result = JSON.parse(jsonMatch[0]);
+    
+    if (result.ticker && typeof result.ticker === 'string') {
+      const ticker = result.ticker.toUpperCase().replace(/[^A-Z]/g, '');
+      // Validate: non-empty, 1-5 chars, only letters
+      if (ticker && ticker.length >= 1 && ticker.length <= 5 && /^[A-Z]+$/.test(ticker)) {
+        console.log(`🤖 AI extracted ticker: ${ticker} (${result.confidence}) - ${result.reason}`);
+        return { ticker, confidence: result.confidence || 'medium', reason: result.reason || '' };
+      } else {
+        console.log(`⚠️ AI returned invalid ticker format: "${result.ticker}" → "${ticker}"`);
+      }
+    }
+    
+    if (result.reason) {
+      console.log(`🤖 AI ticker extraction: No ticker - ${result.reason}`);
+    }
+    return null;
+    
+  } catch (err) {
+    console.log(`⚠️ AI ticker extraction failed: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Smart ticker detection: Rule-based first, then AI fallback
+ * Returns ticker string or null
+ */
+async function smartDetectTicker(query) {
+  // Try rule-based detection first (fast, no API call)
+  const ruleTicker = detectStockTicker(query);
+  if (ruleTicker) {
+    console.log(`📊 Rule-based ticker: ${ruleTicker}`);
+    return ruleTicker;
+  }
+  
+  // Check if query seems financial before calling AI
+  const lowerQuery = (query || '').toLowerCase();
+  const financialKeywords = ['stock', 'price', 'share', 'shares', 'market', 'trading', 'invest', 'analysis', 'forecast', 'outlook', 'ema', 'wave', 'psi', 'ψ'];
+  const hasFinancialContext = financialKeywords.some(kw => lowerQuery.includes(kw));
+  
+  if (!hasFinancialContext) {
+    return null;
+  }
+  
+  // AI fallback for company name extraction
+  const aiResult = await extractTickerWithAI(query);
+  if (aiResult && aiResult.ticker) {
+    return aiResult.ticker;
+  }
+  
+  return null;
+}
+
 module.exports = {
   detectStockTicker,
   isPsiEMAStockQuery,
   fetchStockPrices,
   calculateDataAge,
+  extractTickerWithAI,
+  smartDetectTicker,
   KNOWN_TICKERS,
   COMMON_NON_TICKERS,
   AMBIGUOUS_TICKERS

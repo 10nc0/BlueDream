@@ -1142,8 +1142,21 @@ function shouldTriggerPsiEMA(query, tickerDetector = null) {
       const ticker = tickerDetector(query);
       if (ticker) return true;
     }
-    // No fallback - require explicit ticker detection to avoid false positives
-    // Words like "plan", "data", "team" would otherwise trigger incorrectly
+    
+    // Also check for common company names that map to ambiguous tickers
+    // These will be resolved by AI ticker extraction later
+    const companyNames = [
+      'meta', 'facebook', 'ford', 'costco', 'shopify', 'snap', 'snapchat',
+      'servicenow', 'cloudflare', 'visa', 'mastercard', 'att', 'at&t',
+      'tesla', 'apple', 'google', 'amazon', 'nvidia', 'microsoft', 'netflix',
+      'uber', 'paypal', 'salesforce', 'adobe', 'intel', 'amd', 'oracle',
+      'ibm', 'disney', 'starbucks', 'boeing', 'caterpillar', 'walmart',
+      'jpmorgan', 'bank of america', 'wells fargo', 'goldman', 'morgan stanley'
+    ];
+    
+    if (companyNames.some(name => lowerQuery.includes(name))) {
+      return true;  // Will use AI ticker extraction to resolve
+    }
   }
   
   return false;
