@@ -6476,7 +6476,7 @@ const { shouldTriggerPsiEMA, getPsiEMAContext, PsiEMADashboard } = require('./ut
 const { detectStockTicker, isPsiEMAStockQuery, fetchStockPrices, calculateDataAge } = require('./utils/stock-fetcher');
 
 function isPsiEMAQuery(message) {
-    return shouldTriggerPsiEMA(message);
+    return shouldTriggerPsiEMA(message, detectStockTicker);
 }
 
 function classifyQuery(message) {

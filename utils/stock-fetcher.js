@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 const STOCK_TICKER_REGEX = /\b([A-Z]{1,5})\b/g;
+const DOLLAR_TICKER_REGEX = /\$([A-Z]{1,5})\b/gi;
 const COMMON_NON_TICKERS = new Set([
   'EMA', 'SMA', 'RSI', 'MACD', 'USD', 'EUR', 'GBP', 'JPY', 'CNY',
   'AI', 'API', 'URL', 'USA', 'UK', 'EU', 'CEO', 'CFO', 'CTO',
@@ -19,33 +20,57 @@ const COMMON_NON_TICKERS = new Set([
 ]);
 
 const KNOWN_TICKERS = new Set([
-  'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'META', 'TSLA',
-  'BRK', 'JPM', 'V', 'MA', 'UNH', 'JNJ', 'WMT', 'PG', 'XOM', 'CVX',
-  'HD', 'BAC', 'COST', 'PFE', 'ABBV', 'KO', 'PEP', 'TMO', 'AVGO',
+  'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'TSLA',
+  'BRK', 'JPM', 'UNH', 'JNJ', 'WMT', 'PG', 'XOM', 'CVX',
+  'HD', 'BAC', 'PFE', 'ABBV', 'KO', 'PEP', 'TMO', 'AVGO',
   'MRK', 'CSCO', 'ACN', 'ABT', 'DHR', 'VZ', 'ADBE', 'CRM', 'NKE',
   'CMCSA', 'INTC', 'AMD', 'NFLX', 'QCOM', 'TXN', 'IBM', 'ORCL',
-  'NOW', 'INTU', 'AMAT', 'PYPL', 'UBER', 'SQ', 'SHOP', 'SNAP',
-  'PLTR', 'COIN', 'ROKU', 'ZM', 'DOCU', 'CRWD', 'NET', 'DDOG',
-  'SPY', 'QQQ', 'IWM', 'DIA', 'VTI', 'VOO', 'ARKK'
+  'INTU', 'AMAT', 'PYPL', 'UBER', 'SQ', 'PLTR', 'COIN', 'ROKU',
+  'ZM', 'DOCU', 'CRWD', 'DDOG', 'SPY', 'QQQ', 'IWM', 'DIA', 'VTI', 'VOO', 'ARKK',
+  'ASML', 'LMT', 'RTX', 'BA', 'CAT', 'DE', 'UPS', 'FDX', 'DIS', 'SBUX'
+]);
+
+const AMBIGUOUS_TICKERS = new Set([
+  'META', 'COST', 'SHOP', 'SNAP', 'NOW', 'NET', 'V', 'MA', 'F', 'T', 'X', 'C', 'A', 'D', 'K', 'M', 'W', 'Y', 'Z'
 ]);
 
 function detectStockTicker(query) {
   if (!query || typeof query !== 'string') return null;
   
-  const upperQuery = query.toUpperCase();
-  const matches = upperQuery.match(STOCK_TICKER_REGEX) || [];
-  
-  for (const match of matches) {
-    if (KNOWN_TICKERS.has(match)) {
-      return match;
+  // Priority 1: Check for $TICKER format (e.g., $META, $SBUX, $meta) - highest priority
+  // This is the ONLY way to match ambiguous tickers (META, COST, SHOP, etc.)
+  const dollarMatches = query.match(DOLLAR_TICKER_REGEX);
+  if (dollarMatches && dollarMatches.length > 0) {
+    const ticker = dollarMatches[0].replace('$', '').toUpperCase();
+    if (ticker.length >= 1 && ticker.length <= 5) {
+      return ticker;
     }
   }
   
-  for (const match of matches) {
-    if (!COMMON_NON_TICKERS.has(match) && match.length >= 2 && match.length <= 5) {
-      if (/^[A-Z]+$/.test(match)) {
-        return match;
-      }
+  // Priority 2: Check for KNOWN tickers in any case (safe because they're whitelisted)
+  // This allows "nvda", "NVDA", "Nvda" to all work
+  const words = query.match(/\b[A-Za-z]{2,5}\b/g) || [];
+  for (const word of words) {
+    const upper = word.toUpperCase();
+    // Skip ambiguous tickers - they need $PREFIX
+    if (AMBIGUOUS_TICKERS.has(upper)) {
+      continue;
+    }
+    // Match known unambiguous tickers
+    if (KNOWN_TICKERS.has(upper)) {
+      return upper;
+    }
+  }
+  
+  // Priority 3: Unknown but valid-looking UPPERCASE tickers (user typed in caps)
+  // Only match all-caps words to avoid false positives on common words
+  const originalUppercaseWords = query.match(/\b[A-Z]{2,5}\b/g) || [];
+  for (const word of originalUppercaseWords) {
+    if (AMBIGUOUS_TICKERS.has(word)) {
+      continue;
+    }
+    if (!COMMON_NON_TICKERS.has(word)) {
+      return word;
     }
   }
   
@@ -167,5 +192,6 @@ module.exports = {
   fetchStockPrices,
   calculateDataAge,
   KNOWN_TICKERS,
-  COMMON_NON_TICKERS
+  COMMON_NON_TICKERS,
+  AMBIGUOUS_TICKERS
 };

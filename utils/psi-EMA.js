@@ -1082,18 +1082,22 @@ class PsiEMADashboard {
 
 /**
  * Check if query should trigger Ψ-EMA analysis
+ * Triggers on: explicit Ψ-EMA keywords OR stock ticker + price/analysis keywords OR $TICKER format
+ * 
+ * @param {string} query - The user query
+ * @param {function} tickerDetector - Optional ticker detection function (for dependency injection)
  */
-function shouldTriggerPsiEMA(query) {
+function shouldTriggerPsiEMA(query, tickerDetector = null) {
   if (!query) return false;
   const lowerQuery = query.toLowerCase();
   
-  const keywords = [
+  // Explicit Ψ-EMA keywords (always trigger)
+  const psiEMAKeywords = [
     'fourier',
     'φ',
     'ψ',
     'psi',
     'phi',
-    'series',
     'wave',
     'oscillator',
     'harmonic',
@@ -1112,7 +1116,37 @@ function shouldTriggerPsiEMA(query) {
     'dashboard'
   ];
   
-  return keywords.some(kw => lowerQuery.includes(kw));
+  if (psiEMAKeywords.some(kw => lowerQuery.includes(kw))) {
+    return true;
+  }
+  
+  // Check for $TICKER format (e.g., $META, $SBUX) - always trigger Ψ-EMA
+  const dollarTickerRegex = /\$[A-Z]{1,5}\b/i;
+  if (dollarTickerRegex.test(query)) {
+    return true;
+  }
+  
+  // Stock price/analysis query detection
+  // If query has price/analysis keywords AND a valid stock ticker, trigger Ψ-EMA
+  const priceAnalysisKeywords = [
+    'price', 'stock', 'analysis', 'analyze', 'analyse', 'chart',
+    'technical', 'trading', 'trend', 'momentum', 'bullish', 'bearish',
+    'outlook', 'forecast', 'prediction', 'performance', 'volatility'
+  ];
+  
+  const hasPriceKeyword = priceAnalysisKeywords.some(kw => lowerQuery.includes(kw));
+  
+  if (hasPriceKeyword) {
+    // Use the provided ticker detector (robust, handles ambiguous tickers)
+    if (tickerDetector) {
+      const ticker = tickerDetector(query);
+      if (ticker) return true;
+    }
+    // No fallback - require explicit ticker detection to avoid false positives
+    // Words like "plan", "data", "team" would otherwise trigger incorrectly
+  }
+  
+  return false;
 }
 
 /**
