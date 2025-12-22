@@ -179,13 +179,15 @@ function buildStockContext(preflight) {
   const composite = psiEmaAnalysis.compositeSignal || {};
   const fidelity = psiEmaAnalysis.fidelity || {};
   
-  // Extract values with correct property names
+  // Extract values with correct property names from PsiEMADashboard output
   const phaseTheta = phase.current;  // theta angle in degrees (e.g., 359.76)
   const phaseSignal = phase.signal || summary.phaseSignal || 'N/A';
-  const anomalyZ = anomaly.currentZ;  // z-score (e.g., 0.5)
-  const anomalyLevel = summary.anomalyLevel || anomaly.alertLevel || 'N/A';
-  const convergenceR = convergence.currentR;  // R value (e.g., 1.2)
-  const regimeLabel = summary.regime || convergence.regime || 'N/A';
+  const anomalyZ = anomaly.current;  // z-score (e.g., -0.44)
+  const anomalyLevel = anomaly.alert?.level || summary.anomalyLevel || 'N/A';
+  const convergenceR = convergence.current;  // R ratio (e.g., 1.2)
+  const regimeLabel = typeof convergence.regime === 'string' 
+    ? convergence.regime 
+    : (convergence.regime?.label || summary.regime || 'N/A');
   
   // Composite signal
   const action = composite.action || summary.compositeSignal || 'HOLD';
