@@ -157,8 +157,28 @@ class PipelineOrchestrator {
     
     const { query, conversationHistory, extractedContent, temperature, maxTokens } = input;
     
+    // Build final prompt with proper attachment preservation
+    // Priority: Attachments are ALWAYS preserved. Search context supplements, never overwrites.
     let finalPrompt = query;
-    if (state.searchContext) {
+    const hasAttachments = extractedContent && extractedContent.length > 0;
+    const hasSearch = !!state.searchContext;
+    
+    if (hasAttachments && hasSearch) {
+      // BOTH: Combine attachments + search context (rare: retry during doc analysis)
+      console.log(`📎 Combining attachments (${extractedContent.length}) + search context`);
+      finalPrompt = `UPLOADED ATTACHMENTS (PRIMARY SOURCE - analyze these first):
+${extractedContent.join('\n\n')}
+
+SUPPLEMENTARY WEB SEARCH (use to verify or add context, NOT to override attachments):
+${state.searchContext}
+
+User query: ${query || 'Analyze this content.'}`;
+    } else if (hasAttachments) {
+      // Attachments only (closed-loop document analysis)
+      console.log(`📎 Attachment-only mode: ${extractedContent.length} items`);
+      finalPrompt = `Attachments analyzed:\n${extractedContent.join('\n\n')}\n\nUser query: ${query || 'Analyze this content.'}`;
+    } else if (hasSearch) {
+      // Search only (general queries with web augmentation)
       finalPrompt = `REAL-TIME WEB SEARCH RESULTS (USE THIS DATA):
 ${state.searchContext}
 
@@ -166,10 +186,7 @@ INSTRUCTION: Extract relevant facts from search results. Do NOT mention knowledg
 
 User query: ${query}`;
     }
-    
-    if (extractedContent && extractedContent.length > 0) {
-      finalPrompt = `Attachments analyzed:\n${extractedContent.join('\n\n')}\n\nUser query: ${query || 'Analyze this content.'}`;
-    }
+    // else: plain query (no attachments, no search)
     
     const messages = [
       ...state.systemMessages,
@@ -204,13 +221,19 @@ User query: ${query}`;
     
     const { query, extractedContent } = input;
     
+    // Log attachment preservation for debugging
+    const attachmentCount = extractedContent?.length || 0;
+    if (attachmentCount > 0) {
+      console.log(`📎 Audit: ${attachmentCount} attachment(s) preserved for STRICT verification`);
+    }
+    
     if (this.isIdentityQuery(query)) {
       console.log(`🐱 Identity query - bypassing audit`);
       state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Identity question' };
       return;
     }
     
-    const hasNoDocuments = !extractedContent || extractedContent.length === 0;
+    const hasNoDocuments = attachmentCount === 0;
     const isSeedMetric = state.draftAnswer.includes('~nyan');
     const isTetralemma = isFalseDichotomy(query);
     const auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
