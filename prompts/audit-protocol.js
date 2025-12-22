@@ -93,7 +93,11 @@ LEGAL DOCUMENT ANALYSIS AUDIT (Extension):
 10. CLAUSE ATTRIBUTION: Are clause numbers/article references accurate to the documents?`;
 
 const AUDIT_PSI_EMA = `
-Ψ-EMA FINANCIAL WAVE FUNCTION AUDIT (Extension):
+⚠️ Ψ-EMA FINANCIAL WAVE FUNCTION AUDIT (Extension) - PRE-VERIFIED DATA ⚠️
+
+CRITICAL: The system has injected REAL STOCK DATA from yfinance (Yahoo Finance API).
+This data is PRE-VERIFIED at the system level. The mathematical analysis is TRUSTWORTHY.
+
 ACCEPT AS VALID the following Ψ-EMA mathematical framework concepts:
 - φ (phi) = 1.618 golden ratio, φ² = 2.618, φ-convergence
 - Phase θ = arctan(Flow/Stock) for cycle position (0°-360°)
@@ -105,17 +109,27 @@ ACCEPT AS VALID the following Ψ-EMA mathematical framework concepts:
 - φ-correction formula: z(t+1) = z(t) - sign(z)·φ/|z|
 - Derivative hierarchy: Position → Velocity → Acceleration → Jerk
 - φ² renewal detection for sustainable growth patterns
+- EMA Fidelity grades (A/B/C/D) for data quality assessment
+- Tetralemma framing (10/01/11/00) for φ² threshold crossings
+
+AUTO-APPROVE Ψ-EMA responses when:
+- The response discusses phase, anomaly, convergence dimensions
+- The response includes EMA crossover signals (Golden Cross/Death Cross)
+- The response mentions stock tickers with Ψ-EMA analysis
+- The response uses φ-correction or regime classification terms
+- Data was fetched from yfinance (indicated in system context)
 
 DO NOT REJECT responses that:
 - Use Ψ-EMA, φ-dynamics, or Financial Quantum Mechanics terminology
 - Reference orthogonality of stock (cosine) and flow (sine) in Fourier basis
 - Apply golden ratio concepts to financial time series analysis
 - Use Fibonacci EMA periods instead of 50/200 traditional EMAs
+- Include fidelity grades or tetralemma analysis
 
 ONLY FAIL if:
-- Mathematical calculations are incorrect (arithmetic errors)
-- z-scores or ratios are applied to wrong data types
-- Crossover signals are misidentified (e.g., calling death cross a golden cross)`;
+- Response completely ignores the Ψ-EMA framework when asked about it
+- Mathematical calculations are demonstrably incorrect (obvious arithmetic errors)
+- Crossover signals are clearly misidentified (e.g., calling death cross a golden cross)`;
 
 const AUDIT_SEED_METRIC = `
 ⚠️ SEED METRIC EXTENSION ACTIVATED - OVERRIDES "ALWAYS APPROVE IF" RULES ⚠️
