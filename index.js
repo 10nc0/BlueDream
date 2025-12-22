@@ -33,6 +33,7 @@ const CONSTANTS = require('./config/constants');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('./prompts/nyan-protocol');
 const { getLegalAnalysisSeed, detectLegalDocument, LEGAL_KEYWORDS_REGEX } = require('./prompts/legal-analysis');
 const { runVerifiedAnswer, formatAuditBadge, runStreamingPersonalityPass, runAuditPass } = require('./utils/two-pass-verification');
+const { preflightRouter, buildSystemContext } = require('./utils/preflight-router');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
@@ -7570,146 +7571,41 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             }
         }
         
-        // Build messages array: system prompts + conversation context + current message
-        // Stage 0: NYAN Protocol (always active, non-negotiable)
-        // Stage 1+: Extensions (parallel layer - Financial Physics, Legal Analysis, Chemistry)
-        // LLMs follow the LAST system instruction, so extensions come after NYAN
-        const systemMessages = [
-            { role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT }
-        ];
+        // ===== PREFLIGHT ROUTER (Stage 0+1) =====
+        // Unified pre-processing: mode detection, ticker extraction, stock data fetch
+        // This consolidates scattered detection logic into a single module
+        const preflight = await preflightRouter({
+            query: effectiveMessage || message,
+            attachments: [...photoList.map(p => ({ type: 'photo', name: p.name || 'image.jpg' })), ...docList],
+            docContext: { hasFinancialDoc, hasLegalDoc: hasLegalContext }
+        });
         
-        // Inject extension seeds as needed (parallel layer)
-        if (hasFinancialDoc) {
-            systemMessages.push({ role: 'system', content: getFinancialPhysicsSeed() });
+        // Override queryClass with preflight results
+        if (preflight.mode === 'psi-ema') {
+            queryClass = { type: 'psi-ema', searchStrategy: 'none', skipCompression: false };
+        } else if (preflight.mode === 'seed-metric') {
+            queryClass = { type: 'seed-metric', searchStrategy: 'brave', skipCompression: false };
         }
-        if (hasLegalContext) {
-            systemMessages.push({ role: 'system', content: getLegalAnalysisSeed() });
-        }
-        // Ψ-EMA context for Fourier/wave/series/EMA analysis
+        
+        // Build system messages using preflight results
+        // Stage 0: NYAN Protocol (always active, non-negotiable)
+        // Stage 1+: Extensions (parallel layer - Financial Physics, Legal Analysis, Ψ-EMA)
+        const systemMessages = buildSystemContext(preflight, NYAN_PROTOCOL_SYSTEM_PROMPT);
+        
+        // Store preflight analysis for downstream use (audit flags, etc.)
         let stockPsiEMAAnalysis = null;
-        if (queryClass.type === 'psi-ema') {
-            systemMessages.push({ role: 'system', content: getPsiEMAContext() });
-            console.log(`📊 Ψ-EMA context injected for wave function analysis`);
-            
-            // Smart ticker detection: rule-based first, then AI fallback for company names
-            const stockTicker = await smartDetectTicker(effectiveMessage || message);
-            if (stockTicker) {
-                console.log(`📈 Stock ticker detected: ${stockTicker} - fetching price history via yfinance...`);
-                
-                // Helper to safely format numbers
-                const safeFixed = (val, decimals = 2) => {
-                    const num = typeof val === 'number' ? val : parseFloat(val);
-                    return !isNaN(num) ? num.toFixed(decimals) : 'N/A';
-                };
-                
-                let stockData = null;
-                try {
-                    stockData = await fetchStockPrices(stockTicker, 90);
-                } catch (fetchErr) {
-                    console.log(`⚠️ Stock fetch failed for ${stockTicker}: ${fetchErr.message}`);
-                    const fallbackContext = `
-## Stock Query: ${stockTicker}
-Note: Unable to fetch real-time stock data for ${stockTicker}. Please provide general analysis based on your knowledge.
-`;
-                    systemMessages.push({ role: 'system', content: fallbackContext });
-                }
-                
-                if (stockData) {
-                    // Validate stock data before analysis
-                    const dataAge = calculateDataAge(stockData.endDate);
-                    const ageFlag = dataAge.flag;
-                    
-                    if (!stockData.closes || !Array.isArray(stockData.closes) || stockData.closes.length === 0) {
-                        console.log(`⚠️ Invalid stock data returned for ${stockTicker}`);
-                        stockPsiEMAAnalysis = null;
-                    } else if (stockData.closes.length < 55) {
-                        console.log(`⚠️ Insufficient data for ${stockTicker}: ${stockData.closes.length} closes (need 55+ for EMA-55)`);
-                        stockPsiEMAAnalysis = null; // Explicitly clear
-                        const limitedContext = `
-## Stock Data for ${stockTicker} (${stockData.name || stockTicker})
-Current Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
-Data Timestamp: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
-Note: Only ${stockData.closes.length} trading days of data available. Full Ψ-EMA analysis requires 55+ days for EMA-55 calculation.
-**⚠️ IMPORTANT: This analysis is limited and is based on incomplete data from ${dataAge.age}. Do NOT rely on it for trading decisions.**
-`;
-                        systemMessages.push({ role: 'system', content: limitedContext });
-                    } else {
-                        console.log(`📈 Fetched ${stockData.periodDays || stockData.closes.length} days of ${stockTicker} data (${dataAge.age})`);
-                        
-                        // Run Ψ-EMA analysis with separate error handling
-                        let analysis = null;
-                        try {
-                            const dashboard = new PsiEMADashboard();
-                            analysis = dashboard.analyze({ stocks: stockData.closes });
-                        } catch (analysisErr) {
-                            console.log(`⚠️ Ψ-EMA analysis exception for ${stockTicker}: ${analysisErr.message}`);
-                            const analysisFailContext = `
-## Stock Data for ${stockTicker} (${stockData.name || stockTicker})
-Current Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
-Data Timestamp: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
-Data Points: ${stockData.closes.length} trading days
-Note: Ψ-EMA analysis could not be completed. Please provide general analysis based on the stock data.
-`;
-                            systemMessages.push({ role: 'system', content: analysisFailContext });
-                        }
-                        
-                        if (analysis) {
-                            // Check for errors in analysis result
-                            if (analysis.error) {
-                                console.log(`⚠️ Ψ-EMA analysis error: ${analysis.error}`);
-                                stockPsiEMAAnalysis = null;
-                            } else if (analysis.summary && analysis.dimensions) {
-                                // Store for potential later use
-                                stockPsiEMAAnalysis = {
-                                    ticker: stockTicker,
-                                    name: stockData.name,
-                                    currency: stockData.currency,
-                                    currentPrice: stockData.currentPrice,
-                                    periodDays: stockData.periodDays,
-                                    dateRange: `${stockData.startDate} to ${stockData.endDate}`,
-                                    dataAge,
-                                    analysis
-                                };
-                                
-                                // Safely extract analysis components
-                                const phase = analysis.dimensions.phase;
-                                const anomaly = analysis.dimensions.anomaly;
-                                const convergence = analysis.dimensions.convergence;
-                                const composite = analysis.compositeSignal;
-                                
-                                // Build tetralemma alert if φ² crossed
-                                const tetralemmaAlert = analysis.renewal?.tetralemma 
-                                    ? `\n${analysis.renewal.tetralemma.warning}\nTetralemma: (10)Bubble (01)Breakthrough (11)Both (00)Neither - Investigate fundamentals.`
-                                    : '';
-                                
-                                const analysisContext = `
-[USE THIS Ψ-EMA DATA - computed from yfinance]
-## Ψ-EMA Analysis for ${stockTicker} (${stockData.name || stockTicker})
-Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} | Data: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
-EMA Fidelity: ${analysis.summary.fidelity || 'N/A'}
-${dataAge.isStale ? `⚠️ Data is ${dataAge.daysOld} day(s) old` : ''}
-
-**Summary:** ${analysis.summary.phaseSignal} | ${analysis.summary.anomalyLevel} | ${analysis.summary.regime}
-**Composite:** ${analysis.summary.compositeSignal} (${analysis.summary.compositeConfidence ?? 'N/A'}% conf)
-
-Phase θ: ${phase?.interpretation?.phase || 'N/A'} ${phase?.interpretation?.emoji || ''} | Signal: ${phase?.signal || 'N/A'} | Crossover: ${phase?.crossover?.type || 'NONE'}
-Anomaly z: ${typeof anomaly?.current === 'number' ? anomaly.current.toFixed(2) + 'σ' : 'N/A'} ${anomaly?.alert?.emoji || ''} | ${anomaly?.alert?.level || 'N/A'}
-Convergence R: ${typeof convergence?.current === 'number' ? convergence.current.toFixed(3) : 'N/A'} | ${convergence?.regime?.regime || 'N/A'} ${convergence?.regime?.emoji || ''}
-${tetralemmaAlert}
-**Action:** ${composite?.action || 'N/A'} ${composite?.emoji || ''} (Score: ${composite?.netScore ?? 'N/A'})
-
-${analysis.interpretation || ''}
-Present this analysis. Data cutoff: ${dataAge.timestamp}.
-`;
-                                systemMessages.push({ role: 'system', content: analysisContext });
-                                console.log(`📊 Ψ-EMA stock analysis injected: ${analysis.summary.phaseSignal} | ${analysis.summary.compositeSignal} (data: ${dataAge.age})`);
-                            } else {
-                                stockPsiEMAAnalysis = null;
-                            }
-                        }
-                    }
-                }
-            }
+        if (preflight.psiEmaAnalysis && preflight.stockData) {
+            stockPsiEMAAnalysis = {
+                ticker: preflight.ticker,
+                name: preflight.stockData.name,
+                currency: preflight.stockData.currency,
+                currentPrice: preflight.stockData.currentPrice,
+                periodDays: preflight.stockData.periodDays,
+                dateRange: `${preflight.stockData.startDate} to ${preflight.stockData.endDate}`,
+                dataAge: preflight.dataAge,
+                analysis: preflight.psiEmaAnalysis
+            };
+            console.log(`📊 Ψ-EMA stock analysis ready: ${preflight.ticker} (via preflight router)`);
         }
         
         const messages = [
@@ -8101,120 +7997,23 @@ app.post('/api/playground/stream', async (req, res) => {
         const hasFinancialDoc = docList.some(d => d.name?.match(/\.(xlsx|xls)$/i));
         const hasLegalDoc = docList.some(d => LEGAL_KEYWORDS_REGEX.test(d.name || ''));
         
-        // Build messages
-        const systemMessages = [{ role: 'system', content: NYAN_PROTOCOL_SYSTEM_PROMPT }];
-        if (hasFinancialDoc) systemMessages.push({ role: 'system', content: getFinancialPhysicsSeed() });
-        if (hasLegalDoc) systemMessages.push({ role: 'system', content: getLegalAnalysisSeed() });
+        // ===== PREFLIGHT ROUTER (Stage 0+1) for Streaming =====
+        // Send thinking stage while preflight runs
+        res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Analyzing query...' })}\n\n`);
         
-        // Ψ-EMA context for Fourier/wave/series/EMA analysis
-        const nonStreamQueryClass = classifyQuery(message || '');
-        if (nonStreamQueryClass.type === 'psi-ema') {
-            systemMessages.push({ role: 'system', content: getPsiEMAContext() });
-            console.log(`📊 Ψ-EMA context injected for wave function analysis (streaming)`);
-            
-            // Smart ticker detection: rule-based first, then AI fallback for company names
-            const stockTicker = await smartDetectTicker(message || '');
-            if (stockTicker) {
-                console.log(`📈 Stock ticker detected: ${stockTicker} - fetching price history via yfinance...`);
-                res.write(`data: ${JSON.stringify({ type: 'thinking', stage: `Fetching ${stockTicker} price history...` })}\n\n`);
-                
-                // Helper to safely format numbers
-                const safeFixed = (val, decimals = 2) => {
-                    const num = typeof val === 'number' ? val : parseFloat(val);
-                    return !isNaN(num) ? num.toFixed(decimals) : 'N/A';
-                };
-                
-                let stockData = null;
-                try {
-                    stockData = await fetchStockPrices(stockTicker, 90);
-                } catch (fetchErr) {
-                    console.log(`⚠️ Stock fetch failed for ${stockTicker}: ${fetchErr.message}`);
-                    const fallbackContext = `
-## Stock Query: ${stockTicker}
-Note: Unable to fetch real-time stock data for ${stockTicker}. Please provide general analysis based on your knowledge.
-`;
-                    systemMessages.push({ role: 'system', content: fallbackContext });
-                }
-                
-                if (stockData) {
-                    // Validate stock data before analysis
-                    const dataAge = calculateDataAge(stockData.endDate);
-                    const ageFlag = dataAge.flag;
-                    
-                    if (!stockData.closes || !Array.isArray(stockData.closes) || stockData.closes.length === 0) {
-                        console.log(`⚠️ Invalid stock data returned for ${stockTicker}`);
-                    } else if (stockData.closes.length < 55) {
-                        console.log(`⚠️ Insufficient data for ${stockTicker}: ${stockData.closes.length} closes (need 55+ for EMA-55)`);
-                        const limitedContext = `
-## Stock Data for ${stockTicker} (${stockData.name || stockTicker})
-Current Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
-Data Timestamp: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
-Note: Only ${stockData.closes.length} trading days of data available. Full Ψ-EMA analysis requires 55+ days for EMA-55 calculation.
-**⚠️ IMPORTANT: This analysis is limited and is based on incomplete data from ${dataAge.age}. Do NOT rely on it for trading decisions.**
-`;
-                        systemMessages.push({ role: 'system', content: limitedContext });
-                    } else {
-                        console.log(`📈 Fetched ${stockData.periodDays || stockData.closes.length} days of ${stockTicker} data (${dataAge.age})`);
-                        
-                        // Run Ψ-EMA analysis with separate error handling
-                        let analysis = null;
-                        try {
-                            const dashboard = new PsiEMADashboard();
-                            analysis = dashboard.analyze({ stocks: stockData.closes });
-                        } catch (analysisErr) {
-                            console.log(`⚠️ Ψ-EMA analysis exception for ${stockTicker}: ${analysisErr.message}`);
-                            const analysisFailContext = `
-## Stock Data for ${stockTicker} (${stockData.name || stockTicker})
-Current Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
-Data Timestamp: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
-Data Points: ${stockData.closes.length} trading days
-Note: Ψ-EMA analysis could not be completed. Please provide general analysis based on the stock data.
-`;
-                            systemMessages.push({ role: 'system', content: analysisFailContext });
-                        }
-                        
-                        if (analysis) {
-                            // Check for errors in analysis result
-                            if (analysis.error) {
-                                console.log(`⚠️ Ψ-EMA analysis error: ${analysis.error}`);
-                            } else if (analysis.summary && analysis.dimensions) {
-                                const phase = analysis.dimensions.phase;
-                                const anomaly = analysis.dimensions.anomaly;
-                                const convergence = analysis.dimensions.convergence;
-                                const composite = analysis.compositeSignal;
-                                
-                                // Build tetralemma alert if φ² crossed (streaming)
-                                const tetralemmaAlert = analysis.renewal?.tetralemma 
-                                    ? `\n${analysis.renewal.tetralemma.warning}\nTetralemma: (10)Bubble (01)Breakthrough (11)Both (00)Neither - Investigate fundamentals.`
-                                    : '';
-                                
-                                const analysisContext = `
-[USE THIS Ψ-EMA DATA - computed from yfinance]
-## Ψ-EMA Analysis for ${stockTicker} (${stockData.name || stockTicker})
-Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} | Data: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
-EMA Fidelity: ${analysis.summary.fidelity || 'N/A'}
-${dataAge.isStale ? `⚠️ Data is ${dataAge.daysOld} day(s) old` : ''}
-
-**Summary:** ${analysis.summary.phaseSignal} | ${analysis.summary.anomalyLevel} | ${analysis.summary.regime}
-**Composite:** ${analysis.summary.compositeSignal} (${analysis.summary.compositeConfidence ?? 'N/A'}% conf)
-
-Phase θ: ${phase?.interpretation?.phase || 'N/A'} ${phase?.interpretation?.emoji || ''} | Signal: ${phase?.signal || 'N/A'} | Crossover: ${phase?.crossover?.type || 'NONE'}
-Anomaly z: ${typeof anomaly?.current === 'number' ? anomaly.current.toFixed(2) + 'σ' : 'N/A'} ${anomaly?.alert?.emoji || ''} | ${anomaly?.alert?.level || 'N/A'}
-Convergence R: ${typeof convergence?.current === 'number' ? convergence.current.toFixed(3) : 'N/A'} | ${convergence?.regime?.regime || 'N/A'} ${convergence?.regime?.emoji || ''}
-${tetralemmaAlert}
-**Action:** ${composite?.action || 'N/A'} ${composite?.emoji || ''} (Score: ${composite?.netScore ?? 'N/A'})
-
-${analysis.interpretation || ''}
-Present this analysis. Data cutoff: ${dataAge.timestamp}.
-`;
-                                systemMessages.push({ role: 'system', content: analysisContext });
-                                console.log(`📊 Ψ-EMA stock analysis injected: ${analysis.summary.phaseSignal} | ${analysis.summary.compositeSignal} (data: ${dataAge.age})`);
-                            }
-                        }
-                    }
-                }
-            }
+        const preflight = await preflightRouter({
+            query: message || '',
+            attachments: [...photoList.map(p => ({ type: 'photo', name: 'image.jpg' })), ...docList],
+            docContext: { hasFinancialDoc, hasLegalDoc }
+        });
+        
+        if (preflight.ticker) {
+            res.write(`data: ${JSON.stringify({ type: 'thinking', stage: `Fetched ${preflight.ticker} price history` })}\n\n`);
         }
+        
+        // Build system messages using preflight results
+        const systemMessages = buildSystemContext(preflight, NYAN_PROTOCOL_SYSTEM_PROMPT);
+        console.log(`📊 Streaming: Preflight complete - mode=${preflight.mode}, ticker=${preflight.ticker || 'none'}`);
         
         const messages = [
             ...systemMessages,
