@@ -98,7 +98,7 @@ async function preflightRouter(options) {
         
         // Fetch stock data
         try {
-          result.stockData = await fetchStockPrices(result.ticker, 90);
+          result.stockData = await fetchStockPrices(result.ticker, 180);
           result.dataAge = calculateDataAge(result.stockData?.endDate);
           
           // Run Ψ-EMA analysis if enough data
@@ -210,11 +210,15 @@ function buildStockContext(preflight) {
 **Anomaly z (Deviation)**: ${safeFixed(anomalyZ)}σ — ${anomalyLevel} (EMA-21/EMA-34)
 **Convergence R (Sustainability)**: ${safeFixed(convergenceR)} — ${regimeLabel} (EMA-13/EMA-21)
 
-### COMPOSITE SIGNAL: ${action} (Confidence: ${confidence}%)
+### COMPOSITE SIGNAL: ${action}
 ${tetralemmaAlert}
 
-### DATA FIDELITY:
-${fidelity.grade ? `Grade ${fidelity.grade} (${fidelity.percent}% real data)` : 'N/A'}
+### CONFIDENCE BREAKDOWN:
+- **Data Fidelity**: ${fidelity.percent || 'N/A'}% real data (Grade ${fidelity.grade || 'N/A'})
+- **Signal Strength**: ${typeof confidence === 'number' ? confidence : 'N/A'}% (based on phase/anomaly/convergence alignment)
+- **Combined Confidence**: ${typeof fidelity.percent === 'number' && typeof confidence === 'number' ? Math.round(fidelity.percent * confidence / 100) : 'N/A'}%
+
+⚠️ IMPORTANT: Always include data timestamp in financial claims. Undated prices = unverifiable.
 
 **⚠️ CRITICAL INSTRUCTION**: The values above are COMPUTED from REAL yfinance data. Quote these exact values in your response. Do NOT hallucinate different numbers. Data is fresh through ${dataAge?.timestamp}.
 **End with "🔥 ~nyan" to indicate verified Ψ-EMA output.**

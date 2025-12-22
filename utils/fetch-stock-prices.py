@@ -4,7 +4,7 @@ Fetch stock price history using yfinance for Ψ-EMA analysis.
 Returns JSON with closing prices for the specified ticker.
 
 Usage:
-  python fetch-stock-prices.py NVDA 90
+  python fetch-stock-prices.py NVDA 180
   python fetch-stock-prices.py AAPL
 
 Output:
@@ -23,13 +23,13 @@ except ImportError as e:
     sys.exit(1)
 
 
-def fetch_stock_prices(ticker: str, days: int = 90) -> dict:
+def fetch_stock_prices(ticker: str, days: int = 180) -> dict:
     """
     Fetch historical closing prices for a stock ticker.
     
     Args:
         ticker: Stock symbol (e.g., 'NVDA', 'AAPL')
-        days: Number of days of history to fetch (default 90 for EMA-55 + buffer)
+        days: Number of days of history to fetch (default 180 for higher EMA fidelity)
     
     Returns:
         dict with keys:
@@ -88,7 +88,7 @@ if __name__ == "__main__":
         sys.exit(1)
     
     ticker = sys.argv[1]
-    days = int(sys.argv[2]) if len(sys.argv) > 2 else 90
+    days = int(sys.argv[2]) if len(sys.argv) > 2 else 180
     
     result = fetch_stock_prices(ticker, days)
     print(json.dumps(result))
