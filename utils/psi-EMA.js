@@ -73,26 +73,43 @@ function zScore(value, arr) {
 // ============================================================================
 
 /**
- * Calculate EMA for a time series
+ * Calculate EMA for a time series with linear interpolation for charting
  * EMA = Price(t) × k + EMA(t-1) × (1-k)
  * where k = 2 / (period + 1)
  * 
  * CORRECT SEEDING: EMA[period-1] = SMA(first 'period' values), then iterate from index 'period'
- * Returns array of same length as input, with null for indices before period-1
+ * 
+ * CHARTING MODE (interpolate=true, default):
+ * - Leading values (indices 0 to period-2) are linearly interpolated from data[0] to EMA[period-1]
+ * - Short series (data.length < period) are fully interpolated from data[0] to data[last]
+ * - Creates smooth chart lines without gaps for visualization/tables
+ * 
+ * RAW MODE (interpolate=false):
+ * - Returns null for indices before period-1 (original behavior)
+ * - Short series return all nulls
  * 
  * @param {number[]} data - Time series data
  * @param {number} period - EMA period (Fibonacci: 13, 21, 34, 55)
- * @returns {number[]} EMA values (nulls for indices < period-1)
+ * @param {Object} options - Optional configuration
+ * @param {boolean} options.interpolate - If true (default), linearly interpolate leading values for charting
+ * @returns {number[]} EMA values (interpolated for indices < period-1 when options.interpolate=true)
  */
-function calculateEMA(data, period) {
+function calculateEMA(data, period, options = { interpolate: true }) {
   if (!data || data.length === 0) return [];
   if (data.length < period) {
-    // Not enough data - return array of nulls (insufficient history for valid EMA)
+    // Not enough data for valid EMA
+    if (options.interpolate && data.length >= 2) {
+      // Linear interpolation across entire array from first to last value
+      const start = data[0];
+      const end = data[data.length - 1];
+      return data.map((_, i) => start + (end - start) * (i / (data.length - 1)));
+    }
+    // Return nulls if no interpolation
     return data.map(() => null);
   }
   
   const k = 2 / (period + 1);
-  const ema = new Array(data.length).fill(null);
+  const ema = new Array(data.length);
   
   // Seed EMA at index (period-1) with SMA of first 'period' values
   const firstSMA = mean(data.slice(0, period));
@@ -101,6 +118,23 @@ function calculateEMA(data, period) {
   // Calculate EMA for remaining values starting at index 'period'
   for (let i = period; i < data.length; i++) {
     ema[i] = data[i] * k + ema[i - 1] * (1 - k);
+  }
+  
+  // Linear interpolation for leading values (indices 0 to period-2)
+  if (options.interpolate && period > 1) {
+    const startValue = data[0];
+    const endValue = ema[period - 1];
+    const steps = period - 1; // Number of intervals from index 0 to period-1
+    
+    for (let i = 0; i < period - 1; i++) {
+      // Linear interpolation: start + (end - start) * (i / steps)
+      ema[i] = startValue + (endValue - startValue) * (i / steps);
+    }
+  } else {
+    // Fill with nulls if no interpolation
+    for (let i = 0; i < period - 1; i++) {
+      ema[i] = null;
+    }
   }
   
   return ema;
