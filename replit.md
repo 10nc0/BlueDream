@@ -31,6 +31,13 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Real-time Updates**: Smart polling with `?after={messageId}`, auto-scroll, "New messages" banner, and jump-to-message functionality.
 - **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, providing general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior. Audit results are logged via the Prometheus Trinity Discord bots.
 - **AI Playground**: A sovereign, public AI playground at `/AI` without authentication, offering multimodal support (Text, Photo, Audio, Documents), multi-file upload, dynamic capacity sharing, and abuse prevention. It features query classification, smart retry mechanisms, document parsing, and a search cascade for real-time knowledge.
+  - **Preflight Router** (`utils/preflight-router.js`): Unified Stage 0+1 pre-processing that runs BEFORE the LLM call. Consolidates scattered detection logic into single module:
+    - Mode detection (psi-ema, seed-metric, financial, legal, general)
+    - Ticker extraction (3-tier: $TICKER → known tickers → AI fallback)
+    - Stock data fetching via yfinance
+    - Returns `PreflightResult` contract for downstream consumption
+    - `buildSystemContext(preflight, nyanProtocol)` maps preflight to system messages
+  - **Pipeline Flow**: Preflight → Reasoning → Audit → Personality
   - **Groq-First Architecture**: Result-based routing where Groq proves competence via audit.
   - **Three-Pass Verification**: Draft, Audit (with potential correction), and Personality formatting for responses. Includes dual-mode auditing (Strict for documents, Research for general queries).
   - **Audio Accessibility**: Mic button recordings are treated as user queries, enabling low-literacy users to interact via voice.
