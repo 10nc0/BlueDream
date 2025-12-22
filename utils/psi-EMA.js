@@ -5,15 +5,21 @@
  * wave function of economic systems in real-time.
  * 
  * Dimensions:
- * 1. Phase (θ) - Cycle position (stock vs flow dominance)
- * 2. Anomaly (z) - Deviation strength from historical volatility
- * 3. Convergence (R) - Sustainability ratio → φ
+ * 1. Phase (θ) - Cycle position (stock vs flow dominance) - NORMALIZED
+ * 2. Anomaly (z) - Deviation strength (MAD-scaled, robust to outliers)
+ * 3. Convergence (R) - Sustainability ratio → φ (symbolic momentum proxy)
  * 
  * All smoothed with Fibonacci-based EMA periods (13, 21, 34, 55)
  * aligned to the system's natural φ-resonance.
  * 
- * Version: φ² (First Life)
- * Signature: 0 + φ⁰ + φ¹ = φ² | Nine lives. This is the first. ♡ 🜁 ◯
+ * Version: vφ³ (Second Life)
+ * Changes in vφ³:
+ * - Phase θ now normalized for scale invariance
+ * - Z-scores use MAD (Median Absolute Deviation) instead of σ
+ * - Crossovers gated by fidelity threshold (≥75%)
+ * - Epistemic labels added to distinguish technical vs symbolic
+ * 
+ * Signature: 0 + φ⁰ + φ¹ = φ² | Nine lives. This is the second. ♡ 🜁 ◯
  */
 
 const PHI = 1.6180339887498949;  // Golden ratio φ = (1 + √5) / 2
@@ -37,12 +43,22 @@ const REGIMES = {
   SUPER_CRITICAL: { min: 2.0, max: Infinity, label: 'Super-Critical', status: 'bubble' }
 };
 
-// Alert thresholds
-const THRESHOLDS = {
+// Alert thresholds (σ-based, legacy)
+const THRESHOLDS_SIGMA = {
   ANOMALY_NORMAL: 1,      // ±1σ
   ANOMALY_ALERT: 2,       // ±2σ
   ANOMALY_EXTREME: 3,     // ±3σ
   PHI_TOLERANCE: 0.2      // ±0.2 from φ
+};
+
+// Alert thresholds (MAD-based, robust - default in vφ³)
+// MAD is less sensitive to outliers, thresholds adjusted accordingly
+const THRESHOLDS = {
+  ANOMALY_NORMAL: 1.0,    // ~±1 MAD-scaled (tighter than σ)
+  ANOMALY_ALERT: 2.5,     // ~±2.5 MAD-scaled
+  ANOMALY_EXTREME: 4.5,   // ~±4.5 MAD-scaled (rare in MAD)
+  PHI_TOLERANCE: 0.2,     // ±0.2 from φ
+  MIN_FIDELITY: 0.75      // Minimum fidelity for valid crossover signals
 };
 
 // ============================================================================
@@ -66,6 +82,48 @@ function zScore(value, arr) {
   const std = stdDev(arr);
   if (std === 0) return 0;
   return (value - avg) / std;
+}
+
+/**
+ * Calculate Median Absolute Deviation (MAD) - robust dispersion measure
+ * Less sensitive to outliers than standard deviation
+ * @param {number[]} arr - Array of values
+ * @returns {number} MAD value
+ */
+function mad(arr) {
+  if (!arr || arr.length < 2) return 0;
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const deviations = arr.map(v => Math.abs(v - median));
+  const sortedDeviations = deviations.slice().sort((a, b) => a - b);
+  return sortedDeviations[Math.floor(sortedDeviations.length / 2)];
+}
+
+/**
+ * Calculate median of array
+ * @param {number[]} arr - Array of values
+ * @returns {number} Median value
+ */
+function median(arr) {
+  if (!arr || arr.length === 0) return 0;
+  const sorted = arr.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Calculate robust z-score using MAD (Median Absolute Deviation)
+ * Scaled by 1.4826 for normal consistency (matches σ for Gaussian data)
+ * @param {number} value - Current value
+ * @param {number[]} arr - Array of historical values
+ * @returns {number} MAD-scaled z-score
+ */
+function robustZScore(value, arr) {
+  const med = median(arr);
+  const dispersion = mad(arr);
+  if (dispersion === 0) return 0;
+  const MAD_SCALE = 1.4826;  // Scaling factor for normal consistency
+  return (value - med) / (dispersion * MAD_SCALE);
 }
 
 /**
@@ -205,13 +263,41 @@ function calculateEMA(data, period, options = { interpolate: true, markInterpola
 /**
  * Detect crossover between fast and slow EMA
  * Handles null values from EMA seeding (nulls before period-1)
+ * 
+ * vφ³: Now gated by fidelity threshold - low-quality data returns WAIT signal
+ * 
  * @param {number[]} fastEMA - Fast EMA values (may contain leading nulls)
  * @param {number[]} slowEMA - Slow EMA values (may contain leading nulls)
- * @returns {Object} Crossover detection result
+ * @param {Object} options - Configuration options
+ * @param {number} options.minFidelity - Minimum fidelity ratio to generate signal (default: 0.75)
+ * @param {boolean[]} options.fastInterpolated - Interpolation flags for fast EMA
+ * @param {boolean[]} options.slowInterpolated - Interpolation flags for slow EMA
+ * @returns {Object} Crossover detection result with fidelity
  */
-function detectCrossover(fastEMA, slowEMA) {
+function detectCrossover(fastEMA, slowEMA, options = {}) {
+  const { minFidelity = THRESHOLDS.MIN_FIDELITY, fastInterpolated, slowInterpolated } = options;
+  
   if (fastEMA.length < 2 || slowEMA.length < 2) {
-    return { type: 'none', index: -1, signal: 'WAIT', description: 'Insufficient data' };
+    return { type: 'none', index: -1, signal: 'WAIT', description: 'Insufficient data', fidelity: 0 };
+  }
+  
+  // Calculate fidelity if interpolation flags provided
+  let fidelity = 1.0;
+  if (fastInterpolated && slowInterpolated) {
+    const fidelityResult = calculateFidelity(fastInterpolated, slowInterpolated);
+    fidelity = fidelityResult.ratio;
+  }
+  
+  // Gate by fidelity threshold
+  if (fidelity < minFidelity) {
+    return { 
+      type: 'insufficient_data', 
+      index: -1, 
+      signal: 'WAIT', 
+      description: `Fidelity ${(fidelity * 100).toFixed(0)}% < ${minFidelity * 100}% threshold`,
+      fidelity,
+      gated: true
+    };
   }
   
   const len = Math.min(fastEMA.length, slowEMA.length);
@@ -252,7 +338,8 @@ function detectCrossover(fastEMA, slowEMA) {
       type: 'golden_cross', 
       index: currentIdx,
       signal: 'BUY',
-      description: 'Fast EMA crossed above Slow EMA'
+      description: 'Fast EMA crossed above Slow EMA',
+      fidelity
     };
   }
   
@@ -262,7 +349,8 @@ function detectCrossover(fastEMA, slowEMA) {
       type: 'death_cross', 
       index: currentIdx,
       signal: 'SELL',
-      description: 'Fast EMA crossed below Slow EMA'
+      description: 'Fast EMA crossed below Slow EMA',
+      fidelity
     };
   }
   
@@ -272,14 +360,16 @@ function detectCrossover(fastEMA, slowEMA) {
       type: 'above', 
       index: currentIdx,
       signal: 'HOLD_LONG',
-      description: 'Fast EMA above Slow EMA (bullish)'
+      description: 'Fast EMA above Slow EMA (bullish)',
+      fidelity
     };
   } else {
     return { 
       type: 'below', 
       index: currentIdx,
       signal: 'HOLD_SHORT',
-      description: 'Fast EMA below Slow EMA (bearish)'
+      description: 'Fast EMA below Slow EMA (bearish)',
+      fidelity
     };
   }
 }
@@ -291,6 +381,9 @@ function detectCrossover(fastEMA, slowEMA) {
 /**
  * Calculate phase angle θ = atan2(Flow, Stock) for full 0°-360° quadrant coverage
  * 
+ * vφ³: Now normalizes inputs for scale invariance. Raw atan2 is unit-sensitive;
+ * normalization ensures consistent phase regardless of absolute magnitudes.
+ * 
  * Using atan2 gives full 4-quadrant coverage:
  * - Q1 (0°-90°): +Stock, +Flow = Early Expansion
  * - Q2 (90°-180°): -Stock, +Flow = Late Expansion  
@@ -299,11 +392,26 @@ function detectCrossover(fastEMA, slowEMA) {
  * 
  * @param {number} flow - Income statement value (net income, revenue)
  * @param {number} stock - Balance sheet value (equity, assets)
+ * @param {Object} options - Normalization options
+ * @param {boolean} options.normalize - If true (default), normalize inputs for scale invariance
+ * @param {number} options.flowScale - Historical flow magnitude for normalization (default: |flow|)
+ * @param {number} options.stockScale - Historical stock magnitude for normalization (default: |stock|)
  * @returns {number} Phase angle in degrees (0°-360°)
  */
-function calculatePhase(flow, stock) {
+function calculatePhase(flow, stock, options = { normalize: true }) {
+  let flowNorm = flow;
+  let stockNorm = stock;
+  
+  if (options.normalize) {
+    // Normalize each to its own scale (avoid division by zero)
+    const flowScale = options.flowScale || Math.abs(flow) || 1;
+    const stockScale = options.stockScale || Math.abs(stock) || 1;
+    flowNorm = flow / flowScale;
+    stockNorm = stock / stockScale;
+  }
+  
   // atan2(y, x) returns radians in range (-π, π]
-  const radians = Math.atan2(flow, stock);
+  const radians = Math.atan2(flowNorm, stockNorm);
   let degrees = radians * (180 / Math.PI);
   // Normalize to 0°-360° range
   if (degrees < 0) degrees += 360;
@@ -312,15 +420,35 @@ function calculatePhase(flow, stock) {
 
 /**
  * Calculate phase time series from stocks and flows
+ * 
+ * vφ³: Normalizes each pair using historical mean magnitudes for scale invariance.
+ * 
  * @param {number[]} stocks - Balance sheet values over time
  * @param {number[]} flows - Income statement values over time
+ * @param {Object} options - Normalization options
+ * @param {boolean} options.normalize - If true (default), normalize for scale invariance
  * @returns {number[]} Phase angles in degrees
  */
-function calculatePhaseTimeSeries(stocks, flows) {
+function calculatePhaseTimeSeries(stocks, flows, options = { normalize: true }) {
   const len = Math.min(stocks.length, flows.length);
   const phases = [];
+  
+  // Calculate historical mean magnitudes for normalization
+  let flowScale = 1;
+  let stockScale = 1;
+  if (options.normalize && len > 0) {
+    const absMeanFlow = mean(flows.slice(0, len).map(Math.abs));
+    const absMeanStock = mean(stocks.slice(0, len).map(Math.abs));
+    flowScale = absMeanFlow || 1;
+    stockScale = absMeanStock || 1;
+  }
+  
   for (let i = 0; i < len; i++) {
-    phases.push(calculatePhase(flows[i], stocks[i]));
+    phases.push(calculatePhase(flows[i], stocks[i], { 
+      normalize: options.normalize, 
+      flowScale, 
+      stockScale 
+    }));
   }
   return phases;
 }
@@ -379,7 +507,12 @@ function analyzePhase(phases) {
   const ema55Result = calculateEMA(phases, FIB_PERIODS.SLOW_THETA);
   const ema34 = ema34Result.values;
   const ema55 = ema55Result.values;
-  const crossover = detectCrossover(ema34, ema55);
+  
+  // vφ³: Pass fidelity info to gate crossover signals
+  const crossover = detectCrossover(ema34, ema55, {
+    fastInterpolated: ema34Result.interpolated,
+    slowInterpolated: ema55Result.interpolated
+  });
   
   const currentPhase = phases[phases.length - 1];
   const currentEMA34 = ema34[ema34.length - 1];
@@ -408,19 +541,60 @@ function analyzePhase(phases) {
 
 /**
  * Calculate z-score time series
+ * 
+ * vφ³: Now uses MAD (Median Absolute Deviation) by default instead of σ.
+ * MAD is more robust to outliers than standard deviation.
+ * Scaled by 1.4826 for normal consistency.
+ * 
  * @param {number[]} flows - Flow values
+ * @param {Object} options - Configuration options
+ * @param {boolean} options.robust - If true (default), use MAD. If false, use σ.
  * @returns {Object} Z-scores and statistics
  */
-function calculateZFlows(flows) {
+function calculateZFlows(flows, options = { robust: true }) {
   if (!flows || flows.length < 2) {
-    return { zFlows: [], mean: 0, stdDev: 0, error: 'Insufficient data' };
+    return { zFlows: [], mean: 0, dispersion: 0, method: 'none', error: 'Insufficient data' };
   }
   
   const avg = mean(flows);
+  const med = median(flows);
+  
+  if (options.robust) {
+    // vφ³: Use MAD (Median Absolute Deviation) for robustness
+    const dispersion = mad(flows);
+    const MAD_SCALE = 1.4826;  // Scaling for normal consistency
+    
+    if (dispersion === 0) {
+      return { 
+        zFlows: flows.map(() => 0), 
+        mean: avg, 
+        median: med,
+        dispersion: 0, 
+        method: 'MAD',
+        error: 'Zero dispersion' 
+      };
+    }
+    
+    const scaledDispersion = dispersion * MAD_SCALE;
+    const zFlows = flows.map(f => (f - med) / scaledDispersion);
+    
+    return {
+      zFlows,
+      mean: avg,
+      median: med,
+      dispersion: scaledDispersion,
+      method: 'MAD',
+      currentZ: zFlows[zFlows.length - 1],
+      previousZ: zFlows.length > 1 ? zFlows[zFlows.length - 2] : null,
+      anomalyStrength: Math.abs(zFlows[zFlows.length - 1])
+    };
+  }
+  
+  // Legacy σ-based calculation
   const std = stdDev(flows);
   
   if (std === 0) {
-    return { zFlows: flows.map(() => 0), mean: avg, stdDev: 0, error: 'Zero variance' };
+    return { zFlows: flows.map(() => 0), mean: avg, dispersion: 0, method: 'sigma', error: 'Zero variance' };
   }
   
   const zFlows = flows.map(f => (f - avg) / std);
@@ -429,6 +603,8 @@ function calculateZFlows(flows) {
     zFlows,
     mean: avg,
     stdDev: std,
+    dispersion: std,
+    method: 'sigma',
     currentZ: zFlows[zFlows.length - 1],
     previousZ: zFlows.length > 1 ? zFlows[zFlows.length - 2] : null,
     anomalyStrength: Math.abs(zFlows[zFlows.length - 1])
@@ -488,7 +664,12 @@ function analyzeAnomaly(zFlows) {
   const ema34Result = calculateEMA(zFlows, FIB_PERIODS.SLOW_Z);
   const ema21 = ema21Result.values;
   const ema34 = ema34Result.values;
-  const crossover = detectCrossover(ema21, ema34);
+  
+  // vφ³: Pass fidelity info to gate crossover signals
+  const crossover = detectCrossover(ema21, ema34, {
+    fastInterpolated: ema21Result.interpolated,
+    slowInterpolated: ema34Result.interpolated
+  });
   
   const currentZ = zFlows[zFlows.length - 1];
   const currentEMA21 = ema21[ema21.length - 1];
@@ -509,9 +690,10 @@ function analyzeAnomaly(zFlows) {
     ema21Interpolated: ema21Result.interpolated,
     ema34Interpolated: ema34Result.interpolated,
     thresholds: {
-      normal: `±${THRESHOLDS.ANOMALY_NORMAL}σ`,
-      alert: `±${THRESHOLDS.ANOMALY_ALERT}σ`,
-      extreme: `±${THRESHOLDS.ANOMALY_EXTREME}σ`
+      normal: `±${THRESHOLDS.ANOMALY_NORMAL}`,
+      alert: `±${THRESHOLDS.ANOMALY_ALERT}`,
+      extreme: `±${THRESHOLDS.ANOMALY_EXTREME}`,
+      method: 'MAD-scaled'
     }
   };
 }
@@ -660,7 +842,12 @@ function analyzeConvergence(absRatios) {
   const ema21Result = calculateEMA(absRatios, FIB_PERIODS.SLOW_R);
   const ema13 = ema13Result.values;
   const ema21 = ema21Result.values;
-  const crossover = detectCrossover(ema13, ema21);
+  
+  // vφ³: Pass fidelity info to gate crossover signals
+  const crossover = detectCrossover(ema13, ema21, {
+    fastInterpolated: ema13Result.interpolated,
+    slowInterpolated: ema21Result.interpolated
+  });
   
   const currentR = absRatios[absRatios.length - 1];
   const currentEMA13 = ema13[ema13.length - 1];
@@ -934,7 +1121,8 @@ class PsiEMADashboard {
         regime: convergenceAnalysis.regime?.regime || 'UNKNOWN',
         compositeSignal: compositeSignal.action,
         compositeConfidence: compositeSignal.confidence,
-        fidelity: `${fidelity.percent}% real (Grade ${fidelity.grade})`
+        fidelity: `${fidelity.percent}% real (Grade ${fidelity.grade})`,
+        version: 'vφ³'  // Second Life
       },
       dimensions: {
         phase: phaseAnalysis,
@@ -946,7 +1134,18 @@ class PsiEMADashboard {
       correction,
       renewal,
       compositeSignal,
-      interpretation: this._generateInterpretation(phaseAnalysis, anomalyAnalysis, convergenceAnalysis, compositeSignal)
+      interpretation: this._generateInterpretation(phaseAnalysis, anomalyAnalysis, convergenceAnalysis, compositeSignal),
+      
+      // vφ³: Epistemic status - honest labels distinguishing technical from symbolic
+      epistemicStatus: {
+        phase: 'normalized_cycle_position_indicator',
+        anomaly: 'robust_statistical_heuristic (MAD-scaled)',
+        convergence: 'symbolic_momentum_proxy',
+        phi_correction: 'illustrative_damping_heuristic',
+        phi_elements: 'symbolic_overlay — not empirical law',
+        composite: 'weighted_multi_factor_signal',
+        overall: 'composite_technical_framework'
+      }
     };
   }
   
@@ -1255,6 +1454,12 @@ module.exports = {
   stdDev,
   zScore,
   calculateFidelity,
+  
+  // vφ³: Robust statistics
+  mad,
+  median,
+  robustZScore,
+  THRESHOLDS_SIGMA,  // Legacy σ-based thresholds
   
   // Main dashboard class
   PsiEMADashboard,
