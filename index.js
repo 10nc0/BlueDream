@@ -8278,7 +8278,8 @@ Present this analysis. Data cutoff: ${dataAge.timestamp}.
         // Trigger search retry if:
         // 1. REJECTED by audit, OR
         // 2. Answer claims "not found" but we haven't searched yet (must verify before accepting ignorance)
-        // EXCEPTION: Skip retry for ~nyan responses (Seed Metric / Ψ-EMA) - data is pre-verified
+        // EXCEPTION: Skip retry for Ψ-EMA (yfinance data is pre-verified before LLM call)
+        // NOTE: Seed Metric (~nyan) should NOT skip - proxy cascade hasn't been attempted yet in streaming
         let verifiedAnswer = draftAnswer;
         let didSearchRetry = false;
         const hasNoDocuments = extractedContent.length === 0;
@@ -8286,9 +8287,9 @@ Present this analysis. Data cutoff: ${dataAge.timestamp}.
         const hasNotFoundClaim = containsNotFoundClaim(draftAnswer);
         // Only trigger "not found" retry if we haven't searched yet - prevents infinite loops
         const needsSearchVerification = wasRejected || (hasNotFoundClaim && !didSearchRetry);
-        // Skip search retry for ~nyan responses (Seed Metric / Ψ-EMA use pre-verified data)
-        const hasNyanMarker = draftAnswer.includes('~nyan');
-        const canRetry = !isIdentity && hasNoDocuments && needsSearchVerification && message && !hasNyanMarker;
+        // Only skip retry for Ψ-EMA (has pre-verified yfinance data); Seed Metric needs proxy cascade
+        const isPsiEMAQuery = nonStreamQueryClass.type === 'psi-ema';
+        const canRetry = !isIdentity && hasNoDocuments && needsSearchVerification && message && !isPsiEMAQuery;
         
         if (canRetry) {
             const retryReason = wasRejected ? 'REJECTED' : 'NOT_FOUND_CLAIM';
