@@ -70,10 +70,15 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
   - **Real-Time Stock Integration** (Dec 22, 2025):
     - `utils/fetch-stock-prices.py`: Python script using yfinance for 90-day closing prices
     - `utils/stock-fetcher.js`: Node.js wrapper with ticker detection and price fetching
-    - **Smart Ticker Detection** (3-tier):
-      1. **$TICKER format**: Always matches (e.g., $META, $COST) - for ambiguous tickers
-      2. **Known tickers**: Case-insensitive match for whitelisted tickers (nvda, NVDA, Nvda)
-      3. **AI fallback**: Groq extracts ticker from company names ("meta stock" → META)
+    - **Smart Ticker Detection** (Grammar-based + 3-tier):
+      - **Trigger Grammar**: Object + (Verb OR Adjective) → attempt Ψ-EMA
+        - Object: stock, stocks, share, shares, ticker, equity
+        - Verb: analyze, predict, forecast, view, outlook, opinion
+        - Adjective: price, trend, sentiment, momentum, performance
+      - **3-Tier Extraction**:
+        1. **$TICKER format**: Always matches (e.g., $META, $COST) - for ambiguous tickers
+        2. **Known tickers**: Case-insensitive match for whitelisted tickers (nvda, NVDA, Nvda)
+        3. **AI fallback**: Groq extracts ticker from company names ("ulta stock" → ULTA)
     - **AI Ticker Extraction** (`extractTickerWithAI`):
       - Uses llama-3.1-8b-instant for fast company→ticker mapping
       - Handles commodities (gold, oil), crypto (bitcoin), private companies → returns null
