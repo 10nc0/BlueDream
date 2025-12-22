@@ -158,7 +158,7 @@ function buildCheckPrompt(message, ruleType, language = null) {
     : 'Respond in English.';
   
   const ruleDescriptions = {
-    tire_check: 'Tire inspection: Check serial number, tread depth (mm), and tire age (years). Minimum tread: 3mm, Maximum age: 6 years.',
+    repair: 'Equipment/Asset repair: Check item, issue, severity (critical/high/medium/low), downtime hours. Maximum downtime: 24 hours.',
     expense: 'Expense verification: Check amount, vendor, date. Approval threshold: $500 USD.',
     inventory: 'Inventory audit: Check item ID, count, variance. Maximum variance: 10%.',
     delivery: 'Delivery confirmation: Check order ID, recipient, status, timestamp.',

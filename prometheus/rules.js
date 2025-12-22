@@ -9,15 +9,15 @@
  */
 
 const RULES = {
-  tire_check: {
-    name: 'Tire Inspection',
-    name_id: 'Pemeriksaan Ban',
+  repair: {
+    name: 'Equipment/Asset Repair',
+    name_id: 'Perbaikan Peralatan/Aset',
     thresholds: {
-      tread_depth_min_mm: 3,
-      age_max_years: 6
+      max_downtime_hours: 24,
+      severity_levels: ['critical', 'high', 'medium', 'low']
     },
-    required_fields: ['serial_number', 'tread_depth'],
-    optional_fields: ['age_years', 'brand', 'condition']
+    required_fields: ['item', 'issue'],
+    optional_fields: ['severity', 'downtime_hours', 'repair_date', 'technician', 'parts_replaced']
   },
   
   expense: {
@@ -111,8 +111,8 @@ function applyBusinessRules(data, ruleType, language = 'en') {
   }
   
   switch (ruleType) {
-    case 'tire_check':
-      return applyTireRules(data, rule.thresholds, language);
+    case 'repair':
+      return applyRepairRules(data, rule.thresholds, language);
     case 'expense':
       return applyExpenseRules(data, rule.thresholds, language);
     case 'inventory':
@@ -129,43 +129,48 @@ function applyBusinessRules(data, ruleType, language = 'en') {
   }
 }
 
-function applyTireRules(data, thresholds, language) {
+function applyRepairRules(data, thresholds, language) {
   const issues = [];
+  const item = data.item || 'Unknown item';
+  const issue = data.issue || 'No issue specified';
+  const severity = (data.severity || 'medium').toLowerCase();
+  const downtimeHours = parseFloat(data.downtime_hours) || 0;
   
-  const treadDepth = parseFloat(data.tread_depth) || parseFloat(data.tread_depth_mm);
-  if (treadDepth && treadDepth < thresholds.tread_depth_min_mm) {
+  // Check if severity is valid
+  if (!thresholds.severity_levels.includes(severity)) {
     issues.push(language === 'id'
-      ? `Kedalaman tapak ${treadDepth}mm di bawah minimum ${thresholds.tread_depth_min_mm}mm`
-      : `Tread depth ${treadDepth}mm below minimum ${thresholds.tread_depth_min_mm}mm`);
+      ? `Tingkat keparahan '${severity}' tidak dikenali`
+      : `Unknown severity level: ${severity}`);
   }
   
-  const ageYears = parseFloat(data.age_years) || parseFloat(data.age);
-  if (ageYears && ageYears > thresholds.age_max_years) {
+  // Check downtime against threshold
+  if (downtimeHours > thresholds.max_downtime_hours) {
     issues.push(language === 'id'
-      ? `Usia ban ${ageYears} tahun melebihi maksimum ${thresholds.age_max_years} tahun`
-      : `Tire age ${ageYears} years exceeds maximum ${thresholds.age_max_years} years`);
+      ? `Waktu henti ${downtimeHours}jam melebihi maksimum ${thresholds.max_downtime_hours}jam`
+      : `Downtime ${downtimeHours}h exceeds maximum ${thresholds.max_downtime_hours}h`);
   }
   
-  if (issues.length > 0) {
+  // Check for critical severity
+  if (severity === 'critical') {
     return {
       status: 'FAIL',
-      reason: issues.join('; '),
+      reason: language === 'id'
+        ? `${item}: ${issue} (Kritis)`
+        : `${item}: ${issue} (Critical)`,
       recommended_action: language === 'id'
-        ? 'Jadwalkan penggantian ban segera'
-        : 'Schedule tire replacement immediately',
+        ? 'Perbaikan segera diperlukan'
+        : 'Immediate repair required',
       confidence: 0.95
     };
   }
   
-  if (treadDepth && treadDepth < thresholds.tread_depth_min_mm + 1) {
+  if (issues.length > 0) {
     return {
       status: 'WARNING',
-      reason: language === 'id'
-        ? `Kedalaman tapak ${treadDepth}mm mendekati batas minimum`
-        : `Tread depth ${treadDepth}mm approaching minimum threshold`,
+      reason: issues.join('; '),
       recommended_action: language === 'id'
-        ? 'Monitor kondisi ban, pertimbangkan penggantian dalam 30 hari'
-        : 'Monitor tire condition, consider replacement within 30 days',
+        ? 'Pantau dan rencanakan perbaikan'
+        : 'Monitor and schedule repair',
       confidence: 0.95
     };
   }
@@ -173,11 +178,11 @@ function applyTireRules(data, thresholds, language) {
   return {
     status: 'PASS',
     reason: language === 'id'
-      ? 'Kondisi ban dalam batas normal'
-      : 'Tire condition within normal limits',
+      ? `${item}: ${issue} - Dalam batas normal`
+      : `${item}: ${issue} - Within normal limits`,
     recommended_action: language === 'id'
-      ? 'Lanjutkan penggunaan normal'
-      : 'Continue normal use',
+      ? 'Lanjutkan pemantauan rutin'
+      : 'Continue routine monitoring',
     confidence: 0.95
   };
 }

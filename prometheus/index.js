@@ -19,7 +19,7 @@ class Prometheus {
   /**
    * Check one or more messages against business rules
    * @param {string|string[]} messages - Message(s) to check
-   * @param {string} ruleType - Rule type: tire_check, expense, inventory, delivery, general
+   * @param {string} ruleType - Rule type: repair, expense, inventory, delivery, general
    * @param {Object} options - Additional options
    * @returns {Promise<Object|Object[]>} Check result(s)
    */
