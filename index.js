@@ -6364,41 +6364,7 @@ const H0_TEMPERATURE = 0.15;
 //    APPROVED/FIXABLE → Done
 //    REJECTED → Search → Regenerate → Audit → Done
 
-// Seed Metric topics (SINGLE SOURCE OF TRUTH - also used in nyan-protocol.js ROUTING section)
-const SEED_METRIC_TOPICS = [
-    'housing affordability',
-    'land affordability',
-    'seed metric',
-    'P/I ratio',
-    'price-to-income',
-    'price to income',
-    'fertility rate',
-    'fertility window',
-    'land price',
-    'price.*income',
-    'income.*price',
-    'housing cost',
-    '700.*m²',
-    'land.*afford',
-    'city.*collapse',
-    'empire.*collapse',
-    'extinction',
-    'fatalism',
-    'optimism.*land',
-    'φ',
-    'phi ratio'
-];
-
-// Build regex from topics (case insensitive)
-const SEED_METRIC_REGEX = new RegExp(
-    SEED_METRIC_TOPICS.map(t => `\\b${t.replace(/\s+/g, '\\s+')}\\b`).join('|'),
-    'i'
-);
-
-function isSeedMetricQuery(message) {
-    if (!message) return false;
-    return SEED_METRIC_REGEX.test(message);
-}
+// Seed Metric detection moved to utils/preflight-router.js
 
 // Identity/Meta question detection - bypass audit for self-reference questions
 // Nyan's identity is defined in NYAN_PROTOCOL_SEED, no external verification needed
@@ -6472,32 +6438,8 @@ function containsNotFoundClaim(answer) {
     return NOT_FOUND_PATTERNS.some(pattern => pattern.test(answer));
 }
 
-// Ψ-EMA detection (Fourier Financial Wave analysis)
-const { shouldTriggerPsiEMA, getPsiEMAContext, PsiEMADashboard } = require('./utils/psi-EMA');
-const { detectStockTicker, isPsiEMAStockQuery, fetchStockPrices, calculateDataAge, smartDetectTicker } = require('./utils/stock-fetcher');
-
-function isPsiEMAQuery(message) {
-    return shouldTriggerPsiEMA(message, detectStockTicker);
-}
-
-function classifyQuery(message) {
-    const trimmed = message.trim();
-    
-    // Ψ-EMA: Fourier/wave/series/EMA analysis
-    if (isPsiEMAQuery(trimmed)) {
-        return { type: 'psi-ema', searchStrategy: 'none', skipCompression: false };
-    }
-    
-    // ONLY exception: Seed Metric needs fresh data (land prices, income) - search first
-    if (isSeedMetricQuery(trimmed)) {
-        return { type: 'seed-metric', searchStrategy: 'brave', skipCompression: false };
-    }
-    
-    // EVERYTHING ELSE: Groq-first (no search)
-    // Audit will tell us if the answer is good enough
-    // If REJECTED, we'll trigger search and regenerate
-    return { type: 'groq-first', searchStrategy: 'none', skipCompression: false };
-}
+// Ψ-EMA detection and classifyQuery() moved to utils/preflight-router.js
+// preflightRouter() now handles: mode detection, ticker extraction, stock fetching
 
 // ===== DOCUMENT CONTEXT CACHE (Two-Tier: Session + Global) =====
 // Cache expensive document parsing/analysis, NOT the AI response
@@ -7026,44 +6968,55 @@ app.post('/api/playground', async (req, res) => {
             ? history.filter(msg => msg && typeof msg === 'object' && msg.role && msg.content)
             : [];
         
-        // ===== GROQ-FIRST ARCHITECTURE =====
+        // ===== GROQ-FIRST ARCHITECTURE (Preflight-Driven) =====
         // Philosophy: Let Groq answer first, audit the result, only search if audit REJECTED
         // Exception: Seed Metric (~nyan) queries need fresh data - search FIRST
         let searchContext = null;
-        let queryClass = { type: 'groq-first', searchStrategy: 'none' };
         let noSearchDisclaimer = false;
         let searchQuery = null; // Store for potential retry after audit rejection
-        let wasGroqFirstQuery = false; // Track original routing for retry logic (preserved before mutations)
         
         // CLOSED-LOOP DETECTION: Skip web search for document analysis
-        // Financial documents (Excel, PDF) contain user's own data - nothing to verify externally
         const isClosedLoopAnalysis = docList.length > 0;
         if (isClosedLoopAnalysis) {
             console.log(`📎 Document analysis mode: Closed-loop (no search needed)`);
         }
         
+        // ===== EARLY PREFLIGHT (Stage 0+1) =====
+        // Run preflight FIRST to classify query and fetch any needed data
+        const hasFinancialDoc = docList.some(d => d.name?.match(/\.(xlsx|xls)$/i));
+        const hasLegalContext = docList.some(d => LEGAL_KEYWORDS_REGEX.test(d.name || ''));
+        
+        const earlyPreflight = await preflightRouter({
+            query: message || '',
+            attachments: [...photoList.map(p => ({ type: 'photo', name: p.name || 'image.jpg' })), ...docList],
+            docContext: { hasFinancialDoc, hasLegalDoc: hasLegalContext }
+        });
+        
+        // Derive queryClass from preflight result
+        let queryClass = { 
+            type: earlyPreflight.mode, 
+            searchStrategy: earlyPreflight.searchStrategy || 'none',
+            skipCompression: false 
+        };
+        
+        // Track original routing for retry logic
+        let wasGroqFirstQuery = (earlyPreflight.mode === 'general');
+        
+        // Override: Force closed-loop for document analysis
+        if (isClosedLoopAnalysis) {
+            queryClass.searchStrategy = 'none';
+            queryClass.type = 'closed-loop';
+            wasGroqFirstQuery = false;
+        }
+        console.log(`🎯 Preflight: mode=${earlyPreflight.mode}, ticker=${earlyPreflight.ticker || 'none'}, search=${queryClass.searchStrategy}`);
+        
         if (message) {
-            // Step 0: Classify query - only Seed Metric gets search upfront
-            queryClass = classifyQuery(message);
-            
-            // PRESERVE original classification before any mutations
-            wasGroqFirstQuery = (queryClass.type === 'groq-first');
-            
-            // Override: Force 'none' for document analysis (closed-loop)
-            if (isClosedLoopAnalysis) {
-                queryClass.searchStrategy = 'none';
-                queryClass.type = 'closed-loop';
-                wasGroqFirstQuery = false; // Closed-loop should never retry with search
-            }
-            console.log(`🎯 Query classified as: ${queryClass.type} (initial strategy: ${queryClass.searchStrategy}, groq-first: ${wasGroqFirstQuery})`);
-            
-            // Extract search query for Seed Metric OR for potential retry
+            // Extract search query for potential retry
             searchQuery = await extractCoreQuestion(message);
             console.log(`🔍 Search query prepared: "${searchQuery.substring(0, 50)}..."`);
             
-            // Step 1: ONLY Seed Metric gets search upfront (needs fresh land/income data)
-            // All other queries: Groq answers first, search only if audit REJECTED
-            if (queryClass.type === 'seed-metric' && searchQuery) {
+            // Seed Metric: search upfront (needs fresh land/income data)
+            if (earlyPreflight.mode === 'seed-metric' && searchQuery && !isClosedLoopAnalysis) {
                 console.log(`🌱 Seed Metric detected: Search FIRST (needs fresh data)`);
                 searchContext = await searchBrave(searchQuery, clientIp);
                 if (!searchContext) {
@@ -7076,9 +7029,8 @@ app.post('/api/playground', async (req, res) => {
                     searchContext = await searchDuckDuckGo(coreWords);
                 }
             }
-            // For groq-first: NO search here - will search only if audit rejects
             
-            // Inject context if we have it (Seed Metric path)
+            // Inject search context if we have it (Seed Metric path)
             if (searchContext) {
                 finalPrompt = `REAL-TIME WEB SEARCH RESULTS (USE THIS DATA - it overrides your knowledge cutoff):
 ${searchContext}
@@ -7088,7 +7040,6 @@ INSTRUCTION: Extract the relevant facts from the search results above to answer 
 User query: ${message}`;
                 console.log(`✅ Search context injected into prompt for knowledge augmentation`);
             }
-            // For groq-first: finalPrompt stays as original message
         }
         
         // File size limits (base64 encoded)
@@ -7464,16 +7415,15 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         }
         
         // ===== FINANCIAL PHYSICS: Detect financial documents for seed injection =====
-        // Revolutionary financial cognition: observe flows (+/−), not labels
-        // Inject FINANCIAL_PHYSICS_SEED for Excel OR PDFs with detected financial content
+        // Note: hasFinancialDoc already defined in early preflight (line ~6986)
+        // This section just logs - detection happens in earlyPreflight
         const hasFinancialPDF = docList.some(d => 
             d.name?.match(/\.pdf$/i) && 
             d.extracted?.financialAnalysis?.documentType?.type !== 'unknown' &&
             d.extracted?.financialAnalysis?.documentType?.confidence > 0.5
         );
-        const hasFinancialDoc = hasExcelDoc || hasFinancialPDF;
-        if (hasFinancialDoc) {
-            console.log(`🧠 Financial Physics: ${hasExcelDoc ? 'Excel' : 'Financial PDF'} detected - will inject physics seed`);
+        if (hasFinancialDoc || hasFinancialPDF) {
+            console.log(`🧠 Financial Physics: ${hasExcelDoc ? 'Excel' : 'Financial PDF'} detected - seed injected via preflight`);
         }
         
         // ===== FINANCE TEXT DETECTION: Detect commercial/investment topics in text (no file required) =====
@@ -7485,20 +7435,11 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             console.log(`💰 Finance Text: Commercial/investment topic detected in query text`);
         }
         
-        // ===== LEGAL DOCUMENT ANALYSIS: Detect contracts/agreements for structured legal review =====
-        // Extension layer (parallel with Financial Physics & Chemistry)
-        // Triggers ONLY when: Word/PDF attached with legal keywords in filename or content
-        // Text-only legal queries do NOT trigger (audit requires source material for quotation checks)
-        const hasLegalDoc = docList.some(d => {
-            const isTextDoc = d.name?.match(/\.(docx|doc|pdf)$/i);
-            if (!isTextDoc) return false;
-            const nameMatch = LEGAL_KEYWORDS_REGEX.test(d.name || '');
-            const contentMatch = LEGAL_KEYWORDS_REGEX.test((d.extracted?.text || '').substring(0, 2000));
-            return nameMatch || contentMatch;
-        });
-        const hasLegalContext = hasLegalDoc; // Only documents trigger legal analysis (not text queries)
+        // ===== LEGAL DOCUMENT ANALYSIS =====
+        // Note: hasLegalContext already defined in early preflight (line ~6987)
+        // This section just logs - detection happens in earlyPreflight
         if (hasLegalContext) {
-            console.log(`⚖️ Legal Analysis: Contract document detected - will inject legal template`);
+            console.log(`⚖️ Legal Analysis: Contract document detected - seed injected via preflight`);
         }
         
         // Final reasoning via Groq Llama 3.3 70B
@@ -7571,41 +7512,25 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             }
         }
         
-        // ===== PREFLIGHT ROUTER (Stage 0+1) =====
-        // Unified pre-processing: mode detection, ticker extraction, stock data fetch
-        // This consolidates scattered detection logic into a single module
-        const preflight = await preflightRouter({
-            query: effectiveMessage || message,
-            attachments: [...photoList.map(p => ({ type: 'photo', name: p.name || 'image.jpg' })), ...docList],
-            docContext: { hasFinancialDoc, hasLegalDoc: hasLegalContext }
-        });
-        
-        // Override queryClass with preflight results
-        if (preflight.mode === 'psi-ema') {
-            queryClass = { type: 'psi-ema', searchStrategy: 'none', skipCompression: false };
-        } else if (preflight.mode === 'seed-metric') {
-            queryClass = { type: 'seed-metric', searchStrategy: 'brave', skipCompression: false };
-        }
-        
-        // Build system messages using preflight results
-        // Stage 0: NYAN Protocol (always active, non-negotiable)
-        // Stage 1+: Extensions (parallel layer - Financial Physics, Legal Analysis, Ψ-EMA)
-        const systemMessages = buildSystemContext(preflight, NYAN_PROTOCOL_SYSTEM_PROMPT);
+        // ===== USE EARLY PREFLIGHT RESULTS =====
+        // earlyPreflight was called at the start of the handler
+        // Build system messages using those results
+        const systemMessages = buildSystemContext(earlyPreflight, NYAN_PROTOCOL_SYSTEM_PROMPT);
         
         // Store preflight analysis for downstream use (audit flags, etc.)
         let stockPsiEMAAnalysis = null;
-        if (preflight.psiEmaAnalysis && preflight.stockData) {
+        if (earlyPreflight.psiEmaAnalysis && earlyPreflight.stockData) {
             stockPsiEMAAnalysis = {
-                ticker: preflight.ticker,
-                name: preflight.stockData.name,
-                currency: preflight.stockData.currency,
-                currentPrice: preflight.stockData.currentPrice,
-                periodDays: preflight.stockData.periodDays,
-                dateRange: `${preflight.stockData.startDate} to ${preflight.stockData.endDate}`,
-                dataAge: preflight.dataAge,
-                analysis: preflight.psiEmaAnalysis
+                ticker: earlyPreflight.ticker,
+                name: earlyPreflight.stockData.name,
+                currency: earlyPreflight.stockData.currency,
+                currentPrice: earlyPreflight.stockData.currentPrice,
+                periodDays: earlyPreflight.stockData.periodDays,
+                dateRange: `${earlyPreflight.stockData.startDate} to ${earlyPreflight.stockData.endDate}`,
+                dataAge: earlyPreflight.dataAge,
+                analysis: earlyPreflight.psiEmaAnalysis
             };
-            console.log(`📊 Ψ-EMA stock analysis ready: ${preflight.ticker} (via preflight router)`);
+            console.log(`📊 Ψ-EMA stock analysis ready: ${earlyPreflight.ticker} (via preflight router)`);
         }
         
         const messages = [
@@ -8062,7 +7987,7 @@ app.post('/api/playground/stream', async (req, res) => {
             const auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
             
             try {
-                const isPsiEMA = nonStreamQueryClass.type === 'psi-ema';
+                const isPsiEMA = preflight.mode === 'psi-ema';
                 auditResult = await runAuditPass(
                     PLAYGROUND_GROQ_TOKEN,
                     draftAnswer,
@@ -8099,7 +8024,7 @@ app.post('/api/playground/stream', async (req, res) => {
         // Only trigger "not found" retry if we haven't searched yet - prevents infinite loops
         const needsSearchVerification = wasRejected || (hasNotFoundClaim && !didSearchRetry);
         // Only skip retry for Ψ-EMA (has pre-verified yfinance data); Seed Metric needs proxy cascade
-        const isPsiEMAQuery = nonStreamQueryClass.type === 'psi-ema';
+        const isPsiEMAQuery = preflight.mode === 'psi-ema';
         const canRetry = !isIdentity && hasNoDocuments && needsSearchVerification && message && !isPsiEMAQuery;
         
         if (canRetry) {
