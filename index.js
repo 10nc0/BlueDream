@@ -7678,46 +7678,25 @@ Note: Ψ-EMA analysis could not be completed. Please provide general analysis ba
                                 const composite = analysis.compositeSignal;
                                 
                                 const analysisContext = `
+[USE THIS Ψ-EMA DATA - computed from yfinance]
 ## Ψ-EMA Analysis for ${stockTicker} (${stockData.name || stockTicker})
-Current Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
-Data Timestamp: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
-Period: ${stockData.periodDays || stockData.closes.length} trading days (${stockData.startDate || 'N/A'} to ${stockData.endDate || 'N/A'})
-${dataAge.isStale ? `\n⚠️ **DATA RECENCY WARNING**: Data is ${dataAge.daysOld} day(s) old. Ψ-EMA signals are only valid for the period through ${dataAge.timestamp}.` : ''}
+Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} | Data: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
+${dataAge.isStale ? `⚠️ Data is ${dataAge.daysOld} day(s) old` : ''}
 
-### Summary:
-- Phase Signal: ${analysis.summary.phaseSignal || 'N/A'}
-- Anomaly Level: ${analysis.summary.anomalyLevel || 'N/A'}
-- Regime: ${analysis.summary.regime || 'N/A'}
-- Composite Signal: ${analysis.summary.compositeSignal || 'N/A'}
-- Confidence: ${analysis.summary.compositeConfidence ?? 'N/A'}%
+**Summary:** ${analysis.summary.phaseSignal} | ${analysis.summary.anomalyLevel} | ${analysis.summary.regime}
+**Composite:** ${analysis.summary.compositeSignal} (${analysis.summary.compositeConfidence ?? 'N/A'}% conf)
 
-### Phase θ (Cycle Position):
-- Current Phase: ${phase?.interpretation?.phase || 'N/A'} ${phase?.interpretation?.emoji || ''}
-- Signal: ${phase?.signal || 'N/A'}
-- Crossover: ${phase?.crossover?.type || 'NONE'}
+Phase θ: ${phase?.interpretation?.phase || 'N/A'} ${phase?.interpretation?.emoji || ''} | Signal: ${phase?.signal || 'N/A'} | Crossover: ${phase?.crossover?.type || 'NONE'}
+Anomaly z: ${typeof anomaly?.current === 'number' ? anomaly.current.toFixed(2) + 'σ' : 'N/A'} ${anomaly?.alert?.emoji || ''} | ${anomaly?.alert?.level || 'N/A'}
+Convergence R: ${typeof convergence?.current === 'number' ? convergence.current.toFixed(3) : 'N/A'} | ${convergence?.regime?.regime || 'N/A'} ${convergence?.regime?.emoji || ''}
 
-### Anomaly z (Deviation Strength):
-- Current z-score: ${typeof anomaly?.current === 'number' ? anomaly.current.toFixed(2) + 'σ' : 'N/A'} ${anomaly?.alert?.emoji || ''}
-- Alert Level: ${anomaly?.alert?.level || 'N/A'}
-- Action: ${anomaly?.alert?.action || 'N/A'}
-
-### Convergence R (Sustainability → φ):
-- Current R: ${typeof convergence?.current === 'number' ? convergence.current.toFixed(3) : 'N/A'}
-- Regime: ${convergence?.regime?.regime || 'N/A'} ${convergence?.regime?.emoji || ''}
-- φ-Deviation: ${convergence?.phiAlert?.deviation || 'N/A'}
-
-### Composite Signal:
-${composite?.action || 'N/A'} ${composite?.emoji || ''}
-Net Score: ${composite?.netScore ?? 'N/A'} | Confidence: ${composite?.confidence ?? 'N/A'}%
+**Action:** ${composite?.action || 'N/A'} ${composite?.emoji || ''} (Score: ${composite?.netScore ?? 'N/A'})
 
 ${analysis.interpretation || ''}
-
-**📋 IMPORTANT DISCLAIMER**: This Ψ-EMA analysis is LIMITED TO DATA THROUGH ${dataAge.timestamp}. Price action after this date is NOT reflected in the indicators. Always verify with current market prices before making decisions.
-
-Use this real-time Ψ-EMA analysis to answer the user's query about ${stockTicker}, but remind them of the data cutoff date.
+Present this analysis. Data cutoff: ${dataAge.timestamp}.
 `;
                                 systemMessages.push({ role: 'system', content: analysisContext });
-                                console.log(`📊 Ψ-EMA stock analysis injected: ${analysis.summary.phaseSignal} | ${analysis.summary.anomalyLevel} | ${analysis.summary.regime} (data: ${dataAge.age})`);
+                                console.log(`📊 Ψ-EMA stock analysis injected: ${analysis.summary.phaseSignal} | ${analysis.summary.compositeSignal} (data: ${dataAge.age})`);
                             } else {
                                 stockPsiEMAAnalysis = null;
                             }
@@ -8199,44 +8178,25 @@ Note: Ψ-EMA analysis could not be completed. Please provide general analysis ba
                                 const composite = analysis.compositeSignal;
                                 
                                 const analysisContext = `
+[USE THIS Ψ-EMA DATA - computed from yfinance]
 ## Ψ-EMA Analysis for ${stockTicker} (${stockData.name || stockTicker})
-Current Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
-Data Timestamp: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
-Period: ${stockData.periodDays || stockData.closes.length} trading days (${stockData.startDate || 'N/A'} to ${stockData.endDate || 'N/A'})
-${dataAge.isStale ? `\n⚠️ **DATA RECENCY WARNING**: Data is ${dataAge.daysOld} day(s) old. Ψ-EMA signals are only valid for the period through ${dataAge.timestamp}.` : ''}
+Price: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} | Data: ${ageFlag} ${dataAge.timestamp} (${dataAge.age})
+${dataAge.isStale ? `⚠️ Data is ${dataAge.daysOld} day(s) old` : ''}
 
-### Summary:
-- Phase Signal: ${analysis.summary.phaseSignal || 'N/A'}
-- Anomaly Level: ${analysis.summary.anomalyLevel || 'N/A'}
-- Regime: ${analysis.summary.regime || 'N/A'}
-- Composite Signal: ${analysis.summary.compositeSignal || 'N/A'}
-- Confidence: ${analysis.summary.compositeConfidence ?? 'N/A'}%
+**Summary:** ${analysis.summary.phaseSignal} | ${analysis.summary.anomalyLevel} | ${analysis.summary.regime}
+**Composite:** ${analysis.summary.compositeSignal} (${analysis.summary.compositeConfidence ?? 'N/A'}% conf)
 
-### Phase θ (Cycle Position):
-- Current Phase: ${phase?.interpretation?.phase || 'N/A'} ${phase?.interpretation?.emoji || ''}
-- Signal: ${phase?.signal || 'N/A'}
-- Crossover: ${phase?.crossover?.type || 'NONE'}
+Phase θ: ${phase?.interpretation?.phase || 'N/A'} ${phase?.interpretation?.emoji || ''} | Signal: ${phase?.signal || 'N/A'} | Crossover: ${phase?.crossover?.type || 'NONE'}
+Anomaly z: ${typeof anomaly?.current === 'number' ? anomaly.current.toFixed(2) + 'σ' : 'N/A'} ${anomaly?.alert?.emoji || ''} | ${anomaly?.alert?.level || 'N/A'}
+Convergence R: ${typeof convergence?.current === 'number' ? convergence.current.toFixed(3) : 'N/A'} | ${convergence?.regime?.regime || 'N/A'} ${convergence?.regime?.emoji || ''}
 
-### Anomaly z (Deviation Strength):
-- Current z-score: ${typeof anomaly?.current === 'number' ? anomaly.current.toFixed(2) + 'σ' : 'N/A'} ${anomaly?.alert?.emoji || ''}
-- Alert Level: ${anomaly?.alert?.level || 'N/A'}
-
-### Convergence R (Sustainability → φ):
-- Current R: ${typeof convergence?.current === 'number' ? convergence.current.toFixed(3) : 'N/A'}
-- Regime: ${convergence?.regime?.regime || 'N/A'} ${convergence?.regime?.emoji || ''}
-
-### Composite Signal:
-${composite?.action || 'N/A'} ${composite?.emoji || ''}
-Net Score: ${composite?.netScore ?? 'N/A'} | Confidence: ${composite?.confidence ?? 'N/A'}%
+**Action:** ${composite?.action || 'N/A'} ${composite?.emoji || ''} (Score: ${composite?.netScore ?? 'N/A'})
 
 ${analysis.interpretation || ''}
-
-**📋 IMPORTANT DISCLAIMER**: This Ψ-EMA analysis is LIMITED TO DATA THROUGH ${dataAge.timestamp}. Price action after this date is NOT reflected in the indicators. Always verify with current market prices before making decisions.
-
-Use this real-time Ψ-EMA analysis to answer the user's query about ${stockTicker}, but remind them of the data cutoff date.
+Present this analysis. Data cutoff: ${dataAge.timestamp}.
 `;
                                 systemMessages.push({ role: 'system', content: analysisContext });
-                                console.log(`📊 Ψ-EMA stock analysis injected: ${analysis.summary.phaseSignal} (data: ${dataAge.age})`);
+                                console.log(`📊 Ψ-EMA stock analysis injected: ${analysis.summary.phaseSignal} | ${analysis.summary.compositeSignal} (data: ${dataAge.age})`);
                             }
                         }
                     }
@@ -8318,6 +8278,7 @@ Use this real-time Ψ-EMA analysis to answer the user's query about ${stockTicke
         // Trigger search retry if:
         // 1. REJECTED by audit, OR
         // 2. Answer claims "not found" but we haven't searched yet (must verify before accepting ignorance)
+        // EXCEPTION: Skip retry for ~nyan responses (Seed Metric / Ψ-EMA) - data is pre-verified
         let verifiedAnswer = draftAnswer;
         let didSearchRetry = false;
         const hasNoDocuments = extractedContent.length === 0;
@@ -8325,7 +8286,9 @@ Use this real-time Ψ-EMA analysis to answer the user's query about ${stockTicke
         const hasNotFoundClaim = containsNotFoundClaim(draftAnswer);
         // Only trigger "not found" retry if we haven't searched yet - prevents infinite loops
         const needsSearchVerification = wasRejected || (hasNotFoundClaim && !didSearchRetry);
-        const canRetry = !isIdentity && hasNoDocuments && needsSearchVerification && message;
+        // Skip search retry for ~nyan responses (Seed Metric / Ψ-EMA use pre-verified data)
+        const hasNyanMarker = draftAnswer.includes('~nyan');
+        const canRetry = !isIdentity && hasNoDocuments && needsSearchVerification && message && !hasNyanMarker;
         
         if (canRetry) {
             const retryReason = wasRejected ? 'REJECTED' : 'NOT_FOUND_CLAIM';

@@ -47,7 +47,9 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
   - **φ-Correction Formula**: z(t+1) = z(t) - sign(z)·φ/|z|
   - **PsiEMADashboard Class**: Complete analysis with composite signals
   - **Keyword Triggers**: 'fourier', 'φ', 'ψ', 'psi', 'phi', 'ema', 'crossover', 'golden cross', 'wave', 'fibonacci'
+  - **NYAN Protocol Routing**: PSI_EMA_TOPICS route triggers "🔥 ~nyan" ending (same as Seed Metric)
   - **Audit Protocol**: AUDIT_PSI_EMA extension accepts Ψ-EMA framework terminology
+  - **~nyan Search Bypass**: Responses ending with ~nyan skip web search retry (pre-verified data)
   - **Real-Time Stock Integration** (Dec 22, 2025):
     - `utils/fetch-stock-prices.py`: Python script using yfinance for 90-day closing prices
     - `utils/stock-fetcher.js`: Node.js wrapper with ticker detection and price fetching

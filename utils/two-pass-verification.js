@@ -32,6 +32,7 @@ async function runVerifiedAnswer(options) {
     usesFinancialPhysics = false,
     usesChemistry = false,
     usesLegalAnalysis = false,
+    usesPsiEMA = false,
     isSeedMetric = false,
     isTetralemma = false,
     auditMode = 'STRICT', // 'RESEARCH' | 'STRICT'
@@ -55,6 +56,7 @@ async function runVerifiedAnswer(options) {
   if (usesFinancialPhysics) auditMetadata.extensionsVerified.push('FINANCIAL_PHYSICS');
   if (usesChemistry) auditMetadata.extensionsVerified.push('CHEMISTRY');
   if (usesLegalAnalysis) auditMetadata.extensionsVerified.push('LEGAL_ANALYSIS');
+  if (usesPsiEMA) auditMetadata.extensionsVerified.push('PSI_EMA');
   if (isSeedMetric) auditMetadata.extensionsVerified.push('SEED_METRIC');
   if (isTetralemma) auditMetadata.extensionsVerified.push('TETRALEMMA');
   auditMetadata.extensionsVerified.push(`AUDIT_MODE_${auditMode}`);
@@ -65,7 +67,7 @@ async function runVerifiedAnswer(options) {
       draftAnswer,
       originalQuery,
       userContext,
-      { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, isSeedMetric, isTetralemma, auditMode },
+      { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, usesPsiEMA, isSeedMetric, isTetralemma, auditMode },
       timeout
     );
 
@@ -114,7 +116,7 @@ async function runVerifiedAnswer(options) {
         correctedAnswer,
         originalQuery,
         userContext,
-        { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, isSeedMetric, isTetralemma, auditMode },
+        { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, usesPsiEMA, isSeedMetric, isTetralemma, auditMode },
         timeout
       );
 
@@ -184,6 +186,7 @@ async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, 
     usesFinancialPhysics: extensions.usesFinancialPhysics,
     usesChemistry: extensions.usesChemistry,
     usesLegalAnalysis: extensions.usesLegalAnalysis,
+    usesPsiEMA: extensions.usesPsiEMA,
     isSeedMetric: extensions.isSeedMetric,
     isTetralemma: extensions.isTetralemma,
     auditMode: extensions.auditMode,
