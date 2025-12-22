@@ -6451,6 +6451,26 @@ function isIdentityQuery(message) {
     return IDENTITY_PATTERNS.some(pattern => pattern.test(trimmed));
 }
 
+// Detect "not found" claims that should trigger search before accepting
+// Rule: You can't claim "couldn't find" until you've actually searched
+const NOT_FOUND_PATTERNS = [
+    /couldn'?t\s+find/i,
+    /could\s+not\s+find/i,
+    /no\s+(?:information|results?|data|records?|matches?)\s+(?:found|available|on|about|for)/i,
+    /unable\s+to\s+(?:find|locate)/i,
+    /(?:didn'?t|did\s+not)\s+find/i,
+    /no\s+(?:Forbes|Wikipedia|LinkedIn|Twitter|X)\s+(?:profile|page|entry|article)/i,
+    /(?:doesn'?t|does\s+not)\s+(?:appear|seem)\s+to\s+(?:exist|have|be)/i,
+    /i\s+(?:couldn'?t|could\s+not|wasn'?t\s+able\s+to)\s+(?:find|locate|discover)/i,
+    /not\s+(?:a\s+)?public\s+figure/i,
+    /(?:may\s+be|might\s+be|is\s+(?:likely\s+)?a)\s+private\s+individual/i,
+];
+
+function containsNotFoundClaim(answer) {
+    if (!answer) return false;
+    return NOT_FOUND_PATTERNS.some(pattern => pattern.test(answer));
+}
+
 function classifyQuery(message) {
     const trimmed = message.trim();
     
@@ -7652,13 +7672,19 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
             });
             
             // ===== GROQ-FIRST RETRY LOGIC =====
-            // If REJECTED and this was originally a groq-first query (no prior search), try with search
+            // Trigger search retry if:
+            // 1. REJECTED by audit, OR
+            // 2. Answer claims "not found" but we haven't searched yet (must verify before accepting ignorance)
             // Uses preserved flag wasGroqFirstQuery (set before any mutations to queryClass)
             // Skip retry for identity queries (already bypassed audit)
             const wasRejected = verificationResult?.auditMetadata?.verdict === 'REJECTED';
-            const canRetry = !isIdentity && wasGroqFirstQuery && wasRejected && searchQuery && !isClosedLoopAnalysis;
+            const hasNotFoundClaim = containsNotFoundClaim(reply);
+            const needsSearchVerification = wasRejected || (hasNotFoundClaim && !didSearchRetry);
+            const canRetry = !isIdentity && wasGroqFirstQuery && needsSearchVerification && searchQuery && !isClosedLoopAnalysis;
             
             if (canRetry) {
+                const retryReason = wasRejected ? 'REJECTED' : 'NOT_FOUND_CLAIM';
+                console.log(`🔄 Groq-First ${retryReason}: Triggering search retry...`);
                 didSearchRetry = true;
                 
                 // Use unified search retry cascade
@@ -8005,13 +8031,21 @@ app.post('/api/playground/stream', async (req, res) => {
         }
         
         // ===== GROQ-FIRST RETRY LOGIC (Streaming) =====
-        // If REJECTED and no documents (groq-first), trigger search retry cascade
+        // Trigger search retry if:
+        // 1. REJECTED by audit, OR
+        // 2. Answer claims "not found" but we haven't searched yet (must verify before accepting ignorance)
         let verifiedAnswer = draftAnswer;
         let didSearchRetry = false;
         const hasNoDocuments = extractedContent.length === 0;
-        const canRetry = !isIdentity && hasNoDocuments && auditResult.verdict === 'REJECTED' && message;
+        const wasRejected = auditResult.verdict === 'REJECTED';
+        const hasNotFoundClaim = containsNotFoundClaim(draftAnswer);
+        // Only trigger "not found" retry if we haven't searched yet - prevents infinite loops
+        const needsSearchVerification = wasRejected || (hasNotFoundClaim && !didSearchRetry);
+        const canRetry = !isIdentity && hasNoDocuments && needsSearchVerification && message;
         
         if (canRetry) {
+            const retryReason = wasRejected ? 'REJECTED' : 'NOT_FOUND_CLAIM';
+            console.log(`🔄 Groq-First ${retryReason}: Triggering search retry...`);
             if (isClientDisconnected) return;
             res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Searching for better data...' })}\n\n`);
             
