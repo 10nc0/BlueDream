@@ -50,6 +50,23 @@ function safeFixed(val, decimals = 2) {
 }
 
 /**
+ * Format market cap into human-readable format (e.g., $2.5T, $150B)
+ */
+function formatMarketCap(marketCap) {
+  if (!marketCap || typeof marketCap !== 'number') return 'N/A';
+  
+  if (marketCap >= 1e12) {
+    return '$' + (marketCap / 1e12).toFixed(2) + 'T';
+  } else if (marketCap >= 1e9) {
+    return '$' + (marketCap / 1e9).toFixed(2) + 'B';
+  } else if (marketCap >= 1e6) {
+    return '$' + (marketCap / 1e6).toFixed(2) + 'M';
+  } else {
+    return '$' + marketCap.toFixed(0);
+  }
+}
+
+/**
  * Main preflight router - runs before LLM call
  * 
  * @param {Object} options
@@ -178,6 +195,7 @@ function buildStockContext(preflight) {
   const convergence = psiEmaAnalysis.dimensions?.convergence || {};
   const composite = psiEmaAnalysis.compositeSignal || {};
   const fidelity = psiEmaAnalysis.fidelity || {};
+  const fundamentals = stockData.fundamentals || {};
   
   // Extract values with correct property names from PsiEMADashboard output
   const phaseTheta = phase.current;  // theta angle in degrees (e.g., 359.76)
@@ -198,6 +216,27 @@ function buildStockContext(preflight) {
     ? `\n${psiEmaAnalysis.renewal.tetralemma.warning}\nTetralemma: (10)Bubble (01)Breakthrough (11)Both (00)Neither - Investigate fundamentals.`
     : '';
   
+  // Format fundamentals section if available
+  let fundamentalsSection = '';
+  if (Object.keys(fundamentals).length > 0) {
+    const peRatio = fundamentals.peRatio ? `**P/E Ratio**: ${safeFixed(fundamentals.peRatio)}` : '';
+    const forwardPE = fundamentals.forwardPE ? `**Forward P/E**: ${safeFixed(fundamentals.forwardPE)}` : '';
+    const divYield = fundamentals.dividendYield ? `**Dividend Yield**: ${(fundamentals.dividendYield * 100).toFixed(2)}%` : '';
+    const nextEarnings = fundamentals.nextEarningsDate ? `**Next Earnings**: ${fundamentals.nextEarningsDate}` : '';
+    const sector = fundamentals.sector ? `**Sector**: ${fundamentals.sector}` : '';
+    const industry = fundamentals.industry ? `**Industry**: ${fundamentals.industry}` : '';
+    const marketCap = fundamentals.marketCap ? `**Market Cap**: ${formatMarketCap(fundamentals.marketCap)}` : '';
+    const fiftyTwoWeekHigh = fundamentals.fiftyTwoWeekHigh ? `**52W High**: ${safeFixed(fundamentals.fiftyTwoWeekHigh)}` : '';
+    const fiftyTwoWeekLow = fundamentals.fiftyTwoWeekLow ? `**52W Low**: ${safeFixed(fundamentals.fiftyTwoWeekLow)}` : '';
+    
+    const fundParts = [peRatio, forwardPE, divYield, nextEarnings, sector, industry, marketCap, fiftyTwoWeekHigh, fiftyTwoWeekLow].filter(Boolean);
+    if (fundParts.length > 0) {
+      fundamentalsSection = `
+### FUNDAMENTALS (SEC EDGAR):
+${fundParts.map(p => `- ${p}`).join('\n')}`;
+    }
+  }
+  
   return `
 ## Ψ-EMA REAL-TIME ANALYSIS: ${ticker} (${stockData.name || ticker})
 **Data Source**: yfinance (VERIFIED - REAL PRICES)
@@ -217,6 +256,7 @@ ${tetralemmaAlert}
 - **Data Fidelity**: ${fidelity.percent || 'N/A'}% real data (Grade ${fidelity.grade || 'N/A'})
 - **Signal Strength**: ${typeof confidence === 'number' ? confidence : 'N/A'}% (based on phase/anomaly/convergence alignment)
 - **Combined Confidence**: ${typeof fidelity.percent === 'number' && typeof confidence === 'number' ? Math.round(fidelity.percent * confidence / 100) : 'N/A'}%
+${fundamentalsSection}
 
 ⚠️ IMPORTANT: Always include data timestamp in financial claims. Undated prices = unverifiable.
 
