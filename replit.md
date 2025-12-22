@@ -50,7 +50,12 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis using the **Seed Metric** (P/I ratio: years to buy 700m² land). NYAN is a sacred, always active Step 0 protocol.
 - **Financial Physics System**: A 4-tier architecture for financial cognition, including document type detection, nature classification, semantic enrichment, and validation. It's an extension of the NYAN Protocol.
 - **Legal Document Analysis System**: Stage 1+ extension for contract/agreement analysis, auto-triggered by legal keywords in documents. Provides a universal 7-section template structure for analysis.
-- **Ψ-EMA System** (`utils/psi-EMA.js`): Multi-Dimensional Wave Function Dashboard implementing Financial Quantum Mechanics (Dec 22, 2025). Version: φ² (First Life).
+- **Ψ-EMA System** (`utils/psi-EMA.js`): Multi-Dimensional Wave Function Dashboard implementing Financial Quantum Mechanics (Dec 22, 2025). Version: vφ³ (Second Life).
+  - **vφ³ Epistemic Improvements** (Dec 22, 2025):
+    - **Normalized Phase θ**: Scale-invariant via mean-magnitude normalization
+    - **MAD-based z-scores**: Robust outlier handling replaces σ-based. Thresholds: ±1 (normal), ±2.5 (alert), ±4.5 (extreme)
+    - **Fidelity-gated Crossovers**: 75% threshold blocks low-quality signals, returning WAIT
+    - **Epistemic Labels**: Output includes `epistemicStatus` distinguishing technical indicators from symbolic elements
   - **Three Orthogonal Dimensions**:
     1. **Phase θ** (EMA-34/EMA-55): θ = arctan(Flow/Stock) → cycle position. Golden Cross/Death Cross signals.
     2. **Anomaly z** (EMA-21/EMA-34): z = (Flow - μ)/σ → deviation strength. ±1σ Normal, ±2σ Alert, ±3σ Extreme.
