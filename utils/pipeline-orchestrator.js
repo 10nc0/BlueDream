@@ -230,15 +230,24 @@ class PipelineOrchestrator {
     const { query, conversationHistory, extractedContent, temperature, maxTokens } = input;
     
     // Build final prompt with proper attachment preservation
-    // Priority: Attachments are ALWAYS preserved. Search context supplements, never overwrites.
+    // Priority: Memory → Attachments → Search → Query
+    // Memory provides human-like context, Attachments are primary source, Search supplements
     let finalPrompt = query;
+    const hasMemory = state.contextResult?.memoryPrompt?.length > 0;
     const hasAttachments = extractedContent && extractedContent.length > 0;
     const hasSearch = !!state.searchContext;
+    
+    // Prepend φ-compressed memory context if available (human-like recall)
+    let memoryPrefix = '';
+    if (hasMemory) {
+      memoryPrefix = state.contextResult.memoryPrompt + '\n[CURRENT QUERY]\n';
+      console.log(`📝 Memory injected: ${state.contextResult.memoryPrompt.length} chars`);
+    }
     
     if (hasAttachments && hasSearch) {
       // BOTH: Combine attachments + search context (rare: retry during doc analysis)
       console.log(`📎 Combining attachments (${extractedContent.length}) + search context`);
-      finalPrompt = `UPLOADED ATTACHMENTS (PRIMARY SOURCE - analyze these first):
+      finalPrompt = `${memoryPrefix}UPLOADED ATTACHMENTS (PRIMARY SOURCE - analyze these first):
 ${extractedContent.join('\n\n')}
 
 SUPPLEMENTARY WEB SEARCH (use to verify or add context, NOT to override attachments):
@@ -248,17 +257,20 @@ User query: ${query || 'Analyze this content.'}`;
     } else if (hasAttachments) {
       // Attachments only (closed-loop document analysis)
       console.log(`📎 Attachment-only mode: ${extractedContent.length} items`);
-      finalPrompt = `Attachments analyzed:\n${extractedContent.join('\n\n')}\n\nUser query: ${query || 'Analyze this content.'}`;
+      finalPrompt = `${memoryPrefix}Attachments analyzed:\n${extractedContent.join('\n\n')}\n\nUser query: ${query || 'Analyze this content.'}`;
     } else if (hasSearch) {
       // Search only (general queries with web augmentation)
-      finalPrompt = `REAL-TIME WEB SEARCH RESULTS (USE THIS DATA):
+      finalPrompt = `${memoryPrefix}REAL-TIME WEB SEARCH RESULTS (USE THIS DATA):
 ${state.searchContext}
 
 INSTRUCTION: Extract relevant facts from search results. Do NOT mention knowledge cutoff.
 
 User query: ${query}`;
+    } else if (hasMemory) {
+      // Memory only - human-like context for follow-up queries
+      finalPrompt = `${memoryPrefix}${query}`;
     }
-    // else: plain query (no attachments, no search)
+    // else: plain query (no memory, no attachments, no search)
     
     const messages = [
       ...state.systemMessages,

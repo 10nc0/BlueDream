@@ -9,10 +9,9 @@
  * Output: Hybrid memory = episodic summaries + precise recent + attachment recall
  */
 
-const Groq = require('groq-sdk');
+const axios = require('axios');
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const SUMMARY_MODEL = 'llama-3.1-8b-instant';
 const MAX_WINDOW = 8;
 const SUMMARY_TRIGGER_INTERVAL = 2;
@@ -131,14 +130,30 @@ ${attachmentMentions}
 Write the summary as natural prose, not a list. Focus on what a helpful assistant would need to remember to continue this conversation naturally.`;
 
     try {
-      const response = await groq.chat.completions.create({
-        model: SUMMARY_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 300,
-        temperature: 0.3
-      });
+      const groqToken = process.env.PLAYGROUND_GROQ_TOKEN;
+      if (!groqToken) {
+        console.warn('⚠️ No GROQ token for memory summarization');
+        return this.currentSummary;
+      }
+      
+      const response = await axios.post(
+        GROQ_API_URL,
+        {
+          model: SUMMARY_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 300,
+          temperature: 0.3
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${groqToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        }
+      );
 
-      this.currentSummary = response.choices[0]?.message?.content?.trim() || '';
+      this.currentSummary = response.data?.choices?.[0]?.message?.content?.trim() || '';
       this.lastSummaryTime = Date.now();
 
       const keepCount = Math.min(4, this.messages.length);

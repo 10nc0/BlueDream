@@ -282,8 +282,47 @@ function mergeContextForTickerDetection(currentQuery, contextResult) {
 async function extractContextWithMemory(sessionId, currentQuery, history = [], attachmentHistory = [], currentAttachment = null) {
   const memory = getMemoryManager(sessionId);
   
-  // Add current query to memory (will be added after response, but track it now for context)
-  // Note: We don't add to memory here - that's done after the full response
+  // Sync attachment history to memory (ensures side-door can find older uploads)
+  // Refresh existing entries if content changed (handles re-uploads)
+  if (attachmentHistory && attachmentHistory.length > 0) {
+    for (const att of attachmentHistory) {
+      if (att.processedText && att.processedText.length > 0) {
+        // Check if this attachment is already in memory (by name)
+        const existingIndex = memory.attachments.findIndex(a => a.name === att.name);
+        
+        if (existingIndex >= 0) {
+          // REFRESH: Update existing entry if content is different (re-upload case)
+          const existing = memory.attachments[existingIndex];
+          if (existing.extractedText !== att.processedText) {
+            memory.attachments[existingIndex] = {
+              id: Date.now(),
+              name: att.name,
+              type: att.type || 'document',
+              extractedText: att.processedText,
+              shortDesc: att.shortSummary || att.name,
+              timestamp: Date.now()
+            };
+            console.log(`📎 Memory: Refreshed attachment "${att.name}" (${att.processedText.length} chars)`);
+          }
+        } else {
+          // NEW: Add new attachment
+          memory.attachments.push({
+            id: Date.now(),
+            name: att.name,
+            type: att.type || 'document',
+            extractedText: att.processedText,
+            shortDesc: att.shortSummary || att.name,
+            timestamp: Date.now()
+          });
+          console.log(`📎 Memory: Added attachment "${att.name}" (${att.processedText.length} chars)`);
+        }
+      }
+    }
+    // Keep only last 8 attachments
+    while (memory.attachments.length > 8) {
+      memory.attachments.shift();
+    }
+  }
   
   // Get entity-based context (existing logic)
   const entityContext = extractContext(history, attachmentHistory);
@@ -333,8 +372,9 @@ async function extractContextWithMemory(sessionId, currentQuery, history = [], a
 function recordInMemory(sessionId, userQuery, assistantResponse, attachment = null) {
   const memory = getMemoryManager(sessionId);
   
-  // Add user message
-  memory.addMessage('user', userQuery, attachment);
+  // Add user message WITHOUT attachment (attachment was already synced in Stage -1 with full text)
+  // This prevents truncated duplicates from overwriting the full extraction
+  memory.addMessage('user', userQuery, null);
   
   // Add assistant response (truncate if very long)
   const truncatedResponse = assistantResponse.length > 1000 

@@ -35,6 +35,8 @@ const { getLegalAnalysisSeed, detectLegalDocument, LEGAL_KEYWORDS_REGEX } = requ
 const { runVerifiedAnswer, formatAuditBadge, runStreamingPersonalityPass, runAuditPass } = require('./utils/two-pass-verification');
 const { preflightRouter, buildSystemContext } = require('./utils/preflight-router');
 const { createPipelineOrchestrator, PIPELINE_STEPS } = require('./utils/pipeline-orchestrator');
+const { recordInMemory, clearSessionMemory } = require('./utils/context-extractor');
+const { getMemoryManager, cleanupOldSessions } = require('./utils/memory-manager');
 
 // SECURITY: Enforce FRACTAL_SALT configuration before server starts
 if (!process.env.FRACTAL_SALT) {
@@ -7399,6 +7401,7 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         const maxTokens = hasDocumentAnalysis ? 4000 : 1500;
         
         // Run the unified pipeline (preflight → reasoning → audit → retry → output)
+        // sessionId enables φ-compressed memory (5/8 ≈ 1/φ ratio summarization)
         const pipelineResult = await orchestrator.run({
             query: effectiveMessage || message,
             preComputedPreflight: earlyPreflight,
@@ -7408,7 +7411,20 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
                 isClosedLoop: isClosedLoopAnalysis 
             },
             clientIp,
+            sessionId: clientIp,  // Use IP as session ID for memory manager
             conversationHistory: conversationContext,
+            attachmentHistory: docList.map((d, i) => ({ 
+                name: d.name, 
+                type: d.type || 'document',
+                processedText: extractedContent[i] || '',
+                shortSummary: d.name
+            })),
+            currentAttachment: docList.length > 0 ? {
+                name: docList.map(d => d.name).join(', '),
+                type: docList[0].type || 'document',
+                processedText: extractedContent.join('\n\n'),
+                shortSummary: `${docList.length} document(s): ${docList.map(d => d.name).join(', ')}`
+            } : null,
             extractedContent,
             temperature,
             maxTokens
@@ -7474,6 +7490,21 @@ No hallucinations. If uncertain, say "possibly" or "structure resembles".`
         // Add knowledge cutoff disclaimer when no search context was found
         if (noSearchDisclaimer && !photo && !audio && !document) {
             reply = `${reply}\n\n⚠️ *Note: Unable to verify with current web data. Information based on knowledge cutoff (September 2023).*`;
+        }
+        
+        // Record this exchange in φ-compressed memory (for human-like recall)
+        if (pipelineResult.success) {
+            recordInMemory(
+                clientIp,
+                effectiveMessage || message || '',
+                reply,
+                docList.length > 0 ? {
+                    name: docList[0].name,
+                    type: docList[0].type || 'document',
+                    processedText: extractedContent.join('\n\n').slice(0, 2000),
+                    shortSummary: `${docList.length} document(s): ${docList.map(d => d.name).join(', ')}`
+                } : null
+            );
         }
         
         console.log(`✅ Playground response sent (${reply.length} chars)${responseFileHashes.length > 0 ? ` + ${responseFileHashes.length} file hash(es)` : ''} [${auditBadge}]`);
@@ -7655,6 +7686,7 @@ app.post('/api/playground/stream', async (req, res) => {
         res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Analyzing query...' })}\n\n`);
         
         // Run the unified pipeline (preflight → reasoning → audit → retry → output)
+        // sessionId enables φ-compressed memory (5/8 ≈ 1/φ ratio summarization)
         const pipelineResult = await orchestrator.run({
             query: message,
             docContext: { 
@@ -7663,7 +7695,20 @@ app.post('/api/playground/stream', async (req, res) => {
                 isClosedLoop: docList.length > 0 
             },
             clientIp,
+            sessionId: clientIp,  // Use IP as session ID for memory manager
             conversationHistory: conversationContext,
+            attachmentHistory: docList.map((d, i) => ({ 
+                name: d.name, 
+                type: d.type || 'document',
+                processedText: extractedContent[i] || '',
+                shortSummary: d.name
+            })),
+            currentAttachment: docList.length > 0 ? {
+                name: docList.map(d => d.name).join(', '),
+                type: docList[0].type || 'document',
+                processedText: extractedContent.join('\n\n'),
+                shortSummary: `${docList.length} document(s): ${docList.map(d => d.name).join(', ')}`
+            } : null,
             extractedContent,
             temperature: hasFinancialDoc ? 0.3 : 0.15,
             maxTokens: hasDocumentAnalysis ? 4000 : 1500
@@ -7738,6 +7783,21 @@ app.post('/api/playground/stream', async (req, res) => {
             res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
             res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
             res.end();
+        }
+        
+        // Record this exchange in φ-compressed memory (for human-like recall)
+        if (pipelineResult.success) {
+            recordInMemory(
+                clientIp,
+                message || '',
+                verifiedAnswer || '',
+                docList.length > 0 ? {
+                    name: docList[0].name,
+                    type: docList[0].type || 'document',
+                    processedText: extractedContent.join('\n\n').slice(0, 2000),
+                    shortSummary: `${docList.length} document(s): ${docList.map(d => d.name).join(', ')}`
+                } : null
+            );
         }
         
         console.log(`🌊 Streaming complete for ${clientIp} [${badge}]${didSearchRetry ? ' [+search retry]' : ''}`);
@@ -8078,6 +8138,13 @@ async function runDeferredStartupTasks() {
     } else {
         console.warn('⚠️  Hermes not ready, skipping auto-heal');
     }
+    
+    // φ-MEMORY CLEANUP: Clean stale memory sessions (1 hour max age)
+    // Prevents memory bloat from abandoned sessions
+    setInterval(() => {
+        cleanupOldSessions(60 * 60 * 1000); // 1 hour
+    }, 15 * 60 * 1000); // Every 15 minutes
+    console.log('🧹 Memory cleanup scheduled (15min cycle, 1h max age)');
     
     // Start genesis counter (noisy constant for future security)
     // Tier 1: Cat breath (500ms constant)
