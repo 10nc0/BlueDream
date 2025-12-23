@@ -395,6 +395,25 @@ function clearSessionMemory(sessionId) {
   console.log(`🧹 Memory cleared for session: ${sessionId}`);
 }
 
+/**
+ * Check if session needs full NYAN Protocol (first query)
+ * @param {string} sessionId
+ * @returns {boolean} true if full NYAN needed
+ */
+function isSessionFirstQuery(sessionId) {
+  const memory = getMemoryManager(sessionId);
+  return memory.isFirstQuery();
+}
+
+/**
+ * Mark session as NYAN booted (call after first reasoning pass)
+ * @param {string} sessionId
+ */
+function markSessionNyanBooted(sessionId) {
+  const memory = getMemoryManager(sessionId);
+  memory.markNyanBooted();
+}
+
 module.exports = {
   extractContext,
   extractContextWithMemory,
@@ -402,6 +421,8 @@ module.exports = {
   mergeContextForTickerDetection,
   recordInMemory,
   clearSessionMemory,
+  isSessionFirstQuery,
+  markSessionNyanBooted,
   KNOWN_COMPANIES,
   FINANCIAL_TOPICS
 };

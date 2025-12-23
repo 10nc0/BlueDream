@@ -38,6 +38,25 @@ class LocalMemoryManager {
     this.attachments = [];
     this.queryCount = 0;
     this.lastSummaryTime = null;
+    this.nyanBooted = false;  // Track if full NYAN was injected this session
+  }
+  
+  /**
+   * Check if this is the first query (full NYAN needed)
+   * After first query, subsequent queries use compressed NYAN
+   * @returns {boolean} true if full NYAN should be injected
+   */
+  isFirstQuery() {
+    return !this.nyanBooted;
+  }
+  
+  /**
+   * Mark NYAN as booted for this session
+   * Call after first reasoning pass completes
+   */
+  markNyanBooted() {
+    this.nyanBooted = true;
+    console.log('🐱 NYAN Protocol booted for session');
   }
 
   /**

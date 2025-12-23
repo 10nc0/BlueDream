@@ -308,15 +308,31 @@ Note: Unable to fetch real-time stock data for ${ticker}. Please provide general
  * Build system messages from PreflightResult
  * Replaces scattered if/else blocks in index.js
  * 
+ * NYAN Boot Optimization:
+ * - First query: Full NYAN Protocol (~1500 tokens)
+ * - Subsequent: Compressed NYAN reference (~200 tokens)
+ * 
  * @param {PreflightResult} preflight
- * @param {string} nyanProtocolPrompt - The NYAN protocol system prompt
+ * @param {string} nyanProtocolPrompt - The full NYAN protocol system prompt
+ * @param {Object} options - Optional parameters
+ * @param {boolean} options.isFirstQuery - If true, use full NYAN; else use compressed
+ * @param {string} options.nyanCompressed - Compressed NYAN reference for subsequent queries
  * @returns {Array<{role: string, content: string}>}
  */
-function buildSystemContext(preflight, nyanProtocolPrompt) {
+function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
   const messages = [];
+  const { isFirstQuery = true, nyanCompressed = null } = options;
   
-  // Stage 0: NYAN Protocol (always first)
-  messages.push({ role: 'system', content: nyanProtocolPrompt });
+  // Stage 0: NYAN Protocol
+  // First query = full protocol (~1500 tokens)
+  // Subsequent = compressed reference (~200 tokens) for token efficiency
+  if (isFirstQuery || !nyanCompressed) {
+    messages.push({ role: 'system', content: nyanProtocolPrompt });
+    console.log('📜 NYAN: Full protocol injected (session boot)');
+  } else {
+    messages.push({ role: 'system', content: nyanCompressed });
+    console.log('📜 NYAN: Compressed reference injected (session active)');
+  }
   
   // Stage 1+: Extension seeds based on mode and flags
   if (preflight.routingFlags.usesFinancialPhysics) {

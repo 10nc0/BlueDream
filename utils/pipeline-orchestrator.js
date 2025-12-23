@@ -19,8 +19,8 @@
  */
 
 const { preflightRouter, buildSystemContext } = require('./preflight-router');
-const { extractContext, extractContextWithMemory, mergeContextForTickerDetection } = require('./context-extractor');
-const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('../prompts/nyan-protocol');
+const { extractContext, extractContextWithMemory, mergeContextForTickerDetection, isSessionFirstQuery, markSessionNyanBooted } = require('./context-extractor');
+const { NYAN_PROTOCOL_SYSTEM_PROMPT, NYAN_PROTOCOL_COMPRESSED } = require('../prompts/nyan-protocol');
 const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
 
@@ -71,6 +71,10 @@ class PipelineOrchestrator {
   
   async run(input) {
     const state = new PipelineState();
+    
+    // Track if this is first query for NYAN boot optimization (check early, before any exits)
+    const isFirstQuery = input.sessionId ? isSessionFirstQuery(input.sessionId) : false;
+    state.isFirstQuery = isFirstQuery;
     
     try {
       // ========================================
@@ -148,6 +152,11 @@ class PipelineOrchestrator {
         state.auditResult = { verdict: 'BYPASS', confidence: 100, reason: 'No ticker - fast path' };
         state.transition(PIPELINE_STEPS.OUTPUT);
         
+        // Mark NYAN booted on fast-path success too (didn't need full NYAN, but next query should use compressed)
+        if (input.sessionId && state.isFirstQuery) {
+          markSessionNyanBooted(input.sessionId);
+        }
+        
         return {
           success: true,
           answer: state.finalAnswer,
@@ -169,6 +178,12 @@ class PipelineOrchestrator {
       }
       
       await this.stepOutput(state);
+      
+      // Mark NYAN as booted AFTER successful completion (not during context build)
+      // This ensures retries within same request still get full NYAN
+      if (input.sessionId && state.isFirstQuery) {
+        markSessionNyanBooted(input.sessionId);
+      }
       
       return {
         success: true,
@@ -220,8 +235,15 @@ class PipelineOrchestrator {
   async stepContextBuild(state, input) {
     state.transition(PIPELINE_STEPS.CONTEXT_BUILD);
     
-    state.systemMessages = buildSystemContext(state.preflight, NYAN_PROTOCOL_SYSTEM_PROMPT);
-    console.log(`📝 Context: ${state.systemMessages.length} system messages built`);
+    // NYAN Boot Optimization: Full protocol on first query, compressed on subsequent
+    // Saves ~1350 tokens per query after session boot
+    // NOTE: isFirstQuery is set at start of run(), boot flag is set AFTER successful completion
+    state.systemMessages = buildSystemContext(state.preflight, NYAN_PROTOCOL_SYSTEM_PROMPT, {
+      isFirstQuery: state.isFirstQuery,
+      nyanCompressed: NYAN_PROTOCOL_COMPRESSED
+    });
+    
+    console.log(`📝 Context: ${state.systemMessages.length} system messages built (NYAN: ${state.isFirstQuery ? 'full' : 'compressed'})`);
   }
   
   async stepReasoning(state, input) {
