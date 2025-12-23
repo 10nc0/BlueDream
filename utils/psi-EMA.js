@@ -1518,7 +1518,7 @@ function generateClinicalReport(analysis, patientName = 'UNKNOWN', fetchedPrice 
     outcome: pathogenResult.healthy ? 'STABLE' : 'INTERVENTION_REQUIRED',
     
     // For AI prompt injection
-    clinicalSummary: `PATIENT: ${patientName} | PRICE: ${fetchedPrice ? `$${fetchedPrice.toFixed(2)}` : 'N/A'} (${priceTimestamp}) | DIAGNOSIS: ${diagnosisEmoji} ${diagnosis} | VITALS: R=${vitalSigns.R_ratio.value}, z=${vitalSigns.z_score.value}σ | PROGNOSIS: ${prognosis}`
+    clinicalSummary: `PATIENT: ${patientName} | PRICE: ${fetchedPrice ? `$${fetchedPrice.toFixed(2)}` : 'N/A'} | ${priceTimestamp || 'N/A'} | DIAGNOSIS: ${diagnosisEmoji} ${diagnosis} | VITALS: R=${vitalSigns.R_ratio.value}, z=${vitalSigns.z_score.value}σ | PROGNOSIS: ${prognosis}`
   };
 }
 

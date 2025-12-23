@@ -457,7 +457,7 @@ MANDATORY INSTRUCTIONS:
         const day = priceDate.getDate();
         const month = priceDate.toLocaleDateString('en-GB', { month: 'short' });
         const year = priceDate.getFullYear();
-        priceTimestamp = `${weekday}, ${day} ${month}, ${year}`; // "Friday, 19 Dec, 2025"
+        priceTimestamp = `Last US Market Close (ET): ${weekday}, ${day} ${month}, ${year}`; // "Last US Market Close (ET): Friday, 19 Dec, 2025"
       }
       
       // Financial Microbiology: Clinical pathology report (Dec 23, 2025) - based on daily
