@@ -72,7 +72,15 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.
 - **Zero-Friction Onboarding**: WhatsApp deep link activation.
 - **Scalability & Recovery**: Designed for Replit Autoscale, PostgreSQL for state recovery.
-- **Security**: Strict webhook validation, JWT security, robust audit logging, Sybil attack prevention, and CSP compliance.
+- **Security (10/10 Hardened)**:
+    - **Sybil Attack Prevention**: Dual-layer rate limiting (in-memory fast-check + database persistence). Limits: 3/hour per IP, 5/day per IP, 10/day per domain. Disposable email domains blocked.
+    - **JWT Security**: Issuer/audience validation, HS256 only, 15min access tokens, 7-day refresh tokens.
+    - **Session Management**: SHA256 hashed session IDs, 1-hour TTL with 5-minute auto-cleanup.
+    - **Tenant Key Hashing**: IP+UserAgent hashed with SHA256 (no raw PII stored).
+    - **Command Injection Prevention**: Strict ticker sanitization (A-Z0-9 only, 1-10 chars, must start with letter) before subprocess spawn.
+    - **LLM Prompt Sanitization**: 50KB limit, control character removal before Groq API calls.
+    - **XSS Prevention**: DOMPurify with strict allowed tags/attributes for all markdown rendering.
+    - **CSP Compliance**: Strict Content Security Policy headers.
 - **Discord Bot Trinity Architecture**: Hermes (write-only), Thoth (read-only), Idris (AI write-only for logs/audits), Horus (AI read-only for audit history).
 
 ## External Dependencies
