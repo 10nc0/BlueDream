@@ -703,7 +703,61 @@ function analyzeAnomaly(zFlows) {
 // ============================================================================
 
 /**
+ * Safe convergence ratio calculation (vφ³ finalization Dec 23, 2025)
+ * Addresses numerical instability near zero and sign flips
+ * 
+ * Returns structured result with:
+ * - ratio: raw z(t)/z(t-1) (may be null if denominator too small)
+ * - absRatio: clamped absolute value (0.1-10 range)
+ * - direction: 'same_sign' or 'reversal'
+ * - interpretation: regime description without over-claiming φ
+ * - status: 'VALID' or 'INSUFFICIENT_DATA'
+ * 
+ * @param {number} currentZ - Current z-score
+ * @param {number} previousZ - Previous z-score
+ * @param {number} epsilon - Minimum denominator threshold (default: 0.1)
+ * @returns {Object} Safe ratio result
+ */
+function safeConvergenceRatio(currentZ, previousZ, epsilon = 0.1) {
+  // Guard: denominator near zero → undefined convergence
+  if (Math.abs(previousZ) < epsilon) {
+    return {
+      ratio: null,
+      absRatio: null,
+      direction: null,
+      interpretation: 'Previous anomaly near zero — convergence undefined',
+      status: 'INSUFFICIENT_DATA'
+    };
+  }
+  
+  const rawRatio = currentZ / previousZ;
+  const absRatio = Math.abs(rawRatio);
+  
+  // Clamp to safe range (0.1 to 10) to prevent extreme values
+  const clampedAbsRatio = Math.max(0.1, Math.min(10, absRatio));
+  
+  // Interpret regime using clamped value (φ-zone as band, not law)
+  let interpretation;
+  if (clampedAbsRatio < 1.3) {
+    interpretation = 'anomaly contracting — momentum declining';
+  } else if (clampedAbsRatio < 2.0) {
+    interpretation = 'anomaly momentum in φ-zone — sustainable growth';
+  } else {
+    interpretation = 'anomaly expanding — accelerating momentum';
+  }
+  
+  return {
+    ratio: rawRatio,
+    absRatio: clampedAbsRatio,
+    direction: rawRatio > 0 ? 'same_sign' : 'reversal',
+    interpretation,
+    status: 'VALID'
+  };
+}
+
+/**
  * Calculate successive ratios R(t) = z(t) / z(t-1)
+ * Uses safeConvergenceRatio() for numerical stability
  * Handles sign flips (reversals) which indicate phase transitions
  * @param {number[]} zFlows - Z-score time series
  * @returns {Object} Ratios and convergence analysis with sign flip detection
@@ -714,16 +768,19 @@ function calculatePhiConvergence(zFlows) {
   }
   
   const ratios = [];
+  const safeRatios = [];
   let signFlipCount = 0;
   
   for (let i = 1; i < zFlows.length; i++) {
-    // Zero-division guard: skip if previous z is too small
-    if (Math.abs(zFlows[i - 1]) > 0.1) {
-      const rawRatio = zFlows[i] / zFlows[i - 1];
-      ratios.push(rawRatio);
+    // Use safe convergence ratio function (handles zero-division, clamping, reversals)
+    const safeResult = safeConvergenceRatio(zFlows[i], zFlows[i - 1]);
+    
+    if (safeResult.status === 'VALID') {
+      ratios.push(safeResult.ratio);
+      safeRatios.push(safeResult);
       
-      // Detect sign flip (reversal): negative ratio means z crossed zero
-      if (rawRatio < 0) {
+      // Detect sign flip (reversal): direction change indicates phase transition
+      if (safeResult.direction === 'reversal') {
         signFlipCount++;
       }
     }
@@ -733,15 +790,16 @@ function calculatePhiConvergence(zFlows) {
     return { ratios: [], meanRatio: 0, converged: false, error: 'No valid ratios' };
   }
   
-  const absRatios = ratios.map(r => Math.abs(r));
+  // Use clamped absRatio from safe results (not direct absolute values)
+  const absRatios = safeRatios.map(r => r.absRatio);
   const meanRatio = mean(absRatios);
   const recentRatios = absRatios.slice(-5);
   const recentRawRatios = ratios.slice(-5);
   const recentMean = mean(recentRatios);
   
-  // Count recent sign flips (reversals in last 5 periods)
-  const recentSignFlips = recentRawRatios.filter(r => r < 0).length;
-  const isReversingTrend = recentSignFlips >= 2; // 2+ reversals = unstable
+  // Count recent reversals (sign flips) from safe results
+  const recentReversals = safeRatios.slice(-5).filter(r => r.direction === 'reversal').length;
+  const isReversingTrend = recentReversals >= 2; // 2+ reversals = unstable
   
   return {
     ratios,
@@ -752,7 +810,7 @@ function calculatePhiConvergence(zFlows) {
     converged: recentMean >= 1.3 && recentMean <= 2.0 && !isReversingTrend,
     convergenceStrength: 1 - Math.min(1, Math.abs(recentMean - PHI) / PHI),
     signFlipCount,
-    recentSignFlips,
+    recentSignFlips: recentReversals,
     isReversingTrend,
     trendStatus: isReversingTrend ? 'UNSTABLE_REVERSING' : 
                  recentMean >= 1.3 && recentMean <= 2.0 ? 'STABLE_CONVERGING' : 
