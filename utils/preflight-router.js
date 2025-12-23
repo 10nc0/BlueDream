@@ -333,11 +333,28 @@ function buildStockContext(preflight) {
   const atomicUnits = fundamentals.atomicUnits || [];
   
   if (sectorIndustry || companySummary || atomicUnits.length > 0) {
+    // Format atomic units with state/flow/guard distinction
+    let atomicUnitsFormatted = '';
+    if (atomicUnits.length > 0) {
+      const stateUnits = atomicUnits.filter(u => u.includes('(state)')).map(u => u.replace(' (state)', ''));
+      const flowUnits = atomicUnits.filter(u => u.includes('(flow)')).map(u => u.replace(' (flow)', ''));
+      const guardUnits = atomicUnits.filter(u => u.includes('(guard)')).map(u => u.replace(' (guard)', ''));
+      
+      const parts = [];
+      if (stateUnits.length > 0) parts.push(`**State**: ${stateUnits.join(', ')}`);
+      if (flowUnits.length > 0) parts.push(`**Flow**: ${flowUnits.join(', ')}`);
+      if (guardUnits.length > 0) parts.push(`**Guard**: ${guardUnits.join(', ')}`);
+      
+      if (parts.length > 0) {
+        atomicUnitsFormatted = `\n**Atomic Units**:\n${parts.join('\n')}`;
+      }
+    }
+    
     companyHeader = `
 ### ${stockData.name || ticker} (${ticker})
 ${sectorIndustry ? `**${sectorIndustry}**` : ''}
 ${companySummary ? `\n${companySummary}.` : ''}
-${atomicUnits.length > 0 ? `\n**Atomic Units**: ${atomicUnits.join(', ')}` : ''}
+${atomicUnitsFormatted}
 `;
   }
   

@@ -58,6 +58,15 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **Fidelity Proxying** (Dec 23, 2025): φ-interpolation for small gaps (2-3 days/weeks only), marked with * for transparency. Never extrapolates beyond latest historical date. Fidelity grading (A/B/C/D) handles data quality signaling instead of hard gates
     - **Plain-English Description** (Dec 23, 2025): Replaced verbose experimental disclaimers with concise 3-sentence summary: "Ψ-EMA measures where a stock is in its cycle (θ), how unusual the price is (z), and whether the trend can sustain (R). When all three align, conviction is higher; when they conflict, caution is warranted."
     - **Atomic Unit of Compression**: TIME (quarter/semester/annum) for stocks; HOUSEHOLD for future individual scope
+    - **Atomic Unit Glossary** (Dec 23, 2025): State vs Flow distinction for every industry:
+      - **State** = stock (balance sheet analogue — accumulated quanta at time t)
+      - **Flow** = income statement analogue (rate of change — issuance/payment/dividend)
+      - **Guard** = Flow sufficient to renew state without breach; extraction % not exceeding renewal capacity
+      - **Fintech**: Lending (loan book state, issuance/payment flow, NPL guard), Payments (wallet state, TPV flow, velocity guard), AUM (AUM state, inflows/outflows, fee % guard)
+      - **Commerce**: Inventory/GMV (state) vs Orders/Shipments (flow), turnover guard
+      - **Service**: Backlog/ARR (state) vs Contracts/Projects (flow), burn multiple guard
+      - **Commodity**: Reserves/Stockpile (state) vs Extraction/Shipments (flow), reserve replacement guard
+      - **Media/Subscription**: Subscribers (state) vs Net adds (flow), LTV/CAC guard
     - **LOW_SIGNAL Consolidation Fix** (Dec 23, 2025): When z-score near zero (z < 0.15σ), R ratio becomes undefined. Instead of false "decay" diagnosis, system now outputs "⚪ R Undefined (Consolidation Zone)" with warning. Low z at high price = price tracking median (consolidation at highs), NOT momentum loss. Prevents inverted diagnoses like "decay" when stock is at all-time highs.
     - **Fetched Price & Timestamp** (Dec 23, 2025): Clinical pathology reports now include the fetched stock price with its timestamp (YYYY-MM-DD) for temporal anchoring. Provides immediate context for analysis timeline.
 - **Financial Microbiology** (Dec 23, 2025): Economic pathology framework treating companies as organisms:

@@ -44,75 +44,163 @@ def safe_float(value):
 # Used for Robinhood-style stock summary headers
 # ============================================================================
 
+# ============================================================================
+# ATOMIC UNIT GLOSSARY (State vs Flow distinction)
+# 
+# The Universal Pattern:
+#   State = stock (balance sheet analogue — accumulated quanta at time t)
+#   Flow = income statement analogue (rate of change — issuance/payment/dividend)
+#
+# Guard = Flow sufficient to renew state without breach
+#         Extraction % not exceeding renewal capacity
+#
+# 0 + φ⁰ + φ¹ = φ²
+# ============================================================================
+
+# Sector-level atomic units with guard checks
 SECTOR_ATOMIC_UNITS = {
-    'Technology': ['software licenses', 'API calls', 'subscriptions', 'users', 'devices'],
-    'Communication Services': ['subscriptions', 'ad impressions', 'users', 'content hours', 'downloads'],
-    'Consumer Cyclical': ['orders', 'transactions', 'customers', 'store visits', 'units sold'],
-    'Consumer Defensive': ['units sold', 'orders', 'store visits', 'SKUs', 'households served'],
-    'Financial Services': ['accounts', 'transactions', 'loans', 'policies', 'assets under management'],
-    'Healthcare': ['prescriptions', 'patients treated', 'procedures', 'devices', 'doses'],
-    'Industrials': ['units shipped', 'orders', 'projects', 'equipment hours', 'contracts'],
-    'Basic Materials': ['tons produced', 'units shipped', 'contracts', 'extraction volume', 'orders'],
-    'Energy': ['barrels of oil', 'MMBtu gas', 'MWh electricity', 'gallons refined', 'wells'],
-    'Real Estate': ['properties', 'sq ft leased', 'units occupied', 'rent contracts', 'developments'],
-    'Utilities': ['MWh delivered', 'customers served', 'connections', 'cubic meters', 'service calls'],
+    # Fintech - Lending: loan book (state) vs issuance/payment (flow)
+    # Guard: NPL ratio = extraction breach indicator
+    'Financial Services': ['loan book (state)', 'issuance (flow)', 'payments (flow)', 'AUM (state)', 'TPV (flow)'],
+    
+    # Commerce: inventory/GMV (state) vs orders/shipments (flow)
+    # Guard: inventory turnover = flow/stock (low = dead stock silt)
+    'Consumer Cyclical': ['inventory (state)', 'orders (flow)', 'shipments (flow)', 'GMV booked (state)', 'tickets (flow)'],
+    'Consumer Defensive': ['inventory (state)', 'orders (flow)', 'baskets (flow)', 'GMV booked (state)', 'tickets (flow)'],
+    
+    # Service: backlog/ARR (state) vs contracts/projects (flow)
+    # Guard: burn multiple = cash flow vs backlog (guard for runway)
+    'Technology': ['ARR/MRR (state)', 'subscriptions (state)', 'new contracts (flow)', 'API calls (flow)', 'users (state)'],
+    
+    # Commodity: reserves/stockpile (state) vs extraction/shipments (flow)
+    # Guard: depletion rate vs discovery rate = renewal guard
+    'Basic Materials': ['reserves (state)', 'stockpile (state)', 'extraction (flow)', 'shipments (flow)', 'production (flow)'],
+    'Energy': ['reserves (state)', 'capacity MW (state)', 'barrels (flow)', 'MWh (flow)', 'production (flow)'],
+    
+    # Real Estate: portfolio value (state) vs acquisitions/rental (flow)
+    # Guard: cap rate = NOI / property value (extraction yield)
+    'Real Estate': ['portfolio value (state)', 'units (state)', 'acquisitions (flow)', 'rental income (flow)', 'NOI (flow)'],
+    
+    # Manufacturing: inventory + WIP (state) vs production/shipments (flow)
+    # Guard: inventory days = stock / daily flow (high = silt)
+    'Industrials': ['inventory (state)', 'WIP (state)', 'production (flow)', 'shipments (flow)', 'backlog (state)'],
+    
+    # Telecom: subscriber base (state) vs ARPU × new subs − churn (flow)
+    # Guard: churn rate = flow out / average stock
+    'Communication Services': ['subscribers (state)', 'ARPU × subs (flow)', 'churn (flow)', 'net adds (flow)', 'MAU (state)'],
+    
+    # Healthcare: patient panel/bed capacity (state) vs visits/procedures (flow)
+    # Guard: occupancy rate = flow / capacity
+    'Healthcare': ['patient panel (state)', 'bed capacity (state)', 'visits (flow)', 'procedures (flow)', 'admissions (flow)'],
+    
+    # Utilities: installed capacity (state) vs generation/sales (flow)
+    # Guard: capacity factor = actual output / max possible
+    'Utilities': ['capacity MW (state)', 'customers (state)', 'MWh generated (flow)', 'sales (flow)', 'connections (state)'],
 }
 
+# Industry-specific atomic units with guard checks
 INDUSTRY_ATOMIC_UNITS = {
-    # Technology
-    'Semiconductors': ['chip units', 'wafers', 'GPU/CPU units', 'design wins', 'fab capacity'],
-    'Software—Infrastructure': ['API calls', 'compute hours', 'storage GB', 'seats', 'deployments'],
-    'Software—Application': ['licenses', 'subscriptions', 'users', 'seats', 'integrations'],
-    'Consumer Electronics': ['devices', 'units sold', 'accessories', 'repairs', 'trade-ins'],
-    'Internet Content & Information': ['users', 'page views', 'ad impressions', 'queries', 'content items'],
-    'Internet Retail': ['orders', 'GMV', 'customers', 'sellers', 'deliveries'],
+    # ========== FINTECH ==========
+    # Lending: loan book (state) vs issuance/payment (flow)
+    # Guard: NPL ratio = extraction breach indicator
+    'Banks—Diversified': ['loan book (state)', 'deposits (state)', 'issuance (flow)', 'payments (flow)', 'NPL ratio (guard)'],
+    'Banks—Regional': ['loan book (state)', 'deposits (state)', 'issuance (flow)', 'payments (flow)', 'NPL ratio (guard)'],
+    'Credit Services': ['loan book (state)', 'credit lines (state)', 'issuance (flow)', 'payments (flow)', 'NPL ratio (guard)'],
+    'Mortgage Finance': ['loan book (state)', 'properties (state)', 'originations (flow)', 'payments (flow)', 'delinquency (guard)'],
     
-    # Communication Services
-    'Entertainment': ['subscriptions', 'hours streamed', 'titles', 'downloads', 'tickets'],
-    'Telecom Services': ['subscribers', 'connections', 'data GB', 'calls', 'messages'],
-    'Electronic Gaming & Multimedia': ['players', 'downloads', 'in-app purchases', 'hours played', 'titles'],
+    # Payments: wallet balance (state) vs TPV + active users (flow)
+    # Guard: velocity = TPV / average balance (too high = silt risk)
+    'Financial Data & Stock Exchanges': ['wallet avg (state)', 'deposits (state)', 'TPV (flow)', 'active users (flow)', 'velocity (guard)'],
+    'Capital Markets': ['AUM (state)', 'deposits (state)', 'trades (flow)', 'commissions (flow)', 'velocity (guard)'],
     
-    # Consumer
-    'Restaurants': ['orders', 'covers', 'locations', 'delivery orders', 'tickets'],
-    'Specialty Retail': ['transactions', 'customers', 'units sold', 'returns', 'loyalty members'],
-    'Auto Manufacturers': ['vehicles', 'units delivered', 'orders', 'service visits', 'parts'],
-    'Apparel Retail': ['units sold', 'orders', 'returns', 'store visits', 'SKUs'],
-    'Home Improvement Retail': ['transactions', 'projects', 'SKUs', 'installations', 'orders'],
-    'Discount Stores': ['baskets', 'transactions', 'SKUs', 'store visits', 'customers'],
-    'Grocery Stores': ['baskets', 'transactions', 'SKUs', 'deliveries', 'customers'],
+    # AUM: current AUM (state) vs inflows/outflows (flow)
+    # Guard: fee on AUM >1.5-2% = long-term unsustainable
+    'Asset Management': ['AUM (state)', 'funds (state)', 'inflows (flow)', 'outflows (flow)', 'fee % (guard)'],
+    'Insurance—Life': ['AUM (state)', 'policies (state)', 'premiums (flow)', 'claims (flow)', 'loss ratio (guard)'],
+    'Insurance—Property & Casualty': ['reserves (state)', 'policies (state)', 'premiums (flow)', 'claims (flow)', 'combined ratio (guard)'],
     
-    # Financial Services
-    'Banks—Diversified': ['accounts', 'loans', 'deposits', 'transactions', 'cards issued'],
-    'Credit Services': ['transactions', 'accounts', 'cards active', 'loans', 'credit lines'],
-    'Insurance—Life': ['policies', 'premiums', 'claims', 'annuities', 'beneficiaries'],
-    'Insurance—Property & Casualty': ['policies', 'claims', 'premiums', 'renewals', 'inspections'],
-    'Asset Management': ['AUM', 'accounts', 'funds', 'trades', 'clients'],
+    # ========== COMMERCE ==========
+    # Inventory/GMV (state) vs orders/shipments/tickets (flow)
+    # Guard: inventory turnover = flow/stock (low = dead stock silt)
+    'Internet Retail': ['inventory (state)', 'GMV booked (state)', 'orders (flow)', 'shipments (flow)', 'turnover (guard)'],
+    'Specialty Retail': ['inventory (state)', 'SKUs (state)', 'transactions (flow)', 'tickets (flow)', 'turnover (guard)'],
+    'Restaurants': ['locations (state)', 'inventory (state)', 'orders (flow)', 'covers (flow)', 'turnover (guard)'],
+    'Discount Stores': ['inventory (state)', 'SKUs (state)', 'baskets (flow)', 'transactions (flow)', 'turnover (guard)'],
+    'Grocery Stores': ['inventory (state)', 'SKUs (state)', 'baskets (flow)', 'deliveries (flow)', 'turnover (guard)'],
+    'Apparel Retail': ['inventory (state)', 'SKUs (state)', 'orders (flow)', 'units sold (flow)', 'turnover (guard)'],
+    'Home Improvement Retail': ['inventory (state)', 'SKUs (state)', 'transactions (flow)', 'projects (flow)', 'turnover (guard)'],
+    'Auto Manufacturers': ['backlog (state)', 'inventory (state)', 'vehicles delivered (flow)', 'orders (flow)', 'days inventory (guard)'],
     
-    # Healthcare
-    'Drug Manufacturers—General': ['doses', 'prescriptions', 'patients', 'trials', 'approvals'],
-    'Biotechnology': ['patients treated', 'trials', 'approvals', 'doses', 'indications'],
-    'Medical Devices': ['devices', 'procedures', 'implants', 'units sold', 'services'],
-    'Healthcare Plans': ['members', 'claims', 'enrollees', 'visits', 'prescriptions'],
+    # ========== SERVICE (SaaS/Consulting) ==========
+    # Backlog/ARR (state) vs new contracts/projects (flow)
+    # Guard: burn multiple = cash flow vs backlog
+    'Software—Infrastructure': ['ARR (state)', 'seats (state)', 'new contracts (flow)', 'API calls (flow)', 'burn multiple (guard)'],
+    'Software—Application': ['ARR (state)', 'subscriptions (state)', 'new contracts (flow)', 'users (flow)', 'burn multiple (guard)'],
+    'Consulting Services': ['backlog (state)', 'contracts (state)', 'engagements (flow)', 'billable hours (flow)', 'utilization (guard)'],
+    'Staffing & Employment Services': ['contracts (state)', 'candidates (state)', 'placements (flow)', 'billable hours (flow)', 'fill rate (guard)'],
+    'Information Technology Services': ['backlog (state)', 'SLAs (state)', 'projects (flow)', 'tickets resolved (flow)', 'utilization (guard)'],
     
-    # Energy
-    'Oil & Gas Integrated': ['barrels', 'MMBtu', 'gallons refined', 'wells', 'reserves'],
-    'Oil & Gas E&P': ['barrels', 'wells drilled', 'reserves', 'leases', 'production days'],
-    'Oil & Gas Refining & Marketing': ['gallons', 'barrels refined', 'retail sites', 'shipments', 'blends'],
-    'Utilities—Regulated Electric': ['MWh', 'customers', 'connections', 'meters', 'outage hours'],
-    'Utilities—Renewable': ['MWh', 'installations', 'capacity MW', 'PPAs', 'projects'],
+    # ========== TECHNOLOGY ==========
+    'Semiconductors': ['fab capacity (state)', 'design wins (state)', 'chip units (flow)', 'wafers (flow)', 'utilization (guard)'],
+    'Consumer Electronics': ['inventory (state)', 'SKUs (state)', 'devices sold (flow)', 'units (flow)', 'turnover (guard)'],
+    'Internet Content & Information': ['MAU (state)', 'content items (state)', 'page views (flow)', 'ad impressions (flow)', 'engagement (guard)'],
     
-    # Industrials
-    'Aerospace & Defense': ['aircraft', 'contracts', 'units delivered', 'service hours', 'systems'],
-    'Airlines': ['passengers', 'flights', 'seat miles', 'bookings', 'cargo tons'],
-    'Railroads': ['carloads', 'ton-miles', 'shipments', 'routes', 'trains'],
-    'Trucking': ['shipments', 'miles driven', 'deliveries', 'loads', 'trucks'],
-    'Shipping & Ports': ['TEUs', 'vessels', 'port calls', 'cargo tons', 'routes'],
+    # ========== MEDIA/SUBSCRIPTION ==========
+    # Active subscribers (state) vs net adds (flow)
+    # Guard: LTV / CAC = lifetime flow / acquisition cost
+    'Entertainment': ['subscribers (state)', 'titles (state)', 'net adds (flow)', 'hours streamed (flow)', 'LTV/CAC (guard)'],
+    'Telecom Services': ['subscribers (state)', 'connections (state)', 'ARPU × subs (flow)', 'churn (flow)', 'churn rate (guard)'],
     
-    # Real Estate
-    'REIT—Retail': ['properties', 'sq ft leased', 'tenants', 'occupancy %', 'rent/sqft'],
-    'REIT—Residential': ['units', 'occupancy %', 'leases', 'renewals', 'rent/unit'],
-    'REIT—Industrial': ['warehouses', 'sq ft', 'tenants', 'leases', 'occupancy %'],
-    'REIT—Office': ['buildings', 'sq ft leased', 'tenants', 'occupancy %', 'rent/sqft'],
+    # ========== GAMING ==========
+    # DAU/MAU (state) vs installs − uninstalls (flow)
+    # Guard: retention cohort flow vs stock
+    'Electronic Gaming & Multimedia': ['DAU/MAU (state)', 'players (state)', 'installs (flow)', 'in-app purchases (flow)', 'retention (guard)'],
+    
+    # ========== HEALTHCARE ==========
+    # Patient panel/bed capacity (state) vs visits/procedures (flow)
+    # Guard: occupancy rate = flow / capacity
+    'Drug Manufacturers—General': ['patients (state)', 'trials (state)', 'doses (flow)', 'prescriptions (flow)', 'trial success (guard)'],
+    'Biotechnology': ['patients (state)', 'indications (state)', 'doses (flow)', 'approvals (flow)', 'trial success (guard)'],
+    'Medical Devices': ['installed base (state)', 'contracts (state)', 'procedures (flow)', 'units sold (flow)', 'utilization (guard)'],
+    'Healthcare Plans': ['members (state)', 'enrollees (state)', 'claims (flow)', 'visits (flow)', 'MLR (guard)'],
+    
+    # ========== COMMODITY ==========
+    # Proven reserves/stockpile (state) vs production/shipments (flow)
+    # Guard: depletion rate vs discovery rate = renewal guard
+    'Oil & Gas Integrated': ['reserves (state)', 'wells (state)', 'barrels (flow)', 'MMBtu (flow)', 'reserve replacement (guard)'],
+    'Oil & Gas E&P': ['reserves (state)', 'leases (state)', 'barrels (flow)', 'wells drilled (flow)', 'reserve replacement (guard)'],
+    'Oil & Gas Refining & Marketing': ['capacity (state)', 'retail sites (state)', 'gallons (flow)', 'shipments (flow)', 'utilization (guard)'],
+    'Steel': ['capacity (state)', 'inventory (state)', 'tons shipped (flow)', 'orders (flow)', 'utilization (guard)'],
+    'Aluminum': ['capacity (state)', 'inventory (state)', 'tons shipped (flow)', 'orders (flow)', 'utilization (guard)'],
+    'Copper': ['reserves (state)', 'capacity (state)', 'tons shipped (flow)', 'extraction (flow)', 'reserve replacement (guard)'],
+    'Gold': ['reserves (state)', 'stockpile (state)', 'oz produced (flow)', 'extraction (flow)', 'reserve replacement (guard)'],
+    'Agricultural Inputs': ['inventory (state)', 'contracts (state)', 'tons shipped (flow)', 'acres treated (flow)', 'turnover (guard)'],
+    
+    # ========== MANUFACTURING ==========
+    # Finished goods + WIP (state) vs production/shipments (flow)
+    # Guard: inventory days = stock / daily flow (high = silt)
+    'Aerospace & Defense': ['backlog (state)', 'contracts (state)', 'aircraft delivered (flow)', 'systems (flow)', 'book-to-bill (guard)'],
+    'Industrial Machinery': ['backlog (state)', 'inventory (state)', 'units shipped (flow)', 'orders (flow)', 'days inventory (guard)'],
+    
+    # ========== TRANSPORTATION ==========
+    'Airlines': ['fleet (state)', 'routes (state)', 'passengers (flow)', 'seat miles (flow)', 'load factor (guard)'],
+    'Railroads': ['track miles (state)', 'cars (state)', 'carloads (flow)', 'ton-miles (flow)', 'operating ratio (guard)'],
+    'Trucking': ['trucks (state)', 'routes (state)', 'shipments (flow)', 'miles driven (flow)', 'utilization (guard)'],
+    'Shipping & Ports': ['vessels (state)', 'routes (state)', 'TEUs (flow)', 'cargo tons (flow)', 'utilization (guard)'],
+    
+    # ========== ENERGY/UTILITIES ==========
+    # Installed capacity (state) vs generation/sales (flow)
+    # Guard: capacity factor = actual output / max possible
+    'Utilities—Regulated Electric': ['capacity MW (state)', 'customers (state)', 'MWh delivered (flow)', 'sales (flow)', 'capacity factor (guard)'],
+    'Utilities—Renewable': ['capacity MW (state)', 'PPAs (state)', 'MWh generated (flow)', 'installations (flow)', 'capacity factor (guard)'],
+    
+    # ========== REAL ESTATE ==========
+    # Property portfolio (state) vs acquisitions/rental income (flow)
+    # Guard: cap rate = NOI / property value (extraction yield)
+    'REIT—Retail': ['sq ft (state)', 'properties (state)', 'rental income (flow)', 'leases signed (flow)', 'cap rate (guard)'],
+    'REIT—Residential': ['units (state)', 'properties (state)', 'rental income (flow)', 'renewals (flow)', 'cap rate (guard)'],
+    'REIT—Industrial': ['sq ft (state)', 'warehouses (state)', 'rental income (flow)', 'leases (flow)', 'cap rate (guard)'],
+    'REIT—Office': ['sq ft (state)', 'buildings (state)', 'rental income (flow)', 'leases (flow)', 'cap rate (guard)'],
 }
 
 
