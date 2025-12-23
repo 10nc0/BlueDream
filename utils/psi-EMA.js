@@ -4,20 +4,33 @@
  * A 3-dimensional orthogonal state observer that measures the complete 
  * wave function of economic systems in real-time.
  * 
- * ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
- * │ Ψ-EMA DIMENSIONAL REFERENCE TABLE                                                                              │
- * ├─────────────────┬─────────────────────────┬────────┬──────────┬─────────────────────────┬─────────────────────────┤
- * │ Dimension       │ Formula                 │ Value  │ Signal   │ Physical Analog         │ Financial Meaning       │
- * ├─────────────────┼─────────────────────────┼────────┼──────────┼─────────────────────────┼─────────────────────────┤
- * │ θ (Phase)       │ arctan(ΔEMA-55/ΔEMA-34) │ X°     │ WAIT/    │ Position vs Momentum    │ Stock↔Flow dominance    │
- * │ Cycle Position  │                         │        │ BUY/SELL │ angle in phase space    │ (which cycle quadrant)  │
- * ├─────────────────┼─────────────────────────┼────────┼──────────┼─────────────────────────┼─────────────────────────┤
- * │ z (Anomaly)     │ (Price - Median) / MAD  │ Xσ     │ NORMAL/  │ Deviation from          │ How extreme current     │
- * │ Price Deviation │                         │        │ ALERT    │ equilibrium (z-score)   │ profitability vs history│
- * ├─────────────────┼─────────────────────────┼────────┼──────────┼─────────────────────────┼─────────────────────────┤
- * │ R (Convergence) │ z(t) / z(t-1)           │ ~1.6   │ CRITICAL/│ Successive amplitude    │ Sustainability of       │
- * │ Momentum Ratio  │                         │        │ BUBBLE   │ ratio → φ attractor     │ oscillations (natural?) │
- * └─────────────────┴─────────────────────────┴────────┴──────────┴─────────────────────────┴─────────────────────────┘
+ * ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+ * │ Ψ-EMA DIMENSIONAL REFERENCE TABLE                                                                                                      │
+ * ├─────────────────┬─────────────────────────┬─────────────────┬───────────────┬─────────────────────────┬─────────────────────────────────┤
+ * │ Dimension       │ Formula                 │ Value           │ Signal        │ What It Measures        │ Why It Works                    │
+ * ├─────────────────┼─────────────────────────┼─────────────────┼───────────────┼─────────────────────────┼─────────────────────────────────┤
+ * │ θ (Phase)       │ arctan(ΔEMA-55/ΔEMA-34) │ X°              │ WAIT/BUY/SELL │ Cycle position via EMA  │ atan2(flow, stock) gives true  │
+ * │ Cycle Position  │                         │                 │               │ slope angle             │ 4-quadrant cycle position       │
+ * ├─────────────────┼─────────────────────────┼─────────────────┼───────────────┼─────────────────────────┼─────────────────────────────────┤
+ * │ z (Anomaly)     │ (Price - Median) / MAD  │ Xσ              │ NORMAL/ALERT  │ Deviation from          │ Measures kinetic anomaly —      │
+ * │ Price Deviation │                         │                 │               │ equilibrium             │ sine-like spikes                │
+ * ├─────────────────┼─────────────────────────┼─────────────────┼───────────────┼─────────────────────────┼─────────────────────────────────┤
+ * │ R (Convergence) │ z(t) / z(t-1)           │ x = 1 + 1/x     │ OPTIMISM/     │ Successive amplitude    │ R ≈ φ means self-similar,       │
+ * │ Momentum Ratio  │                         │ x = φ (1.618)   │ FATALISM      │ ratio                   │ natural growth (critical)       │
+ * └─────────────────┴─────────────────────────┴─────────────────┴───────────────┴─────────────────────────┴─────────────────────────────────┘
+ * 
+ * ┌─────────────────┬─────────────────────────┬─────────────────────────────────┐
+ * │ Dimension       │ Physical Analog         │ Financial Meaning               │
+ * ├─────────────────┼─────────────────────────┼─────────────────────────────────┤
+ * │ θ (Phase)       │ Phase space trajectory  │ Stock↔Flow dominance (which     │
+ * │                 │                         │ quadrant of the cycle)          │
+ * ├─────────────────┼─────────────────────────┼─────────────────────────────────┤
+ * │ z (Anomaly)     │ Kinetic energy spike    │ How extreme current state is    │
+ * │                 │                         │ vs history                      │
+ * ├─────────────────┼─────────────────────────┼─────────────────────────────────┤
+ * │ R (Convergence) │ Damping/amplification   │ Sustainability — R ≈ φ is       │
+ * │                 │                         │ critical, R > φ² is bubble      │
+ * └─────────────────┴─────────────────────────┴─────────────────────────────────┘
  * 
  * WHY IT WORKS:
  * - θ: atan2(flow, stock) gives true 4-quadrant cycle position
@@ -27,7 +40,7 @@
  *      R > 2.0 = bubble (super-critical, unsustainable amplification)
  * 
  * φ (1.618) AS NATURAL ATTRACTOR:
- * The golden ratio emerges as the natural attractor for sustainable oscillations.
+ * The golden ratio is defined by: x = 1 + 1/x → x = φ (self-referential!)
  * When R converges to φ, the system exhibits self-similar growth patterns.
  * Deviation from φ indicates either decay (R→0) or unsustainable amplification (R→∞).
  * 
