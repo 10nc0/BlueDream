@@ -1356,9 +1356,11 @@ function classifyStage(severity, type) {
  * Generate clinical pathology report
  * @param {Object} analysis - Complete Ψ-EMA analysis
  * @param {string} patientName - Company/asset name
+ * @param {number} fetchedPrice - Current stock price
+ * @param {string} priceTimestamp - Date of price fetch (YYYY-MM-DD)
  * @returns {Object} Clinical report in pathology format
  */
-function generateClinicalReport(analysis, patientName = 'UNKNOWN') {
+function generateClinicalReport(analysis, patientName = 'UNKNOWN', fetchedPrice = null, priceTimestamp = 'N/A') {
   const pathogenResult = detectPathogens(analysis);
   const { anomaly, convergence, phase } = analysis.dimensions || {};
   
@@ -1418,6 +1420,10 @@ function generateClinicalReport(analysis, patientName = 'UNKNOWN') {
     admission: new Date().toISOString().split('T')[0],
     complaint: analysis.summary?.compositeSignal || 'Routine Examination',
     
+    // Fetched price and timestamp for temporal anchoring
+    fetchedPrice: fetchedPrice ? `$${fetchedPrice.toFixed(2)}` : 'N/A',
+    priceTimestamp: priceTimestamp,
+    
     vitalSigns,
     
     diagnosis: {
@@ -1439,7 +1445,7 @@ function generateClinicalReport(analysis, patientName = 'UNKNOWN') {
     outcome: pathogenResult.healthy ? 'STABLE' : 'INTERVENTION_REQUIRED',
     
     // For AI prompt injection
-    clinicalSummary: `PATIENT: ${patientName} | DIAGNOSIS: ${diagnosisEmoji} ${diagnosis} | VITALS: R=${vitalSigns.R_ratio.value}, z=${vitalSigns.z_score.value}σ | PROGNOSIS: ${prognosis}`
+    clinicalSummary: `PATIENT: ${patientName} | PRICE: ${fetchedPrice ? `$${fetchedPrice.toFixed(2)}` : 'N/A'} (${priceTimestamp}) | DIAGNOSIS: ${diagnosisEmoji} ${diagnosis} | VITALS: R=${vitalSigns.R_ratio.value}, z=${vitalSigns.z_score.value}σ | PROGNOSIS: ${prognosis}`
   };
 }
 

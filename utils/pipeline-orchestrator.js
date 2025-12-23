@@ -309,9 +309,12 @@ class PipelineOrchestrator {
         edgarSection += '\n';
       }
       
+      // Format stock price with timestamp (for clinical report and display)
+      const priceTimestamp = stockData.endDate ? new Date(stockData.endDate).toISOString().split('T')[0] : 'N/A';
+      
       // Financial Microbiology: Clinical pathology report (Dec 23, 2025) - based on daily
       const pathogenResult = detectPathogens(analysis);
-      const clinicalReport = generateClinicalReport(analysis, ticker);
+      const clinicalReport = generateClinicalReport(analysis, ticker, stockData.currentPrice, priceTimestamp);
       
       // Physical Audit Disclaimer: "See to believe" infrastructure verification (Dec 23, 2025)
       const physicalAuditDisclaimer = generatePhysicalAuditDisclaimer(analysis, ticker);
@@ -357,9 +360,6 @@ Reason: ${weeklyUnavailableReason || 'Insufficient weekly data (<13 bars)'}`;
       
       // Daily fidelity grade emoji
       const dailyGradeEmoji = { 'A': '🟢', 'B': '🟡', 'C': '🟠', 'D': '🔴' }[fidelity.grade] || '⚪';
-      
-      // Format stock price with timestamp
-      const priceTimestamp = stockData.endDate ? new Date(stockData.endDate).toISOString().split('T')[0] : 'N/A';
       const priceHeader = `${ticker}: ${stockData.currency || 'USD'} ${stockData.currentPrice?.toFixed(2) || 'N/A'} (${priceTimestamp})`;
       
       psiEmaInstruction = `

@@ -47,6 +47,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **Fidelity Proxying** (Dec 23, 2025): φ-interpolation for small gaps (2-3 days/weeks only), marked with * for transparency. Never extrapolates beyond latest historical date. Fidelity grading (A/B/C/D) handles data quality signaling instead of hard gates
     - **Atomic Unit of Compression**: TIME (quarter/semester/annum) for stocks; HOUSEHOLD for future individual scope
     - **LOW_SIGNAL Consolidation Fix** (Dec 23, 2025): When z-score near zero (z < 0.15σ), R ratio becomes undefined. Instead of false "decay" diagnosis, system now outputs "⚪ R Undefined (Consolidation Zone)" with warning. Low z at high price = price tracking median (consolidation at highs), NOT momentum loss. Prevents inverted diagnoses like "decay" when stock is at all-time highs.
+    - **Fetched Price & Timestamp** (Dec 23, 2025): Clinical pathology reports now include the fetched stock price with its timestamp (YYYY-MM-DD) for temporal anchoring. Provides immediate context for analysis timeline.
 - **Financial Microbiology** (Dec 23, 2025): Economic pathology framework treating companies as organisms:
     - **Economic Pathogens**:
       - 🦠 **Ponzi Virus**: R > 2.5 (unsustainable acceleration, new capital feeds old obligations)
