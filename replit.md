@@ -38,8 +38,9 @@ The system employs a Node.js backend with Express and a Single Page Application 
     - **θ (Phase)**: arctan(ΔEMA-55/ΔEMA-34) → Cycle position (Stock↔Flow dominance in 4 quadrants)
     - **z (Anomaly)**: (Price - Median) / MAD → Deviation from equilibrium (kinetic energy spike)
     - **R (Convergence)**: z(t) / z(t-1) → Sustainability ratio with φ (1.618) as natural attractor
-    - **φ Natural Attractor**: R ≈ φ = critical regime (sustainable). R < 1.3 = dying. R > 2.0 = bubble.
-    - Features: Fibonacci EMA periods (13, 21, 34, 55), real-time stock integration, dual timeframe analysis, fidelity proxying, AI-PUSH rescue for missing keys.
+    - **φ Natural Attractor**: R ≈ φ = critical regime (sustainable). R < φ⁻¹ = dying. R > φ² = bubble.
+    - **Per-Dimension Fidelity**: No aggregate grades - each dimension (θ, z, R) shows its own real/total data points independently. Format: `θ: X/Y | z: X/Y | R: X/Y`. Avoids skew bias from aggregation ("no sum > parts").
+    - Features: Fibonacci EMA periods (13, 21, 34, 55), real-time stock integration, dual timeframe analysis, φ-derived thresholds only, AI-PUSH rescue for missing keys.
     - **Financial Microbiology**: An economic pathology framework for companies, identifying "Economic Pathogens" (Ponzi Virus, Bubble Cancer, Zombie Debt Bacteria) with stage classification and a clinical report generator. It integrates a 2-pass audit for clinical findings.
     - **Unified Personality Layer**: All formatting enforced in ONE place (`applyPersonalityFormat()` in pipeline-orchestrator.js). Removes fluff patterns ("Summary of...", "A comprehensive analysis...") via regex post-processing. stockContext provides raw data only; prevents over-recursing of formatting across layers.
 - **SEC EDGAR Reality Check**: Anti-hallucination guard for EDGAR API claims, explicitly stating limitations in direct data fetching.
