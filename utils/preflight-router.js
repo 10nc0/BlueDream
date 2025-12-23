@@ -440,17 +440,6 @@ ${fundParts.map(p => `- ${p}`).join('\n')}`;
   const confidenceLine = `**${fidelityPct}%** (${fidelityGrade}) → yfinance prices + SEC EDGAR fundamentals`;
   
   return `
-## ⚠️ CRITICAL FORMAT INSTRUCTION
-FORBIDDEN (instant fail):
-- "Summary of X Stock Analysis" ❌
-- "A comprehensive analysis of..." ❌
-- "The following is..." ❌
-- Any intro paragraph before company name ❌
-- Converting table to bullet points ❌
-
-START your response with the company header below. Copy the table VERBATIM.
-
----
 ${companyHeader}
 **Ψ-EMA**: θ = cycle position, z = price deviation, R = momentum sustainability. Alignment = conviction; conflict = caution.
 
@@ -468,9 +457,6 @@ ${tetralemmaAlert}
 ${fundamentalsSection}
 
 **Confidence**: ${confidenceLine}
-
----
-⚠️ OUTPUT EXACTLY as formatted above. NO intro paragraphs. NO "Summary" section. NO rephrasing. Copy the table verbatim. End "🔥 ~nyan".
 `;
 }
 

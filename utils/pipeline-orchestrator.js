@@ -628,7 +628,45 @@ User query: ${query}`;
       state.finalAnswer = state.draftAnswer;
     }
     
+    // Apply personality formatting (unified, single-pass)
+    state.finalAnswer = this.applyPersonalityFormat(state.finalAnswer, state.mode);
+    
     console.log(`✅ Output: ${state.finalAnswer.length} chars, mode=${state.mode}`);
+  }
+  
+  /**
+   * PERSONALITY LAYER (S5) - Unified format enforcement
+   * All formatting happens HERE, not scattered across prompts/contexts
+   * This is the SINGLE source of truth for output formatting
+   */
+  applyPersonalityFormat(answer, mode) {
+    if (!answer) return answer;
+    
+    // Remove any LLM-added fluff that bypassed prompt instructions
+    let cleaned = answer;
+    
+    // Remove generic intro paragraphs (case-insensitive)
+    const fluffPatterns = [
+      /^##?\s*Summary[^\n]*\n+[^\n]*comprehensive analysis[^\n]*\n+/i,
+      /^##?\s*Summary[^\n]*\n+[^\n]*following[^\n]*\n+/i,
+      /^##?\s*Summary\s*\n+/i,
+      /^A comprehensive analysis of[^\n]*\n+/i,
+      /^The following is[^\n]*\n+/i,
+      /^Here is[^\n]*analysis[^\n]*\n+/i,
+      /^Let me provide[^\n]*\n+/i,
+      /^I'll analyze[^\n]*\n+/i,
+    ];
+    
+    for (const pattern of fluffPatterns) {
+      cleaned = cleaned.replace(pattern, '');
+    }
+    
+    // Ensure ~nyan signature exists (add if missing, don't duplicate)
+    if (!cleaned.includes('~nyan')) {
+      cleaned = cleaned.trimEnd() + '\n\n🔥 ~nyan';
+    }
+    
+    return cleaned.trim();
   }
 }
 
