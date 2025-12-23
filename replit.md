@@ -43,6 +43,14 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - Returns: { entities, inferredTicker, dominantTopic, attachmentMeta, hasFinancialContext }
     - Enables two-step conversations: "netflix price trend" → "stock price" resolves NFLX from history
     - Context fallback only triggers with explicit stock/ticker/share keywords (prevents false positives)
+  - **φ-Compressed Memory** (`utils/memory-manager.js`): Stage -1 episodic memory system (Dec 23, 2025):
+    - **LocalMemoryManager class**: Per-session memory with 8-message sliding window
+    - **φ-Compression Ratio**: 5-sentence summary every 2nd query (5/8 ≈ 1/φ golden ratio)
+    - **Attachment Side-Door**: Keywords ("the document", "that file") inject full document content
+    - **Session Management**: Uses clientIp as sessionId, automatic cleanup (15min cycle, 1h max age)
+    - **Memory Sync**: attachmentHistory synced in Stage -1, recordInMemory after response (no attachment to avoid truncation)
+    - **Human-like Recall**: Summaries provide episodic memory vs calculator-like entity extraction
+    - **Known Edge Cases**: Multi-document alignment and streaming endpoint syncing need refinement
   - **Pipeline Orchestrator** (`utils/pipeline-orchestrator.js`): State machine for AI processing (Dec 23, 2025):
     - **7-Step State Machine**: S-1(Context) → S0(Preflight) → S1(Context Build) → S2(Reasoning) → S3(Audit) → S4(Retry) → S5(Output)
     - **PipelineState class**: Tracks current step, preflight result, context result, audit result, retry count, and system messages
