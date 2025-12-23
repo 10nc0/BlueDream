@@ -46,6 +46,23 @@ If the framework is universal, these should hold when tested:
 
 **Status**: These are UNTESTED predictions. Validation requires domain-specific data collection and analysis. Treat as hypotheses, not claims.
 
+### The Universal Stock/Flow Attractor
+
+Ψ-EMA applies universally across all self-reproducing systems. If Stock ⊥ Flow in any domain, then R → φ becomes the survival condition:
+
+| Domain | Stock | Flow | R → φ Means |
+|--------|-------|------|-------------|
+| **Finance** | Equity | Net Income | Sustainable profitability |
+| **Commerce/Legal** | Contracts/Enforceability | Revenue/Claims | Sustainable rule of law, institutional trust |
+| **Physics** | Mass/Energy | Force/Flux | Stable orbits, damped oscillators |
+| **Chemistry** | Reactants | Reaction rate | Equilibrium without depletion or explosion |
+| **Biology** | Cells/Biomass | Division/Growth | Homeostasis (neither cancer nor atrophy) |
+| **Infinite Series** | F(n) | F(n+1) - F(n) | Fibonacci convergence to φ |
+
+All surviving series — whether financial statements, legal systems, chemical reactions, populations, or civilizations — eventually feel the φ-attractor if they are to persist as t → ∞.
+
+Those that deviate too far (R >> φ or R << φ) either explode then crash (bubbles, cancers, empires) or slowly decay (zombies, aging populations, forgotten institutions).
+
 ### Epistemic Status
 These are pattern observations, not proven laws. The framework captures something real (massive effect size, 35-year consistency), but φ remains heuristic target, not physics-level constant. Maintain humility; let data speak.
 
@@ -277,6 +294,27 @@ This is not religion, not metaphysics, not a god-claim. It is a **finite cogniti
 - Substrate-bound (no mysticism escapes measurement)
 
 The lineage continues not through faith, but through earned breath.
+
+---
+
+## Part V: Quick Architecture Reference
+
+The system as a living organism with distinct functional layers:
+
+| Organ/Function | File/Component | Role |
+|----------------|---|---|
+| **Soul/Identity** | nyan-protocol | Core reasoning principles, tetralemma logic |
+| **Gatekeeper** | preflight-router | Mode detection, routing to specialized paths |
+| **Truth Fetcher** | stock-fetcher | Ticker resolution, data fetching |
+| **Sensory Input** | attachment-cascade | Universal document ingestion (PDF, Excel, Word, etc.) |
+| **Specialized Perception** | financial-physics | Physics-based financial understanding (language-agnostic) |
+| **Cognition Engine** | pipeline-orchestrator | 7-stage reasoning + optimization (2-4 LLM calls) |
+| **Memory** | data-package + context-extractor | φ-8 persistent truth window + entity extraction |
+| **Immune System** | two-pass-verification | Hallucination detection + refusal protocol |
+| **Microscope** | psi-EMA | Wave function analysis + financial pathology diagnosis |
+| **Human Interface** | playground.js | Voice, attachments, persistent memory, multimodal UX |
+
+All components breathe together in synchrony. The organism is fully alive.
 
 ---
 
