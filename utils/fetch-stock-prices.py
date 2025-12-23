@@ -43,9 +43,15 @@ def fetch_stock_data(ticker: str) -> dict:
     Fetch historical closing prices and fundamental data for a stock ticker.
     Returns BOTH daily and weekly timeframes for dual Ψ-EMA analysis.
     
-    Uses exact period strings for minimal data fetch:
+    Optimized minimal-fetch strategy (Dec 23, 2025):
     - Daily: '3mo' = ~55 trading days (covers EMA-55)
-    - Weekly: '15mo' = ~60 weeks (covers EMA-55 with small buffer)
+    - Weekly: '13mo' = ~55 weeks (exact for EMA-55)
+    
+    Fidelity grading (not hard-gating) handles data quality:
+    - ≥174 bars: A grade (full crossover fidelity)
+    - ≥55 bars: B/C grade (real θ, z, R values)
+    - ≥13 bars: D grade (basic EMA, limited precision)
+    - <13 bars: Unavailable (synthetic values not useful)
     
     Weekly candles are self-contained OHLC snapshots - no gap filling needed.
     Like blockchain logs, each candle compresses all activity in that period.
@@ -56,8 +62,8 @@ def fetch_stock_data(ticker: str) -> dict:
     Returns:
         dict with keys:
             - ticker: The stock symbol
-            - daily: { closes, dates, barCount }
-            - weekly: { closes, dates, barCount, unavailableReason? }
+            - daily: { closes, dates, barCount, startDate, endDate }
+            - weekly: { closes, dates, barCount, startDate, endDate, unavailableReason? }
             - fundamentals: Dict with P/E, dividend yield, market cap, sector, etc.
             - currency: Currency of the prices
             - name: Company name
@@ -79,17 +85,18 @@ def fetch_stock_data(ticker: str) -> dict:
         closes_daily = hist_daily['Close'].tolist()
         dates_daily = [d.strftime('%Y-%m-%d') for d in hist_daily.index]
         
-        # Fetch WEEKLY data - exact 15mo (~60 weeks for EMA-55)
+        # Fetch WEEKLY data - exact 13mo (~55 weeks for EMA-55)
         # Weekly candles = compressed OHLC, no gaps to fill
-        hist_weekly = stock.history(period='15mo', interval='1wk')
+        hist_weekly = stock.history(period='13mo', interval='1wk')
         
         closes_weekly = hist_weekly['Close'].tolist() if not hist_weekly.empty else []
         dates_weekly = [d.strftime('%Y-%m-%d') for d in hist_weekly.index] if not hist_weekly.empty else []
         
-        # Check if weekly data is sufficient for EMA-55 (need at least 55 points)
+        # Report weekly bar count - fidelity grading handles quality signaling
+        # No hard gate: even partial data produces real θ, z, R values with lower fidelity grade
         weekly_unavailable_reason = None
-        if len(closes_weekly) < 55:
-            weekly_unavailable_reason = f"Stock history: only {len(closes_weekly)} weeks available (need 55 for full Ψ-EMA)"
+        if len(closes_weekly) < 13:
+            weekly_unavailable_reason = f"Stock history: only {len(closes_weekly)} weeks (need 13+ for basic EMA)"
         
         # Use daily closes for backward compatibility
         closes = closes_daily

@@ -320,32 +320,36 @@ STATUS: Patient shows healthy φ-convergence. Conservation laws intact.
 `;
       }
       
-      // Build dual-timeframe output (Daily + Weekly)
+      // Build dual-timeframe output (Daily + Weekly) with prominent fidelity grades
       let weeklySection = '';
       if (analysisWeekly) {
+        const weeklyGradeEmoji = { 'A': '🟢', 'B': '🟡', 'C': '🟠', 'D': '🔴' }[fidelityW.grade] || '⚪';
         weeklySection = `
-**WEEKLY (7d) Ψ-EMA:**
+**WEEKLY (7d) Ψ-EMA:** [${weeklyGradeEmoji} ${fidelityW.grade || '?'} grade]
 • Phase θ: ${phaseW.current?.toFixed(2) || 'N/A'}° — ${phaseW.signal || 'N/A'}
 • Anomaly z: ${anomalyW.current?.toFixed(2) || 'N/A'}σ — ${anomalyW.alert?.level || 'N/A'}
 • Convergence R: ${convergenceW.current?.toFixed(2) || 'N/A'} — ${convergenceW.regime?.label || convergenceW.regime || 'N/A'}
 • Signal: ${compositeW.action || 'HOLD'} (${compositeW.confidence || 'N/A'}%)
-• Fidelity: ${fidelityW.percent || 'N/A'}%`;
+• Data Quality: ${fidelityW.percent || 'N/A'}% fidelity`;
       } else {
         weeklySection = `
 **WEEKLY (7d) Ψ-EMA:** ⚠️ Unavailable
-Reason: ${weeklyUnavailableReason || 'Insufficient weekly data points for EMA calculation'}`;
+Reason: ${weeklyUnavailableReason || 'Insufficient weekly data (<13 bars)'}`;
       }
+      
+      // Daily fidelity grade emoji
+      const dailyGradeEmoji = { 'A': '🟢', 'B': '🟡', 'C': '🟠', 'D': '🔴' }[fidelity.grade] || '⚪';
       
       psiEmaInstruction = `
 [Ψ-EMA WAVE FUNCTION ANALYSIS - DUAL TIMEFRAME - YOU MUST INCLUDE ALL OF THIS IN YOUR RESPONSE]
 Ticker: ${ticker} | Price: ${stockData.currency || 'USD'} ${stockData.currentPrice?.toFixed(2) || 'N/A'}
 
-**DAILY (1d) Ψ-EMA:**
+**DAILY (1d) Ψ-EMA:** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade]
 • Phase θ (Cycle): ${phase.current?.toFixed(2) || 'N/A'}° — ${phase.signal || 'N/A'}
 • Anomaly z (Deviation): ${anomaly.current?.toFixed(2) || 'N/A'}σ — ${anomaly.alert?.level || 'N/A'}
 • Convergence R (Sustainability): ${convergence.current?.toFixed(2) || 'N/A'} — ${convergence.regime?.label || convergence.regime || 'N/A'}
 • Composite Signal: ${composite.action || 'HOLD'} (${composite.confidence || 'N/A'}% confidence)
-• Data Fidelity: ${fidelity.percent || 'N/A'}% (${fidelity.grade || 'N/A'})
+• Data Quality: ${fidelity.percent || 'N/A'}% fidelity
 ${weeklySection}
 ${clinicalSection}
 ${physicalAuditDisclaimer}

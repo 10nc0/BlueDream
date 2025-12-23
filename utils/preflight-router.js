@@ -149,17 +149,18 @@ async function preflightRouter(options) {
               result.psiEmaAnalysis.timeframe = 'daily';
               console.log(`📊 Preflight: Ψ-EMA daily analysis complete for ${result.ticker}`);
               
-              // Weekly analysis (need 55 bars for full EMA-55) - FRESH dashboard instance
-              if (weeklyBars >= 55 && !weeklyUnavailableReason) {
+              // Weekly analysis - run if we have any data, fidelity grade handles quality
+              // No hard gate: even 13 bars produces real θ, z, R (just lower fidelity)
+              if (weeklyBars >= 13 && !weeklyUnavailableReason) {
                 const weeklyDashboard = new PsiEMADashboard();  // Fresh instance to avoid state mutation
                 const weeklyCloses = result.stockData?.weekly?.closes || [];
                 result.psiEmaAnalysisWeekly = weeklyDashboard.analyze({ stocks: weeklyCloses });
                 result.psiEmaAnalysisWeekly.timeframe = 'weekly';
-                console.log(`📊 Preflight: Ψ-EMA weekly analysis complete for ${result.ticker}`);
-              } else {
-                result.weeklyUnavailableReason = weeklyUnavailableReason || 
-                  `Stock history: ${weeklyBars} weeks available (need 55 for full Ψ-EMA)`;
-                console.log(`⚠️ Preflight: Weekly Ψ-EMA unavailable: ${result.weeklyUnavailableReason}`);
+                const fidelityGrade = result.psiEmaAnalysisWeekly.fidelity?.grade || '?';
+                console.log(`📊 Preflight: Ψ-EMA weekly analysis complete for ${result.ticker} (fidelity: ${fidelityGrade})`);
+              } else if (weeklyUnavailableReason) {
+                console.log(`⚠️ Preflight: Weekly Ψ-EMA unavailable: ${weeklyUnavailableReason}`);
+                result.weeklyUnavailableReason = weeklyUnavailableReason;
               }
               
               // Build stock context for injection
