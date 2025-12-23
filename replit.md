@@ -37,10 +37,16 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - Stock data fetching via yfinance
     - Returns `PreflightResult` contract for downstream consumption
     - `buildSystemContext(preflight, nyanProtocol)` maps preflight to system messages
-  - **Pipeline Orchestrator** (`utils/pipeline-orchestrator.js`): State machine for AI processing (Dec 22, 2025):
-    - **6-Step State Machine**: S0(Preflight) → S1(Context Build) → S2(Reasoning) → S3(Audit) → S4(Retry) → S5(Output)
-    - **PipelineState class**: Tracks current step, preflight result, audit result, retry count, and system messages
-    - **Separation of Concerns**: NYAN=reasoning principles, Pipeline=orchestration, Routing=mode detection
+  - **Context Extractor** (`utils/context-extractor.js`): Stage -1 module for conversation-aware routing (Dec 23, 2025):
+    - Extracts entities from 8-message user window WITHOUT reasoning bleed
+    - KNOWN_COMPANIES map: 50+ company→ticker mappings (meta→META, netflix→NFLX, etc.)
+    - Returns: { entities, inferredTicker, dominantTopic, attachmentMeta, hasFinancialContext }
+    - Enables two-step conversations: "netflix price trend" → "stock price" resolves NFLX from history
+    - Context fallback only triggers with explicit stock/ticker/share keywords (prevents false positives)
+  - **Pipeline Orchestrator** (`utils/pipeline-orchestrator.js`): State machine for AI processing (Dec 23, 2025):
+    - **7-Step State Machine**: S-1(Context) → S0(Preflight) → S1(Context Build) → S2(Reasoning) → S3(Audit) → S4(Retry) → S5(Output)
+    - **PipelineState class**: Tracks current step, preflight result, context result, audit result, retry count, and system messages
+    - **Separation of Concerns**: NYAN=reasoning principles, Pipeline=orchestration, Routing=mode detection, Context=entity extraction
     - **Automatic retry**: If audit rejects, steps back to reasoning with corrections (max 2 retries)
   - **Pipeline Flow**: Preflight → Reasoning → Audit → Personality
   - **Groq-First Architecture**: Result-based routing where Groq proves competence via audit.
