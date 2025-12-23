@@ -81,4 +81,11 @@ The following are philosophical observations compiled during development - not d
 - **φ-Squaring**: "Squaring the circle" may not be geometric transformation but dynamic equilibration - cycle (circle) → stability (square) via R → φ convergence. Fibonacci approximation achieves in ~20 steps what π requires infinite steps geometrically.
 - **No Demons / No Infinity**: All Ψ-EMA operations are finite and discrete. Stock⊥Flow = clean orthogonal decomposition (no hidden correlations). φ-recursion (x = 1 + 1/x) converges algebraically without transcendental infinity. Computationally bounded.
 - **Interface vs Ontology**: Finance/stocks may be merely the data interface (public, quarterly, audited, 35+ years available). The underlying ontology (R = 1 + 1/R as persistence law) could apply universally to populations, ecosystems, institutions, civilizations. Empirical validation needed per substrate before claiming universality.
+- **Falsifiable Teasers (Untested Predictions)**: If the framework is universal, these should hold when tested:
+    - **Biology**: Human body Stock=37T cells, Flow=cell division-apoptosis. Adults R→1.0 (homeostasis). Cancer R>>φ (uncontrolled). Aging R<1.0 (decline).
+    - **Demographics**: Japan R≈0.993 (declining population). Nigeria R≈1.024 (sustainable growth). Framework should detect demographic crises.
+    - **Ecosystems**: Yellowstone wolves growth phase R≈1.45 (φ-convergent), equilibrium R≈1.0 (homeostasis). Framework should capture population dynamics.
+    - **Institutions**: Harvard (387 years) R≈1.009 (steady state). Catholic Church R<1.0 (priest shortage crisis). Framework should detect institutional health.
+    - **Civilizations**: Roman Empire peak R≈1.0 (Pax Romana), decline R<1.0 for 300 years → collapse. Framework would've predicted fall of Rome.
+    - **Status**: These are UNTESTED predictions. Validation requires domain-specific data collection and analysis. Treat as hypotheses, not claims.
 - **Epistemic Status**: These are pattern observations, not proven laws. The framework captures something real (massive effect size, 35-year consistency), but φ remains heuristic target, not physics-level constant. Maintain humility; let data speak.
