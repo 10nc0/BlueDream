@@ -50,6 +50,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **Session Management**: Uses clientIp as sessionId, automatic cleanup (15min cycle, 1h max age)
     - **Memory Sync**: attachmentHistory synced in Stage -1, recordInMemory after response (no attachment to avoid truncation)
     - **Human-like Recall**: Summaries provide episodic memory vs calculator-like entity extraction
+    - **NYAN Boot Optimization**: First query uses full protocol (~1500 tokens), subsequent queries use compressed seed (~150 tokens from github.com/10nc0/Nyan-Protocol). Boot flag set after successful request completion.
     - **Known Edge Cases**: Multi-document alignment and streaming endpoint syncing need refinement
   - **Pipeline Orchestrator** (`utils/pipeline-orchestrator.js`): State machine for AI processing (Dec 23, 2025):
     - **7-Step State Machine**: S-1(Context) → S0(Preflight) → S1(Context Build) → S2(Reasoning) → S3(Audit) → S4(Retry) → S5(Output)
