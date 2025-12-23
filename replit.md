@@ -15,14 +15,14 @@
 The system employs a Node.js backend with Express and a Single Page Application (SPA) frontend, featuring an Apple glassmorphism design and a Discord-style two-pane layout with real-time updates. The core paradigm treats financial statements as physical systems, applying conservation laws and sustainability metrics.
 
 **7-Layer Stack:**
-- **Layer 7: AI Interface** (Human interaction)
-- **Layer 6: Orchestration** (7-stage processing pipeline)
-- **Layer 5: Verification** (Audit protocol)
-- **Layer 4: Memory & Context** (Data persistence)
-- **Layer 3: Perception** (Universal ingestion)
-- **Layer 2: Measurement** (Wave function observer)
-- **Layer 1: Identity** (Compressed seed protocol)
-- **Layer 0: Invariant** (Unconditioned attractor)
+- **Layer 7: AI Interface** (playground.js - user interaction)
+- **Layer 6: Orchestration** (pipeline-orchestrator - 7-stage state machine)
+- **Layer 5: Verification** (two-pass-verification - LLM output validation)
+- **Layer 4: Memory & Context** (data-package + context-extractor - session state)
+- **Layer 3: Perception** (attachment-cascade + financial-physics - document parsing)
+- **Layer 2: Measurement** (psi-EMA - 3D financial analysis: θ, z, R)
+- **Layer 1: Identity** (nyan-protocol - system prompts + routing)
+- **Layer 0: Constants** (φ=1.618 thresholds, conservation laws)
 
 **UI/UX Decisions:**
 - **Adaptive & Responsive Design**: Resizable elements for desktop, mobile-optimized layouts, and foldable devices.
@@ -48,14 +48,18 @@ The system employs a Node.js backend with Express and a Single Page Application 
         - S5: Personality (regex cleanup, O(n) string ops, NOT an LLM call)
         - S6: Output (finalize DataPackage, store in φ-8 window)
         - **Complexity**: Best case 2 LLM calls (Reasoning + Audit), worst case 4 (with retry + re-audit). Personality is regex-based `applyPersonalityFormat()` + chunked SSE streaming via `fastStreamPersonality()`.
-    - **φ-Compressed Memory**: Episodic memory system using an 8-message sliding window with φ-compression.
-    - **DataPackage Sovereign Data Flow**: Each message carries a sovereign DataPackage (JSON container) through the pipeline. Fractal storage: Tenant (IP) → 8 message window → each message's DataPackage. Stages WRITE to package (immutable after finalize), personality layer strips fluff but NEVER alters data. Principle: "Data enters → transmutes → never hallucinates".
-    - **DataPackage Store Design**: Intentionally in-memory (φ-8 window for session context). Discord provides permanent retention; RAM provides speed. Server restart = fresh context (acceptable for conversational AI).
-- **Nyan Protocol (Permanent Seed Context)**: A protocol for historical comparison and socio-economic analysis using the Seed Metric (P/I ratio) to prevent LLM hallucinations.
+    - **Sliding Window Memory**: 8-message context window with periodic summarization (5-sentence summaries every 2nd query).
+    - **DataPackage Flow**: Each message carries a JSON container through the pipeline. Storage: IP → 8-message window → per-message package. Immutable after finalization; personality layer cleans formatting but preserves data integrity.
+    - **In-Memory Store**: Session context stored in RAM for speed. Discord provides permanent retention. Server restart clears context (acceptable for conversational AI).
+- **Nyan Protocol**: System prompt framework for historical comparison and socio-economic analysis. Uses Seed Metric (Price/Income ratio) as falsifiable threshold. Prevents LLM hallucinations via mandatory source requirements.
 - **Financial Physics System**: A 4-tier architecture extending the NYAN Protocol for financial cognition.
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis, providing a universal 7-section template.
-- **Ψ-EMA System (Financial Quantum Mechanics)**: A Multi-Dimensional Wave Function Dashboard for financial time series analysis using three orthogonal dimensions: θ (Phase), z (Anomaly), and R (Convergence). It uses Fibonacci EMA periods and φ-derived thresholds.
-    - **Financial Microbiology**: An economic pathology framework for companies, identifying "Economic Pathogens" (Ponzi Virus, Bubble Cancer, Zombie Debt Bacteria) with stage classification and a clinical report generator.
+- **Ψ-EMA System**: Multi-dimensional stock analysis dashboard using three metrics:
+    - **θ (Phase)**: arctan(ΔEMA-55/ΔEMA-34) - cycle position in 4 quadrants
+    - **z (Anomaly)**: (Price - Median) / MAD - deviation from equilibrium
+    - **R (Convergence)**: z(t)/z(t-1) - sustainability ratio (target: φ ≈ 1.618)
+    - Uses Fibonacci EMA periods (13, 21, 34, 55) for consistency.
+    - **Financial Pathology**: Pattern detection for unsustainable business models (e.g., Ponzi schemes show R >> φ, dying companies show R << 1).
 - **Unified Personality Layer**: All formatting enforced in `applyPersonalityFormat()` in `pipeline-orchestrator.js` to remove "fluff patterns" via regex post-processing.
 - **Code Execution Honesty**: AI provides code for user execution, but does not execute it itself.
 - **H₀ Physical Audit Disclaimer**: Advisory appended to financial outputs, emphasizing physical reality verification methods.
