@@ -11,6 +11,13 @@
  * S5: Personality (format final output)
  * S6: Output
  * 
+ * GROQFIRST FLOW PATTERN (not a value, a flow):
+ * - Try Groq FIRST for generation (S2)
+ * - Run audit pass to verify output (S3)
+ * - If audit PASSES → use Groq output (outcome = groqonly, not a default)
+ * - If audit FAILS → retry with search augmentation (S4), then re-audit
+ * - "groqonly" is a FLOW OUTCOME, never a hardcoded value
+ * 
  * This separates concerns:
  * - NYAN Protocol = What to think (reasoning principles)
  * - Pipeline = How to process (state machine)

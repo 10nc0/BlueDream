@@ -50,6 +50,37 @@ const COMMON_NON_TICKERS = new Set([
 // Single-letter tickers need $PREFIX to avoid false positives
 const AMBIGUOUS_SINGLE_LETTERS = new Set(['A', 'B', 'C', 'D', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']);
 
+// Common short English words that should NEVER be tickers (blocklist)
+const COMMON_SHORT_WORDS = new Set([
+  'DATA', 'INFO', 'HERE', 'THAT', 'JUST', 'SOME', 'MORE', 'LESS',
+  'MUCH', 'MANY', 'VERY', 'ALSO', 'ONLY', 'EVEN', 'LIKE', 'RANGE',
+  'GOOD', 'BEST', 'WELL', 'LAST', 'LONG', 'HIGH', 'LOW', 'NEW',
+  'OLD', 'BIG', 'HUGE', 'REAL', 'TRUE', 'FULL', 'OPEN', 'NEXT',
+  'BACK', 'OVER', 'SUCH', 'SAME', 'EACH', 'BOTH', 'MADE', 'BEEN',
+  'COME', 'CAME', 'GONE', 'DONE', 'TOOK', 'MAKE', 'TAKE', 'GIVE',
+  'GAVE', 'HELP', 'WANT', 'NEED', 'KNOW', 'KNEW', 'LOOK', 'WORK',
+  'YEAR', 'WEEK', 'DAYS', 'TIME', 'LIFE', 'PART', 'CASE', 'IDEA',
+  'FACT', 'FEEL', 'SAID', 'SAYS', 'TELL', 'TOLD', 'KEEP', 'KEPT',
+  'CALL', 'FIND', 'FOUND', 'TALK', 'TURN', 'MOVE', 'LIVE', 'ABLE',
+  'SHOW', 'SHOWS', 'VIEW', 'VIEWS', 'FETCH', 'PULL', 'PUSH', 'PLAN',
+  'GOAL', 'TEST', 'TASK', 'ITEM', 'FILE', 'PAGE', 'SITE', 'CODE'
+]);
+
+// ========================================
+// PUSH → PUSH → AUTHENTICATE PATTERN
+// ========================================
+// 1. PUSH verb key (if found)
+// 2. PUSH adjective key (if found)
+// 3. PUSH ticker key (if valid capitalized ticker found)
+// 4. AUTHENTICATE: 2/3 keys + ticker required → unlock gate
+// 
+// TICKER PRIORITY ($format is highest confidence):
+// Priority 1: $TICKER format (like $NVDA) - BYPASS all blocklists
+// Priority 2: ALL-CAPS (like NVDA) - checked against blocklists
+// Priority 3: Titlecase (like Nvda) - checked against blocklists
+// Priority 4: lowercase - NEVER accepted (signals no intent)
+// ========================================
+
 /**
  * Detect potential stock ticker (KEY 3: OBJECT)
  * STRICT: Only accepts $TICKER, ALL-CAPS, or Titlecase (not lowercase)
@@ -134,29 +165,22 @@ function detectPsiEMAKeys(query) {
   
   // 2/3 keys → unlock Ψ-EMA gate
   // BUT require at least one key to be an OBJECT (ticker) to prevent false positives
-  // "show me chart" = verb + adj = 2 keys but NO ticker → should NOT trigger
+  // "show me chart" = verb + adj = 2 keys but NO ticker → LIMBO JUNK (non-negotiable)
   const hasTickerKey = keys.some(k => k.type === 'object');
   const shouldTrigger = keys.length >= 2 && hasTickerKey;
   
-  console.log(`🔑 Ψ-EMA Keys: [${keys.map(k => `${k.type}:${k.value}`).join(', ')}] → ${shouldTrigger ? '✅ UNLOCK' : '❌ locked'}`);
+  // Log with helpful $format hint for limbo junk cases
+  if (shouldTrigger) {
+    console.log(`🔑 Ψ-EMA Keys: [${keys.map(k => `${k.type}:${k.value}`).join(', ')}] → ✅ UNLOCK`);
+  } else if (keys.length >= 1 && !hasTickerKey) {
+    // Has verb/adj but no ticker → limbo junk
+    console.log(`🔑 Ψ-EMA Keys: [${keys.map(k => `${k.type}:${k.value}`).join(', ')}] → ❌ LIMBO JUNK (no ticker - try $TICKER format like $NVDA)`);
+  } else {
+    console.log(`🔑 Ψ-EMA Keys: [${keys.map(k => `${k.type}:${k.value}`).join(', ')}] → ❌ locked`);
+  }
   
   return { keys, ticker, shouldTrigger };
 }
-
-// Common short English words that should NEVER be tickers
-const COMMON_SHORT_WORDS = new Set([
-  'DATA', 'INFO', 'HERE', 'THAT', 'JUST', 'SOME', 'MORE', 'LESS',
-  'MUCH', 'MANY', 'VERY', 'ALSO', 'ONLY', 'EVEN', 'JUST', 'LIKE',
-  'GOOD', 'BEST', 'WELL', 'LAST', 'LONG', 'HIGH', 'LOW', 'NEW',
-  'OLD', 'BIG', 'HUGE', 'REAL', 'TRUE', 'FULL', 'OPEN', 'NEXT',
-  'BACK', 'OVER', 'SUCH', 'SAME', 'EACH', 'BOTH', 'MADE', 'BEEN',
-  'COME', 'CAME', 'GONE', 'DONE', 'TOOK', 'MAKE', 'TAKE', 'GIVE',
-  'GAVE', 'HELP', 'WANT', 'NEED', 'KNOW', 'KNEW', 'LOOK', 'WORK',
-  'YEAR', 'WEEK', 'DAYS', 'TIME', 'LIFE', 'PART', 'CASE', 'IDEA',
-  'FACT', 'FEEL', 'SAID', 'SAYS', 'TELL', 'TOLD', 'KEEP', 'KEPT',
-  'CALL', 'FIND', 'FOUND', 'TALK', 'TURN', 'MOVE', 'LIVE', 'ABLE',
-  'SHOW', 'SHOWS', 'VIEW', 'VIEWS', 'FETCH', 'PULL', 'PUSH'
-]);
 
 /**
  * Detect potential ticker WITH strong context (verb + adjective present)
