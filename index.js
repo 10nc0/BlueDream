@@ -1687,7 +1687,14 @@ app.post('/api/auth/signup', async (req, res) => {
             // FIRST PRINCIPLES: Genesis admin should NEVER be blocked by rate limits
             // Only apply sybil/rate limit checks for non-genesis signups
             if (!isFirstUser) {
-                // Check Sybil attack prevention
+                // FAST CHECK: In-memory rate limiting (no database query)
+                const fastCheck = tenantManager.checkSignupRateLimit(req.ip, email);
+                if (!fastCheck.allowed) {
+                    console.log(`[${getTimestamp()}] 🚫 Rate limit blocked (in-memory) - Email: ${email}, Reason: ${fastCheck.reason}`);
+                    return res.status(429).json({ error: fastCheck.reason });
+                }
+                
+                // Check Sybil attack prevention (database-backed for persistence)
                 const sybilCheck = await tenantManager.checkSybilRisk(email, req.ip);
                 if (!sybilCheck.allowed) {
                     console.log(`[${getTimestamp()}] 🚫 Sybil protection blocked - Email: ${email}, Reason: ${sybilCheck.reason}`);
@@ -1740,6 +1747,7 @@ app.post('/api/auth/signup', async (req, res) => {
             // Record tenant creation for Sybil tracking (non-blocking - don't fail signup if this fails)
             try {
                 await tenantManager.recordTenantCreation(email, req.ip);
+                tenantManager.recordSuccessfulSignup(req.ip, email);
             } catch (analyticsError) {
                 console.error('⚠️ Analytics recording failed (non-critical):', analyticsError.message);
             }

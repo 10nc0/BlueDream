@@ -1,7 +1,123 @@
 // Tenant Manager - Multi-tenant schema management
+const crypto = require('crypto');
+
+// Sybil Rate Limiter - In-memory tracking for signup abuse prevention
+const RATE_LIMITS = {
+    IP_PER_HOUR: 3,
+    IP_PER_DAY: 5,
+    DOMAIN_PER_DAY: 10
+};
+
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+    'tempmail.com', 'throwaway.email', '10minutemail.com', 'guerrillamail.com',
+    'mailinator.com', 'yopmail.com', 'temp-mail.org', 'fakeinbox.com',
+    'getnada.com', 'burnermail.io', 'discard.email', 'sharklasers.com'
+]);
+
+class SybilRateLimiter {
+    constructor() {
+        this.ipHourly = new Map();
+        this.ipDaily = new Map();
+        this.domainDaily = new Map();
+        this.cleanupInterval = setInterval(() => this.cleanup(), 60000);
+    }
+    
+    cleanup() {
+        const now = Date.now();
+        const hourAgo = now - 3600000;
+        const dayAgo = now - 86400000;
+        
+        for (const [key, data] of this.ipHourly) {
+            if (data.timestamp < hourAgo) this.ipHourly.delete(key);
+        }
+        for (const [key, data] of this.ipDaily) {
+            if (data.timestamp < dayAgo) this.ipDaily.delete(key);
+        }
+        for (const [key, data] of this.domainDaily) {
+            if (data.timestamp < dayAgo) this.domainDaily.delete(key);
+        }
+    }
+    
+    hashKey(value) {
+        return crypto.createHash('sha256').update(value).digest('hex').slice(0, 16);
+    }
+    
+    extractDomain(email) {
+        const parts = email.toLowerCase().split('@');
+        return parts.length === 2 ? parts[1] : null;
+    }
+    
+    checkRateLimit(ip, email) {
+        const now = Date.now();
+        const hourAgo = now - 3600000;
+        const dayAgo = now - 86400000;
+        const ipHash = this.hashKey(ip);
+        const domain = this.extractDomain(email);
+        
+        if (domain && DISPOSABLE_EMAIL_DOMAINS.has(domain)) {
+            return { allowed: false, reason: 'Disposable email domains are not allowed' };
+        }
+        
+        const ipHourData = this.ipHourly.get(ipHash);
+        if (ipHourData && ipHourData.timestamp > hourAgo && ipHourData.count >= RATE_LIMITS.IP_PER_HOUR) {
+            return { allowed: false, reason: 'Rate limit exceeded: too many signups from this IP (hourly)' };
+        }
+        
+        const ipDayData = this.ipDaily.get(ipHash);
+        if (ipDayData && ipDayData.timestamp > dayAgo && ipDayData.count >= RATE_LIMITS.IP_PER_DAY) {
+            return { allowed: false, reason: 'Rate limit exceeded: too many signups from this IP (daily)' };
+        }
+        
+        if (domain) {
+            const domainHash = this.hashKey(domain);
+            const domainData = this.domainDaily.get(domainHash);
+            if (domainData && domainData.timestamp > dayAgo && domainData.count >= RATE_LIMITS.DOMAIN_PER_DAY) {
+                return { allowed: false, reason: 'Rate limit exceeded: too many signups from this email domain' };
+            }
+        }
+        
+        return { allowed: true };
+    }
+    
+    recordSignup(ip, email) {
+        const now = Date.now();
+        const ipHash = this.hashKey(ip);
+        const domain = this.extractDomain(email);
+        
+        const ipHour = this.ipHourly.get(ipHash) || { count: 0, timestamp: now };
+        ipHour.count++;
+        ipHour.timestamp = now;
+        this.ipHourly.set(ipHash, ipHour);
+        
+        const ipDay = this.ipDaily.get(ipHash) || { count: 0, timestamp: now };
+        ipDay.count++;
+        ipDay.timestamp = now;
+        this.ipDaily.set(ipHash, ipDay);
+        
+        if (domain) {
+            const domainHash = this.hashKey(domain);
+            const domainDay = this.domainDaily.get(domainHash) || { count: 0, timestamp: now };
+            domainDay.count++;
+            domainDay.timestamp = now;
+            this.domainDaily.set(domainHash, domainDay);
+        }
+    }
+}
+
+const sybilLimiter = new SybilRateLimiter();
+
 class TenantManager {
     constructor(pool) {
         this.pool = pool;
+        this.rateLimiter = sybilLimiter;
+    }
+    
+    checkSignupRateLimit(ip, email) {
+        return this.rateLimiter.checkRateLimit(ip, email);
+    }
+    
+    recordSuccessfulSignup(ip, email) {
+        this.rateLimiter.recordSignup(ip, email);
     }
 
     async initializeCoreSchema() {

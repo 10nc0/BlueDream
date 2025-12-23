@@ -407,6 +407,26 @@ Write the summary as natural prose, not a list. Focus on what a helpful assistan
 }
 
 const sessionMemories = new Map();
+const SESSION_TTL_MS = 60 * 60 * 1000;
+
+setInterval(() => {
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [sessionId, manager] of sessionMemories) {
+    const lastActivity = Math.max(
+      manager.lastSummaryTime || 0,
+      ...manager.messages.map(m => m.timestamp || 0),
+      0
+    );
+    if (lastActivity > 0 && now - lastActivity > SESSION_TTL_MS) {
+      sessionMemories.delete(sessionId);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`🧹 Auto-cleaned ${cleaned} expired memory sessions (TTL: ${SESSION_TTL_MS / 60000} min)`);
+  }
+}, 5 * 60 * 1000);
 
 /**
  * Get or create memory manager for a session
