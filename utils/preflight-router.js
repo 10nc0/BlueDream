@@ -303,9 +303,12 @@ ${fundParts.map(p => `- ${p}`).join('\n')}`;
 ### COMPOSITE SIGNAL: ${action}
 ${tetralemmaAlert}
 
-### CONFIDENCE BREAKDOWN:
-- **Signal Confidence**: ${typeof confidence === 'number' ? confidence : 'N/A'}% (analytical conviction based on phase/anomaly/convergence alignment)
-- **Data Fidelity**: ${fidelity.percent || 'N/A'}% real data (Grade ${fidelity.grade || 'N/A'}) — separate quality metric, NOT multiplied into confidence
+### CONFIDENCE BREAKDOWN (Ψ-EMA Market Analysis):
+- **Signal Confidence**: ${typeof confidence === 'number' ? confidence : 'N/A'}% (market conviction from phase/anomaly/convergence alignment)
+- **Data Fidelity**: ${fidelity.percent || 'N/A'}% real data (Grade ${fidelity.grade || 'N/A'})
+
+**NOTE FOR NYAN AI**: Your response confidence will be assessed separately via audit verification (not combined with signal confidence above). Report signal confidence as stated above; your confidence in your answer is tracked independently.
+
 ${fundamentalsSection}
 
 ⚠️ IMPORTANT: Always include data timestamp in financial claims. Undated prices = unverifiable.

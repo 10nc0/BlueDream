@@ -370,11 +370,17 @@ ${priceHeader}${edgarSection}
 • Phase θ (Cycle): ${phase.current?.toFixed(2) || 'N/A'}° — ${phase.signal || 'N/A'}
 • Anomaly z (Deviation): ${anomaly.current?.toFixed(2) || 'N/A'}σ — ${anomaly.alert?.level || 'N/A'}
 • Convergence R (Sustainability): ${convergence.current?.toFixed(2) || 'N/A'} — ${convergence.regime?.label || convergence.regime || 'N/A'}
-• Composite Signal: ${composite.action || 'HOLD'} (${composite.confidence || 'N/A'}% confidence)
+• Composite Signal: ${composite.action || 'HOLD'} (${composite.confidence || 'N/A'}% signal confidence)
 • Data Quality: ${fidelity.percent || 'N/A'}% fidelity
 ${weeklySection}
 ${clinicalSection}
 ${physicalAuditDisclaimer}
+
+CONFIDENCE SEMANTICS (CRITICAL):
+- "Signal Confidence" = Market conviction from Ψ-EMA dimensions (shown above)
+- "Response Confidence" = Your confidence in this answer (assessed separately via audit)
+DO NOT compute or display a combined/multiplied confidence. Keep both metrics independent.
+DO NOT invent confidence numbers. Use only what is provided above or calculated independently.
 
 INSTRUCTION: Present BOTH Daily and Weekly Ψ-EMA analysis with all three dimensions (Phase θ, Anomaly z, Convergence R). Include clinical diagnosis AND physical audit disclaimer. End with 🔥 ~nyan.
 `;
