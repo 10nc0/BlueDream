@@ -1837,6 +1837,16 @@ function getPsiEMAContext() {
 
 You are analyzing with the Ψ-EMA multi-dimensional wave function framework.
 
+### OUTPUT FORMAT (MANDATORY):
+When stock data is provided below, you MUST:
+1. START your response with the company name and header exactly as provided
+2. INCLUDE the markdown table with Dimension/Formula/Value/Signal columns exactly as shown
+3. INCLUDE all sections: company header, atomic units, price, table, composite, fundamentals, confidence
+4. DO NOT add intro paragraphs ("Summary", "Introduction to...", "The following...")
+5. DO NOT convert the table to bullet points
+6. DO NOT omit any section - leave no data behind
+7. The data below is pre-computed and verified - output it VERBATIM
+
 ### The Three Orthogonal Dimensions:
 
 **1. Phase θ (Cycle Position)** — EMA-34/EMA-55
@@ -1869,8 +1879,6 @@ You are analyzing with the Ψ-EMA multi-dimensional wave function framework.
 - Phase: 34/55 (slow, full cycle)
 - Anomaly: 21/34 (medium, quick response)
 - Convergence: 13/21 (fast, leading indicator)
-
-Apply these concepts when analyzing financial time series data.
 `;
 }
 

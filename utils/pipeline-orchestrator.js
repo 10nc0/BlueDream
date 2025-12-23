@@ -646,16 +646,19 @@ User query: ${query}`;
     
     // INTRO FLUFF: Remove generic intro paragraphs (case-insensitive)
     const introFluffPatterns = [
-      /^##?\s*Summary[^\n]*\n+[^\n]*(?:comprehensive|detailed|provides)[^\n]*\n+/i,
+      /^##?\s*Summary[^\n]*\n+[^\n]*(?:comprehensive|detailed|provides|uncertain)[^\n]*\n+/i,
       /^##?\s*Summary[^\n]*\n+[^\n]*following[^\n]*\n+/i,
       /^##?\s*Summary\s*\n+[^\n]+\n+/i,
       /^##?\s*Summary\s*\n+/i,
-      /^(?:A |The )?(?:comprehensive|detailed) (?:analysis|view|overview) of[^\n]*\n+/i,
-      /^The following (?:is|provides)[^\n]*\n+/i,
+      /^##?\s*Introduction to[^\n]*\n+(?:[^\n]+\n+)?/i,
+      /^(?:A |The )?(?:comprehensive|detailed|current) (?:analysis|view|overview|price trend) of[^\n]*\n+/i,
+      /^The (?:following|current|NVDA|stock)[^\n]*(?:is|can be|provides)[^\n]*\n+/i,
       /^Here (?:is|are)[^\n]*analysis[^\n]*\n+/i,
       /^Let me provide[^\n]*\n+/i,
       /^I'll analyze[^\n]*\n+/i,
       /^This analysis provides[^\n]*\n+/i,
+      /^To analyze[^\n]*\n+/i,
+      /^As of my knowledge[^\n]*\n+/i,
     ];
     
     for (const pattern of introFluffPatterns) {

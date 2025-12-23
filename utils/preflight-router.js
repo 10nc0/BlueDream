@@ -439,8 +439,8 @@ ${fundParts.map(p => `- ${p}`).join('\n')}`;
   const fidelityGrade = fidelity.grade || 'N/A';
   const confidenceLine = `**${fidelityPct}%** (${fidelityGrade}) → yfinance prices + SEC EDGAR fundamentals`;
   
-  return `
-${companyHeader}
+  // Return ONLY the data - instructions are handled separately in getPsiEMAContext()
+  return `${companyHeader}
 **Ψ-EMA**: θ = cycle position, z = price deviation, R = momentum sustainability. Alignment = conviction; conflict = caution.
 
 **Price**: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} (${ageFlag} ${dataAge?.timestamp})
@@ -457,7 +457,8 @@ ${tetralemmaAlert}
 ${fundamentalsSection}
 
 **Confidence**: ${confidenceLine}
-`;
+
+🔥 ~nyan`;
 }
 
 /**
