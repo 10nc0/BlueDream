@@ -143,14 +143,27 @@ async function preflightRouter(options) {
       const hasContextTicker = contextResult?.inferredTicker;
       const hasExplicitStockKeyword = /\b(stock|stocks|ticker|share|shares|price|prices)\b/i.test(query);
       const hasVerbOrAdjective = psiEmaDetection.keys.some(k => k.type === 'verb' || k.type === 'adjective');
+      const hasVerb = psiEmaDetection.keys.some(k => k.type === 'verb');
+      const hasAdjective = psiEmaDetection.keys.some(k => k.type === 'adjective');
       const contextFallbackApplies = hasContextTicker && hasExplicitStockKeyword && hasVerbOrAdjective;
+      
+      // LIMBO JUNK RESCUE: If verb + adjective detected but no ticker,
+      // try AI ticker extraction before giving up (handles lowercase tickers like "nvda")
+      let aiRescuedTicker = null;
+      if (!psiEmaDetection.shouldTrigger && hasVerb && hasAdjective && !psiEmaDetection.ticker) {
+        console.log(`🔧 Preflight: LIMBO JUNK rescue - trying AI ticker extraction...`);
+        aiRescuedTicker = await smartDetectTicker(query);
+        if (aiRescuedTicker) {
+          console.log(`✅ Preflight: AI rescued ticker: ${aiRescuedTicker}`);
+        }
+      }
     
-      if (psiEmaDetection.shouldTrigger || contextFallbackApplies) {
+      if (psiEmaDetection.shouldTrigger || contextFallbackApplies || aiRescuedTicker) {
         result.mode = 'psi-ema';
         result.routingFlags.usesPsiEMA = true;
         
-        // Use ticker from key detection, or fall back to AI/context
-        result.ticker = psiEmaDetection.ticker || await smartDetectTicker(query);
+        // Use ticker from key detection, AI rescue, or context
+        result.ticker = psiEmaDetection.ticker || aiRescuedTicker || await smartDetectTicker(query);
         
         // If no ticker from current query, use context-inferred ticker
         if (!result.ticker && contextResult?.inferredTicker) {
