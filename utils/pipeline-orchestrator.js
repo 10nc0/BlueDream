@@ -23,6 +23,7 @@ const { extractContext, extractContextWithMemory, mergeContextForTickerDetection
 const { NYAN_PROTOCOL_SYSTEM_PROMPT, NYAN_PROTOCOL_COMPRESSED } = require('../prompts/nyan-protocol');
 const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
+const { detectPathogens, generateClinicalReport } = require('./psi-EMA');
 
 const PIPELINE_STEPS = {
   CONTEXT_EXTRACT: 'S-1',
@@ -279,6 +280,32 @@ class PipelineOrchestrator {
       const composite = analysis.compositeSignal || {};
       const fidelity = analysis.fidelity || {};
       
+      // Financial Microbiology: Clinical pathology report (Dec 23, 2025)
+      const pathogenResult = detectPathogens(analysis);
+      const clinicalReport = generateClinicalReport(analysis, ticker);
+      
+      // Build clinical section if pathogens detected or unhealthy
+      let clinicalSection = '';
+      if (!pathogenResult.healthy) {
+        clinicalSection = `
+[FINANCIAL MICROBIOLOGY - PATHOLOGY REPORT]
+PATIENT: ${ticker}
+DIAGNOSIS: ${clinicalReport.diagnosis.emoji} ${clinicalReport.diagnosis.primary}
+VITAL SIGNS: R=${clinicalReport.vitalSigns.R_ratio.value}, z=${clinicalReport.vitalSigns.z_score.value}σ
+MICROSCOPY: ${clinicalReport.pathology.microscopy}
+PROGNOSIS: ${clinicalReport.prognosis}
+TREATMENT: ${clinicalReport.treatment}
+
+INSTRUCTION: Present this as a CLINICAL PATHOLOGY REPORT. Use medical/pharmaceutical language (pathogen, treatment, prognosis).
+`;
+      } else {
+        clinicalSection = `
+[FINANCIAL HEALTH STATUS]
+DIAGNOSIS: ${clinicalReport.diagnosis.emoji} ${clinicalReport.diagnosis.primary}
+STATUS: Patient shows healthy φ-convergence. Conservation laws intact.
+`;
+      }
+      
       psiEmaInstruction = `
 [Ψ-EMA WAVE FUNCTION ANALYSIS - YOU MUST INCLUDE ALL OF THIS IN YOUR RESPONSE]
 Ticker: ${ticker} | Price: ${stockData.currency || 'USD'} ${stockData.currentPrice?.toFixed(2) || 'N/A'}
@@ -287,10 +314,10 @@ Ticker: ${ticker} | Price: ${stockData.currency || 'USD'} ${stockData.currentPri
 • Convergence R (Sustainability): ${convergence.current?.toFixed(2) || 'N/A'} — ${convergence.regime?.label || convergence.regime || 'N/A'}
 • Composite Signal: ${composite.action || 'HOLD'} (${composite.confidence || 'N/A'}% confidence)
 • Data Fidelity: ${fidelity.percent || 'N/A'}% (${fidelity.grade || 'N/A'})
-
-INSTRUCTION: Present ALL three dimensions (Phase θ, Anomaly z, Convergence R) with their exact values. End with 🔥 ~nyan.
+${clinicalSection}
+INSTRUCTION: Present ALL three dimensions (Phase θ, Anomaly z, Convergence R) with their exact values. Include clinical diagnosis. End with 🔥 ~nyan.
 `;
-      console.log(`📊 Ψ-EMA instruction injected for ${ticker}`);
+      console.log(`📊 Ψ-EMA instruction injected for ${ticker} (${pathogenResult.healthy ? 'healthy' : clinicalReport.diagnosis.primary})`);
     }
     
     if (hasAttachments && hasSearch) {

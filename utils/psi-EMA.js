@@ -1095,6 +1095,226 @@ function detectPhiSquaredRenewal(stocks, convergenceR = null) {
 }
 
 // ============================================================================
+// PART 6.5: FINANCIAL MICROBIOLOGY (Pathogen Detection & Clinical Reports)
+// ============================================================================
+// "Economic microbiology is what happens when we actually LOOK."
+// LOL = Ledger Observation Laboratory
+
+/**
+ * Economic Pathogen Thresholds
+ * Based on Financial Microbiology framework (Dec 23, 2025)
+ */
+const PATHOGENS = {
+  PONZI_VIRUS: {
+    name: 'Ponzi Virus',
+    emoji: '🦠',
+    detection: 'R >> φ (unsustainable acceleration)',
+    thresholds: { R_min: 2.5, sustained_periods: 3 },
+    mechanism: 'New capital feeds old obligations',
+    symptoms: 'Income solely from new investors, no real revenue',
+    treatment: 'Immediate quarantine (stop new investment)',
+    prognosis: '100% fatal if untreated'
+  },
+  BUBBLE_CANCER: {
+    name: 'Bubble Cancer',
+    emoji: '🎈',
+    detection: 'z > +3σ AND R > 2.0 sustained',
+    thresholds: { z_min: 3.0, R_min: 2.0, sustained_periods: 3 },
+    mechanism: 'Unchecked exponential growth',
+    symptoms: 'Price disconnected from fundamentals',
+    treatment: 'None (crash inevitable)',
+    prognosis: 'Metastasizes to healthy sectors'
+  },
+  ZOMBIE_DEBT: {
+    name: 'Zombie Debt Bacteria',
+    emoji: '🧟',
+    detection: 'Debt service ratio > 1.0',
+    thresholds: { debt_service_ratio: 1.0 },
+    mechanism: 'Interest > income capacity',
+    symptoms: 'Borrowing to pay interest',
+    treatment: 'Restructuring or bankruptcy',
+    prognosis: 'Slow death, spreads to creditors'
+  }
+};
+
+/**
+ * Stage Classification (like cancer staging)
+ */
+const STAGES = {
+  I: { label: 'Stage I', description: 'Early detection, localized', prognosis: 'Excellent if treated', actionWindow: 'Wide' },
+  II: { label: 'Stage II', description: 'Moderate spread, contained', prognosis: 'Good with intervention', actionWindow: 'Moderate' },
+  III: { label: 'Stage III', description: 'Significant progression', prognosis: 'Guarded, requires aggressive treatment', actionWindow: 'Narrow' },
+  IV: { label: 'Stage IV', description: 'Terminal, systemic failure', prognosis: 'Poor, palliative care recommended', actionWindow: 'Closed' }
+};
+
+/**
+ * Detect economic pathogens from Ψ-EMA readings
+ * @param {Object} analysis - Ψ-EMA analysis result
+ * @returns {Object} Pathogen detection results
+ */
+function detectPathogens(analysis) {
+  const detected = [];
+  const { anomaly, convergence } = analysis.dimensions || {};
+  
+  if (!anomaly || !convergence) {
+    return { detected: [], healthy: true, diagnosis: 'INSUFFICIENT_DATA' };
+  }
+  
+  const currentZ = anomaly.current || 0;
+  const currentR = convergence.current || PHI;
+  const regime = convergence.regime?.regime || 'UNKNOWN';
+  
+  // Check for Ponzi Virus: R >> φ (R > 2.5)
+  if (currentR > PATHOGENS.PONZI_VIRUS.thresholds.R_min) {
+    const severity = (currentR - 2.5) / 1.5; // 0-1 scale above threshold
+    detected.push({
+      ...PATHOGENS.PONZI_VIRUS,
+      severity: Math.min(1, severity),
+      stage: classifyStage(severity, 'ponzi'),
+      currentR: currentR.toFixed(3),
+      deviation: `R = ${currentR.toFixed(2)} (threshold: 2.5)`
+    });
+  }
+  
+  // Check for Bubble Cancer: z > +3σ AND R > 2.0
+  if (Math.abs(currentZ) > PATHOGENS.BUBBLE_CANCER.thresholds.z_min && 
+      currentR > PATHOGENS.BUBBLE_CANCER.thresholds.R_min) {
+    const severity = (Math.abs(currentZ) - 3) / 2; // 0-1 scale above threshold
+    detected.push({
+      ...PATHOGENS.BUBBLE_CANCER,
+      severity: Math.min(1, severity),
+      stage: classifyStage(severity, 'bubble'),
+      currentZ: currentZ.toFixed(3),
+      currentR: currentR.toFixed(3),
+      deviation: `z = ${currentZ.toFixed(2)}σ, R = ${currentR.toFixed(2)}`
+    });
+  }
+  
+  // Sub-Critical decay (not a pathogen, but a warning sign)
+  const isDecaying = regime === 'SUB_CRITICAL' && currentR < 1.0;
+  
+  return {
+    detected,
+    healthy: detected.length === 0 && !isDecaying,
+    decaying: isDecaying,
+    diagnosis: detected.length > 0 
+      ? detected.map(p => `${p.emoji} ${p.name}`).join(' + ')
+      : isDecaying ? '⚠️ System Decay (Sub-Critical)' : '✅ Healthy (φ-Converged)',
+    pathogens: detected,
+    vitalSigns: {
+      R_ratio: currentR,
+      z_score: currentZ,
+      regime: regime
+    }
+  };
+}
+
+/**
+ * Classify disease stage based on severity
+ * @param {number} severity - 0-1 severity score
+ * @param {string} type - Pathogen type
+ * @returns {Object} Stage classification
+ */
+function classifyStage(severity, type) {
+  if (severity < 0.25) {
+    return { ...STAGES.I, roman: 'I', numeric: 1 };
+  } else if (severity < 0.5) {
+    return { ...STAGES.II, roman: 'II', numeric: 2 };
+  } else if (severity < 0.75) {
+    return { ...STAGES.III, roman: 'III', numeric: 3 };
+  } else {
+    return { ...STAGES.IV, roman: 'IV', numeric: 4 };
+  }
+}
+
+/**
+ * Generate clinical pathology report
+ * @param {Object} analysis - Complete Ψ-EMA analysis
+ * @param {string} patientName - Company/asset name
+ * @returns {Object} Clinical report in pathology format
+ */
+function generateClinicalReport(analysis, patientName = 'UNKNOWN') {
+  const pathogenResult = detectPathogens(analysis);
+  const { anomaly, convergence, phase } = analysis.dimensions || {};
+  
+  // Vital Signs
+  const vitalSigns = {
+    R_ratio: {
+      value: convergence?.current?.toFixed(3) || 'N/A',
+      reference: '1.3-2.0 (φ-zone)',
+      status: convergence?.regime?.regime || 'UNKNOWN'
+    },
+    z_score: {
+      value: anomaly?.current?.toFixed(2) || 'N/A',
+      reference: '±2σ normal',
+      status: anomaly?.alert?.level || 'UNKNOWN'
+    },
+    phase_theta: {
+      value: phase?.currentPhase?.toFixed(3) || 'N/A',
+      reference: 'normalized cycle',
+      status: phase?.crossover?.type || 'UNKNOWN'
+    }
+  };
+  
+  // Diagnosis
+  let diagnosis, diagnosisEmoji;
+  if (pathogenResult.detected.length > 0) {
+    const primary = pathogenResult.detected[0];
+    diagnosis = `${primary.name} (${primary.stage.label})`;
+    diagnosisEmoji = primary.emoji;
+  } else if (pathogenResult.decaying) {
+    diagnosis = 'System Decay (Sub-Critical)';
+    diagnosisEmoji = '🔵';
+  } else {
+    diagnosis = 'Healthy (φ-Converged)';
+    diagnosisEmoji = '🟢';
+  }
+  
+  // Prognosis
+  const prognosis = pathogenResult.detected.length > 0
+    ? pathogenResult.detected[0].prognosis
+    : pathogenResult.decaying 
+      ? 'Requires intervention to restore momentum'
+      : 'Sustainable trajectory within φ-band';
+  
+  // Treatment recommendation
+  const treatment = pathogenResult.detected.length > 0
+    ? pathogenResult.detected[0].treatment
+    : pathogenResult.decaying
+      ? 'Investigate structural causes of decline'
+      : 'Maintain current trajectory, monitor for deviation';
+  
+  return {
+    patient: patientName,
+    admission: new Date().toISOString().split('T')[0],
+    complaint: analysis.summary?.compositeSignal || 'Routine Examination',
+    
+    vitalSigns,
+    
+    diagnosis: {
+      primary: diagnosis,
+      emoji: diagnosisEmoji,
+      pathogens: pathogenResult.pathogens,
+      stage: pathogenResult.detected[0]?.stage || null
+    },
+    
+    pathology: {
+      microscopy: `z = ${anomaly?.current?.toFixed(2) || 'N/A'}σ, R = ${convergence?.current?.toFixed(3) || 'N/A'}`,
+      phase: `θ = ${phase?.currentPhase?.toFixed(3) || 'N/A'} (${phase?.crossover?.type || 'N/A'})`,
+      conservation: convergence?.regime?.regime === 'CRITICAL' ? 'Intact' : 'Under stress'
+    },
+    
+    prognosis,
+    treatment,
+    
+    outcome: pathogenResult.healthy ? 'STABLE' : 'INTERVENTION_REQUIRED',
+    
+    // For AI prompt injection
+    clinicalSummary: `PATIENT: ${patientName} | DIAGNOSIS: ${diagnosisEmoji} ${diagnosis} | VITALS: R=${vitalSigns.R_ratio.value}, z=${vitalSigns.z_score.value}σ | PROGNOSIS: ${prognosis}`
+  };
+}
+
+// ============================================================================
 // PART 7: Ψ-EMA DASHBOARD (Complete Analysis)
 // ============================================================================
 
@@ -1203,6 +1423,36 @@ class PsiEMADashboard {
         phi_elements: 'symbolic_overlay — not empirical law',
         composite: 'weighted_multi_factor_signal',
         overall: 'composite_technical_framework'
+      }
+    };
+  }
+  
+  /**
+   * Analyze with clinical pathology report
+   * Financial Microbiology extension (Dec 23, 2025)
+   * @param {Object} data - Financial data
+   * @param {string} patientName - Company/asset name for report
+   * @returns {Object} Complete analysis with clinical report
+   */
+  analyzeWithClinical(data, patientName = 'UNKNOWN') {
+    const analysis = this.analyze(data);
+    if (analysis.error) return analysis;
+    
+    // Generate clinical report
+    const clinicalReport = generateClinicalReport(analysis, patientName);
+    
+    // Add clinical section to analysis
+    return {
+      ...analysis,
+      clinical: clinicalReport,
+      
+      // Update summary with pathology diagnosis
+      summary: {
+        ...analysis.summary,
+        diagnosis: clinicalReport.diagnosis.primary,
+        diagnosisEmoji: clinicalReport.diagnosis.emoji,
+        prognosis: clinicalReport.prognosis,
+        treatment: clinicalReport.treatment
       }
     };
   }
@@ -1532,6 +1782,13 @@ module.exports = {
   median,
   robustZScore,
   THRESHOLDS_SIGMA,  // Legacy σ-based thresholds
+  
+  // Financial Microbiology (Dec 23, 2025)
+  PATHOGENS,
+  STAGES,
+  detectPathogens,
+  classifyStage,
+  generateClinicalReport,
   
   // Main dashboard class
   PsiEMADashboard,

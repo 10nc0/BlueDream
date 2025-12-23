@@ -42,6 +42,15 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Financial Physics System**: A 4-tier architecture for financial cognition, extending the NYAN Protocol.
 - **Legal Document Analysis System**: Stage 1+ extension for contract/agreement analysis, auto-triggered by legal keywords, providing a universal 7-section template.
 - **Ψ-EMA System**: Multi-Dimensional Wave Function Dashboard implementing Financial Quantum Mechanics. It analyzes financial time series using three orthogonal dimensions (Phase θ, Anomaly z, Convergence R) with Fibonacci EMA periods. It includes real-time stock integration using yfinance for historical prices and SEC EDGAR for fundamental metrics, with smart and three-tier ticker detection.
+- **Financial Microbiology** (Dec 23, 2025): Economic pathology framework treating companies as organisms:
+    - **Economic Pathogens**:
+      - 🦠 **Ponzi Virus**: R > 2.5 (unsustainable acceleration, new capital feeds old obligations)
+      - 🎈 **Bubble Cancer**: z > +3σ AND R > 2.0 (unchecked exponential growth, price disconnected from fundamentals)
+      - 🧟 **Zombie Debt Bacteria**: Debt service ratio > 1.0 (interest exceeds income capacity)
+    - **Stage Classification**: Stage I-IV based on severity (like cancer staging)
+    - **Clinical Report Generator**: Produces pathology-style reports with Patient, Vital Signs, Diagnosis, Microscopy, Prognosis, Treatment
+    - **Pipeline Integration**: AI responses use medical/pharmaceutical language when pathogens detected
+    - **LOL = Ledger Observation Laboratory**: "Economic microbiology is what happens when we actually LOOK."
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.
