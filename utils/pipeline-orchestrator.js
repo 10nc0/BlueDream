@@ -642,22 +642,34 @@ User query: ${query}`;
   applyPersonalityFormat(answer, mode) {
     if (!answer) return answer;
     
-    // Remove any LLM-added fluff that bypassed prompt instructions
     let cleaned = answer;
     
-    // Remove generic intro paragraphs (case-insensitive)
-    const fluffPatterns = [
-      /^##?\s*Summary[^\n]*\n+[^\n]*comprehensive analysis[^\n]*\n+/i,
+    // INTRO FLUFF: Remove generic intro paragraphs (case-insensitive)
+    const introFluffPatterns = [
+      /^##?\s*Summary[^\n]*\n+[^\n]*(?:comprehensive|detailed|provides)[^\n]*\n+/i,
       /^##?\s*Summary[^\n]*\n+[^\n]*following[^\n]*\n+/i,
+      /^##?\s*Summary\s*\n+[^\n]+\n+/i,
       /^##?\s*Summary\s*\n+/i,
-      /^A comprehensive analysis of[^\n]*\n+/i,
-      /^The following is[^\n]*\n+/i,
-      /^Here is[^\n]*analysis[^\n]*\n+/i,
+      /^(?:A |The )?(?:comprehensive|detailed) (?:analysis|view|overview) of[^\n]*\n+/i,
+      /^The following (?:is|provides)[^\n]*\n+/i,
+      /^Here (?:is|are)[^\n]*analysis[^\n]*\n+/i,
       /^Let me provide[^\n]*\n+/i,
       /^I'll analyze[^\n]*\n+/i,
+      /^This analysis provides[^\n]*\n+/i,
     ];
     
-    for (const pattern of fluffPatterns) {
+    for (const pattern of introFluffPatterns) {
+      cleaned = cleaned.replace(pattern, '');
+    }
+    
+    // OUTRO FLUFF: Remove verbose confidence grading sections (95%/80%/<50% tiers)
+    const outroFluffPatterns = [
+      /###?\s*Confidence Grading\s*\n+(?:[\s\S]*?(?:\*\s*\*\*95%\*\*|\*\s*\*\*80%\*\*|\*\s*\*\*<50%\*\*)[\s\S]*?)+(?=\n*(?:🔥|$))/i,
+      /The confidence (?:grading|levels?) (?:for this analysis )?(?:is|are) as follows:\s*\n+(?:\*[^\n]+\n+)+/i,
+      /The current analysis has a confidence grade of[^\n]*\n+/i,
+    ];
+    
+    for (const pattern of outroFluffPatterns) {
       cleaned = cleaned.replace(pattern, '');
     }
     
