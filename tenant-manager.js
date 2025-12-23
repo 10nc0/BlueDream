@@ -339,13 +339,90 @@ class TenantManager {
     }
 
     async checkSybilRisk(email, ip) {
-        // Simplified sybil check - allow all signups
-        return { allowed: true };
+        const client = await this.pool.connect();
+        try {
+            const emailDomain = email.split('@')[1]?.toLowerCase() || '';
+            
+            const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            const last1h = new Date(Date.now() - 60 * 60 * 1000);
+            
+            const ipResult = await client.query(`
+                SELECT COUNT(*) as count FROM core.tenant_creation_log 
+                WHERE ip = $1 AND created_at > $2
+            `, [ip, last24h]);
+            const ipCount24h = parseInt(ipResult.rows[0]?.count || 0);
+            
+            const ipHourResult = await client.query(`
+                SELECT COUNT(*) as count FROM core.tenant_creation_log 
+                WHERE ip = $1 AND created_at > $2
+            `, [ip, last1h]);
+            const ipCountHour = parseInt(ipHourResult.rows[0]?.count || 0);
+            
+            const domainResult = await client.query(`
+                SELECT COUNT(*) as count FROM core.tenant_creation_log 
+                WHERE email LIKE $1 AND created_at > $2
+            `, [`%@${emailDomain}`, last24h]);
+            const domainCount = parseInt(domainResult.rows[0]?.count || 0);
+            
+            const disposableDomains = new Set([
+                'tempmail.com', 'throwaway.com', 'guerrillamail.com', '10minutemail.com',
+                'mailinator.com', 'yopmail.com', 'tempail.com', 'fakeinbox.com',
+                'trashmail.com', 'discard.email', 'temp-mail.org'
+            ]);
+            
+            const reasons = [];
+            
+            if (ipCountHour >= 3) {
+                reasons.push(`Too many signups from this IP in the last hour (${ipCountHour}/3)`);
+            }
+            if (ipCount24h >= 5) {
+                reasons.push(`Too many signups from this IP today (${ipCount24h}/5)`);
+            }
+            if (domainCount >= 10) {
+                reasons.push(`Too many signups from @${emailDomain} today (${domainCount}/10)`);
+            }
+            if (disposableDomains.has(emailDomain)) {
+                reasons.push(`Disposable email domain not allowed: @${emailDomain}`);
+            }
+            
+            const allowed = reasons.length === 0;
+            
+            if (!allowed) {
+                console.warn(`🚫 Sybil check failed for ${email} from ${ip}:`, reasons);
+            }
+            
+            return { 
+                allowed, 
+                reasons,
+                metrics: { ipCountHour, ipCount24h, domainCount }
+            };
+        } finally {
+            client.release();
+        }
     }
 
-    async checkRateLimit(type, key, value) {
-        // Simplified rate limit check - allow all requests
-        return { allowed: true };
+    async checkRateLimit(type, key, maxRequests = 10, windowMs = 60000) {
+        const windowStart = new Date(Date.now() - windowMs);
+        const client = await this.pool.connect();
+        try {
+            if (type === 'tenant_creation') {
+                const result = await client.query(`
+                    SELECT COUNT(*) as count FROM core.tenant_creation_log 
+                    WHERE (email = $1 OR ip = $2) AND created_at > $3
+                `, [key, key, windowStart]);
+                const count = parseInt(result.rows[0]?.count || 0);
+                
+                const allowed = count < maxRequests;
+                if (!allowed) {
+                    console.warn(`⏱️ Rate limit exceeded for ${type}:${key} (${count}/${maxRequests})`);
+                }
+                return { allowed, count, limit: maxRequests };
+            }
+            
+            return { allowed: true, count: 0, limit: maxRequests };
+        } finally {
+            client.release();
+        }
     }
 
     async recordTenantCreation(email, ip) {

@@ -16,6 +16,10 @@ const SECRET = JWT_SECRET || 'dev-only-weak-jwt-secret-DO-NOT-USE-IN-PRODUCTION'
 const ACCESS_TOKEN_EXPIRY = '15m';  // 15 minutes
 const REFRESH_TOKEN_EXPIRY = '7d';  // 7 days
 
+const JWT_ISSUER = 'nyanbook';
+const JWT_AUDIENCE = 'nyanbook-app';
+const ALLOWED_ALGORITHMS = ['HS256'];
+
 function signAccessToken(userId, email, role, tenantId = null, adminId = null, isGenesisAdmin = false) {
     return jwt.sign(
         {
@@ -28,7 +32,12 @@ function signAccessToken(userId, email, role, tenantId = null, adminId = null, i
             type: 'access'
         },
         SECRET,
-        { expiresIn: ACCESS_TOKEN_EXPIRY }
+        { 
+            expiresIn: ACCESS_TOKEN_EXPIRY,
+            issuer: JWT_ISSUER,
+            audience: JWT_AUDIENCE,
+            algorithm: 'HS256'
+        }
     );
 }
 
@@ -46,7 +55,12 @@ function signRefreshToken(userId, email, role, tenantId = null, adminId = null, 
             type: 'refresh'
         },
         SECRET,
-        { expiresIn: REFRESH_TOKEN_EXPIRY }
+        { 
+            expiresIn: REFRESH_TOKEN_EXPIRY,
+            issuer: JWT_ISSUER,
+            audience: JWT_AUDIENCE,
+            algorithm: 'HS256'
+        }
     );
     
     return { token, tokenId };
@@ -54,8 +68,17 @@ function signRefreshToken(userId, email, role, tenantId = null, adminId = null, 
 
 function verifyToken(token) {
     try {
-        return jwt.verify(token, SECRET);
+        return jwt.verify(token, SECRET, {
+            algorithms: ALLOWED_ALGORITHMS,
+            issuer: JWT_ISSUER,
+            audience: JWT_AUDIENCE
+        });
     } catch (error) {
+        if (error.name === 'TokenExpiredError') {
+            console.warn('⚠️ JWT expired');
+        } else if (error.name === 'JsonWebTokenError') {
+            console.warn('⚠️ Invalid JWT:', error.message);
+        }
         return null;
     }
 }
