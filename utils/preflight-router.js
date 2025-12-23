@@ -326,6 +326,21 @@ function buildStockContext(preflight) {
     ? `\n${psiEmaAnalysis.renewal.tetralemma.warning}\nTetralemma: (10)Bubble (01)Breakthrough (11)Both (00)Neither - Investigate fundamentals.`
     : '';
   
+  // Build Robinhood-style company header
+  let companyHeader = '';
+  const sectorIndustry = [fundamentals.sector, fundamentals.industry].filter(Boolean).join(' · ');
+  const companySummary = fundamentals.summary || '';
+  const atomicUnits = fundamentals.atomicUnits || [];
+  
+  if (sectorIndustry || companySummary || atomicUnits.length > 0) {
+    companyHeader = `
+### ${stockData.name || ticker} (${ticker})
+${sectorIndustry ? `**${sectorIndustry}**` : ''}
+${companySummary ? `\n${companySummary}.` : ''}
+${atomicUnits.length > 0 ? `\n**Atomic Units**: ${atomicUnits.join(', ')}` : ''}
+`;
+  }
+  
   // Format fundamentals section if available
   let fundamentalsSection = '';
   if (Object.keys(fundamentals).length > 0) {
@@ -333,13 +348,11 @@ function buildStockContext(preflight) {
     const forwardPE = fundamentals.forwardPE ? `**Forward P/E**: ${safeFixed(fundamentals.forwardPE)}` : '';
     const divYield = fundamentals.dividendYield != null ? `**Dividend Yield**: ${safeFixed(fundamentals.dividendYield)}%` : '';
     const nextEarnings = fundamentals.nextEarningsDate ? `**Next Earnings**: ${fundamentals.nextEarningsDate}` : '';
-    const sector = fundamentals.sector ? `**Sector**: ${fundamentals.sector}` : '';
-    const industry = fundamentals.industry ? `**Industry**: ${fundamentals.industry}` : '';
     const marketCap = fundamentals.marketCap ? `**Market Cap**: ${formatMarketCap(fundamentals.marketCap)}` : '';
     const fiftyTwoWeekHigh = fundamentals.fiftyTwoWeekHigh ? `**52W High**: ${safeFixed(fundamentals.fiftyTwoWeekHigh)}` : '';
     const fiftyTwoWeekLow = fundamentals.fiftyTwoWeekLow ? `**52W Low**: ${safeFixed(fundamentals.fiftyTwoWeekLow)}` : '';
     
-    const fundParts = [peRatio, forwardPE, divYield, nextEarnings, sector, industry, marketCap, fiftyTwoWeekHigh, fiftyTwoWeekLow].filter(Boolean);
+    const fundParts = [peRatio, forwardPE, divYield, nextEarnings, marketCap, fiftyTwoWeekHigh, fiftyTwoWeekLow].filter(Boolean);
     if (fundParts.length > 0) {
       fundamentalsSection = `
 ### FUNDAMENTALS (SEC EDGAR):
@@ -348,7 +361,8 @@ ${fundParts.map(p => `- ${p}`).join('\n')}`;
   }
   
   return `
-## Ψ-EMA REAL-TIME ANALYSIS: ${ticker} (${stockData.name || ticker})
+## Ψ-EMA REAL-TIME ANALYSIS
+${companyHeader}
 **Data Source**: yfinance (VERIFIED - REAL PRICES)
 **Data Timestamp**: ${ageFlag} ${dataAge?.timestamp} (${dataAge?.age})
 **Current Price**: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}

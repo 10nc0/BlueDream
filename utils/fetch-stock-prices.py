@@ -38,6 +38,108 @@ def safe_float(value):
         return None
 
 
+# ============================================================================
+# ATOMIC UNIT OF PRODUCTION INFERENCE
+# Maps sector/industry to likely atomic units (what the company produces/sells)
+# Used for Robinhood-style stock summary headers
+# ============================================================================
+
+SECTOR_ATOMIC_UNITS = {
+    'Technology': ['software licenses', 'API calls', 'subscriptions', 'users', 'devices'],
+    'Communication Services': ['subscriptions', 'ad impressions', 'users', 'content hours', 'downloads'],
+    'Consumer Cyclical': ['orders', 'transactions', 'customers', 'store visits', 'units sold'],
+    'Consumer Defensive': ['units sold', 'orders', 'store visits', 'SKUs', 'households served'],
+    'Financial Services': ['accounts', 'transactions', 'loans', 'policies', 'assets under management'],
+    'Healthcare': ['prescriptions', 'patients treated', 'procedures', 'devices', 'doses'],
+    'Industrials': ['units shipped', 'orders', 'projects', 'equipment hours', 'contracts'],
+    'Basic Materials': ['tons produced', 'units shipped', 'contracts', 'extraction volume', 'orders'],
+    'Energy': ['barrels of oil', 'MMBtu gas', 'MWh electricity', 'gallons refined', 'wells'],
+    'Real Estate': ['properties', 'sq ft leased', 'units occupied', 'rent contracts', 'developments'],
+    'Utilities': ['MWh delivered', 'customers served', 'connections', 'cubic meters', 'service calls'],
+}
+
+INDUSTRY_ATOMIC_UNITS = {
+    # Technology
+    'Semiconductors': ['chip units', 'wafers', 'GPU/CPU units', 'design wins', 'fab capacity'],
+    'Software—Infrastructure': ['API calls', 'compute hours', 'storage GB', 'seats', 'deployments'],
+    'Software—Application': ['licenses', 'subscriptions', 'users', 'seats', 'integrations'],
+    'Consumer Electronics': ['devices', 'units sold', 'accessories', 'repairs', 'trade-ins'],
+    'Internet Content & Information': ['users', 'page views', 'ad impressions', 'queries', 'content items'],
+    'Internet Retail': ['orders', 'GMV', 'customers', 'sellers', 'deliveries'],
+    
+    # Communication Services
+    'Entertainment': ['subscriptions', 'hours streamed', 'titles', 'downloads', 'tickets'],
+    'Telecom Services': ['subscribers', 'connections', 'data GB', 'calls', 'messages'],
+    'Electronic Gaming & Multimedia': ['players', 'downloads', 'in-app purchases', 'hours played', 'titles'],
+    
+    # Consumer
+    'Restaurants': ['orders', 'covers', 'locations', 'delivery orders', 'tickets'],
+    'Specialty Retail': ['transactions', 'customers', 'units sold', 'returns', 'loyalty members'],
+    'Auto Manufacturers': ['vehicles', 'units delivered', 'orders', 'service visits', 'parts'],
+    'Apparel Retail': ['units sold', 'orders', 'returns', 'store visits', 'SKUs'],
+    'Home Improvement Retail': ['transactions', 'projects', 'SKUs', 'installations', 'orders'],
+    'Discount Stores': ['baskets', 'transactions', 'SKUs', 'store visits', 'customers'],
+    'Grocery Stores': ['baskets', 'transactions', 'SKUs', 'deliveries', 'customers'],
+    
+    # Financial Services
+    'Banks—Diversified': ['accounts', 'loans', 'deposits', 'transactions', 'cards issued'],
+    'Credit Services': ['transactions', 'accounts', 'cards active', 'loans', 'credit lines'],
+    'Insurance—Life': ['policies', 'premiums', 'claims', 'annuities', 'beneficiaries'],
+    'Insurance—Property & Casualty': ['policies', 'claims', 'premiums', 'renewals', 'inspections'],
+    'Asset Management': ['AUM', 'accounts', 'funds', 'trades', 'clients'],
+    
+    # Healthcare
+    'Drug Manufacturers—General': ['doses', 'prescriptions', 'patients', 'trials', 'approvals'],
+    'Biotechnology': ['patients treated', 'trials', 'approvals', 'doses', 'indications'],
+    'Medical Devices': ['devices', 'procedures', 'implants', 'units sold', 'services'],
+    'Healthcare Plans': ['members', 'claims', 'enrollees', 'visits', 'prescriptions'],
+    
+    # Energy
+    'Oil & Gas Integrated': ['barrels', 'MMBtu', 'gallons refined', 'wells', 'reserves'],
+    'Oil & Gas E&P': ['barrels', 'wells drilled', 'reserves', 'leases', 'production days'],
+    'Oil & Gas Refining & Marketing': ['gallons', 'barrels refined', 'retail sites', 'shipments', 'blends'],
+    'Utilities—Regulated Electric': ['MWh', 'customers', 'connections', 'meters', 'outage hours'],
+    'Utilities—Renewable': ['MWh', 'installations', 'capacity MW', 'PPAs', 'projects'],
+    
+    # Industrials
+    'Aerospace & Defense': ['aircraft', 'contracts', 'units delivered', 'service hours', 'systems'],
+    'Airlines': ['passengers', 'flights', 'seat miles', 'bookings', 'cargo tons'],
+    'Railroads': ['carloads', 'ton-miles', 'shipments', 'routes', 'trains'],
+    'Trucking': ['shipments', 'miles driven', 'deliveries', 'loads', 'trucks'],
+    'Shipping & Ports': ['TEUs', 'vessels', 'port calls', 'cargo tons', 'routes'],
+    
+    # Real Estate
+    'REIT—Retail': ['properties', 'sq ft leased', 'tenants', 'occupancy %', 'rent/sqft'],
+    'REIT—Residential': ['units', 'occupancy %', 'leases', 'renewals', 'rent/unit'],
+    'REIT—Industrial': ['warehouses', 'sq ft', 'tenants', 'leases', 'occupancy %'],
+    'REIT—Office': ['buildings', 'sq ft leased', 'tenants', 'occupancy %', 'rent/sqft'],
+}
+
+
+def infer_atomic_units(sector, industry):
+    """
+    Infer top 3-5 atomic units of production based on sector and industry.
+    Industry-specific mapping takes priority over sector mapping.
+    
+    Args:
+        sector: Company sector (e.g., 'Technology')
+        industry: Company industry (e.g., 'Semiconductors')
+    
+    Returns:
+        List of 3-5 atomic unit strings, or None if unknown
+    """
+    # Try industry-specific mapping first (more precise)
+    if industry and industry in INDUSTRY_ATOMIC_UNITS:
+        return INDUSTRY_ATOMIC_UNITS[industry][:5]
+    
+    # Fall back to sector mapping
+    if sector and sector in SECTOR_ATOMIC_UNITS:
+        return SECTOR_ATOMIC_UNITS[sector][:5]
+    
+    # Default for unknown
+    return None
+
+
 def phi_interpolate(closes, dates):
     """
     Fill small gaps in price series using φ-interpolation (x = 1 + 1/x).
@@ -196,6 +298,9 @@ def fetch_stock_data(ticker: str) -> dict:
         fifty_two_week_low = safe_float(info.get('fiftyTwoWeekLow'))
         revenue_per_share = safe_float(info.get('revenuePerShare'))
         
+        # Infer atomic units of production based on sector/industry
+        atomic_units = infer_atomic_units(sector, industry)
+        
         fundamentals = {
             "peRatio": pe_ratio,
             "forwardPE": forward_pe,
@@ -204,6 +309,7 @@ def fetch_stock_data(ticker: str) -> dict:
             "sector": sector,
             "industry": industry,
             "summary": business_summary,
+            "atomicUnits": atomic_units,
             "nextEarningsDate": next_earnings,
             "bookValue": book_value,
             "fiftyTwoWeekHigh": fifty_two_week_high,
