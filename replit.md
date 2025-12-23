@@ -39,6 +39,13 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **Audio Accessibility**: Mic button recordings are treated as user queries for voice interaction.
     - **Streaming Token Output**: Real-time SSE streaming for "watching it think" UX.
 - **Nyan Protocol (Permanent Seed Context)**: A specific protocol for historical comparison and socio-economic analysis using the Seed Metric (P/I ratio). It's a sacred, always active Step 0 protocol.
+    - **SEED METRIC Data Quality** (Dec 23, 2025): LLM training data for real estate is stale/wrong. MUST trigger web search for grounded data:
+      - **Problem**: LLM hallucinated Tokyo $/m² as ¥30,833 (1973) and ¥1,050,000 (2022) — actual 1973 was ~¥180,000-230,000
+      - **Problem**: Singapore private $/m² claimed as SGD 2,100 — actual is SGD 15,000-20,000
+      - **Problem**: Direction analysis reversed (claimed Tokyo improved, actually worsened)
+      - **Solution**: SEED_METRIC mode triggers web search cascade BEFORE LLM response
+      - **Authoritative Sources**: Japan Real Estate Economic Institute, Singapore URA/MOM, local government statistics
+      - **Mandatory 700sqm Conversion**: $/m² × 700 is non-negotiable; cuts all "no data" excuses
 - **Financial Physics System**: A 4-tier architecture for financial cognition, extending the NYAN Protocol.
 - **Legal Document Analysis System**: Stage 1+ extension for contract/agreement analysis, auto-triggered by legal keywords, providing a universal 7-section template.
 - **Ψ-EMA System**: Multi-Dimensional Wave Function Dashboard implementing Financial Quantum Mechanics. It analyzes financial time series using three orthogonal dimensions (Phase θ, Anomaly z, Convergence R) with Fibonacci EMA periods. It includes real-time stock integration using yfinance for historical prices and SEC EDGAR for fundamental metrics, with smart and three-tier ticker detection.

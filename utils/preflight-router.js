@@ -188,11 +188,34 @@ async function preflightRouter(options) {
         }
       }
     }
-    // 2. Seed Metric: Needs web search for fresh land/income data
+    // 2. Seed Metric: MANDATORY web search for grounded real estate data
+    // LLM training data is stale/wrong - must fetch actual $/m² from authoritative sources
     else if (isSeedMetricQuery(query)) {
       result.mode = 'seed-metric';
       result.routingFlags.isSeedMetric = true;
       result.searchStrategy = 'brave';
+      
+      // Extract city names for targeted search
+      const cityPattern = /\b(tokyo|singapore|hong kong|london|new york|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|delhi|bangkok|jakarta|manila|kuala lumpur|ho chi minh|hanoi|san francisco|los angeles|chicago|toronto|vancouver|melbourne|auckland)\b/gi;
+      const cities = [...new Set((query.match(cityPattern) || []).map(c => c.toLowerCase()))];
+      
+      if (cities.length > 0) {
+        // Build search queries for real estate $/m² + median income
+        result.seedMetricSearchQueries = cities.flatMap(city => [
+          `${city} residential property price per square meter 2024`,
+          `${city} median individual income salary 2024`,
+          `${city} housing price 1970s historical per sqm`
+        ]);
+        console.log(`🏠 Preflight: SEED_METRIC detected for cities: ${cities.join(', ')}`);
+        console.log(`🔍 Preflight: Will search for: ${result.seedMetricSearchQueries.slice(0, 3).join(' | ')}...`);
+      } else {
+        // Generic search if no city specified
+        result.seedMetricSearchQueries = [
+          'residential property price per square meter comparison major cities 2024',
+          'median income by country 2024'
+        ];
+        console.log(`🏠 Preflight: SEED_METRIC detected (no specific city)`);
+      }
     }
     // 3. Default: Groq-first (no search until audit rejects)
     else {
