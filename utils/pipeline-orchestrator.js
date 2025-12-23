@@ -2,6 +2,7 @@
  * Pipeline Orchestrator - Unified AI Request Processing
  * 
  * State Machine:
+ * S-1: Context Extraction (8-message window - entities, not reasoning)
  * S0: Preflight (routing, mode detection, external data fetch)
  * S1: Context Build (inject system prompts based on mode)
  * S2: Reasoning (LLM call)
@@ -14,14 +15,17 @@
  * - NYAN Protocol = What to think (reasoning principles)
  * - Pipeline = How to process (state machine)
  * - Routing = Where to go (mode detection via preflight-router)
+ * - Context = What was discussed (entity extraction from history)
  */
 
 const { preflightRouter, buildSystemContext } = require('./preflight-router');
+const { extractContext, mergeContextForTickerDetection } = require('./context-extractor');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('../prompts/nyan-protocol');
 const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
 
 const PIPELINE_STEPS = {
+  CONTEXT_EXTRACT: 'S-1',
   PREFLIGHT: 'S0',
   CONTEXT_BUILD: 'S1', 
   REASONING: 'S2',
@@ -33,10 +37,11 @@ const PIPELINE_STEPS = {
 
 class PipelineState {
   constructor() {
-    this.step = PIPELINE_STEPS.PREFLIGHT;
+    this.step = PIPELINE_STEPS.CONTEXT_EXTRACT;
     this.retryCount = 0;
     this.maxRetries = 1;
     this.mode = 'general';
+    this.contextResult = null;  // Stage -1 output
     this.searchContext = null;
     this.didSearch = false;
     this.preflight = null;
@@ -68,6 +73,29 @@ class PipelineOrchestrator {
     const state = new PipelineState();
     
     try {
+      // ========================================
+      // STAGE -1: Context Extraction (8-message window)
+      // Extracts entities from history WITHOUT reasoning bleed
+      // ========================================
+      state.transition(PIPELINE_STEPS.CONTEXT_EXTRACT);
+      state.contextResult = extractContext(
+        input.conversationHistory || [],
+        input.attachmentHistory || [],
+        8  // 8-message window
+      );
+      
+      if (state.contextResult.inferredTicker) {
+        console.log(`📜 Stage -1: Context extracted - inferred ticker: ${state.contextResult.inferredTicker}`);
+      } else if (state.contextResult.hasFinancialContext) {
+        console.log(`📜 Stage -1: Financial context detected, no specific ticker`);
+      }
+      
+      // Merge context with current query for enhanced detection
+      const contextAwareQuery = mergeContextForTickerDetection(input.query, state.contextResult);
+      
+      // ========================================
+      // STAGE 0: Preflight (mode detection, external data)
+      // ========================================
       // Support pre-computed preflight (avoids duplicate calls when endpoint already ran it)
       if (input.preComputedPreflight) {
         state.preflight = input.preComputedPreflight;
@@ -86,7 +114,8 @@ class PipelineOrchestrator {
           state.didSearch = !!state.searchContext;
         }
       } else {
-        await this.stepPreflight(state, input);
+        // Pass context-aware query and context result to preflight
+        await this.stepPreflight(state, { ...input, query: contextAwareQuery, contextResult: state.contextResult });
       }
       
       // FAST-PATH: Ψ-EMA mode but no ticker found → return "no data" message (saves tokens)
@@ -140,13 +169,14 @@ class PipelineOrchestrator {
   async stepPreflight(state, input) {
     state.transition(PIPELINE_STEPS.PREFLIGHT);
     
-    const { query, attachments, clientIp } = input;
+    const { query, attachments, clientIp, contextResult } = input;
     const safeDocContext = input.docContext || {};
     
     state.preflight = await preflightRouter({
       query: query || '',
       attachments: attachments || [],
-      docContext: safeDocContext
+      docContext: safeDocContext,
+      contextResult: contextResult || null  // Stage -1 output for context-aware routing
     });
     
     state.mode = state.preflight.mode;

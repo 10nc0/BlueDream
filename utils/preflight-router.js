@@ -73,10 +73,11 @@ function formatMarketCap(marketCap) {
  * @param {string} options.query - User's query text
  * @param {Array} options.attachments - Array of attachment metadata
  * @param {Object} options.docContext - Parsed document context (if any)
+ * @param {Object} options.contextResult - Stage -1 output (entities from conversation history)
  * @returns {Promise<PreflightResult>}
  */
 async function preflightRouter(options) {
-  const { query = '', attachments = [], docContext = {} } = options;
+  const { query = '', attachments = [], docContext = {}, contextResult = null } = options;
   
   const result = {
     mode: 'general',
@@ -103,12 +104,24 @@ async function preflightRouter(options) {
     // ========================================
     
     // 1. Ψ-EMA: Fourier/wave/financial analysis
-    if (shouldTriggerPsiEMA(query, detectStockTicker)) {
+    // Context fallback ONLY applies if current query EXPLICITLY mentions stock/ticker/share
+    // This prevents "netflix price trend" (no stock keyword) from triggering psi-EMA
+    const hasContextTicker = contextResult?.inferredTicker;
+    const hasExplicitStockKeyword = /\b(stock|stocks|ticker|share|shares)\b/i.test(query);
+    const contextFallbackApplies = hasContextTicker && hasExplicitStockKeyword;
+    
+    if (shouldTriggerPsiEMA(query, detectStockTicker) || contextFallbackApplies) {
       result.mode = 'psi-ema';
       result.routingFlags.usesPsiEMA = true;
       
-      // Extract ticker (rule-based first, then AI fallback)
+      // Extract ticker (rule-based first, then AI fallback, then context fallback)
       result.ticker = await smartDetectTicker(query);
+      
+      // If no ticker from current query, use context-inferred ticker
+      if (!result.ticker && contextResult?.inferredTicker) {
+        result.ticker = contextResult.inferredTicker;
+        console.log(`📜 Preflight: Using context-inferred ticker ${result.ticker}`);
+      }
       
       if (result.ticker) {
         console.log(`🎯 Preflight: Detected ticker ${result.ticker} for Ψ-EMA`);
