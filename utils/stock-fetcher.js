@@ -7,8 +7,33 @@ const { spawn } = require('child_process');
 const path = require('path');
 const axios = require('axios');
 
-const STOCK_TICKER_REGEX = /\b([A-Z]{1,5})\b/g;
-const DOLLAR_TICKER_REGEX = /\$([A-Z]{1,5})\b/gi;
+const DOLLAR_TICKER_REGEX = /\$([A-Za-z]{1,5})\b/gi;
+
+// ========================================
+// Ψ-EMA LEGO KEYS (Push-based 2/3 detection)
+// If 2 out of 3 keys present → unlock Ψ-EMA gate
+// ========================================
+
+// KEY 1: VERBS (action words for stock analysis)
+const PSI_EMA_VERBS = new Set([
+  'analyze', 'analyse', 'diagnose', 'view', 'forecast', 'predict',
+  'evaluate', 'assess', 'review', 'check', 'examine', 'show', 'get',
+  'fetch', 'calculate', 'compute', 'determine', 'measure', 'track',
+  'monitor', 'watch', 'study', 'inspect', 'investigate', 'scan',
+  'lookup', 'find', 'search', 'query', 'pull', 'display', 'report'
+]);
+
+// KEY 2: ADJECTIVES (descriptive words for financial analysis)
+const PSI_EMA_ADJECTIVES = new Set([
+  'price', 'trend', 'wave', 'fourier', 'ema', 'momentum', 'volatility',
+  'pattern', 'signal', 'chart', 'technical', 'stock', 'share', 'shares',
+  'equity', 'market', 'trading', 'psi', 'phi', 'fibonacci', 'golden',
+  'death', 'cross', 'convergence', 'divergence', 'bullish', 'bearish',
+  'moving', 'average', 'resistance', 'support', 'breakout', 'breakdown',
+  'overbought', 'oversold', 'rsi', 'macd', 'performance', 'outlook'
+]);
+
+// Words that look like tickers but aren't (blocklist)
 const COMMON_NON_TICKERS = new Set([
   'EMA', 'SMA', 'RSI', 'MACD', 'USD', 'EUR', 'GBP', 'JPY', 'CNY',
   'AI', 'API', 'URL', 'USA', 'UK', 'EU', 'CEO', 'CFO', 'CTO',
@@ -17,29 +42,22 @@ const COMMON_NON_TICKERS = new Set([
   'PSI', 'PHI', 'ETA', 'WHAT', 'IS', 'OF', 'TO', 'IN', 'ON', 'AT',
   'BY', 'WITH', 'FROM', 'AS', 'OR', 'IF', 'BE', 'SO', 'AN', 'IT',
   'MY', 'ME', 'WE', 'US', 'DO', 'GO', 'NO', 'UP', 'OUT', 'ALL',
-  'STOCK', 'STOCKS', 'PRICE', 'PRICES', 'CHART', 'CHARTS'
+  'CAN', 'YOU', 'YOUR', 'THIS', 'THAT', 'HOW', 'WHY', 'WHEN',
+  'PLEASE', 'STOCK', 'STOCKS', 'PRICE', 'PRICES', 'CHART', 'CHARTS',
+  'TREND', 'WAVE', 'SIGNAL', 'PATTERN', 'MARKET', 'SHARE', 'SHARES'
 ]);
 
-const KNOWN_TICKERS = new Set([
-  'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'GOOG', 'AMZN', 'TSLA',
-  'BRK', 'JPM', 'UNH', 'JNJ', 'WMT', 'PG', 'XOM', 'CVX',
-  'HD', 'BAC', 'PFE', 'ABBV', 'KO', 'PEP', 'TMO', 'AVGO',
-  'MRK', 'CSCO', 'ACN', 'ABT', 'DHR', 'VZ', 'ADBE', 'CRM', 'NKE',
-  'CMCSA', 'INTC', 'AMD', 'NFLX', 'QCOM', 'TXN', 'IBM', 'ORCL',
-  'INTU', 'AMAT', 'PYPL', 'UBER', 'SQ', 'PLTR', 'COIN', 'ROKU',
-  'ZM', 'DOCU', 'CRWD', 'DDOG', 'SPY', 'QQQ', 'IWM', 'DIA', 'VTI', 'VOO', 'ARKK',
-  'ASML', 'LMT', 'RTX', 'BA', 'CAT', 'DE', 'UPS', 'FDX', 'DIS', 'SBUX'
-]);
+// Single-letter tickers need $PREFIX to avoid false positives
+const AMBIGUOUS_SINGLE_LETTERS = new Set(['A', 'B', 'C', 'D', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']);
 
-const AMBIGUOUS_TICKERS = new Set([
-  'META', 'COST', 'SHOP', 'SNAP', 'NOW', 'NET', 'V', 'MA', 'F', 'T', 'X', 'C', 'A', 'D', 'K', 'M', 'W', 'Y', 'Z'
-]);
-
-function detectStockTicker(query) {
+/**
+ * Detect potential stock ticker (KEY 3: OBJECT)
+ * STRICT: Only accepts $TICKER, ALL-CAPS, or Titlecase (not lowercase)
+ */
+function detectPotentialTicker(query) {
   if (!query || typeof query !== 'string') return null;
   
-  // Priority 1: Check for $TICKER format (e.g., $META, $SBUX, $meta) - highest priority
-  // This is the ONLY way to match ambiguous tickers (META, COST, SHOP, etc.)
+  // Priority 1: $TICKER format (explicit, highest confidence)
   const dollarMatches = query.match(DOLLAR_TICKER_REGEX);
   if (dollarMatches && dollarMatches.length > 0) {
     const ticker = dollarMatches[0].replace('$', '').toUpperCase();
@@ -48,47 +66,153 @@ function detectStockTicker(query) {
     }
   }
   
-  // Priority 2: Check for KNOWN tickers in any case (safe because they're whitelisted)
-  // This allows "nvda", "NVDA", "Nvda" to all work
-  const words = query.match(/\b[A-Za-z]{2,5}\b/g) || [];
-  for (const word of words) {
-    const upper = word.toUpperCase();
-    // Skip ambiguous tickers - they need $PREFIX
-    if (AMBIGUOUS_TICKERS.has(upper)) {
-      continue;
-    }
-    // Match known unambiguous tickers
-    if (KNOWN_TICKERS.has(upper)) {
-      return upper;
-    }
-  }
-  
-  // Priority 3: Unknown but valid-looking UPPERCASE tickers (user typed in caps)
-  // Only match all-caps words to avoid false positives on common words
-  const originalUppercaseWords = query.match(/\b[A-Z]{2,5}\b/g) || [];
-  for (const word of originalUppercaseWords) {
-    if (AMBIGUOUS_TICKERS.has(word)) {
-      continue;
-    }
-    if (!COMMON_NON_TICKERS.has(word)) {
+  // Priority 2: ALL-CAPS words (NVDA, AAPL, ULTA)
+  const allCapsWords = query.match(/\b[A-Z]{2,5}\b/g) || [];
+  for (const word of allCapsWords) {
+    if (!COMMON_NON_TICKERS.has(word) && !COMMON_SHORT_WORDS.has(word)) {
       return word;
     }
   }
   
+  // Priority 3: Titlecase words (Ulta, Nvda)
+  const titleCaseWords = query.match(/\b[A-Z][a-z]{1,4}\b/g) || [];
+  for (const word of titleCaseWords) {
+    const upper = word.toUpperCase();
+    if (!COMMON_NON_TICKERS.has(upper) && !COMMON_SHORT_WORDS.has(upper)) {
+      return upper;
+    }
+  }
+  
+  // NO lowercase - require explicit capitalization or $prefix
   return null;
 }
 
-function isPsiEMAStockQuery(query) {
-  if (!query || typeof query !== 'string') return false;
+/**
+ * Push-based Ψ-EMA key detection
+ * Collects keys: verb, adjective, ticker (object)
+ * IMPORTANT: Words used as verb/adjective are excluded from ticker detection
+ * @returns {{ keys: Array, ticker: string|null, shouldTrigger: boolean }}
+ */
+function detectPsiEMAKeys(query) {
+  if (!query || typeof query !== 'string') {
+    return { keys: [], ticker: null, shouldTrigger: false };
+  }
   
+  const keys = [];
+  const usedWords = new Set(); // Track words already used as verb/adjective
   const lowerQuery = query.toLowerCase();
-  const hasPsiEMA = /(?:psi|ψ|phi|φ)\s*[-]?\s*ema/i.test(query) ||
-                    /ema\s*(?:for|of|on)/i.test(query) ||
-                    /(?:crossover|golden\s*cross|death\s*cross)/i.test(query);
+  const words = lowerQuery.match(/\b[a-z]+\b/g) || [];
   
-  const ticker = detectStockTicker(query);
+  // Push KEY 1: Verb
+  for (const word of words) {
+    if (PSI_EMA_VERBS.has(word)) {
+      keys.push({ type: 'verb', value: word });
+      usedWords.add(word.toUpperCase()); // Mark as used
+      break; // Only need one
+    }
+  }
   
-  return hasPsiEMA && ticker !== null;
+  // Push KEY 2: Adjective
+  for (const word of words) {
+    if (PSI_EMA_ADJECTIVES.has(word)) {
+      keys.push({ type: 'adjective', value: word });
+      usedWords.add(word.toUpperCase()); // Mark as used
+      break; // Only need one
+    }
+  }
+  
+  // Push KEY 3: Ticker (Object) - EXCLUDE words already used as verb/adjective
+  // If we have BOTH verb AND adjective (strong stock context), allow lowercase tickers
+  const hasStrongContext = keys.length >= 2;
+  const ticker = hasStrongContext 
+    ? detectPotentialTickerWithContext(query, usedWords)  // Allow lowercase if strong context
+    : detectPotentialTickerExcluding(query, usedWords);   // Require uppercase if weak context
+  
+  if (ticker) {
+    keys.push({ type: 'object', value: ticker });
+  }
+  
+  // 2/3 keys → unlock Ψ-EMA gate
+  // BUT require at least one key to be an OBJECT (ticker) to prevent false positives
+  // "show me chart" = verb + adj = 2 keys but NO ticker → should NOT trigger
+  const hasTickerKey = keys.some(k => k.type === 'object');
+  const shouldTrigger = keys.length >= 2 && hasTickerKey;
+  
+  console.log(`🔑 Ψ-EMA Keys: [${keys.map(k => `${k.type}:${k.value}`).join(', ')}] → ${shouldTrigger ? '✅ UNLOCK' : '❌ locked'}`);
+  
+  return { keys, ticker, shouldTrigger };
+}
+
+// Common short English words that should NEVER be tickers
+const COMMON_SHORT_WORDS = new Set([
+  'DATA', 'INFO', 'HERE', 'THAT', 'JUST', 'SOME', 'MORE', 'LESS',
+  'MUCH', 'MANY', 'VERY', 'ALSO', 'ONLY', 'EVEN', 'JUST', 'LIKE',
+  'GOOD', 'BEST', 'WELL', 'LAST', 'LONG', 'HIGH', 'LOW', 'NEW',
+  'OLD', 'BIG', 'HUGE', 'REAL', 'TRUE', 'FULL', 'OPEN', 'NEXT',
+  'BACK', 'OVER', 'SUCH', 'SAME', 'EACH', 'BOTH', 'MADE', 'BEEN',
+  'COME', 'CAME', 'GONE', 'DONE', 'TOOK', 'MAKE', 'TAKE', 'GIVE',
+  'GAVE', 'HELP', 'WANT', 'NEED', 'KNOW', 'KNEW', 'LOOK', 'WORK',
+  'YEAR', 'WEEK', 'DAYS', 'TIME', 'LIFE', 'PART', 'CASE', 'IDEA',
+  'FACT', 'FEEL', 'SAID', 'SAYS', 'TELL', 'TOLD', 'KEEP', 'KEPT',
+  'CALL', 'FIND', 'FOUND', 'TALK', 'TURN', 'MOVE', 'LIVE', 'ABLE',
+  'SHOW', 'SHOWS', 'VIEW', 'VIEWS', 'FETCH', 'PULL', 'PUSH'
+]);
+
+/**
+ * Detect potential ticker WITH strong context (verb + adjective present)
+ * STILL requires capitalization - no lowercase tickers allowed
+ * Same as without context - capitalization is the signal of intent
+ */
+function detectPotentialTickerWithContext(query, excludeWords) {
+  // Same as strict version - capitalization is required regardless of context
+  return detectPotentialTickerExcluding(query, excludeWords);
+}
+
+/**
+ * Detect potential ticker WITHOUT strong context
+ * STRICTER: Only accept uppercase/$prefix, no lowercase
+ */
+function detectPotentialTickerExcluding(query, excludeWords) {
+  if (!query || typeof query !== 'string') return null;
+  
+  // Priority 1: $TICKER format (explicit, highest confidence)
+  const dollarMatches = query.match(DOLLAR_TICKER_REGEX);
+  if (dollarMatches && dollarMatches.length > 0) {
+    const ticker = dollarMatches[0].replace('$', '').toUpperCase();
+    if (ticker.length >= 1 && ticker.length <= 5) {
+      return ticker;
+    }
+  }
+  
+  // Priority 2: ALL-CAPS words (NVDA, AAPL, ULTA) - user typed explicitly
+  const allCapsWords = query.match(/\b[A-Z]{2,5}\b/g) || [];
+  for (const word of allCapsWords) {
+    if (!COMMON_NON_TICKERS.has(word) && !excludeWords.has(word) && !COMMON_SHORT_WORDS.has(word)) {
+      return word;
+    }
+  }
+  
+  // Priority 3: Titlecase words (Ulta, Nvda) - company name references
+  const titleCaseWords = query.match(/\b[A-Z][a-z]{1,4}\b/g) || [];
+  for (const word of titleCaseWords) {
+    const upper = word.toUpperCase();
+    if (!COMMON_NON_TICKERS.has(upper) && !excludeWords.has(upper) && !COMMON_SHORT_WORDS.has(upper)) {
+      return upper;
+    }
+  }
+  
+  // NO lowercase words without strong context
+  return null;
+}
+
+// Legacy function for backward compatibility
+function detectStockTicker(query) {
+  return detectPotentialTicker(query);
+}
+
+function isPsiEMAStockQuery(query) {
+  const { shouldTrigger } = detectPsiEMAKeys(query);
+  return shouldTrigger;
 }
 
 function fetchStockPrices(ticker) {
@@ -302,12 +426,14 @@ async function smartDetectTicker(query) {
 
 module.exports = {
   detectStockTicker,
+  detectPotentialTicker,
+  detectPsiEMAKeys,
   isPsiEMAStockQuery,
   fetchStockPrices,
   calculateDataAge,
   extractTickerWithAI,
   smartDetectTicker,
-  KNOWN_TICKERS,
   COMMON_NON_TICKERS,
-  AMBIGUOUS_TICKERS
+  PSI_EMA_VERBS,
+  PSI_EMA_ADJECTIVES
 };

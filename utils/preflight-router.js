@@ -11,8 +11,8 @@
  * keeping NYAN Protocol pure (reasoning only) and reducing code bloat.
  */
 
-const { detectStockTicker, smartDetectTicker, fetchStockPrices, calculateDataAge } = require('./stock-fetcher');
-const { shouldTriggerPsiEMA, getPsiEMAContext, PsiEMADashboard } = require('./psi-EMA');
+const { detectStockTicker, detectPsiEMAKeys, smartDetectTicker, fetchStockPrices, calculateDataAge } = require('./stock-fetcher');
+const { getPsiEMAContext, PsiEMADashboard } = require('./psi-EMA');
 const { getFinancialPhysicsSeed } = require('./financial-physics');
 const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal-analysis');
 
@@ -103,19 +103,26 @@ async function preflightRouter(options) {
     // MODE DETECTION (Priority Order)
     // ========================================
     
-    // 1. Ψ-EMA: Fourier/wave/financial analysis
-    // Context fallback ONLY applies if current query EXPLICITLY mentions stock/ticker/share
-    // This prevents "netflix price trend" (no stock keyword) from triggering psi-EMA
-    const hasContextTicker = contextResult?.inferredTicker;
-    const hasExplicitStockKeyword = /\b(stock|stocks|ticker|share|shares)\b/i.test(query);
-    const contextFallbackApplies = hasContextTicker && hasExplicitStockKeyword;
+    // 1. Ψ-EMA: Push-based 2/3 key detection (Lego-style Turing test)
+    // Keys: VERB (analyze/diagnose) + ADJECTIVE (price/trend) + OBJECT (ticker)
+    // If 2/3 keys match → unlock Ψ-EMA gate
+    const psiEmaDetection = detectPsiEMAKeys(query);
     
-    if (shouldTriggerPsiEMA(query, detectStockTicker) || contextFallbackApplies) {
+    // Context fallback: STRICT - only reuse inferred ticker if:
+    // 1. We have a ticker from prior conversation, AND
+    // 2. Current query has EXPLICIT stock keyword (stock/share/ticker/price), AND
+    // 3. Current query has at least a verb OR adjective
+    const hasContextTicker = contextResult?.inferredTicker;
+    const hasExplicitStockKeyword = /\b(stock|stocks|ticker|share|shares|price|prices)\b/i.test(query);
+    const hasVerbOrAdjective = psiEmaDetection.keys.some(k => k.type === 'verb' || k.type === 'adjective');
+    const contextFallbackApplies = hasContextTicker && hasExplicitStockKeyword && hasVerbOrAdjective;
+    
+    if (psiEmaDetection.shouldTrigger || contextFallbackApplies) {
       result.mode = 'psi-ema';
       result.routingFlags.usesPsiEMA = true;
       
-      // Extract ticker (rule-based first, then AI fallback, then context fallback)
-      result.ticker = await smartDetectTicker(query);
+      // Use ticker from key detection, or fall back to AI/context
+      result.ticker = psiEmaDetection.ticker || await smartDetectTicker(query);
       
       // If no ticker from current query, use context-inferred ticker
       if (!result.ticker && contextResult?.inferredTicker) {
