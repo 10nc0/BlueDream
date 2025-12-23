@@ -252,18 +252,45 @@ class PipelineOrchestrator {
     const { query, conversationHistory, extractedContent, temperature, maxTokens } = input;
     
     // Build final prompt with proper attachment preservation
-    // Priority: Memory → Attachments → Search → Query
-    // Memory provides human-like context, Attachments are primary source, Search supplements
+    // Priority: Memory → Ψ-EMA → Attachments → Search → Query
+    // Memory provides human-like context, Ψ-EMA injects wave analysis, Attachments are primary source
     let finalPrompt = query;
     const hasMemory = state.contextResult?.memoryPrompt?.length > 0;
     const hasAttachments = extractedContent && extractedContent.length > 0;
     const hasSearch = !!state.searchContext;
+    const isPsiEma = state.mode === 'psi-ema' && state.preflight?.psiEmaAnalysis;
     
     // Prepend φ-compressed memory context if available (human-like recall)
     let memoryPrefix = '';
     if (hasMemory) {
       memoryPrefix = state.contextResult.memoryPrompt + '\n[CURRENT QUERY]\n';
       console.log(`📝 Memory injected: ${state.contextResult.memoryPrompt.length} chars`);
+    }
+    
+    // Build Ψ-EMA instruction for user prompt (ensures LLM outputs wave analysis)
+    let psiEmaInstruction = '';
+    if (isPsiEma) {
+      const analysis = state.preflight.psiEmaAnalysis;
+      const stockData = state.preflight.stockData || {};
+      const ticker = state.preflight.ticker;
+      const phase = analysis.dimensions?.phase || {};
+      const anomaly = analysis.dimensions?.anomaly || {};
+      const convergence = analysis.dimensions?.convergence || {};
+      const composite = analysis.compositeSignal || {};
+      const fidelity = analysis.fidelity || {};
+      
+      psiEmaInstruction = `
+[Ψ-EMA WAVE FUNCTION ANALYSIS - YOU MUST INCLUDE ALL OF THIS IN YOUR RESPONSE]
+Ticker: ${ticker} | Price: ${stockData.currency || 'USD'} ${stockData.currentPrice?.toFixed(2) || 'N/A'}
+• Phase θ (Cycle): ${phase.current?.toFixed(2) || 'N/A'}° — ${phase.signal || 'N/A'}
+• Anomaly z (Deviation): ${anomaly.current?.toFixed(2) || 'N/A'}σ — ${anomaly.alert?.level || 'N/A'}
+• Convergence R (Sustainability): ${convergence.current?.toFixed(2) || 'N/A'} — ${convergence.regime?.label || convergence.regime || 'N/A'}
+• Composite Signal: ${composite.action || 'HOLD'} (${composite.confidence || 'N/A'}% confidence)
+• Data Fidelity: ${fidelity.percent || 'N/A'}% (${fidelity.grade || 'N/A'})
+
+INSTRUCTION: Present ALL three dimensions (Phase θ, Anomaly z, Convergence R) with their exact values. End with 🔥 ~nyan.
+`;
+      console.log(`📊 Ψ-EMA instruction injected for ${ticker}`);
     }
     
     if (hasAttachments && hasSearch) {
@@ -293,6 +320,12 @@ User query: ${query}`;
       finalPrompt = `${memoryPrefix}${query}`;
     }
     // else: plain query (no memory, no attachments, no search)
+    
+    // Append Ψ-EMA instruction to ensure wave analysis is output
+    // This goes at the END so it's the last thing the LLM sees before responding
+    if (psiEmaInstruction) {
+      finalPrompt = `${finalPrompt}\n\n${psiEmaInstruction}`;
+    }
     
     const messages = [
       ...state.systemMessages,
