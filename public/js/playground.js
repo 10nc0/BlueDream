@@ -590,14 +590,25 @@ function addMessage(role, content, messageAttachments = [], auditData = null) {
     }
     
     // Render markdown for AI responses, plain text for user
+    // Use DOMPurify to sanitize HTML and prevent XSS attacks
     if (role === 'assistant' && typeof marked !== 'undefined') {
         try {
             // Escape tildes in "nyan~" to prevent strikethrough between instances
             const safeContent = content.replace(/nyan~/g, 'nyan\\~');
-            const renderedMarkdown = marked.parse(safeContent, {
+            let renderedMarkdown = marked.parse(safeContent, {
                 breaks: true,
                 gfm: true
             });
+            // Sanitize HTML output with DOMPurify if available
+            if (typeof DOMPurify !== 'undefined') {
+                renderedMarkdown = DOMPurify.sanitize(renderedMarkdown, {
+                    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'b', 'i', 'u', 'code', 'pre', 'blockquote', 
+                                   'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a', 'hr',
+                                   'table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'span', 'del'],
+                    ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'class'],
+                    ALLOW_DATA_ATTR: false
+                });
+            }
             html += `<div class="content">${renderedMarkdown}</div>`;
         } catch (err) {
             console.error('Markdown parse error:', err);

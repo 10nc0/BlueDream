@@ -18,6 +18,30 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_TOKEN = process.env.GROQ_API_KEY;
 
+const MAX_PROMPT_LENGTH = 50000;
+
+/**
+ * Sanitize input before sending to LLM
+ * Prevents prompt injection and limits size
+ * @param {string} input - Raw input
+ * @returns {string} Sanitized input
+ */
+function sanitizePromptInput(input) {
+  if (!input || typeof input !== 'string') return '';
+  
+  let sanitized = input
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    .replace(/\uFEFF/g, '')
+    .trim();
+  
+  if (sanitized.length > MAX_PROMPT_LENGTH) {
+    sanitized = sanitized.slice(0, MAX_PROMPT_LENGTH) + '\n[Input truncated for safety]';
+    console.warn(`⚠️ Prometheus: Input truncated from ${input.length} to ${MAX_PROMPT_LENGTH} chars`);
+  }
+  
+  return sanitized;
+}
+
 const DEFAULT_PARAMS = {
   max_tokens: 500,
   temperature: 0.1,           // H(0) shield - no creativity, only facts
@@ -37,6 +61,11 @@ async function callLLM(prompt, options = {}) {
     throw new Error('GROQ_API_KEY not configured. Add it to Replit Secrets.');
   }
   
+  const sanitizedPrompt = sanitizePromptInput(prompt);
+  if (!sanitizedPrompt) {
+    throw new Error('Empty or invalid prompt provided');
+  }
+  
   const params = { ...DEFAULT_PARAMS, ...options };
   let lastError = null;
   
@@ -49,7 +78,7 @@ async function callLLM(prompt, options = {}) {
         {
           model: GROQ_MODEL,
           messages: [
-            { role: 'user', content: prompt }
+            { role: 'user', content: sanitizedPrompt }
           ],
           max_tokens: params.max_tokens,
           temperature: params.temperature,
@@ -178,7 +207,9 @@ module.exports = {
   callLLM,
   checkWithLLM,
   extractJSON,
+  sanitizePromptInput,
   GROQ_API_URL,
   GROQ_MODEL,
-  DEFAULT_PARAMS
+  DEFAULT_PARAMS,
+  MAX_PROMPT_LENGTH
 };

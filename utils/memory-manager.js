@@ -7,9 +7,24 @@
  * - Attachment side-door for direct context injection
  * 
  * Output: Hybrid memory = episodic summaries + precise recent + attachment recall
+ * 
+ * Security: Uses hashed session IDs, enforces message size limits
  */
 
 const axios = require('axios');
+const crypto = require('crypto');
+
+const MAX_MESSAGE_SIZE = 50000; // 50KB per message
+const MAX_ATTACHMENT_TEXT_SIZE = 100000; // 100KB per attachment
+
+/**
+ * Hash session ID for privacy
+ * @param {string} sessionId - Raw session ID (e.g., IP)
+ * @returns {string} Hashed session key
+ */
+function hashSessionId(sessionId) {
+  return crypto.createHash('sha256').update(`${sessionId}:nyan-memory`).digest('hex').slice(0, 16);
+}
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const SUMMARY_MODEL = 'llama-3.1-8b-instant';
@@ -66,19 +81,31 @@ class LocalMemoryManager {
    * @param {Object|null} attachment - Optional attachment metadata
    */
   addMessage(role, content, attachment = null) {
+    let safeContent = content;
+    if (typeof content === 'string' && content.length > MAX_MESSAGE_SIZE) {
+      safeContent = content.slice(0, MAX_MESSAGE_SIZE) + '... [truncated]';
+      console.warn(`⚠️ Message truncated from ${content.length} to ${MAX_MESSAGE_SIZE} chars`);
+    }
+    
     this.messages.push({ 
       role, 
-      content,
+      content: safeContent,
       timestamp: Date.now()
     });
 
     if (attachment) {
+      let extractedText = attachment.processedText || attachment.extractedText || '';
+      if (extractedText.length > MAX_ATTACHMENT_TEXT_SIZE) {
+        extractedText = extractedText.slice(0, MAX_ATTACHMENT_TEXT_SIZE) + '... [truncated]';
+        console.warn(`⚠️ Attachment text truncated from ${(attachment.processedText || attachment.extractedText || '').length} to ${MAX_ATTACHMENT_TEXT_SIZE} chars`);
+      }
+      
       this.attachments.push({
         id: Date.now(),
-        name: attachment.name || 'unnamed',
-        type: attachment.type || 'unknown',
-        extractedText: attachment.processedText || attachment.extractedText || '',
-        shortDesc: attachment.shortSummary || attachment.summary || this._generateShortDesc(attachment),
+        name: (attachment.name || 'unnamed').slice(0, 255),
+        type: (attachment.type || 'unknown').slice(0, 100),
+        extractedText,
+        shortDesc: (attachment.shortSummary || attachment.summary || this._generateShortDesc(attachment)).slice(0, 500),
         timestamp: Date.now()
       });
     }
@@ -384,23 +411,27 @@ const sessionMemories = new Map();
 /**
  * Get or create memory manager for a session
  * @param {string} sessionId - Session identifier (e.g., IP address)
+ * @param {boolean} useHash - Whether to hash the session ID (default: true)
  * @returns {LocalMemoryManager}
  */
-function getMemoryManager(sessionId) {
-  if (!sessionMemories.has(sessionId)) {
-    sessionMemories.set(sessionId, new LocalMemoryManager());
+function getMemoryManager(sessionId, useHash = true) {
+  const key = useHash ? hashSessionId(sessionId) : sessionId;
+  if (!sessionMemories.has(key)) {
+    sessionMemories.set(key, new LocalMemoryManager());
   }
-  return sessionMemories.get(sessionId);
+  return sessionMemories.get(key);
 }
 
 /**
  * Clear memory for a session
  * @param {string} sessionId
+ * @param {boolean} useHash - Whether to hash the session ID (default: true)
  */
-function clearMemory(sessionId) {
-  if (sessionMemories.has(sessionId)) {
-    sessionMemories.get(sessionId).clear();
-    sessionMemories.delete(sessionId);
+function clearMemory(sessionId, useHash = true) {
+  const key = useHash ? hashSessionId(sessionId) : sessionId;
+  if (sessionMemories.has(key)) {
+    sessionMemories.get(key).clear();
+    sessionMemories.delete(key);
   }
 }
 
@@ -427,5 +458,8 @@ module.exports = {
   getMemoryManager,
   clearMemory,
   clearSession: clearMemory,
-  cleanupOldSessions
+  cleanupOldSessions,
+  hashSessionId,
+  MAX_MESSAGE_SIZE,
+  MAX_ATTACHMENT_TEXT_SIZE
 };

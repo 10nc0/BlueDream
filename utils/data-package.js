@@ -169,30 +169,86 @@ class DataPackage {
 }
 
 /**
+ * Hash tenant identifier for privacy (IP+UserAgent → SHA256 truncated)
+ * @param {string} ip - IP address
+ * @param {string} userAgent - User agent string (optional)
+ * @returns {string} Hashed tenant key
+ */
+function hashTenantKey(ip, userAgent = '') {
+  const data = `${ip}:${userAgent}:nyanbook-salt`;
+  return crypto.createHash('sha256').update(data).digest('hex').slice(0, 16);
+}
+
+/**
  * TenantPackageStore - IP-scoped DataPackage storage
  * Fractal: Tenant → 8 messages → each message's DataPackage
+ * Security: Uses hashed keys, auto-expires stale sessions
  */
 class TenantPackageStore {
   constructor() {
     this.tenants = new Map();
     this.maxPackagesPerTenant = 8;
+    this.sessionTTL = 60 * 60 * 1000; // 1 hour TTL
+    this.lastCleanup = Date.now();
+    this.cleanupInterval = 5 * 60 * 1000; // Cleanup every 5 minutes
+  }
+  
+  /**
+   * Generate secure tenant key from IP and optional User-Agent
+   * @param {string} ip - IP address
+   * @param {string} userAgent - User agent (optional)
+   * @returns {string} Secure hashed key
+   */
+  getSecureTenantKey(ip, userAgent = '') {
+    return hashTenantKey(ip, userAgent);
   }
   
   /**
    * Get or create tenant storage
-   * @param {string} tenantId - IP or session ID
-   * @returns {Array} Tenant's package history
+   * @param {string} tenantId - Hashed tenant key or raw IP (backward compat)
+   * @returns {Object} Tenant's storage with packages and metadata
    */
   getTenant(tenantId) {
+    this._maybeCleanup();
+    
     if (!this.tenants.has(tenantId)) {
-      this.tenants.set(tenantId, []);
+      this.tenants.set(tenantId, {
+        packages: [],
+        createdAt: Date.now(),
+        lastActivity: Date.now()
+      });
     }
-    return this.tenants.get(tenantId);
+    
+    const tenant = this.tenants.get(tenantId);
+    tenant.lastActivity = Date.now();
+    return tenant.packages;
+  }
+  
+  /**
+   * Periodic cleanup of expired sessions
+   */
+  _maybeCleanup() {
+    const now = Date.now();
+    if (now - this.lastCleanup < this.cleanupInterval) return;
+    
+    this.lastCleanup = now;
+    let expired = 0;
+    
+    for (const [key, tenant] of this.tenants) {
+      if (now - tenant.lastActivity > this.sessionTTL) {
+        this.tenants.delete(key);
+        expired++;
+      }
+    }
+    
+    if (expired > 0) {
+      console.log(`🧹 DataPackage: Cleaned ${expired} expired tenant sessions`);
+    }
   }
   
   /**
    * Store DataPackage for tenant (φ-8 window)
-   * @param {string} tenantId - IP or session ID
+   * @param {string} tenantId - Hashed tenant key
    * @param {DataPackage} pkg - Package to store
    */
   storePackage(tenantId, pkg) {
@@ -203,7 +259,8 @@ class TenantPackageStore {
       packages.shift();
     }
     
-    console.log(`📦 TenantStore [${tenantId}]: Stored package ${pkg.id.slice(0,8)} (${packages.length}/${this.maxPackagesPerTenant})`);
+    const safeId = tenantId.slice(0, 8);
+    console.log(`📦 TenantStore [${safeId}...]: Stored package ${pkg.id.slice(0,8)} (${packages.length}/${this.maxPackagesPerTenant})`);
   }
   
   /**
@@ -272,5 +329,6 @@ module.exports = {
   DataPackage,
   TenantPackageStore,
   globalPackageStore,
+  hashTenantKey,
   STAGE_IDS
 };

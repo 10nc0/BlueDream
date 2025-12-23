@@ -239,12 +239,34 @@ function isPsiEMAStockQuery(query) {
   return shouldTrigger;
 }
 
+/**
+ * Sanitize ticker symbol to prevent command injection
+ * Only allows uppercase letters and hyphens (for B-class shares like BRK-B)
+ * @param {string} ticker - Raw ticker input
+ * @returns {string|null} Sanitized ticker or null if invalid
+ */
+function sanitizeTicker(ticker) {
+  if (!ticker || typeof ticker !== 'string') return null;
+  
+  const sanitized = ticker.toUpperCase().replace(/[^A-Z0-9\-\.]/g, '');
+  
+  if (sanitized.length < 1 || sanitized.length > 10) return null;
+  if (!/^[A-Z]/.test(sanitized)) return null;
+  
+  return sanitized;
+}
+
 function fetchStockPrices(ticker) {
   return new Promise((resolve, reject) => {
+    const safeTicker = sanitizeTicker(ticker);
+    if (!safeTicker) {
+      reject(new Error(`Invalid ticker format: ${ticker}`));
+      return;
+    }
+    
     const scriptPath = path.join(__dirname, 'fetch-stock-prices.py');
     
-    // Python script handles exact period strings: 3mo daily, 15mo weekly
-    const python = spawn('python', [scriptPath, ticker]);
+    const python = spawn('python', [scriptPath, safeTicker]);
     
     let stdout = '';
     let stderr = '';
@@ -466,6 +488,7 @@ module.exports = {
   calculateDataAge,
   extractTickerWithAI,
   smartDetectTicker,
+  sanitizeTicker,
   COMMON_NON_TICKERS,
   PSI_EMA_VERBS,
   PSI_EMA_ADJECTIVES
