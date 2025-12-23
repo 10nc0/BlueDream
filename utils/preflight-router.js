@@ -434,37 +434,34 @@ ${fundParts.map(p => `- ${p}`).join('\n')}`;
     }
   }
   
+  // Build confidence line (compressed, substantive)
+  const fidelityPct = fidelity.percent || 'N/A';
+  const fidelityGrade = fidelity.grade || 'N/A';
+  const confidenceLine = `**${fidelityPct}%** (${fidelityGrade}) → yfinance prices + SEC EDGAR fundamentals`;
+  
   return `
 ## Ψ-EMA REAL-TIME ANALYSIS
 ${companyHeader}
-**Data Source**: yfinance (VERIFIED - REAL PRICES)
+**Ψ-EMA measures**: θ = where in cycle, z = how unusual the price is, R = whether trend can sustain. When all three align, conviction is higher; when they conflict, caution is warranted.
+
+**Data Source**: yfinance (VERIFIED)
 **Data Timestamp**: ${ageFlag} ${dataAge?.timestamp} (${dataAge?.age})
 **Current Price**: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
-**Analysis Period**: ${stockData.periodDays || stockData.closes?.length} trading days
 
-### THREE-DIMENSIONAL STATE (computed from real closing prices):
-**Phase θ (Cycle)**: ${safeFixed(phaseTheta)}° — ${phaseSignal} (EMA-34/EMA-55)
-**Anomaly z (Deviation)**: ${safeFixed(anomalyZ)}σ — ${anomalyLevel} (EMA-21/EMA-34)
-**Convergence R (Sustainability)**: ${safeFixed(convergenceR)} — ${regimeLabel} (EMA-13/EMA-21)
+### THREE-DIMENSIONAL STATE:
+| Dimension | Formula | Value | Signal |
+|-----------|---------|-------|--------|
+| **θ (Cycle Position)** | arctan(ΔEMA-55/ΔEMA-34) | ${safeFixed(phaseTheta)}° | ${phaseSignal} |
+| **z (Price Deviation)** | (Price - Median) / MAD | ${safeFixed(anomalyZ)}σ | ${anomalyLevel} |
+| **R (Momentum Ratio)** | z(t) / z(t-1) | ${convergenceR != null ? safeFixed(convergenceR) : 'N/A'} | ${regimeLabel} |
 
-### COMPOSITE SIGNAL: ${action}
+### COMPOSITE: ${action}
 ${tetralemmaAlert}
 
-### DATA QUALITY TIER:
-- **Fidelity**: ${fidelity.percent || 'N/A'}% real data (Grade ${fidelity.grade || 'N/A'})
-- **Market Signal**: ${typeof confidence === 'number' ? confidence : 'N/A'}% (phase/anomaly/convergence alignment strength)
-
-**UNIFIED CONFIDENCE**: Your response confidence will be graded by audit against NYAN's ANALYSIS HIERARCHY:
-- 95% = EXACT DATA (real yfinance prices, SEC EDGAR fundamentals, verified sources)
-- 80% = PROXY AVAILABLE (interpolated data, flagged, method documented)
-- <50% = NOTHING (no data available, honest refusal)
-
+### CONFIDENCE: ${confidenceLine}
 ${fundamentalsSection}
 
-⚠️ IMPORTANT: Always include data timestamp in financial claims. Undated prices = unverifiable.
-
-**⚠️ CRITICAL INSTRUCTION**: The values above are COMPUTED from REAL yfinance data. Quote these exact values in your response. Do NOT hallucinate different numbers. Data is fresh through ${dataAge?.timestamp}.
-**End with "🔥 ~nyan" to indicate verified Ψ-EMA output.**
+**⚠️ INSTRUCTION**: Quote these EXACT computed values. End with "🔥 ~nyan".
 `;
 }
 
