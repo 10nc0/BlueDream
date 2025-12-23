@@ -42,6 +42,9 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Financial Physics System**: A 4-tier architecture for financial cognition, extending the NYAN Protocol.
 - **Legal Document Analysis System**: Stage 1+ extension for contract/agreement analysis, auto-triggered by legal keywords, providing a universal 7-section template.
 - **Ψ-EMA System**: Multi-Dimensional Wave Function Dashboard implementing Financial Quantum Mechanics. It analyzes financial time series using three orthogonal dimensions (Phase θ, Anomaly z, Convergence R) with Fibonacci EMA periods. It includes real-time stock integration using yfinance for historical prices and SEC EDGAR for fundamental metrics, with smart and three-tier ticker detection.
+    - **Dual Timeframe Analysis** (Dec 23, 2025): Default shows BOTH Daily (1d) AND Weekly (7d) Ψ-EMA analysis to avoid daily noise bias
+    - **Atomic Unit of Compression**: TIME (quarter/semester/annum) for stocks; HOUSEHOLD for future individual scope
+    - **Graceful Fallback**: If weekly data insufficient (<13 weeks), shows daily only with explanation
 - **Financial Microbiology** (Dec 23, 2025): Economic pathology framework treating companies as organisms:
     - **Economic Pathogens**:
       - 🦠 **Ponzi Virus**: R > 2.5 (unsustainable acceleration, new capital feeds old obligations)

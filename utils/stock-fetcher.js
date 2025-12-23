@@ -91,7 +91,7 @@ function isPsiEMAStockQuery(query) {
   return hasPsiEMA && ticker !== null;
 }
 
-function fetchStockPrices(ticker, days = 180) {
+function fetchStockPrices(ticker, days = 365) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(__dirname, 'fetch-stock-prices.py');
     

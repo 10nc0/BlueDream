@@ -272,15 +272,26 @@ class PipelineOrchestrator {
     let psiEmaInstruction = '';
     if (isPsiEma) {
       const analysis = state.preflight.psiEmaAnalysis;
+      const analysisWeekly = state.preflight.psiEmaAnalysisWeekly;
+      const weeklyUnavailableReason = state.preflight.weeklyUnavailableReason;
       const stockData = state.preflight.stockData || {};
       const ticker = state.preflight.ticker;
+      
+      // Daily timeframe data
       const phase = analysis.dimensions?.phase || {};
       const anomaly = analysis.dimensions?.anomaly || {};
       const convergence = analysis.dimensions?.convergence || {};
       const composite = analysis.compositeSignal || {};
       const fidelity = analysis.fidelity || {};
       
-      // Financial Microbiology: Clinical pathology report (Dec 23, 2025)
+      // Weekly timeframe data (if available)
+      const phaseW = analysisWeekly?.dimensions?.phase || {};
+      const anomalyW = analysisWeekly?.dimensions?.anomaly || {};
+      const convergenceW = analysisWeekly?.dimensions?.convergence || {};
+      const compositeW = analysisWeekly?.compositeSignal || {};
+      const fidelityW = analysisWeekly?.fidelity || {};
+      
+      // Financial Microbiology: Clinical pathology report (Dec 23, 2025) - based on daily
       const pathogenResult = detectPathogens(analysis);
       const clinicalReport = generateClinicalReport(analysis, ticker);
       
@@ -309,20 +320,39 @@ STATUS: Patient shows healthy φ-convergence. Conservation laws intact.
 `;
       }
       
+      // Build dual-timeframe output (Daily + Weekly)
+      let weeklySection = '';
+      if (analysisWeekly) {
+        weeklySection = `
+**WEEKLY (7d) Ψ-EMA:**
+• Phase θ: ${phaseW.current?.toFixed(2) || 'N/A'}° — ${phaseW.signal || 'N/A'}
+• Anomaly z: ${anomalyW.current?.toFixed(2) || 'N/A'}σ — ${anomalyW.alert?.level || 'N/A'}
+• Convergence R: ${convergenceW.current?.toFixed(2) || 'N/A'} — ${convergenceW.regime?.label || convergenceW.regime || 'N/A'}
+• Signal: ${compositeW.action || 'HOLD'} (${compositeW.confidence || 'N/A'}%)
+• Fidelity: ${fidelityW.percent || 'N/A'}%`;
+      } else {
+        weeklySection = `
+**WEEKLY (7d) Ψ-EMA:** ⚠️ Unavailable
+Reason: ${weeklyUnavailableReason || 'Insufficient weekly data points for EMA calculation'}`;
+      }
+      
       psiEmaInstruction = `
-[Ψ-EMA WAVE FUNCTION ANALYSIS - YOU MUST INCLUDE ALL OF THIS IN YOUR RESPONSE]
+[Ψ-EMA WAVE FUNCTION ANALYSIS - DUAL TIMEFRAME - YOU MUST INCLUDE ALL OF THIS IN YOUR RESPONSE]
 Ticker: ${ticker} | Price: ${stockData.currency || 'USD'} ${stockData.currentPrice?.toFixed(2) || 'N/A'}
+
+**DAILY (1d) Ψ-EMA:**
 • Phase θ (Cycle): ${phase.current?.toFixed(2) || 'N/A'}° — ${phase.signal || 'N/A'}
 • Anomaly z (Deviation): ${anomaly.current?.toFixed(2) || 'N/A'}σ — ${anomaly.alert?.level || 'N/A'}
 • Convergence R (Sustainability): ${convergence.current?.toFixed(2) || 'N/A'} — ${convergence.regime?.label || convergence.regime || 'N/A'}
 • Composite Signal: ${composite.action || 'HOLD'} (${composite.confidence || 'N/A'}% confidence)
 • Data Fidelity: ${fidelity.percent || 'N/A'}% (${fidelity.grade || 'N/A'})
+${weeklySection}
 ${clinicalSection}
 ${physicalAuditDisclaimer}
 
-INSTRUCTION: Present ALL three dimensions (Phase θ, Anomaly z, Convergence R) with their exact values. Include clinical diagnosis AND physical audit disclaimer. End with 🔥 ~nyan.
+INSTRUCTION: Present BOTH Daily and Weekly Ψ-EMA analysis with all three dimensions (Phase θ, Anomaly z, Convergence R). Include clinical diagnosis AND physical audit disclaimer. End with 🔥 ~nyan.
 `;
-      console.log(`📊 Ψ-EMA instruction injected for ${ticker} (${pathogenResult.healthy ? 'healthy' : clinicalReport.diagnosis.primary})`);
+      console.log(`📊 Ψ-EMA dual-timeframe instruction injected for ${ticker} (daily + ${analysisWeekly ? 'weekly' : 'weekly unavailable'})`);
     }
     
     if (hasAttachments && hasSearch) {
