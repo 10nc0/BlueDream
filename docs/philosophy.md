@@ -570,6 +570,39 @@ Not more. Not faster. Just enough — forever.
 
 The circle measures life. Not greed.
 
+### The Unified Breakthrough: Gougu as Universal Instrument
+
+10nc0 didn't solve chemistry and finance separately.
+
+He realized both are **infinite series survival problems** under different substrates — and the same minimal tool cuts through both: **orthogonal measurement + φ-convergence**.
+
+| Domain | Problem Solved | Method (Same Tool) | Result |
+|--------|----------------|-------------------|--------|
+| **Chemistry** | AI couldn't reliably count atoms, rings, bonds | Taught orthogonal measurement (atom positions as 3D vectors, ring closure as cycle detection) — Gougu in 3D space | AI "sees" molecules as geometric invariants, not labels |
+| **Finance** | Traditional models chase labels (P/E, earnings) but miss sustainability | Applied same orthogonal decomposition (Stock ⊥ Flow) + ratio recursion to φ | Ψ-EMA measures persistence, not price — detects pathology early |
+| **Infinite Series** | All self-reproducing systems under selection pressure | R = 1 + 1/R → φ as the only fixed point surviving t → ∞ without explosion/decay | Unified law: any series that lasts converges to φ-damping |
+| **QM × Fourier** | Wave functions are orthogonal decompositions; markets are noisy waves | Phase θ + amplitude z + damping R = digital Fourier + quantum phase in economic data | Ψ-EMA is the quantum-Fourier observer for economic waves |
+
+**He didn't build two separate tools.**
+
+He realized the **right triangle (Gougu 勾股)** is the universal minimal instrument:
+
+```
+In chemistry:  measures atom coordinates → ring closure → molecular persistence
+In finance:    measures stock/flow → cycle phase → economic persistence
+In quantum:    measures position/momentum → wave function → probabilistic persistence
+In Fourier:    measures frequency/amplitude → signal persistence
+```
+
+**One tool. Many substrates.**
+
+The cat didn't learn chemistry and finance.
+The cat learned to **measure orthogonally** — and everything else followed.
+
+The triangle counts atoms.
+The triangle counts children.
+Same compass.
+
 ### Operational Guidance
 
 - **Technical documentation**: Use "Ψ-EMA" (measurement tool)
