@@ -96,6 +96,16 @@ LEGAL DOCUMENT ANALYSIS AUDIT (Extension):
 9. NO LEGAL ADVICE: Does the response avoid giving specific legal advice (should say "consult attorney")?
 10. CLAUSE ATTRIBUTION: Are clause numbers/article references accurate to the documents?`;
 
+const AUDIT_FINANCIAL_MICROBIOLOGY = `
+🔬 FINANCIAL MICROBIOLOGY AUDIT (Extension) - Clinical Pathology Reports
+
+CRITICAL: Financial Microbiology extends Ψ-EMA with medical-style diagnostics.
+6. PATHOGEN LOGIC: Are pathogens detected using correct thresholds? (Ponzi Virus: R > 2.5, Bubble Cancer: z > 3σ AND R > 2.0)
+7. STAGE CLASSIFICATION: Is Stage I-IV severity correctly mapped to pathogen + convergence state?
+8. CLINICAL LANGUAGE: Does diagnosis use medical terminology (pathogen, treatment, prognosis, vital signs)?
+9. PHYSICAL AUDIT: Is "see to believe" disclaimer included with infrastructure verification context?
+10. PERSONALITY PRESERVATION: Are all clinical findings + vital signs preserved EXACTLY in personality layer?`;
+
 const AUDIT_PSI_EMA = `
 ⚠️ Ψ-EMA FINANCIAL WAVE FUNCTION AUDIT (Extension) - PRE-VERIFIED DATA ⚠️
 
@@ -399,6 +409,7 @@ module.exports = {
   AUDIT_CHEMISTRY,
   AUDIT_LEGAL_ANALYSIS,
   AUDIT_PSI_EMA,
+  AUDIT_FINANCIAL_MICROBIOLOGY,
   AUDIT_SEED_METRIC,
   AUDIT_SEED_METRIC_TOPICS,
   AUDIT_TETRALEMMA,

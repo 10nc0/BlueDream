@@ -23,7 +23,7 @@ const { extractContext, extractContextWithMemory, mergeContextForTickerDetection
 const { NYAN_PROTOCOL_SYSTEM_PROMPT, NYAN_PROTOCOL_COMPRESSED } = require('../prompts/nyan-protocol');
 const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
-const { detectPathogens, generateClinicalReport } = require('./psi-EMA');
+const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer } = require('./psi-EMA');
 
 const PIPELINE_STEPS = {
   CONTEXT_EXTRACT: 'S-1',
@@ -284,6 +284,9 @@ class PipelineOrchestrator {
       const pathogenResult = detectPathogens(analysis);
       const clinicalReport = generateClinicalReport(analysis, ticker);
       
+      // Physical Audit Disclaimer: "See to believe" infrastructure verification (Dec 23, 2025)
+      const physicalAuditDisclaimer = generatePhysicalAuditDisclaimer(analysis, ticker);
+      
       // Build clinical section if pathogens detected or unhealthy
       let clinicalSection = '';
       if (!pathogenResult.healthy) {
@@ -315,7 +318,9 @@ Ticker: ${ticker} | Price: ${stockData.currency || 'USD'} ${stockData.currentPri
 • Composite Signal: ${composite.action || 'HOLD'} (${composite.confidence || 'N/A'}% confidence)
 • Data Fidelity: ${fidelity.percent || 'N/A'}% (${fidelity.grade || 'N/A'})
 ${clinicalSection}
-INSTRUCTION: Present ALL three dimensions (Phase θ, Anomaly z, Convergence R) with their exact values. Include clinical diagnosis. End with 🔥 ~nyan.
+${physicalAuditDisclaimer}
+
+INSTRUCTION: Present ALL three dimensions (Phase θ, Anomaly z, Convergence R) with their exact values. Include clinical diagnosis AND physical audit disclaimer. End with 🔥 ~nyan.
 `;
       console.log(`📊 Ψ-EMA instruction injected for ${ticker} (${pathogenResult.healthy ? 'healthy' : clinicalReport.diagnosis.primary})`);
     }

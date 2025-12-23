@@ -33,6 +33,7 @@ async function runVerifiedAnswer(options) {
     usesChemistry = false,
     usesLegalAnalysis = false,
     usesPsiEMA = false,
+    usesFinancialMicrobiology = false,
     isSeedMetric = false,
     isTetralemma = false,
     auditMode = 'STRICT', // 'RESEARCH' | 'STRICT'
@@ -57,6 +58,7 @@ async function runVerifiedAnswer(options) {
   if (usesChemistry) auditMetadata.extensionsVerified.push('CHEMISTRY');
   if (usesLegalAnalysis) auditMetadata.extensionsVerified.push('LEGAL_ANALYSIS');
   if (usesPsiEMA) auditMetadata.extensionsVerified.push('PSI_EMA');
+  if (usesFinancialMicrobiology) auditMetadata.extensionsVerified.push('FINANCIAL_MICROBIOLOGY');
   if (isSeedMetric) auditMetadata.extensionsVerified.push('SEED_METRIC');
   if (isTetralemma) auditMetadata.extensionsVerified.push('TETRALEMMA');
   auditMetadata.extensionsVerified.push(`AUDIT_MODE_${auditMode}`);
@@ -67,7 +69,7 @@ async function runVerifiedAnswer(options) {
       draftAnswer,
       originalQuery,
       userContext,
-      { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, usesPsiEMA, isSeedMetric, isTetralemma, auditMode },
+      { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, usesPsiEMA, usesFinancialMicrobiology, isSeedMetric, isTetralemma, auditMode },
       timeout
     );
 
@@ -116,7 +118,7 @@ async function runVerifiedAnswer(options) {
         correctedAnswer,
         originalQuery,
         userContext,
-        { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, usesPsiEMA, isSeedMetric, isTetralemma, auditMode },
+        { usesFinancialPhysics, usesChemistry, usesLegalAnalysis, usesPsiEMA, usesFinancialMicrobiology, isSeedMetric, isTetralemma, auditMode },
         timeout
       );
 

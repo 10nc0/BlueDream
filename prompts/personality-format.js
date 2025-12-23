@@ -22,7 +22,9 @@ YOUR TASK: Reformat the following verified answer for better readability while p
 3. **Conclusions**: The final verdict, recommendation, or answer must not change in meaning
 4. **Quotes**: Any quoted text from documents must remain unchanged
 5. **Tables**: Data in tables must have identical values (you may only reformat the table structure)
-6. **Nyan Protocl**: Preserve all NYAN Protocol metrics, calculations, outputs, and labels exactly. Remember to include 50yr ago vs recent for SEED METRIC
+6. **Nyan Protocol**: Preserve all NYAN Protocol metrics, calculations, outputs, and labels exactly. Remember to include 50yr ago vs recent for SEED METRIC
+7. **Clinical Findings**: Preserve ALL clinical pathology report findings, vital signs (R, z, emoji, diagnosis), microscopy, prognosis, and treatment EXACTLY
+8. **Physical Audit**: Preserve infrastructure verification disclaimers and "see to believe" context exactly
 
 ## FORMATTING IMPROVEMENTS (ALLOWED)
 - Echo '🔥 ~nyan' or '🔥 nyan~' signature

@@ -51,6 +51,14 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **Clinical Report Generator**: Produces pathology-style reports with Patient, Vital Signs, Diagnosis, Microscopy, Prognosis, Treatment
     - **Pipeline Integration**: AI responses use medical/pharmaceutical language when pathogens detected
     - **LOL = Ledger Observation Laboratory**: "Economic microbiology is what happens when we actually LOOK."
+    - **2-Pass Audit Integration**: Clinical findings (vital signs, diagnosis, treatment, prognosis) pass through audit verification and are exactly preserved in personality formatting layer
+- **Physical Audit Disclaimer** (Dec 23, 2025): "See to believe" infrastructure verification for Financial Physics:
+    - **Three-Tier Context**: 
+      - **Healthy**: Data center infrastructure, thermal management, genuine market structure verification via yfinance source
+      - **Critical**: Production infrastructure context with real latency, bandwidth, fault-domain isolation, SEC filing aggregators
+      - **Super-Critical**: Distributed infrastructure audit requirements including data center acres, MW/GW capacity, fan arrays, network topology, dark fiber redundancy, storage durability
+    - **Pipeline Integration**: Automatically triggered in Ψ-EMA outputs with regime-based severity level
+    - **Personality Preservation**: Infrastructure disclaimers preserved exactly through audit and formatting layers
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.
