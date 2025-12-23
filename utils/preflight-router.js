@@ -147,18 +147,62 @@ async function preflightRouter(options) {
       const hasAdjective = psiEmaDetection.keys.some(k => k.type === 'adjective');
       const contextFallbackApplies = hasContextTicker && hasExplicitStockKeyword && hasVerbOrAdjective;
       
-      // LIMBO JUNK RESCUE: If verb + adjective detected but no ticker,
-      // try AI ticker extraction before giving up (handles lowercase tickers like "nvda")
+      // ========================================
+      // BIDIRECTIONAL 2/3 KEY RESCUE (AI-PUSH)
+      // Read → Interpret → Push → Retry
+      // ========================================
+      // Scenario 1: verb + adjective, no ticker → AI extracts ticker
+      // Scenario 2: ticker + verb, no adjective → infer adjective (implied "price")
+      // Scenario 3: ticker + adjective, no verb → infer verb (implied "analyze")
+      // Scenario 4: ticker only + stock context → infer both
+      
       let aiRescuedTicker = null;
-      if (!psiEmaDetection.shouldTrigger && hasVerb && hasAdjective && !psiEmaDetection.ticker) {
-        console.log(`🔧 Preflight: LIMBO JUNK rescue - trying AI ticker extraction...`);
+      let aiInferredVerb = false;
+      let aiInferredAdjective = false;
+      const hasTicker = !!psiEmaDetection.ticker;
+      const keyCount = psiEmaDetection.keys.length;
+      
+      // Scenario 1: Has verb + adjective but no ticker → try AI ticker extraction
+      if (!psiEmaDetection.shouldTrigger && hasVerb && hasAdjective && !hasTicker) {
+        console.log(`🔧 AI-PUSH: verb + adjective detected, missing ticker → extracting...`);
         aiRescuedTicker = await smartDetectTicker(query);
         if (aiRescuedTicker) {
-          console.log(`✅ Preflight: AI rescued ticker: ${aiRescuedTicker}`);
+          console.log(`✅ AI-PUSH: Rescued ticker: ${aiRescuedTicker}`);
         }
       }
+      
+      // Scenario 2: Has ticker + verb, missing adjective → infer adjective
+      if (!psiEmaDetection.shouldTrigger && hasTicker && hasVerb && !hasAdjective) {
+        console.log(`🔧 AI-PUSH: ticker + verb detected, inferring adjective (implied: price/trend)`);
+        aiInferredAdjective = true;
+      }
+      
+      // Scenario 3: Has ticker + adjective, missing verb → infer verb
+      if (!psiEmaDetection.shouldTrigger && hasTicker && hasAdjective && !hasVerb) {
+        console.log(`🔧 AI-PUSH: ticker + adjective detected, inferring verb (implied: analyze)`);
+        aiInferredVerb = true;
+      }
+      
+      // Scenario 4: Has ticker only + explicit stock context → infer both
+      if (!psiEmaDetection.shouldTrigger && hasTicker && !hasVerb && !hasAdjective && hasExplicitStockKeyword) {
+        console.log(`🔧 AI-PUSH: ticker + stock keyword detected, inferring verb + adjective`);
+        aiInferredVerb = true;
+        aiInferredAdjective = true;
+      }
+      
+      // Calculate effective key count after AI inference
+      // Rule: 2/3 keys where one is a ticker (not 2 + ticker)
+      const effectiveHasTicker = hasTicker || !!aiRescuedTicker;
+      const effectiveHasVerb = hasVerb || aiInferredVerb;
+      const effectiveHasAdjective = hasAdjective || aiInferredAdjective;
+      const effectiveKeyCount = (effectiveHasTicker ? 1 : 0) + (effectiveHasVerb ? 1 : 0) + (effectiveHasAdjective ? 1 : 0);
+      const shouldUnlock = (effectiveKeyCount >= 2 && effectiveHasTicker) || psiEmaDetection.shouldTrigger;
+      
+      if (shouldUnlock) {
+        console.log(`🔑 AI-PUSH: ${effectiveKeyCount}/3 keys [ticker=${effectiveHasTicker}, verb=${effectiveHasVerb}, adj=${effectiveHasAdjective}] → ✅ UNLOCK`);
+      }
     
-      if (psiEmaDetection.shouldTrigger || contextFallbackApplies || aiRescuedTicker) {
+      if (shouldUnlock || contextFallbackApplies) {
         result.mode = 'psi-ema';
         result.routingFlags.usesPsiEMA = true;
         

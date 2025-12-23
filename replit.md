@@ -51,7 +51,12 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Ψ-EMA System**: Multi-Dimensional Wave Function Dashboard implementing Financial Quantum Mechanics. It analyzes financial time series using three orthogonal dimensions (Phase θ, Anomaly z, Convergence R) with Fibonacci EMA periods. It includes real-time stock integration using yfinance for historical prices and SEC EDGAR for fundamental metrics.
     - **Push-Based 2/3 Key Detection** (Dec 23, 2025): "Lego-style Turing test" with three key types: VERB (analyze/diagnose/forecast), ADJECTIVE (price/trend/wave), OBJECT (ticker). If 2/3 keys present + ticker detected → unlock Ψ-EMA gate.
     - **Strict Capitalization Rule**: Tickers MUST be capitalized to signal intent. Accepted formats: $TICKER ($NVDA), ALL-CAPS (NVDA), or Titlecase (Nvda). Lowercase words ("nvda", "ulta") are NEVER treated as tickers by rule-based detection.
-    - **LIMBO JUNK Rescue** (Dec 23, 2025): When verb + adjective detected but no capitalized ticker found, AI ticker extraction (smartDetectTicker) is invoked before declaring query as limbo junk. This rescues lowercase ticker queries like "check nvda stock prices" by proactively filling the missing ticker key via AI inference.
+    - **Bidirectional AI-PUSH Rescue** (Dec 23, 2025): Full 2/3 key rescue system that reads, interprets, and pushes missing keys:
+      - Scenario 1: verb + adjective, no ticker → AI extracts ticker (handles lowercase like "nvda")
+      - Scenario 2: ticker + verb, no adjective → infer adjective (implied "price/trend")
+      - Scenario 3: ticker + adjective, no verb → infer verb (implied "analyze")
+      - Scenario 4: ticker only + stock keyword → infer both verb + adjective
+      - Effective key count recalculated after AI inference; unlocks Ψ-EMA if ≥2/3 keys + ticker present
     - **COMMON_SHORT_WORDS Blocklist**: Common English words (data, info, show, view, range, etc.) are blocked from becoming false ticker matches.
     - **Context Fallback Strictened**: Reusing inferred ticker from conversation history requires: prior ticker exists + current query has explicit stock keyword (stock/share/price) + has verb OR adjective.
     - **Dual Timeframe Analysis** (Dec 23, 2025): Default shows BOTH Daily (1d) AND Weekly (7d) Ψ-EMA analysis to avoid daily noise bias
