@@ -989,12 +989,21 @@ async function sendMessage() {
 }
 
 // Clear history handler (can be called from UI or console)
-function clearNyanHistory() {
+async function clearNyanHistory() {
     console.log('🧹 CLEARHISTORY CALLED - Starting conversation clear...');
-    alert('🧹 Clearing conversation...');  // Visual feedback so you know it worked
     
     // Set flag to prevent auto-hydration
     shouldSkipHydration = true;
+    
+    // 🗑️ NUKE: Call server to clear DataPackage + session (full privacy)
+    try {
+        const nukeRes = await fetch('/api/playground/nuke', { method: 'DELETE' });
+        if (nukeRes.ok) {
+            console.log('🗑️ Server session nuked - DataPackage cleared');
+        }
+    } catch (e) {
+        console.warn('⚠️ Server nuke failed (offline?):', e.message);
+    }
     
     // Clear in-memory arrays
     conversationHistory = [];

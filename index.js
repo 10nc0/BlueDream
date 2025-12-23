@@ -6763,6 +6763,33 @@ app.get('/api/playground/usage', (req, res) => {
     }
 });
 
+// 🗑️ NUKE: Clear DataPackage + session for fresh start (full privacy, full local)
+// Both DataPackage and memory-manager use clientIp as session identifier
+app.delete('/api/playground/nuke', (req, res) => {
+    const clientIp = req.ip || req.connection.remoteAddress;
+    try {
+        const { globalPackageStore } = require('./utils/data-package');
+        const { clearMemory } = require('./utils/memory-manager');
+        
+        // Clear DataPackage φ-8 window for this tenant
+        const pkgResult = globalPackageStore.nukeTenant(clientIp);
+        
+        // Clear memory session (uses same IP as sessionId - see orchestrator input)
+        clearMemory(clientIp);
+        
+        console.log(`🗑️ NUKE endpoint: DataPackage + Memory cleared for ${clientIp}`);
+        res.json({ 
+            success: true, 
+            ...pkgResult, 
+            memoryCleared: true,
+            message: 'Session nuked - fresh start, full privacy' 
+        });
+    } catch (error) {
+        console.error('❌ Nuke error:', error.message);
+        res.status(500).json({ error: 'Failed to nuke session' });
+    }
+});
+
 app.post('/api/playground', async (req, res) => {
     const clientIp = req.ip || req.connection.remoteAddress;
     

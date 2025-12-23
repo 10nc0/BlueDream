@@ -243,6 +243,27 @@ class TenantPackageStore {
   getTenantCount() {
     return this.tenants.size;
   }
+  
+  /**
+   * NUKE: Clear all tenant data for fresh session
+   * Called by 🗑️ button - full privacy, full local
+   * @param {string} tenantId - IP or session ID
+   */
+  nukeTenant(tenantId) {
+    this.tenants.delete(tenantId);
+    console.log(`🗑️ NUKE: Tenant ${tenantId} data cleared - fresh session`);
+    return { cleared: true, tenantId };
+  }
+  
+  /**
+   * NUKE ALL: Clear entire store (admin use only)
+   */
+  nukeAll() {
+    const count = this.tenants.size;
+    this.tenants.clear();
+    console.log(`🗑️ NUKE ALL: ${count} tenants cleared`);
+    return { cleared: count };
+  }
 }
 
 const globalPackageStore = new TenantPackageStore();

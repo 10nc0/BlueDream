@@ -426,5 +426,6 @@ module.exports = {
   LocalMemoryManager,
   getMemoryManager,
   clearMemory,
+  clearSession: clearMemory,
   cleanupOldSessions
 };

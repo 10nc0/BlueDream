@@ -648,12 +648,15 @@ User query: ${query}`;
       );
       console.log(`🔍 Audit: ${state.auditResult.verdict} (${state.auditResult.confidence}%)`);
       
-      // WRITE to DataPackage: Stage S3 audit result
+      // WRITE to DataPackage: Stage S3 audit MARKERS only (read-only mode)
+      // Audit cannot write corrections - only marks issues for retry stage to fix
       state.writeToPackage(STAGE_IDS.AUDIT, {
         verdict: state.auditResult.verdict,
         confidence: state.auditResult.confidence,
         passed: state.auditResult.verdict === 'ACCEPTED' || state.auditResult.verdict === 'BYPASS',
-        auditMode
+        auditMode,
+        markers: state.auditResult.issues || [],
+        correctionNeeded: state.auditResult.verdict === 'REJECTED'
       });
     } catch (err) {
       console.log(`⚠️ Audit error: ${err.message}`);
