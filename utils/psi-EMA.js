@@ -706,27 +706,43 @@ function analyzeAnomaly(zFlows) {
  * Safe convergence ratio calculation (vφ³ finalization Dec 23, 2025)
  * Addresses numerical instability near zero and sign flips
  * 
+ * CRITICAL FIX (Dec 23, 2025): Both numerator AND denominator must be checked.
+ * When z is near zero (price at median), R ratio is UNDEFINED — not "decay".
+ * Low z at high price = consolidation at new highs, not momentum loss.
+ * 
  * Returns structured result with:
- * - ratio: raw z(t)/z(t-1) (may be null if denominator too small)
+ * - ratio: raw z(t)/z(t-1) (may be null if either z too small)
  * - absRatio: clamped absolute value (0.1-10 range)
  * - direction: 'same_sign' or 'reversal'
  * - interpretation: regime description without over-claiming φ
- * - status: 'VALID' or 'INSUFFICIENT_DATA'
+ * - status: 'VALID', 'INSUFFICIENT_DATA', or 'LOW_SIGNAL'
  * 
  * @param {number} currentZ - Current z-score
  * @param {number} previousZ - Previous z-score
- * @param {number} epsilon - Minimum denominator threshold (default: 0.1)
+ * @param {number} epsilon - Minimum z threshold for valid ratio (default: 0.15)
  * @returns {Object} Safe ratio result
  */
-function safeConvergenceRatio(currentZ, previousZ, epsilon = 0.1) {
-  // Guard: denominator near zero → undefined convergence
+function safeConvergenceRatio(currentZ, previousZ, epsilon = 0.15) {
+  // Guard: EITHER z near zero → R is undefined (not decay!)
+  // This prevents false "decay" signals when price consolidates at highs
   if (Math.abs(previousZ) < epsilon) {
     return {
       ratio: null,
       absRatio: null,
       direction: null,
-      interpretation: 'Previous anomaly near zero — convergence undefined',
+      interpretation: 'Previous anomaly near zero — R undefined (consolidation zone)',
       status: 'INSUFFICIENT_DATA'
+    };
+  }
+  
+  if (Math.abs(currentZ) < epsilon) {
+    return {
+      ratio: null,
+      absRatio: null,
+      direction: null,
+      interpretation: 'Current anomaly near zero — R undefined (price at median)',
+      status: 'LOW_SIGNAL',
+      warning: 'Low z-score may indicate consolidation, not decay'
     };
   }
   
@@ -786,20 +802,57 @@ function calculatePhiConvergence(zFlows) {
     }
   }
   
+  // Count LOW_SIGNAL cases (z near zero → R undefined)
+  const lowSignalCount = safeRatios.filter(r => r.status === 'LOW_SIGNAL' || r.status === 'INSUFFICIENT_DATA').length;
+  const lowSignalRatio = lowSignalCount / (zFlows.length - 1);
+  const hasLowSignal = lowSignalRatio > 0.3; // >30% undefined = unreliable R
+  
   if (ratios.length === 0) {
-    return { ratios: [], meanRatio: 0, converged: false, error: 'No valid ratios' };
+    return { 
+      ratios: [], 
+      meanRatio: null, 
+      converged: false, 
+      error: 'No valid ratios',
+      hasLowSignal: true,
+      warning: 'R undefined — z-scores near zero (price at median). Not decay, likely consolidation.'
+    };
   }
   
   // Use clamped absRatio from safe results (not direct absolute values)
-  const absRatios = safeRatios.map(r => r.absRatio);
+  const absRatios = safeRatios.filter(r => r.absRatio !== null).map(r => r.absRatio);
+  if (absRatios.length === 0) {
+    return { 
+      ratios: [], 
+      meanRatio: null, 
+      converged: false, 
+      error: 'All ratios undefined',
+      hasLowSignal: true,
+      warning: 'R undefined — all z-scores near zero. Price tracking median closely.'
+    };
+  }
+  
   const meanRatio = mean(absRatios);
   const recentRatios = absRatios.slice(-5);
   const recentRawRatios = ratios.slice(-5);
-  const recentMean = mean(recentRatios);
+  const recentMean = recentRatios.length > 0 ? mean(recentRatios) : meanRatio;
   
   // Count recent reversals (sign flips) from safe results
   const recentReversals = safeRatios.slice(-5).filter(r => r.direction === 'reversal').length;
   const isReversingTrend = recentReversals >= 2; // 2+ reversals = unstable
+  
+  // Determine trend status with LOW_SIGNAL awareness
+  let trendStatus;
+  if (hasLowSignal) {
+    trendStatus = 'LOW_SIGNAL_CONSOLIDATION';
+  } else if (isReversingTrend) {
+    trendStatus = 'UNSTABLE_REVERSING';
+  } else if (recentMean >= 1.3 && recentMean <= 2.0) {
+    trendStatus = 'STABLE_CONVERGING';
+  } else if (recentMean < 1.3) {
+    trendStatus = 'DECAYING';
+  } else {
+    trendStatus = 'ACCELERATING';
+  }
   
   return {
     ratios,
@@ -807,23 +860,44 @@ function calculatePhiConvergence(zFlows) {
     meanRatio,
     recentMeanRatio: recentMean,
     distanceFromPhi: Math.abs(recentMean - PHI),
-    converged: recentMean >= 1.3 && recentMean <= 2.0 && !isReversingTrend,
+    converged: recentMean >= 1.3 && recentMean <= 2.0 && !isReversingTrend && !hasLowSignal,
     convergenceStrength: 1 - Math.min(1, Math.abs(recentMean - PHI) / PHI),
     signFlipCount,
     recentSignFlips: recentReversals,
     isReversingTrend,
-    trendStatus: isReversingTrend ? 'UNSTABLE_REVERSING' : 
-                 recentMean >= 1.3 && recentMean <= 2.0 ? 'STABLE_CONVERGING' : 
-                 recentMean < 1.3 ? 'DECAYING' : 'ACCELERATING'
+    hasLowSignal,
+    lowSignalRatio,
+    trendStatus,
+    warning: hasLowSignal ? 'R unstable due to z-scores near zero. May indicate consolidation, not decay.' : null
   };
 }
 
 /**
  * Classify regime based on R ratio
- * @param {number} ratio - Mean convergence ratio
+ * Now handles LOW_SIGNAL case when R is undefined due to z near zero
+ * 
+ * @param {number|null} ratio - Mean convergence ratio (null if undefined)
+ * @param {Object} options - Additional context for classification
+ * @param {boolean} options.hasLowSignal - Whether R is unstable due to low z-scores
+ * @param {string} options.warning - Warning message from convergence analysis
  * @returns {Object} Regime classification
  */
-function classifyRegime(ratio) {
+function classifyRegime(ratio, options = {}) {
+  const { hasLowSignal = false, warning = null } = options;
+  
+  // Handle LOW_SIGNAL case: R undefined due to z near zero
+  if (ratio === null || hasLowSignal) {
+    return {
+      regime: 'UNDEFINED',
+      label: 'R Undefined (Consolidation)',
+      status: 'consolidating',
+      emoji: '⚪',
+      interpretation: 'R ratio undefined — z-scores near zero. Price tracking median closely.',
+      recommendation: 'R unstable. Use price momentum or trend analysis instead.',
+      warning: warning || 'Low z-score may indicate consolidation at highs, not decay.'
+    };
+  }
+  
   if (ratio < REGIMES.SUB_CRITICAL.max) {
     return {
       regime: 'SUB_CRITICAL',
@@ -888,12 +962,27 @@ function getPhiDeviationAlert(ratio) {
 
 /**
  * Analyze Convergence R with EMA-13/EMA-21
+ * Now accepts full convergenceResult to propagate LOW_SIGNAL warnings
+ * 
  * @param {number[]} absRatios - Absolute ratio time series
+ * @param {Object} options - Additional context from calculatePhiConvergence
+ * @param {boolean} options.hasLowSignal - Whether R is unstable due to low z-scores
+ * @param {string} options.warning - Warning message if R is unstable
  * @returns {Object} Convergence analysis with signals
  */
-function analyzeConvergence(absRatios) {
+function analyzeConvergence(absRatios, options = {}) {
+  const { hasLowSignal = false, warning = null } = options;
+  
   if (!absRatios || absRatios.length === 0) {
-    return { error: 'No ratio data' };
+    // No valid ratios — return UNDEFINED regime with warning
+    return { 
+      error: 'No ratio data',
+      dimension: 'CONVERGENCE_R',
+      current: null,
+      regime: classifyRegime(null, { hasLowSignal: true, warning }),
+      hasLowSignal: true,
+      warning: warning || 'R undefined — insufficient data or z-scores near zero.'
+    };
   }
   
   const ema13Result = calculateEMA(absRatios, FIB_PERIODS.FAST_R);
@@ -910,12 +999,16 @@ function analyzeConvergence(absRatios) {
   const currentR = absRatios[absRatios.length - 1];
   const currentEMA13 = ema13[ema13.length - 1];
   const currentEMA21 = ema21[ema21.length - 1];
-  const regime = classifyRegime(currentR);
-  const phiAlert = getPhiDeviationAlert(currentR);
+  
+  // Pass hasLowSignal and warning to classifyRegime
+  const regime = classifyRegime(currentR, { hasLowSignal, warning });
+  const phiAlert = hasLowSignal ? 
+    { level: 'UNDEFINED', emoji: '⚪', action: 'WAIT', description: 'R unstable' } :
+    getPhiDeviationAlert(currentR);
   
   return {
     dimension: 'CONVERGENCE_R',
-    current: currentR,
+    current: hasLowSignal ? null : currentR,
     ema13: currentEMA13,
     ema21: currentEMA21,
     crossover,
@@ -927,7 +1020,9 @@ function analyzeConvergence(absRatios) {
     emaFast: ema13,
     emaSlow: ema21,
     ema13Interpolated: ema13Result.interpolated,
-    ema21Interpolated: ema21Result.interpolated
+    ema21Interpolated: ema21Result.interpolated,
+    hasLowSignal,
+    warning
   };
 }
 
@@ -1161,8 +1256,28 @@ function detectPathogens(analysis) {
   }
   
   const currentZ = anomaly.current || 0;
-  const currentR = convergence.current || PHI;
+  const currentR = convergence.current;
   const regime = convergence.regime?.regime || 'UNKNOWN';
+  const hasLowSignal = convergence.hasLowSignal || false;
+  const warning = convergence.warning || null;
+  
+  // CRITICAL FIX (Dec 23, 2025): If R is undefined (low z-score), no pathogen detection
+  // Low z at high price = consolidation at highs, NOT decay
+  if (regime === 'UNDEFINED' || hasLowSignal || currentR === null || currentR === undefined) {
+    return {
+      detected: [],
+      healthy: true,
+      consolidating: true,
+      diagnosis: '⚪ R Undefined (Consolidation Zone)',
+      pathogens: [],
+      warning: warning || 'R ratio unstable due to z-scores near zero. Price may be consolidating at highs.',
+      vitalSigns: {
+        R_ratio: currentR ?? 'undefined',
+        z_score: currentZ,
+        regime: 'UNDEFINED'
+      }
+    };
+  }
   
   // Check for Ponzi Virus: R >> φ (R > 2.5)
   if (currentR > PATHOGENS.PONZI_VIRUS.thresholds.R_min) {
@@ -1191,7 +1306,8 @@ function detectPathogens(analysis) {
   }
   
   // Sub-Critical decay (not a pathogen, but a warning sign)
-  const isDecaying = regime === 'SUB_CRITICAL' && currentR < 1.0;
+  // Only flag decay if R is valid and not in consolidation
+  const isDecaying = regime === 'SUB_CRITICAL' && currentR !== null && currentR < 1.0;
   
   return {
     detected,
@@ -1256,12 +1372,16 @@ function generateClinicalReport(analysis, patientName = 'UNKNOWN') {
     }
   };
   
-  // Diagnosis
+  // Diagnosis - now handles consolidation (low z-score at highs)
   let diagnosis, diagnosisEmoji;
   if (pathogenResult.detected.length > 0) {
     const primary = pathogenResult.detected[0];
     diagnosis = `${primary.name} (${primary.stage.label})`;
     diagnosisEmoji = primary.emoji;
+  } else if (pathogenResult.consolidating) {
+    // NEW: Consolidation zone — R undefined, not decay
+    diagnosis = 'R Undefined (Consolidation Zone)';
+    diagnosisEmoji = '⚪';
   } else if (pathogenResult.decaying) {
     diagnosis = 'System Decay (Sub-Critical)';
     diagnosisEmoji = '🔵';
@@ -1360,9 +1480,19 @@ class PsiEMADashboard {
     // Analyze all three dimensions
     const phaseAnalysis = analyzePhase(phases);
     const anomalyAnalysis = analyzeAnomaly(zFlowResult.zFlows);
+    
+    // Pass hasLowSignal and warning from convergenceResult to analyzeConvergence
     const convergenceAnalysis = convergenceResult.absRatios && convergenceResult.absRatios.length > 0 
-      ? analyzeConvergence(convergenceResult.absRatios)
-      : { error: 'Insufficient convergence data' };
+      ? analyzeConvergence(convergenceResult.absRatios, {
+          hasLowSignal: convergenceResult.hasLowSignal,
+          warning: convergenceResult.warning
+        })
+      : { 
+          error: 'Insufficient convergence data',
+          hasLowSignal: convergenceResult.hasLowSignal,
+          warning: convergenceResult.warning,
+          regime: classifyRegime(null, { hasLowSignal: true, warning: convergenceResult.warning })
+        };
     
     // Calculate EMA fidelity (% real vs interpolated data)
     const fidelity = calculateFidelity(
