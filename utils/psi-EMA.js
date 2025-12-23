@@ -784,12 +784,14 @@ function calculatePhiConvergence(zFlows) {
   }
   
   const ratios = [];
-  const safeRatios = [];
+  const safeRatios = [];  // Only VALID results
+  const allResults = [];   // ALL results including LOW_SIGNAL
   let signFlipCount = 0;
   
   for (let i = 1; i < zFlows.length; i++) {
     // Use safe convergence ratio function (handles zero-division, clamping, reversals)
     const safeResult = safeConvergenceRatio(zFlows[i], zFlows[i - 1]);
+    allResults.push(safeResult);  // Track ALL results
     
     if (safeResult.status === 'VALID') {
       ratios.push(safeResult.ratio);
@@ -802,10 +804,17 @@ function calculatePhiConvergence(zFlows) {
     }
   }
   
-  // Count LOW_SIGNAL cases (z near zero → R undefined)
-  const lowSignalCount = safeRatios.filter(r => r.status === 'LOW_SIGNAL' || r.status === 'INSUFFICIENT_DATA').length;
-  const lowSignalRatio = lowSignalCount / (zFlows.length - 1);
-  const hasLowSignal = lowSignalRatio > 0.3; // >30% undefined = unreliable R
+  // Count LOW_SIGNAL cases from ALL results (not just valid ones)
+  const lowSignalCount = allResults.filter(r => r.status === 'LOW_SIGNAL' || r.status === 'INSUFFICIENT_DATA').length;
+  const lowSignalRatio = lowSignalCount / allResults.length;
+  
+  // CRITICAL: Check if MOST RECENT result is LOW_SIGNAL (current z near zero)
+  const mostRecentResult = allResults[allResults.length - 1];
+  const currentIsLowSignal = mostRecentResult && 
+    (mostRecentResult.status === 'LOW_SIGNAL' || mostRecentResult.status === 'INSUFFICIENT_DATA');
+  
+  // hasLowSignal is true if current is low signal OR >30% of all results are low signal
+  const hasLowSignal = currentIsLowSignal || lowSignalRatio > 0.3;
   
   if (ratios.length === 0) {
     return { 
