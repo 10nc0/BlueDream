@@ -441,7 +441,14 @@ ${fundParts.map(p => `- ${p}`).join('\n')}`;
   
   return `
 ## ⚠️ CRITICAL FORMAT INSTRUCTION
-You MUST output the EXACT content below. Do NOT add intro paragraphs, summaries, or "comprehensive analysis" fluff. START DIRECTLY with the company header. PRESERVE the markdown table EXACTLY as shown.
+FORBIDDEN (instant fail):
+- "Summary of X Stock Analysis" ❌
+- "A comprehensive analysis of..." ❌
+- "The following is..." ❌
+- Any intro paragraph before company name ❌
+- Converting table to bullet points ❌
+
+START your response with the company header below. Copy the table VERBATIM.
 
 ---
 ${companyHeader}
