@@ -97,4 +97,5 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Email**: Resend API
 - **AI**: Groq API
 - **Search**: DuckDuckGo Instant Answer API, Brave Search API
+- **Forex**: fawazahmed0 Currency API (free, no rate limits, no API key)
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth`
