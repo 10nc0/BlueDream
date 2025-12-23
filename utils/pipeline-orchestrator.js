@@ -31,6 +31,7 @@ const { NYAN_PROTOCOL_SYSTEM_PROMPT, NYAN_PROTOCOL_COMPRESSED } = require('../pr
 const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
 const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer } = require('./psi-EMA');
+const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package');
 
 const PIPELINE_STEPS = {
   CONTEXT_EXTRACT: 'S-1',
@@ -44,7 +45,7 @@ const PIPELINE_STEPS = {
 };
 
 class PipelineState {
-  constructor() {
+  constructor(tenantId = null) {
     this.step = PIPELINE_STEPS.CONTEXT_EXTRACT;
     this.retryCount = 0;
     this.maxRetries = 1;
@@ -58,11 +59,20 @@ class PipelineState {
     this.auditResult = null;
     this.finalAnswer = null;
     this.error = null;
+    this.dataPackage = new DataPackage(tenantId);
   }
   
   transition(nextStep) {
     console.log(`🔄 Pipeline: ${this.step} → ${nextStep}`);
     this.step = nextStep;
+  }
+  
+  writeToPackage(stageId, data) {
+    this.dataPackage.writeStage(stageId, data);
+  }
+  
+  readFromPackage(stageId) {
+    return this.dataPackage.readStage(stageId);
   }
 }
 
@@ -78,7 +88,8 @@ class PipelineOrchestrator {
   }
   
   async run(input) {
-    const state = new PipelineState();
+    const tenantId = input.clientIp || input.sessionId || 'anonymous';
+    const state = new PipelineState(tenantId);
     
     // Track if this is first query for NYAN boot optimization (check early, before any exits)
     const isFirstQuery = input.sessionId ? isSessionFirstQuery(input.sessionId) : false;
@@ -113,6 +124,14 @@ class PipelineOrchestrator {
           8  // 8-message window
         );
       }
+      
+      // WRITE to DataPackage: Stage S-1 context extraction result
+      state.writeToPackage(STAGE_IDS.CONTEXT_EXTRACT, {
+        inferredTicker: state.contextResult.inferredTicker,
+        hasFinancialContext: state.contextResult.hasFinancialContext,
+        hasMemory: state.contextResult.hasMemory,
+        attachmentContext: state.contextResult.attachmentContext?.name || null
+      });
       
       if (state.contextResult.inferredTicker) {
         console.log(`📜 Stage -1: Context extracted - inferred ticker: ${state.contextResult.inferredTicker}`);
@@ -232,14 +251,17 @@ MANDATORY INSTRUCTIONS:
         preflight: state.preflight,
         auditResult: state.auditResult,
         didSearch: state.didSearch,
-        retryCount: state.retryCount
+        retryCount: state.retryCount,
+        dataPackageId: state.dataPackage.id,
+        dataPackageSummary: state.dataPackage.toCompressedSummary()
       };
     } catch (err) {
       console.error(`❌ Pipeline error at ${state.step}: ${err.message}`);
       return {
         success: false,
         error: err.message,
-        step: state.step
+        step: state.step,
+        dataPackageId: state.dataPackage?.id || null
       };
     }
   }
@@ -259,6 +281,14 @@ MANDATORY INSTRUCTIONS:
     
     state.mode = state.preflight.mode;
     console.log(`📊 Preflight: mode=${state.mode}, ticker=${state.preflight.ticker || 'none'}`);
+    
+    // WRITE to DataPackage: Stage S0 preflight result
+    state.writeToPackage(STAGE_IDS.PREFLIGHT, {
+      mode: state.mode,
+      ticker: state.preflight.ticker || null,
+      stockContext: state.preflight.stockContext || null,
+      hasPsiEma: !!state.preflight.psiEmaAnalysis
+    });
     
     if (state.mode === 'seed-metric' && query && !safeDocContext.isClosedLoop) {
       console.log(`🌱 Seed Metric: MANDATORY web search for grounded real estate data`);
@@ -587,6 +617,14 @@ User query: ${query}`;
         12000
       );
       console.log(`🔍 Audit: ${state.auditResult.verdict} (${state.auditResult.confidence}%)`);
+      
+      // WRITE to DataPackage: Stage S3 audit result
+      state.writeToPackage(STAGE_IDS.AUDIT, {
+        verdict: state.auditResult.verdict,
+        confidence: state.auditResult.confidence,
+        passed: state.auditResult.verdict === 'ACCEPTED' || state.auditResult.verdict === 'BYPASS',
+        auditMode
+      });
     } catch (err) {
       console.log(`⚠️ Audit error: ${err.message}`);
       state.auditResult = { verdict: 'BYPASS', confidence: 70, reason: 'Audit failed' };
@@ -629,7 +667,20 @@ User query: ${query}`;
     }
     
     // Apply personality formatting (unified, single-pass)
+    // Note: Personality layer strips FLUFF only, never alters actual DATA
     state.finalAnswer = this.applyPersonalityFormat(state.finalAnswer, state.mode);
+    
+    // WRITE to DataPackage: Stage S6 output (personality-formatted)
+    state.writeToPackage(STAGE_IDS.OUTPUT, {
+      mode: state.mode,
+      outputLength: state.finalAnswer.length,
+      didSearch: state.didSearch,
+      retryCount: state.retryCount
+    });
+    
+    // FINALIZE: Package is now read-only, store in tenant's φ-8 window
+    state.dataPackage.finalize();
+    globalPackageStore.storePackage(state.dataPackage.tenantId, state.dataPackage);
     
     console.log(`✅ Output: ${state.finalAnswer.length} chars, mode=${state.mode}`);
   }
