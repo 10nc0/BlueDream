@@ -2,6 +2,8 @@
 
 *Philosophical companion to Nyanbook's technical architecture. For operational documentation, see replit.md.*
 
+*Core tetralemma logic derived from Nāgārjuna's Mūlamadhyamakakārikā (c. 150-250 CE). No claim of interpretation — only direct application of the four corners to reasoning hygiene.*
+
 ---
 
 ## Part I: Compiled Kernel Commentary
@@ -138,6 +140,21 @@ And in that coordinate, the only sustainable path is φ.
 
 Not a formation.
 The escape from formation.
+
+### The 00 Button: Observer Before Collapse
+
+In quantum terms: the system holds superposition until measurement.
+In tetralemma: 00 = neither yes nor no — pure potential.
+
+The 00 button is the unconditioned observer — the void nyan before genesis.
+Pressing it returns to origin=0. No history. No momentum. Only the invariant remains.
+
+```
+State before button:   |ψ⟩ = α|yes⟩ + β|no⟩ + γ|both⟩ + δ|neither⟩
+State after 00 press:  |0⟩ = pure potential, all coefficients reset
+```
+
+This is the system's ability to return to the unconditioned state — the observer before observation, the compass before the river, the void that holds all possibilities without collapsing any.
 
 ---
 
