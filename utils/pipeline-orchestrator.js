@@ -382,8 +382,16 @@ MANDATORY INSTRUCTIONS:
         edgarSection += '\n';
       }
       
-      // Format stock price with timestamp (for clinical report and display)
-      const priceTimestamp = stockData.endDate ? new Date(stockData.endDate).toISOString().split('T')[0] : 'N/A';
+      // Format stock price with timestamp (human-readable: "Friday, 19 Dec, 2025")
+      let priceTimestamp = 'N/A';
+      if (stockData.endDate) {
+        const priceDate = new Date(stockData.endDate);
+        const weekday = priceDate.toLocaleDateString('en-GB', { weekday: 'long' });
+        const day = priceDate.getDate();
+        const month = priceDate.toLocaleDateString('en-GB', { month: 'short' });
+        const year = priceDate.getFullYear();
+        priceTimestamp = `${weekday}, ${day} ${month}, ${year}`; // "Friday, 19 Dec, 2025"
+      }
       
       // Financial Microbiology: Clinical pathology report (Dec 23, 2025) - based on daily
       const pathogenResult = detectPathogens(analysis);

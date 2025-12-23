@@ -1074,4 +1074,39 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         console.error('❌ Clear button not found in DOM');
     }
+    
+    // ===== MOBILE KEYBOARD HANDLER (visualViewport API) =====
+    // Fixes iOS keyboard clipping the input bubble
+    if (window.visualViewport) {
+        const inputContainerEl = document.querySelector('.input-container');
+        const messagesAreaEl = document.querySelector('.messages');
+        
+        function handleViewportResize() {
+            if (!inputContainerEl) return;
+            
+            // Calculate keyboard height (difference between window height and viewport height)
+            const keyboardHeight = window.innerHeight - window.visualViewport.height;
+            
+            if (keyboardHeight > 100) {
+                // Keyboard is open - lift input container above keyboard
+                inputContainerEl.style.transform = `translateY(-${keyboardHeight}px)`;
+                // Also adjust messages area to keep last message visible
+                if (messagesAreaEl) {
+                    messagesAreaEl.style.paddingBottom = `${120 + keyboardHeight}px`;
+                    // Scroll to bottom to keep current view
+                    messagesAreaEl.scrollTop = messagesAreaEl.scrollHeight;
+                }
+            } else {
+                // Keyboard is closed - reset
+                inputContainerEl.style.transform = 'translateY(0)';
+                if (messagesAreaEl) {
+                    messagesAreaEl.style.paddingBottom = '';
+                }
+            }
+        }
+        
+        window.visualViewport.addEventListener('resize', handleViewportResize);
+        window.visualViewport.addEventListener('scroll', handleViewportResize);
+        console.log('📱 Mobile keyboard handler initialized (visualViewport)');
+    }
 });
