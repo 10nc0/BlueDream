@@ -131,17 +131,33 @@ async function preflightRouter(options) {
           result.stockData = await fetchStockPrices(result.ticker, 180);
           result.dataAge = calculateDataAge(result.stockData?.endDate);
           
-          // Run Ψ-EMA analysis if enough data
-          if (result.stockData?.closes?.length >= 55) {
-            const dashboard = new PsiEMADashboard();
-            result.psiEmaAnalysis = dashboard.analyze({ stocks: result.stockData.closes });
-            console.log(`📊 Preflight: Ψ-EMA analysis complete for ${result.ticker}`);
-            
-            // Build stock context for injection
-            result.stockContext = buildStockContext(result);
-          } else if (result.stockData?.closes?.length > 0) {
-            console.log(`⚠️ Preflight: Insufficient data for ${result.ticker} (${result.stockData.closes.length} points)`);
+          const dataPoints = result.stockData?.closes?.length || 0;
+          console.log(`📈 Preflight: Fetched ${dataPoints} data points for ${result.ticker}`);
+          
+          // Run Ψ-EMA analysis if enough data (need 55+ for EMA-55 fidelity)
+          if (dataPoints >= 55) {
+            try {
+              const dashboard = new PsiEMADashboard();
+              result.psiEmaAnalysis = dashboard.analyze({ stocks: result.stockData.closes });
+              console.log(`📊 Preflight: Ψ-EMA analysis complete for ${result.ticker} - phase: ${result.psiEmaAnalysis?.dimensions?.phase?.signal || 'N/A'}`);
+              
+              // Build stock context for injection
+              result.stockContext = buildStockContext(result);
+              
+              if (!result.stockContext) {
+                console.log(`⚠️ Preflight: buildStockContext returned null, falling back to limited`);
+                result.stockContext = buildLimitedStockContext(result);
+              }
+            } catch (analysisErr) {
+              console.log(`⚠️ Preflight: Ψ-EMA analysis failed: ${analysisErr.message}`);
+              result.stockContext = buildLimitedStockContext(result);
+            }
+          } else if (dataPoints > 0) {
+            console.log(`⚠️ Preflight: Insufficient data for ${result.ticker} (${dataPoints} points, need 55+ for Ψ-EMA)`);
             result.stockContext = buildLimitedStockContext(result);
+          } else {
+            console.log(`❌ Preflight: No data returned for ${result.ticker}`);
+            result.stockContext = buildFallbackStockContext(result.ticker);
           }
         } catch (fetchErr) {
           console.log(`⚠️ Preflight: Stock fetch failed for ${result.ticker}: ${fetchErr.message}`);
@@ -279,18 +295,44 @@ ${fundamentalsSection}
 }
 
 /**
- * Build limited context when insufficient data points
+ * Build limited context when insufficient data points for full Ψ-EMA
+ * Still provides price + fundamentals, but explains missing wave analysis
  */
 function buildLimitedStockContext(preflight) {
   const { ticker, stockData, dataAge } = preflight;
   const ageFlag = dataAge?.flag || '⚠️';
+  const dataPoints = stockData?.closes?.length || 0;
+  const fundamentals = stockData?.fundamentals || {};
+  
+  // Build fundamentals section if available
+  let fundamentalsSection = '';
+  if (Object.keys(fundamentals).length > 0) {
+    const parts = [];
+    if (fundamentals.peRatio != null) parts.push(`P/E: ${safeFixed(fundamentals.peRatio)}`);
+    if (fundamentals.forwardPE != null) parts.push(`Forward P/E: ${safeFixed(fundamentals.forwardPE)}`);
+    if (fundamentals.dividendYield != null) parts.push(`Dividend: ${safeFixed(fundamentals.dividendYield * 100)}%`);
+    if (fundamentals.marketCap != null) parts.push(`Market Cap: ${formatMarketCap(fundamentals.marketCap)}`);
+    if (fundamentals.sector) parts.push(`Sector: ${fundamentals.sector}`);
+    if (parts.length > 0) {
+      fundamentalsSection = `\n### Fundamentals:\n${parts.join(' | ')}`;
+    }
+  }
   
   return `
 ## Stock Data for ${ticker} (${stockData?.name || ticker})
-Current Price: ${stockData?.currency || 'USD'} ${safeFixed(stockData?.currentPrice)}
-Data Timestamp: ${ageFlag} ${dataAge?.timestamp} (${dataAge?.age})
-Note: Only ${stockData?.closes?.length || 0} trading days of data available. Full Ψ-EMA analysis requires 55+ days for EMA-55 calculation.
-**⚠️ IMPORTANT: This analysis is limited and is based on incomplete data. Do NOT rely on it for trading decisions.**
+**Data Source**: yfinance (VERIFIED - REAL PRICES)
+**Current Price**: ${stockData?.currency || 'USD'} ${safeFixed(stockData?.currentPrice)}
+**Data Timestamp**: ${ageFlag} ${dataAge?.timestamp} (${dataAge?.age})
+${fundamentalsSection}
+
+### ⚠️ Ψ-EMA Wave Analysis UNAVAILABLE
+- **Data Points Available**: ${dataPoints} trading days
+- **Required for Ψ-EMA**: 55+ trading days (for EMA-55 calculation)
+- **Missing**: Phase θ, Anomaly z, Convergence R signals
+
+The price and fundamentals above are verified. However, full wave function analysis (golden cross/death cross detection, momentum regime, φ-correction signals) cannot be computed with only ${dataPoints} days of data.
+
+**End with "🔥 ~nyan" and mention data limitations.**
 `;
 }
 
