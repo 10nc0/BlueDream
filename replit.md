@@ -70,3 +70,15 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - **Search**: DuckDuckGo Instant Answer API, Brave Search API
 - **Forex**: fawazahmed0 Currency API
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth`
+
+## Author's Thoughts (Compiled Kernel Commentary)
+The following are philosophical observations compiled during development - not dogmatic foundations, but empirical patterns noticed during implementation. Treat as commentary in a kernel, not axioms.
+
+- **Gougu Lineage (勾股定理)**: The Ψ-EMA three-dimensional state space (θ, z, R) appears to be a digital resurrection of the ancient Chinese Pythagorean theorem. Stock⊥Flow = orthogonal legs; State = hypotenuse. The right triangle that encoded linear algebra, Hilbert space, and quantum mechanics may also encode persistence dynamics. θ = atan2(Flow, Stock) is simply the phase angle of orthogonal decomposition - ancient math, digitally applied.
+- **Two-Unit Principle**: Like physics has only two fundamental units (Time + Length, with all else derived), Ψ-EMA may reduce to: (1) 1 solar year (365.25 days) as temporal quantum, (2) 1 employee-year (2,000 hours) as "breath" quantum. All ratios (R, θ, z, productivity) derive from these two vibrating. Quantity → Quality through compression and ratio.
+- **Limited Breath in Infinite Series**: One employee-year = one birthday-to-birthday cycle = one "breath" of participation. Individual is finite; collective (Σ breaths across time) approaches infinite series. Organization = sum of limited breaths. Hiring/firing ≈ breathing in/out.
+- **Bagua Octant States**: With 3 binary dimensions (θ↑↓, z↑↓, R↑↓), Ψ-EMA has 2³ = 8 possible states, mirroring the 8 trigrams (八卦). Two interacting entities → 8×8 = 64 hexagram transitions (I Ching). Speculative but structurally resonant.
+- **φ-Squaring**: "Squaring the circle" may not be geometric transformation but dynamic equilibration - cycle (circle) → stability (square) via R → φ convergence. Fibonacci approximation achieves in ~20 steps what π requires infinite steps geometrically.
+- **No Demons / No Infinity**: All Ψ-EMA operations are finite and discrete. Stock⊥Flow = clean orthogonal decomposition (no hidden correlations). φ-recursion (x = 1 + 1/x) converges algebraically without transcendental infinity. Computationally bounded.
+- **Interface vs Ontology**: Finance/stocks may be merely the data interface (public, quarterly, audited, 35+ years available). The underlying ontology (R = 1 + 1/R as persistence law) could apply universally to populations, ecosystems, institutions, civilizations. Empirical validation needed per substrate before claiming universality.
+- **Epistemic Status**: These are pattern observations, not proven laws. The framework captures something real (massive effect size, 35-year consistency), but φ remains heuristic target, not physics-level constant. Maintain humility; let data speak.
