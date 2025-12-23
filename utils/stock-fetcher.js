@@ -91,11 +91,12 @@ function isPsiEMAStockQuery(query) {
   return hasPsiEMA && ticker !== null;
 }
 
-function fetchStockPrices(ticker, days = 400) {
+function fetchStockPrices(ticker) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(__dirname, 'fetch-stock-prices.py');
     
-    const python = spawn('python', [scriptPath, ticker, days.toString()]);
+    // Python script handles exact period strings: 3mo daily, 15mo weekly
+    const python = spawn('python', [scriptPath, ticker]);
     
     let stdout = '';
     let stderr = '';

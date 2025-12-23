@@ -3,8 +3,14 @@
 Fetch stock price history and fundamental data using yfinance for Ψ-EMA analysis.
 Returns JSON with closing prices, dates, and fundamental metrics.
 
+Optimized fetching strategy (Dec 23, 2025):
+- Daily: fetch exact 3mo (~55 trading days for EMA-55)
+- Weekly: fetch exact 15mo (~55 weeks for EMA-55)
+- Weekly candles already compress weekends/holidays (like blockchain blocks)
+- No buffer logic needed - yfinance returns only trading days
+
 Usage:
-  python fetch-stock-prices.py NVDA 180
+  python fetch-stock-prices.py NVDA
   python fetch-stock-prices.py AAPL
 
 Output:
@@ -13,7 +19,6 @@ Output:
 
 import sys
 import json
-from datetime import datetime, timedelta
 
 try:
     import yfinance as yf
@@ -33,20 +38,26 @@ def safe_float(value):
         return None
 
 
-def fetch_stock_data(ticker: str, days: int = 365) -> dict:
+def fetch_stock_data(ticker: str) -> dict:
     """
     Fetch historical closing prices and fundamental data for a stock ticker.
     Returns BOTH daily and weekly timeframes for dual Ψ-EMA analysis.
     
+    Uses exact period strings for minimal data fetch:
+    - Daily: '3mo' = ~55 trading days (covers EMA-55)
+    - Weekly: '15mo' = ~60 weeks (covers EMA-55 with small buffer)
+    
+    Weekly candles are self-contained OHLC snapshots - no gap filling needed.
+    Like blockchain logs, each candle compresses all activity in that period.
+    
     Args:
         ticker: Stock symbol (e.g., 'NVDA', 'AAPL')
-        days: Number of days of history to fetch (default 365 for weekly EMA coverage)
     
     Returns:
         dict with keys:
             - ticker: The stock symbol
-            - daily: { closes, dates, periodDays, startDate, endDate }
-            - weekly: { closes, dates, periodWeeks, startDate, endDate, unavailableReason? }
+            - daily: { closes, dates, barCount }
+            - weekly: { closes, dates, barCount, unavailableReason? }
             - fundamentals: Dict with P/E, dividend yield, market cap, sector, etc.
             - currency: Currency of the prices
             - name: Company name
@@ -56,13 +67,8 @@ def fetch_stock_data(ticker: str, days: int = 365) -> dict:
     try:
         stock = yf.Ticker(ticker.upper())
         
-        # Fetch historical prices - DAILY
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days)
-        
-        hist_daily = stock.history(start=start_date.strftime('%Y-%m-%d'), 
-                                   end=end_date.strftime('%Y-%m-%d'),
-                                   interval='1d')
+        # Fetch DAILY data - exact 3mo (~55 trading days for EMA-55)
+        hist_daily = stock.history(period='3mo', interval='1d')
         
         if hist_daily.empty:
             return {
@@ -73,18 +79,17 @@ def fetch_stock_data(ticker: str, days: int = 365) -> dict:
         closes_daily = hist_daily['Close'].tolist()
         dates_daily = [d.strftime('%Y-%m-%d') for d in hist_daily.index]
         
-        # Fetch historical prices - WEEKLY
-        hist_weekly = stock.history(start=start_date.strftime('%Y-%m-%d'), 
-                                    end=end_date.strftime('%Y-%m-%d'),
-                                    interval='1wk')
+        # Fetch WEEKLY data - exact 15mo (~60 weeks for EMA-55)
+        # Weekly candles = compressed OHLC, no gaps to fill
+        hist_weekly = stock.history(period='15mo', interval='1wk')
         
         closes_weekly = hist_weekly['Close'].tolist() if not hist_weekly.empty else []
         dates_weekly = [d.strftime('%Y-%m-%d') for d in hist_weekly.index] if not hist_weekly.empty else []
         
-        # Check if weekly data is sufficient for EMA (need at least 13 points for fast EMA)
+        # Check if weekly data is sufficient for EMA-55 (need at least 55 points)
         weekly_unavailable_reason = None
-        if len(closes_weekly) < 13:
-            weekly_unavailable_reason = f"Insufficient data: only {len(closes_weekly)} weeks available (need 13+ for EMA)"
+        if len(closes_weekly) < 55:
+            weekly_unavailable_reason = f"Stock history: only {len(closes_weekly)} weeks available (need 55 for full Ψ-EMA)"
         
         # Use daily closes for backward compatibility
         closes = closes_daily
@@ -136,11 +141,11 @@ def fetch_stock_data(ticker: str, days: int = 365) -> dict:
         # Remove None values for cleaner output
         fundamentals = {k: v for k, v in fundamentals.items() if v is not None}
         
-        # Build weekly data object
+        # Build weekly data object with barCount and dates
         weekly_data = {
             "closes": closes_weekly,
             "dates": dates_weekly,
-            "periodWeeks": len(closes_weekly),
+            "barCount": len(closes_weekly),
             "startDate": dates_weekly[0] if dates_weekly else None,
             "endDate": dates_weekly[-1] if dates_weekly else None
         }
@@ -154,18 +159,17 @@ def fetch_stock_data(ticker: str, days: int = 365) -> dict:
             "currentPrice": current_price,
             "closes": closes,  # Daily closes for backward compatibility
             "dates": dates,    # Daily dates for backward compatibility
+            "startDate": dates[0] if dates else None,
+            "endDate": dates[-1] if dates else None,
             "daily": {
                 "closes": closes_daily,
                 "dates": dates_daily,
-                "periodDays": len(closes_daily),
+                "barCount": len(closes_daily),
                 "startDate": dates_daily[0] if dates_daily else None,
                 "endDate": dates_daily[-1] if dates_daily else None
             },
             "weekly": weekly_data,
-            "fundamentals": fundamentals,
-            "periodDays": len(closes),
-            "startDate": dates[0] if dates else None,
-            "endDate": dates[-1] if dates else None
+            "fundamentals": fundamentals
         }
         
     except Exception as e:
@@ -177,11 +181,9 @@ def fetch_stock_data(ticker: str, days: int = 365) -> dict:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(json.dumps({"error": "Usage: python fetch-stock-prices.py TICKER [days]"}))
+        print(json.dumps({"error": "Usage: python fetch-stock-prices.py TICKER"}))
         sys.exit(1)
     
     ticker = sys.argv[1]
-    days = int(sys.argv[2]) if len(sys.argv) > 2 else 365  # Extended to 1 year for weekly coverage
-    
-    result = fetch_stock_data(ticker, days)
+    result = fetch_stock_data(ticker)
     print(json.dumps(result))

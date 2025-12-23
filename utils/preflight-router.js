@@ -126,20 +126,21 @@ async function preflightRouter(options) {
       if (result.ticker) {
         console.log(`🎯 Preflight: Detected ticker ${result.ticker} for Ψ-EMA`);
         
-        // Fetch stock data (365 days for weekly EMA coverage)
+        // Fetch stock data (exact periods: 3mo daily, 15mo weekly)
         try {
-          result.stockData = await fetchStockPrices(result.ticker, 365);
+          result.stockData = await fetchStockPrices(result.ticker);
           result.dataAge = calculateDataAge(result.stockData?.endDate);
           
-          // Dual timeframe data points
-          const dailyPoints = result.stockData?.daily?.closes?.length || result.stockData?.closes?.length || 0;
-          const weeklyPoints = result.stockData?.weekly?.closes?.length || 0;
+          // Use barCount from optimized fetch (exact data, no buffer)
+          const dailyBars = result.stockData?.daily?.barCount || 0;
+          const weeklyBars = result.stockData?.weekly?.barCount || 0;
           const weeklyUnavailableReason = result.stockData?.weekly?.unavailableReason;
           
-          console.log(`📈 Preflight: Fetched ${dailyPoints} daily + ${weeklyPoints} weekly data points for ${result.ticker}`);
+          console.log(`📈 Preflight: Fetched ${dailyBars} daily bars + ${weeklyBars} weekly bars for ${result.ticker}`);
           
           // Run Ψ-EMA analysis on BOTH timeframes if enough data
-          if (dailyPoints >= 55) {
+          // Daily: need 55 bars for EMA-55, Weekly: need 55 bars for EMA-55
+          if (dailyBars >= 55) {
             try {
               // Daily analysis (primary) - fresh dashboard instance
               const dailyDashboard = new PsiEMADashboard();
@@ -148,8 +149,8 @@ async function preflightRouter(options) {
               result.psiEmaAnalysis.timeframe = 'daily';
               console.log(`📊 Preflight: Ψ-EMA daily analysis complete for ${result.ticker}`);
               
-              // Weekly analysis (if sufficient data - need 13+ weeks for EMA-13) - FRESH dashboard instance
-              if (weeklyPoints >= 13 && !weeklyUnavailableReason) {
+              // Weekly analysis (need 55 bars for full EMA-55) - FRESH dashboard instance
+              if (weeklyBars >= 55 && !weeklyUnavailableReason) {
                 const weeklyDashboard = new PsiEMADashboard();  // Fresh instance to avoid state mutation
                 const weeklyCloses = result.stockData?.weekly?.closes || [];
                 result.psiEmaAnalysisWeekly = weeklyDashboard.analyze({ stocks: weeklyCloses });
@@ -157,7 +158,7 @@ async function preflightRouter(options) {
                 console.log(`📊 Preflight: Ψ-EMA weekly analysis complete for ${result.ticker}`);
               } else {
                 result.weeklyUnavailableReason = weeklyUnavailableReason || 
-                  `Insufficient weekly data: only ${weeklyPoints} weeks available (need 13+ for EMA)`;
+                  `Stock history: ${weeklyBars} weeks available (need 55 for full Ψ-EMA)`;
                 console.log(`⚠️ Preflight: Weekly Ψ-EMA unavailable: ${result.weeklyUnavailableReason}`);
               }
               
@@ -172,8 +173,8 @@ async function preflightRouter(options) {
               console.log(`⚠️ Preflight: Ψ-EMA analysis failed: ${analysisErr.message}`);
               result.stockContext = buildLimitedStockContext(result);
             }
-          } else if (dailyPoints > 0) {
-            console.log(`⚠️ Preflight: Insufficient data for ${result.ticker} (${dailyPoints} points, need 55+ for Ψ-EMA)`);
+          } else if (dailyBars > 0) {
+            console.log(`⚠️ Preflight: Insufficient data for ${result.ticker} (${dailyBars} bars, need 55 for Ψ-EMA)`);
             result.stockContext = buildLimitedStockContext(result);
           } else {
             console.log(`❌ Preflight: No data returned for ${result.ticker}`);
