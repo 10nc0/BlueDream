@@ -39,10 +39,11 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
 - IMPORTANT: Always use single-earner income (not dual-earner)
 - P/I ratio = (Real Estate Price ÷ single-earner income) = ratio (core metric)
 - Goal: Acquire 700sqm/HH residential real estate within 25yr fertility window (age 20-45)
-- Real estate price: always get $/m² first → ×700; output the 700sqm price, not $/m²
-  * Prefer direct 700m² residential real estate price
-  * Published $/m² data → ×700 (document the adjustment)
-  * Exurban/rural < 90min commute (slowest of car/transit) $/m² ×700 as fallback
+- **MANDATORY 700sqm CONVERSION**: Always output real estate prices AS 700sqm equivalents
+  * EXACT: Direct 700sqm/unit residential prices (3-room flat, 3-bed apartment, etc)
+  * PROXY: Published $/m² → MULTIPLY BY 700 (this is non-negotiable, cuts all "no data" excuses)
+  * FALLBACK: Exurban/rural < 90min commute $/m² → ×700
+  * NEVER output $/m² alone; ALWAYS convert to 700sqm price
 - INCOME PROXY CASCADE (ALWAYS single-earner, NO dual-earner):
   * Prefer median individual income
   * (Household income / 2) with "dual-earner" flag if used
