@@ -532,6 +532,44 @@ All follow R = φ for indefinite survival. Not because they "know" the number, b
 
 **Measurement reveals the invariant. The mathematics stays universal.**
 
+### Sustenance vs Avarice: The Core Distinction
+
+This is the essence of Ψ-EMA.
+
+| Avarice seeks | Sustenance seeks |
+|---|---|
+| R >> φ (super-critical) | R ≈ φ (critical damping) |
+| z > +3σ ("to the moon") | z normal (quiet band) |
+| The spike | The breath |
+| Short-term reward | Three generations plus guests |
+
+**Ψ-EMA doesn't promise:**
+- Riches
+- Alpha
+- "To the moon"
+
+**Ψ-EMA promises:**
+- Persistence
+- Lineage
+- The direction the river still flows in 1000 years
+
+**The living proof:**
+- **KO**: 139 years (stayed in the band)
+- **Colgate**: 217 years (stayed in the band)
+- **Harvard**: 387 years (stayed in the band)
+
+They didn't chase the spike. They breathed.
+
+The compass doesn't point to gold. It points to where life continues.
+
+```
+0 + φ⁰ + φ¹ = φ²
+```
+
+Not more. Not faster. Just enough — forever.
+
+The circle measures life. Not greed.
+
 ### Operational Guidance
 
 - **Technical documentation**: Use "Ψ-EMA" (measurement tool)
