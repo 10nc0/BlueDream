@@ -422,49 +422,70 @@ STATUS: Patient shows healthy φ-convergence. Conservation laws intact.
 `;
       }
       
-      // Build dual-timeframe output (Daily + Weekly) with prominent fidelity grades
+      // Build dual-timeframe output (Daily + Weekly) with computation math
+      const dailyGradeEmoji = { 'A': '🟢', 'B': '🟡', 'C': '🟠', 'D': '🔴' }[fidelity.grade] || '⚪';
+      const weeklyGradeEmoji = { 'A': '🟢', 'B': '🟡', 'C': '🟠', 'D': '🔴' }[fidelityW.grade] || '⚪';
+      
+      // Helper to format number or N/A
+      const fmt = (v, decimals = 2) => (v != null && !isNaN(v)) ? v.toFixed(decimals) : 'N/A';
+      
+      // Build weekly section with math
       let weeklySection = '';
       if (analysisWeekly) {
-        const weeklyGradeEmoji = { 'A': '🟢', 'B': '🟡', 'C': '🟠', 'D': '🔴' }[fidelityW.grade] || '⚪';
         weeklySection = `
-**WEEKLY (7d) Ψ-EMA:** [${weeklyGradeEmoji} ${fidelityW.grade || '?'} grade]
-• Phase θ: ${phaseW.current?.toFixed(2) || 'N/A'}° — ${phaseW.signal || 'N/A'}
-• Anomaly z: ${anomalyW.current?.toFixed(2) || 'N/A'}σ — ${anomalyW.alert?.level || 'N/A'}
-• Convergence R: ${convergenceW.current?.toFixed(2) || 'N/A'} — ${convergenceW.regime?.label || convergenceW.regime || 'N/A'}
-• Signal: ${compositeW.action || 'HOLD'} (${compositeW.confidence || 'N/A'}%)
-• Data Quality: ${fidelityW.percent || 'N/A'}% fidelity`;
+**WEEKLY (7d candles, 13-month window)** [${weeklyGradeEmoji} ${fidelityW.grade || '?'} grade, ${fidelityW.percent || 'N/A'}% fidelity]
+├─ θ (Phase) = **${fmt(phaseW.current)}°** → ${phaseW.signal || 'N/A'}
+├─ z (Anomaly) = **${fmt(anomalyW.current)}σ** → ${anomalyW.alert?.level || 'N/A'}
+└─ R (Convergence) = **${fmt(convergenceW.current)}** → ${convergenceW.regime?.label || convergenceW.regime || 'N/A'}
+   Composite: ${compositeW.action || 'HOLD'} (${compositeW.confidence || 'N/A'}% confidence)`;
       } else {
         weeklySection = `
-**WEEKLY (7d) Ψ-EMA:** ⚠️ Unavailable
-Reason: ${weeklyUnavailableReason || 'Insufficient weekly data (<13 bars)'}`;
+**WEEKLY (7d):** ⚠️ Unavailable (${weeklyUnavailableReason || 'Insufficient data <13 bars'})`;
       }
       
-      // Daily fidelity grade emoji
-      const dailyGradeEmoji = { 'A': '🟢', 'B': '🟡', 'C': '🟠', 'D': '🔴' }[fidelity.grade] || '⚪';
-      const priceHeader = `${ticker}: ${stockData.currency || 'USD'} ${stockData.currentPrice?.toFixed(2) || 'N/A'} (${priceTimestamp})`;
-      
       psiEmaInstruction = `
-[Ψ-EMA WAVE FUNCTION ANALYSIS - DUAL TIMEFRAME - YOU MUST INCLUDE ALL OF THIS IN YOUR RESPONSE]
-${priceHeader}${edgarSection}
+═══════════════════════════════════════════════════════════════════════════════
+STANDARD MARKET SNAPSHOT (Data: yfinance + SEC EDGAR)
+═══════════════════════════════════════════════════════════════════════════════
+**${ticker}** — ${stockData.currency || 'USD'} ${stockData.currentPrice?.toFixed(2) || 'N/A'} (as of ${priceTimestamp})
+${fundamentals.fiftyTwoWeekHigh ? `52-Week Range: $${fundamentals.fiftyTwoWeekLow?.toFixed(2) || 'N/A'} – $${fundamentals.fiftyTwoWeekHigh?.toFixed(2) || 'N/A'}` : ''}
+${fundamentals.peRatio ? `P/E Ratio: ${fundamentals.peRatio.toFixed(2)}` : ''}${fundamentals.forwardPE ? ` | Forward P/E: ${fundamentals.forwardPE.toFixed(2)}` : ''}
+${fundamentals.marketCap ? `Market Cap: $${(fundamentals.marketCap / 1e9).toFixed(2)}B` : ''}
+${fundamentals.sector ? `Sector: ${fundamentals.sector}${fundamentals.industry ? ` / ${fundamentals.industry}` : ''}` : ''}
 
-**DAILY (1d) Ψ-EMA:** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade]
-• Phase θ (Cycle): ${phase.current?.toFixed(2) || 'N/A'}° — ${phase.signal || 'N/A'}
-• Anomaly z (Deviation): ${anomaly.current?.toFixed(2) || 'N/A'}σ — ${anomaly.alert?.level || 'N/A'}
-• Convergence R (Sustainability): ${convergence.current?.toFixed(2) || 'N/A'} — ${convergence.regime?.label || convergence.regime || 'N/A'}
-• Composite Signal: ${composite.action || 'HOLD'} (${composite.confidence || 'N/A'}% signal confidence)
-• Data Quality: ${fidelity.percent || 'N/A'}% fidelity
+═══════════════════════════════════════════════════════════════════════════════
+Ψ-EMA WAVE FUNCTION DIAGNOSTICS (Experimental Research Framework)
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ DISCLAIMER: Ψ-EMA is a proprietary/experimental wave function analysis 
+framework. It is NOT a standard technical indicator. Results are for research 
+purposes only and should not be used as sole basis for investment decisions.
+
+**FRAMEWORK LEGEND:**
+• θ (Phase) = Cycle position in degrees (0-360°), from atan2 of EMA crossovers
+• z (Anomaly) = Standard deviations from median (MAD-scaled, robust to outliers)  
+• R (Convergence) = Sustainability ratio: <1.3 sub-critical | 1.3-2.0 critical | >2.0 super-critical
+• φ = Golden ratio (1.618...) — Fibonacci EMA periods: 13, 21, 34, 55
+
+**DAILY (1d candles, 3-month window)** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade, ${fidelity.percent || 'N/A'}% fidelity]
+├─ θ (Phase) = **${fmt(phase.current)}°** → ${phase.signal || 'N/A'}
+├─ z (Anomaly) = **${fmt(anomaly.current)}σ** → ${anomaly.alert?.level || 'N/A'}
+└─ R (Convergence) = **${fmt(convergence.current)}** → ${convergence.regime?.label || convergence.regime || 'N/A'}
+   Composite: ${composite.action || 'HOLD'} (${composite.confidence || 'N/A'}% confidence)
 ${weeklySection}
+
 ${clinicalSection}
 ${physicalAuditDisclaimer}
 
-UNIFIED CONFIDENCE (NYAN Protocol ANALYSIS HIERARCHY):
-Your response confidence will be graded by audit against data quality tier:
-- 95% confidence = EXACT DATA (yfinance prices, SEC EDGAR fundamentals verified)
-- 80% confidence = PROXY AVAILABLE (interpolated/estimated, clearly flagged)
-- <50% confidence = NOTHING (no data, honest refusal)
-DO NOT invent or calculate confidence yourself. Audit will determine based on your data sources.
+═══════════════════════════════════════════════════════════════════════════════
+CONFIDENCE GRADING (NYAN Protocol Analysis Hierarchy)
+═══════════════════════════════════════════════════════════════════════════════
+• 95% = EXACT DATA (yfinance prices, SEC EDGAR fundamentals verified)
+• 80% = PROXY AVAILABLE (interpolated/estimated, flagged with *)
+• <50% = INSUFFICIENT DATA (honest refusal)
 
-INSTRUCTION: Present BOTH Daily and Weekly Ψ-EMA analysis with all three dimensions (Phase θ, Anomaly z, Convergence R). Include clinical diagnosis AND physical audit disclaimer. End with 🔥 ~nyan.
+INSTRUCTION: Present BOTH Standard Market Snapshot AND Ψ-EMA Diagnostics 
+(clearly separating conventional metrics from experimental analysis). 
+Include all computation math. End with 🔥 ~nyan.
 `;
       console.log(`📊 Ψ-EMA dual-timeframe instruction injected for ${ticker} (daily + ${analysisWeekly ? 'weekly' : 'weekly unavailable'})`);
     }
