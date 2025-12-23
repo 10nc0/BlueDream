@@ -34,7 +34,12 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - **Nyan Protocol (Permanent Seed Context)**: A sacred, always active Step 0 protocol for historical comparison and socio-economic analysis using the Seed Metric (P/I ratio), ensuring web search for grounded data to prevent LLM hallucinations.
 - **Financial Physics System**: A 4-tier architecture extending the NYAN Protocol for financial cognition.
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis, providing a universal 7-section template.
-- **Ψ-EMA System (Financial Quantum Mechanics)**: A Multi-Dimensional Wave Function Dashboard for financial time series analysis using three orthogonal dimensions (Phase θ, Anomaly z, Convergence R) with Fibonacci EMA periods. It includes real-time stock integration, a "Lego-style Turing test" for key detection, AI-PUSH rescue for missing keys, and strict capitalization rules for tickers. It performs dual timeframe analysis, optimized data fetching, fidelity proxying, and provides plain-English descriptions with structured output.
+- **Ψ-EMA System (Financial Quantum Mechanics)**: A Multi-Dimensional Wave Function Dashboard for financial time series analysis using three orthogonal dimensions:
+    - **θ (Phase)**: arctan(ΔEMA-55/ΔEMA-34) → Cycle position (Stock↔Flow dominance in 4 quadrants)
+    - **z (Anomaly)**: (Price - Median) / MAD → Deviation from equilibrium (kinetic energy spike)
+    - **R (Convergence)**: z(t) / z(t-1) → Sustainability ratio with φ (1.618) as natural attractor
+    - **φ Natural Attractor**: R ≈ φ = critical regime (sustainable). R < 1.3 = dying. R > 2.0 = bubble.
+    - Features: Fibonacci EMA periods (13, 21, 34, 55), real-time stock integration, dual timeframe analysis, fidelity proxying, AI-PUSH rescue for missing keys.
     - **Financial Microbiology**: An economic pathology framework for companies, identifying "Economic Pathogens" (Ponzi Virus, Bubble Cancer, Zombie Debt Bacteria) with stage classification and a clinical report generator. It integrates a 2-pass audit for clinical findings.
     - **Unified Personality Layer**: All formatting enforced in ONE place (`applyPersonalityFormat()` in pipeline-orchestrator.js). Removes fluff patterns ("Summary of...", "A comprehensive analysis...") via regex post-processing. stockContext provides raw data only; prevents over-recursing of formatting across layers.
 - **SEC EDGAR Reality Check**: Anti-hallucination guard for EDGAR API claims, explicitly stating limitations in direct data fetching.
