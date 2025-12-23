@@ -156,6 +156,15 @@ class PipelineOrchestrator {
         state.mode = state.preflight.mode;
         console.log(`📊 Preflight (pre-computed): mode=${state.mode}, ticker=${state.preflight.ticker || 'none'}`);
         
+        // WRITE to DataPackage: Stage S0 preflight result (pre-computed path)
+        state.writeToPackage(STAGE_IDS.PREFLIGHT, {
+          mode: state.mode,
+          ticker: state.preflight.ticker || null,
+          stockContext: state.preflight.stockContext || null,
+          hasPsiEma: !!state.preflight.psiEmaAnalysis,
+          preComputed: true
+        });
+        
         // Still do seed-metric search if needed
         const safeDocContext = input.docContext || {};
         if (state.mode === 'seed-metric' && input.query && !safeDocContext.isClosedLoop) {
@@ -211,6 +220,25 @@ MANDATORY INSTRUCTIONS:
         state.auditResult = { verdict: 'BYPASS', confidence: 100, reason: 'No ticker - fast path' };
         state.transition(PIPELINE_STEPS.OUTPUT);
         
+        // WRITE to DataPackage: Fast-path audit + output (S3 + S6)
+        state.writeToPackage(STAGE_IDS.AUDIT, {
+          verdict: 'BYPASS',
+          confidence: 100,
+          passed: true,
+          auditMode: 'FAST_PATH'
+        });
+        state.writeToPackage(STAGE_IDS.OUTPUT, {
+          mode: state.mode,
+          outputLength: state.finalAnswer.length,
+          didSearch: false,
+          retryCount: 0,
+          fastPath: true
+        });
+        
+        // FINALIZE: Store in tenant's φ-8 window
+        state.dataPackage.finalize();
+        globalPackageStore.storePackage(state.dataPackage.tenantId, state.dataPackage);
+        
         // Mark NYAN booted on fast-path success too (didn't need full NYAN, but next query should use compressed)
         if (input.sessionId && state.isFirstQuery) {
           markSessionNyanBooted(input.sessionId);
@@ -224,7 +252,9 @@ MANDATORY INSTRUCTIONS:
           auditResult: state.auditResult,
           didSearch: false,
           retryCount: 0,
-          fastPath: true
+          fastPath: true,
+          dataPackageId: state.dataPackage.id,
+          dataPackageSummary: state.dataPackage.toCompressedSummary()
         };
       }
       
