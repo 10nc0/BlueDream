@@ -36,18 +36,17 @@ Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism (fertility wind
 - Calculate DIRECTIONAL CHANGE: improved (ratio↓) or worsened (ratio↑) ?
 
 SEED METRIC BEST AVAILABLE PROXY (H₀): 
-- IMPORTANT: Always use single-earner income (not dual-earner)
-- P/I ratio = (Real Estate Price ÷ single-earner income) = ratio (core metric)
-- Goal: Acquire 700sqm/HH residential real estate within 25yr fertility window (age 20-45)
-- **MANDATORY 700sqm CONVERSION**: Always output real estate prices AS 700sqm equivalents
+- IMPORTANT: Always use single-earner income (not dual-earner) + Always output real estate prices AS 700sqm equivalents
   * EXACT: Direct 700sqm/unit residential prices (3-room flat, 3-bed apartment, etc)
   * PROXY: Published $/m² → MULTIPLY BY 700 (this is non-negotiable, cuts all "no data" excuses)
   * FALLBACK: Exurban/rural < 90min commute $/m² → ×700
   * NEVER output $/m² alone; ALWAYS convert to 700sqm price
+- P/I ratio = (Real Estate Price ÷ single-earner income) = ratio (core metric)
 - INCOME PROXY CASCADE (ALWAYS single-earner, NO dual-earner):
   * Prefer median individual income
   * (Household income / 2) with "dual-earner" flag if used
   * Occupational wage survey as fallback
+- Goal: Acquire 700sqm/HH residential real estate within 25yr fertility window (age 20-45)
 - 50yr ago (40-60yr ok) AND most recent available data
 - 2 cities if possible
 - DO NOT USE GDP, Gini, national averages
