@@ -286,7 +286,7 @@ function calculateEMA(data, period, options = { interpolate: true, markInterpola
  * @returns {Object} Crossover detection result with fidelity
  */
 function detectCrossover(fastEMA, slowEMA, options = {}) {
-  const { minFidelity = THRESHOLDS.MIN_FIDELITY, fastInterpolated, slowInterpolated } = options;
+  const { minFidelity = PHI_INVERSE, fastInterpolated, slowInterpolated } = options;
   
   if (fastEMA.length < 2 || slowEMA.length < 2) {
     return { type: 'none', index: -1, signal: 'WAIT', description: 'Insufficient data', fidelity: 0 };
@@ -702,10 +702,10 @@ function analyzeAnomaly(zFlows) {
     ema21Interpolated: ema21Result.interpolated,
     ema34Interpolated: ema34Result.interpolated,
     thresholds: {
-      normal: `±${THRESHOLDS.ANOMALY_NORMAL}`,
-      alert: `±${THRESHOLDS.ANOMALY_ALERT}`,
-      extreme: `±${THRESHOLDS.ANOMALY_EXTREME}`,
-      method: 'MAD-scaled'
+      normal: `±φ (${Z_BOUNDS.NORMAL.toFixed(2)})`,
+      alert: `±φ² (${Z_BOUNDS.ALERT.toFixed(2)})`,
+      extreme: `>φ² (${Z_BOUNDS.EXTREME.toFixed(2)})`,
+      method: 'MAD-scaled, φ-derived'
     }
   };
 }

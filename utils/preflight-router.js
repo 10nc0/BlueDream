@@ -260,15 +260,15 @@ async function preflightRouter(options) {
                 
                 if (!result.stockContext) {
                   console.log(`⚠️ Preflight: buildStockContext returned null, falling back to limited`);
-                  result.stockContext = buildLimitedStockContext(result);
+                  result.stockContext = buildLimitedStockContext(result, 'Analysis returned null (possible data quality issue)');
                 }
               } catch (analysisErr) {
                 console.log(`⚠️ Preflight: Ψ-EMA analysis failed: ${analysisErr.message}`);
-                result.stockContext = buildLimitedStockContext(result);
+                result.stockContext = buildLimitedStockContext(result, analysisErr.message);
               }
             } else if (dailyBars > 0) {
               console.log(`⚠️ Preflight: Insufficient data for ${result.ticker} (${dailyBars} bars, need 55 for Ψ-EMA)`);
-              result.stockContext = buildLimitedStockContext(result);
+              result.stockContext = buildLimitedStockContext(result, `Insufficient data (${dailyBars} days, need 55+ for EMA-55)`);
             } else {
               console.log(`❌ Preflight: No data returned for ${result.ticker}`);
               result.stockContext = buildFallbackStockContext(result.ticker);
@@ -462,10 +462,13 @@ ${fundamentalsSection}
 }
 
 /**
- * Build limited context when insufficient data points for full Ψ-EMA
- * Still provides price + fundamentals, but explains missing wave analysis
+ * Build limited context when Ψ-EMA analysis unavailable
+ * Still provides price + fundamentals, but explains why wave analysis is missing
+ * 
+ * @param {Object} preflight - Preflight result
+ * @param {string} reason - Reason for analysis failure (optional)
  */
-function buildLimitedStockContext(preflight) {
+function buildLimitedStockContext(preflight, reason = null) {
   const { ticker, stockData, dataAge } = preflight;
   const ageFlag = dataAge?.flag || '⚠️';
   const dataPoints = stockData?.closes?.length || 0;
@@ -485,6 +488,16 @@ function buildLimitedStockContext(preflight) {
     }
   }
   
+  // Determine the actual reason for limited context
+  let reasonText = '';
+  if (reason) {
+    reasonText = `- **Reason**: ${reason}`;
+  } else if (dataPoints < 55) {
+    reasonText = `- **Reason**: Insufficient data (${dataPoints} days, need 55+ for EMA-55)`;
+  } else {
+    reasonText = `- **Reason**: Analysis computation error`;
+  }
+  
   return `
 ## Stock Data for ${ticker} (${stockData?.name || ticker})
 **Data Source**: yfinance (VERIFIED - REAL PRICES)
@@ -494,12 +507,12 @@ ${fundamentalsSection}
 
 ### ⚠️ Ψ-EMA Wave Analysis UNAVAILABLE
 - **Data Points Available**: ${dataPoints} trading days
-- **Required for Ψ-EMA**: 55+ trading days (for EMA-55 calculation)
+${reasonText}
 - **Missing**: Phase θ, Anomaly z, Convergence R signals
 
-The price and fundamentals above are verified. However, full wave function analysis (golden cross/death cross detection, momentum regime, φ-correction signals) cannot be computed with only ${dataPoints} days of data.
+The price and fundamentals above are verified.
 
-**End with "🔥 ~nyan" and mention data limitations.**
+**End with "🔥 ~nyan"**
 `;
 }
 
