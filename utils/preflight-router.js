@@ -440,28 +440,30 @@ ${fundParts.map(p => `- ${p}`).join('\n')}`;
   const confidenceLine = `**${fidelityPct}%** (${fidelityGrade}) → yfinance prices + SEC EDGAR fundamentals`;
   
   return `
-## Ψ-EMA REAL-TIME ANALYSIS
+## ⚠️ CRITICAL FORMAT INSTRUCTION
+You MUST output the EXACT content below. Do NOT add intro paragraphs, summaries, or "comprehensive analysis" fluff. START DIRECTLY with the company header. PRESERVE the markdown table EXACTLY as shown.
+
+---
 ${companyHeader}
-**Ψ-EMA measures**: θ = where in cycle, z = how unusual the price is, R = whether trend can sustain. When all three align, conviction is higher; when they conflict, caution is warranted.
+**Ψ-EMA**: θ = cycle position, z = price deviation, R = momentum sustainability. Alignment = conviction; conflict = caution.
 
-**Data Source**: yfinance (VERIFIED)
-**Data Timestamp**: ${ageFlag} ${dataAge?.timestamp} (${dataAge?.age})
-**Current Price**: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)}
+**Price**: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} (${ageFlag} ${dataAge?.timestamp})
 
-### THREE-DIMENSIONAL STATE:
+### Ψ-EMA (3D State)
 | Dimension | Formula | Value | Signal |
 |-----------|---------|-------|--------|
-| **θ (Cycle Position)** | arctan(ΔEMA-55/ΔEMA-34) | ${safeFixed(phaseTheta)}° | ${phaseSignal} |
-| **z (Price Deviation)** | (Price - Median) / MAD | ${safeFixed(anomalyZ)}σ | ${anomalyLevel} |
-| **R (Momentum Ratio)** | z(t) / z(t-1) | ${convergenceR != null ? safeFixed(convergenceR) : 'N/A'} | ${regimeLabel} |
+| θ (Cycle Position) | arctan(ΔEMA-55/ΔEMA-34) | ${safeFixed(phaseTheta)}° | ${phaseSignal} |
+| z (Price Deviation) | (Price - Median) / MAD | ${safeFixed(anomalyZ)}σ | ${anomalyLevel} |
+| R (Momentum Ratio) | z(t) / z(t-1) | ${convergenceR != null ? safeFixed(convergenceR) : 'N/A'} | ${regimeLabel} |
 
-### COMPOSITE: ${action}
+**Composite**: ${action}
 ${tetralemmaAlert}
-
-### CONFIDENCE: ${confidenceLine}
 ${fundamentalsSection}
 
-**⚠️ INSTRUCTION**: Quote these EXACT computed values. End with "🔥 ~nyan".
+**Confidence**: ${confidenceLine}
+
+---
+⚠️ OUTPUT EXACTLY as formatted above. NO intro paragraphs. NO "Summary" section. NO rephrasing. Copy the table verbatim. End "🔥 ~nyan".
 `;
 }
 
