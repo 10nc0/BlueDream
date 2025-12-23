@@ -304,9 +304,8 @@ ${fundParts.map(p => `- ${p}`).join('\n')}`;
 ${tetralemmaAlert}
 
 ### CONFIDENCE BREAKDOWN:
-- **Data Fidelity**: ${fidelity.percent || 'N/A'}% real data (Grade ${fidelity.grade || 'N/A'})
-- **Signal Strength**: ${typeof confidence === 'number' ? confidence : 'N/A'}% (based on phase/anomaly/convergence alignment)
-- **Combined Confidence**: ${typeof fidelity.percent === 'number' && typeof confidence === 'number' ? Math.round(fidelity.percent * confidence / 100) : 'N/A'}%
+- **Signal Confidence**: ${typeof confidence === 'number' ? confidence : 'N/A'}% (analytical conviction based on phase/anomaly/convergence alignment)
+- **Data Fidelity**: ${fidelity.percent || 'N/A'}% real data (Grade ${fidelity.grade || 'N/A'}) — separate quality metric, NOT multiplied into confidence
 ${fundamentalsSection}
 
 ⚠️ IMPORTANT: Always include data timestamp in financial claims. Undated prices = unverifiable.
