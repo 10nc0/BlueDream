@@ -40,6 +40,7 @@ The system employs a Node.js backend with Express and a Single Page Application 
         - **Complexity**: Best case 2 LLM calls (Reasoning + Audit), worst case 4 (with retry + re-audit). Personality is regex-based `applyPersonalityFormat()` + chunked SSE streaming via `fastStreamPersonality()`.
     - **φ-Compressed Memory**: Episodic memory system using an 8-message sliding window with φ-compression.
     - **DataPackage Sovereign Data Flow**: Each message carries a sovereign DataPackage (JSON container) through the pipeline. Fractal storage: Tenant (IP) → 8 message window → each message's DataPackage. Stages WRITE to package (immutable after finalize), personality layer strips fluff but NEVER alters data. Principle: "Data enters → transmutes → never hallucinates".
+    - **DataPackage Store Design**: Intentionally in-memory (φ-8 window for session context). Discord provides permanent retention; RAM provides speed. Server restart = fresh context (acceptable for conversational AI).
 - **Nyan Protocol (Permanent Seed Context)**: A sacred, always active Step 0 protocol for historical comparison and socio-economic analysis using the Seed Metric (P/I ratio), ensuring web search for grounded data to prevent LLM hallucinations.
 - **Financial Physics System**: A 4-tier architecture extending the NYAN Protocol for financial cognition.
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis, providing a universal 7-section template.
