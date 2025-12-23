@@ -291,6 +291,24 @@ class PipelineOrchestrator {
       const compositeW = analysisWeekly?.compositeSignal || {};
       const fidelityW = analysisWeekly?.fidelity || {};
       
+      // Extract EDGAR fundamentals
+      const fundamentals = stockData.fundamentals || {};
+      let edgarSection = '';
+      if (Object.keys(fundamentals).length > 0) {
+        edgarSection = `
+[SEC EDGAR FUNDAMENTALS]`;
+        if (fundamentals.peRatio) edgarSection += `\nP/E Ratio: ${fundamentals.peRatio.toFixed(2)}`;
+        if (fundamentals.forwardPE) edgarSection += `\nForward P/E: ${fundamentals.forwardPE.toFixed(2)}`;
+        if (fundamentals.marketCap) edgarSection += `\nMarket Cap: $${(fundamentals.marketCap / 1e9).toFixed(2)}B`;
+        if (fundamentals.sector) edgarSection += `\nSector: ${fundamentals.sector}`;
+        if (fundamentals.industry) edgarSection += `\nIndustry: ${fundamentals.industry}`;
+        if (fundamentals.dividendYield) edgarSection += `\nDividend Yield: ${(fundamentals.dividendYield * 100).toFixed(2)}%`;
+        if (fundamentals.bookValue) edgarSection += `\nBook Value: ${fundamentals.bookValue.toFixed(2)}`;
+        if (fundamentals.fiftyTwoWeekHigh) edgarSection += `\n52-Week High: $${fundamentals.fiftyTwoWeekHigh.toFixed(2)}`;
+        if (fundamentals.fiftyTwoWeekLow) edgarSection += `\n52-Week Low: $${fundamentals.fiftyTwoWeekLow.toFixed(2)}`;
+        edgarSection += '\n';
+      }
+      
       // Financial Microbiology: Clinical pathology report (Dec 23, 2025) - based on daily
       const pathogenResult = detectPathogens(analysis);
       const clinicalReport = generateClinicalReport(analysis, ticker);
@@ -340,9 +358,13 @@ Reason: ${weeklyUnavailableReason || 'Insufficient weekly data (<13 bars)'}`;
       // Daily fidelity grade emoji
       const dailyGradeEmoji = { 'A': '🟢', 'B': '🟡', 'C': '🟠', 'D': '🔴' }[fidelity.grade] || '⚪';
       
+      // Format stock price with timestamp
+      const priceTimestamp = stockData.endDate ? new Date(stockData.endDate).toISOString().split('T')[0] : 'N/A';
+      const priceHeader = `${ticker}: ${stockData.currency || 'USD'} ${stockData.currentPrice?.toFixed(2) || 'N/A'} (${priceTimestamp})`;
+      
       psiEmaInstruction = `
 [Ψ-EMA WAVE FUNCTION ANALYSIS - DUAL TIMEFRAME - YOU MUST INCLUDE ALL OF THIS IN YOUR RESPONSE]
-Ticker: ${ticker} | Price: ${stockData.currency || 'USD'} ${stockData.currentPrice?.toFixed(2) || 'N/A'}
+${priceHeader}${edgarSection}
 
 **DAILY (1d) Ψ-EMA:** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade]
 • Phase θ (Cycle): ${phase.current?.toFixed(2) || 'N/A'}° — ${phase.signal || 'N/A'}
