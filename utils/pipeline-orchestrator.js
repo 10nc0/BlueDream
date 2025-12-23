@@ -133,13 +133,45 @@ class PipelineOrchestrator {
         // Still do seed-metric search if needed
         const safeDocContext = input.docContext || {};
         if (state.mode === 'seed-metric' && input.query && !safeDocContext.isClosedLoop) {
-          const searchQuery = await this.extractCoreQuestion(input.query);
-          console.log(`🌱 Seed Metric: Search FIRST for fresh data`);
-          state.searchContext = await this.searchBrave(searchQuery, input.clientIp);
-          if (!state.searchContext) {
-            state.searchContext = await this.searchDuckDuckGo(searchQuery);
+          console.log(`🌱 Seed Metric (pre-computed): MANDATORY web search for grounded data`);
+          
+          const searchQueries = state.preflight.seedMetricSearchQueries || [];
+          const searchResults = [];
+          
+          if (searchQueries.length > 0) {
+            for (const sq of searchQueries.slice(0, 4)) {
+              const result = await this.searchBrave(sq, input.clientIp);
+              if (result) {
+                searchResults.push(`[${sq}]\n${result}`);
+              } else {
+                const ddgResult = await this.searchDuckDuckGo(sq);
+                if (ddgResult) {
+                  searchResults.push(`[${sq}]\n${ddgResult}`);
+                }
+              }
+            }
+            console.log(`🔍 Seed Metric: ${searchResults.length}/${searchQueries.length} searches returned data`);
+          } else {
+            const searchQuery = await this.extractCoreQuestion(input.query);
+            const result = await this.searchBrave(searchQuery, input.clientIp);
+            if (result) searchResults.push(result);
+            else {
+              const ddgResult = await this.searchDuckDuckGo(searchQuery);
+              if (ddgResult) searchResults.push(ddgResult);
+            }
           }
-          state.didSearch = !!state.searchContext;
+          
+          if (searchResults.length > 0) {
+            state.searchContext = `[REAL ESTATE & INCOME DATA FROM WEB SEARCH - USE THESE EXACT FIGURES]
+${searchResults.join('\n\n')}
+
+MANDATORY INSTRUCTIONS:
+1. Use $/m² data above → MULTIPLY BY 700 for 700sqm price
+2. CITE your sources explicitly (e.g., "According to [source name]...")
+3. Do NOT hallucinate prices — only use figures from search results above
+4. If search data is incomplete, flag which data is missing and use proxy with documented conversion`;
+            state.didSearch = true;
+          }
         }
       } else {
         // Pass context-aware query and context result to preflight
@@ -222,14 +254,48 @@ class PipelineOrchestrator {
     console.log(`📊 Preflight: mode=${state.mode}, ticker=${state.preflight.ticker || 'none'}`);
     
     if (state.mode === 'seed-metric' && query && !safeDocContext.isClosedLoop) {
-      const searchQuery = await this.extractCoreQuestion(query);
-      console.log(`🌱 Seed Metric: Search FIRST for fresh data`);
+      console.log(`🌱 Seed Metric: MANDATORY web search for grounded real estate data`);
       
-      state.searchContext = await this.searchBrave(searchQuery, clientIp);
-      if (!state.searchContext) {
-        state.searchContext = await this.searchDuckDuckGo(searchQuery);
+      // Use specific search queries from preflight (e.g., "tokyo residential price per square meter 2024")
+      const searchQueries = state.preflight.seedMetricSearchQueries || [];
+      const searchResults = [];
+      
+      if (searchQueries.length > 0) {
+        // Run targeted searches for $/m² + income data (limit to 4 searches max)
+        for (const sq of searchQueries.slice(0, 4)) {
+          const result = await this.searchBrave(sq, clientIp);
+          if (result) {
+            searchResults.push(`[${sq}]\n${result}`);
+          } else {
+            const ddgResult = await this.searchDuckDuckGo(sq);
+            if (ddgResult) {
+              searchResults.push(`[${sq}]\n${ddgResult}`);
+            }
+          }
+        }
+        console.log(`🔍 Seed Metric: ${searchResults.length}/${searchQueries.length} searches returned data`);
+      } else {
+        // Fallback to generic search
+        const searchQuery = await this.extractCoreQuestion(query);
+        const result = await this.searchBrave(searchQuery, clientIp);
+        if (result) searchResults.push(result);
+        else {
+          const ddgResult = await this.searchDuckDuckGo(searchQuery);
+          if (ddgResult) searchResults.push(ddgResult);
+        }
       }
-      state.didSearch = !!state.searchContext;
+      
+      if (searchResults.length > 0) {
+        state.searchContext = `[REAL ESTATE & INCOME DATA FROM WEB SEARCH - USE THESE EXACT FIGURES]
+${searchResults.join('\n\n')}
+
+MANDATORY INSTRUCTIONS:
+1. Use $/m² data above → MULTIPLY BY 700 for 700sqm price
+2. CITE your sources explicitly (e.g., "According to [source name]...")
+3. Do NOT hallucinate prices — only use figures from search results above
+4. If search data is incomplete, flag which data is missing and use proxy with documented conversion`;
+        state.didSearch = true;
+      }
     }
   }
   

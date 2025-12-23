@@ -195,8 +195,8 @@ async function preflightRouter(options) {
       result.routingFlags.isSeedMetric = true;
       result.searchStrategy = 'brave';
       
-      // Extract city names for targeted search
-      const cityPattern = /\b(tokyo|singapore|hong kong|london|new york|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|delhi|bangkok|jakarta|manila|kuala lumpur|ho chi minh|hanoi|san francisco|los angeles|chicago|toronto|vancouver|melbourne|auckland)\b/gi;
+      // Extract city names for targeted search (major world cities + common variants)
+      const cityPattern = /\b(tokyo|singapore|hong kong|hongkong|london|new york|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
       const cities = [...new Set((query.match(cityPattern) || []).map(c => c.toLowerCase()))];
       
       if (cities.length > 0) {
