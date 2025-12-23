@@ -138,11 +138,73 @@ function robustZScore(value, arr) {
 }
 
 /**
- * Calculate EMA fidelity (% of real vs interpolated data)
- * @param {boolean[][]} interpolatedArrays - Array of interpolation flag arrays from EMA calculations
- * @returns {Object} Fidelity metrics
+ * Count real vs interpolated points in an array
+ * @param {boolean[]} arr - Interpolation flag array
+ * @returns {Object} { real, total }
  */
-function calculateFidelity(...interpolatedArrays) {
+function countFidelity(arr) {
+  if (!arr || !Array.isArray(arr)) return { real: 0, total: 0 };
+  let total = arr.length;
+  let interpolated = arr.filter(x => x === true).length;
+  return { real: total - interpolated, total };
+}
+
+/**
+ * Calculate per-dimension EMA fidelity (no aggregate - each dimension stands alone)
+ * 
+ * vφ³: Removed aggregate percentage and letter grades.
+ * Each dimension (θ, z, R) reports its own real/total ratio independently.
+ * "No sum > parts" - avoids skew bias from aggregation.
+ * 
+ * @param {Object} dimensions - Named interpolation arrays per dimension
+ * @param {boolean[]} dimensions.theta1 - θ dimension EMA-34 interpolated flags
+ * @param {boolean[]} dimensions.theta2 - θ dimension EMA-55 interpolated flags
+ * @param {boolean[]} dimensions.z1 - z dimension EMA-21 interpolated flags
+ * @param {boolean[]} dimensions.z2 - z dimension EMA-34 interpolated flags
+ * @param {boolean[]} dimensions.r1 - R dimension EMA-13 interpolated flags
+ * @param {boolean[]} dimensions.r2 - R dimension EMA-21 interpolated flags
+ * @returns {Object} Per-dimension fidelity breakdown
+ */
+function calculateFidelity(dimensions = {}) {
+  const { theta1, theta2, z1, z2, r1, r2 } = dimensions;
+  
+  // Count per-dimension (merge arrays within each dimension)
+  const thetaCount1 = countFidelity(theta1);
+  const thetaCount2 = countFidelity(theta2);
+  const zCount1 = countFidelity(z1);
+  const zCount2 = countFidelity(z2);
+  const rCount1 = countFidelity(r1);
+  const rCount2 = countFidelity(r2);
+  
+  // Aggregate within each dimension only
+  const theta = {
+    real: thetaCount1.real + thetaCount2.real,
+    total: thetaCount1.total + thetaCount2.total
+  };
+  const z = {
+    real: zCount1.real + zCount2.real,
+    total: zCount1.total + zCount2.total
+  };
+  const r = {
+    real: rCount1.real + rCount2.real,
+    total: rCount1.total + rCount2.total
+  };
+  
+  return {
+    theta,
+    z,
+    r,
+    // Human-readable breakdown string
+    breakdown: `θ: ${theta.real}/${theta.total} | z: ${z.real}/${z.total} | R: ${r.real}/${r.total}`
+  };
+}
+
+/**
+ * Legacy fidelity calculation for crossover detection (needs aggregate ratio)
+ * @param {boolean[][]} interpolatedArrays - Array of interpolation flag arrays
+ * @returns {Object} Fidelity with ratio for gating
+ */
+function calculateFidelityLegacy(...interpolatedArrays) {
   let totalPoints = 0;
   let interpolatedPoints = 0;
   
@@ -154,20 +216,12 @@ function calculateFidelity(...interpolatedArrays) {
     }
   }
   
-  if (totalPoints === 0) return { ratio: 1, percent: 100, interpolated: 0, real: 0, total: 0, grade: 'N/A', description: 'No EMA data' };
+  if (totalPoints === 0) return { ratio: 1, real: 0, total: 0 };
   
   const realPoints = totalPoints - interpolatedPoints;
   const ratio = realPoints / totalPoints;
   
-  return {
-    ratio,
-    percent: Math.round(ratio * 100),
-    interpolated: interpolatedPoints,
-    real: realPoints,
-    total: totalPoints,
-    grade: ratio >= 0.9 ? 'A' : ratio >= 0.75 ? 'B' : ratio >= 0.5 ? 'C' : 'D',
-    description: ratio >= 0.9 ? 'Excellent' : ratio >= 0.75 ? 'Good' : ratio >= 0.5 ? 'Limited' : 'Insufficient'
-  };
+  return { ratio, real: realPoints, total: totalPoints };
 }
 
 // ============================================================================
@@ -295,7 +349,7 @@ function detectCrossover(fastEMA, slowEMA, options = {}) {
   // Calculate fidelity if interpolation flags provided
   let fidelity = 1.0;
   if (fastInterpolated && slowInterpolated) {
-    const fidelityResult = calculateFidelity(fastInterpolated, slowInterpolated);
+    const fidelityResult = calculateFidelityLegacy(fastInterpolated, slowInterpolated);
     fidelity = fidelityResult.ratio;
   }
   
@@ -1524,15 +1578,15 @@ class PsiEMADashboard {
           regime: classifyRegime(null, { hasLowSignal: true, warning: convergenceResult.warning })
         };
     
-    // Calculate EMA fidelity (% real vs interpolated data)
-    const fidelity = calculateFidelity(
-      phaseAnalysis.ema34Interpolated,
-      phaseAnalysis.ema55Interpolated,
-      anomalyAnalysis.ema21Interpolated,
-      anomalyAnalysis.ema34Interpolated,
-      convergenceAnalysis.ema13Interpolated,
-      convergenceAnalysis.ema21Interpolated
-    );
+    // Calculate EMA fidelity per dimension (no aggregate - each dimension stands alone)
+    const fidelity = calculateFidelity({
+      theta1: phaseAnalysis.ema34Interpolated,
+      theta2: phaseAnalysis.ema55Interpolated,
+      z1: anomalyAnalysis.ema21Interpolated,
+      z2: anomalyAnalysis.ema34Interpolated,
+      r1: convergenceAnalysis.ema13Interpolated,
+      r2: convergenceAnalysis.ema21Interpolated
+    });
     
     // Calculate derivatives
     const derivatives = calculateDerivatives(stocks);
@@ -1559,7 +1613,7 @@ class PsiEMADashboard {
         regime: convergenceAnalysis.regime?.regime || 'UNKNOWN',
         compositeSignal: compositeSignal.action,
         compositeConfidence: compositeSignal.confidence,
-        fidelity: `${fidelity.percent}% real (Grade ${fidelity.grade})`,
+        fidelity: fidelity.breakdown,
         version: 'vφ³'  // Second Life
       },
       dimensions: {
@@ -1977,6 +2031,7 @@ module.exports = {
   stdDev,
   zScore,
   calculateFidelity,
+  calculateFidelityLegacy,
   
   // Robust statistics
   mad,

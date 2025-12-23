@@ -248,8 +248,8 @@ async function preflightRouter(options) {
                   const weeklyCloses = result.stockData?.weekly?.closes || [];
                   result.psiEmaAnalysisWeekly = weeklyDashboard.analyze({ stocks: weeklyCloses });
                   result.psiEmaAnalysisWeekly.timeframe = 'weekly';
-                  const fidelityGrade = result.psiEmaAnalysisWeekly.fidelity?.grade || '?';
-                  console.log(`📊 Preflight: Ψ-EMA weekly analysis complete for ${result.ticker} (fidelity: ${fidelityGrade})`);
+                  const fidelityInfo = result.psiEmaAnalysisWeekly.fidelity?.breakdown || 'N/A';
+                  console.log(`📊 Preflight: Ψ-EMA weekly analysis complete for ${result.ticker} (${fidelityInfo})`);
                 } else if (weeklyUnavailableReason) {
                   console.log(`⚠️ Preflight: Weekly Ψ-EMA unavailable: ${weeklyUnavailableReason}`);
                   result.weeklyUnavailableReason = weeklyUnavailableReason;
@@ -434,10 +434,9 @@ ${fundParts.map(p => `- ${p}`).join('\n')}`;
     }
   }
   
-  // Build confidence line (compressed, substantive)
-  const fidelityPct = fidelity.percent || 'N/A';
-  const fidelityGrade = fidelity.grade || 'N/A';
-  const confidenceLine = `**${fidelityPct}%** (${fidelityGrade}) → yfinance prices + SEC EDGAR fundamentals`;
+  // Build fidelity line (per-dimension, no aggregate)
+  const fidelityBreakdown = fidelity.breakdown || 'N/A';
+  const confidenceLine = `[${fidelityBreakdown}] → yfinance prices + SEC EDGAR fundamentals`;
   
   // Return ONLY the data - instructions are handled separately in getPsiEMAContext()
   return `${companyHeader}
