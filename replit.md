@@ -28,7 +28,16 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - **Real-time Updates**: Smart polling, auto-scroll, and "New messages" banner.
 - **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, logging results via Prometheus Trinity Discord bots. Includes general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior.
 - **AI Playground**: A public, unauthenticated multimodal AI playground at `/AI` with features like multi-file upload, dynamic capacity sharing, abuse prevention, query classification, smart retry, document parsing, and real-time knowledge search.
-    - **AI Processing Pipeline**: A 7-step state machine (Context → Preflight → Context Build → Reasoning → Audit → Retry → Output) with three-pass verification and streaming token output.
+    - **AI Processing Pipeline (7-Stage State Machine)**:
+        - S-1: Context Extraction (φ-8 message window, entity extraction)
+        - S0: Preflight (mode detection, routing, external data fetch)
+        - S1: Context Build (inject system prompts based on mode)
+        - S2: Reasoning (LLM call, O(tokens), ~1500 tokens)
+        - S3: Audit (LLM call, O(tokens), ~800 tokens)
+        - S4: Retry (search augmentation if audit rejected)
+        - S5: Personality (regex cleanup, O(n) string ops, NOT an LLM call)
+        - S6: Output (finalize DataPackage, store in φ-8 window)
+        - **Complexity**: Best case 2 LLM calls (Reasoning + Audit), worst case 4 (with retry + re-audit). Personality is regex-based `applyPersonalityFormat()` + chunked SSE streaming via `fastStreamPersonality()`.
     - **φ-Compressed Memory**: Episodic memory system using an 8-message sliding window with φ-compression.
     - **DataPackage Sovereign Data Flow**: Each message carries a sovereign DataPackage (JSON container) through the pipeline. Fractal storage: Tenant (IP) → 8 message window → each message's DataPackage. Stages WRITE to package (immutable after finalize), personality layer strips fluff but NEVER alters data. Principle: "Data enters → transmutes → never hallucinates".
 - **Nyan Protocol (Permanent Seed Context)**: A sacred, always active Step 0 protocol for historical comparison and socio-economic analysis using the Seed Metric (P/I ratio), ensuring web search for grounded data to prevent LLM hallucinations.

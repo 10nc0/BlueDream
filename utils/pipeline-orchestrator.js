@@ -1,28 +1,35 @@
 /**
  * Pipeline Orchestrator - Unified AI Request Processing
  * 
- * State Machine:
- * S-1: Context Extraction (8-message window - entities, not reasoning)
- * S0: Preflight (routing, mode detection, external data fetch)
- * S1: Context Build (inject system prompts based on mode)
- * S2: Reasoning (LLM call)
- * S3: Audit (verify output)
- * S4: Retry (search + regenerate if audit rejected)
- * S5: Personality (format final output)
- * S6: Output
+ * 7-STAGE STATE MACHINE (S-1 to S6):
+ * ┌─────────────────────────────────────────────────────────────────┐
+ * │ S-1: Context Extraction  │ φ-8 message window, entity extraction │
+ * │ S0:  Preflight           │ Mode detection, routing, data fetch   │
+ * │ S1:  Context Build       │ Inject system prompts based on mode   │
+ * │ S2:  Reasoning           │ LLM call (O(tokens), ~1500 tokens)    │
+ * │ S3:  Audit               │ LLM call (O(tokens), ~800 tokens)     │
+ * │ S4:  Retry               │ Search augmentation if audit rejected │
+ * │ S5:  Personality         │ Regex cleanup (O(n), NOT an LLM call) │
+ * │ S6:  Output              │ Finalize DataPackage, store in φ-8    │
+ * └─────────────────────────────────────────────────────────────────┘
  * 
- * GROQFIRST FLOW PATTERN (not a value, a flow):
+ * COMPLEXITY ANALYSIS:
+ * - Best case: 2 LLM calls (Reasoning + Audit)
+ * - Worst case: 4 LLM calls (Reasoning + Audit + Retry + Re-Audit)
+ * - Personality: Regex-based (applyPersonalityFormat), NOT an LLM call
+ * 
+ * GROQFIRST FLOW PATTERN:
  * - Try Groq FIRST for generation (S2)
  * - Run audit pass to verify output (S3)
- * - If audit PASSES → use Groq output (outcome = groqonly, not a default)
+ * - If audit PASSES → use Groq output
  * - If audit FAILS → retry with search augmentation (S4), then re-audit
- * - "groqonly" is a FLOW OUTCOME, never a hardcoded value
  * 
- * This separates concerns:
+ * SEPARATION OF CONCERNS:
  * - NYAN Protocol = What to think (reasoning principles)
- * - Pipeline = How to process (state machine)
- * - Routing = Where to go (mode detection via preflight-router)
- * - Context = What was discussed (entity extraction from history)
+ * - Pipeline = How to process (this state machine)
+ * - Routing = Where to go (preflight-router.js)
+ * - Context = What was discussed (context-extractor.js)
+ * - Audit = Verification (two-pass-verification.js::runAuditPass)
  */
 
 const { preflightRouter, buildSystemContext } = require('./preflight-router');
@@ -773,9 +780,95 @@ function createPipelineOrchestrator(config) {
   return new PipelineOrchestrator(config);
 }
 
+/**
+ * STANDALONE PERSONALITY FORMAT (exported for use outside pipeline)
+ * Regex-based cleanup: O(n) string operations, NOT an LLM call
+ * Use this instead of runStreamingPersonalityPass() to save 1 LLM call
+ */
+function applyPersonalityFormat(answer, mode = 'general') {
+  if (!answer) return answer;
+  
+  let cleaned = answer;
+  
+  const introFluffPatterns = [
+    /^##?\s*Summary[^\n]*\n+[^\n]*(?:comprehensive|detailed|provides|uncertain)[^\n]*\n+/i,
+    /^##?\s*Summary[^\n]*\n+[^\n]*following[^\n]*\n+/i,
+    /^##?\s*Summary\s*\n+[^\n]+\n+/i,
+    /^##?\s*Summary\s*\n+/i,
+    /^##?\s*Introduction to[^\n]*\n+(?:[^\n]+\n+)?/i,
+    /^(?:A |The )?(?:comprehensive|detailed|current) (?:analysis|view|overview|price trend) of[^\n]*\n+/i,
+    /^The (?:following|current|NVDA|stock)[^\n]*(?:is|can be|provides)[^\n]*\n+/i,
+    /^Here (?:is|are)[^\n]*analysis[^\n]*\n+/i,
+    /^Let me provide[^\n]*\n+/i,
+    /^I'll analyze[^\n]*\n+/i,
+    /^This analysis provides[^\n]*\n+/i,
+    /^To analyze[^\n]*\n+/i,
+    /^As of my knowledge[^\n]*\n+/i,
+  ];
+  
+  for (const pattern of introFluffPatterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+  
+  const outroFluffPatterns = [
+    /###?\s*Confidence Grading\s*\n+(?:[\s\S]*?(?:\*\s*\*\*95%\*\*|\*\s*\*\*80%\*\*|\*\s*\*\*<50%\*\*)[\s\S]*?)+(?=\n*(?:🔥|$))/i,
+    /The confidence (?:grading|levels?) (?:for this analysis )?(?:is|are) as follows:\s*\n+(?:\*[^\n]+\n+)+/i,
+    /The current analysis has a confidence grade of[^\n]*\n+/i,
+  ];
+  
+  for (const pattern of outroFluffPatterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+  
+  if (!cleaned.includes('~nyan')) {
+    cleaned = cleaned.trimEnd() + '\n\n🔥 ~nyan';
+  }
+  
+  return cleaned.trim();
+}
+
+/**
+ * FAST STREAMING PERSONALITY (replaces runStreamingPersonalityPass)
+ * Uses regex cleanup + chunked SSE output instead of LLM streaming
+ * Saves 1 LLM call (~800 tokens) per request
+ * 
+ * @param {object} res - Express response object (SSE-enabled)
+ * @param {string} answer - Answer to format and stream
+ * @param {object} auditMetadata - Audit metadata to send before streaming
+ * @param {number} chunkSize - Characters per chunk (default: 50 for natural feel)
+ * @param {number} chunkDelay - Milliseconds between chunks (default: 10ms)
+ */
+async function fastStreamPersonality(res, answer, auditMetadata, chunkSize = 50, chunkDelay = 10) {
+  const formatted = applyPersonalityFormat(answer);
+  
+  if (!res.writableEnded) {
+    res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Formatting...' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
+  }
+  
+  for (let i = 0; i < formatted.length; i += chunkSize) {
+    if (res.writableEnded) break;
+    const chunk = formatted.slice(i, i + chunkSize);
+    res.write(`data: ${JSON.stringify({ type: 'token', content: chunk })}\n\n`);
+    if (chunkDelay > 0) {
+      await new Promise(resolve => setTimeout(resolve, chunkDelay));
+    }
+  }
+  
+  if (!res.writableEnded) {
+    res.write(`data: ${JSON.stringify({ type: 'done', fullContent: formatted })}\n\n`);
+    res.end();
+  }
+  
+  console.log(`⚡ Fast personality: ${formatted.length} chars (regex, no LLM)`);
+  return formatted;
+}
+
 module.exports = {
   PipelineOrchestrator,
   PipelineState,
   PIPELINE_STEPS,
-  createPipelineOrchestrator
+  createPipelineOrchestrator,
+  applyPersonalityFormat,
+  fastStreamPersonality
 };

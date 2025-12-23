@@ -1,18 +1,20 @@
 /**
- * THREE-PASS VERIFICATION ORCHESTRATOR
+ * AUDIT PASS UTILITIES
  * 
- * O(1) Generation + audit(O(1)) + personality(O(1))
- * Inspired by Replit's Architect review pattern.
+ * Provides verification infrastructure for the 7-stage pipeline.
+ * Complexity: O(tokens) per LLM call, not O(1).
  * 
- * Flow:
- * 1. Pass 1 (Generate): Draft answer using NYAN + extensions
- * 2. Pass 2 (Audit): Verify for hallucination/context leakage
- * 3. Pass 1.5 (Correct): Fix issues if FIXABLE verdict
- * 4. Pass 3 (Personality): Reformat verified answer for readability
- *    - Presentation-only layer (runs AFTER verification)
- *    - Preserves all data, calculations, citations exactly
- *    - Only adjusts formatting, tone, and structure
- * 5. Return formatted answer with verification metadata
+ * Exported Functions:
+ * - runAuditPass(): Single LLM call to verify draft answer (used by pipeline-orchestrator)
+ * - runCorrectivePass(): LLM call to fix issues if FIXABLE verdict
+ * - formatAuditBadge(): Display helper for audit status
+ * - buildRefusalMessage(): Construct rejection messages
+ * 
+ * Architecture Note (Dec 2025):
+ * - Pipeline-orchestrator.js is the primary entry point (7-stage state machine)
+ * - This module provides ONLY the audit LLM call, not full orchestration
+ * - Personality formatting is handled by regex in pipeline-orchestrator.applyPersonalityFormat()
+ * - runVerifiedAnswer() and runPersonalityPass() are LEGACY - kept for backward compatibility
  */
 
 const axios = require('axios');

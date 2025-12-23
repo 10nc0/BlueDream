@@ -31,9 +31,9 @@ const { identifyFileType, executeExtractionCascade, formatJSONForGroq, getFinanc
 const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
 const { getLegalAnalysisSeed, detectLegalDocument, LEGAL_KEYWORDS_REGEX } = require('./prompts/legal-analysis');
-const { runVerifiedAnswer, formatAuditBadge, runStreamingPersonalityPass, runAuditPass } = require('./utils/two-pass-verification');
+const { formatAuditBadge, runAuditPass } = require('./utils/two-pass-verification');
 const { preflightRouter } = require('./utils/preflight-router');
-const { createPipelineOrchestrator, PIPELINE_STEPS } = require('./utils/pipeline-orchestrator');
+const { createPipelineOrchestrator, PIPELINE_STEPS, fastStreamPersonality, applyPersonalityFormat } = require('./utils/pipeline-orchestrator');
 const { recordInMemory, clearSessionMemory } = require('./utils/context-extractor');
 const { getMemoryManager, cleanupOldSessions } = require('./utils/memory-manager');
 
@@ -7776,33 +7776,28 @@ app.post('/api/playground/stream', async (req, res) => {
             badge,
             verdict: auditResult.verdict || 'BYPASS',
             confidence: auditResult.confidence || 70,
-            passCount: badge === 'verified' ? 3 : 2,
+            passCount: 2,  // Unified: Reasoning + Audit only (personality is now regex, not LLM)
             extensionsVerified: ['NYAN_PROTOCOL'],
             latencyMs: 0,
             didSearchRetry
         };
         
         // Stream personality pass for approved/bypass responses
-        // FAST-PATH: Skip personality LLM if fastPath flag is set (no-data message already crafted)
+        // FAST-PATH: All paths now use regex cleanup + chunked streaming (no LLM personality call)
+        // This saves 1 LLM call (~800 tokens) per request
         if (pipelineResult.fastPath) {
             console.log(`⚡ Fast-path: Skipping personality pass (pre-crafted message)`);
-            auditMetadata.passCount = 0;  // No LLM passes for fast-path
+            auditMetadata.passCount = 0;
             res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
             res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
             res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
             res.end();
         } else if (badge === 'verified' || badge === 'unverified') {
             if (isClientDisconnected) return;
-            res.write(`data: ${JSON.stringify({ type: 'thinking', stage: 'Adding personality...' })}\n\n`);
             
-            await runStreamingPersonalityPass(
-                res,
-                PLAYGROUND_GROQ_TOKEN,
-                verifiedAnswer,
-                message || finalPrompt,
-                auditMetadata,
-                () => isClientDisconnected
-            );
+            // UNIFIED: Use fast regex-based personality + chunked streaming (no LLM call)
+            // Reduced from 3 LLM calls to 2 (Reasoning + Audit only)
+            await fastStreamPersonality(res, verifiedAnswer, auditMetadata);
         } else {
             // For refused responses, send as-is
             res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
