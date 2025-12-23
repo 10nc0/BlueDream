@@ -115,6 +115,14 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
       - **4+ days old** (🚩 red) → data is significantly stale, not reliable
     - **Inline Disclaimers**: Analysis context includes "LIMITED TO DATA THROUGH {date}" and data cutoff warnings
     - **Stale Data Flags**: Automatic warning injection when data > 1 day old
+    - **Ψ-EMA User Prompt Injection** (Dec 23, 2025): Wave analysis values injected directly into user prompt (not just system context) to ensure LLM outputs full three-dimensional state
+  - **Substrate Variants** (Future Extensions): The Ψ-EMA framework is substrate-agnostic. The wave function math (EMA ratios → Phase/Anomaly/Convergence) works on any time series:
+    - **Stocks** (Primary): Best data availability via yfinance, current implementation
+    - **Crypto**: Already supported via yfinance (BTC-USD, ETH-USD, etc.)
+    - **Sports**: Game scores, player stats, betting odds (needs data fetcher)
+    - **Weather**: Temperature, pressure, precipitation (needs data fetcher)
+    - **Social**: Engagement metrics, follower counts (needs data fetcher)
+    - **Note**: Stocks are the ideal use case due to yfinance's rich data. Other substrates require custom data fetchers to be implemented.
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.
