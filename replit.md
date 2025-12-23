@@ -62,7 +62,8 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **Dual Timeframe Analysis** (Dec 23, 2025): Default shows BOTH Daily (1d) AND Weekly (7d) Ψ-EMA analysis to avoid daily noise bias
     - **Optimized Data Fetching**: Exact period strings (3mo daily, 13mo weekly). Weekly candles = compressed OHLC snapshots (like blockchain blocks), no gap filling needed
     - **Fidelity Proxying** (Dec 23, 2025): φ-interpolation for small gaps (2-3 days/weeks only), marked with * for transparency. Never extrapolates beyond latest historical date. Fidelity grading (A/B/C/D) handles data quality signaling instead of hard gates
-    - **Plain-English Description** (Dec 23, 2025): Replaced verbose experimental disclaimers with concise 3-sentence summary: "Ψ-EMA measures where a stock is in its cycle (θ), how unusual the price is (z), and whether the trend can sustain (R). When all three align, conviction is higher; when they conflict, caution is warranted."
+    - **Plain-English Description** (Dec 23, 2025): Explicit variable mapping: "θ = where in cycle, z = how unusual the price is, R = whether trend can sustain. When all three align, conviction is higher; when they conflict, caution is warranted."
+    - **Output Formatting** (Dec 23, 2025): Ψ-EMA output includes table format with Dimension/Formula/Value/Signal columns. θ renamed to "Cycle Position" (not vague "Phase"). Formulas shown: arctan(ΔEMA-55/ΔEMA-34), (Price-Median)/MAD, z(t)/z(t-1). Confidence compressed to single line: "{fidelity}% ({grade}) → yfinance + SEC EDGAR".
     - **Atomic Unit of Compression**: TIME (quarter/semester/annum) for stocks; HOUSEHOLD for future individual scope
     - **Atomic Unit Glossary** (Dec 23, 2025): State vs Flow distinction for every industry:
       - **State** = stock (balance sheet analogue — accumulated quanta at time t)
