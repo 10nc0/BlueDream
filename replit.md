@@ -30,6 +30,7 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - **AI Playground**: A public, unauthenticated multimodal AI playground at `/AI` with features like multi-file upload, dynamic capacity sharing, abuse prevention, query classification, smart retry, document parsing, and real-time knowledge search.
     - **AI Processing Pipeline**: A 7-step state machine (Context → Preflight → Context Build → Reasoning → Audit → Retry → Output) with three-pass verification and streaming token output.
     - **φ-Compressed Memory**: Episodic memory system using an 8-message sliding window with φ-compression.
+    - **DataPackage Sovereign Data Flow**: Each message carries a sovereign DataPackage (JSON container) through the pipeline. Fractal storage: Tenant (IP) → 8 message window → each message's DataPackage. Stages WRITE to package (immutable after finalize), personality layer strips fluff but NEVER alters data. Principle: "Data enters → transmutes → never hallucinates".
 - **Nyan Protocol (Permanent Seed Context)**: A sacred, always active Step 0 protocol for historical comparison and socio-economic analysis using the Seed Metric (P/I ratio), ensuring web search for grounded data to prevent LLM hallucinations.
 - **Financial Physics System**: A 4-tier architecture extending the NYAN Protocol for financial cognition.
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis, providing a universal 7-section template.
