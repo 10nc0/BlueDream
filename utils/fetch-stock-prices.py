@@ -170,6 +170,17 @@ def fetch_stock_data(ticker: str) -> dict:
         sector = info.get('sector')
         industry = info.get('industry')
         
+        # Get business summary for Robinhood-style one-liner
+        business_summary = info.get('longBusinessSummary', '')
+        # Extract first sentence as one-liner (up to 150 chars)
+        if business_summary:
+            first_sentence = business_summary.split('.')[0].strip()
+            if len(first_sentence) > 150:
+                first_sentence = first_sentence[:147] + '...'
+            business_summary = first_sentence
+        else:
+            business_summary = None
+        
         # Earnings date (may be list of dates or single date)
         earnings_dates = info.get('earningsDates', [])
         next_earnings = None
@@ -192,6 +203,7 @@ def fetch_stock_data(ticker: str) -> dict:
             "marketCap": market_cap,
             "sector": sector,
             "industry": industry,
+            "summary": business_summary,
             "nextEarningsDate": next_earnings,
             "bookValue": book_value,
             "fiftyTwoWeekHigh": fifty_two_week_high,
