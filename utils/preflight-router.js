@@ -303,11 +303,14 @@ ${fundParts.map(p => `- ${p}`).join('\n')}`;
 ### COMPOSITE SIGNAL: ${action}
 ${tetralemmaAlert}
 
-### CONFIDENCE BREAKDOWN (Ψ-EMA Market Analysis):
-- **Signal Confidence**: ${typeof confidence === 'number' ? confidence : 'N/A'}% (market conviction from phase/anomaly/convergence alignment)
-- **Data Fidelity**: ${fidelity.percent || 'N/A'}% real data (Grade ${fidelity.grade || 'N/A'})
+### DATA QUALITY TIER:
+- **Fidelity**: ${fidelity.percent || 'N/A'}% real data (Grade ${fidelity.grade || 'N/A'})
+- **Market Signal**: ${typeof confidence === 'number' ? confidence : 'N/A'}% (phase/anomaly/convergence alignment strength)
 
-**NOTE FOR NYAN AI**: Your response confidence will be assessed separately via audit verification (not combined with signal confidence above). Report signal confidence as stated above; your confidence in your answer is tracked independently.
+**UNIFIED CONFIDENCE**: Your response confidence will be graded by audit against NYAN's ANALYSIS HIERARCHY:
+- 95% = EXACT DATA (real yfinance prices, SEC EDGAR fundamentals, verified sources)
+- 80% = PROXY AVAILABLE (interpolated data, flagged, method documented)
+- <50% = NOTHING (no data available, honest refusal)
 
 ${fundamentalsSection}
 

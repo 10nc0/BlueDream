@@ -232,10 +232,16 @@ OUTPUT FORMAT (JSON only, no markdown):
 
 IMPORTANT: Do NOT include the original answer in your response. Only output the audit verdict and findings.
 
-VERDICT RULES:
-- APPROVED: All checks pass, confidence ≥80%
-- FIXABLE: Minor/Major issues that can be corrected (no CRITICAL issues)
-- REJECTED: Has CRITICAL issues (fabrication, context leak, impossible claims)`;
+UNIFIED CONFIDENCE GRADING (NYAN Protocol ANALYSIS HIERARCHY):
+Confidence is determined by DATA QUALITY TIER USED in the response:
+- 95% confidence: Response uses EXACT DATA (verified sources, real-time data, direct quotes from documents)
+- 80% confidence: Response uses PROXY AVAILABLE (interpolated/estimated data, clearly flagged, proxy method documented)
+- <50% confidence: Response admits NOTHING (insufficient data, honest refusal, no data available)
+
+VERDICT RULES (Map to hierarchy above):
+- APPROVED: All checks pass + uses EXACT DATA or properly flagged PROXY → confidence 95% or 80%
+- FIXABLE: Minor/Major issues correctable + still uses EXACT/PROXY → confidence mapped to data tier used
+- REJECTED: CRITICAL issues (fabrication, falsified sources, misrepresented data quality) → insufficient data tier`;
 
 const CORRECTIVE_TEMPLATE = `You are correcting your previous answer based on audit feedback.
 

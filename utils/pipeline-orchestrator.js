@@ -376,11 +376,12 @@ ${weeklySection}
 ${clinicalSection}
 ${physicalAuditDisclaimer}
 
-CONFIDENCE SEMANTICS (CRITICAL):
-- "Signal Confidence" = Market conviction from Ψ-EMA dimensions (shown above)
-- "Response Confidence" = Your confidence in this answer (assessed separately via audit)
-DO NOT compute or display a combined/multiplied confidence. Keep both metrics independent.
-DO NOT invent confidence numbers. Use only what is provided above or calculated independently.
+UNIFIED CONFIDENCE (NYAN Protocol ANALYSIS HIERARCHY):
+Your response confidence will be graded by audit against data quality tier:
+- 95% confidence = EXACT DATA (yfinance prices, SEC EDGAR fundamentals verified)
+- 80% confidence = PROXY AVAILABLE (interpolated/estimated, clearly flagged)
+- <50% confidence = NOTHING (no data, honest refusal)
+DO NOT invent or calculate confidence yourself. Audit will determine based on your data sources.
 
 INSTRUCTION: Present BOTH Daily and Weekly Ψ-EMA analysis with all three dimensions (Phase θ, Anomaly z, Convergence R). Include clinical diagnosis AND physical audit disclaimer. End with 🔥 ~nyan.
 `;
