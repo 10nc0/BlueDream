@@ -4,11 +4,19 @@
  * Extracts entities and metadata from conversation history (8-message window)
  * WITHOUT bleeding prior reasoning/answers into current query.
  * 
+ * Now integrates with LocalMemoryManager for φ-compressed episodic memory:
+ * - Every 2nd query → 5-sentence summary (5/8 ≈ 1/φ compression)
+ * - Side-door attachment injection when referenced
+ * - Human-like recall vs calculator-like entity extraction
+ * 
  * Output is used for:
  * - Ticker resolution (when user says "stock price" and "netflix" was mentioned earlier)
  * - Topic continuity (understanding what domain we're discussing)
  * - Attachment context (knowing what files were uploaded previously)
+ * - Memory context (natural language summary of conversation)
  */
+
+const { getMemoryManager } = require('./memory-manager');
 
 const KNOWN_COMPANIES = new Map([
   ['netflix', 'NFLX'],
@@ -260,10 +268,100 @@ function mergeContextForTickerDetection(currentQuery, contextResult) {
   return currentQuery;
 }
 
+/**
+ * Enhanced context extraction with φ-compressed memory
+ * Combines entity extraction with human-like episodic memory
+ * 
+ * @param {string} sessionId - Session identifier (e.g., IP address)
+ * @param {string} currentQuery - Current user query
+ * @param {Array<{role: string, content: string}>} history - Conversation history
+ * @param {Array<Object>} attachmentHistory - Attachment metadata
+ * @param {Object|null} currentAttachment - Current query's attachment if any
+ * @returns {Promise<Object>} Enhanced context result with memory
+ */
+async function extractContextWithMemory(sessionId, currentQuery, history = [], attachmentHistory = [], currentAttachment = null) {
+  const memory = getMemoryManager(sessionId);
+  
+  // Add current query to memory (will be added after response, but track it now for context)
+  // Note: We don't add to memory here - that's done after the full response
+  
+  // Get entity-based context (existing logic)
+  const entityContext = extractContext(history, attachmentHistory);
+  
+  // Check if we should generate a new summary (every 2nd query)
+  const shouldSummarize = memory.shouldSummarize();
+  
+  if (shouldSummarize) {
+    // Sync memory with current history before summarizing
+    // This ensures memory has all messages up to now
+    await memory.generateSummary();
+  }
+  
+  // Get memory context for current query
+  const memoryContext = memory.getContextForPrompt(currentQuery);
+  
+  // Build the memory prompt string
+  const memoryPrompt = memory.buildMemoryPrompt(currentQuery);
+  
+  // Merge entity context with memory context
+  return {
+    // Entity-based (calculator-like)
+    entities: entityContext.entities,
+    inferredTicker: entityContext.inferredTicker,
+    dominantTopic: entityContext.dominantTopic,
+    hasFinancialContext: entityContext.hasFinancialContext,
+    
+    // Memory-based (human-like)
+    memorySummary: memoryContext.memorySummary,
+    memoryPrompt: memoryPrompt,
+    attachmentContext: memoryContext.attachmentContext,
+    hasMemory: memoryContext.hasMemory,
+    
+    // Stats
+    memoryStats: memory.getStats()
+  };
+}
+
+/**
+ * Record a message exchange in memory (call after response is complete)
+ * 
+ * @param {string} sessionId - Session identifier
+ * @param {string} userQuery - User's query
+ * @param {string} assistantResponse - Assistant's response
+ * @param {Object|null} attachment - Attachment metadata if any
+ */
+function recordInMemory(sessionId, userQuery, assistantResponse, attachment = null) {
+  const memory = getMemoryManager(sessionId);
+  
+  // Add user message
+  memory.addMessage('user', userQuery, attachment);
+  
+  // Add assistant response (truncate if very long)
+  const truncatedResponse = assistantResponse.length > 1000 
+    ? assistantResponse.slice(0, 1000) + '...[truncated]'
+    : assistantResponse;
+  memory.addMessage('assistant', truncatedResponse);
+  
+  console.log(`📝 Memory recorded: user (${userQuery.length} chars), assistant (${truncatedResponse.length} chars)`);
+}
+
+/**
+ * Clear memory for a session (e.g., on "forget" command or clear chat)
+ * @param {string} sessionId
+ */
+function clearSessionMemory(sessionId) {
+  const { clearMemory } = require('./memory-manager');
+  clearMemory(sessionId);
+  console.log(`🧹 Memory cleared for session: ${sessionId}`);
+}
+
 module.exports = {
   extractContext,
+  extractContextWithMemory,
   extractEntitiesFromText,
   mergeContextForTickerDetection,
+  recordInMemory,
+  clearSessionMemory,
   KNOWN_COMPANIES,
   FINANCIAL_TOPICS
 };

@@ -19,7 +19,7 @@
  */
 
 const { preflightRouter, buildSystemContext } = require('./preflight-router');
-const { extractContext, mergeContextForTickerDetection } = require('./context-extractor');
+const { extractContext, extractContextWithMemory, mergeContextForTickerDetection } = require('./context-extractor');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT } = require('../prompts/nyan-protocol');
 const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
@@ -74,20 +74,43 @@ class PipelineOrchestrator {
     
     try {
       // ========================================
-      // STAGE -1: Context Extraction (8-message window)
-      // Extracts entities from history WITHOUT reasoning bleed
+      // STAGE -1: Context Extraction with φ-Compressed Memory
+      // Entity extraction + human-like episodic memory (5/8 ≈ 1/φ)
       // ========================================
       state.transition(PIPELINE_STEPS.CONTEXT_EXTRACT);
-      state.contextResult = extractContext(
-        input.conversationHistory || [],
-        input.attachmentHistory || [],
-        8  // 8-message window
-      );
+      
+      // Use memory-enhanced extraction if sessionId provided
+      if (input.sessionId) {
+        state.contextResult = await extractContextWithMemory(
+          input.sessionId,
+          input.query,
+          input.conversationHistory || [],
+          input.attachmentHistory || [],
+          input.currentAttachment || null
+        );
+        
+        if (state.contextResult.hasMemory) {
+          console.log(`📝 Stage -1: Memory active - summary: ${state.contextResult.memorySummary ? 'yes' : 'no'}, ` +
+            `messages: ${state.contextResult.memoryStats?.messageCount || 0}`);
+        }
+      } else {
+        // Fallback to basic entity extraction
+        state.contextResult = extractContext(
+          input.conversationHistory || [],
+          input.attachmentHistory || [],
+          8  // 8-message window
+        );
+      }
       
       if (state.contextResult.inferredTicker) {
         console.log(`📜 Stage -1: Context extracted - inferred ticker: ${state.contextResult.inferredTicker}`);
       } else if (state.contextResult.hasFinancialContext) {
         console.log(`📜 Stage -1: Financial context detected, no specific ticker`);
+      }
+      
+      // Log memory-based context if available
+      if (state.contextResult.attachmentContext) {
+        console.log(`📎 Stage -1: Attachment side-door active - "${state.contextResult.attachmentContext.name}"`);
       }
       
       // Merge context with current query for enhanced detection
