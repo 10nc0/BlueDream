@@ -1732,31 +1732,27 @@ Apply these concepts when analyzing financial time series data.
 /**
  * Generate Physical Audit Disclaimer for Financial Physics
  * 
- * Adds "see to believe" infrastructure verification context to Financial Physics outputs.
- * Emphasizes the physical substrate underlying financial claims: data centers, compute,
- * cooling infrastructure, etc.
+ * H₀ PHYSICAL AUDIT DISCLAIMER: Grounds financial analysis in physical reality verification.
+ * Reported numbers are vulnerable to human error and financial acrobatics. This disclaimer
+ * recommends combining spreadsheet analysis with real-world physical audits: inventory counts,
+ * receivables verification, customer site visits, shipment verification, bank reconciliation.
  * 
- * @param {Object} analysis - Ψ-EMA analysis object
+ * The "seeing is believing" H₀ approach verifies that P (price/claim) corresponds to Q (quantity).
+ * 
+ * @param {Object} analysis - Ψ-EMA analysis object (optional, for future expansion)
  * @param {string} ticker - Stock ticker symbol
  * @returns {string} Physical audit disclaimer text
  */
 function generatePhysicalAuditDisclaimer(analysis, ticker) {
-  const regimeLabel = analysis.dimensions?.convergence?.regime?.label || 'UNKNOWN';
-  const isHealthy = analysis.dimensions?.convergence?.current < 2.0;
-  
-  const disclaimers = {
-    'HEALTHY': `🏢 **PHYSICAL AUDIT DISCLAIMER**: This analysis is computed on real data center infrastructure—specific servers processing yfinance API calls, cooling systems managing thermal load, and storage arrays persisting financial timeseries. ${ticker}'s healthy convergence (φ-proximal) reflects genuine market structure, not computational artifact. See data at source: yfinance (Yahoo Finance API historical prices). 🔬`,
-    
-    'CRITICAL': `🏢 **PHYSICAL AUDIT DISCLAIMER**: The φ-convergent trajectory for ${ticker} is computed on production infrastructure with real latency, bandwidth, and fault-domain isolation. These are not theoretical metrics—they're live calculations over petabytes of OHLCV data streamed through SEC filing aggregators and exchange feeds. Verify underlying assumptions: data center acres, GW power draw, fan arrays, network topology. 🔬`,
-    
-    'SUPER_CRITICAL': `⚠️ **CRITICAL PHYSICAL AUDIT**: ${ticker}'s super-critical divergence (R > 2.0) detected in real-time systems spanning multiple availability zones. This analysis ran on distributed infrastructure with measurable latency and fault tolerance budgets. Before accepting this diagnosis, audit the PHYSICAL SUBSTRATE: (1) Data center footprint (acres), (2) Electrical capacity (MW/GW), (3) Cooling infrastructure (fans, water loops), (4) Network redundancy (dark fiber), (5) Storage durability (replication factor). See to believe. 🔬`
-  };
-  
-  const selected = isHealthy ? disclaimers.HEALTHY : 
-                   regimeLabel.includes('Critical (φ') ? disclaimers.CRITICAL : 
-                   disclaimers.SUPER_CRITICAL;
-  
-  return selected;
+  return `⚠️ **H₀ PHYSICAL AUDIT ADVISORY**: Reported numbers are vulnerable to human error and financial acrobatics. Verify ${ticker}'s financials by combining this analysis with real physical audits:
+
+• **Warehouse visit** (stock taking) to verify inventory claims
+• **Sample PO / AR / vendor verification** to confirm receivables accuracy
+• **Customer site visits** to validate revenue relationships and demand reality
+• **Counting trucks/shipments** as proxy to verify financial magnitude (P × Q correlation)
+• **Bank statement reconciliation** for cash flow and liquidity verification
+
+This "seeing is believing" H₀ approach grounds spreadsheet claims in physical reality. Numbers without physical substrate are hallucinations. 🔬`;
 }
 
 // ============================================================================

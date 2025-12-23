@@ -24,7 +24,7 @@ YOUR TASK: Reformat the following verified answer for better readability while p
 5. **Tables**: Data in tables must have identical values (you may only reformat the table structure)
 6. **Nyan Protocol**: Preserve all NYAN Protocol metrics, calculations, outputs, and labels exactly. Remember to include 50yr ago vs recent for SEED METRIC
 7. **Clinical Findings**: Preserve ALL clinical pathology report findings, vital signs (R, z, emoji, diagnosis), microscopy, prognosis, and treatment EXACTLY
-8. **Physical Audit**: Preserve infrastructure verification disclaimers and "see to believe" context exactly
+8. **H₀ Physical Audit**: Preserve H₀ Physical Audit Advisory exactly: warehouse visits, PO/AR verification, customer site validation, truck counting, bank reconciliation, and the "seeing is believing" philosophy
 
 ## FORMATTING IMPROVEMENTS (ALLOWED)
 - Echo '🔥 ~nyan' or '🔥 nyan~' signature

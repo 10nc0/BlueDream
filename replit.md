@@ -52,13 +52,17 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
     - **Pipeline Integration**: AI responses use medical/pharmaceutical language when pathogens detected
     - **LOL = Ledger Observation Laboratory**: "Economic microbiology is what happens when we actually LOOK."
     - **2-Pass Audit Integration**: Clinical findings (vital signs, diagnosis, treatment, prognosis) pass through audit verification and are exactly preserved in personality formatting layer
-- **Physical Audit Disclaimer** (Dec 23, 2025): "See to believe" infrastructure verification for Financial Physics:
-    - **Three-Tier Context**: 
-      - **Healthy**: Data center infrastructure, thermal management, genuine market structure verification via yfinance source
-      - **Critical**: Production infrastructure context with real latency, bandwidth, fault-domain isolation, SEC filing aggregators
-      - **Super-Critical**: Distributed infrastructure audit requirements including data center acres, MW/GW capacity, fan arrays, network topology, dark fiber redundancy, storage durability
-    - **Pipeline Integration**: Automatically triggered in Ψ-EMA outputs with regime-based severity level
-    - **Personality Preservation**: Infrastructure disclaimers preserved exactly through audit and formatting layers
+- **H₀ Physical Audit Disclaimer** (Dec 23, 2025): "Seeing is believing" company financial verification for Financial Physics:
+    - **H₀ PHYSICAL AUDIT ADVISORY**: Grounds spreadsheet numbers in physical reality verification
+    - **Verification Methods**: 
+      - Warehouse visits (stock taking) to verify inventory claims
+      - Sample PO/AR/vendor verification to confirm receivables
+      - Customer site visits to validate revenue relationships
+      - Truck counting/shipments as proxy for P × Q correlation
+      - Bank statement reconciliation for cash flow verification
+    - **Philosophy**: Numbers without physical substrate are hallucinations. P (price) must correspond to actual Q (quantity).
+    - **Pipeline Integration**: Automatically appended to Ψ-EMA + Financial Microbiology outputs
+    - **Personality Preservation**: H₀ disclaimer preserved exactly through audit and formatting layers
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.

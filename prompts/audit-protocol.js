@@ -103,8 +103,8 @@ CRITICAL: Financial Microbiology extends Ψ-EMA with medical-style diagnostics.
 6. PATHOGEN LOGIC: Are pathogens detected using correct thresholds? (Ponzi Virus: R > 2.5, Bubble Cancer: z > 3σ AND R > 2.0)
 7. STAGE CLASSIFICATION: Is Stage I-IV severity correctly mapped to pathogen + convergence state?
 8. CLINICAL LANGUAGE: Does diagnosis use medical terminology (pathogen, treatment, prognosis, vital signs)?
-9. PHYSICAL AUDIT: Is "see to believe" disclaimer included with infrastructure verification context?
-10. PERSONALITY PRESERVATION: Are all clinical findings + vital signs preserved EXACTLY in personality layer?`;
+9. H₀ PHYSICAL AUDIT: Is H₀ Physical Audit Advisory included (warehouse visits, PO/AR verification, customer site validation, truck counting, bank reconciliation)?
+10. PERSONALITY PRESERVATION: Are all clinical findings + vital signs + H₀ disclaimer preserved EXACTLY in personality layer?`;
 
 const AUDIT_PSI_EMA = `
 ⚠️ Ψ-EMA FINANCIAL WAVE FUNCTION AUDIT (Extension) - PRE-VERIFIED DATA ⚠️
