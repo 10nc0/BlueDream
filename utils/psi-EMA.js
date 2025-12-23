@@ -958,17 +958,19 @@ function calculatePhiConvergence(zFlows) {
  * @returns {Object} Regime classification
  */
 function classifyRegime(ratio, options = {}) {
-  const { hasLowSignal = false, warning = null } = options;
+  const { hasLowSignal = false, currentZScore = null, warning = null } = options;
   
   // Handle LOW_SIGNAL case: R undefined due to z near zero
-  if (ratio === null || hasLowSignal) {
+  // CRITICAL: If current z-score is near zero (consolidation zone), force CONSOLIDATION
+  // regardless of computed R ratio from older data
+  if (ratio === null || hasLowSignal || (currentZScore !== null && Math.abs(currentZScore) < 0.15)) {
     return {
-      regime: 'UNDEFINED',
-      label: 'R Undefined',
+      regime: 'CONSOLIDATION',
+      label: 'R Undefined (Consolidation)',
       emoji: '⚪',
-      hypothesis: 'H₀: R is undefined (z-scores near zero)',
-      description: 'Insufficient deviation data to compute amplitude ratio.',
-      warning: warning || 'Low signal state.'
+      hypothesis: 'H₀: R is undefined (z-scores near zero, price at median)',
+      description: 'Price consolidating at current level. Amplitude ratio unreliable.',
+      warning: warning || 'Near-equilibrium state. R undefined.'
     };
   }
   
@@ -1046,10 +1048,11 @@ function getPhiDeviationAlert(ratio) {
  * @param {Object} options - Additional context from calculatePhiConvergence
  * @param {boolean} options.hasLowSignal - Whether R is unstable due to low z-scores
  * @param {string} options.warning - Warning message if R is unstable
+ * @param {number} options.currentZScore - Current z-score for consolidation detection
  * @returns {Object} Convergence analysis with signals
  */
 function analyzeConvergence(absRatios, options = {}) {
-  const { hasLowSignal = false, warning = null } = options;
+  const { hasLowSignal = false, warning = null, currentZScore = null } = options;
   
   if (!absRatios || absRatios.length === 0) {
     // No valid ratios — return UNDEFINED regime with warning
@@ -1057,7 +1060,7 @@ function analyzeConvergence(absRatios, options = {}) {
       error: 'No ratio data',
       dimension: 'CONVERGENCE_R',
       current: null,
-      regime: classifyRegime(null, { hasLowSignal: true, warning }),
+      regime: classifyRegime(null, { hasLowSignal: true, warning, currentZScore }),
       hasLowSignal: true,
       warning: warning || 'R undefined — insufficient data or z-scores near zero.'
     };
@@ -1078,8 +1081,9 @@ function analyzeConvergence(absRatios, options = {}) {
   const currentEMA13 = ema13[ema13.length - 1];
   const currentEMA21 = ema21[ema21.length - 1];
   
-  // Pass hasLowSignal and warning to classifyRegime
-  const regime = classifyRegime(currentR, { hasLowSignal, warning });
+  // Pass hasLowSignal, warning, AND currentZ to classifyRegime
+  // This ensures consolidation is detected if current z is near zero
+  const regime = classifyRegime(currentR, { hasLowSignal, warning, currentZScore });
   const phiAlert = hasLowSignal ? 
     { level: 'UNDEFINED', emoji: '⚪', action: 'WAIT', description: 'R unstable' } :
     getPhiDeviationAlert(currentR);
@@ -1564,18 +1568,20 @@ class PsiEMADashboard {
     // Analyze all three dimensions
     const phaseAnalysis = analyzePhase(phases);
     const anomalyAnalysis = analyzeAnomaly(zFlowResult.zFlows);
+    const currentZ = anomalyAnalysis.current || 0;
     
     // Pass hasLowSignal and warning from convergenceResult to analyzeConvergence
     const convergenceAnalysis = convergenceResult.absRatios && convergenceResult.absRatios.length > 0 
       ? analyzeConvergence(convergenceResult.absRatios, {
           hasLowSignal: convergenceResult.hasLowSignal,
-          warning: convergenceResult.warning
+          warning: convergenceResult.warning,
+          currentZScore: currentZ
         })
       : { 
           error: 'Insufficient convergence data',
           hasLowSignal: convergenceResult.hasLowSignal,
           warning: convergenceResult.warning,
-          regime: classifyRegime(null, { hasLowSignal: true, warning: convergenceResult.warning })
+          regime: classifyRegime(null, { hasLowSignal: true, warning: convergenceResult.warning, currentZScore: currentZ })
         };
     
     // Calculate EMA fidelity per dimension (no aggregate - each dimension stands alone)
