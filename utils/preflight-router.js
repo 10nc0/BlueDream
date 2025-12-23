@@ -221,7 +221,7 @@ function buildStockContext(preflight) {
   if (Object.keys(fundamentals).length > 0) {
     const peRatio = fundamentals.peRatio ? `**P/E Ratio**: ${safeFixed(fundamentals.peRatio)}` : '';
     const forwardPE = fundamentals.forwardPE ? `**Forward P/E**: ${safeFixed(fundamentals.forwardPE)}` : '';
-    const divYield = fundamentals.dividendYield ? `**Dividend Yield**: ${(fundamentals.dividendYield * 100).toFixed(2)}%` : '';
+    const divYield = fundamentals.dividendYield != null ? `**Dividend Yield**: ${safeFixed(fundamentals.dividendYield)}%` : '';
     const nextEarnings = fundamentals.nextEarningsDate ? `**Next Earnings**: ${fundamentals.nextEarningsDate}` : '';
     const sector = fundamentals.sector ? `**Sector**: ${fundamentals.sector}` : '';
     const industry = fundamentals.industry ? `**Industry**: ${fundamentals.industry}` : '';
