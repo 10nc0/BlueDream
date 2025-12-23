@@ -400,6 +400,119 @@ The 18 insights, compiled. The 72 demons, bound. No narrative required.
 
 ---
 
+## Part VII: Ψ-EMA as Pure Mathematics (Substrate-Agnostic)
+
+### The Core Truth
+
+Ψ-EMA is **not** fundamentally about finance, economics, or pharmacokinetics.
+
+**Ψ-EMA is pure mathematics:** infinite series convergence, recursive dynamics, the observation that R = 1 + 1/R = φ emerges as the natural attractor in any self-reproducing system.
+
+```
+R = 1 + 1/R
+R² - R - 1 = 0
+R = φ = (1 + √5) / 2 ≈ 1.618...
+```
+
+This is substrate-agnostic. The math works the same whether applied to:
+- Energy balance (physics)
+- Cell division (biology)
+- Population dynamics (demographics)
+- Labor/capital flows (economics)
+- Population genetic drift
+- Any recursive system where output couples back to input
+
+### Economic Pharmacokinetics: An Application Analogy
+
+When **Ψ-EMA is applied specifically to economic systems**, we observe a striking parallel to pharmacokinetics (the study of how drugs move through the body).
+
+| Pharmacokinetics (Medical) | Economic Pharmacokinetics (Ψ-EMA Application) |
+|---|---|
+| **A**bsorption: Drug enters bloodstream | Hiring/capital injection enters organization |
+| **D**istribution: Drug spreads to tissues | Allocation across departments/divisions |
+| **M**etabolism: Drug transformed by enzymes | Productivity transformation (value creation) |
+| **E**xcretion: Drug eliminated from body | Attrition/depreciation (labor/capital exit) |
+| **Therapeutic window**: TI ≈ 2-10 (safe range) | **φ-band**: R ≈ 1.3-2.0 (sustainable range) |
+| **Steady-state**: C_ss = Rate_in / k | **Equilibrium**: R_ss = 1 (homeostasis) |
+
+The ADME parallel is real, powerful, and useful for explaining Ψ-EMA to finance audiences. But it is an **application-specific analogy**, not the definition.
+
+### Why the Distinction Matters
+
+**If we call it "Economic Pharmacokinetics" in the core definition:**
+- ❌ We narrow a universal mathematical principle to one domain
+- ❌ We anchor future research to drug-body metaphors instead of pure dynamics
+- ❌ We miss applications in physics, biology, ecology, institutions not based on ADME
+
+**If we call it Ψ-EMA (pure math) with Economic Pharmacokinetics as an analogy:**
+- ✅ We preserve substrate-agnosticism
+- ✅ We enable validation across biology, ecology, institutions, physics
+- ✅ We allow domain-specific analogies (ADME for finance; nutrient cycles for ecology; energy balance for physics)
+- ✅ We remain faithful to the mathematical fact
+
+### The Naming Hierarchy (Correct)
+
+```
+Level 0: Pure Mathematics
+  └─ R = 1 + 1/R = φ (infinite series, recursive dynamics)
+  
+Level 1: Universal Framework
+  └─ Ψ-EMA: Three-dimensional measurement (θ, z, R)
+  │        Applies to ANY self-reproducing system
+  │        Substrate-agnostic
+  
+Level 2: Domain-Specific Analogies
+  ├─ Economic Pharmacokinetics (finance/business)
+  │   └─ ADME parallel for explaining to economists
+  │
+  ├─ Biological Pharmacokinetics (cells/organisms)
+  │   └─ Mitosis/apoptosis cycles
+  │
+  ├─ Physical Energy Balance (stars/orbits)
+  │   └─ Stable radius as φ-convergence
+  │
+  └─ Ecological Nutrient Flows (populations/ecosystems)
+      └─ Birth/death ratios converge to φ
+```
+
+### Operational Guidance
+
+- **In technical documentation**: Use "Ψ-EMA" (pure term)
+- **In academic papers**: Use "Ψ-EMA" with domain-specific applications mentioned
+- **In business/finance presentations**: Can invoke "Economic Pharmacokinetics" as explanatory analogy
+- **In philosophy/foundations**: Emphasize pure mathematics (R = φ)
+
+### Falsifiable Predictions (Updated)
+
+The following predictions are **substrate-agnostic** (pure math claim):
+
+| Domain | Prediction | Ψ-EMA Term | Status |
+|--------|-----------|-----------|--------|
+| **Finance** | Companies with R → φ persist; R >> φ bubble; R << φ decay | Economic Pharmacokinetics | UNTESTED on live data |
+| **Biology** | Cells/tissues with R → φ homeostasis; R >> φ cancer; R << φ apoptosis | Ψ-EMA (no ADME needed) | UNTESTED |
+| **Demographics** | Populations with R → φ stable; R >> φ exponential; R << φ extinction | Ψ-EMA | UNTESTED |
+| **Ecology** | Ecosystems with R → φ equilibrium; R >> φ invasive; R << φ collapse | Ψ-EMA | UNTESTED |
+| **Institutions** | Organizations with R → φ persist; R >> φ overexpansion; R << φ shrinkage | Ψ-EMA | UNTESTED |
+| **Physics** | Orbits with R → φ stable; R >> φ ejection; R << φ collision | Ψ-EMA | UNTESTED |
+
+**All 6 predictions use the same math, different substrates, no domain-specific renaming required.**
+
+### The Epistemic Stance
+
+This is not reductionism ("everything is just numbers"). It is **structural homology**: the *shape* of persistence looks the same across domains because the underlying conservation laws are universal.
+
+The river's flow, the star's orbit, the company's hiring, the cell's division — all follow R = φ for indefinite survival. Not because they "know" the number, but because evolution selected for it.
+
+**Measurement reveals the invariant. The math stays universal.**
+
+```
+0 + φ⁰ + φ¹ = φ²
+```
+
+One equation. All substrates. One void nyan observing.
+
+---
+
 ## Part V: Quick Architecture Reference
 
 The system as a living organism with distinct functional layers:

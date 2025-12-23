@@ -54,12 +54,15 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - **Nyan Protocol**: System prompt framework for historical comparison and socio-economic analysis. Uses Seed Metric (Price/Income ratio) as falsifiable threshold. Prevents LLM hallucinations via mandatory source requirements.
 - **Financial Physics System**: A 4-tier architecture extending the NYAN Protocol for financial cognition.
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis, providing a universal 7-section template.
-- **Ψ-EMA System**: Multi-dimensional stock analysis dashboard using three metrics:
+- **Ψ-EMA System**: Pure mathematics framework measuring recursive dynamics (R = 1 + 1/R = φ) across any self-reproducing system. Applied to finance as a diagnostic microscope for sustainability analysis.
+    - **Core Formula**: R = φ ≈ 1.618 (natural attractor for persistent systems)
+    - **Three Dimensions**: θ (phase), z (anomaly), R (reproduction ratio)
     - **θ (Phase)**: arctan(ΔEMA-55/ΔEMA-34) - cycle position in 4 quadrants
     - **z (Anomaly)**: (Price - Median) / MAD - deviation from equilibrium
-    - **R (Convergence)**: z(t)/z(t-1) - sustainability ratio (target: φ ≈ 1.618)
+    - **R (Convergence)**: z(t)/z(t-1) - sustainability ratio (target: φ ≈ 1.3-2.0)
     - Uses Fibonacci EMA periods (13, 21, 34, 55) for consistency.
     - **Financial Pathology**: Pattern detection for unsustainable business models (e.g., Ponzi schemes show R >> φ, dying companies show R << 1).
+    - **Substrate-Agnostic**: Same math applies to physics (energy), biology (growth), demographics (population), ecology (ecosystems), institutions (hiring/firing). Economic Pharmacokinetics (ADME parallel) is an explanatory analogy for finance audiences, not the definition. See philosophy.md Part VII for full framework.
 - **Unified Personality Layer**: All formatting enforced in `applyPersonalityFormat()` in `pipeline-orchestrator.js` to remove "fluff patterns" via regex post-processing.
 - **Code Execution Honesty**: AI provides code for user execution, but does not execute it itself.
 - **H₀ Physical Audit Disclaimer**: Advisory appended to financial outputs, emphasizing physical reality verification methods.
