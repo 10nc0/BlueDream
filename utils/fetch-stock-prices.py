@@ -38,6 +38,54 @@ def safe_float(value):
         return None
 
 
+def phi_interpolate(closes, dates):
+    """
+    Fill small gaps in price series using φ-interpolation (x = 1 + 1/x).
+    Anchors to most recent historical data (never extrapolates beyond latest date).
+    
+    Args:
+        closes: List of closing prices
+        dates: List of corresponding dates (YYYY-MM-DD strings)
+    
+    Returns:
+        tuple: (interpolated_closes, interpolated_dates, flags)
+        flags: List of booleans, True = interpolated value
+    """
+    from datetime import datetime, timedelta
+    
+    PHI = 1.6180339887498949  # Golden ratio
+    
+    if len(closes) < 2:
+        return closes, dates, [False] * len(closes)
+    
+    interpolated = []
+    interpolated_dates = []
+    flags = []
+    
+    for i in range(len(closes)):
+        interpolated.append(closes[i])
+        interpolated_dates.append(dates[i])
+        flags.append(False)
+        
+        # Check gap to next bar (only if not last bar)
+        if i < len(closes) - 1:
+            date_curr = datetime.strptime(dates[i], '%Y-%m-%d')
+            date_next = datetime.strptime(dates[i + 1], '%Y-%m-%d')
+            gap_days = (date_next - date_curr).days
+            
+            # Conservative: only interpolate gaps of 2-3 days (unlikely with yfinance, but safe)
+            if 2 <= gap_days <= 3:
+                # φ-interpolation: new_value = value_1 + (value_2 - value_1) / φ
+                mid_value = closes[i] + (closes[i + 1] - closes[i]) / PHI
+                mid_date = date_curr + timedelta(days=gap_days // 2)
+                
+                interpolated.append(mid_value)
+                interpolated_dates.append(mid_date.strftime('%Y-%m-%d') + '*')  # Mark with *
+                flags.append(True)
+    
+    return interpolated, interpolated_dates, flags
+
+
 def fetch_stock_data(ticker: str) -> dict:
     """
     Fetch historical closing prices and fundamental data for a stock ticker.
@@ -85,12 +133,18 @@ def fetch_stock_data(ticker: str) -> dict:
         closes_daily = hist_daily['Close'].tolist()
         dates_daily = [d.strftime('%Y-%m-%d') for d in hist_daily.index]
         
+        # φ-interpolate small gaps in daily data (conservative: 2-3 days only)
+        closes_daily, dates_daily, daily_flags = phi_interpolate(closes_daily, dates_daily)
+        
         # Fetch WEEKLY data - exact 13mo (~55 weeks for EMA-55)
         # Weekly candles = compressed OHLC, no gaps to fill
         hist_weekly = stock.history(period='13mo', interval='1wk')
         
         closes_weekly = hist_weekly['Close'].tolist() if not hist_weekly.empty else []
         dates_weekly = [d.strftime('%Y-%m-%d') for d in hist_weekly.index] if not hist_weekly.empty else []
+        
+        # φ-interpolate small gaps in weekly data (conservative: 2-3 weeks only)
+        closes_weekly, dates_weekly, weekly_flags = phi_interpolate(closes_weekly, dates_weekly) if closes_weekly else ([], [], [])
         
         # Report weekly bar count - fidelity grading handles quality signaling
         # No hard gate: even partial data produces real θ, z, R values with lower fidelity grade
@@ -148,13 +202,14 @@ def fetch_stock_data(ticker: str) -> dict:
         # Remove None values for cleaner output
         fundamentals = {k: v for k, v in fundamentals.items() if v is not None}
         
-        # Build weekly data object with barCount and dates
+        # Build weekly data object with barCount, dates, and interpolation flags
         weekly_data = {
             "closes": closes_weekly,
             "dates": dates_weekly,
-            "barCount": len(closes_weekly),
-            "startDate": dates_weekly[0] if dates_weekly else None,
-            "endDate": dates_weekly[-1] if dates_weekly else None
+            "barCount": len([c for i, c in enumerate(closes_weekly) if not weekly_flags[i]]),  # Count only real bars
+            "interpolatedCount": sum(weekly_flags),
+            "startDate": dates_weekly[0].rstrip('*') if dates_weekly else None,
+            "endDate": dates_weekly[-1].rstrip('*') if dates_weekly else None
         }
         if weekly_unavailable_reason:
             weekly_data["unavailableReason"] = weekly_unavailable_reason
@@ -166,14 +221,15 @@ def fetch_stock_data(ticker: str) -> dict:
             "currentPrice": current_price,
             "closes": closes,  # Daily closes for backward compatibility
             "dates": dates,    # Daily dates for backward compatibility
-            "startDate": dates[0] if dates else None,
-            "endDate": dates[-1] if dates else None,
+            "startDate": dates[0].rstrip('*') if dates else None,
+            "endDate": dates[-1].rstrip('*') if dates else None,
             "daily": {
                 "closes": closes_daily,
                 "dates": dates_daily,
-                "barCount": len(closes_daily),
-                "startDate": dates_daily[0] if dates_daily else None,
-                "endDate": dates_daily[-1] if dates_daily else None
+                "barCount": len([c for i, c in enumerate(closes_daily) if not daily_flags[i]]),  # Count only real bars
+                "interpolatedCount": sum(daily_flags),
+                "startDate": dates_daily[0].rstrip('*') if dates_daily else None,
+                "endDate": dates_daily[-1].rstrip('*') if dates_daily else None
             },
             "weekly": weekly_data,
             "fundamentals": fundamentals
