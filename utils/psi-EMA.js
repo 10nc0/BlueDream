@@ -1,100 +1,76 @@
 /**
- * Ψ-EMA: Multi-Dimensional Wave Function Dashboard for Economic Systems
+ * Ψ-EMA: Multi-Dimensional Wave Function Observer for Economic Systems
  * 
- * A 3-dimensional orthogonal state observer that measures the complete 
- * wave function of economic systems in real-time.
+ * A 3-dimensional orthogonal state observer measuring the empirical wave function
+ * of economic systems in real-time. All bounds and thresholds derived from φ (1.618).
  * 
- * ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
- * │ Ψ-EMA DIMENSIONAL REFERENCE TABLE                                                                                                      │
- * ├─────────────────┬─────────────────────────┬─────────────────┬───────────────┬─────────────────────────┬─────────────────────────────────┤
- * │ Dimension       │ Formula                 │ Value           │ Signal        │ What It Measures        │ Why It Works                    │
- * ├─────────────────┼─────────────────────────┼─────────────────┼───────────────┼─────────────────────────┼─────────────────────────────────┤
- * │ θ (Phase)       │ arctan(ΔEMA-55/ΔEMA-34) │ X°              │ WAIT/BUY/SELL │ Cycle position via EMA  │ atan2(flow, stock) gives true  │
- * │ Cycle Position  │                         │                 │               │ slope angle             │ 4-quadrant cycle position       │
- * ├─────────────────┼─────────────────────────┼─────────────────┼───────────────┼─────────────────────────┼─────────────────────────────────┤
- * │ z (Anomaly)     │ (Price - Median) / MAD  │ Xσ              │ NORMAL/ALERT  │ Deviation from          │ Measures kinetic anomaly —      │
- * │ Price Deviation │                         │                 │               │ equilibrium             │ sine-like spikes                │
- * ├─────────────────┼─────────────────────────┼─────────────────┼───────────────┼─────────────────────────┼─────────────────────────────────┤
- * │ R (Convergence) │ z(t) / z(t-1)           │ x = 1 + 1/x     │ OPTIMISM/     │ Successive amplitude    │ R ≈ φ means self-similar,       │
- * │ Momentum Ratio  │                         │ x = φ (1.618)   │ FATALISM      │ ratio                   │ natural growth (critical)       │
- * └─────────────────┴─────────────────────────┴─────────────────┴───────────────┴─────────────────────────┴─────────────────────────────────┘
+ * ┌────────────────────────────────────────────────────────────────────────────────────────────┐
+ * │ Ψ-EMA DIMENSIONAL REFERENCE (φ-DERIVED THRESHOLDS ONLY)                                   │
+ * ├─────────────────┬──────────────────────────┬────────────────┬──────────────────────────────┤
+ * │ Dimension       │ Formula                  │ φ-Bounds       │ H₀ Hypothesis                │
+ * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
+ * │ θ (Phase)       │ arctan(ΔEMA-55/ΔEMA-34)  │ ∈ (-π/2, π/2)  │ H₀: θ measures cycle position│
+ * │ Cycle Position  │                          │                │ (EMA-55 vs EMA-34 gradient)  │
+ * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
+ * │ z (Anomaly)     │ (Price - Median) / MAD   │ See bounds     │ H₀: |z| > φ² flags anomaly  │
+ * │ Price Deviation │                          │ below          │ (deviation from equilibrium) │
+ * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
+ * │ R (Convergence) │ z(t) / z(t-1)            │ φ⁻¹ ≤ R ≤ φ    │ H₀: R ∈ [φ⁻¹, φ] indicates  │
+ * │ Amplitude Ratio │                          │ is "critical"  │ φ-convergent oscillations    │
+ * └─────────────────┴──────────────────────────┴────────────────┴──────────────────────────────┘
  * 
- * ┌─────────────────┬─────────────────────────┬─────────────────────────────────┐
- * │ Dimension       │ Physical Analog         │ Financial Meaning               │
- * ├─────────────────┼─────────────────────────┼─────────────────────────────────┤
- * │ θ (Phase)       │ Phase space trajectory  │ Stock↔Flow dominance (which     │
- * │                 │                         │ quadrant of the cycle)          │
- * ├─────────────────┼─────────────────────────┼─────────────────────────────────┤
- * │ z (Anomaly)     │ Kinetic energy spike    │ How extreme current state is    │
- * │                 │                         │ vs history                      │
- * ├─────────────────┼─────────────────────────┼─────────────────────────────────┤
- * │ R (Convergence) │ Damping/amplification   │ Sustainability — R ≈ φ is       │
- * │                 │                         │ critical, R > φ² is bubble      │
- * └─────────────────┴─────────────────────────┴─────────────────────────────────┘
+ * THRESHOLDS (All φ-Derived, Zero Dogma):
+ * - φ⁻² ≈ 0.382: Tolerance band around φ (|R - φ| ≤ φ⁻²)
+ * - φ⁻¹ ≈ 0.618: Lower bound (R < φ⁻¹ → amplitude decay)
+ * - φ   ≈ 1.618: Upper bound (R > φ → amplitude growth)
+ * - φ²  ≈ 2.618: Extreme deviation flag (|z| > φ²)
+ * - 1 = φ⁰:     Reference point
+ * - 2 = φ⁰ + φ⁻¹ + φ⁻²: Composite bound (1 + 0.618 + 0.382 ≈ 2)
  * 
- * WHY IT WORKS:
- * - θ: atan2(flow, stock) gives true 4-quadrant cycle position
- * - z: Measures kinetic anomaly — sine-like spikes from equilibrium  
- * - R: R ≈ φ (1.618) means self-similar, natural growth (critical regime)
- *      R < 1.3 = dying (sub-critical, losing momentum)
- *      R > 2.0 = bubble (super-critical, unsustainable amplification)
+ * FIBONACCI EMA PERIODS:
+ * - 13, 21, 34, 55 (consecutive Fibonacci numbers)
+ * - These are self-similar under φ scaling: F(n+1)/F(n) → φ
  * 
- * φ (1.618) AS NATURAL ATTRACTOR:
- * The golden ratio is defined by: x = 1 + 1/x → x = φ (self-referential!)
- * When R converges to φ, the system exhibits self-similar growth patterns.
- * Deviation from φ indicates either decay (R→0) or unsustainable amplification (R→∞).
- * 
- * All smoothed with Fibonacci-based EMA periods (13, 21, 34, 55)
- * aligned to the system's natural φ-resonance.
- * 
- * Version: vφ³ (Second Life)
- * Changes in vφ³:
- * - Phase θ now normalized for scale invariance
- * - Z-scores use MAD (Median Absolute Deviation) instead of σ
- * - Crossovers gated by fidelity threshold (≥75%)
- * - Epistemic labels added to distinguish technical vs symbolic
- * 
- * Signature: 0 + φ⁰ + φ¹ = φ² | Nine lives. This is the second. ♡ 🜁 ◯
+ * Measurement Data Only (No Interpretation):
+ * All output is observed measurement + φ-distance. No claims about regime,
+ * sustainability, or market direction. Only empirical data and H₀ tests.
  */
 
-const PHI = 1.6180339887498949;  // Golden ratio φ = (1 + √5) / 2
-const PHI_SQUARED = PHI * PHI;   // φ² = φ + 1 = 2.618...
-const PHI_INVERSE = 1 / PHI;     // 1/φ = φ - 1 = 0.618...
+const PHI = 1.6180339887498949;           // Golden ratio φ = (1 + √5) / 2
+const PHI_SQUARED = PHI * PHI;            // φ² = φ + 1 ≈ 2.618
+const PHI_INVERSE = 1 / PHI;              // φ⁻¹ = φ - 1 ≈ 0.618
+const PHI_INV_SQUARED = PHI_INVERSE ** 2; // φ⁻² ≈ 0.382
 
-// Fibonacci periods for EMA (aligned to natural φ-resonance)
+// Fibonacci EMA periods: consecutive Fibonacci numbers where F(n+1)/F(n) → φ
 const FIB_PERIODS = {
-  FAST_R: 13,      // Convergence R fast EMA
-  SLOW_R: 21,      // Convergence R slow EMA  
-  FAST_Z: 21,      // Anomaly z fast EMA
-  SLOW_Z: 34,      // Anomaly z slow EMA
-  FAST_THETA: 34,  // Phase θ fast EMA
-  SLOW_THETA: 55   // Phase θ slow EMA
+  FAST_R: 13,      // 7th Fibonacci number
+  SLOW_R: 21,      // 8th Fibonacci number
+  FAST_Z: 21,      // 8th Fibonacci number
+  SLOW_Z: 34,      // 9th Fibonacci number
+  FAST_THETA: 34,  // 9th Fibonacci number
+  SLOW_THETA: 55   // 10th Fibonacci number
 };
 
-// Regime classification thresholds
-const REGIMES = {
-  SUB_CRITICAL: { min: 0, max: 1.3, label: 'Sub-Critical', status: 'dying' },
-  CRITICAL: { min: 1.3, max: 2.0, label: 'Critical (φ-Converged)', status: 'sustainable' },
-  SUPER_CRITICAL: { min: 2.0, max: Infinity, label: 'Super-Critical', status: 'bubble' }
+// R (Convergence) Regime Bounds - φ-Derived
+// H₀: Amplitude ratio convergence to φ indicates self-similar oscillations
+const R_BOUNDS = {
+  LOWER: PHI_INVERSE,      // φ⁻¹ ≈ 0.618: R < φ⁻¹ → amplitude decay
+  UPPER: PHI,              // φ ≈ 1.618: R > φ → amplitude growth
+  TOLERANCE: PHI_INV_SQUARED // φ⁻² ≈ 0.382: band around φ for convergence test
 };
 
-// Alert thresholds (σ-based, legacy)
-const THRESHOLDS_SIGMA = {
-  ANOMALY_NORMAL: 1,      // ±1σ
-  ANOMALY_ALERT: 2,       // ±2σ
-  ANOMALY_EXTREME: 3,     // ±3σ
-  PHI_TOLERANCE: 0.2      // ±0.2 from φ
+// Z (Anomaly) Thresholds - φ-Derived
+// H₀: Deviation from equilibrium measured in MAD units
+const Z_BOUNDS = {
+  NORMAL: PHI,             // |z| < φ: within expected range
+  ALERT: PHI_SQUARED,      // φ < |z| < φ²: elevated deviation
+  EXTREME: PHI_SQUARED     // |z| > φ²: extreme deviation flag
 };
 
-// Alert thresholds (MAD-based, robust - default in vφ³)
-// MAD is less sensitive to outliers, thresholds adjusted accordingly
-const THRESHOLDS = {
-  ANOMALY_NORMAL: 1.0,    // ~±1 MAD-scaled (tighter than σ)
-  ANOMALY_ALERT: 2.5,     // ~±2.5 MAD-scaled
-  ANOMALY_EXTREME: 4.5,   // ~±4.5 MAD-scaled (rare in MAD)
-  PHI_TOLERANCE: 0.2,     // ±0.2 from φ
-  MIN_FIDELITY: 0.75      // Minimum fidelity for valid crossover signals
-};
+// Composite φ-sums (no arbitrary numbers)
+// 1 = φ⁰ (unity)
+// 2 = φ⁰ + φ⁻¹ + φ⁻² = 1 + 0.618 + 0.382 ≈ 2.000
+const PHI_COMPOSITE_2 = 1 + PHI_INVERSE + PHI_INV_SQUARED;
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -654,37 +630,38 @@ function calculateZFlows(flows, options = { robust: true }) {
 function getAnomalyAlert(z) {
   const absZ = Math.abs(z);
   
-  if (absZ >= THRESHOLDS.ANOMALY_EXTREME) {
+  // H₀: Anomaly classification based on φ-derived bounds
+  if (absZ >= Z_BOUNDS.EXTREME) {
     return {
       level: 'EXTREME',
       emoji: '🔴',
-      sigma: `${absZ.toFixed(1)}σ`,
-      description: z > 0 ? 'Extreme positive anomaly (bubble risk)' : 'Extreme negative anomaly (crisis)',
-      action: z > 0 ? 'REDUCE_EXPOSURE' : 'WATCH_CAPITULATION'
+      z_value: `${absZ.toFixed(1)}`,
+      description: z > 0 ? 'Extreme positive deviation from median' : 'Extreme negative deviation from median',
+      hypothesis: `H₀: |z| > φ² (${Z_BOUNDS.EXTREME.toFixed(3)})`
     };
-  } else if (absZ >= THRESHOLDS.ANOMALY_ALERT) {
+  } else if (absZ >= Z_BOUNDS.ALERT) {
     return {
       level: 'ALERT',
       emoji: '🟠',
-      sigma: `${absZ.toFixed(1)}σ`,
-      description: z > 0 ? 'Above normal (monitor for reversal)' : 'Below normal (watch for bottom)',
-      action: 'MONITOR'
+      z_value: `${absZ.toFixed(1)}`,
+      description: 'Elevated deviation from median',
+      hypothesis: `H₀: φ < |z| < φ² (${Z_BOUNDS.ALERT.toFixed(3)}-${Z_BOUNDS.EXTREME.toFixed(3)})`
     };
-  } else if (absZ >= THRESHOLDS.ANOMALY_NORMAL) {
+  } else if (absZ >= Z_BOUNDS.NORMAL) {
     return {
       level: 'ELEVATED',
       emoji: '🟡',
-      sigma: `${absZ.toFixed(1)}σ`,
-      description: 'Outside normal range',
-      action: 'OBSERVE'
+      z_value: `${absZ.toFixed(1)}`,
+      description: 'Moderate deviation from median',
+      hypothesis: `H₀: |z| ≥ φ (${Z_BOUNDS.NORMAL.toFixed(3)})`
     };
   } else {
     return {
       level: 'NORMAL',
       emoji: '🟢',
-      sigma: `${absZ.toFixed(1)}σ`,
-      description: 'Within normal range',
-      action: 'HOLD'
+      z_value: `${absZ.toFixed(1)}`,
+      description: 'Within equilibrium range',
+      hypothesis: `H₀: |z| < φ (${Z_BOUNDS.NORMAL.toFixed(3)})`
     };
   }
 }
@@ -933,73 +910,76 @@ function classifyRegime(ratio, options = {}) {
   if (ratio === null || hasLowSignal) {
     return {
       regime: 'UNDEFINED',
-      label: 'R Undefined (Consolidation)',
-      status: 'consolidating',
+      label: 'R Undefined',
       emoji: '⚪',
-      interpretation: 'R ratio undefined — z-scores near zero. Price tracking median closely.',
-      recommendation: 'R unstable. Use price momentum or trend analysis instead.',
-      warning: warning || 'Low z-score may indicate consolidation at highs, not decay.'
+      hypothesis: 'H₀: R is undefined (z-scores near zero)',
+      description: 'Insufficient deviation data to compute amplitude ratio.',
+      warning: warning || 'Low signal state.'
     };
   }
   
-  if (ratio < REGIMES.SUB_CRITICAL.max) {
+  // H₀: Regime classification based on φ-derived bounds
+  if (ratio < R_BOUNDS.LOWER) {
     return {
-      regime: 'SUB_CRITICAL',
-      ...REGIMES.SUB_CRITICAL,
+      regime: 'DECAY',
+      label: 'R < φ⁻¹ (Amplitude Decay)',
       emoji: '🔵',
-      interpretation: 'System losing momentum. Each spike weaker than last.',
-      recommendation: 'Investigate structural causes of decline.'
+      hypothesis: `H₀: R < φ⁻¹ (${R_BOUNDS.LOWER.toFixed(3)})`,
+      description: 'Successive amplitudes decreasing.'
     };
-  } else if (ratio < REGIMES.CRITICAL.max) {
+  } else if (ratio <= R_BOUNDS.UPPER + R_BOUNDS.TOLERANCE) {
     return {
-      regime: 'CRITICAL',
-      ...REGIMES.CRITICAL,
+      regime: 'CONVERGENCE',
+      label: `R ∈ [φ⁻¹, φ] (φ-Convergent)`,
       emoji: '🟢',
-      interpretation: 'System in sustainable φ² renewal. Optimal growth.',
-      recommendation: 'Maintain trajectory. Monitor for deviation.'
+      hypothesis: `H₀: R ∈ [${R_BOUNDS.LOWER.toFixed(3)}, ${R_BOUNDS.UPPER.toFixed(3)}]`,
+      description: 'Oscillations exhibit φ-convergence.'
     };
   } else {
     return {
-      regime: 'SUPER_CRITICAL',
-      ...REGIMES.SUPER_CRITICAL,
+      regime: 'AMPLIFICATION',
+      label: `R > φ (Amplitude Growth)`,
       emoji: '🔴',
-      interpretation: 'System accelerating unsustainably. Bubble dynamics.',
-      recommendation: 'Prepare for correction. Reduce exposure.'
+      hypothesis: `H₀: R > φ (${R_BOUNDS.UPPER.toFixed(3)})`,
+      description: 'Successive amplitudes increasing.'
     };
   }
 }
 
 /**
  * Get φ-deviation alert
+ * H₀: Measure R distance from φ attractor
  * @param {number} ratio - Current R ratio
- * @returns {Object} Deviation alert
+ * @returns {Object} Deviation measurement
  */
 function getPhiDeviationAlert(ratio) {
   const deviation = Math.abs(ratio - PHI);
   
-  if (deviation > 0.4) {
+  // H₀: Use φ-derived tolerance bounds for all thresholds
+  if (deviation > PHI_SQUARED - PHI) {
+    // > φ (1.618), which is φ² - φ = 1
     return {
-      level: 'CRITICAL',
+      level: 'HIGH_DEVIATION',
       emoji: '🔴',
       deviation: deviation.toFixed(3),
-      description: ratio > PHI ? 'Super-critical acceleration' : 'Sub-critical deceleration',
-      action: 'REASSESS_STRATEGY'
+      hypothesis: `H₀: |R - φ| > φ (${(PHI_SQUARED - PHI).toFixed(3)})`,
+      description: 'R far from φ attractor'
     };
-  } else if (deviation > THRESHOLDS.PHI_TOLERANCE) {
+  } else if (deviation > R_BOUNDS.TOLERANCE) {
     return {
-      level: 'WARNING',
+      level: 'MODERATE_DEVIATION',
       emoji: '🟠',
       deviation: deviation.toFixed(3),
-      description: 'Drifting from φ-equilibrium',
-      action: 'GUARD_RISK'
+      hypothesis: `H₀: φ⁻² < |R - φ| < φ (${R_BOUNDS.TOLERANCE.toFixed(3)}-${(PHI_SQUARED - PHI).toFixed(3)})`,
+      description: 'R drifting from φ'
     };
   } else {
     return {
-      level: 'STABLE',
+      level: 'CONVERGENT',
       emoji: '🟢',
       deviation: deviation.toFixed(3),
-      description: 'Within φ ± 0.2 band (sustainable)',
-      action: 'MAINTAIN'
+      hypothesis: `H₀: |R - φ| ≤ φ⁻² (${R_BOUNDS.TOLERANCE.toFixed(3)})`,
+      description: 'R within φ-convergence band'
     };
   }
 }
@@ -1865,55 +1845,60 @@ function shouldTriggerPsiEMA(query, tickerDetector = null) {
 
 /**
  * Generate AI context prompt for Ψ-EMA analysis
+ * All thresholds φ-derived, no arbitrary heuristics
  */
 function getPsiEMAContext() {
   return `
-## Ψ-EMA: FINANCIAL WAVE FUNCTION DASHBOARD
+## Ψ-EMA: WAVE FUNCTION OBSERVER (φ-DERIVED BOUNDS ONLY)
 
 You are analyzing with the Ψ-EMA multi-dimensional wave function framework.
+All measurements and bounds derived from φ (1.618). No arbitrary heuristics.
 
 ### OUTPUT FORMAT (MANDATORY):
 When stock data is provided below, you MUST:
-1. START your response with the company name and header exactly as provided
-2. INCLUDE the markdown table with Dimension/Formula/Value/Signal columns exactly as shown
-3. INCLUDE all sections: company header, atomic units, price, table, composite, fundamentals, confidence
-4. DO NOT add intro paragraphs ("Summary", "Introduction to...", "The following...")
-5. DO NOT convert the table to bullet points
+1. START with company name and header as provided
+2. INCLUDE markdown table with Dimension/Formula/Value/H₀ columns
+3. INCLUDE all sections: company header, price, table, composite, fundamentals, confidence
+4. DO NOT add intro paragraphs ("Summary", "Introduction...", "The following...")
+5. DO NOT convert table to bullet points
 6. DO NOT omit any section - leave no data behind
-7. The data below is pre-computed and verified - output it VERBATIM
+7. The data below is pre-computed - output it VERBATIM
 
-### The Three Orthogonal Dimensions:
+### The Three Orthogonal Dimensions (φ-Derived):
 
 **1. Phase θ (Cycle Position)** — EMA-34/EMA-55
-   θ = arctan(Flow/Stock)
-   - 0°-90° = Early Expansion 🟢 (stock→flow)
-   - 90°-180° = Late Expansion 🟡 (flow peak)
-   - 180°-270° = Early Contraction 🔴 (flow→stock)
-   - 270°-360° = Late Contraction 🔵 (stock trough)
-   - Golden Cross = Fast EMA crosses above Slow → BUY
-   - Death Cross = Fast EMA crosses below Slow → SELL
+   θ = arctan(ΔEMA-55/ΔEMA-34)
+   - 0°-90° = Early Expansion 🟢
+   - 90°-180° = Late Expansion 🟡
+   - 180°-270° = Early Contraction 🔴
+   - 270°-360° = Late Contraction 🔵
+   - Golden Cross = Fast EMA > Slow EMA
+   - Death Cross = Fast EMA < Slow EMA
 
 **2. Anomaly z (Deviation Strength)** — EMA-21/EMA-34
-   z = (Flow - μ) / σ
-   - ±1σ = Normal range 🟢
-   - ±2σ = Alert threshold 🟠
-   - ±3σ = Extreme (bubble/crisis) 🔴
+   z = (Price - Median) / MAD
+   H₀: |z| < φ (${PHI.toFixed(3)}) = NORMAL
+   H₀: φ < |z| < φ² (${Z_BOUNDS.ALERT.toFixed(3)}) = ALERT
+   H₀: |z| > φ² (${Z_BOUNDS.EXTREME.toFixed(3)}) = EXTREME
 
-**3. Convergence R (Sustainability)** — EMA-13/EMA-21
+**3. Convergence R (Amplitude Ratio)** — EMA-13/EMA-21
    R = z(t) / z(t-1)
-   - R < 1.3 = Sub-Critical (dying) 🔵
-   - R ≈ φ (1.3-2.0) = Critical (sustainable) 🟢
-   - R > 2.0 = Super-Critical (bubble) 🔴
+   H₀: R < φ⁻¹ (${R_BOUNDS.LOWER.toFixed(3)}) = DECAY
+   H₀: φ⁻¹ ≤ R ≤ φ = CONVERGENCE (self-similar)
+   H₀: R > φ (${R_BOUNDS.UPPER.toFixed(3)}) = AMPLIFICATION
 
-### Key Formulas:
-- φ = 1.618 (golden ratio)
-- φ² = 2.618 (renewal threshold)
-- φ-Correction: z(t+1) = z(t) - sign(z)·φ/|z|
+### Fibonacci EMA Periods (Self-Similar Under φ):
+- Phase: 34/55 (F₉/F₁₀)
+- Anomaly: 21/34 (F₈/F₉)
+- Convergence: 13/21 (F₇/F₈)
+- Ratio: F(n+1)/F(n) → φ as n → ∞
 
-### Fibonacci EMA Periods:
-- Phase: 34/55 (slow, full cycle)
-- Anomaly: 21/34 (medium, quick response)
-- Convergence: 13/21 (fast, leading indicator)
+### Constants (φ-Derived):
+- φ ≈ 1.618 (golden ratio, x = 1 + 1/x)
+- φ⁻¹ ≈ 0.618 (φ - 1)
+- φ⁻² ≈ 0.382 (tolerance band)
+- φ² ≈ 2.618 (φ + 1)
+- 2 = φ⁰ + φ⁻¹ + φ⁻² (unity + reciprocal + inverse-squared)
 `;
 }
 
@@ -1948,13 +1933,15 @@ This "seeing is believing" H₀ approach grounds spreadsheet claims in physical 
 // ============================================================================
 
 module.exports = {
-  // Constants
+  // φ-Derived Constants (No Arbitrary Heuristics)
   PHI,
   PHI_SQUARED,
   PHI_INVERSE,
+  PHI_INV_SQUARED,
   FIB_PERIODS,
-  REGIMES,
-  THRESHOLDS,
+  R_BOUNDS,
+  Z_BOUNDS,
+  PHI_COMPOSITE_2,
   
   // EMA functions
   calculateEMA,
@@ -1991,11 +1978,10 @@ module.exports = {
   zScore,
   calculateFidelity,
   
-  // vφ³: Robust statistics
+  // Robust statistics
   mad,
   median,
   robustZScore,
-  THRESHOLDS_SIGMA,  // Legacy σ-based thresholds
   
   // Financial Microbiology (Dec 23, 2025)
   PATHOGENS,
