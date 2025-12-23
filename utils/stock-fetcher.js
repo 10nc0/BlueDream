@@ -264,7 +264,16 @@ function fetchStockPrices(ticker) {
       }
       
       try {
-        const result = JSON.parse(stdout.trim());
+        // Sanitize Python output: NaN, Infinity are not valid JSON
+        // Replace with null to avoid parse errors
+        let sanitized = stdout.trim()
+          .replace(/:\s*NaN\b/g, ': null')
+          .replace(/:\s*Infinity\b/g, ': null')
+          .replace(/:\s*-Infinity\b/g, ': null')
+          .replace(/,\s*NaN\b/g, ', null')
+          .replace(/\[\s*NaN\b/g, '[null');
+        
+        const result = JSON.parse(sanitized);
         if (result.error) {
           reject(new Error(result.error));
         } else {

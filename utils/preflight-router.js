@@ -236,7 +236,9 @@ async function preflightRouter(options) {
               try {
                 // Daily analysis (primary) - fresh dashboard instance
                 const dailyDashboard = new PsiEMADashboard();
-                const dailyCloses = result.stockData?.daily?.closes || result.stockData?.closes || [];
+                const dailyClosesRaw = result.stockData?.daily?.closes || result.stockData?.closes || [];
+                // Filter out null/NaN values from yfinance (converts to null in stock-fetcher)
+                const dailyCloses = dailyClosesRaw.filter(v => v != null && !isNaN(v));
                 result.psiEmaAnalysis = dailyDashboard.analyze({ stocks: dailyCloses });
                 result.psiEmaAnalysis.timeframe = 'daily';
                 console.log(`📊 Preflight: Ψ-EMA daily analysis complete for ${result.ticker}`);
@@ -245,7 +247,9 @@ async function preflightRouter(options) {
                 // No hard gate: even 13 bars produces real θ, z, R (just lower fidelity)
                 if (weeklyBars >= 13 && !weeklyUnavailableReason) {
                   const weeklyDashboard = new PsiEMADashboard();  // Fresh instance to avoid state mutation
-                  const weeklyCloses = result.stockData?.weekly?.closes || [];
+                  const weeklyClosesRaw = result.stockData?.weekly?.closes || [];
+                  // Filter out null/NaN values from yfinance
+                  const weeklyCloses = weeklyClosesRaw.filter(v => v != null && !isNaN(v));
                   result.psiEmaAnalysisWeekly = weeklyDashboard.analyze({ stocks: weeklyCloses });
                   result.psiEmaAnalysisWeekly.timeframe = 'weekly';
                   const fidelityInfo = result.psiEmaAnalysisWeekly.fidelity?.breakdown || 'N/A';
