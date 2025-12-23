@@ -15,6 +15,7 @@ const { detectStockTicker, detectPsiEMAKeys, smartDetectTicker, fetchStockPrices
 const { getPsiEMAContext, PsiEMADashboard } = require('./psi-EMA');
 const { getFinancialPhysicsSeed } = require('./financial-physics');
 const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal-analysis');
+const { detectForexPair, isForexQuery, fetchForexRate, buildForexContext } = require('./forex-fetcher');
 
 const SEED_METRIC_KEYWORDS = [
   'seed metric', 'seed factor', 'p/i ratio', 'years to buy',
@@ -91,10 +92,13 @@ async function preflightRouter(options) {
       isSeedMetric: false,
       usesFinancialPhysics: false,
       usesLegalAnalysis: false,
+      usesForex: false,
       hasAttachments: attachments.length > 0,
       hasDocContext: Object.keys(docContext).length > 0
     },
     stockContext: null,
+    forexData: null,
+    forexContext: null,
     error: null
   };
   
@@ -103,130 +107,155 @@ async function preflightRouter(options) {
     // MODE DETECTION (Priority Order)
     // ========================================
     
+    // 0. FOREX: Detect currency pair queries FIRST (before stock detection)
+    // USD/JPY, EUR/USD, "yen rate", "dollar to euro", etc.
+    const forexPair = detectForexPair(query);
+    if (forexPair || isForexQuery(query)) {
+      result.mode = 'forex';
+      result.routingFlags.usesForex = true;
+      
+      if (forexPair) {
+        console.log(`💱 Preflight: Detected forex pair ${forexPair.base}/${forexPair.quote}`);
+        
+        try {
+          result.forexData = await fetchForexRate(forexPair.base, forexPair.quote);
+          result.forexContext = buildForexContext(result.forexData);
+          console.log(`💱 Preflight: Fetched ${forexPair.pair} rate: ${result.forexData.rate}`);
+        } catch (forexErr) {
+          console.log(`⚠️ Preflight: Forex fetch failed: ${forexErr.message}`);
+          result.error = `Forex fetch failed: ${forexErr.message}`;
+        }
+      } else {
+        console.log(`💱 Preflight: Forex query detected but no specific pair extracted`);
+      }
+    }
     // 1. Ψ-EMA: Push-based 2/3 key detection (Lego-style Turing test)
     // Keys: VERB (analyze/diagnose) + ADJECTIVE (price/trend) + OBJECT (ticker)
     // If 2/3 keys match → unlock Ψ-EMA gate
-    const psiEmaDetection = detectPsiEMAKeys(query);
+    // SKIP if forex mode already triggered
+    else if (result.mode !== 'forex') {
+      const psiEmaDetection = detectPsiEMAKeys(query);
     
-    // Context fallback: STRICT - only reuse inferred ticker if:
-    // 1. We have a ticker from prior conversation, AND
-    // 2. Current query has EXPLICIT stock keyword (stock/share/ticker/price), AND
-    // 3. Current query has at least a verb OR adjective
-    const hasContextTicker = contextResult?.inferredTicker;
-    const hasExplicitStockKeyword = /\b(stock|stocks|ticker|share|shares|price|prices)\b/i.test(query);
-    const hasVerbOrAdjective = psiEmaDetection.keys.some(k => k.type === 'verb' || k.type === 'adjective');
-    const contextFallbackApplies = hasContextTicker && hasExplicitStockKeyword && hasVerbOrAdjective;
+      // Context fallback: STRICT - only reuse inferred ticker if:
+      // 1. We have a ticker from prior conversation, AND
+      // 2. Current query has EXPLICIT stock keyword (stock/share/ticker/price), AND
+      // 3. Current query has at least a verb OR adjective
+      const hasContextTicker = contextResult?.inferredTicker;
+      const hasExplicitStockKeyword = /\b(stock|stocks|ticker|share|shares|price|prices)\b/i.test(query);
+      const hasVerbOrAdjective = psiEmaDetection.keys.some(k => k.type === 'verb' || k.type === 'adjective');
+      const contextFallbackApplies = hasContextTicker && hasExplicitStockKeyword && hasVerbOrAdjective;
     
-    if (psiEmaDetection.shouldTrigger || contextFallbackApplies) {
-      result.mode = 'psi-ema';
-      result.routingFlags.usesPsiEMA = true;
-      
-      // Use ticker from key detection, or fall back to AI/context
-      result.ticker = psiEmaDetection.ticker || await smartDetectTicker(query);
-      
-      // If no ticker from current query, use context-inferred ticker
-      if (!result.ticker && contextResult?.inferredTicker) {
-        result.ticker = contextResult.inferredTicker;
-        console.log(`📜 Preflight: Using context-inferred ticker ${result.ticker}`);
-      }
-      
-      if (result.ticker) {
-        console.log(`🎯 Preflight: Detected ticker ${result.ticker} for Ψ-EMA`);
+      if (psiEmaDetection.shouldTrigger || contextFallbackApplies) {
+        result.mode = 'psi-ema';
+        result.routingFlags.usesPsiEMA = true;
         
-        // Fetch stock data (exact periods: 3mo daily, 15mo weekly)
-        try {
-          result.stockData = await fetchStockPrices(result.ticker);
-          result.dataAge = calculateDataAge(result.stockData?.endDate);
+        // Use ticker from key detection, or fall back to AI/context
+        result.ticker = psiEmaDetection.ticker || await smartDetectTicker(query);
+        
+        // If no ticker from current query, use context-inferred ticker
+        if (!result.ticker && contextResult?.inferredTicker) {
+          result.ticker = contextResult.inferredTicker;
+          console.log(`📜 Preflight: Using context-inferred ticker ${result.ticker}`);
+        }
+        
+        if (result.ticker) {
+          console.log(`🎯 Preflight: Detected ticker ${result.ticker} for Ψ-EMA`);
           
-          // Use barCount from optimized fetch (exact data, no buffer)
-          const dailyBars = result.stockData?.daily?.barCount || 0;
-          const weeklyBars = result.stockData?.weekly?.barCount || 0;
-          const weeklyUnavailableReason = result.stockData?.weekly?.unavailableReason;
-          
-          console.log(`📈 Preflight: Fetched ${dailyBars} daily bars + ${weeklyBars} weekly bars for ${result.ticker}`);
-          
-          // Run Ψ-EMA analysis on BOTH timeframes if enough data
-          // Daily: need 55 bars for EMA-55, Weekly: need 55 bars for EMA-55
-          if (dailyBars >= 55) {
-            try {
-              // Daily analysis (primary) - fresh dashboard instance
-              const dailyDashboard = new PsiEMADashboard();
-              const dailyCloses = result.stockData?.daily?.closes || result.stockData?.closes || [];
-              result.psiEmaAnalysis = dailyDashboard.analyze({ stocks: dailyCloses });
-              result.psiEmaAnalysis.timeframe = 'daily';
-              console.log(`📊 Preflight: Ψ-EMA daily analysis complete for ${result.ticker}`);
-              
-              // Weekly analysis - run if we have any data, fidelity grade handles quality
-              // No hard gate: even 13 bars produces real θ, z, R (just lower fidelity)
-              if (weeklyBars >= 13 && !weeklyUnavailableReason) {
-                const weeklyDashboard = new PsiEMADashboard();  // Fresh instance to avoid state mutation
-                const weeklyCloses = result.stockData?.weekly?.closes || [];
-                result.psiEmaAnalysisWeekly = weeklyDashboard.analyze({ stocks: weeklyCloses });
-                result.psiEmaAnalysisWeekly.timeframe = 'weekly';
-                const fidelityGrade = result.psiEmaAnalysisWeekly.fidelity?.grade || '?';
-                console.log(`📊 Preflight: Ψ-EMA weekly analysis complete for ${result.ticker} (fidelity: ${fidelityGrade})`);
-              } else if (weeklyUnavailableReason) {
-                console.log(`⚠️ Preflight: Weekly Ψ-EMA unavailable: ${weeklyUnavailableReason}`);
-                result.weeklyUnavailableReason = weeklyUnavailableReason;
-              }
-              
-              // Build stock context for injection
-              result.stockContext = buildStockContext(result);
-              
-              if (!result.stockContext) {
-                console.log(`⚠️ Preflight: buildStockContext returned null, falling back to limited`);
+          // Fetch stock data (exact periods: 3mo daily, 15mo weekly)
+          try {
+            result.stockData = await fetchStockPrices(result.ticker);
+            result.dataAge = calculateDataAge(result.stockData?.endDate);
+            
+            // Use barCount from optimized fetch (exact data, no buffer)
+            const dailyBars = result.stockData?.daily?.barCount || 0;
+            const weeklyBars = result.stockData?.weekly?.barCount || 0;
+            const weeklyUnavailableReason = result.stockData?.weekly?.unavailableReason;
+            
+            console.log(`📈 Preflight: Fetched ${dailyBars} daily bars + ${weeklyBars} weekly bars for ${result.ticker}`);
+            
+            // Run Ψ-EMA analysis on BOTH timeframes if enough data
+            // Daily: need 55 bars for EMA-55, Weekly: need 55 bars for EMA-55
+            if (dailyBars >= 55) {
+              try {
+                // Daily analysis (primary) - fresh dashboard instance
+                const dailyDashboard = new PsiEMADashboard();
+                const dailyCloses = result.stockData?.daily?.closes || result.stockData?.closes || [];
+                result.psiEmaAnalysis = dailyDashboard.analyze({ stocks: dailyCloses });
+                result.psiEmaAnalysis.timeframe = 'daily';
+                console.log(`📊 Preflight: Ψ-EMA daily analysis complete for ${result.ticker}`);
+                
+                // Weekly analysis - run if we have any data, fidelity grade handles quality
+                // No hard gate: even 13 bars produces real θ, z, R (just lower fidelity)
+                if (weeklyBars >= 13 && !weeklyUnavailableReason) {
+                  const weeklyDashboard = new PsiEMADashboard();  // Fresh instance to avoid state mutation
+                  const weeklyCloses = result.stockData?.weekly?.closes || [];
+                  result.psiEmaAnalysisWeekly = weeklyDashboard.analyze({ stocks: weeklyCloses });
+                  result.psiEmaAnalysisWeekly.timeframe = 'weekly';
+                  const fidelityGrade = result.psiEmaAnalysisWeekly.fidelity?.grade || '?';
+                  console.log(`📊 Preflight: Ψ-EMA weekly analysis complete for ${result.ticker} (fidelity: ${fidelityGrade})`);
+                } else if (weeklyUnavailableReason) {
+                  console.log(`⚠️ Preflight: Weekly Ψ-EMA unavailable: ${weeklyUnavailableReason}`);
+                  result.weeklyUnavailableReason = weeklyUnavailableReason;
+                }
+                
+                // Build stock context for injection
+                result.stockContext = buildStockContext(result);
+                
+                if (!result.stockContext) {
+                  console.log(`⚠️ Preflight: buildStockContext returned null, falling back to limited`);
+                  result.stockContext = buildLimitedStockContext(result);
+                }
+              } catch (analysisErr) {
+                console.log(`⚠️ Preflight: Ψ-EMA analysis failed: ${analysisErr.message}`);
                 result.stockContext = buildLimitedStockContext(result);
               }
-            } catch (analysisErr) {
-              console.log(`⚠️ Preflight: Ψ-EMA analysis failed: ${analysisErr.message}`);
+            } else if (dailyBars > 0) {
+              console.log(`⚠️ Preflight: Insufficient data for ${result.ticker} (${dailyBars} bars, need 55 for Ψ-EMA)`);
               result.stockContext = buildLimitedStockContext(result);
+            } else {
+              console.log(`❌ Preflight: No data returned for ${result.ticker}`);
+              result.stockContext = buildFallbackStockContext(result.ticker);
             }
-          } else if (dailyBars > 0) {
-            console.log(`⚠️ Preflight: Insufficient data for ${result.ticker} (${dailyBars} bars, need 55 for Ψ-EMA)`);
-            result.stockContext = buildLimitedStockContext(result);
-          } else {
-            console.log(`❌ Preflight: No data returned for ${result.ticker}`);
+          } catch (fetchErr) {
+            console.log(`⚠️ Preflight: Stock fetch failed for ${result.ticker}: ${fetchErr.message}`);
+            result.error = `Stock fetch failed: ${fetchErr.message}`;
             result.stockContext = buildFallbackStockContext(result.ticker);
           }
-        } catch (fetchErr) {
-          console.log(`⚠️ Preflight: Stock fetch failed for ${result.ticker}: ${fetchErr.message}`);
-          result.error = `Stock fetch failed: ${fetchErr.message}`;
-          result.stockContext = buildFallbackStockContext(result.ticker);
         }
       }
-    }
-    // 2. Seed Metric: MANDATORY web search for grounded real estate data
-    // LLM training data is stale/wrong - must fetch actual $/m² from authoritative sources
-    else if (isSeedMetricQuery(query)) {
-      result.mode = 'seed-metric';
-      result.routingFlags.isSeedMetric = true;
-      result.searchStrategy = 'brave';
-      
-      // Extract city names for targeted search (major world cities + common variants)
-      const cityPattern = /\b(tokyo|singapore|hong kong|hongkong|london|new york|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
-      const cities = [...new Set((query.match(cityPattern) || []).map(c => c.toLowerCase()))];
-      
-      if (cities.length > 0) {
-        // Build search queries for real estate $/m² + median income
-        result.seedMetricSearchQueries = cities.flatMap(city => [
-          `${city} residential property price per square meter 2024`,
-          `${city} median individual income salary 2024`,
-          `${city} housing price 1970s historical per sqm`
-        ]);
-        console.log(`🏠 Preflight: SEED_METRIC detected for cities: ${cities.join(', ')}`);
-        console.log(`🔍 Preflight: Will search for: ${result.seedMetricSearchQueries.slice(0, 3).join(' | ')}...`);
-      } else {
-        // Generic search if no city specified
-        result.seedMetricSearchQueries = [
-          'residential property price per square meter comparison major cities 2024',
-          'median income by country 2024'
-        ];
-        console.log(`🏠 Preflight: SEED_METRIC detected (no specific city)`);
+      // 2. Seed Metric: MANDATORY web search for grounded real estate data
+      // LLM training data is stale/wrong - must fetch actual $/m² from authoritative sources
+      else if (isSeedMetricQuery(query)) {
+        result.mode = 'seed-metric';
+        result.routingFlags.isSeedMetric = true;
+        result.searchStrategy = 'brave';
+        
+        // Extract city names for targeted search (major world cities + common variants)
+        const cityPattern = /\b(tokyo|singapore|hong kong|hongkong|london|new york|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
+        const cities = [...new Set((query.match(cityPattern) || []).map(c => c.toLowerCase()))];
+        
+        if (cities.length > 0) {
+          // Build search queries for real estate $/m² + median income
+          result.seedMetricSearchQueries = cities.flatMap(city => [
+            `${city} residential property price per square meter 2024`,
+            `${city} median individual income salary 2024`,
+            `${city} housing price 1970s historical per sqm`
+          ]);
+          console.log(`🏠 Preflight: SEED_METRIC detected for cities: ${cities.join(', ')}`);
+          console.log(`🔍 Preflight: Will search for: ${result.seedMetricSearchQueries.slice(0, 3).join(' | ')}...`);
+        } else {
+          // Generic search if no city specified
+          result.seedMetricSearchQueries = [
+            'residential property price per square meter comparison major cities 2024',
+            'median income by country 2024'
+          ];
+          console.log(`🏠 Preflight: SEED_METRIC detected (no specific city)`);
+        }
       }
-    }
-    // 3. Default: Groq-first (no search until audit rejects)
-    else {
-      result.mode = 'general';
+      // 3. Default: Groq-first (no search until audit rejects)
+      else {
+        result.mode = 'general';
+      }
     }
     
     // ========================================
@@ -450,6 +479,12 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
     if (preflight.stockContext) {
       messages.push({ role: 'system', content: preflight.stockContext });
     }
+  }
+  
+  // Forex context - inject real exchange rate data to prevent hallucination
+  if (preflight.routingFlags.usesForex && preflight.forexContext) {
+    messages.push({ role: 'system', content: preflight.forexContext });
+    console.log(`💱 Forex context injected: ${preflight.forexData?.pair || 'unknown'}`);
   }
   
   return messages;
