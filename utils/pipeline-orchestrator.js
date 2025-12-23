@@ -454,17 +454,12 @@ ${fundamentals.marketCap ? `Market Cap: $${(fundamentals.marketCap / 1e9).toFixe
 ${fundamentals.sector ? `Sector: ${fundamentals.sector}${fundamentals.industry ? ` / ${fundamentals.industry}` : ''}` : ''}
 
 ═══════════════════════════════════════════════════════════════════════════════
-Ψ-EMA WAVE FUNCTION DIAGNOSTICS (Experimental Research Framework)
+Ψ-EMA TREND ANALYSIS
 ═══════════════════════════════════════════════════════════════════════════════
-⚠️ DISCLAIMER: Ψ-EMA is a proprietary/experimental wave function analysis 
-framework. It is NOT a standard technical indicator. Results are for research 
-purposes only and should not be used as sole basis for investment decisions.
-
-**FRAMEWORK LEGEND:**
-• θ (Phase) = Cycle position in degrees (0-360°), from atan2 of EMA crossovers
-• z (Anomaly) = Standard deviations from median (MAD-scaled, robust to outliers)  
-• R (Convergence) = Sustainability ratio: <1.3 sub-critical | 1.3-2.0 critical | >2.0 super-critical
-• φ = Golden ratio (1.618...) — Fibonacci EMA periods: 13, 21, 34, 55
+Ψ-EMA measures three things: **where** a stock is in its price cycle (θ phase), 
+**how unusual** the current price is compared to recent history (z anomaly), 
+and **whether the trend can sustain** (R convergence). When all three align, 
+conviction is higher; when they conflict, caution is warranted.
 
 **DAILY (1d candles, 3-month window)** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade, ${fidelity.percent || 'N/A'}% fidelity]
 ├─ θ (Phase) = **${fmt(phase.current)}°** → ${phase.signal || 'N/A'}
