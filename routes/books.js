@@ -1215,6 +1215,175 @@ function registerBooksRoutes(app, deps) {
         }
     });
 
+    const exportBookHandler = async (req, res) => {
+        const { book_id } = req.params;
+        const selectedMessageIds = req.body?.messageIds || null;
+        
+        try {
+            const client = req.dbClient || pool;
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const bookResult = await client.query(
+                `SELECT id, name, output_credentials FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                [book_id]
+            );
+            
+            if (bookResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found in your tenant' });
+            }
+            
+            const book = bookResult.rows[0];
+            const outputCreds = book.output_credentials;
+            
+            let messages = [];
+            
+            if (!thothBot || !thothBot.client || !thothBot.ready) {
+                messages = [];
+            } else {
+                try {
+                    const threadId = outputCreds?.output_01?.thread_id;
+                    if (threadId) {
+                        const channel = await thothBot.client.channels.fetch(threadId);
+                        const fetchedMessages = await channel.messages.fetch({ limit: 100 });
+                        
+                        let allMessages = fetchedMessages.map(m => ({
+                            id: m.id,
+                            content: m.content,
+                            author: m.author.username,
+                            timestamp: m.createdAt.toISOString(),
+                            embeds: m.embeds.map(e => ({
+                                title: e.title,
+                                description: e.description,
+                                fields: e.fields
+                            })),
+                            attachments: m.attachments.map(a => ({
+                                url: a.url,
+                                filename: a.name,
+                                size: a.size
+                            }))
+                        }));
+                        
+                        if (selectedMessageIds && selectedMessageIds.length > 0) {
+                            const selectedSet = new Set(selectedMessageIds);
+                            messages = allMessages.filter(m => selectedSet.has(m.id));
+                        } else {
+                            messages = allMessages;
+                        }
+                    }
+                } catch (err) {
+                    logger.warn({ err }, 'Error fetching Discord messages for export');
+                }
+            }
+            
+            const dropsResult = await client.query(
+                `SELECT * FROM ${tenantSchema}.drops WHERE book_id = $1 ORDER BY created_at DESC`,
+                [book.id]
+            );
+            
+            const dropsMap = new Map();
+            dropsResult.rows.forEach(drop => {
+                dropsMap.set(drop.discord_message_id, drop);
+            });
+            
+            const enrichedMessages = messages.map(msg => ({
+                ...msg,
+                metadata: dropsMap.get(msg.id) || null
+            }));
+            
+            const exportData = {
+                book: {
+                    id: book_id,
+                    name: book.name,
+                    exported_at: new Date().toISOString()
+                },
+                messages: enrichedMessages,
+                drops: dropsResult.rows,
+                statistics: {
+                    total_messages: messages.length,
+                    total_drops: dropsResult.rows.length,
+                    messages_with_metadata: enrichedMessages.filter(m => m.metadata).length
+                }
+            };
+            
+            const archive = archiver('zip', { zlib: { level: 9 } });
+            
+            res.attachment(`${book.name.replace(/[^a-z0-9]/gi, '_')}_export.zip`);
+            res.setHeader('Content-Type', 'application/zip');
+            
+            archive.pipe(res);
+            archive.append(JSON.stringify(exportData, null, 2), { name: 'messages.json' });
+            
+            let attachmentStats = { total: 0, downloaded: 0, failed: 0 };
+            
+            for (const msg of enrichedMessages) {
+                if (msg.attachments && msg.attachments.length > 0) {
+                    const timestamp = new Date(msg.timestamp);
+                    const dateFolder = timestamp.toISOString().split('T')[0];
+                    const isoTime = timestamp.toISOString().split('T')[1].substring(0, 8);
+                    const timeFolder = isoTime.replace(/:/g, '').replace(/(\d{2})(\d{2})(\d{2})/, '$1h$2m$3s');
+                    
+                    const offset = -timestamp.getTimezoneOffset();
+                    const sign = offset >= 0 ? '+' : '-';
+                    const absOffset = Math.abs(offset);
+                    const tzHours = Math.floor(absOffset / 60);
+                    const tzMinutes = absOffset % 60;
+                    const tzString = `GMT${sign}${tzHours.toString().padStart(2, '0')}${tzMinutes > 0 ? ':' + tzMinutes.toString().padStart(2, '0') : ''}`;
+                    
+                    for (const attachment of msg.attachments) {
+                        attachmentStats.total++;
+                        try {
+                            const response = await axios.get(attachment.url, { 
+                                responseType: 'arraybuffer',
+                                timeout: 30000 
+                            });
+                            
+                            const folderPath = `attachments/${dateFolder}/${timeFolder}_${tzString}/${attachment.filename}`;
+                            archive.append(response.data, { name: folderPath });
+                            attachmentStats.downloaded++;
+                        } catch (err) {
+                            attachmentStats.failed++;
+                            logger.warn({ filename: attachment.filename, err }, 'Failed to download attachment');
+                        }
+                    }
+                }
+            }
+            
+            const readme = `# Your Nyanbook Export
+        
+Book: ${book.name}
+Exported: ${new Date().toISOString()}
+
+This archive contains:
+- messages.json: All messages with drops metadata
+  - ${messages.length} messages total
+  - ${dropsResult.rows.length} metadata drops
+  - ${enrichedMessages.filter(m => m.metadata).length} messages with metadata
+
+- attachments/: Media files organized by timestamp
+  - ${attachmentStats.downloaded} files downloaded
+  - ${attachmentStats.failed} files failed to download
+  - Total attempted: ${attachmentStats.total}
+
+Folder Structure:
+attachments/YYYY-MM-DD/HhMMmSSs_GMTxx/{filename}
+`;
+            archive.append(readme, { name: 'README.txt' });
+            
+            await archive.finalize();
+            
+            logger.info({ bookId: book_id, messages: messages.length, drops: dropsResult.rows.length }, 'Export created');
+            
+        } catch (error) {
+            logger.error({ err: error }, 'Error creating export');
+            if (!res.headersSent) {
+                res.status(500).json({ error: error.message });
+            }
+        }
+    };
+
+    const exportMiddleware = setTenantContext ? [requireAuth, setTenantContext] : [requireAuth];
+    app.get('/api/books/:book_id/export', ...exportMiddleware, exportBookHandler);
+    app.post('/api/books/:book_id/export', ...exportMiddleware, exportBookHandler);
+
     return {};
 }
 

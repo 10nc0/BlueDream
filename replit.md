@@ -54,13 +54,14 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Push Guard vs Pull Action Pattern**: O(1) validation before expensive work.
 - **Security (10/10 Hardened)**: Sybil attack prevention, JWT security (15-min access token + refresh token revocation), session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, CSP compliance, dev-role bypass blocked in production.
 - **Discord Bot Trinity Architecture**: Hermes (write-only), Thoth (read-only), Idris (AI write-only), Horus (AI read-only).
-- **Vegapunk Kernel Architecture**: Factory pattern with dependency injection. Named after Dr. Vegapunk (One Piece) - the genius who splits consciousness into satellite bodies while maintaining a pure core. vegapunk.js orchestrates 6 modular routes (satellites) via DI.
+- **Vegapunk Kernel Architecture**: Factory pattern with dependency injection. Named after Dr. Vegapunk (One Piece) - the genius who splits consciousness into satellite bodies while maintaining a pure core. vegapunk.js orchestrates 5 modular routes (satellites) via DI.
   - **Kernel (vegapunk.js)**: 1299 lines (85% reduction from 8500-line monolith)
-  - **Routes (satellites)**: auth.js (1335), books.js (1232: CRUD + drops + messages + search), inpipe.js (405), prometheus.js (505), nyan-ai.js (769), export.js (224)
+  - **Routes (satellites)**: auth.js (1335), books.js (1381: CRUD + drops + messages + search + export), inpipe.js (405), prometheus.js (505), nyan-ai.js (769)
   - **Shared libs**: deps.js (85), heartbeat.js (269: phi-breathe orchestrator), discord-webhooks.js (232), heal-queue.js (266), logger.js (26), validators.js (137: Zod schemas), error-handler.js (108: global Express error middleware), route-registry.js (49: centralized route registration)
-  - **Total endpoints**: 62 (health/pages: 11, auth: 19, books: 20, inpipe: 1, prometheus: 4, nyan-ai: 5, export: 2)
-  - **Code stats**: Kernel 1299 + Routes 4470 + Libs 878 = 6647 total lines (vs ~9000 original = 26% net reduction with better modularity)
+  - **Total endpoints**: 62 (health/pages: 11, auth: 19, books: 22 [includes export], inpipe: 1, prometheus: 4, nyan-ai: 5)
+  - **Code stats**: Kernel 1299 + Routes 4395 + Libs 878 = 6572 total lines (vs ~9000 original = 27% net reduction with better modularity)
   - Unified auth removes separate admin terminology (no admin/back-door impression)
+  - **Export consolidation**: Moved 2 export endpoints into books satellite for tighter cohesion
 - **AI Architecture Split**: Nyan AI (public playground) and Prometheus AI (authenticated ledger auditor) for independent rate limiting and security.
 - **Dual AI Engine Audit Panel**: Dashboard AI Audit modal supports engine selection (Local Prometheus vs Cloud Nyan AI) with multi-book chip selector. Nyan AI accesses book substrate via authenticated /api/nyan-ai/audit endpoint, loading user-selected book context from Discord threads.
 - **Phi Breathe Orchestrator**: Unified φ-rhythm background task scheduler (lib/heartbeat.js) for:
