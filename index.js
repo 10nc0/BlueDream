@@ -39,7 +39,7 @@ const { getMemoryManager, cleanupOldSessions } = require('./utils/memory-manager
 
 const { initialize: initDeps, setMiddleware: setDepsMiddleware, deps } = require('./lib/deps');
 const { registerAuthRoutes, createAuthMiddleware } = require('./routes/auth');
-const { registerAdminRoutes } = require('./routes/admin');
+// Admin routes merged into routes/auth.js (no separate admin terminology)
 const { registerBooksRoutes } = require('./routes/books');
 const { registerInpipeRoutes } = require('./routes/inpipe');
 const { registerExportRoutes } = require('./routes/export');
@@ -1749,51 +1749,7 @@ app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, re
 
 // DEPRECATED: Removed duplicate endpoint - use /api/books/:id/messages?source=ledger instead
 
-// ===========================
-// ONBOARDING API
-// ===========================
-
-// Get onboarding status
-app.get('/api/onboarding/status', requireAuth, async (req, res) => {
-    try {
-        const result = await pool.query(
-            'SELECT onboarding_completed, settings FROM user_settings WHERE user_id = $1',
-            [req.userId]
-        );
-        
-        if (result.rows.length === 0) {
-            return res.json({ completed: false, state: {} });
-        }
-        
-        res.json({
-            completed: result.rows[0].onboarding_completed,
-            state: result.rows[0].settings || {}
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Save onboarding progress
-app.post('/api/onboarding/status', requireAuth, async (req, res) => {
-    const { completed, state } = req.body;
-    
-    try {
-        await pool.query(`
-            INSERT INTO user_settings (user_id, onboarding_completed, settings)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (user_id)
-            DO UPDATE SET 
-                onboarding_completed = $2,
-                settings = $3,
-                updated_at = NOW()
-        `, [req.userId, completed || false, JSON.stringify(state || {})]);
-        
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
+// ONBOARDING API: Moved to routes/auth.js (user lifecycle)
 
 // ===========================
 // SERVER-SIDE MESSAGE SEARCH API
@@ -2252,13 +2208,12 @@ app.listen(PORT, '0.0.0.0', async () => {
     // Register modular routes (after deps initialized with live bots)
     const authMiddleware = registerAuthRoutes(app, deps);
     setDepsMiddleware(authMiddleware.requireAuth, authMiddleware.requireRole);
-    registerAdminRoutes(app, deps);
     registerBooksRoutes(app, deps);
     registerInpipeRoutes(app, deps);
     registerExportRoutes(app, deps);
     registerPrometheusRoutes(app, deps);
     registerNyanAIRoutes(app, deps);
-    console.log('📦 Modular routes registered: auth, admin, books, inpipe, export, prometheus, nyan-ai');
+    console.log('📦 Modular routes registered: auth, books, inpipe, export, prometheus, nyan-ai');
     
     // DEFERRED STARTUP: Run non-critical tasks after server is ready
     // This prevents connection pool exhaustion during startup
