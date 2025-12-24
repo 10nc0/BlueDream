@@ -57,6 +57,7 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis, providing a universal 7-section template.
 - **Φ-Dynamics & Ψ-EMA System**: Multi-signal time series oscillator using robust signal processing and φ (1.618) as the measurement threshold. Φ-Dynamics is the theoretical framework (R = 1 + 1/R = φ), while Ψ-EMA is the three-dimensional measurement instrument.
     - **Glossary & Framing**: Ψ-EMA is a **general-purpose time series oscillator**, not stock-market-specific. Examples herein use capital markets due to data accessibility, but identical mathematics apply to climate (temperature dynamics), sports (win-rate momentum), demographics (population flows), and any system with stock/flow decomposition.
+    - **Philosophical Foundation**: See `philosophy.md` for the complete theoretical grounding: the **Time Series Fidelity Law** (0 + φ⁰ + φ¹ = φ²), its manifestation across all domains, the Möbius closure, and Buddhist Dependent Origination correspondence.
     - **Core Principle**: φ is **endogenous** - derived from the self-referential equation x = 1 + 1/x, the unique positive fixed point of self-similar recursion. The Ψ-EMA pipeline applies this derived constant as calibration thresholds.
     - **Measurement**: Ψ-EMA (θ, z, R) classifies system states across any domain via signal decomposition
     - **θ (Phase)**: atan2(Flow, Stock) - cycle position in 4 quadrants (0°-360°). Measures phase relationship between stock and flow components.
