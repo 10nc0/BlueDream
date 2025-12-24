@@ -2,11 +2,11 @@ const axios = require('axios');
 const FormData = require('form-data');
 const { TwilioChannel } = require('../lib/channels/twilio');
 
-async function registerInpipeRoutes(app, deps) {
+function registerInpipeRoutes(app, deps) {
     const { pool, bots, helpers, constants, logger } = deps;
     const { hermes: hermesBot } = bots || {};
     const NYANBOOK_LEDGER_WEBHOOK = constants?.NYANBOOK_LEDGER_WEBHOOK;
-    const LIMBO_THREAD_ID = '1433850939751534672';
+    const LIMBO_THREAD_ID = constants?.LIMBO_THREAD_ID || '1433850939751534672';
     
     if (!pool) {
         logger.warn('Inpipe routes: pool not available, skipping registration');
@@ -14,7 +14,7 @@ async function registerInpipeRoutes(app, deps) {
     }
     
     const twilioChannel = new TwilioChannel();
-    await twilioChannel.initialize();
+    twilioChannel.initialize().catch(err => logger.error({ err }, 'TwilioChannel init failed'));
     logger.info('Registering inpipe routes: POST /api/twilio/webhook');
     
     app.post('/api/twilio/webhook', async (req, res) => {
