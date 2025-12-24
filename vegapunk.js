@@ -1279,9 +1279,17 @@ app.listen(PORT, '0.0.0.0', async () => {
         console.log('🔢 Genesis counter started (cat + φ breath tiers)');
         
         // === PHI BREATHE: Unified orchestrator for all background tasks ===
+        const { formatPulseLog } = require('./lib/route-registry');
         phiBreathe.setPool(pool);
         phiBreathe.setBots({ idris: idrisBot });
         phiBreathe.setCleanupFunctions({ cleanupOldSessions });
+        
+        // Heartbeat checkpoint every 86 breaths (~15min)
+        phiBreathe.setHeartbeatCallback((breathCount) => {
+            const satellites = ['auth', 'books', 'inpipe', 'prometheus', 'nyan-ai'];
+            console.log('\n' + formatPulseLog(satellites, 'online') + '\n');
+        });
+        
         await phiBreathe.startPhiBreathe();
         await phiBreathe.orchestrateStartup();
         
