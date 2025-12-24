@@ -71,6 +71,10 @@ const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBER
 // SECURITY: Loaded from environment variable (fail-closed check above)
 const NYANBOOK_LEDGER_WEBHOOK = process.env.NYANBOOK_WEBHOOK_URL;
 
+// ENVIRONMENT CHECK (must be defined before pool for SSL config)
+// Replit sets REPLIT_DEPLOYMENT=1 when deployed (not 'true')
+const isProd = process.env.REPLIT_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
+
 // TRANSACTION MODE: Append pool_mode=transaction to DATABASE_URL for scalability
 // This allows 10,000+ concurrent connections (vs 3-10 in Session mode)
 // Trade-off: Cannot use SET search_path (must use explicit schema prefixes)
@@ -83,7 +87,7 @@ const connectionString = databaseUrl?.includes('?')
 const pool = new Pool({
     connectionString,
     ssl: databaseUrl?.includes('localhost') ? false : { 
-        rejectUnauthorized: false
+        rejectUnauthorized: isProd
     },
     max: 20, // Transaction Mode supports 10,000+ connections - using 20 for production workload
     min: 2,
@@ -107,9 +111,6 @@ pool.on('remove', () => {
     console.log(`🔓 Pool: Connection released (Total: ${pool.totalCount}, Idle: ${pool.idleCount})`);
 });
 
-// ENVIRONMENT CHECK
-// Replit sets REPLIT_DEPLOYMENT=1 when deployed (not 'true')
-const isProd = process.env.REPLIT_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
 const dbHost = process.env.DATABASE_URL?.split('@')[1]?.split('.')[0] || 'unknown';
 
 console.log(`🚀 Mode: ${isProd ? 'PRODUCTION' : 'DEVELOPMENT'}`);
@@ -257,6 +258,65 @@ app.get('/health', async (req, res) => {
             });
         }
     }
+});
+
+app.get('/health/deep', async (req, res) => {
+    const checks = {
+        database: { healthy: false, latency: null, pool: null },
+        discord: { 
+            hermes: { healthy: false, status: 'not_initialized' },
+            thoth: { healthy: false, status: 'not_initialized' },
+            idris: { healthy: false, status: 'not_initialized' },
+            horus: { healthy: false, status: 'not_initialized' }
+        },
+        twilio: { configured: false }
+    };
+    
+    const startTime = Date.now();
+    
+    try {
+        const dbStart = Date.now();
+        await pool.query('SELECT 1 as health');
+        checks.database.healthy = true;
+        checks.database.latency = Date.now() - dbStart;
+        checks.database.pool = {
+            total: pool.totalCount || 0,
+            idle: pool.idleCount || 0,
+            waiting: pool.waitingCount || 0
+        };
+    } catch (err) {
+        checks.database.error = err.message;
+    }
+    
+    if (typeof hermesBot !== 'undefined' && hermesBot) {
+        checks.discord.hermes.healthy = hermesBot.isReady?.() || false;
+        checks.discord.hermes.status = checks.discord.hermes.healthy ? 'ready' : 'disconnected';
+    }
+    if (typeof thothBot !== 'undefined' && thothBot) {
+        checks.discord.thoth.healthy = thothBot.ready || false;
+        checks.discord.thoth.status = checks.discord.thoth.healthy ? 'ready' : 'disconnected';
+    }
+    if (typeof idrisBot !== 'undefined' && idrisBot) {
+        checks.discord.idris.healthy = idrisBot.isReady?.() || false;
+        checks.discord.idris.status = checks.discord.idris.healthy ? 'ready' : 'disconnected';
+    }
+    if (typeof horusBot !== 'undefined' && horusBot) {
+        checks.discord.horus.healthy = horusBot.isReady?.() || false;
+        checks.discord.horus.status = checks.discord.horus.healthy ? 'ready' : 'disconnected';
+    }
+    
+    checks.twilio.configured = !!process.env.TWILIO_AUTH_TOKEN;
+    
+    const allHealthy = checks.database.healthy && 
+        (checks.discord.hermes.healthy || checks.discord.hermes.status === 'not_initialized') &&
+        (checks.discord.thoth.healthy || checks.discord.thoth.status === 'not_initialized');
+    
+    res.status(allHealthy ? 200 : 503).json({
+        status: allHealthy ? 'healthy' : 'degraded',
+        checks,
+        totalLatency: Date.now() - startTime,
+        timestamp: new Date().toISOString()
+    });
 });
 
 // SECURITY: CORS with origin whitelist
