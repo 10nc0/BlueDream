@@ -369,43 +369,7 @@ function registerBooksRoutes(app, deps) {
                 JSON.stringify(outpipesUser)
             ]);
             
-            logger.debug({ fractalId: generatedFractalId }, 'Book registered');
-            
-            if (hermesBot && hermesBot.isReady()) {
-                try {
-                    const dualThreads = await hermesBot.createDualThreadsForBook(
-                        output01Url, output0nUrl, name, tenantId, book.id
-                    );
-                    
-                    const outputDestinations = {};
-                    if (dualThreads.output_01) outputDestinations.output_01 = dualThreads.output_01;
-                    if (dualThreads.output_0n) outputDestinations.output_0n = dualThreads.output_0n;
-                    
-                    if (dualThreads.errors.length > 0) {
-                        logger.warn({ errors: dualThreads.errors }, 'Output creation errors');
-                    }
-                    
-                    await client.query(
-                        `UPDATE ${tenantSchema}.books 
-                         SET output_credentials = output_credentials || $1::jsonb
-                         WHERE id = $2`,
-                        [JSON.stringify(outputDestinations), book.id]
-                    );
-                    
-                    book.output_credentials = { ...book.output_credentials, ...outputDestinations };
-                    
-                    if (dualThreads.output_01?.type === 'thread') {
-                        await hermesBot.sendInitialMessage(dualThreads.output_01.thread_id, name, output01Url);
-                    }
-                    if (dualThreads.output_0n?.type === 'thread') {
-                        await hermesBot.sendInitialMessage(dualThreads.output_0n.thread_id, name, output0nUrl);
-                    }
-                    
-                    logger.info({ fractalId: generatedFractalId }, 'Dual-thread setup complete');
-                } catch (error) {
-                    logger.error({ err: error, fractalId: generatedFractalId }, 'Failed to create dual threads');
-                }
-            }
+            logger.debug({ fractalId: generatedFractalId }, 'Book registered with status=pending (thread creation deferred to Twilio activation)');
             
             const sanitized = sanitizeForRole ? sanitizeForRole(book, userRole) : book;
             logger.info({ fractalId: generatedFractalId }, 'Created book');

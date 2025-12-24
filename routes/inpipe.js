@@ -210,24 +210,38 @@ async function handlePendingBook(res, channel, msg, bookRecord, deps) {
             const tenantIdMatch = tenantSchema.match(/tenant_(\d+)/);
             const tenantId = tenantIdMatch ? parseInt(tenantIdMatch[1]) : 0;
             
-            logger.info({ bookName: bookRecord.book_name, tenantId, bookId }, 'Hermes creating dual outputs');
+            let userOutputUrl = null;
+            if (bookRecord.outpipes_user) {
+                try {
+                    const outpipesUser = typeof bookRecord.outpipes_user === 'string' 
+                        ? JSON.parse(bookRecord.outpipes_user) 
+                        : bookRecord.outpipes_user;
+                    if (Array.isArray(outpipesUser) && outpipesUser.length > 0) {
+                        userOutputUrl = outpipesUser[0]?.url || null;
+                    }
+                } catch (e) {
+                    logger.warn({ error: e.message }, 'Failed to parse outpipes_user');
+                }
+            }
+            
+            logger.info({ bookName: bookRecord.book_name, tenantId, bookId, hasUserOutput: !!userOutputUrl }, 'Hermes creating dual outputs');
             const dualThreads = await hermesBot.createDualThreadsForBook(
                 bookRecord.outpipe_ledger,
-                null,
+                userOutputUrl,
                 bookRecord.book_name,
                 tenantId,
                 bookId
             );
             
+            const outputDestinations = {};
+            if (dualThreads.output_01) outputDestinations.output_01 = dualThreads.output_01;
+            if (dualThreads.output_0n) outputDestinations.output_0n = dualThreads.output_0n;
+            
             await pool.query(`
                 UPDATE ${tenantSchema}.books 
-                SET output_credentials = jsonb_set(
-                    COALESCE(output_credentials, '{}'::jsonb),
-                    '{output_01}',
-                    $1::jsonb
-                )
+                SET output_credentials = COALESCE(output_credentials, '{}'::jsonb) || $1::jsonb
                 WHERE id = $2
-            `, [JSON.stringify(dualThreads.output_01), bookId]);
+            `, [JSON.stringify(outputDestinations), bookId]);
             
             const activationEmbed = {
                 embeds: [{
@@ -247,9 +261,12 @@ async function handlePendingBook(res, channel, msg, bookRecord, deps) {
                 await sendToDiscordThread(dualThreads.output_01.thread_id, activationEmbed, null, deps);
             }
             
-            logger.info({ threadId: dualThreads.output_01?.thread_id }, 'Hermes thread created');
+            logger.info({ 
+                threadId: dualThreads.output_01?.thread_id, 
+                hasUserOutput: !!dualThreads.output_0n 
+            }, 'Hermes dual-thread setup complete');
         } catch (error) {
-            logger.error({ error: error.message }, 'Failed to create Hermes thread');
+            logger.error({ error: error.message }, 'Failed to create Hermes threads');
         }
     }
     
