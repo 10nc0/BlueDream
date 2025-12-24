@@ -2,6 +2,7 @@ const archiver = require('archiver');
 const axios = require('axios');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
+const MetadataExtractor = require('../metadata-extractor');
 
 function registerBooksRoutes(app, deps) {
     const { pool, bots, helpers, middleware, tenantMiddleware, logger, fractalId, constants } = deps;
@@ -17,6 +18,7 @@ function registerBooksRoutes(app, deps) {
     const hermesBot = bots?.hermes;
     const thothBot = bots?.thoth;
     const NYANBOOK_LEDGER_WEBHOOK = constants?.NYANBOOK_LEDGER_WEBHOOK;
+    const metadataExtractor = new MetadataExtractor();
 
     app.get('/api/books', requireAuth, async (req, res) => {
         logger.info({ userId: req.userId }, '/api/books called');
@@ -570,7 +572,659 @@ function registerBooksRoutes(app, deps) {
         });
     });
 
-    logger.info('Books routes registered (factory pattern)');
+    // ============ DROPS API - Personal Cloud OS ============
+    app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
+        try {
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const { book_id, discord_message_id, metadata_text } = req.body;
+            const client = req.dbClient || pool;
+            
+            if (!book_id || !discord_message_id || !metadata_text) {
+                return res.status(400).json({ 
+                    error: 'Missing required fields: book_id, discord_message_id, metadata_text' 
+                });
+            }
+            
+            const bookResult = await client.query(
+                `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                [book_id]
+            );
+            
+            if (bookResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found in your tenant' });
+            }
+            
+            const internalBookId = bookResult.rows[0].id;
+            
+            const existingDrop = await client.query(
+                `SELECT * FROM ${tenantSchema}.drops WHERE book_id = $1 AND discord_message_id = $2`,
+                [internalBookId, discord_message_id]
+            );
+            
+            let dropResult;
+            let extracted;
+            
+            if (existingDrop.rows.length > 0) {
+                const combinedText = existingDrop.rows[0].metadata_text + ' ' + metadata_text;
+                extracted = metadataExtractor.extract(combinedText);
+                
+                dropResult = await client.query(`
+                    UPDATE ${tenantSchema}.drops
+                    SET metadata_text = $1,
+                        extracted_tags = $2::text[],
+                        extracted_dates = $3::text[],
+                        updated_at = NOW()
+                    WHERE book_id = $4 AND discord_message_id = $5
+                    RETURNING *
+                `, [combinedText, extracted.tags, extracted.dates, internalBookId, discord_message_id]);
+            } else {
+                extracted = metadataExtractor.extract(metadata_text);
+                
+                dropResult = await client.query(`
+                    INSERT INTO ${tenantSchema}.drops (book_id, discord_message_id, metadata_text, extracted_tags, extracted_dates)
+                    VALUES ($1, $2, $3, $4::text[], $5::text[])
+                    RETURNING *
+                `, [internalBookId, discord_message_id, metadata_text, extracted.tags, extracted.dates]);
+            }
+            
+            res.json({ success: true, drop: dropResult.rows[0], extracted });
+        } catch (error) {
+            logger.error({ err: error }, 'Error creating drop');
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.get('/api/drops/:book_id', requireAuth, setTenantContext, async (req, res) => {
+        try {
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const { book_id } = req.params;
+            const client = req.dbClient || pool;
+            
+            const bookResult = await client.query(
+                `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                [book_id]
+            );
+            
+            if (bookResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found in your tenant' });
+            }
+            
+            const dropsResult = await client.query(
+                `SELECT * FROM ${tenantSchema}.drops WHERE book_id = $1 ORDER BY created_at DESC`,
+                [bookResult.rows[0].id]
+            );
+            
+            res.json({ drops: dropsResult.rows });
+        } catch (error) {
+            logger.error({ err: error }, 'Error fetching drops');
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => {
+        try {
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const { book_id, discord_message_id, tag } = req.body;
+            const client = req.dbClient || pool;
+            
+            if (!book_id || !discord_message_id || !tag) {
+                return res.status(400).json({ error: 'Missing required fields' });
+            }
+            
+            const bookResult = await client.query(
+                `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                [book_id]
+            );
+            
+            if (bookResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found' });
+            }
+            
+            const escapedTag = tag.replace(/[.+*?[\](){}|\\^$]/g, '\\$&');
+            
+            const dropResult = await client.query(`
+                UPDATE ${tenantSchema}.drops
+                SET extracted_tags = array_remove(extracted_tags, $1),
+                    metadata_text = TRIM(REGEXP_REPLACE(REGEXP_REPLACE(metadata_text, '(^|\\s)#?' || $2 || '(\\s|$)', ' ', 'gi'), '\\s+', ' ', 'g')),
+                    updated_at = NOW()
+                WHERE book_id = $3 AND discord_message_id = $4
+                RETURNING *
+            `, [tag, escapedTag, bookResult.rows[0].id, discord_message_id]);
+            
+            if (dropResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Drop not found' });
+            }
+            
+            res.json({ success: true, drop: dropResult.rows[0] });
+        } catch (error) {
+            logger.error({ err: error }, 'Error removing tag');
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.delete('/api/drops/date', requireAuth, setTenantContext, async (req, res) => {
+        try {
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const { book_id, discord_message_id, date } = req.body;
+            const client = req.dbClient || pool;
+            
+            if (!book_id || !discord_message_id || !date) {
+                return res.status(400).json({ error: 'Missing required fields' });
+            }
+            
+            const bookResult = await client.query(
+                `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                [book_id]
+            );
+            
+            if (bookResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found' });
+            }
+            
+            const escapedDate = date.replace(/[.+*?[\](){}|\\^$]/g, '\\$&');
+            
+            const dropResult = await client.query(`
+                UPDATE ${tenantSchema}.drops
+                SET extracted_dates = array_remove(extracted_dates, $1),
+                    metadata_text = TRIM(REGEXP_REPLACE(REGEXP_REPLACE(metadata_text, '(^|\\s)' || $2 || '(\\s|$)', ' ', 'gi'), '\\s+', ' ', 'g')),
+                    updated_at = NOW()
+                WHERE book_id = $3 AND discord_message_id = $4
+                RETURNING *
+            `, [date, escapedDate, bookResult.rows[0].id, discord_message_id]);
+            
+            if (dropResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Drop not found' });
+            }
+            
+            res.json({ success: true, drop: dropResult.rows[0] });
+        } catch (error) {
+            logger.error({ err: error }, 'Error removing date');
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    app.get('/api/drops/search/:book_id', requireAuth, setTenantContext, async (req, res) => {
+        try {
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const { book_id } = req.params;
+            const { query } = req.query;
+            const client = req.dbClient || pool;
+            
+            if (!query) {
+                return res.status(400).json({ error: 'Query parameter required' });
+            }
+            
+            const bookResult = await client.query(
+                `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                [book_id]
+            );
+            
+            if (bookResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found' });
+            }
+            
+            const searchResult = await client.query(`
+                SELECT *, ts_rank(search_vector, plainto_tsquery('english', $1)) as rank
+                FROM ${tenantSchema}.drops
+                WHERE book_id = $2 AND search_vector @@ plainto_tsquery('english', $1)
+                ORDER BY rank DESC, created_at DESC
+                LIMIT 100
+            `, [query, bookResult.rows[0].id]);
+            
+            res.json({ query, results: searchResult.rows, count: searchResult.rows.length });
+        } catch (error) {
+            logger.error({ err: error }, 'Error searching drops');
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    // ============ MESSAGES API ============
+    app.get('/api/messages/:id/media', requireAuth, async (req, res) => {
+        res.status(404).json({ 
+            error: 'Media not available via this endpoint',
+            note: 'Use message.media_url (Discord CDN URL) directly from message data'
+        });
+    });
+
+    app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, res) => {
+        try {
+            const { id } = req.params;
+            const client = req.dbClient || pool;
+            let limit = parseInt(req.query.limit) || 50;
+            const before = req.query.before;
+            const after = req.query.after;
+            const around = req.query.around;
+            const context = parseInt(req.query.context) || 10;
+            const source = req.query.source || 'user';
+            
+            if (around && isNaN(Number(around))) {
+                return res.status(400).json({ error: 'Invalid message ID for around parameter' });
+            }
+            if (after && isNaN(Number(after))) {
+                return res.status(400).json({ error: 'Invalid message ID for after parameter' });
+            }
+            if (context < 0 || !Number.isInteger(context) || context > 25) {
+                return res.status(400).json({ error: 'Context must be 0-25' });
+            }
+            
+            if (source === 'ledger' && req.tenantContext?.userRole !== 'dev') {
+                return res.status(403).json({ error: 'Access denied: Ledger messages are dev-only' });
+            }
+            
+            if (!['user', 'ledger'].includes(source)) {
+                return res.status(400).json({ error: 'Invalid source parameter' });
+            }
+            
+            let tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const isDev = req.tenantContext?.userRole === 'dev';
+            
+            if (isDev) {
+                const registryLookup = await client.query(
+                    `SELECT tenant_schema FROM core.book_registry WHERE fractal_id = $1 LIMIT 1`,
+                    [id]
+                );
+                if (registryLookup.rows.length > 0) {
+                    tenantSchema = registryLookup.rows[0].tenant_schema;
+                }
+            }
+            
+            const bookResult = await client.query(
+                `SELECT id, name, output_credentials, created_at FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                [id]
+            );
+            
+            if (bookResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found' });
+            }
+            
+            const book = bookResult.rows[0];
+            const bookCreatedAt = new Date(book.created_at);
+            
+            let creatorPhone = null;
+            const registryResult = await client.query(
+                `SELECT creator_phone, phone_number FROM core.book_registry WHERE fractal_id = $1 LIMIT 1`,
+                [id]
+            );
+            if (registryResult.rows.length > 0) {
+                creatorPhone = registryResult.rows[0].creator_phone || registryResult.rows[0].phone_number;
+            }
+            
+            let outputCredentials = book.output_credentials;
+            if (typeof outputCredentials === 'string') {
+                outputCredentials = JSON.parse(outputCredentials);
+            }
+            
+            const outputData = outputCredentials?.output_01;
+            
+            if (!outputData || !outputData.thread_id) {
+                return res.json({ messages: [], total: 0, hasMore: false, note: 'No Ledger thread configured' });
+            }
+            
+            if (!thothBot || !thothBot.client || !thothBot.ready) {
+                return res.json({ messages: [], total: 0, hasMore: false, note: 'Discord bot not ready' });
+            }
+            
+            try {
+                const thread = await thothBot.client.channels.fetch(outputData.thread_id);
+                
+                if (!thread) {
+                    return res.json({ messages: [], total: 0, hasMore: false, note: 'Thread not found' });
+                }
+                
+                const options = { force: true };
+                
+                if (around) {
+                    options.around = around;
+                    options.limit = Math.min(context * 2 + 1, 51);
+                } else if (after) {
+                    options.after = after;
+                    options.limit = 100;
+                } else {
+                    options.limit = limit;
+                    if (before) options.before = before;
+                }
+                
+                const discordMessages = await thread.messages.fetch(options);
+                
+                const normalizePhone = (phone) => phone ? phone.replace(/\D/g, '') : '';
+                
+                const messages = Array.from(discordMessages.values())
+                    .filter(msg => msg.createdAt >= bookCreatedAt)
+                    .map(msg => {
+                        const attachment = msg.attachments.size > 0 ? msg.attachments.first() : null;
+                        
+                        let mediaFromEmbed = null;
+                        let senderContact = null;
+                        for (const embed of msg.embeds) {
+                            const mediaField = embed.fields?.find(f => f.name === '📎 Media');
+                            if (mediaField?.value) {
+                                const match = mediaField.value.match(/\[(.*?)\]\((.*?)\)/);
+                                if (match) {
+                                    mediaFromEmbed = { url: match[2], contentType: match[1] };
+                                }
+                            }
+                            const phoneField = embed.fields?.find(f => f.name === '📱 Phone');
+                            if (phoneField?.value) {
+                                senderContact = phoneField.value;
+                            }
+                        }
+                        
+                        const senderPhoneNorm = normalizePhone(senderContact);
+                        const creatorPhoneNorm = normalizePhone(creatorPhone);
+                        const isCreator = senderPhoneNorm && creatorPhoneNorm && senderPhoneNorm === creatorPhoneNorm;
+                        
+                        return {
+                            id: msg.id,
+                            sender_name: msg.author.username,
+                            sender_avatar: msg.author.displayAvatarURL(),
+                            sender_contact: senderContact,
+                            is_creator: isCreator,
+                            message_content: msg.content || '',
+                            timestamp: msg.createdAt.toISOString(),
+                            has_media: msg.attachments.size > 0 || !!mediaFromEmbed,
+                            media_url: attachment ? attachment.url : (mediaFromEmbed ? mediaFromEmbed.url : null),
+                            media_type: attachment ? attachment.contentType : (mediaFromEmbed ? mediaFromEmbed.contentType : null),
+                            embeds: msg.embeds.map(e => ({
+                                title: e.title === '🎉 Book Activated' ? e.title : null,
+                                description: e.description,
+                                color: e.color,
+                                fields: e.fields ? e.fields.filter(f => f.name !== '📖 Book' && f.name !== '👤 Sender') : []
+                            }))
+                        };
+                    });
+                
+                res.json({ 
+                    messages,
+                    total: messages.length,
+                    hasMore: discordMessages.size === limit,
+                    oldestMessageId: messages.length > 0 ? messages[messages.length - 1].id : null
+                });
+            } catch (discordError) {
+                logger.error({ err: discordError }, 'Failed to fetch from Discord');
+                return res.json({ messages: [], total: 0, hasMore: false, error: discordError.message });
+            }
+        } catch (error) {
+            logger.error({ err: error }, 'Error in /api/books/:id/messages');
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    // ============ SEARCH API ============
+    app.get('/api/search', requireAuth, async (req, res) => {
+        const { term, bookIds } = req.query;
+        
+        if (!term || term.trim().length === 0) {
+            return res.status(400).json({ error: 'Search term is required' });
+        }
+        
+        const searchTerm = term.toLowerCase().trim();
+        
+        try {
+            const tenantSchema = req.tenantSchema;
+            if (!tenantSchema) {
+                return res.status(500).json({ error: 'Tenant context not found' });
+            }
+            
+            const userResult = await pool.query(
+                `SELECT id, email, tenant_id, is_genesis_admin FROM ${tenantSchema}.users WHERE id = $1`,
+                [req.userId]
+            );
+            
+            if (!userResult.rows.length) {
+                return res.status(404).json({ error: 'User not found' });
+            }
+            
+            const user = userResult.rows[0];
+            const hasExtendedAccess = req.userRole === 'dev' && user.is_genesis_admin;
+            
+            let targetBookIds = null;
+            if (bookIds) {
+                targetBookIds = bookIds.split(',').map(id => id.trim()).filter(id => id);
+            }
+            
+            const isTagSearch = searchTerm.startsWith('#');
+            const tagQuery = isTagSearch ? searchTerm.slice(1) : searchTerm;
+            
+            let books = [];
+            
+            if (hasExtendedAccess && getAllTenantSchemas) {
+                const allSchemas = await getAllTenantSchemas(pool, req.userRole);
+                
+                for (const schemaRow of allSchemas) {
+                    try {
+                        let schemaQuery = `
+                            SELECT fractal_id, name as book_name, output_credentials, created_at, tags
+                            FROM ${schemaRow.tenant_schema}.books
+                            WHERE status = 'active' AND archived = false
+                        `;
+                        const schemaParams = [];
+                        
+                        if (targetBookIds?.length > 0) {
+                            schemaQuery += ` AND fractal_id = ANY($1)`;
+                            schemaParams.push(targetBookIds);
+                        }
+                        
+                        const schemaResult = await pool.query(schemaQuery, schemaParams);
+                        books.push(...schemaResult.rows);
+                    } catch (error) {}
+                }
+            } else {
+                let booksQuery = `
+                    SELECT fractal_id, name as book_name, output_credentials, created_at, tags
+                    FROM ${tenantSchema}.books
+                    WHERE status = 'active' AND archived = false
+                `;
+                const queryParams = [];
+                
+                if (targetBookIds?.length > 0) {
+                    booksQuery += ` AND fractal_id = ANY($1)`;
+                    queryParams.push(targetBookIds);
+                }
+                
+                const booksResult = await pool.query(booksQuery, queryParams);
+                books = booksResult.rows;
+            }
+            
+            const metadataMatches = new Set();
+            for (const book of books) {
+                if ((book.book_name || '').toLowerCase().includes(tagQuery)) {
+                    metadataMatches.add(book.fractal_id);
+                    continue;
+                }
+                if (book.tags && Array.isArray(book.tags)) {
+                    if (book.tags.some(tag => (tag || '').toLowerCase().includes(tagQuery))) {
+                        metadataMatches.add(book.fractal_id);
+                    }
+                }
+            }
+            
+            if (books.length === 0) {
+                return res.json({ matchingBooks: [] });
+            }
+            
+            if (!thothBot || !thothBot.client || !thothBot.ready) {
+                return res.json({ matchingBooks: [...metadataMatches], note: 'Discord bot not ready' });
+            }
+            
+            const matchingBooks = [];
+            let searchedCount = 0;
+            const DISCORD_DELAY_MS = 150;
+            const TIMEOUT_MS = 5000;
+            
+            for (const book of books) {
+                try {
+                    let outputCredentials = book.output_credentials;
+                    if (typeof outputCredentials === 'string') {
+                        outputCredentials = JSON.parse(outputCredentials);
+                    }
+                    
+                    const outputData = outputCredentials?.output_01;
+                    if (!outputData?.thread_id) continue;
+                    
+                    const bookCreatedAt = new Date(book.created_at);
+                    
+                    if (searchedCount > 0) {
+                        await new Promise(resolve => setTimeout(resolve, DISCORD_DELAY_MS));
+                    }
+                    
+                    let thread;
+                    try {
+                        thread = await Promise.race([
+                            thothBot.client.channels.fetch(outputData.thread_id),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), TIMEOUT_MS))
+                        ]);
+                    } catch (fetchError) {
+                        continue;
+                    }
+                    if (!thread) continue;
+                    
+                    let allMessages = [];
+                    let lastId = null;
+                    let fetchCount = 0;
+                    
+                    try {
+                        while (fetchCount < 10) {
+                            const options = { limit: 100, force: true };
+                            if (lastId) options.before = lastId;
+                            
+                            const batch = await Promise.race([
+                                thread.messages.fetch(options),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), TIMEOUT_MS))
+                            ]);
+                            
+                            if (batch.size === 0) break;
+                            
+                            for (const msg of batch.values()) {
+                                allMessages.push(msg);
+                                lastId = msg.id;
+                            }
+                            fetchCount++;
+                        }
+                    } catch (fetchError) {}
+                    
+                    searchedCount++;
+                    
+                    let hasMatch = false;
+                    for (const msg of allMessages) {
+                        if (msg.createdAt < bookCreatedAt) continue;
+                        
+                        let searchableText = (msg.content || '').toLowerCase();
+                        
+                        for (const embed of msg.embeds) {
+                            if (embed.description) searchableText += ' ' + embed.description.toLowerCase();
+                            if (embed.title) searchableText += ' ' + embed.title.toLowerCase();
+                            if (embed.fields) {
+                                for (const field of embed.fields) {
+                                    searchableText += ' ' + (field.name || '').toLowerCase();
+                                    searchableText += ' ' + (field.value || '').toLowerCase();
+                                }
+                            }
+                        }
+                        
+                        for (const attachment of msg.attachments.values()) {
+                            if (attachment.name) searchableText += ' ' + attachment.name.toLowerCase();
+                            if (attachment.contentType) searchableText += ' ' + attachment.contentType.toLowerCase();
+                        }
+                        
+                        if (searchableText.includes(searchTerm)) {
+                            hasMatch = true;
+                            break;
+                        }
+                    }
+                    
+                    if (hasMatch) {
+                        matchingBooks.push(book.fractal_id);
+                    }
+                } catch (bookError) {
+                    if (bookError.message?.includes('429')) {
+                        const allMatches = [...new Set([...matchingBooks, ...metadataMatches])];
+                        return res.json({ matchingBooks: allMatches, partial: true, reason: 'Rate limited' });
+                    }
+                }
+            }
+            
+            const allMatches = [...new Set([...matchingBooks, ...metadataMatches])];
+            res.json({ matchingBooks: allMatches, partial: false });
+        } catch (error) {
+            logger.error({ err: error }, 'Server search error');
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    // ============ CREATE THREAD API ============
+    app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (req, res) => {
+        try {
+            const { id } = req.params;
+            const client = req.dbClient || pool;
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const tenantId = req.tenantContext?.tenantId;
+            
+            if (!tenantId) {
+                return res.status(400).json({ error: 'Tenant context required' });
+            }
+            
+            const book = await client.query(
+                `SELECT id, name, output_01_url, output_credentials, tenant_id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                [id]
+            );
+            
+            if (!book.rows.length) {
+                return res.status(404).json({ error: 'Book not found' });
+            }
+            
+            const bookData = book.rows[0];
+            
+            let outputCredentials = bookData.output_credentials;
+            if (typeof outputCredentials === 'string') {
+                outputCredentials = JSON.parse(outputCredentials);
+            }
+            
+            if (outputCredentials?.output_01?.thread_id) {
+                return res.json({ 
+                    success: true, 
+                    message: 'Thread already exists',
+                    threadInfo: outputCredentials.output_01
+                });
+            }
+            
+            if (!hermesBot || !hermesBot.isReady()) {
+                return res.status(503).json({ error: 'Discord bot not ready' });
+            }
+            
+            logger.info({ bookId: id, bookName: bookData.name }, 'Creating output_01 thread');
+            const threadInfo = await hermesBot.createThreadForBook(
+                NYANBOOK_LEDGER_WEBHOOK,
+                id,
+                bookData.name,
+                tenantId
+            );
+            
+            const updatedCredentials = {
+                ...outputCredentials,
+                output_01: {
+                    type: 'thread',
+                    thread_id: threadInfo.threadId,
+                    parent_channel_id: threadInfo.channelId
+                }
+            };
+            
+            await client.query(
+                `UPDATE ${tenantSchema}.books SET output_credentials = $1 WHERE fractal_id = $2`,
+                [JSON.stringify(updatedCredentials), id]
+            );
+            
+            res.json({ 
+                success: true, 
+                message: 'Thread created successfully',
+                threadInfo: updatedCredentials.output_01
+            });
+        } catch (error) {
+            logger.error({ err: error }, 'Error creating thread');
+            res.status(500).json({ error: error.message });
+        }
+    });
+
+    logger.info('Books routes registered (factory pattern - includes drops, messages, search)');
     
     return {};
 }
