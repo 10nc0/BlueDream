@@ -3,7 +3,7 @@
 
 **Date:** December 24, 2025  
 **Discovery:** The universal compression formula underlying all persistent systems  
-**Core Insight:** "All roads lead to φ² (The Möbius Closure)"
+**Core Insight:** "All roads lead to φ² (The Closed Loop)"
 
 ---
 
@@ -102,11 +102,13 @@ Each period ratio converges to φ, ensuring all smoothing operations maintain φ
 
 ---
 
-## The Möbius Closure: Persistence vs. Extinction
+## The Closed Loop: Persistence vs. Extinction (Metaphor)
 
-### **The Non-Escapable Loop**
+> **Note:** The following uses "Möbius" as a *poetic metaphor* for a closed loop with no easy exit—not as a claim about actual topological structure. The mathematics is φ-algebra; the imagery is evocative, not rigorous topology.
 
-The φ² formula creates a **topological Möbius strip**: a one-sided, non-orientable surface where inside and outside are the same.
+### **The Observed Pattern**
+
+The φ² formula describes a *closed loop pattern* where systems tend to oscillate between persistence and extinction:
 
 ```
 START: 0 (void)
@@ -121,36 +123,37 @@ START: 0 (void)
     ✓ If renewal succeeds → φ³, φ⁴, ... (next generation)
     ✗ If renewal fails     → 0 (extinction, return to void)
   ↓
-  LOOP: No escape to 5th state
-        No "outside" dimension
-        All returns to φ² or 0
+  HYPOTHESIS: Do systems preferentially oscillate at φ⁰/φ¹/φ²?
+              Higher powers (φ³, φ⁴) exist mathematically — their stability as attractors is an open question
 ```
 
-### *NAGARJUNA - Why There Is No 5th State**
+### **NAGARJUNA - Why Systems Tend Toward Lower States**
 
-In logic (Nagarjuna's Tetralemma), there are exactly 4 states:
+In logic (Nagarjuna's Tetralemma), there are exactly 4 logical states:
 - **00** Neither (void, 0)
 - **01** Yes (affirmation, φ⁰)
 - **10** No (negation, φ¹)
 - **11** Both (transcendence, φ²)
 
-Any attempt to create a **5th state (12, 20, etc.)** collapses back to one of the four:
+> **Clarification:** φ³, φ⁴, etc. exist mathematically and are valid φ-algebra states. The following is a **hypothesis** (not empirical observation) about attractor behavior:
 
 ```
-Craving for 5th state = Taṇhā (thirst, avarice)
-This desire itself = Dukkha (suffering)
-Consequence = Return to 0 (extinction of that desire)
-
-Therefore: φ² = φ + 1 is closed under self-reference
-           φ³ = φ² · φ = (φ+1) · φ = φ² + φ = 2φ + 1
-           But 2φ + 1 ≡ φ² + φ (still within φ-algebra)
+Mathematically: φ² = φ + 1 is closed under self-reference
+               φ³ = φ² · φ = (φ+1) · φ = φ² + φ = 2φ + 1
+               φ⁴ = φ³ · φ = (2φ+1) · φ = 2φ² + φ = 3φ + 2
            
-No escape. No freedom. Only persistence or collapse.
+HYPOTHESIS (pending empirical validation):
+  Self-sustaining systems may preferentially settle near φ² 
+  rather than expand indefinitely.
+  
+  Status: CONJECTURE — requires cross-domain datasets to test.
+  No empirical evidence cited here for φ² as preferred attractor.
+  Treat as proposed invariant, not established fact.
 ```
 
-### **Ψ-EMA as Möbius Detector**
+### **Ψ-EMA as Convergence Detector (Metaphorically: "Möbius Detector")**
 
-Ψ-EMA detects which branch of the Möbius a time series occupies:
+Ψ-EMA detects which branch of the closed loop a time series occupies:
 
 | Classification | R Value | Trajectory | Outcome |
 |----------------|---------|-----------|---------|
@@ -298,7 +301,7 @@ not φ algebra. The parallel is inspirational, not doctrinal.
 1. **Multi-Tenant Isolation (φ⁰)**: Each user is a unity with their own schema
 2. **Message Flow (φ¹)**: WhatsApp → Discord creates directed flow
 3. **Thread Renewal (φ²)**: Discord threads achieve permanent retention (renewal threshold)
-4. **AI Audit (Möbius Check)**: Verifies system stays in convergent state (R → φ)
+4. **AI Audit (Convergence Check)**: Verifies system stays in convergent state (R → φ)
 
 ---
 
