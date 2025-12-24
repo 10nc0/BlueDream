@@ -1,9 +1,7 @@
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 
-function createAuthMiddleware(deps) {
-    const { pool, authService, logger } = deps;
-
+function createAuthMiddleware(pool, authService, logger) {
     async function requireAuth(req, res, next) {
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -96,15 +94,68 @@ function createAuthMiddleware(deps) {
 
 function registerAuthAdminRoutes(app, deps) {
     const { pool, authService, tenantManager, helpers, logger } = deps;
-    const { logAudit, noCacheHeaders, getTimestamp } = helpers || {};
+    const { logAudit, noCacheHeaders, getTimestamp, createSessionRecord, getAllTenantSchemas, getGlobalWebhook, saveGlobalWebhook } = helpers;
     
-    const { requireAuth, requireRole } = createAuthMiddleware(deps);
-    
-    if (deps.setMiddleware) {
-        deps.setMiddleware(requireAuth, requireRole);
-    }
+    const { requireAuth, requireRole } = createAuthMiddleware(pool, authService, logger);
 
-    logger.info('Auth-Admin routes module loaded (middleware exported, routes not yet integrated)');
+    // ============ AUTHENTICATION ROUTES ============
+    
+    app.get('/api/auth/status', async (req, res) => {
+        noCacheHeaders(res);
+        
+        try {
+            const authHeader = req.headers.authorization;
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                const token = authHeader.substring(7);
+                const decoded = authService.verifyToken(token);
+                
+                if (decoded && decoded.type === 'access') {
+                    const mappingResult = await pool.query(
+                        'SELECT tenant_schema FROM core.user_email_to_tenant WHERE email = $1',
+                        [decoded.email]
+                    );
+                    
+                    if (mappingResult.rows.length > 0) {
+                        const { tenant_schema } = mappingResult.rows[0];
+                        const result = await pool.query(
+                            `SELECT id, email, role, is_genesis_admin, tenant_id FROM ${tenant_schema}.users WHERE id = $1`,
+                            [decoded.userId]
+                        );
+                        
+                        if (result.rows.length > 0) {
+                            return res.json({ authenticated: true, user: result.rows[0], authMethod: 'jwt' });
+                        }
+                    }
+                }
+            }
+            
+            if (req.session && req.session.userId && req.session.userEmail) {
+                const mappingResult = await pool.query(
+                    'SELECT tenant_schema FROM core.user_email_to_tenant WHERE email = $1',
+                    [req.session.userEmail]
+                );
+                
+                if (mappingResult.rows.length > 0) {
+                    const { tenant_schema } = mappingResult.rows[0];
+                    const result = await pool.query(
+                        `SELECT id, email, role, is_genesis_admin, tenant_id FROM ${tenant_schema}.users WHERE id = $1`,
+                        [req.session.userId]
+                    );
+                    
+                    if (result.rows.length > 0) {
+                        return res.json({ authenticated: true, user: result.rows[0], authMethod: 'cookie' });
+                    }
+                }
+            }
+            
+            res.json({ authenticated: false });
+        } catch (error) {
+            logger.error({ err: error }, 'Auth status error');
+            res.json({ authenticated: false });
+        }
+    });
+
+    logger.info('Auth-Admin routes registered (factory pattern)');
     
     return { requireAuth, requireRole };
 }

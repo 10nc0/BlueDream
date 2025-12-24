@@ -3,14 +3,10 @@ const axios = require('axios');
 function registerAiRoutes(app, deps) {
     const { pool, bots, helpers, logger } = deps;
     
-    if (!bots) {
-        logger.warn('AI routes: bots not yet available, skipping registration');
-        return {};
-    }
-    
-    const { idris: idrisBot, horus: horusBot } = bots;
+    const idrisBot = bots?.idris;
+    const horusBot = bots?.horus;
 
-    logger.info('AI routes module loaded (not yet integrated)');
+    logger.info('AI routes module loaded (factory pattern ready)');
     
     return {};
 }
