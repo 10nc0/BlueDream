@@ -46,7 +46,7 @@ const { registerExportRoutes } = require('./routes/export');
 const { registerPrometheusRoutes } = require('./routes/prometheus');
 const { registerNyanAIRoutes, capacityManager, usageTracker } = require('./routes/nyan-ai');
 const { healQueue } = require('./lib/heal-queue');
-const heartbeat = require('./lib/heartbeat');
+const phiBreathe = require('./lib/heartbeat');
 const { splitMessageIntoChunks, postPayloadToWebhook, createSendToLedger, createSendToUserOutput } = require('./lib/discord-webhooks');
 
 // ============================================================================
@@ -2215,173 +2215,39 @@ app.listen(PORT, '0.0.0.0', async () => {
     registerNyanAIRoutes(app, deps);
     console.log('📦 Modular routes registered: auth, books, inpipe, export, prometheus, nyan-ai');
     
-    // DEFERRED STARTUP: Run non-critical tasks after server is ready
+    // DEFERRED STARTUP: Run non-critical tasks via unified phi breathe orchestrator
     // This prevents connection pool exhaustion during startup
-    setTimeout(() => {
-        runDeferredStartupTasks();
+    setTimeout(async () => {
+        // AUTO-HEAL: Priority queue-based healing (O(log n) instead of O(n²))
+        // Uses modular heal-queue system from lib/heal-queue.js
+        if (hermesBot && hermesBot.isReady()) {
+            try {
+                console.log('🔧 Auto-healing: Initializing heal queue...');
+                healQueue.setDependencies(pool, hermesBot);
+                await healQueue.initialize();
+                healQueue.start(20000);
+            } catch (error) {
+                console.error('❌ Auto-heal initialization failed:', error.message);
+            }
+        } else {
+            console.warn('⚠️  Hermes not ready, skipping auto-heal');
+        }
+        
+        // Start genesis counter (noisy constant for future security)
+        genesisCounter.start();
+        console.log('🔢 Genesis counter started (cat + φ breath tiers)');
+        
+        // === PHI BREATHE: Unified orchestrator for all background tasks ===
+        phiBreathe.setPool(pool);
+        phiBreathe.setBots({ idris: idrisBot });
+        phiBreathe.setCleanupFunctions({ cleanupOldSessions });
+        await phiBreathe.startPhiBreathe();
+        await phiBreathe.orchestrateStartup();
+        
+        // Register usage cleanup with phi breathe (1h cycle)
+        usageTracker.registerWithHeartbeat(phiBreathe);
     }, 2000); // 2 second delay to let initial connections settle
 });
-
-// ============================================================================
-// AUTO-HEAL IMMUNE SYSTEM - MOVED TO lib/heal-queue.js
-// The heal queue module provides: healQueue.setDependencies(), healQueue.initialize(),
-// healQueue.start(), healQueue.queueForHealing()
-// ============================================================================
-
-
-// Non-critical background tasks that run after server is ready
-async function runDeferredStartupTasks() {
-    console.log('🔄 Running deferred startup tasks...');
-    
-    // AUTO-HEAL: Priority queue-based healing (O(log n) instead of O(n²))
-    // Uses modular heal-queue system from lib/heal-queue.js
-    if (hermesBot && hermesBot.isReady()) {
-        try {
-            console.log('🔧 Auto-healing: Initializing heal queue...');
-            healQueue.setDependencies(pool, hermesBot);
-            await healQueue.initialize();
-            healQueue.start(20000);
-        } catch (error) {
-            console.error('❌ Auto-heal initialization failed:', error.message);
-        }
-    } else {
-        console.warn('⚠️  Hermes not ready, skipping auto-heal');
-    }
-    
-    // φ-MEMORY CLEANUP: Clean stale memory sessions (1 hour max age)
-    // Prevents memory bloat from abandoned sessions
-    setInterval(() => {
-        cleanupOldSessions(60 * 60 * 1000); // 1 hour
-    }, 15 * 60 * 1000); // Every 15 minutes
-    console.log('🧹 Memory cleanup scheduled (15min cycle, 1h max age)');
-    
-    // Start genesis counter (noisy constant for future security)
-    // Tier 1: Cat breath (500ms constant)
-    // Tier 2: φ breath (4000-6472ms sine wave, synchronized with UI φ-breath)
-    genesisCounter.start();
-    console.log('🔢 Genesis counter started (cat + φ breath tiers)');
-    
-    // === PHI BREATHE: Modular heartbeat scheduler ===
-    // Moved to lib/heartbeat.js for O(1) kernel architecture
-    heartbeat.setPool(pool);
-    await heartbeat.startPhiBreathe();
-    
-    // Register usage cleanup with shared heartbeat (1h cycle)
-    usageTracker.registerWithHeartbeat(heartbeat);
-    
-    // 3-DAY MEDIA PURGE: Clean up old media from buffer
-    // Nyanbook Ledger has permanent copy, so buffer only needed for retry safety
-    // Uses single client connection to reduce pool exhaustion
-    async function purgeOldMedia() {
-        let client = null;
-        try {
-            console.log('🧹 Starting 3-day media purge...');
-            
-            // Use single client for all batch queries
-            client = await pool.connect();
-            
-            // Get all tenant schemas
-            const schemas = await client.query(`
-                SELECT schema_name 
-                FROM information_schema.schemata 
-                WHERE schema_name LIKE 'tenant_%'
-                ORDER BY schema_name
-            `);
-            
-            let totalPurged = 0;
-            
-            for (const { schema_name } of schemas.rows) {
-                // Check if media_buffer table exists (skip empty tenant schemas)
-                const tableCheck = await client.query(`
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables 
-                        WHERE table_schema = $1 
-                        AND table_name = 'media_buffer'
-                    ) as exists
-                `, [schema_name]);
-                
-                if (!tableCheck.rows[0].exists) {
-                    continue; // Skip empty tenant schema
-                }
-                
-                const result = await client.query(`
-                    DELETE FROM ${schema_name}.media_buffer 
-                    WHERE created_at < NOW() - INTERVAL '3 days'
-                    RETURNING id
-                `);
-                
-                if (result.rowCount > 0) {
-                    console.log(`  🗑️  Purged ${result.rowCount} media entries from ${schema_name}`);
-                    totalPurged += result.rowCount;
-                }
-            }
-            
-            console.log(`✅ Media purge complete: ${totalPurged} total entries removed`);
-        } catch (error) {
-            console.error('❌ Media purge failed:', error.message);
-        } finally {
-            // Always release the client back to the pool
-            if (client) {
-                client.release();
-            }
-        }
-    }
-    
-    // Run purge immediately on startup
-    await purgeOldMedia();
-    
-    // Schedule purge every 24 hours
-    setInterval(purgeOldMedia, 24 * 60 * 60 * 1000);
-    console.log('⏰ 3-day media purge scheduled (runs every 24 hours)');
-    
-    // 60-DAY DORMANCY CLEANUP: Revoke access for unregistered contributors
-    // Only affects phones NOT linked to a registered user (no email anchor)
-    // Protects against phone recycling for global users
-    async function revokeDormantContributors() {
-        try {
-            console.log('🔒 Starting 60-day dormancy cleanup...');
-            
-            // Find unregistered phone contributors with no activity in 60 days
-            // Unregistered = phone exists in book_engaged_phones BUT
-            // NOT linked to any email via is_creator=true in ANY book
-            const dormantResult = await pool.query(`
-                WITH registered_phones AS (
-                    -- Phones that are creators of at least one book (email-linked)
-                    SELECT DISTINCT ep.phone
-                    FROM core.book_engaged_phones ep
-                    WHERE ep.is_creator = true
-                )
-                UPDATE core.book_engaged_phones ep
-                SET last_engaged_at = NULL
-                WHERE ep.is_creator = false
-                  AND ep.last_engaged_at < NOW() - INTERVAL '60 days'
-                  AND ep.phone NOT IN (SELECT phone FROM registered_phones)
-                RETURNING ep.phone, ep.book_registry_id
-            `);
-            
-            if (dormantResult.rowCount > 0) {
-                console.log(`🔒 Revoked access for ${dormantResult.rowCount} dormant unregistered contributors`);
-                
-                // Log to Discord via Idris if available
-                if (idrisBot && idrisBot.ready) {
-                    const revokedPhones = [...new Set(dormantResult.rows.map(r => r.phone))];
-                    console.log(`   Revoked phones: ${revokedPhones.join(', ')}`);
-                }
-            } else {
-                console.log('✅ No dormant unregistered contributors to revoke');
-            }
-        } catch (error) {
-            console.error('❌ Dormancy cleanup failed:', error.message);
-        }
-    }
-    
-    // Run dormancy cleanup on startup and every 24 hours
-    revokeDormantContributors();
-    setInterval(revokeDormantContributors, 24 * 60 * 60 * 1000);
-    console.log('⏰ 60-day dormancy cleanup scheduled (runs every 24 hours)');
-    
-    console.log('✅ All deferred startup tasks completed');
-}
 
 // Graceful shutdown
 process.on('SIGINT', async () => {

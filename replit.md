@@ -54,11 +54,16 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Push Guard vs Pull Action Pattern**: O(1) validation before expensive work.
 - **Security (10/10 Hardened)**: Sybil attack prevention, JWT security (15-min access token + refresh token revocation), session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, CSP compliance, dev-role bypass blocked in production.
 - **Discord Bot Trinity Architecture**: Hermes (write-only), Thoth (read-only), Idris (AI write-only), Horus (AI read-only).
-- **Route Modularization**: Factory pattern with dependency injection. index.js reduced from 8500 → 3320 lines (~61% reduction). 
-  - Extracted: routes/auth.js, routes/admin.js, routes/books.js, routes/inpipe.js, routes/export.js, routes/prometheus.js, routes/nyan-ai.js
-  - Helpers: lib/deps.js, lib/heartbeat.js, lib/discord-webhooks.js, lib/heal-queue.js
+- **Route Modularization**: Factory pattern with dependency injection. index.js reduced from 8500 → 2256 lines (~73% reduction).
+  - Extracted: routes/auth.js (1335 lines: auth, sessions, users, audit), routes/books.js (578), routes/inpipe.js (405), routes/prometheus.js (505), routes/nyan-ai.js (769), routes/export.js (224)
+  - Unified auth removes separate admin terminology (no admin/back-door impression)
+  - Helpers: lib/deps.js, lib/heartbeat.js (269 lines: phi-breathe orchestrator), lib/discord-webhooks.js, lib/heal-queue.js
 - **AI Architecture Split**: Nyan AI (public playground) and Prometheus AI (authenticated ledger auditor) for independent rate limiting and security.
-- **Heartbeat Scheduler**: Shared φ-rhythm timer (lib/heartbeat.js) for background tasks - phi-breathe, usage cleanup. One clock tower, multiple bells.
+- **Phi Breathe Orchestrator**: Unified φ-rhythm background task scheduler (lib/heartbeat.js) for:
+  - Memory cleanup (15min cycle, 1h max age)
+  - 3-day media purge (immediate + 24h cycle)
+  - 60-day dormancy contributor revocation (immediate + 24h cycle)
+  - Usage tracking via heartbeat subscription pattern. One φ-rhythm, multiple bells.
 - **Inpipe Architecture**: Multi-channel input with an abstract channel interface for extensibility.
 
 ## External Dependencies
