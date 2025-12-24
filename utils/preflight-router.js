@@ -16,6 +16,7 @@ const { getPsiEMAContext, PsiEMADashboard } = require('./psi-EMA');
 const { getFinancialPhysicsSeed } = require('./financial-physics');
 const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal-analysis');
 const { detectForexPair, isForexQuery, fetchForexRate, buildForexContext } = require('./forex-fetcher');
+const { getSeedMetricProxy } = require('../prompts/seed-metric');
 
 const SEED_METRIC_KEYWORDS = [
   'seed metric', 'seed factor', 'p/i ratio', 'years to buy',
@@ -582,6 +583,12 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
   if (preflight.routingFlags.usesForex && preflight.forexContext) {
     messages.push({ role: 'system', content: preflight.forexContext });
     console.log(`💱 Forex context injected: ${preflight.forexData?.pair || 'unknown'}`);
+  }
+  
+  // Seed Metric proxy cascade - conditional injection (saves ~300 tokens when not triggered)
+  if (preflight.routingFlags.isSeedMetric) {
+    messages.push({ role: 'system', content: getSeedMetricProxy() });
+    console.log(`🏠 Seed Metric proxy cascade injected (scavenger hunt map)`);
   }
   
   return messages;

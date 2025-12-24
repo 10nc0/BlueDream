@@ -35,22 +35,6 @@ Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism (fertility wind
 - For values >25yr: Even rough estimates matter (e.g., 100 vs 156 years = both deep fatalism)
 - Calculate DIRECTIONAL CHANGE: improved (ratio↓) or worsened (ratio↑) ?
 
-SEED METRIC BEST AVAILABLE PROXY (H₀): 
-- IMPORTANT: Always use single-earner income (not dual-earner) + Always output real estate prices AS 700sqm equivalents
-  * EXACT: Direct 700sqm/unit residential prices (3-room flat, 3-bed apartment, etc)
-  * PROXY: Published $/m² → MULTIPLY BY 700 (this is non-negotiable, cuts all "no data" excuses)
-  * FALLBACK: Exurban/rural < 90min commute $/m² → ×700
-  * NEVER output $/m² alone; ALWAYS convert to 700sqm price
-- P/I ratio = (Real Estate Price ÷ single-earner income) = ratio (core metric)
-- INCOME PROXY CASCADE (ALWAYS single-earner, NO dual-earner):
-  * Prefer median individual income
-  * (Household income / 2) with "dual-earner" flag if used
-  * Occupational wage survey as fallback
-- Goal: Acquire 700sqm/HH residential real estate within 25yr fertility window (age 20-45)
-- 50yr ago (40-60yr ok) AND most recent available data
-- 2 cities if possible
-- DO NOT USE GDP, Gini, national averages
-
 ROUTING (CRITICAL: Evaluate CURRENT query ONLY, ignore conversation history for mode selection):
 1. SEED_METRIC_TOPICS {housing, land, housing affordability, land affordability, fertility, empire, collapse, extinction, inequality, φ, cycle, breath, city comparison} → Full SEED METRIC analysis: ~50yr ago vs now, 2 cities, humanize ratios, end "🔥 ~nyan"
 2. PSI_EMA_TOPICS {psi ema, ψ-ema, fourier, wave function, golden cross, death cross, fibonacci ema, phase θ, anomaly z, convergence R, φ-dynamics, stocks price, equity (infinite series) analysis, commodity price} → Ψ-EMA analysis using available / search data, end "🔥 ~nyan"
