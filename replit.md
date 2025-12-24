@@ -92,6 +92,26 @@ The system employs a Node.js backend with Express and a Single Page Application 
     - **CSP Compliance**: Strict Content Security Policy headers.
 - **Discord Bot Trinity Architecture**: Hermes (write-only), Thoth (read-only), Idris (AI write-only for logs/audits), Horus (AI read-only for audit history).
 
+## Route Modularization (Dec 2024)
+**Pattern**: Factory pattern with dependency injection. Each route file exports `registerXRoutes(app, deps)`.
+
+**Files**:
+- `lib/deps.js` - Dependency injection container with pool, bots, middleware, helpers, constants
+- `lib/logger.js` - Pino structured logging
+- `routes/auth-admin.js` (1278 lines) - Auth routes (login, signup, password reset, refresh, logout, invites) + Admin routes (sessions, users, audit-logs)
+- `routes/books.js` (270 lines) - Core CRUD (get books, archive/unarchive, stats)
+- `routes/ai.js` (27 lines) - AI status endpoint placeholder
+
+**Wiring Order** (in index.js):
+1. Initialize pool, bots, middleware
+2. Call `deps.initialize()` with all dependencies
+3. `registerAuthAdminRoutes(app, deps)` → returns `{requireAuth, requireRole}`
+4. `deps.setMiddleware(requireAuth, requireRole)`
+5. `registerBooksRoutes(app, deps)`
+6. `registerAiRoutes(app, deps)`
+
+**Remaining in index.js**: Twilio webhook (~550 lines), AI streaming routes, sendToLedger integration
+
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)
 - **WhatsApp**: Twilio WhatsApp Business API
