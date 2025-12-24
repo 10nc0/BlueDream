@@ -4609,15 +4609,27 @@
                 return;
             }
             
+            // Prevent double-clicks during deletion
+            const deleteBtn = document.querySelector(`[data-delete-book="${fractalId}"]`);
+            if (deleteBtn) deleteBtn.disabled = true;
+            
             try {
+                console.log('🗑️ DELETE request for book:', fractalId);
                 const response = await window.authFetch(`/api/books/${fractalId}`, {
                     method: 'DELETE'
                 });
                 
+                console.log('🗑️ DELETE response status:', response.status, response.ok);
+                
                 if (response.ok) {
+                    // Immediately remove from arrays to sync state
+                    books = books.filter(b => b.fractal_id !== fractalId);
+                    filteredBooks = filteredBooks.filter(b => b.fractal_id !== fractalId);
+                    
                     // Animate book card deletion with liquid glass effect
-                    const bookCard = document.querySelector(`.book-list-item[data-fractal-id="${fractalId}"], .channel-item[data-book-id="${fractalId}"]`);
+                    const bookCard = document.querySelector(`.book-list-item[data-fractal-id="${fractalId}"]`);
                     if (bookCard) {
+                        console.log('🗑️ Card found, animating...');
                         // Apply liquid glass delete animation
                         bookCard.style.transition = 'all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1)';
                         bookCard.style.transform = 'scale(0.95)';
@@ -4636,13 +4648,9 @@
                             bookCard.style.overflow = 'hidden';
                         }, 150);
                         
-                        // Remove from DOM and update state after animation
+                        // Remove from DOM after animation
                         setTimeout(() => {
                             bookCard.remove();
-                            
-                            // CRITICAL: Immediately remove from arrays to prevent loop-back
-                            books = books.filter(b => b.fractal_id !== fractalId);
-                            filteredBooks = filteredBooks.filter(b => b.fractal_id !== fractalId);
                             
                             // Clear selection and detail view if deleted book was selected
                             if (selectedBookId === fractalId) {
@@ -4662,21 +4670,29 @@
                             // If no books left, show empty state
                             if (books.length === 0) {
                                 const sidebar = document.getElementById('bookListContainer');
-                                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.875rem;">No books found</p>';
+                                if (sidebar) sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.875rem;">No books found</p>';
                             }
+                            
+                            // Trigger full render to ensure consistency
+                            renderBooks();
                         }, 750);
                     } else {
-                        // Fallback: reload if card not found
+                        console.log('🗑️ Card not found, full refresh...');
+                        // Fallback: full refresh if card not found
                         selectedBookId = null;
-                        loadBooks();
                         showToast('✅ Book deleted successfully', 'success');
+                        renderBooks();
                     }
                 } else {
                     const error = await response.json();
+                    console.error('🗑️ DELETE failed:', error);
+                    // Re-enable button on error
+                    if (deleteBtn) deleteBtn.disabled = false;
                     showToast(`❌ Failed to delete: ${error.error || 'Unknown error'}`, 'error');
                 }
             } catch (error) {
-                console.error('Error deleting bot:', error);
+                console.error('🗑️ Error deleting book:', error);
+                if (deleteBtn) deleteBtn.disabled = false;
                 showToast('❌ Error deleting book', 'error');
             }
         }
