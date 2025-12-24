@@ -6,7 +6,7 @@ function registerInpipeRoutes(app, deps) {
     const { pool, bots, helpers, constants, logger } = deps;
     const { hermes: hermesBot } = bots || {};
     const NYANBOOK_LEDGER_WEBHOOK = constants?.NYANBOOK_LEDGER_WEBHOOK;
-    const LIMBO_THREAD_ID = constants?.LIMBO_THREAD_ID || '1433850939751534672';
+    const LIMBO_THREAD_ID = constants?.LIMBO_THREAD_ID;
     const HERMES_TOKEN = constants?.HERMES_TOKEN || process.env.HERMES_TOKEN;
     
     if (!pool) {
@@ -117,7 +117,7 @@ async function routeMessage(pool, msg, logger) {
 
 async function handleLimboMessage(res, channel, msg, rawPayload, deps) {
     const { pool, constants, logger } = deps;
-    const LIMBO_THREAD_ID = constants?.LIMBO_THREAD_ID || '1433850939751534672';
+    const LIMBO_THREAD_ID = constants?.LIMBO_THREAD_ID;
     const NYANBOOK_LEDGER_WEBHOOK = constants?.NYANBOOK_LEDGER_WEBHOOK;
     
     logger.info({ phone: msg.phone }, 'Routing to limbo (no valid join code)');

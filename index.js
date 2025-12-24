@@ -3112,7 +3112,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         fractalId: process.env.FRACTAL_ID,
         constants: {
             NYANBOOK_LEDGER_WEBHOOK: process.env.NYANBOOK_LEDGER_WEBHOOK,
-            LIMBO_THREAD_ID: '1433850939751534672',
+            LIMBO_THREAD_ID: process.env.LIMBO_THREAD_ID,
             HERMES_TOKEN: process.env.HERMES_TOKEN
         },
         bots: {

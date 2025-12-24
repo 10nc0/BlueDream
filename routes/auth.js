@@ -71,8 +71,12 @@ function createAuthMiddleware(pool, authService, logger) {
             const userRole = result.rows[0].role;
             
             if (userRole === 'dev') {
-                req.userRole = userRole;
-                return next();
+                if (process.env.NODE_ENV === 'production') {
+                    logger.warn({ userId: req.userId }, 'Dev role bypass blocked in production');
+                } else {
+                    req.userRole = userRole;
+                    return next();
+                }
             }
             
             if (userRole === 'admin' && (allowedRoles.includes('admin') || allowedRoles.includes('user'))) {
