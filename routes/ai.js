@@ -5,8 +5,21 @@ function registerAiRoutes(app, deps) {
     
     const idrisBot = bots?.idris;
     const horusBot = bots?.horus;
+    const { noCacheHeaders } = helpers || {};
 
-    logger.info('AI routes module loaded (factory pattern ready)');
+    app.get('/api/ai/status', async (req, res) => {
+        if (noCacheHeaders) noCacheHeaders(res);
+        
+        res.json({
+            status: 'operational',
+            bots: {
+                idris: idrisBot?.isReady() || false,
+                horus: horusBot?.isReady() || false
+            }
+        });
+    });
+
+    logger.info('AI routes registered (factory pattern)');
     
     return {};
 }
