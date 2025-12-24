@@ -94,7 +94,7 @@ The system employs a Node.js backend with Express and a Single Page Application 
 
 ## Route Modularization (Dec 2024)
 **Pattern**: Factory pattern with dependency injection. Each route file exports `registerXRoutes(app, deps)`.
-**Progress**: index.js reduced from 8500 → 8033 lines (~5% reduction so far). Target: ~3000 lines.
+**Progress**: index.js reduced from 8500 → 7764 lines (~9% reduction so far). Target: ~3000 lines.
 
 **Files**:
 - `lib/deps.js` - Dependency injection container with pool, bots, middleware, helpers, constants
