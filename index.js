@@ -47,6 +47,7 @@ const { registerPrometheusRoutes } = require('./routes/prometheus');
 const { registerNyanAIRoutes, capacityManager, usageTracker } = require('./routes/nyan-ai');
 const { healQueue } = require('./lib/heal-queue');
 const heartbeat = require('./lib/heartbeat');
+const { splitMessageIntoChunks, postPayloadToWebhook, createSendToLedger, createSendToUserOutput } = require('./lib/discord-webhooks');
 
 // ============================================================================
 // SECURITY: Fail-Closed Secret Guards (Critical Infrastructure Only)
@@ -953,260 +954,10 @@ function getFileExtension(mimetype) {
     return mimeMap[mimetype] || mimetype.split('/').pop().replace(/[^a-z0-9]/gi, '');
 }
 
-// Send to Ledger (Output #01 - internal monitoring thread)
-// WEBHOOK-FIRST: Accepts book object directly, no database queries needed
-// Message chunking for Discord's limits (4096 char embed description)
-const MESSAGE_CHUNK_SIZE = 3800; // Safe margin under 4096 limit
-
-function splitMessageIntoChunks(text, chunkSize = MESSAGE_CHUNK_SIZE) {
-    if (text.length <= chunkSize) {
-        return [text]; // No split needed
-    }
-    
-    const chunks = [];
-    let remaining = text;
-    
-    while (remaining.length > 0) {
-        if (remaining.length <= chunkSize) {
-            chunks.push(remaining);
-            break;
-        }
-        
-        // Try to split at newline for cleaner breaks
-        let splitIndex = remaining.lastIndexOf('\n', chunkSize);
-        if (splitIndex === -1 || splitIndex < chunkSize * 0.5) {
-            // No good newline, split at word boundary
-            splitIndex = remaining.lastIndexOf(' ', chunkSize);
-            if (splitIndex === -1 || splitIndex < chunkSize * 0.5) {
-                // No good word boundary, hard split
-                splitIndex = chunkSize;
-            }
-        }
-        
-        chunks.push(remaining.substring(0, splitIndex));
-        remaining = remaining.substring(splitIndex).trimStart();
-    }
-    
-    return chunks;
-}
-
-// HELPER: Post to webhook with optional media (eliminates duplicate logic)
-async function postPayloadToWebhook(url, payload, options = {}) {
-    if (!url) throw new Error('Webhook URL required');
-    
-    try {
-        let response;
-        
-        // Handle direct media buffer (from Twilio download)
-        if (options.mediaBuffer) {
-            const FormData = require('form-data');
-            const form = new FormData();
-            form.append('files[0]', options.mediaBuffer, {
-                filename: options.mediaFilename || 'attachment',
-                contentType: options.mediaContentType || 'application/octet-stream'
-            });
-            form.append('payload_json', JSON.stringify(payload));
-            response = await axios.post(url, form, { headers: form.getHeaders() });
-        } 
-        // Handle media from DB buffer table
-        else if (options.isMedia && options.mediaBufferId && options.tenantSchema && options.pool) {
-            const mediaClient = await options.pool.connect();
-            try {
-                const mediaResult = await mediaClient.query(`
-                    SELECT media_data, media_type, filename 
-                    FROM ${options.tenantSchema}.media_buffer 
-                    WHERE id = $1
-                `, [options.mediaBufferId]);
-                
-                if (mediaResult.rows.length === 0) {
-                    throw new Error(`Media buffer ID ${options.mediaBufferId} not found`);
-                }
-                
-                const { media_data, media_type, filename } = mediaResult.rows[0];
-                const FormData = require('form-data');
-                const form = new FormData();
-                form.append('file', media_data, {
-                    filename: filename,
-                    contentType: media_type
-                });
-                form.append('payload_json', JSON.stringify(payload));
-                response = await axios.post(url, form, { headers: form.getHeaders() });
-            } finally {
-                mediaClient.release();
-            }
-        }
-        // Text-only payload
-        else {
-            response = await axios.post(url, payload);
-        }
-        
-        return response;
-    } catch (error) {
-        console.error(`  ❌ Webhook POST failed: ${error.message}`);
-        throw error;
-    }
-}
-
-async function sendToLedger(payload, options = {}, book = null) {
-    // WEBHOOK-FIRST: Use webhook URL directly from book object
-    let ledgerUrl = book?.output_01_url;
-    
-    // Fallback to global constant if book doesn't have URL configured
-    if (!ledgerUrl || !ledgerUrl.trim()) {
-        ledgerUrl = NYANBOOK_LEDGER_WEBHOOK;
-    }
-    
-    if (!ledgerUrl) {
-        console.log('  ℹ️  No ledger configured - skipping Output #01');
-        return null;
-    }
-
-    try {
-        // DUAL-OUTPUT: Detect channel vs thread routing
-        const output = options.output;
-        const destinationType = output?.type || 'unknown';
-        const destinationId = output?.type === 'thread' ? output?.thread_id : output?.channel_id;
-        
-        // Debug logging (mask webhook URL for security)
-        console.log(`  🔍 Ledger URL: ${ledgerUrl ? '[MASKED_LEDGER_WEBHOOK]' : 'none'}`);
-        console.log(`  🔍 Destination: ${destinationType} (ID: ${destinationId || 'none'})`);
-        
-        const url = new URL(ledgerUrl);
-        url.searchParams.set('wait', 'true');
-        
-        // CRITICAL: thread_id is only added for threads (not channels)
-        if (output?.type === 'thread' && output?.thread_id) {
-            url.searchParams.set('thread_id', output.thread_id);
-            console.log(`  📍 Targeting thread: ${output.thread_id}`);
-        } else if (output?.type === 'channel') {
-            console.log(`  📍 Targeting channel: ${output.channel_id}`);
-        }
-
-        // Use unified webhook helper
-        const response = await postPayloadToWebhook(url.toString(), payload, {
-            mediaBuffer: options.mediaBuffer,
-            mediaFilename: options.mediaFilename,
-            mediaContentType: options.mediaContentType,
-            isMedia: options.isMedia,
-            mediaBufferId: options.mediaBufferId,
-            tenantSchema: options.tenantSchema,
-            pool
-        });
-
-        console.log(`  ✅ Sent to Output #01 (Ledger) - Thread: ${options.threadId || 'channel'}`);
-        return response.data?.channel_id || null;
-    } catch (error) {
-        console.error(`  ❌ Output #01 failed: ${error.message}`);
-        console.error(`  🔍 URL attempted: ${ledgerUrl?.substring(0, 50)}...`);
-        if (error.response?.data) {
-            console.error(`  🔍 Discord error response:`, JSON.stringify(error.response.data, null, 2));
-        }
-        return null;
-    }
-}
-
-// Send to User Output (Output #0n = user's personal Discord, mutable)
-// DUAL-OUTPUT: Routes to output_0n (channel OR thread) for user visibility
-// MULTI-WEBHOOK: Sends to ALL webhooks in output_credentials.webhooks array
-async function sendToUserOutput(payload, options = {}, book = null) {
-    if (!book) {
-        console.log('  ℹ️  No book context - skipping Output #0n');
-        return false;
-    }
-
-    try {
-        // MULTI-WEBHOOK: Get all webhooks from output_credentials.webhooks array
-        const webhooks = book.output_credentials?.webhooks || [];
-        const fallbackUrl = book.output_0n_url; // Backward compatibility
-        
-        // If no webhooks in array, try fallback single URL
-        if (webhooks.length === 0 && (!fallbackUrl || !fallbackUrl.trim())) {
-            console.log(`  ℹ️  No Output #0n configured - skipping user Discord`);
-            return false;
-        }
-        
-        // Build webhook list: prioritize webhooks array, fall back to single URL
-        const webhookList = webhooks.length > 0 
-            ? webhooks.filter(w => w.url && w.url.trim())
-            : (fallbackUrl ? [{ name: 'Personal Webhook', url: fallbackUrl }] : []);
-        
-        if (webhookList.length === 0) {
-            console.log(`  ℹ️  No valid webhooks configured - skipping user Discord`);
-            return false;
-        }
-        
-        console.log(`  📤 Sending to ${webhookList.length} personal webhook(s)...`);
-        
-        // Send to ALL webhooks in parallel (unified helper handles media)
-        const sendPromises = webhookList.map(async (webhook, index) => {
-            try {
-                const url = new URL(webhook.url);
-                url.searchParams.set('wait', 'true');
-                
-                // DUAL-OUTPUT: Route to output_0n (channel OR thread)
-                const output = options.output;
-                if (output?.type === 'thread' && output?.thread_id) {
-                    url.searchParams.set('thread_id', output.thread_id);
-                }
-                
-                // Use unified webhook helper
-                await postPayloadToWebhook(url.toString(), payload, {
-                    isMedia: options.isMedia,
-                    mediaBufferId: options.mediaBufferId,
-                    tenantSchema: options.tenantSchema,
-                    pool
-                });
-                
-                console.log(`    ✅ Sent to "${webhook.name || 'Webhook ' + (index + 1)}"`);
-                return true;
-            } catch (error) {
-                console.error(`    ❌ Failed to send to "${webhook.name || 'Webhook ' + (index + 1)}": ${error.message}`);
-                return false;
-            }
-        });
-        
-        const results = await Promise.all(sendPromises);
-        const successCount = results.filter(r => r).length;
-        console.log(`  📊 Sent to ${successCount}/${webhookList.length} webhook(s)`);
-        
-        // Mark media as delivered (only if at least one webhook succeeded)
-        if (successCount > 0 && options.isMedia && options.mediaBufferId) {
-            const deliveryClient = await pool.connect();
-            try {
-                await deliveryClient.query(`
-                    UPDATE ${options.tenantSchema}.media_buffer 
-                    SET delivered_to_user = true,
-                        delivery_attempts = delivery_attempts + 1,
-                        last_delivery_attempt = NOW()
-                    WHERE id = $1
-                `, [options.mediaBufferId]);
-            } finally {
-                deliveryClient.release();
-            }
-        }
-
-        console.log(`  ✅ Sent to Output #0n (User Discord)`);
-        return true;
-    } catch (error) {
-        console.error(`  ❌ Output #0n failed: ${error.message}`);
-        if (error.response?.data) {
-            console.error(`  🔍 Discord error response:`, JSON.stringify(error.response.data, null, 2));
-        }
-        return false;
-    }
-}
-
-async function saveMessage(client, message, bookId = 1) {
-    // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
-    // This function is kept for backward compatibility but does nothing
-    // Discord threads provide permanent storage, search, and UI at zero cost
-    return null;
-}
-
-// DEAD CODE REMOVED: updateMessageStatus, getMessages, getMessageStats
-// REASON: Messages stored ONLY in Discord (not PostgreSQL)
-// Discord threads provide permanent storage, search, and message management
-// No PostgreSQL messages table exists in tenant schemas
+// Discord webhook helpers moved to lib/discord-webhooks.js
+// Factory functions created in app.listen() for DI pattern
+let sendToLedger;
+let sendToUserOutput;
 
 // ===== GENESIS COUNTER API (Red Herring) =====
 // Expose counter state for debugging/monitoring
@@ -5382,6 +5133,10 @@ app.listen(PORT, '0.0.0.0', async () => {
     }
     
     await initializeDatabase();
+    
+    // Initialize Discord webhook factories (DI pattern)
+    sendToLedger = createSendToLedger(pool, NYANBOOK_LEDGER_WEBHOOK);
+    sendToUserOutput = createSendToUserOutput(pool);
     
     // Initialize capacity manager with database for reputation persistence
     capacityManager.setDbPool(pool);
