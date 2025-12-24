@@ -27,6 +27,12 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - Adaptive & Responsive Design for various devices.
 - Enhanced Touch Interactions for mobile.
 - Visuals include a cat animation, blinking date/time, Discord-style message layout, and fixed scroll for messages.
+- **LayoutController (public/js/layout-controller.js)**: Unified state machine for UI modes:
+  - Device detection (mobile/desktop with foldable device support)
+  - Expansion states (collapsed, expanding, expanded, collapsing)
+  - Animation timing and locking (eliminates race conditions)
+  - Auto-collapse timers for mobile thumbs zone
+  - Replaces scattered layout state variables (77 references consolidated)
 
 **Technical Implementations:**
 - **Authentication**: Email/password with JWT, role-based access control, secure password recovery, isolated user data.

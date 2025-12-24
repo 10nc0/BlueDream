@@ -113,6 +113,8 @@ const LayoutController = (function() {
             el.body.classList.add('desktop-mode');
             el.body.classList.remove('mobile-mode');
             
+            clearIdleTimer();
+            
             if (el.catCanvas) {
                 el.catCanvas.width = 100;
                 el.catCanvas.height = 100;
