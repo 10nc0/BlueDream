@@ -57,9 +57,9 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Vegapunk Kernel Architecture**: Factory pattern with dependency injection. Named after Dr. Vegapunk (One Piece) - the genius who splits consciousness into satellite bodies while maintaining a pure core. vegapunk.js orchestrates 5 modular routes (satellites) via DI.
   - **Kernel (vegapunk.js)**: 1299 lines (85% reduction from 8500-line monolith)
   - **Routes (satellites)**: auth.js (1335), books.js (1381: CRUD + drops + messages + search + export), inpipe.js (405), prometheus.js (505), nyan-ai.js (769)
-  - **Shared libs**: deps.js (85), phi-breathe.js (280: unified background task orchestrator), discord-webhooks.js (232), heal-queue.js (266), logger.js (26), validators.js (137: Zod schemas), error-handler.js (108: global Express error middleware), route-registry.js (49: centralized route registration)
+  - **Shared libs**: deps.js (85), phi-breathe.js (280: unified background task orchestrator), discord-webhooks.js (232), heal-queue.js (266), logger.js (26), validators.js (137: Zod schemas), error-handler.js (108: global Express error middleware)
   - **Total endpoints**: 62 (health/pages: 11, auth: 19, books: 22 [includes export], inpipe: 1, prometheus: 4, nyan-ai: 5)
-  - **Code stats**: Kernel 1299 + Routes 4395 + Libs 878 = 6572 total lines (vs ~9000 original = 27% net reduction with better modularity)
+  - **Code stats**: Kernel ~1330 + Routes 4395 + Libs 829 = ~6554 total lines (route-registry inlined into kernel)
   - Unified auth removes separate admin terminology (no admin/back-door impression)
   - **Export consolidation**: Moved 2 export endpoints into books satellite for tighter cohesion
 - **AI Architecture Split**: Nyan AI (public playground) and Prometheus AI (authenticated ledger auditor) for independent rate limiting and security.
