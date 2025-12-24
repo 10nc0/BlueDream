@@ -1221,7 +1221,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         pool,
         tenantManager,
         authService,
-        fractalId: process.env.FRACTAL_ID,
+        fractalId,
         constants: {
             NYANBOOK_LEDGER_WEBHOOK: process.env.NYANBOOK_LEDGER_WEBHOOK,
             LIMBO_THREAD_ID: process.env.LIMBO_THREAD_ID,
