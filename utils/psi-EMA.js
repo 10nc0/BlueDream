@@ -1,16 +1,16 @@
 /**
- * Ψ-EMA: Multi-Dimensional Wave Function Observer for Economic Systems
+ * Ψ-EMA: Multi-Dimensional Wave Function Observer for Infinite Series
  * 
  * A 3-dimensional orthogonal state observer measuring the empirical wave function
- * of economic systems in real-time. All bounds and thresholds derived from φ (1.618).
+ * in real-time with economic lens. All bounds and thresholds derived from φ (1.618).
  * 
  * ┌────────────────────────────────────────────────────────────────────────────────────────────┐
  * │ Ψ-EMA DIMENSIONAL REFERENCE (φ-DERIVED THRESHOLDS ONLY)                                   │
  * ├─────────────────┬──────────────────────────┬────────────────┬──────────────────────────────┤
  * │ Dimension       │ Formula                  │ φ-Bounds       │ H₀ Hypothesis                │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
- * │ θ (Phase)       │ arctan(ΔEMA-55/ΔEMA-34)  │ ∈ (-π/2, π/2)  │ H₀: θ measures cycle position│
- * │ Cycle Position  │                          │                │ (EMA-55 vs EMA-34 gradient)  │
+ * │ θ (Phase)       │ atan2(Flow, Stock)       │ ∈ [0°, 360°)   │ H₀: θ measures cycle position│
+ * │ Cycle Position  │                          │                │ (Flow-Stock phase angle)     │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
  * │ z (Anomaly)     │ (Price - Median) / MAD   │ See bounds     │ H₀: |z| > φ² flags anomaly  │
  * │ Price Deviation │                          │ below          │ (deviation from equilibrium) │

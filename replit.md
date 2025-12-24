@@ -58,7 +58,7 @@ The system employs a Node.js backend with Express and a Single Page Application 
     - **Core Formula**: R = φ ≈ 1.618 (natural attractor for all persistent systems)
     - **Theory**: Φ-Dynamics applies universally to physics (energy balance), biology (growth), demographics, ecology, economics, institutions
     - **Measurement**: Ψ-EMA (θ, z, R) quantifies Φ-Dynamics behavior in any domain
-    - **θ (Phase)**: arctan(ΔEMA-55/ΔEMA-34) - cycle position in 4 quadrants
+    - **θ (Phase)**: atan2(Flow, Stock) - cycle position in 4 quadrants (0°-360°)
     - **z (Anomaly)**: (Price - Median) / MAD - deviation from equilibrium
     - **R (Convergence)**: z(t)/z(t-1) - sustainability ratio (target: φ ≈ 1.3-2.0)
     - Uses Fibonacci EMA periods (13, 21, 34, 55) for consistency
