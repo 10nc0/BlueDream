@@ -54,8 +54,11 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Push Guard vs Pull Action Pattern**: O(1) validation before expensive work.
 - **Security (10/10 Hardened)**: Sybil attack prevention, JWT security, session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, CSP compliance.
 - **Discord Bot Trinity Architecture**: Hermes (write-only), Thoth (read-only), Idris (AI write-only), Horus (AI read-only).
-- **Route Modularization**: Factory pattern with dependency injection for scalable and maintainable routing.
+- **Route Modularization**: Factory pattern with dependency injection. index.js reduced from 8500 → 3320 lines (~61% reduction). 
+  - Extracted: routes/auth.js, routes/admin.js, routes/books.js, routes/inpipe.js, routes/export.js, routes/prometheus.js, routes/nyan-ai.js
+  - Helpers: lib/deps.js, lib/heartbeat.js, lib/discord-webhooks.js, lib/heal-queue.js
 - **AI Architecture Split**: Nyan AI (public playground) and Prometheus AI (authenticated ledger auditor) for independent rate limiting and security.
+- **Heartbeat Scheduler**: Shared φ-rhythm timer (lib/heartbeat.js) for background tasks - phi-breathe, usage cleanup. One clock tower, multiple bells.
 - **Inpipe Architecture**: Multi-channel input with an abstract channel interface for extensibility.
 
 ## External Dependencies
