@@ -1,0 +1,769 @@
+const axios = require('axios');
+const querystring = require('querystring');
+const crypto = require('crypto');
+const JSZip = require('jszip');
+const logger = require('../lib/logger');
+const { createPipelineOrchestrator, fastStreamPersonality, applyPersonalityFormat } = require('../utils/pipeline-orchestrator');
+const { recordInMemory, clearSessionMemory } = require('../utils/context-extractor');
+const { getMemoryManager, cleanupOldSessions } = require('../utils/memory-manager');
+const capacityManager = require('../utils/playground-capacity');
+const usageTracker = require('../utils/playground-usage');
+
+const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
+const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_GROQ_TOKEN;
+const H0_TEMPERATURE = 0.15;
+
+const IDENTITY_PATTERNS = [
+    /who\s+(?:are|is)\s+(?:you|nyan)/i,
+    /what\s+(?:are|is)\s+(?:you|nyan)/i,
+    /are\s+you\s+(?:related|connected|linked)\s+to/i,
+    /who\s+(?:made|created|built)\s+(?:you|nyan|this)/i,
+    /your\s+(?:creator|origin|source|developer)/i,
+    /tell\s+me\s+about\s+(?:yourself|nyan)/i,
+    /introduce\s+yourself/i,
+    /what\s+is\s+nyan.*protocol/i,
+    /nyan.*protocol.*what/i,
+    /github\.com\/.*nyan/i,
+    /10nc0/i,
+    /void\s*nyan/i,
+    /nyanbook.*(?:what|who|origin|about)/i,
+    /(?:any\s+)?trace.*(?:on|in|at|from)\s+/i,
+    /where\s+(?:can\s+I\s+)?find\s+you/i,
+    /your\s+(?:presence|account|profile|website|handle)/i,
+    /do\s+you\s+(?:exist|have\s+a|are\s+on)/i,
+    /like\s+(?:perplexity|chatgpt|claude|copilot|gemini)/i,
+    /similar\s+to\s+(?:perplexity|chatgpt|claude)/i,
+    /compared\s+to\s+/i,
+    /competitor\s+(?:to|of)\s+/i,
+    /(?:so\s+)?you\s+are\s+(?:like|a|some|just)\s+/i,
+    /what\s+makes?\s+you\s+(?:different|unique)/i,
+    /how\s+(?:are|do)\s+you\s+(?:differ|compare)/i,
+    /(?:our|this)\s+(?:chat|conversation|dialogue|history)/i,
+    /what\s+(?:have\s+)?we\s+(?:discussed|talked|covered)/i,
+    /describe\s+me\s+from\s+(?:our|this)/i,
+    /what\s+do\s+you\s+know\s+about\s+me/i,
+    /from\s+(?:our|this)\s+(?:chat|conversation)/i,
+    /summarize\s+(?:our|this)\s+(?:chat|conversation)/i,
+    /remember\s+(?:me|what|our)/i,
+    /(?:in|during)\s+(?:this|our)\s+(?:chat|conversation)/i,
+    /can\s+you\s+(?:recap|review|recall|remind)\s+/i,
+];
+
+const NOT_FOUND_PATTERNS = [
+    /couldn'?t\s+find/i,
+    /could\s+not\s+find/i,
+    /no\s+(?:information|results?|data|records?|matches?)\s+(?:found|available|on|about|for)/i,
+    /unable\s+to\s+(?:find|locate)/i,
+    /(?:didn'?t|did\s+not)\s+find/i,
+    /no\s+(?:Forbes|Wikipedia|LinkedIn|Twitter|X)\s+(?:profile|page|entry|article)/i,
+    /(?:doesn'?t|does\s+not)\s+(?:appear|seem)\s+to\s+(?:exist|have|be)/i,
+    /i\s+(?:couldn'?t|could\s+not|wasn'?t\s+able\s+to)\s+(?:find|locate|discover)/i,
+    /not\s+(?:a\s+)?public\s+figure/i,
+    /(?:may\s+be|might\s+be|is\s+(?:likely\s+)?a)\s+private\s+individual/i,
+];
+
+function isIdentityQuery(message) {
+    if (!message) return false;
+    const trimmed = message.trim().toLowerCase();
+    return IDENTITY_PATTERNS.some(pattern => pattern.test(trimmed));
+}
+
+function containsNotFoundClaim(answer) {
+    if (!answer) return false;
+    return NOT_FOUND_PATTERNS.some(pattern => pattern.test(answer));
+}
+
+const sessionDocumentCache = new Map();
+const SESSION_DOC_TTL = 30 * 60 * 1000;
+const globalDocumentCache = new Map();
+const documentUploadCounter = new Map();
+const GLOBAL_DOC_TTL = 2 * 60 * 60 * 1000;
+const GLOBAL_CACHE_THRESHOLD = 3;
+
+function getDocumentHash(docData, docName) {
+    const rawData = typeof docData === 'string' ? docData : JSON.stringify(docData);
+    const hash = crypto.createHash('sha256')
+        .update(docName + ':' + rawData)
+        .digest('hex');
+    return hash;
+}
+
+function getSessionCacheKey(clientIp, fileHash) {
+    return `${clientIp}:${fileHash}`;
+}
+
+function incrementDocumentUpload(fileHash) {
+    const current = documentUploadCounter.get(fileHash) || 0;
+    const newCount = current + 1;
+    documentUploadCounter.set(fileHash, newCount);
+    return newCount;
+}
+
+function getCachedDocumentContext(fileHash, clientIp) {
+    const now = Date.now();
+    
+    if (clientIp) {
+        const sessionKey = getSessionCacheKey(clientIp, fileHash);
+        const sessionCached = sessionDocumentCache.get(sessionKey);
+        if (sessionCached && now - sessionCached.timestamp < SESSION_DOC_TTL) {
+            sessionCached.timestamp = now;
+            console.log(`📂 Session Cache HIT: "${fileHash.substring(0, 16)}..." for ${clientIp}`);
+            return sessionCached;
+        }
+        if (sessionCached) {
+            sessionDocumentCache.delete(sessionKey);
+        }
+    }
+    
+    const globalCached = globalDocumentCache.get(fileHash);
+    if (globalCached && now - globalCached.timestamp < GLOBAL_DOC_TTL) {
+        console.log(`📂 Global Cache HIT: "${fileHash.substring(0, 16)}..." (age: ${Math.round((now - globalCached.timestamp) / 60000)}min)`);
+        return globalCached;
+    }
+    if (globalCached) {
+        globalDocumentCache.delete(fileHash);
+        documentUploadCounter.delete(fileHash);
+    }
+    
+    return null;
+}
+
+function setCachedDocumentContext(fileHash, context, clientIp) {
+    const now = Date.now();
+    
+    if (clientIp) {
+        const sessionKey = getSessionCacheKey(clientIp, fileHash);
+        sessionDocumentCache.set(sessionKey, {
+            ...context,
+            timestamp: now,
+            fileHash
+        });
+        console.log(`📂 Session Cache SET: "${fileHash.substring(0, 16)}..." for ${clientIp}`);
+        
+        while (sessionDocumentCache.size > 500) {
+            const oldestKey = sessionDocumentCache.keys().next().value;
+            sessionDocumentCache.delete(oldestKey);
+        }
+    }
+    
+    const uploadCount = documentUploadCounter.get(fileHash) || 0;
+    if (uploadCount >= GLOBAL_CACHE_THRESHOLD) {
+        globalDocumentCache.set(fileHash, {
+            ...context,
+            timestamp: now
+        });
+        console.log(`📂 Global Cache SET: "${fileHash.substring(0, 16)}..." (${uploadCount} uploads)`);
+        
+        while (globalDocumentCache.size > 100) {
+            const oldestKey = globalDocumentCache.keys().next().value;
+            globalDocumentCache.delete(oldestKey);
+            documentUploadCounter.delete(oldestKey);
+        }
+    }
+    
+    return true;
+}
+
+function getCachedDocumentByHash(fileHash, clientIp) {
+    return getCachedDocumentContext(fileHash, clientIp);
+}
+
+setInterval(() => {
+    const now = Date.now();
+    let sessionEvicted = 0, globalEvicted = 0;
+    
+    for (const [key, value] of sessionDocumentCache.entries()) {
+        if (now - value.timestamp > SESSION_DOC_TTL) {
+            sessionDocumentCache.delete(key);
+            sessionEvicted++;
+        }
+    }
+    
+    for (const [key, value] of globalDocumentCache.entries()) {
+        if (now - value.timestamp > GLOBAL_DOC_TTL) {
+            globalDocumentCache.delete(key);
+            documentUploadCounter.delete(key);
+            globalEvicted++;
+        }
+    }
+    
+    if (sessionEvicted > 0 || globalEvicted > 0) {
+        console.log(`📂 Cache cleanup: ${sessionEvicted} session + ${globalEvicted} global entries evicted`);
+    }
+}, 10 * 60 * 1000);
+
+async function searchDuckDuckGo(query) {
+    const params = {
+        q: query,
+        format: 'json',
+        no_html: 1,
+        skip_disambig: 1,
+        t: 'nyanbook'
+    };
+    const url = `https://api.duckduckgo.com/?${querystring.stringify(params)}`;
+    
+    try {
+        const response = await axios.get(url, { timeout: 5000 });
+        const data = response.data;
+        
+        const context = [];
+        if (data.AbstractText) {
+            context.push(`📚 ${data.AbstractText}`);
+            console.log(`🔍 DDG: Found instant answer for "${query.substring(0, 40)}..."`);
+        }
+        if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+            const relevantTopics = data.RelatedTopics.filter(t => t.Text && !t.FirstURL).slice(0, 3);
+            if (relevantTopics.length > 0) {
+                context.push('Related information:');
+                relevantTopics.forEach(topic => {
+                    if (topic.Text) context.push(`  • ${topic.Text}`);
+                });
+            }
+        }
+        
+        if (context.length > 0) {
+            console.log(`🔍 DDG: Injecting ${context.length} search results into prompt`);
+            return context.join('\n');
+        } else {
+            console.log(`🔍 DDG: No results found for "${query.substring(0, 40)}..." - using base knowledge only`);
+            return null;
+        }
+    } catch (err) {
+        console.error('🔍 DDG search error:', err.message);
+        return null;
+    }
+}
+
+async function extractCoreQuestion(message) {
+    const GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
+    if (!GROQ_TOKEN || message.length < 100) {
+        return message.substring(0, 200);
+    }
+    
+    const isNyanProtocol = /\{money|city|land price|empire|collapse|extinction|inequality|φ|cycle|breath\}/i.test(message) ||
+        /price.*income|land.*afford|fertility|700.*m²|housing.*cost/i.test(message);
+    
+    try {
+        console.log(`🧠 Extracting core question from ${message.length} char message...`);
+        const systemPrompt = isNyanProtocol 
+            ? 'Extract the core question about land price, housing affordability, or city cost. Include "50 years ago" or "historical" to get comparative data. Return ONLY a short search query (max 30 words). No explanation.'
+            : 'Extract the core question or topic from the user message. Return ONLY a short search query (max 25 words) that captures what they want to know. No explanation, just the query.';
+        
+        const response = await axios.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            {
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: message.substring(0, 1000) }
+                ],
+                temperature: 0.1,
+                max_tokens: 40
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${GROQ_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 3000
+            }
+        );
+        
+        const extractedQuery = response.data?.choices?.[0]?.message?.content?.trim();
+        if (extractedQuery && extractedQuery.length > 3) {
+            console.log(`🧠 Extracted query: "${extractedQuery}"`);
+            if (isNyanProtocol && !extractedQuery.toLowerCase().includes('ago') && !extractedQuery.toLowerCase().includes('historical')) {
+                const enhancedQuery = extractedQuery + ' vs 50 years ago';
+                console.log(`🧠 Enhanced with historical: "${enhancedQuery}"`);
+                return enhancedQuery;
+            }
+            return extractedQuery;
+        }
+        return message.substring(0, 200);
+    } catch (err) {
+        console.error('🧠 Query extraction error:', err.message);
+        return message.substring(0, 200);
+    }
+}
+
+async function searchBrave(query, clientIp = null) {
+    const BRAVE_API_KEY = process.env.PLAYGROUND_BRAVE_API;
+    if (!BRAVE_API_KEY) {
+        console.log('🦁 Brave: API key not configured, skipping');
+        return null;
+    }
+    
+    if (clientIp) {
+        const braveCapacity = await capacityManager.consumeToken(clientIp, 'brave');
+        if (!braveCapacity.allowed) {
+            console.log(`🦁 Brave: Capacity exhausted for ${clientIp} - ${braveCapacity.reason}`);
+            return null;
+        }
+    }
+    
+    try {
+        console.log(`🦁 Brave: Searching for real-time context: "${query.substring(0, 40)}..."`);
+        const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
+            headers: {
+                'Accept': 'application/json',
+                'X-Subscription-Token': BRAVE_API_KEY
+            },
+            params: {
+                q: query,
+                count: 5,
+                text_decorations: false,
+                safesearch: 'moderate'
+            },
+            timeout: 5000
+        });
+        
+        const results = response.data?.web?.results || [];
+        if (results.length === 0) {
+            console.log(`🦁 Brave: No results found for "${query.substring(0, 40)}..."`);
+            return null;
+        }
+        
+        const context = results.slice(0, 5).map((r, i) => 
+            `${i + 1}. ${r.title}\n   ${r.description || ''}`
+        ).join('\n\n');
+        
+        console.log(`🦁 Brave: Found ${results.length} results, injecting top 5 into prompt`);
+        return `🌐 Web search results:\n${context}`;
+    } catch (err) {
+        console.error('🦁 Brave search error:', err.message);
+        return null;
+    }
+}
+
+async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') {
+    let lastError;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await axios.post(axiosConfig.url, axiosConfig.data, axiosConfig.config);
+            
+            if (response.data?.usage) {
+                usageTracker.recordUsage(serviceType, response.data.usage);
+            }
+            
+            return response;
+        } catch (error) {
+            lastError = error;
+            
+            const status = error.response?.status;
+            const headers = error.response?.headers || {};
+            const errorBody = error.response?.data;
+            
+            console.log(`🔴 Groq Error (attempt ${attempt + 1}/${maxRetries + 1}):`);
+            console.log(`   Status: ${status}`);
+            console.log(`   x-ratelimit-limit-requests: ${headers['x-ratelimit-limit-requests'] || 'N/A'}`);
+            console.log(`   x-ratelimit-remaining-requests: ${headers['x-ratelimit-remaining-requests'] || 'N/A'}`);
+            console.log(`   retry-after: ${headers['retry-after'] || 'N/A'}`);
+            console.log(`   Error body: ${JSON.stringify(errorBody) || 'N/A'}`);
+            
+            const promptTokensEstimate = axiosConfig.data?.messages 
+                ? JSON.stringify(axiosConfig.data.messages).length / 4 
+                : 'unknown';
+            console.log(`   Prompt size estimate: ~${Math.round(promptTokensEstimate)} tokens`);
+            
+            if (status === 429 && attempt < maxRetries) {
+                const retryAfter = headers['retry-after'];
+                const delayMs = retryAfter 
+                    ? parseInt(retryAfter) * 1000 
+                    : Math.min(1000 * Math.pow(2, attempt), 8000);
+                console.log(`⏳ Groq 429: Retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            } else {
+                throw error;
+            }
+        }
+    }
+    throw lastError;
+}
+
+const orchestrator = createPipelineOrchestrator({
+    groqToken: process.env.PLAYGROUND_GROQ_TOKEN,
+    groqVisionToken: process.env.PLAYGROUND_GROQ_VISION_TOKEN,
+    searchBrave,
+    searchDuckDuckGo,
+    extractCoreQuestion,
+    isIdentityQuery,
+    groqWithRetry
+});
+
+function registerNyanAIRoutes(app, deps) {
+    const { pool } = deps;
+
+    app.get('/api/playground/usage', (req, res) => {
+        try {
+            const stats = usageTracker.getAllUsageStats();
+            res.json(stats);
+        } catch (error) {
+            console.error('❌ Usage stats error:', error.message);
+            res.status(500).json({ error: 'Failed to get usage stats' });
+        }
+    });
+
+    app.delete('/api/playground/nuke', (req, res) => {
+        const clientIp = req.ip || req.connection.remoteAddress;
+        try {
+            const { globalPackageStore } = require('../utils/data-package');
+            const { clearMemory } = require('../utils/memory-manager');
+            
+            const pkgResult = globalPackageStore.nukeTenant(clientIp);
+            clearMemory(clientIp);
+            
+            console.log(`🗑️ NUKE endpoint: DataPackage + Memory cleared for ${clientIp}`);
+            res.json({ 
+                success: true, 
+                ...pkgResult, 
+                memoryCleared: true,
+                message: 'Session nuked - fresh start, full privacy' 
+            });
+        } catch (error) {
+            console.error('❌ Nuke error:', error.message);
+            res.status(500).json({ error: 'Failed to nuke session' });
+        }
+    });
+
+    app.post('/api/playground', async (req, res) => {
+        const clientIp = req.ip || req.connection.remoteAddress;
+        
+        capacityManager.recordActivity(clientIp);
+        
+        try {
+            let { message, photo, audio, document, documentName, photos, audios, documents, history, zipData, contextAttachments, cachedFileHashes } = req.body;
+            let finalPrompt = message || '';
+            let extractedContent = [];
+            
+            const responseFileHashes = [];
+            
+            if (zipData) {
+                try {
+                    const zipBuffer = Buffer.from(zipData, 'base64');
+                    const zip = await JSZip.loadAsync(zipBuffer);
+                    const manifestFile = zip.file('manifest.json');
+                    
+                    if (manifestFile) {
+                        const manifestContent = await manifestFile.async('string');
+                        const manifest = JSON.parse(manifestContent);
+                        
+                        photos = photos || [];
+                        audios = audios || [];
+                        documents = documents || [];
+                        
+                        for (const entry of manifest) {
+                            const file = zip.file(entry.path);
+                            if (file) {
+                                const data = await file.async('base64');
+                                const item = { name: entry.name, data, type: entry.type };
+                                
+                                if (entry.category === 'photo') photos.push(item);
+                                else if (entry.category === 'audio') audios.push(item);
+                                else if (entry.category === 'document') documents.push(item);
+                            }
+                        }
+                    }
+                } catch (zipError) {
+                    console.error('❌ ZIP extraction error:', zipError.message);
+                }
+            }
+            
+            const docList = [];
+            if (documents && documents.length > 0) {
+                docList.push(...documents.map(d => ({ name: d.name, data: d.data, type: d.type })));
+            }
+            if (document) {
+                docList.push({ name: documentName || 'document', data: document, type: 'document' });
+            }
+            
+            for (const doc of docList) {
+                const fileHash = getDocumentHash(doc.data, doc.name);
+                incrementDocumentUpload(fileHash);
+                
+                const cached = getCachedDocumentContext(fileHash, clientIp);
+                if (cached && cached.extractedText) {
+                    console.log(`📂 Using cached document context for ${doc.name}`);
+                    extractedContent.push(cached.extractedText);
+                    responseFileHashes.push({ name: doc.name, hash: fileHash });
+                    continue;
+                }
+                
+                try {
+                    const { processDocumentForAI } = require('../utils/attachment-cascade');
+                    const result = await processDocumentForAI(doc.data, doc.name, doc.type);
+                    if (result && result.text) {
+                        extractedContent.push(result.text);
+                        setCachedDocumentContext(fileHash, { extractedText: result.text }, clientIp);
+                        responseFileHashes.push({ name: doc.name, hash: fileHash });
+                    }
+                } catch (docError) {
+                    console.error(`❌ Document processing error for ${doc.name}:`, docError.message);
+                }
+            }
+            
+            if (cachedFileHashes && Array.isArray(cachedFileHashes)) {
+                for (const hashEntry of cachedFileHashes) {
+                    const cached = getCachedDocumentByHash(hashEntry.hash, clientIp);
+                    if (cached && cached.extractedText) {
+                        console.log(`📂 Restored cached context for ${hashEntry.name}`);
+                        extractedContent.push(cached.extractedText);
+                    }
+                }
+            }
+            
+            const photoList = [];
+            if (photos && photos.length > 0) {
+                photoList.push(...photos);
+            }
+            if (photo) {
+                photoList.push({ name: 'image', data: photo, type: 'image' });
+            }
+            
+            const capacityCheck = await capacityManager.consumeToken(clientIp, photoList.length > 0 ? 'vision' : 'text');
+            if (!capacityCheck.allowed) {
+                return res.status(429).json({
+                    error: capacityCheck.reason,
+                    remaining: capacityCheck.remaining,
+                    resetIn: capacityCheck.resetIn
+                });
+            }
+            
+            const pipelineInput = {
+                message: finalPrompt,
+                photos: photoList,
+                documents: docList,
+                extractedContent,
+                history: history || [],
+                clientIp,
+                isVisionRequest: photoList.length > 0,
+                contextAttachments
+            };
+            
+            const pipelineResult = await orchestrator.execute(pipelineInput);
+            
+            if (pipelineResult.success && pipelineResult.answer) {
+                recordInMemory(
+                    clientIp,
+                    message || '',
+                    pipelineResult.answer,
+                    docList.length > 0 ? {
+                        name: docList[0].name,
+                        type: docList[0].type || 'document',
+                        processedText: extractedContent.join('\n\n').slice(0, 2000),
+                        shortSummary: `${docList.length} document(s): ${docList.map(d => d.name).join(', ')}`
+                    } : null
+                );
+            }
+            
+            res.json({
+                success: pipelineResult.success,
+                response: pipelineResult.answer,
+                badge: pipelineResult.badge,
+                audit: pipelineResult.audit,
+                fileHashes: responseFileHashes,
+                processingTime: pipelineResult.processingTime
+            });
+            
+        } catch (error) {
+            console.error('❌ Playground error:', error.message);
+            res.status(500).json({ error: 'An error occurred. Please try again.' });
+        }
+    });
+
+    app.post('/api/playground/stream', async (req, res) => {
+        const clientIp = req.ip || req.connection.remoteAddress;
+        
+        capacityManager.recordActivity(clientIp);
+        
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        
+        let isClientDisconnected = false;
+        req.on('close', () => {
+            isClientDisconnected = true;
+        });
+        
+        try {
+            let { message, photo, photos, document, documentName, documents, history, zipData, contextAttachments, cachedFileHashes } = req.body;
+            let extractedContent = [];
+            
+            const responseFileHashes = [];
+            
+            if (zipData) {
+                try {
+                    const zipBuffer = Buffer.from(zipData, 'base64');
+                    const zip = await JSZip.loadAsync(zipBuffer);
+                    const manifestFile = zip.file('manifest.json');
+                    
+                    if (manifestFile) {
+                        const manifestContent = await manifestFile.async('string');
+                        const manifest = JSON.parse(manifestContent);
+                        
+                        photos = photos || [];
+                        documents = documents || [];
+                        
+                        for (const entry of manifest) {
+                            const file = zip.file(entry.path);
+                            if (file) {
+                                const data = await file.async('base64');
+                                const item = { name: entry.name, data, type: entry.type };
+                                
+                                if (entry.category === 'photo') photos.push(item);
+                                else if (entry.category === 'document') documents.push(item);
+                            }
+                        }
+                    }
+                } catch (zipError) {
+                    console.error('❌ ZIP extraction error:', zipError.message);
+                }
+            }
+            
+            const docList = [];
+            if (documents && documents.length > 0) {
+                docList.push(...documents.map(d => ({ name: d.name, data: d.data, type: d.type })));
+            }
+            if (document) {
+                docList.push({ name: documentName || 'document', data: document, type: 'document' });
+            }
+            
+            for (const doc of docList) {
+                const fileHash = getDocumentHash(doc.data, doc.name);
+                incrementDocumentUpload(fileHash);
+                
+                const cached = getCachedDocumentContext(fileHash, clientIp);
+                if (cached && cached.extractedText) {
+                    console.log(`📂 Using cached document context for ${doc.name}`);
+                    extractedContent.push(cached.extractedText);
+                    responseFileHashes.push({ name: doc.name, hash: fileHash });
+                    continue;
+                }
+                
+                try {
+                    const { processDocumentForAI } = require('../utils/attachment-cascade');
+                    const result = await processDocumentForAI(doc.data, doc.name, doc.type);
+                    if (result && result.text) {
+                        extractedContent.push(result.text);
+                        setCachedDocumentContext(fileHash, { extractedText: result.text }, clientIp);
+                        responseFileHashes.push({ name: doc.name, hash: fileHash });
+                    }
+                } catch (docError) {
+                    console.error(`❌ Document processing error for ${doc.name}:`, docError.message);
+                }
+            }
+            
+            if (cachedFileHashes && Array.isArray(cachedFileHashes)) {
+                for (const hashEntry of cachedFileHashes) {
+                    const cached = getCachedDocumentByHash(hashEntry.hash, clientIp);
+                    if (cached && cached.extractedText) {
+                        console.log(`📂 Restored cached context for ${hashEntry.name}`);
+                        extractedContent.push(cached.extractedText);
+                    }
+                }
+            }
+            
+            const photoList = [];
+            if (photos && photos.length > 0) {
+                photoList.push(...photos);
+            }
+            if (photo) {
+                photoList.push({ name: 'image', data: photo, type: 'image' });
+            }
+            
+            const capacityCheck = await capacityManager.consumeToken(clientIp, photoList.length > 0 ? 'vision' : 'text');
+            if (!capacityCheck.allowed) {
+                res.write(`data: ${JSON.stringify({ type: 'error', message: capacityCheck.reason })}\n\n`);
+                res.end();
+                return;
+            }
+            
+            if (responseFileHashes.length > 0) {
+                res.write(`data: ${JSON.stringify({ type: 'fileHashes', hashes: responseFileHashes })}\n\n`);
+            }
+            
+            res.write(`data: ${JSON.stringify({ type: 'status', message: 'Processing...' })}\n\n`);
+            
+            const pipelineInput = {
+                message: message || '',
+                photos: photoList,
+                documents: docList,
+                extractedContent,
+                history: history || [],
+                clientIp,
+                isVisionRequest: photoList.length > 0,
+                contextAttachments,
+                streaming: true
+            };
+            
+            const pipelineResult = await orchestrator.execute(pipelineInput);
+            
+            if (isClientDisconnected) return;
+            
+            const verifiedAnswer = pipelineResult.answer || '';
+            const badge = pipelineResult.badge || 'unverified';
+            const didSearchRetry = pipelineResult.didSearchRetry || false;
+            
+            const auditMetadata = {
+                badge,
+                confidence: pipelineResult.audit?.confidence || 0,
+                reason: pipelineResult.audit?.reason || '',
+                didSearchRetry,
+                passCount: pipelineResult.passCount || 1
+            };
+            
+            if (pipelineResult.fastPath) {
+                console.log(`⚡ Fast-path: Skipping personality pass (pre-crafted message)`);
+                auditMetadata.passCount = 0;
+                res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
+                res.end();
+            } else if (badge === 'verified' || badge === 'unverified') {
+                if (isClientDisconnected) return;
+                
+                await fastStreamPersonality(res, verifiedAnswer, auditMetadata);
+            } else {
+                res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
+                res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
+                res.end();
+            }
+            
+            if (pipelineResult.success) {
+                recordInMemory(
+                    clientIp,
+                    message || '',
+                    verifiedAnswer || '',
+                    docList.length > 0 ? {
+                        name: docList[0].name,
+                        type: docList[0].type || 'document',
+                        processedText: extractedContent.join('\n\n').slice(0, 2000),
+                        shortSummary: `${docList.length} document(s): ${docList.map(d => d.name).join(', ')}`
+                    } : null
+                );
+            }
+            
+            console.log(`🌊 Streaming complete for ${clientIp} [${badge}]${didSearchRetry ? ' [+search retry]' : ''}`);
+            
+        } catch (error) {
+            console.error('❌ Streaming error:', error.message);
+            res.write(`data: ${JSON.stringify({ type: 'error', message: 'An error occurred. Please try again.' })}\n\n`);
+            res.end();
+        }
+    });
+
+    logger.info('Nyan AI routes registered (factory pattern)');
+}
+
+module.exports = { 
+    registerNyanAIRoutes,
+    capacityManager,
+    usageTracker,
+    isIdentityQuery,
+    containsNotFoundClaim,
+    searchDuckDuckGo,
+    searchBrave,
+    extractCoreQuestion,
+    groqWithRetry
+};
