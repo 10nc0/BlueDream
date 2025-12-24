@@ -413,8 +413,6 @@ app.use(session({
     name: 'book.sid' // Custom session cookie name
 }));
 
-// Google OAuth removed - email/password authentication only
-
 // Middleware to block HTML files from static serving
 app.use((req, res, next) => {
     if (req.path.endsWith('.html') && req.path !== '/login.html') {
@@ -455,8 +453,6 @@ app.get('/dev', (req, res) => {
     console.log(`[${getTimestamp()}] 🛠️  Dev panel accessed - IP: ${req.ip}`);
     res.sendFile(__dirname + '/public/dev.html');
 });
-
-// UAT/Test route removed - use real signup flow for multi-tenant architecture
 
 // Root redirects to AI Playground (public landing page)
 app.get('/', (req, res) => {
@@ -1252,15 +1248,6 @@ async function getBookTenantSchema(fractalIdInput) {
         throw error;
     }
 }
-
-// ============ BAILEYS MESSAGE HANDLER - REMOVED ============
-// The old createTenantAwareMessageHandler() has been removed - Twilio webhook handles inbound messages.
-// See /api/twilio/webhook endpoint below for message routing.
-
-
-// OLD initializeWhatsAppClient() function removed - replaced with per-book management
-// See book-level API endpoints below: POST /api/books/:id/start, DELETE /api/books/:id/stop, etc.
-// Each book now has its own independent message session managed by WhatsAppClientManager
 
 // ============ SESSION TRACKING SYSTEM ============
 
