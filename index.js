@@ -7980,6 +7980,43 @@ app.listen(PORT, '0.0.0.0', async () => {
     // Server is now ready for requests
     console.log('✅ Multi-tenant NyanBook~ ready');
     
+    // Initialize dependency injection container with all dependencies
+    initDeps({
+        pool,
+        tenantManager,
+        authService: { /* placeholder for future auth service */ },
+        fractalId: process.env.FRACTAL_ID,
+        constants: {
+            NYANBOOK_LEDGER_WEBHOOK: process.env.NYANBOOK_LEDGER_WEBHOOK,
+            LIMBO_THREAD_ID: '1433850939751534672',
+            HERMES_TOKEN: process.env.HERMES_TOKEN
+        },
+        bots: {
+            hermes: hermesBot,
+            thoth: thothBot,
+            idris: idrisBot,
+            horus: horusBot
+        },
+        tenantMiddleware: {
+            setTenantContext,
+            getAllTenantSchemas: () => tenantManager.getAllSchemas(),
+            sanitizeForRole
+        },
+        helpers: {
+            logAudit,
+            getTimestamp,
+            noCacheHeaders,
+            createSessionRecord
+        }
+    });
+    
+    // Register modular routes (after deps initialized with live bots)
+    const authMiddleware = registerAuthAdminRoutes(app, deps);
+    setDepsMiddleware(authMiddleware.requireAuth, authMiddleware.requireRole);
+    registerBooksRoutes(app, deps);
+    registerInpipeRoutes(app, deps);
+    console.log('📦 Modular routes registered: auth-admin, books, inpipe');
+    
     // DEFERRED STARTUP: Run non-critical tasks after server is ready
     // This prevents connection pool exhaustion during startup
     setTimeout(() => {
