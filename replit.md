@@ -52,6 +52,7 @@ The system employs a Node.js backend with Express and a Single Page Application 
     - **DataPackage Flow**: Each message carries a JSON container through the pipeline. Storage: IP → 8-message window → per-message package. Immutable after finalization; personality layer cleans formatting but preserves data integrity.
     - **In-Memory Store**: Session context stored in RAM for speed. Discord provides permanent retention. Server restart clears context (acceptable for conversational AI).
 - **Nyan Protocol**: System prompt framework for historical comparison and socio-economic analysis. Uses Seed Metric (Price/Income ratio) as falsifiable threshold. Prevents LLM hallucinations via mandatory source requirements.
+    - **Seed Metric Conditional Injection**: The Seed Metric proxy cascade (700sqm conversion rules, income proxy cascade, P/I ratio methodology) is conditionally loaded only when Seed Metric topics are detected via `routingFlags.isSeedMetric`. Saves ~300 tokens on non-Seed queries. Module: `prompts/seed-metric.js`.
 - **Financial Physics System**: A 4-tier architecture extending the NYAN Protocol for financial cognition.
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis, providing a universal 7-section template.
 - **Φ-Dynamics & Ψ-EMA System**: Multi-signal state classifier using robust signal processing and φ (1.618) as the measurement threshold. Φ-Dynamics is the theoretical framework (R = 1 + 1/R = φ), while Ψ-EMA is the three-dimensional measurement instrument.
