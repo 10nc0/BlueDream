@@ -1223,7 +1223,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         authService,
         fractalId,
         constants: {
-            NYANBOOK_LEDGER_WEBHOOK: process.env.NYANBOOK_LEDGER_WEBHOOK,
+            NYANBOOK_LEDGER_WEBHOOK: process.env.NYANBOOK_WEBHOOK_URL,
             LIMBO_THREAD_ID: process.env.LIMBO_THREAD_ID,
             HERMES_TOKEN: process.env.HERMES_TOKEN
         },
