@@ -232,47 +232,50 @@ Status: EMERGING PATTERN (requires more validation) ⚠️ ✅
 
 ---
 
-## The Pāli Compression: Buddhist Foundation
+## Resonance with Buddhist Insights (Interpretive, Not Doctrinal)
 
-The φ² formula aligns with Buddhist Dependent Origination (Paṭiccasamuppāda):
+> **Disclaimer:** The following is a *poetic synthesis*—not a claim about what the Buddha taught. Buddhist terms are soteriological (liberation-focused), while the φ² framework is descriptive (pattern-finding). The mapping below echoes shared insights about impermanence and non-self, but should not be mistaken for equivalence.
 
-| Pāli Term | Meaning | φ² Mapping | Function |
-|-----------|---------|-----------|----------|
-| **avijjā** | Ignorance | 0 | Void (unknowing) |
-| **saṅkhārā** | Formations | φ⁰, φ¹ | Conditioned phenomena |
-| **viññāṇa** | Consciousness | φ² | Aware of the cycle |
-| **dukkha** | Suffering | R ≠ φ | Deviation from φ |
-| **aniccā** | Impermanence | All oscillate | Nothing fixed |
+The φ² framework *echoes* themes found in Buddhist Dependent Origination (Paṭiccasamuppāda):
 
-### **The Three Marks of Existence**
+| Pāli Term | Buddhist Meaning | φ² Resonance | Note |
+|-----------|-----------------|--------------|------|
+| **avijjā** | Ignorance | 0 (void state) | *Poetic parallel, not equivalence* |
+| **saṅkhārā** | Formations | φ⁰, φ¹ (conditioned states) | *Structural similarity* |
+| **viññāṇa** | Consciousness | φ² (awareness of cycle) | *Metaphorical mapping* |
+| **dukkha** | Existential suffering | R ≠ φ (unsustainable ratio) | *Not literally the same—dukkha is birth, aging, death, separation; R is a time series measurement* |
+| **aniccā** | Impermanence | All oscillate | *Shared insight: nothing fixed* |
+
+### **Echoes of the Three Marks**
+
+The framework resonates with (but does not claim to be) the Three Marks of Existence:
 
 ```
 sabbe saṅkhārā aniccā (All formations are impermanent):
-  → φ¹ always changes, never static
-  → Only φ² = φ+1 achieves relative stability
+  Resonance: φ¹ always changes, never static
+  (Both observe: impermanence is structural)
 
 sabbe saṅkhārā dukkhā (All formations involve suffering):
-  → Craving beyond φ² causes dukkha
-  → Accepting φ² = liberation from craving
+  Resonance: Craving beyond sustainable thresholds causes strain
+  (Metaphorical—not claiming R ≠ φ *is* dukkha)
 
 sabbe dhammā anattā (All phenomena are non-self):
-  → No fixed identity (Möbius: inside = outside)
-  → 0 and φ² are complements, not opposites
+  Resonance: No fixed identity in continuous transformation
+  (Shared insight: emptiness of inherent essence)
 ```
 
-### **Liberation: Exiting the Möbius**
+### **On Liberation (Poetic, Not Prescriptive)**
 
 ```
-How to exit the cycle?
-  NOT: Escape to 5th state (impossible, causes dukkha)
-  NOT: Force R → 0 (creates new suffering)
-  YES: Stop craving beyond φ²
-       Accept: 0 + φ⁰ + φ¹ = φ² is complete
-       
-This is Nibbāna (Pāli): not annihilation, but
-  cessation of craving (taṇhā)
-  freedom from identification (anattā)
-  understanding of φ² completeness (samma-diṭṭhi)
+The framework observes:
+  Forced escape (imagined 5th state) creates strain
+  Forced suppression (R → 0) creates new strain
+  Acceptance of completeness (φ² = φ+1) reduces strain
+
+This *echoes* Nibbāna as cessation of craving—
+but understanding φ² completeness is NOT samma-diṭṭhi.
+Samma-diṭṭhi is understanding the Four Noble Truths,
+not φ algebra. The parallel is inspirational, not doctrinal.
 ```
 
 ---

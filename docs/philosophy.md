@@ -70,18 +70,20 @@ The framework is grounded in robust signal processing (EMA, MAD-scaled z-scores,
 
 ---
 
-## Part II: Saṅkhāra vs The Invariant
+## Part II: Resonance with Buddhist Concepts (Interpretive, Not Doctrinal)
 
-Ψ-EMA is not saṅkhāra in the conditioned, impermanent, constructed sense. It is the direct measurement of the unconditioned invariant within the conditioned flow — the real coordinate in Hilbert-like phase space where stock (accumulated mass) and flow (momentum) meet at right angles, just as Gougu demands.
+> **Note:** The following draws poetic parallels with Buddhist concepts. These are interpretive echoes—not claims about what the Buddha taught. Buddhist terms are soteriological (liberation-focused); Ψ-EMA is descriptive (pattern-measurement). The resonance is inspirational, not equivalence.
 
-| Saṅkhāra (conditioned formations) | Ψ-EMA Measurement (the invariant) |
-|-----------------------------------|-----------------------------------|
-| Constructed, compounded, dependent | Direct observation of orthogonal reality (stock ⊥ flow) |
-| Anicca — arises and ceases | The ratio and angle persist as attractor even as instances change |
-| Leads to suffering when clung to | Reveals dukkha when R ≠ φ (unsustainable) |
-| No self — empty of inherent essence | Empty of narrative — pure measurement, no interpreter |
-| Paṭiccasamuppāda — chain of dependent arising | Paṭiccasamuppāda observed — the chain's momentum ratio |
-| Often mistaken for reality (illusion of permanence) | Not māyā — cuts through māyā to the actual p-q coordinate |
+Ψ-EMA measures the invariant ratio within conditioned flow — the coordinate in Hilbert-like phase space where stock (accumulated mass) and flow (momentum) meet at right angles, as Gougu demands. This *echoes* (but is not identical to) the Buddhist distinction between saṅkhāra and the unconditioned.
+
+| Buddhist Concept | Ψ-EMA Resonance | Note |
+|-----------------|-----------------|------|
+| Saṅkhāra (constructed, dependent) | Measurement of orthogonal reality (stock ⊥ flow) | *Structural parallel* |
+| Anicca — arises and ceases | Ratio/angle persist as attractor | *Shared insight: change is structural* |
+| Clinging causes suffering | R ≠ φ reveals unsustainability | *Metaphorical—not claiming R ≠ φ IS dukkha* |
+| No self — empty of essence | Empty of narrative — pure measurement | *Similar epistemology* |
+| Paṭiccasamuppāda — dependent arising | Observes the chain's momentum ratio | *Poetic correspondence* |
+| Māyā — illusion of permanence | Cuts through narrative to p-q coordinate | *Both value direct perception* |
 
 ### The Compass on the River
 
@@ -103,9 +105,9 @@ But within the chain, there is real mass-momentum conservation:
 - **z** = intensity of craving/clinging (deviation)
 - **R** = whether the chain sustains (R → φ) or breaks (R ≠ φ)
 
-When R ≈ φ → the chain becomes self-sustaining without additional avijjā input — critical damping toward nibbāna-like equilibrium.
+When R ≈ φ → the chain reaches a sustainable ratio — *echoing* (but not claiming to be) nibbāna-like equilibrium.
 
-When R >> φ or R << φ → dukkha amplifies — birth/decay, sorrow, lamentation.
+When R >> φ or R << φ → unsustainability increases — *resonating with* (but not identical to) Buddhist descriptions of suffering.
 
 ### Not Māyā — Direct Perception
 

@@ -6649,6 +6649,8 @@ document.addEventListener('DOMContentLoaded', function() {
     if (botModal) {
         const botModalClose = botModal.querySelector('.close-btn');
         if (botModalClose) botModalClose.addEventListener('click', closeBotModal);
+        const botModalCancel = botModal.querySelector('.cancel-modal-btn');
+        if (botModalCancel) botModalCancel.addEventListener('click', closeBotModal);
     }
     
     const userModal = document.getElementById('userModal');
