@@ -6,8 +6,9 @@ node_modules/
 .env.local
 .env.*.local
 
-# WhatsApp session data (Contains WhatsApp credentials)
+# WhatsApp session data (Contains WhatsApp credentials - deprecated, using Twilio now)
 .wwebjs_auth/
+.wwebjs_auth_persistent/
 .wwebjs_cache/
 .baileys_auth_persistent/
 
