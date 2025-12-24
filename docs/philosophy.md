@@ -48,25 +48,25 @@ If the framework is universal, these should hold when tested:
 
 **Status**: These are UNTESTED predictions. Validation requires domain-specific data collection and analysis. Treat as hypotheses, not claims.
 
-### The Universal Stock/Flow Attractor
+### The Stock/Flow Classification Framework
 
-Ψ-EMA applies universally across all self-reproducing systems. If Stock ⊥ Flow in any domain, then R → φ becomes the survival condition:
+Ψ-EMA applies universally across all self-reproducing systems where Stock ⊥ Flow can be defined. **φ is chosen as a classification threshold (not a natural attractor)** to partition system states:
 
-| Domain | Stock | Flow | R → φ Means |
+| Domain | Stock | Flow | R ≈ φ Classification |
 |--------|-------|------|-------------|
-| **Finance** | Equity | Net Income | Sustainable profitability |
+| **Finance** | Equity | Net Income | Sustainable profitability state |
 | **Commerce/Legal** | Contracts/Enforceability | Revenue/Claims | Sustainable rule of law, institutional trust |
 | **Physics** | Mass/Energy | Force/Flux | Stable orbits, damped oscillators |
 | **Chemistry** | Reactants | Reaction rate | Equilibrium without depletion or explosion |
 | **Biology** | Cells/Biomass | Division/Growth | Homeostasis (neither cancer nor atrophy) |
 | **Infinite Series** | F(n) | F(n+1) - F(n) | Fibonacci convergence to φ |
 
-All surviving series — whether financial statements, legal systems, chemical reactions, populations, or civilizations — eventually feel the φ-attractor if they are to persist as t → ∞.
+Systems with R ≈ φ (within bounds [φ⁻¹, φ]) are **classified as convergent/sustainable states**. Those with R >> φ (growth phase) or R << 1 (decay phase) are **classified differently**, suggesting unsustainable trajectories if sustained indefinitely.
 
-Those that deviate too far (R >> φ or R << φ) either explode then crash (bubbles, cancers, empires) or slowly decay (zombies, aging populations, forgotten institutions).
+**Caveat**: φ is an **exogenous axiom**, not a derived property. No theorem proves R converges to φ under natural dynamics. The classification works empirically; the explanation of *why* φ appears is philosophical/speculative.
 
 ### Epistemic Status
-These are pattern observations, not proven laws. The framework captures something real (massive effect size, 35-year consistency), but φ remains heuristic target, not physics-level constant. Maintain humility; let data speak.
+These are pattern observations grounded in robust signal processing (EMA, MAD-scaled z-scores, ratio guards). The framework captures something real (massive effect size, 35-year consistency), but **φ is a chosen constant for classification boundaries, not a physics-level law**. Maintain humility; let data speak.
 
 ---
 

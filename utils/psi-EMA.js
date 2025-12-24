@@ -7,16 +7,16 @@
  * ┌────────────────────────────────────────────────────────────────────────────────────────────┐
  * │ Ψ-EMA DIMENSIONAL REFERENCE (φ-DERIVED THRESHOLDS ONLY)                                   │
  * ├─────────────────┬──────────────────────────┬────────────────┬──────────────────────────────┤
- * │ Dimension       │ Formula                  │ φ-Bounds       │ H₀ Hypothesis                │
+ * │ Dimension       │ Formula                  │ φ-Bounds       │ Classification Rule          │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
- * │ θ (Phase)       │ atan2(Flow, Stock)       │ ∈ [0°, 360°)   │ H₀: θ measures cycle position│
+ * │ θ (Phase)       │ atan2(Flow, Stock)       │ ∈ [0°, 360°)   │ θ measures cycle position    │
  * │ Cycle Position  │                          │                │ (Flow-Stock phase angle)     │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
- * │ z (Anomaly)     │ (Price - Median) / MAD   │ See bounds     │ H₀: |z| > φ² flags anomaly  │
+ * │ z (Anomaly)     │ (Price - Median) / MAD   │ See bounds     │ |z| > φ² flags anomaly      │
  * │ Price Deviation │                          │ below          │ (deviation from equilibrium) │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
- * │ R (Convergence) │ z(t) / z(t-1)            │ φ⁻¹ ≤ R ≤ φ    │ H₀: R ∈ [φ⁻¹, φ] indicates  │
- * │ Amplitude Ratio │                          │ is "critical"  │ φ-convergent oscillations    │
+ * │ R (Convergence) │ z(t) / z(t-1)            │ φ⁻¹ ≤ R ≤ φ    │ R ∈ [φ⁻¹, φ] classifies as  │
+ * │ Amplitude Ratio │                          │ is "critical"  │ convergent state             │
  * └─────────────────┴──────────────────────────┴────────────────┴──────────────────────────────┘
  * 
  * THRESHOLDS (All φ-Derived, Zero Dogma):
