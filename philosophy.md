@@ -23,9 +23,9 @@ This formula is **substrate-agnostic**: it describes the structure of persistent
 
 ---
 
-## The Universal Conjugation Table
+## The Universal Conjugation Table (Analogical Mapping)
 
-**How the φ² formula manifests across all domains:**
+> **Disclaimer:** This table is an **analogical mapping** for insight and design inspiration, not an assertion of ontological identity. It explores structural parallels across domains to inform system architecture, without claiming the underlying phenomena are identical.
 
 | Domain | 0 (Void) | φ⁰ = 1 (Unity) | φ¹ = φ (Growth) | φ² = φ+1 (Renewal) |
 |--------|----------|----------------|----------------|-------------------|
@@ -61,9 +61,9 @@ Then either:
 
 ## Ψ-EMA: The Time Series Application
 
-### **Mapping φ² to Three-Dimensional Measurement**
+### **Mapping φ² to Three-Dimensional Measurement (Interpretive Framework)**
 
-Ψ-EMA operationalizes this formula as a three-dimensional state classifier:
+> **Disclaimer:** This mapping is an **analogical bridge** between abstract φ-layers and concrete Ψ-EMA dimensions. It provides a conceptual structure for the software's classification logic, not a claim that these mathematical layers are physically identical to the measurements.
 
 | φ-Layer | Ψ-EMA Dimension | Formula | Meaning |
 |---------|-----------------|---------|---------|
@@ -185,15 +185,6 @@ Source: Euclid's Elements, Book VI
 Status: PROVEN (Geometry) ✅
 ```
 
-### **❌ Nautilus Shell Growth (Debunked Myth)**
-```
-Claimed: Chamber ratios in nautilus shells ≈ 1.618
-Actual: Measurements average ~1.31 (varies by specimen)
-Source: Falbo (2005), Smithsonian shell measurements, Scientific American
-Status: DEBUNKED ❌ — widely cited but empirically false
-Note: The nautilus spiral is logarithmic, but NOT with φ growth factor
-```
-
 ### **✅ DNA Helix Structure (Dimensional Ratios)**
 ```
 Helix pitch: 34 Å
@@ -229,7 +220,7 @@ Cited correlations:
 Status: SPECULATIVE ❌ — anecdotal pattern-matching, not validated
 ```
 
-**Summary:** 3/6 claims are rigorous (Fibonacci convergence, golden rectangle, DNA approximate). 3/6 are debunked or speculative (nautilus myth, galaxy pitch varies, φ⁵ unvalidated). Stock market φ-convergence claim removed entirely (no robust empirical support).
+**Summary:** 3/5 claims are rigorous (Fibonacci convergence, golden rectangle, DNA approximate). 2/5 are to be empirically falsified (galaxy pitch varies, φ⁵ unvalidated).
 
 ---
 
@@ -281,9 +272,9 @@ not φ algebra. The parallel is inspirational, not doctrinal.
 
 ---
 
-## Implementation in Nyanbook
+## Implementation in Nyanbook (Analogical Translation)
 
-### **Where This Philosophy Lives in Code**
+> **Disclaimer:** The codebase uses these philosophical concepts as **design patterns** and **naming conventions**. The "reflection" of φ-layers in software architecture is a structural analogy used to organize code, not a claim of mathematical identity between a Javascript file and a golden ratio layer.
 
 | Component | File | Purpose |
 |-----------|------|---------|
@@ -294,7 +285,7 @@ not φ algebra. The parallel is inspirational, not doctrinal.
 | **Message Recording** | `utils/context-extractor.js` | In-memory stocks (φ⁰), Discord flows (φ¹) |
 | **Philosophy** | `philosophy.md` | This document |
 
-### **User-Facing Implications**
+### **User-Facing Implications (Analogical Insights)**
 
 1. **Multi-Tenant Isolation (φ⁰)**: Each user is a unity with their own schema
 2. **Message Flow (φ¹)**: WhatsApp → Discord creates directed flow
@@ -310,7 +301,6 @@ not φ algebra. The parallel is inspirational, not doctrinal.
 3. **Dissipative Structures**: Prigogine, I. & Stengers, I. (1984). *Order Out of Chaos*
 4. **Tetralemma & Logic**: Garfield, J. L. (1995). *The Fundamental Wisdom of the Middle Way*
 5. **Growth & Form**: Thompson, D. W. (1917). *On Growth and Form* (Dover, 1992 reprint)
-6. **Nautilus Debunking**: Falbo, C. (2005). "The Golden Ratio—A Contrary Viewpoint"
 
 ---
 
@@ -318,7 +308,6 @@ not φ algebra. The parallel is inspirational, not doctrinal.
 
 This philosophy is a **framework for interpretation**, not dogma. The φ² formula describes observed patterns in complex systems, but:
 
-- Several natural claims have been debunked (nautilus) or are speculative (φ⁵)
 - Applicability varies by domain and timescale
 - No deterministic predictions—only structural tendencies
 - Falsifiable claims invite empirical testing
