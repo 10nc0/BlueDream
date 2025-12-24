@@ -954,7 +954,6 @@ Respond in ${language || 'the same language as the user query'}.`
         }
     });
 
-    logger.info('Nyan AI routes registered (factory pattern)');
 }
 
 module.exports = { 

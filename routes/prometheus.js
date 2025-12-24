@@ -499,7 +499,6 @@ function registerPrometheusRoutes(app, deps) {
         }
     });
 
-    logger.info('Prometheus AI routes registered (factory pattern)');
 }
 
 module.exports = { registerPrometheusRoutes };

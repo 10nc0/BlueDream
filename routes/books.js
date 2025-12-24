@@ -1215,8 +1215,6 @@ function registerBooksRoutes(app, deps) {
         }
     });
 
-    logger.info('Books routes registered (factory pattern - includes drops, messages, search)');
-    
     return {};
 }
 

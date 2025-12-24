@@ -1316,8 +1316,6 @@ function registerAuthRoutes(app, deps) {
         }
     });
 
-    logger.info('Auth routes registered (factory pattern - includes user lifecycle, sessions, audit)');
-    
     return { requireAuth, requireRole };
 }
 

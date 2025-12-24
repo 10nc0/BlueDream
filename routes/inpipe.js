@@ -67,7 +67,6 @@ function registerInpipeRoutes(app, deps) {
         }
     });
     
-    logger.info('Inpipe routes registered successfully');
 }
 
 async function routeMessage(pool, msg, logger) {

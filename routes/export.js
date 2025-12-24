@@ -216,8 +216,6 @@ Each attachment is organized by:
     app.get('/api/books/:book_id/export', requireAuth, setTenantContext, exportBookHandler);
     app.post('/api/books/:book_id/export', requireAuth, setTenantContext, exportBookHandler);
 
-    logger.info('Export routes registered successfully');
-
     return {};
 }
 
