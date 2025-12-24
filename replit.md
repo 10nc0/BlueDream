@@ -100,7 +100,14 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - `lib/logger.js` - Pino structured logging
 - `routes/auth-admin.js` (1278 lines) - Auth routes (login, signup, password reset, refresh, logout, invites) + Admin routes (sessions, users, audit-logs)
 - `routes/books.js` (270 lines) - Core CRUD (get books, archive/unarchive, stats)
+- `routes/inpipe.js` (406 lines) - Multi-channel input with abstract channel interface
 - `routes/ai.js` (27 lines) - AI status endpoint placeholder
+
+**Inpipe Architecture** (Multi-In Pattern):
+- `lib/channels/base.js` - Abstract channel interface (validateSignature, parsePayload, normalizeMessage, sendReply)
+- `lib/channels/twilio.js` - Twilio WhatsApp implementation (first channel)
+- Future channels: telegram.js, twitter.js (same interface)
+- Flow: Channel → normalize() → routeMessage() → Discord out
 
 **Wiring Order** (in index.js):
 1. Initialize pool, bots, middleware
@@ -108,9 +115,10 @@ The system employs a Node.js backend with Express and a Single Page Application 
 3. `registerAuthAdminRoutes(app, deps)` → returns `{requireAuth, requireRole}`
 4. `deps.setMiddleware(requireAuth, requireRole)`
 5. `registerBooksRoutes(app, deps)`
-6. `registerAiRoutes(app, deps)`
+6. `registerInpipeRoutes(app, deps)`
+7. `registerAiRoutes(app, deps)`
 
-**Remaining in index.js**: Twilio webhook (~550 lines), AI streaming routes, sendToLedger integration
+**Remaining in index.js**: AI streaming routes, sendToLedger integration
 
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)

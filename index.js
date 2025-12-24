@@ -37,6 +37,12 @@ const { createPipelineOrchestrator, PIPELINE_STEPS, fastStreamPersonality, apply
 const { recordInMemory, clearSessionMemory } = require('./utils/context-extractor');
 const { getMemoryManager, cleanupOldSessions } = require('./utils/memory-manager');
 
+const { initialize: initDeps, setMiddleware: setDepsMiddleware, deps } = require('./lib/deps');
+const { registerAuthAdminRoutes } = require('./routes/auth-admin');
+const { registerBooksRoutes } = require('./routes/books');
+const { registerInpipeRoutes } = require('./routes/inpipe');
+const { registerAiRoutes } = require('./routes/ai');
+
 // ============================================================================
 // SECURITY: Fail-Closed Secret Guards (Critical Infrastructure Only)
 // ============================================================================
