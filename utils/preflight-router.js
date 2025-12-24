@@ -16,20 +16,7 @@ const { getPsiEMAContext, PsiEMADashboard } = require('./psi-EMA');
 const { getFinancialPhysicsSeed } = require('./financial-physics');
 const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal-analysis');
 const { detectForexPair, isForexQuery, fetchForexRate, buildForexContext } = require('./forex-fetcher');
-const { getSeedMetricProxy } = require('../prompts/seed-metric');
-
-const SEED_METRIC_KEYWORDS = [
-  'seed metric', 'seed factor', 'p/i ratio', 'years to buy',
-  'land price', 'property price', 'housing afford',
-  'income ratio', 'how many years', 'salary to buy',
-  'median income', 'average income', 'house price ratio'
-];
-
-function isSeedMetricQuery(query) {
-  if (!query) return false;
-  const lower = query.toLowerCase();
-  return SEED_METRIC_KEYWORDS.some(kw => lower.includes(kw));
-}
+const { getSeedMetricProxy, detectSeedMetricIntent } = require('../prompts/seed-metric');
 
 /**
  * @typedef {Object} PreflightResult
@@ -287,7 +274,7 @@ async function preflightRouter(options) {
       }
       // 2. Seed Metric: MANDATORY web search for grounded real estate data
       // LLM training data is stale/wrong - must fetch actual $/m² from authoritative sources
-      else if (isSeedMetricQuery(query)) {
+      else if (detectSeedMetricIntent(query)) {
         result.mode = 'seed-metric';
         result.routingFlags.isSeedMetric = true;
         result.searchStrategy = 'brave';
@@ -597,9 +584,5 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
 module.exports = {
   preflightRouter,
   buildSystemContext,
-  buildStockContext,
-  buildLimitedStockContext,
-  buildFallbackStockContext,
-  isSeedMetricQuery,
   safeFixed
 };
