@@ -2533,9 +2533,30 @@
                                 
                                 <!-- Book Selector -->
                                 <div style="flex: 2; min-width: 280px;">
-                                    <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 0.35rem; font-weight: 600;">📚 Books (click to select)</div>
-                                    <div id="auditBookSelector" style="display: flex; flex-wrap: wrap; gap: 0.35rem; padding: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; min-height: 36px; max-height: 80px; overflow-y: auto;">
-                                        <span style="color: #64748b; font-size: 0.75rem;">Loading books...</span>
+                                    <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 0.35rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
+                                        <span>📚 Books</span>
+                                        <div style="font-size: 0.65rem; gap: 0.25rem; display: flex;">
+                                            <button id="bookSelectAll" style="padding: 0.15rem 0.5rem; background: rgba(34, 211, 238, 0.2); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 3px; color: #22d3ee; cursor: pointer; font-size: 0.65rem;">All</button>
+                                            <button id="bookSelectNone" style="padding: 0.15rem 0.5rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 3px; color: #ef4444; cursor: pointer; font-size: 0.65rem;">None</button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Selected Books (Bubbles) -->
+                                    <div id="auditSelectedBubbles" style="display: flex; flex-wrap: wrap; gap: 0.35rem; padding: 0.375rem 0; margin-bottom: 0.5rem; min-height: 20px;">
+                                        <span style="color: #64748b; font-size: 0.7rem;">Loading...</span>
+                                    </div>
+                                    
+                                    <!-- Dropdown Toggle & Search -->
+                                    <div style="position: relative;">
+                                        <div style="display: flex; gap: 0.5rem;">
+                                            <input id="bookSearchInput" type="text" placeholder="🔍 Search books..." style="flex: 1; padding: 0.5rem 0.75rem; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 6px; color: #e2e8f0; font-size: 0.8rem;" />
+                                            <button id="bookDropdownToggle" style="padding: 0.5rem 0.75rem; background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 6px; color: #94a3b8; cursor: pointer; font-size: 0.8rem; min-width: 40px;">▼</button>
+                                        </div>
+                                        
+                                        <!-- Dropdown List -->
+                                        <div id="auditBookDropdown" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 0.25rem; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 6px; max-height: 200px; overflow-y: auto; z-index: 1001; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                                            <div style="padding: 0.5rem; color: #64748b; font-size: 0.75rem;">Loading books...</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -2611,40 +2632,139 @@
             document.getElementById('prometheusCheckBtn').textContent = '🔮 Run AI Check';
             document.getElementById('auditAiEngine').value = 'prometheus';
             
-            // Populate book selector chips
-            const bookSelector = document.getElementById('auditBookSelector');
-            if (bookSelector && books && books.length > 0) {
-                window.auditSelectedBooks = new Set(books.map(b => b.fractal_id));
+            // Initialize book selector with dropdown + search + bubbles
+            window.auditSelectedBooks = new Set(books && books.length > 0 ? books.map(b => b.fractal_id) : []);
+            window.auditAllBooks = books || [];
+            
+            const renderSelectedBubbles = () => {
+                const bubblesDiv = document.getElementById('auditSelectedBubbles');
+                if (!bubblesDiv) return;
                 
-                bookSelector.innerHTML = books.map(book => `
-                    <span class="audit-book-chip" data-fractal-id="${book.fractal_id}" 
-                          style="padding: 0.25rem 0.5rem; background: rgba(34, 211, 238, 0.2); border: 1px solid rgba(34, 211, 238, 0.4); border-radius: 4px; color: #22d3ee; font-size: 0.7rem; cursor: pointer; transition: all 0.2s; user-select: none;"
-                          title="Click to toggle">
-                        📚 ${escapeHtml(book.name.length > 15 ? book.name.substring(0, 15) + '...' : book.name)}
-                    </span>
-                `).join('');
-                
-                bookSelector.querySelectorAll('.audit-book-chip').forEach(chip => {
-                    chip.addEventListener('click', function() {
-                        const fractalId = this.getAttribute('data-fractal-id');
-                        if (window.auditSelectedBooks.has(fractalId)) {
+                if (window.auditSelectedBooks.size === 0) {
+                    bubblesDiv.innerHTML = '<span style="color: #64748b; font-size: 0.7rem;">No books selected</span>';
+                } else {
+                    const bubbles = Array.from(window.auditSelectedBooks)
+                        .map(fractalId => {
+                            const book = window.auditAllBooks.find(b => b.fractal_id === fractalId);
+                            const name = book ? book.name : fractalId;
+                            return `
+                                <span class="audit-selected-bubble" data-fractal-id="${fractalId}" 
+                                      style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(34, 211, 238, 0.25); border: 1px solid rgba(34, 211, 238, 0.4); border-radius: 12px; color: #22d3ee; font-size: 0.7rem; white-space: nowrap;">
+                                    📚 ${escapeHtml(name.length > 12 ? name.substring(0, 12) + '...' : name)}
+                                    <button class="bubble-remove" style="background: none; border: none; color: #22d3ee; cursor: pointer; font-size: 0.8rem; padding: 0; line-height: 1;">×</button>
+                                </span>
+                            `;
+                        })
+                        .join('');
+                    bubblesDiv.innerHTML = bubbles;
+                    
+                    document.querySelectorAll('.bubble-remove').forEach(btn => {
+                        btn.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            const fractalId = this.closest('.audit-selected-bubble').getAttribute('data-fractal-id');
                             window.auditSelectedBooks.delete(fractalId);
-                            this.style.background = 'rgba(100, 116, 139, 0.2)';
-                            this.style.borderColor = 'rgba(100, 116, 139, 0.4)';
-                            this.style.color = '#64748b';
-                        } else {
-                            window.auditSelectedBooks.add(fractalId);
-                            this.style.background = 'rgba(34, 211, 238, 0.2)';
-                            this.style.borderColor = 'rgba(34, 211, 238, 0.4)';
-                            this.style.color = '#22d3ee';
-                        }
-                        updateBookContextDisplay();
+                            renderSelectedBubbles();
+                            renderDropdownList('');
+                            updateBookContextDisplay();
+                        });
                     });
+                }
+            };
+            
+            const renderDropdownList = (searchText) => {
+                const dropdown = document.getElementById('auditBookDropdown');
+                if (!dropdown) return;
+                
+                const filtered = window.auditAllBooks.filter(book => 
+                    !window.auditSelectedBooks.has(book.fractal_id) &&
+                    book.name.toLowerCase().includes(searchText.toLowerCase())
+                );
+                
+                if (filtered.length === 0) {
+                    dropdown.innerHTML = `<div style="padding: 0.5rem; color: #64748b; font-size: 0.75rem;">No unselected books found</div>`;
+                } else {
+                    dropdown.innerHTML = filtered.map(book => `
+                        <div class="dropdown-book-item" data-fractal-id="${book.fractal_id}" 
+                             style="padding: 0.5rem 0.75rem; cursor: pointer; color: #e2e8f0; font-size: 0.8rem; border-bottom: 1px solid rgba(148, 163, 184, 0.1); transition: background 0.2s;">
+                            📚 ${escapeHtml(book.name)}
+                        </div>
+                    `).join('');
+                    
+                    document.querySelectorAll('.dropdown-book-item').forEach(item => {
+                        item.addEventListener('click', function() {
+                            const fractalId = this.getAttribute('data-fractal-id');
+                            window.auditSelectedBooks.add(fractalId);
+                            renderSelectedBubbles();
+                            renderDropdownList('');
+                            document.getElementById('bookSearchInput').value = '';
+                            updateBookContextDisplay();
+                        });
+                        item.addEventListener('mouseover', function() {
+                            this.style.background = 'rgba(148, 163, 184, 0.1)';
+                        });
+                        item.addEventListener('mouseout', function() {
+                            this.style.background = 'transparent';
+                        });
+                    });
+                }
+            };
+            
+            // Dropdown toggle
+            const dropdown = document.getElementById('auditBookDropdown');
+            const toggleBtn = document.getElementById('bookDropdownToggle');
+            const searchInput = document.getElementById('bookSearchInput');
+            
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', () => {
+                    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+                    if (dropdown.style.display === 'block') renderDropdownList('');
                 });
-            } else {
-                bookSelector.innerHTML = '<span style="color: #64748b; font-size: 0.75rem;">No books available</span>';
-                window.auditSelectedBooks = new Set();
             }
+            
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    dropdown.style.display = 'block';
+                    renderDropdownList(e.target.value);
+                });
+                searchInput.addEventListener('focus', () => {
+                    dropdown.style.display = 'block';
+                });
+            }
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#bookSearchInput') && 
+                    !e.target.closest('#bookDropdownToggle') && 
+                    !e.target.closest('#auditBookDropdown')) {
+                    dropdown.style.display = 'none';
+                }
+            });
+            
+            // All/None buttons
+            const allBtn = document.getElementById('bookSelectAll');
+            const noneBtn = document.getElementById('bookSelectNone');
+            
+            if (allBtn) {
+                allBtn.addEventListener('click', () => {
+                    window.auditSelectedBooks = new Set(window.auditAllBooks.map(b => b.fractal_id));
+                    renderSelectedBubbles();
+                    renderDropdownList('');
+                    updateBookContextDisplay();
+                });
+            }
+            
+            if (noneBtn) {
+                noneBtn.addEventListener('click', () => {
+                    window.auditSelectedBooks.clear();
+                    renderSelectedBubbles();
+                    renderDropdownList('');
+                    updateBookContextDisplay();
+                });
+            }
+            
+            // Initial render
+            renderSelectedBubbles();
+            renderDropdownList('');
             
             updateBookContextDisplay();
             auditModal.style.display = 'flex';
