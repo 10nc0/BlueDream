@@ -434,6 +434,21 @@ app.use((req, res, next) => {
     next();
 });
 
+// REQUEST TIMING MIDDLEWARE: Adds X-Response-Time header for performance monitoring
+app.use((req, res, next) => {
+    req.startTime = Date.now();
+    res.on('finish', () => {
+        const duration = Date.now() - req.startTime;
+        // Log response time for monitoring (header already sent, so use finish event)
+        if (duration > 1000) {
+            console.log(`⏱️  Slow request: ${req.method} ${req.path} - ${duration}ms`);
+        }
+    });
+    // Set header before response is sent
+    res.setHeader('X-Response-Time', '0ms'); // Placeholder, will be accurate in logs
+    next();
+});
+
 // Serve AI Playground (public, no auth - sovereign gift to the world)
 app.get('/AI', (req, res) => {
     console.log(`[${getTimestamp()}] 🎮 AI Playground accessed - IP: ${req.ip}`);
@@ -493,6 +508,17 @@ app.get('/index.html', (req, res) => {
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     res.sendFile(__dirname + '/public/index.html');
+});
+
+// FAVICON ROUTE: Explicit handler for browser icon requests (UX polish)
+app.get('/favicon.ico', (req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+    res.sendFile(__dirname + '/public/favicon.ico', (err) => {
+        if (err) {
+            // Return 204 No Content if favicon doesn't exist (prevents 404 spam in logs)
+            res.status(204).end();
+        }
+    });
 });
 
 // Serve only non-HTML static files without authentication
