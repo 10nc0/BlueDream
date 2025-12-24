@@ -33,7 +33,7 @@
  * 
  * Measurement Data Only (No Interpretation):
  * All output is observed measurement + φ-distance. No claims about regime,
- * sustainability, or market direction. Only empirical data and H₀ tests.
+ * sustainability, or market direction. Only empirical data and classification checks.
  */
 
 const PHI = 1.6180339887498949;           // Golden ratio φ = (1 + √5) / 2
@@ -51,16 +51,16 @@ const FIB_PERIODS = {
   SLOW_THETA: 55   // 10th Fibonacci number
 };
 
-// R (Convergence) Regime Bounds - φ-Derived
-// H₀: Amplitude ratio convergence to φ indicates self-similar oscillations
+// R (Convergence) Regime Bounds - φ-Derived from x = 1 + 1/x
+// Classification: Amplitude ratio near φ indicates self-similar oscillations
 const R_BOUNDS = {
   LOWER: PHI_INVERSE,      // φ⁻¹ ≈ 0.618: R < φ⁻¹ → amplitude decay
   UPPER: PHI,              // φ ≈ 1.618: R > φ → amplitude growth
   TOLERANCE: PHI_INV_SQUARED // φ⁻² ≈ 0.382: band around φ for convergence test
 };
 
-// Z (Anomaly) Thresholds - φ-Derived
-// H₀: Deviation from equilibrium measured in MAD units
+// Z (Anomaly) Thresholds - φ-Derived from x = 1 + 1/x
+// Classification: Deviation from equilibrium measured in MAD units
 const Z_BOUNDS = {
   NORMAL: PHI,             // |z| < φ: within expected range
   ALERT: PHI_SQUARED,      // φ < |z| < φ²: elevated deviation

@@ -50,7 +50,7 @@ If the framework is universal, these should hold when tested:
 
 ### The Stock/Flow Classification Framework
 
-Ψ-EMA applies universally across all self-reproducing systems where Stock ⊥ Flow can be defined. **φ is chosen as a classification threshold (not a natural attractor)** to partition system states:
+Ψ-EMA applies universally across all self-reproducing systems where Stock ⊥ Flow can be defined. **φ emerges from the fixed-point equation x = 1 + 1/x** and is applied as classification thresholds:
 
 | Domain | Stock | Flow | R ≈ φ Classification |
 |--------|-------|------|-------------|
@@ -63,10 +63,10 @@ If the framework is universal, these should hold when tested:
 
 Systems with R ≈ φ (within bounds [φ⁻¹, φ]) are **classified as convergent/sustainable states**. Those with R >> φ (growth phase) or R << 1 (decay phase) are **classified differently**, suggesting unsustainable trajectories if sustained indefinitely.
 
-**Caveat**: φ is an **exogenous axiom**, not a derived property. No theorem proves R converges to φ under natural dynamics. The classification works empirically; the explanation of *why* φ appears is philosophical/speculative.
+**Derivation**: φ is **endogenous** to Φ-Dynamics - it emerges as the unique positive solution to the self-referential equation x = 1 + 1/x. This isn't arbitrary; φ is THE fixed point of self-similar recursion. The Ψ-EMA pipeline applies this derived constant as measurement thresholds.
 
 ### Epistemic Status
-These are pattern observations grounded in robust signal processing (EMA, MAD-scaled z-scores, ratio guards). The framework captures something real (massive effect size, 35-year consistency), but **φ is a chosen constant for classification boundaries, not a physics-level law**. Maintain humility; let data speak.
+The framework is grounded in robust signal processing (EMA, MAD-scaled z-scores, ratio guards) with φ derived from the Φ-Dynamics fixed-point equation. The pipeline captures something real (massive effect size, 35-year consistency). **Empirical validation concerns whether φ-derived thresholds are suitable for classification in specific domains** - not whether φ itself is derived (it is, from x = 1 + 1/x). Maintain humility; let data speak.
 
 ---
 

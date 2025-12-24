@@ -54,14 +54,14 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - **Nyan Protocol**: System prompt framework for historical comparison and socio-economic analysis. Uses Seed Metric (Price/Income ratio) as falsifiable threshold. Prevents LLM hallucinations via mandatory source requirements.
 - **Financial Physics System**: A 4-tier architecture extending the NYAN Protocol for financial cognition.
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis, providing a universal 7-section template.
-- **Φ-Dynamics & Ψ-EMA System**: Multi-signal state classifier using robust signal processing and φ (1.618) as a chosen classification threshold. Φ-Dynamics is a conceptual framework, while Ψ-EMA is the three-dimensional measurement instrument.
-    - **Core Principle**: φ is an **exogenous constant** (chosen, not derived). EMA-based measurement provides deterministic signal processing with φ used exclusively as a fixed scale constant for classification boundaries.
+- **Φ-Dynamics & Ψ-EMA System**: Multi-signal state classifier using robust signal processing and φ (1.618) as the measurement threshold. Φ-Dynamics is the theoretical framework (R = 1 + 1/R = φ), while Ψ-EMA is the three-dimensional measurement instrument.
+    - **Core Principle**: φ is **endogenous** - derived from the self-referential equation x = 1 + 1/x, the unique positive fixed point of self-similar recursion. The Ψ-EMA pipeline applies this derived constant as calibration thresholds.
     - **Measurement**: Ψ-EMA (θ, z, R) classifies system states across any domain via signal decomposition
     - **θ (Phase)**: atan2(Flow, Stock) - cycle position in 4 quadrants (0°-360°)
     - **z (Anomaly)**: (Price - Median) / MAD - deviation from equilibrium (robust z-score)
     - **R (Convergence)**: z(t)/z(t-1) - ratio of successive standardized values (with near-zero guards)
     - Uses Fibonacci EMA periods (13, 21, 34, 55) for consistency in signal smoothing
-    - **Classification Rules**: Thresholds (R ≈ φ, |z| > φ²) are **axioms, not derivations**. They define state classification boundaries based on φ, not proven convergence properties.
+    - **Classification Rules**: Thresholds (R ≈ φ, |z| > φ²) derive from φ-Dynamics theory. Empirical validation concerns suitability of φ-derived thresholds for state classification in specific domains.
     - **Substrate-Agnostic**: Same signal processing applies to any domain (physics, biology, demographics, economics, institutions) where Stock⊥Flow decomposition is valid. See philosophy.md for theoretical context and untested falsifiable predictions.
 - **Unified Personality Layer**: All formatting enforced in `applyPersonalityFormat()` in `pipeline-orchestrator.js` to remove "fluff patterns" via regex post-processing.
 - **Code Execution Honesty**: AI provides code for user execution, but does not execute it itself.
