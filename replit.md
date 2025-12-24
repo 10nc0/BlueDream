@@ -52,7 +52,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Zero-Friction Onboarding**: WhatsApp deep link activation.
 - **Scalability & Recovery**: Designed for Replit Autoscale, PostgreSQL for state recovery.
 - **Push Guard vs Pull Action Pattern**: O(1) validation before expensive work.
-- **Security (10/10 Hardened)**: Sybil attack prevention, JWT security, session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, CSP compliance.
+- **Security (10/10 Hardened)**: Sybil attack prevention, JWT security (15-min access token + refresh token revocation), session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, CSP compliance, dev-role bypass blocked in production.
 - **Discord Bot Trinity Architecture**: Hermes (write-only), Thoth (read-only), Idris (AI write-only), Horus (AI read-only).
 - **Route Modularization**: Factory pattern with dependency injection. index.js reduced from 8500 → 3320 lines (~61% reduction). 
   - Extracted: routes/auth.js, routes/admin.js, routes/books.js, routes/inpipe.js, routes/export.js, routes/prometheus.js, routes/nyan-ai.js
