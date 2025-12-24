@@ -1,8 +1,23 @@
 /**
- * Ψ-EMA: Multi-Dimensional Wave Function Observer for Infinite Series
+ * Ψ-EMA: Time Series Oscillator (Three-Dimensional Wave Function Observer)
  * 
- * A 3-dimensional orthogonal state observer measuring the empirical wave function
- * in real-time with economic lens. All bounds and thresholds derived from φ (1.618).
+ * GLOSSARY & SUBSTRATE-AGNOSTIC FRAMING:
+ * ═════════════════════════════════════════════════════════════════════════════
+ * Ψ-EMA is a GENERAL-PURPOSE time series oscillator applicable to any domain with
+ * stock/flow decomposition. Examples herein use capital markets due to data accessibility,
+ * but the same framework applies to:
+ *   • Climate: Temperature (stock) vs heating/cooling flow (anomaly detection)
+ *   • Sports: Win rate (stock) vs momentum (phase angle)
+ *   • Demographics: Population (stock) vs birth/death flow (signal decomposition)
+ *   • Physics: Charge/mass (stock) vs force field (phase relationships)
+ * 
+ * The THREE DIMENSIONS (θ, z, R) are substrate-independent measurements:
+ *   θ (Phase):       Cycle position via atan2(Flow, Stock) - applies to any oscillating system
+ *   z (Anomaly):     Deviation from equilibrium via robust MAD z-score - universal
+ *   R (Convergence): Amplitude ratio z(t)/z(t-1) - scale-free convergence metric
+ * 
+ * All bounds and thresholds derive from φ (1.618), the golden ratio from x = 1 + 1/x.
+ * ═════════════════════════════════════════════════════════════════════════════
  * 
  * ┌────────────────────────────────────────────────────────────────────────────────────────────┐
  * │ Ψ-EMA DIMENSIONAL REFERENCE (φ-DERIVED THRESHOLDS ONLY)                                   │
@@ -12,8 +27,8 @@
  * │ θ (Phase)       │ atan2(Flow, Stock)       │ ∈ [0°, 360°)   │ θ measures cycle position    │
  * │ Cycle Position  │                          │                │ (Flow-Stock phase angle)     │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
- * │ z (Anomaly)     │ (Price - Median) / MAD   │ See bounds     │ |z| > φ² flags anomaly      │
- * │ Price Deviation │                          │ below          │ (deviation from equilibrium) │
+ * │ z (Anomaly)     │ (Value - Median) / MAD   │ See bounds     │ |z| > φ² flags anomaly      │
+ * │ Signal Deviation│                          │ below          │ (deviation from equilibrium) │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
  * │ R (Convergence) │ z(t) / z(t-1)            │ φ⁻¹ ≤ R ≤ φ    │ R ∈ [φ⁻¹, φ] classifies as  │
  * │ Amplitude Ratio │                          │ is "critical"  │ convergent state             │
@@ -33,7 +48,7 @@
  * 
  * Measurement Data Only (No Interpretation):
  * All output is observed measurement + φ-distance. No claims about regime,
- * sustainability, or market direction. Only empirical data and classification checks.
+ * sustainability, or directional prediction. Only empirical data and classification checks.
  */
 
 const PHI = 1.6180339887498949;           // Golden ratio φ = (1 + √5) / 2

@@ -55,15 +55,16 @@ The system employs a Node.js backend with Express and a Single Page Application 
     - **Seed Metric Conditional Injection**: The Seed Metric proxy cascade (700sqm conversion rules, income proxy cascade, P/I ratio methodology) is conditionally loaded only when Seed Metric topics are detected via `routingFlags.isSeedMetric`. Saves ~300 tokens on non-Seed queries. Module: `prompts/seed-metric.js`.
 - **Financial Physics System**: A 4-tier architecture extending the NYAN Protocol for financial cognition.
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis, providing a universal 7-section template.
-- **Φ-Dynamics & Ψ-EMA System**: Multi-signal state classifier using robust signal processing and φ (1.618) as the measurement threshold. Φ-Dynamics is the theoretical framework (R = 1 + 1/R = φ), while Ψ-EMA is the three-dimensional measurement instrument.
+- **Φ-Dynamics & Ψ-EMA System**: Multi-signal time series oscillator using robust signal processing and φ (1.618) as the measurement threshold. Φ-Dynamics is the theoretical framework (R = 1 + 1/R = φ), while Ψ-EMA is the three-dimensional measurement instrument.
+    - **Glossary & Framing**: Ψ-EMA is a **general-purpose time series oscillator**, not stock-market-specific. Examples herein use capital markets due to data accessibility, but identical mathematics apply to climate (temperature dynamics), sports (win-rate momentum), demographics (population flows), and any system with stock/flow decomposition.
     - **Core Principle**: φ is **endogenous** - derived from the self-referential equation x = 1 + 1/x, the unique positive fixed point of self-similar recursion. The Ψ-EMA pipeline applies this derived constant as calibration thresholds.
     - **Measurement**: Ψ-EMA (θ, z, R) classifies system states across any domain via signal decomposition
-    - **θ (Phase)**: atan2(Flow, Stock) - cycle position in 4 quadrants (0°-360°)
-    - **z (Anomaly)**: (Price - Median) / MAD - deviation from equilibrium (robust z-score)
-    - **R (Convergence)**: z(t)/z(t-1) - ratio of successive standardized values (with near-zero guards)
-    - Uses Fibonacci EMA periods (13, 21, 34, 55) for consistency in signal smoothing
+    - **θ (Phase)**: atan2(Flow, Stock) - cycle position in 4 quadrants (0°-360°). Measures phase relationship between stock and flow components.
+    - **z (Anomaly)**: (Value - Median) / MAD - deviation from equilibrium (robust z-score). Detects when signal deviates beyond φ² threshold.
+    - **R (Convergence)**: z(t)/z(t-1) - ratio of successive standardized values (with near-zero guards). Classifies amplitude growth/decay/stability.
+    - Uses Fibonacci EMA periods (13, 21, 34, 55) for consistency in signal smoothing across all domains
     - **Classification Rules**: Thresholds (R ≈ φ, |z| > φ²) derive from φ-Dynamics theory. Empirical validation concerns suitability of φ-derived thresholds for state classification in specific domains.
-    - **Substrate-Agnostic**: Same signal processing applies to any domain (physics, biology, demographics, economics, institutions) where Stock⊥Flow decomposition is valid. See philosophy.md for theoretical context and untested falsifiable predictions.
+    - **Substrate-Agnostic**: Same signal processing applies to any domain (physics, biology, demographics, economics, climate, sports, institutions) where Stock⊥Flow decomposition is valid. See philosophy.md for theoretical context and untested falsifiable predictions.
 - **Unified Personality Layer**: All formatting enforced in `applyPersonalityFormat()` in `pipeline-orchestrator.js` to remove "fluff patterns" via regex post-processing.
 - **Code Execution Honesty**: AI provides code for user execution, but does not execute it itself.
 - **H₀ Physical Audit Disclaimer**: Advisory appended to financial outputs, emphasizing physical reality verification methods.
