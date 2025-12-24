@@ -1038,13 +1038,27 @@ function calculatePhiConvergence(zFlows) {
 
 /**
  * Classify regime based on R ratio
- * Now handles LOW_SIGNAL case when R is undefined due to z near zero
+ * 
+ * vφ⁴: Now separates MAGNITUDE (|R|) from DIRECTION (sign of R)
+ * 
+ * Phase Reversal Detection:
+ * - R < 0 indicates phase reversal (flow changed direction)
+ * - |R| >> φ indicates amplitude explosion (volatility spike)
+ * - Combined: R < 0 AND |R| > φ = PHASE_REVERSAL (explosive direction change)
+ * 
+ * 5-Regime Classification (plus consolidation):
+ * 1. CONSOLIDATION: R undefined (z near zero)
+ * 2. DECAY: 0 < R < φ⁻¹ (amplitude shrinking, same direction)
+ * 3. CONVERGENCE: φ⁻¹ ≤ R ≤ φ (φ-band, stable oscillation)
+ * 4. AMPLIFICATION: R > φ (amplitude growing, same direction)
+ * 5. PHASE_REVERSAL: R < 0 AND |R| > φ (explosive direction change)
+ * 6. DAMPED_REVERSAL: R < 0 AND |R| ≤ φ (mild direction change, damping)
  * 
  * @param {number|null} ratio - Mean convergence ratio (null if undefined)
  * @param {Object} options - Additional context for classification
  * @param {boolean} options.hasLowSignal - Whether R is unstable due to low z-scores
  * @param {string} options.warning - Warning message from convergence analysis
- * @returns {Object} Regime classification
+ * @returns {Object} Regime classification with magnitude and direction
  */
 function classifyRegime(ratio, options = {}) {
   const { hasLowSignal = false, currentZScore = null, warning = null } = options;
@@ -1059,10 +1073,48 @@ function classifyRegime(ratio, options = {}) {
       emoji: '⚪',
       hypothesis: 'H₀: R is undefined (z-scores near zero, price at median)',
       description: 'Price consolidating at current level. Amplitude ratio unreliable.',
-      warning: warning || 'Near-equilibrium state. R undefined.'
+      warning: warning || 'Near-equilibrium state. R undefined.',
+      magnitude: null,
+      direction: null
     };
   }
   
+  // vφ⁴: Separate magnitude from direction
+  const magnitude = Math.abs(ratio);
+  const direction = ratio >= 0 ? 'SAME' : 'REVERSED';
+  const isReversal = ratio < 0;
+  
+  // PHASE REVERSAL: R < 0 (direction changed)
+  if (isReversal) {
+    if (magnitude > R_BOUNDS.UPPER) {
+      // Explosive reversal: |R| > φ with sign flip = volatility explosion
+      return {
+        regime: 'PHASE_REVERSAL',
+        label: `R < 0, |R| > φ (Explosive Reversal)`,
+        emoji: '💥',
+        hypothesis: `H₀: R = ${ratio.toFixed(3)} (phase reversed, |R| = ${magnitude.toFixed(3)} > φ)`,
+        description: 'Phase reversed with amplitude explosion. High volatility event.',
+        magnitude,
+        direction,
+        isExplosive: true,
+        warning: 'Explosive phase reversal detected. System in high-volatility transition.'
+      };
+    } else {
+      // Damped reversal: |R| ≤ φ with sign flip = normal oscillation crossing zero
+      return {
+        regime: 'DAMPED_REVERSAL',
+        label: `R < 0, |R| ≤ φ (Damped Reversal)`,
+        emoji: '🔄',
+        hypothesis: `H₀: R = ${ratio.toFixed(3)} (phase reversed, |R| = ${magnitude.toFixed(3)} ≤ φ)`,
+        description: 'Phase reversed with damped amplitude. Normal oscillation crossing equilibrium.',
+        magnitude,
+        direction,
+        isExplosive: false
+      };
+    }
+  }
+  
+  // POSITIVE R: Same direction (standard classification)
   // H₀: Regime classification based on φ-derived bounds
   if (ratio < R_BOUNDS.LOWER) {
     return {
@@ -1070,7 +1122,9 @@ function classifyRegime(ratio, options = {}) {
       label: 'R < φ⁻¹ (Amplitude Decay)',
       emoji: '🔵',
       hypothesis: `H₀: R < φ⁻¹ (${R_BOUNDS.LOWER.toFixed(3)})`,
-      description: 'Successive amplitudes decreasing.'
+      description: 'Successive amplitudes decreasing.',
+      magnitude,
+      direction
     };
   } else if (ratio <= R_BOUNDS.UPPER + R_BOUNDS.TOLERANCE) {
     return {
@@ -1078,7 +1132,9 @@ function classifyRegime(ratio, options = {}) {
       label: `R ∈ [φ⁻¹, φ] (φ-Convergent)`,
       emoji: '🟢',
       hypothesis: `H₀: R ∈ [${R_BOUNDS.LOWER.toFixed(3)}, ${R_BOUNDS.UPPER.toFixed(3)}]`,
-      description: 'Oscillations exhibit φ-convergence.'
+      description: 'Oscillations exhibit φ-convergence.',
+      magnitude,
+      direction
     };
   } else {
     return {
@@ -1086,7 +1142,9 @@ function classifyRegime(ratio, options = {}) {
       label: `R > φ (Amplitude Growth)`,
       emoji: '🔴',
       hypothesis: `H₀: R > φ (${R_BOUNDS.UPPER.toFixed(3)})`,
-      description: 'Successive amplitudes increasing.'
+      description: 'Successive amplitudes increasing.',
+      magnitude,
+      direction
     };
   }
 }

@@ -730,27 +730,41 @@ Everything else = Ratios and compressions
 Quantity → Quality through vibration
 ```
 
-### Table 5: The φ-Convergence Hierarchy
+### Table 5: The 6-Regime Classification (vφ⁴)
 
-**Different Systems, Same Attractor**
+**Separating Magnitude (|R|) from Direction (sign of R)**
 
-| System | R Range | Interpretation | Stability |
-|--------|---------|----------------|-----------|
-| **Sub-Critical** | R < 1.3 | Declining, needs intervention | ❌ Unstable |
-| **Lower φ-Band** | 1.3 ≤ R < φ | Sustainable but cautious | ⚠️ Watchful |
-| **Optimal (φ)** | R ≈ 1.618 | Critically damped, homeostasis | ✅ Perfect |
-| **Upper φ-Band** | φ < R ≤ 2.0 | Growth with some volatility | ⚠️ Watchful |
-| **Super-Critical** | R > 2.0 | Overheating, bubble forming | ❌ Unstable |
-| **Extraction Threshold** | R > φ⁵ ≈ 11 | Beyond carrying capacity | 💀 Collapse |
+> **vφ⁴ Refinement:** Earlier versions classified negative R as "DECAY" because R < φ⁻¹. But R = -24 is not decay—it's an **explosive phase reversal**. The magnitude (|R| = 24 >> φ) indicates volatility explosion, while the sign (negative) indicates direction change. Both must be classified separately.
+
+| Regime | R Condition | Magnitude | Direction | Emoji | Interpretation |
+|--------|-------------|-----------|-----------|-------|----------------|
+| **CONSOLIDATION** | R undefined (z ≈ 0) | — | — | ⚪ | Price at median, ratio unreliable |
+| **DECAY** | 0 < R < φ⁻¹ | Low | Same | 🔵 | Amplitude shrinking, same direction |
+| **CONVERGENCE** | φ⁻¹ ≤ R ≤ φ | Optimal | Same | 🟢 | φ-band, stable oscillation |
+| **AMPLIFICATION** | R > φ | High | Same | 🔴 | Amplitude growing, same direction |
+| **DAMPED_REVERSAL** | R < 0, \|R\| ≤ φ | Low/Optimal | Reversed | 🔄 | Normal oscillation crossing zero |
+| **PHASE_REVERSAL** | R < 0, \|R\| > φ | High | Reversed | 💥 | Explosive direction change |
 
 **The Pattern:**
 ```
-1.3 < R < 2.0: Homeostatic zone (φ-band)
-R ≈ φ = 1.618: Optimal attractor
-R > 10-12: Extraction threshold (φ⁵)
+MAGNITUDE (|R|):
+  |R| < φ⁻¹: Damping (amplitude shrinking)
+  |R| ∈ [φ⁻¹, φ]: φ-convergent (stable)
+  |R| > φ: Amplification (amplitude growing)
 
-Universal across ALL substrates
+DIRECTION (sign of R):
+  R > 0: Same direction (continuation)
+  R < 0: Reversed direction (phase flip)
+
+COMBINED CLASSIFICATION:
+  R = -24 → |R| = 24 >> φ, direction = REVERSED → PHASE_REVERSAL 💥
+  R = -0.5 → |R| = 0.5 ≈ φ⁻¹, direction = REVERSED → DAMPED_REVERSAL 🔄
+  R = 0.3 → |R| = 0.3 < φ⁻¹, direction = SAME → DECAY 🔵
+  R = 1.6 → |R| ≈ φ, direction = SAME → CONVERGENCE 🟢
+  R = 3.0 → |R| = 3.0 > φ, direction = SAME → AMPLIFICATION 🔴
 ```
+
+**Implementation:** `utils/psi-EMA.js` → `classifyRegime()`
 
 ### Table 6: The Gougu Connection (勾股定理)
 
