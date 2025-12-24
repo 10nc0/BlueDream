@@ -285,8 +285,6 @@ not φ algebra. The parallel is inspirational, not doctrinal.
 | **Message Recording** | `utils/context-extractor.js` | In-memory stocks (φ⁰), Discord flows (φ¹) |
 | **Philosophy** | `philosophy.md` | This document |
 
-> **See Also:** For a complete 18-contemplation → code mapping (Anupassanā framework), see [`docs/philosophy.md` Part IX](docs/philosophy.md#part-ix-the-18-contemplations--code-mapping-analogical).
-
 ### **User-Facing Implications (Analogical Insights)**
 
 1. **Multi-Tenant Isolation (φ⁰)**: Each user is a unity with their own schema
