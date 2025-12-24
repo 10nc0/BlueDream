@@ -101,7 +101,6 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - `routes/auth-admin.js` (1278 lines) - Auth routes (login, signup, password reset, refresh, logout, invites) + Admin routes (sessions, users, audit-logs)
 - `routes/books.js` (270 lines) - Core CRUD (get books, archive/unarchive, stats)
 - `routes/inpipe.js` (406 lines) - Multi-channel input with abstract channel interface
-- `routes/ai.js` (27 lines) - AI status endpoint placeholder
 
 **Inpipe Architecture** (Multi-In Pattern):
 - `lib/channels/base.js` - Abstract channel interface (validateSignature, parsePayload, normalizeMessage, sendReply)
@@ -116,7 +115,6 @@ The system employs a Node.js backend with Express and a Single Page Application 
 4. `deps.setMiddleware(requireAuth, requireRole)`
 5. `registerBooksRoutes(app, deps)`
 6. `registerInpipeRoutes(app, deps)`
-7. `registerAiRoutes(app, deps)`
 
 **Remaining in index.js**: AI streaming routes, sendToLedger integration
 

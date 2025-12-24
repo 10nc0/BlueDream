@@ -41,7 +41,6 @@ const { initialize: initDeps, setMiddleware: setDepsMiddleware, deps } = require
 const { registerAuthAdminRoutes } = require('./routes/auth-admin');
 const { registerBooksRoutes } = require('./routes/books');
 const { registerInpipeRoutes } = require('./routes/inpipe');
-const { registerAiRoutes } = require('./routes/ai');
 
 // ============================================================================
 // SECURITY: Fail-Closed Secret Guards (Critical Infrastructure Only)

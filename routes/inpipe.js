@@ -7,13 +7,14 @@ function registerInpipeRoutes(app, deps) {
     const { hermes: hermesBot } = bots || {};
     const NYANBOOK_LEDGER_WEBHOOK = constants?.NYANBOOK_LEDGER_WEBHOOK;
     const LIMBO_THREAD_ID = constants?.LIMBO_THREAD_ID || '1433850939751534672';
+    const HERMES_TOKEN = constants?.HERMES_TOKEN || process.env.HERMES_TOKEN;
     
     if (!pool) {
         logger.warn('Inpipe routes: pool not available, skipping registration');
         return;
     }
     
-    const twilioChannel = new TwilioChannel();
+    const twilioChannel = new TwilioChannel({ logger });
     twilioChannel.initialize().catch(err => logger.error({ err }, 'TwilioChannel init failed'));
     logger.info('Registering inpipe routes: POST /api/twilio/webhook');
     
@@ -37,7 +38,7 @@ function registerInpipeRoutes(app, deps) {
                 return sendChannelResponse(res, twilioChannel);
             }
             
-            const routingResult = await routeMessage(pool, msg);
+            const routingResult = await routeMessage(pool, msg, logger);
             
             if (!routingResult.bookRecord) {
                 await handleLimboMessage(res, twilioChannel, msg, rawPayload, deps);
@@ -69,8 +70,7 @@ function registerInpipeRoutes(app, deps) {
     logger.info('Inpipe routes registered successfully');
 }
 
-async function routeMessage(pool, msg) {
-    const logger = require('../lib/logger');
+async function routeMessage(pool, msg, logger) {
     let bookRecord = null;
     let routingMethod = 'unknown';
     
@@ -117,7 +117,7 @@ async function routeMessage(pool, msg) {
 
 async function handleLimboMessage(res, channel, msg, rawPayload, deps) {
     const { pool, constants, logger } = deps;
-    const LIMBO_THREAD_ID = '1433850939751534672';
+    const LIMBO_THREAD_ID = constants?.LIMBO_THREAD_ID || '1433850939751534672';
     const NYANBOOK_LEDGER_WEBHOOK = constants?.NYANBOOK_LEDGER_WEBHOOK;
     
     logger.info({ phone: msg.phone }, 'Routing to limbo (no valid join code)');
@@ -351,7 +351,7 @@ async function handleActiveBook(res, channel, msg, rawPayload, bookRecord, deps)
 }
 
 async function sendToDiscordThread(threadId, payload, media, deps) {
-    const hermesToken = process.env.HERMES_TOKEN;
+    const hermesToken = deps?.constants?.HERMES_TOKEN || process.env.HERMES_TOKEN;
     
     if (media) {
         const form = new FormData();
