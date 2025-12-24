@@ -72,6 +72,11 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.
 - **Zero-Friction Onboarding**: WhatsApp deep link activation.
 - **Scalability & Recovery**: Designed for Replit Autoscale, PostgreSQL for state recovery.
+- **Push Guard vs Pull Action Pattern** (O(1) Security Strategy):
+    - **Push Guard**: O(1) validation before expensive work (signature verification, routing flags, secret checks)
+    - **Pull Action**: On-demand work triggered only after guard passes (data fetching, LLM calls, parsing)
+    - Examples: Twilio signature verification → pull message routing; Routing flags set → conditionally pull context injection
+    - Strategy: Fail-closed startup checks for critical secrets; O(1) guards at all ingress points; conditional context injection based on routing flags
 - **Security (10/10 Hardened)**:
     - **Sybil Attack Prevention**: Dual-layer rate limiting (in-memory fast-check + database persistence). Limits: 3/hour per IP, 5/day per IP, 10/day per domain. Disposable email domains blocked.
     - **JWT Security**: Issuer/audience validation, HS256 only, 15min access tokens, 7-day refresh tokens.

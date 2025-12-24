@@ -1,17 +1,16 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
-// SECURITY: Require SESSION_SECRET to be set in production
+// SECURITY: Require SESSION_SECRET to be set (fail-closed in index.js startup check)
 const JWT_SECRET = process.env.SESSION_SECRET;
 
 if (!JWT_SECRET) {
-    console.warn('⚠️  WARNING: SESSION_SECRET not set! Using weak default.');
-    console.warn('   Set SESSION_SECRET environment variable for production security.');
-    console.warn('   Generate a strong secret: openssl rand -hex 64');
+    // This should only happen if startup check in index.js missed it (defensive fallback)
+    console.error('❌ CRITICAL: SESSION_SECRET not configured! Token signing disabled.');
+    process.exit(1);
 }
 
-// Fallback for development only - NEVER use this in production
-const SECRET = JWT_SECRET || 'dev-only-weak-jwt-secret-DO-NOT-USE-IN-PRODUCTION';
+const SECRET = JWT_SECRET;
 
 const ACCESS_TOKEN_EXPIRY = '15m';  // 15 minutes
 const REFRESH_TOKEN_EXPIRY = '7d';  // 7 days

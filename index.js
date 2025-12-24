@@ -37,24 +37,30 @@ const { createPipelineOrchestrator, PIPELINE_STEPS, fastStreamPersonality, apply
 const { recordInMemory, clearSessionMemory } = require('./utils/context-extractor');
 const { getMemoryManager, cleanupOldSessions } = require('./utils/memory-manager');
 
-// SECURITY: Enforce FRACTAL_SALT configuration before server starts
-if (!process.env.FRACTAL_SALT) {
-    const autoSalt = crypto.randomBytes(32).toString('hex');
-    console.error('❌ CRITICAL: FRACTAL_SALT environment variable not set!');
+// ============================================================================
+// SECURITY: Fail-Closed Secret Guards (Critical Infrastructure Only)
+// ============================================================================
+// Strategy: Throw hard errors on startup if critical secrets missing
+// Only enforce truly essential secrets - don't require optional integrations
+
+const criticalSecrets = {
+    FRACTAL_SALT: 'Secure book ID generation (crypto salt)',
+    NYANBOOK_WEBHOOK_URL: 'Discord Ledger #01 (output book)',
+    PLAYGROUND_GROQ_TOKEN: 'AI Playground reasoning (Groq Llama 3.3)'
+};
+
+const missingCriticalSecrets = Object.entries(criticalSecrets).filter(([key]) => !process.env[key]);
+
+if (missingCriticalSecrets.length > 0) {
+    console.error('❌ CRITICAL: Missing essential secrets (fail-closed)');
     console.error('');
-    console.error('🔐 FRACTAL_SALT is required for secure book ID generation.');
+    missingCriticalSecrets.forEach(([key, description]) => {
+        console.error(`   • ${key}: ${description}`);
+    });
     console.error('');
-    console.error('📋 SETUP INSTRUCTIONS:');
-    console.error('   1. Go to Replit Secrets tab');
-    console.error('   2. Add a new secret: FRACTAL_SALT');
-    console.error('   3. Generate a secure value: https://www.random.org/strings/?num=1&len=64&digits=on&upperalpha=on&loweralpha=on&unique=on&format=plain');
-    console.error('   4. Paste the generated string as the value');
-    console.error('   5. Restart the server');
+    console.error('📋 Configuration required in Replit Secrets tab before startup');
     console.error('');
-    console.error('⚠️  For your convenience, here\'s a pre-generated salt (use this if you prefer):');
-    console.error(`   ${autoSalt}`);
-    console.error('');
-    console.error('🛑 Server will not start until FRACTAL_SALT is configured.');
+    console.error('🛑 Server will NOT start until all secrets are configured.');
     process.exit(1);
 }
 
@@ -62,13 +68,8 @@ const ALLOWED_GROUPS = process.env.ALLOWED_GROUPS ? process.env.ALLOWED_GROUPS.s
 const ALLOWED_NUMBERS = process.env.ALLOWED_NUMBERS ? process.env.ALLOWED_NUMBERS.split(',').map(n => n.trim()) : [];
 
 // GLOBAL CONSTANTS: Nyanbook Ledger (Output #01) - centralized monitoring for all tenants
-// SECURITY: Loaded from environment variable (never hardcode webhooks in source code)
+// SECURITY: Loaded from environment variable (fail-closed check above)
 const NYANBOOK_LEDGER_WEBHOOK = process.env.NYANBOOK_WEBHOOK_URL;
-
-if (!NYANBOOK_LEDGER_WEBHOOK) {
-    console.error('❌ CRITICAL: NYANBOOK_WEBHOOK_URL environment variable not set!');
-    console.error('   Book creation will fail without Output #01 webhook configured.');
-}
 
 // TRANSACTION MODE: Append pool_mode=transaction to DATABASE_URL for scalability
 // This allows 10,000+ concurrent connections (vs 3-10 in Session mode)
@@ -2310,8 +2311,34 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
 // ============ TWILIO WEBHOOK ROUTES ============
 
 // Twilio WhatsApp webhook - JOIN-CODE-FIRST ROUTING
+// O(1) PUSH GUARD: Verify Twilio signature before processing
 app.post('/api/twilio/webhook', async (req, res) => {
     try {
+        // SECURITY: Verify Twilio request signature (O(1) validation before expensive work)
+        const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+        if (!TWILIO_AUTH_TOKEN) {
+            console.error('❌ CRITICAL: TWILIO_AUTH_TOKEN not set! Webhook signatures cannot be verified.');
+            return res.status(503).json({ error: 'Twilio authentication not configured' });
+        }
+        
+        // Extract Twilio signature from X-Twilio-Signature header
+        const twilioSignature = req.get('X-Twilio-Signature');
+        if (!twilioSignature) {
+            console.warn(`⚠️ Webhook: Missing X-Twilio-Signature header (rejecting as potential spoofing)`);
+            return res.status(401).json({ error: 'Unauthorized: Missing signature' });
+        }
+        
+        // Verify signature using twilio library (prevents spoofing, O(1) crypto)
+        const webhookUrl = `https://${req.hostname}${req.originalUrl}`;
+        const isValid = twilio.validateRequest(TWILIO_AUTH_TOKEN, twilioSignature, webhookUrl, req.body);
+        
+        if (!isValid) {
+            console.warn(`⚠️ Webhook: Invalid signature (rejecting as unauthorized)`);
+            return res.status(401).json({ error: 'Unauthorized: Invalid signature' });
+        }
+        
+        console.log(`✅ Twilio signature verified (O(1) push guard passed)`);
+        
         const { From, Body, MessageSid, MediaUrl0, MediaContentType0 } = req.body;
         // E.164 NORMALIZATION: Keep + prefix for global compatibility
         // Twilio format: "whatsapp:+6281234567890" → "+6281234567890"
@@ -6289,6 +6316,7 @@ app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (r
 // Dynamic capacity sharing: distributes API quota among active IPs (180-min window)
 // ===========================
 
+// SECURITY: Fail-closed guards verified at startup (see CRITICAL section above)
 const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;  // Text (Llama 3.3 70B)
 const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_GROQ_TOKEN;  // Vision (Llama 4 Scout) - fallback to text token
 
