@@ -4688,12 +4688,22 @@
                     console.error('🗑️ DELETE failed:', error);
                     // Re-enable button on error
                     if (deleteBtn) deleteBtn.disabled = false;
-                    showToast(`❌ Failed to delete: ${error.error || 'Unknown error'}`, 'error');
+                    
+                    // Provide contextualized error messages for dashboard book management
+                    let errorMsg = '❌ Could not delete book';
+                    if (error.error?.includes('not found')) {
+                        errorMsg = '⚠️ Book appears to have been deleted or moved. Try refreshing your books list.';
+                    } else if (response.status === 500) {
+                        errorMsg = '❌ Server error during deletion. Please try again or contact support.';
+                    } else if (response.status === 403) {
+                        errorMsg = '❌ You don\'t have permission to delete this book.';
+                    }
+                    showToast(errorMsg, 'error');
                 }
             } catch (error) {
                 console.error('🗑️ Error deleting book:', error);
                 if (deleteBtn) deleteBtn.disabled = false;
-                showToast('❌ Error deleting book', 'error');
+                showToast('❌ Network error while deleting. Check your connection and try again.', 'error');
             }
         }
         
