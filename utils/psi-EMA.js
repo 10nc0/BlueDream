@@ -519,6 +519,76 @@ function calculatePhaseTimeSeries(stocks, flows, options = { normalize: true }) 
 }
 
 /**
+ * Calculate EMA for phase angles using circular mean on unit circle
+ * 
+ * CRITICAL MATHEMATICAL HARDENING:
+ * Direct EMA on angles creates wraparound artifacts near 0°/360° boundary.
+ * Example: EMA(350°, 10°) = 180° (wrong), but circular mean gives 0° (correct).
+ * 
+ * Solution: Use unit circle representation
+ * - Convert each angle θ to unit vector: (cos θ, sin θ)
+ * - Apply EMA to sin and cos components separately
+ * - Recover angle via atan2(EMA(sin), EMA(cos))
+ * - Normalize to [0°, 360°)
+ * 
+ * This eliminates discontinuity artifacts and provides mathematically rigorous averaging.
+ * 
+ * @param {number[]} phaseAngles - Phase angles in degrees [0, 360)
+ * @param {number} period - EMA period (Fibonacci: 34, 55 for θ)
+ * @param {Object} options - Configuration
+ * @param {boolean} options.interpolate - If true (default), interpolate leading values
+ * @param {boolean} options.markInterpolation - If true, track interpolation flags
+ * @returns {Object} { values (in degrees), interpolated, sinComponent, cosComponent }
+ */
+function calculatePhaseEMACircular(phaseAngles, period, options = { interpolate: true, markInterpolation: true }) {
+  if (!phaseAngles || phaseAngles.length === 0) {
+    if (options.markInterpolation) {
+      return { values: [], interpolated: [], sinComponent: [], cosComponent: [] };
+    }
+    return [];
+  }
+
+  // Convert all angles to radians and extract sin/cos components
+  const sinComponents = phaseAngles.map(deg => Math.sin(deg * Math.PI / 180));
+  const cosComponents = phaseAngles.map(deg => Math.cos(deg * Math.PI / 180));
+
+  // Apply EMA to each component separately
+  const sinEMAResult = calculateEMA(sinComponents, period, { 
+    interpolate: options.interpolate, 
+    markInterpolation: options.markInterpolation 
+  });
+  const cosEMAResult = calculateEMA(cosComponents, period, { 
+    interpolate: options.interpolate, 
+    markInterpolation: options.markInterpolation 
+  });
+
+  const sinEMA = sinEMAResult.values;
+  const cosEMA = cosEMAResult.values;
+  const interpolatedFlags = sinEMAResult.interpolated;
+
+  // Recover angles from EMA'd sin/cos components
+  const recoveredAngles = [];
+  for (let i = 0; i < sinEMA.length; i++) {
+    if (sinEMA[i] === null || cosEMA[i] === null) {
+      recoveredAngles.push(null);
+    } else {
+      // atan2 returns radians in (-π, π], normalize to [0°, 360°)
+      let radians = Math.atan2(sinEMA[i], cosEMA[i]);
+      let degrees = radians * (180 / Math.PI);
+      if (degrees < 0) degrees += 360;
+      recoveredAngles.push(degrees);
+    }
+  }
+
+  return {
+    values: recoveredAngles,
+    interpolated: interpolatedFlags,
+    sinComponent: sinEMA,
+    cosComponent: cosEMA
+  };
+}
+
+/**
  * Get cycle phase interpretation from angle
  * @param {number} theta - Phase angle in degrees
  * @returns {Object} Phase interpretation
@@ -564,12 +634,16 @@ function interpretPhase(theta) {
 
 /**
  * Analyze Phase θ with EMA-34/EMA-55 crossover
- * @param {number[]} phases - Phase angle time series
+ * 
+ * Uses circular mean EMA (hardened against wraparound artifacts).
+ * 
+ * @param {number[]} phases - Phase angle time series (in degrees)
  * @returns {Object} Phase analysis with signals
  */
 function analyzePhase(phases) {
-  const ema34Result = calculateEMA(phases, FIB_PERIODS.FAST_THETA);
-  const ema55Result = calculateEMA(phases, FIB_PERIODS.SLOW_THETA);
+  // Use circular mean EMA to eliminate wraparound artifacts at 0°/360° boundary
+  const ema34Result = calculatePhaseEMACircular(phases, FIB_PERIODS.FAST_THETA);
+  const ema55Result = calculatePhaseEMACircular(phases, FIB_PERIODS.SLOW_THETA);
   const ema34 = ema34Result.values;
   const ema55 = ema55Result.values;
   
@@ -1926,8 +2000,8 @@ When stock data is provided below, you MUST:
 
 ### The Three Orthogonal Dimensions (φ-Derived):
 
-**1. Phase θ (Cycle Position)** — EMA-34/EMA-55
-   θ = arctan(ΔEMA-55/ΔEMA-34)
+**1. Phase θ (Cycle Position)** — EMA-34/EMA-55 (Circular Mean)
+   θ = atan2(EMA(sin(θ)), EMA(cos(θ)))
    - 0°-90° = Early Expansion 🟢
    - 90°-180° = Late Expansion 🟡
    - 180°-270° = Early Contraction 🔴
@@ -2005,6 +2079,7 @@ module.exports = {
   
   // EMA functions
   calculateEMA,
+  calculatePhaseEMACircular,
   detectCrossover,
   
   // Phase analysis
