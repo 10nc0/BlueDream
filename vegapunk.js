@@ -1076,16 +1076,6 @@ async function logAudit(client, req, actionType, targetType, targetId, targetEma
     }
 }
 
-// NOTE: Authentication middleware (requireAuth, requireRole) moved to routes/auth.js
-// NOTE: /api/messages, /api/stats routes moved to routes/books.js
-// NOTE: GET /api/books moved to routes/books.js (full implementation with contributor access)
-// NOTE: POST /api/books (create) moved to routes/books.js
-// NOTE: PUT /api/books/:id (update) moved to routes/books.js
-// NOTE: DELETE /api/books/:id (soft delete) moved to routes/books.js
-// NOTE: POST /api/books/:id/archive moved to routes/books.js
-// NOTE: POST /api/books/:id/unarchive moved to routes/books.js
-// NOTE: POST /api/books/:id/relink moved to routes/books.js
-
 // ============ WEBHOOK INPUT ENDPOINT (HYBRID MODEL) ============
 // Support ANY input: Telegram bot, Twitter/X, SMS, Email → Discord
 // Example: POST /api/webhook/bridge_t6_abc123 with { text, username, avatar_url, media_url }
@@ -1180,16 +1170,6 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
-// NOTE: GET /api/books/archived moved to routes/books.js
-// NOTE: GET /api/books/:id/stats moved to routes/books.js
-// NOTE: Drops API moved to routes/books.js
-// NOTE: Messages API moved to routes/books.js
-// NOTE: Search API moved to routes/books.js
-// NOTE: Create thread API moved to routes/books.js
-
-
-
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', async () => {

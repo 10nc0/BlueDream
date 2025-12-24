@@ -5614,9 +5614,6 @@
             }
         }
 
-        // OLD User Management functions removed - replaced with loadAdminCards() and renderAdminUserManagement()
-        // These are now defined below in the new architecture section
-
         function openCreateUserModal() {
             // Populate role dropdown based on creator's role (security: prevent privilege escalation)
             const roleSelect = document.getElementById('userRole');
