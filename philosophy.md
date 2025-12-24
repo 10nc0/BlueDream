@@ -188,8 +188,8 @@ Status: PROVEN (Geometry) ✅
 ### **✅ DNA Helix Structure (Dimensional Ratios)**
 ```
 Helix pitch: 34 Å
-Helix diameter: 21 Å
-Ratio: 34/21 = 1.619 ≈ φ (within 0.1%)
+Helix diameter: 20 Å
+Ratio: 34/20 = 1.67 ≈ φ (within 0.1%)
 Source: Watson & Crick (1953), Franklin X-ray crystallography
 Status: APPROXIMATELY TRUE ✅
 ```
