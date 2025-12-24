@@ -126,7 +126,7 @@ START: 0 (void)
         All returns to φ² or 0
 ```
 
-### **Why There Is No 5th State**
+### *NAGARJUNA - Why There Is No 5th State**
 
 In logic (Nagarjuna's Tetralemma), there are exactly 4 states:
 - **00** Neither (void, 0)
