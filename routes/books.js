@@ -3,6 +3,7 @@ const axios = require('axios');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const MetadataExtractor = require('../metadata-extractor');
+const { validate, schemas } = require('../lib/validators');
 
 function registerBooksRoutes(app, deps) {
     const { pool, bots, helpers, middleware, tenantMiddleware, logger, fractalId, constants } = deps;
@@ -265,21 +266,17 @@ function registerBooksRoutes(app, deps) {
         }
     });
 
-    app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
+    app.post('/api/books', requireAuth, setTenantContext, requireRole('admin', 'write-only'), validate(schemas.createBook), async (req, res, next) => {
         try {
             const client = req.dbClient || pool;
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
             const userRole = req.tenantContext?.userRole || 'read-only';
             const tenantId = req.tenantContext?.tenantId;
             const isGenesisAdmin = req.tenantContext?.isGenesisAdmin || false;
-            const { name, inputPlatform, userOutputUrl, contactInfo, tags, outputCredentials: userOutputCredentials } = req.body;
+            const { name, inputPlatform, userOutputUrl, contactInfo, tags, outputCredentials: userOutputCredentials } = { ...req.body, ...req.validated };
             
             if (!tenantId) {
                 return res.status(400).json({ error: 'Tenant context required' });
-            }
-            
-            if (!name || typeof name !== 'string' || !name.trim()) {
-                return res.status(400).json({ error: 'Book name is required and cannot be blank' });
             }
             
             const output01Url = NYANBOOK_LEDGER_WEBHOOK;
@@ -410,11 +407,11 @@ function registerBooksRoutes(app, deps) {
             res.json(sanitized);
         } catch (error) {
             logger.error({ err: error }, 'Error in POST /api/books');
-            res.status(500).json({ error: error.message });
+            next(error);
         }
     });
 
-    app.put('/api/books/:id', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res) => {
+    app.put('/api/books/:id', requireAuth, setTenantContext, requireRole('admin', 'write-only'), async (req, res, next) => {
         try {
             const client = req.dbClient || pool;
             const userRole = req.tenantContext?.userRole || 'read-only';
@@ -504,11 +501,11 @@ function registerBooksRoutes(app, deps) {
             res.json(sanitized);
         } catch (error) {
             logger.error({ err: error }, 'Error in PUT /api/books/:id');
-            res.status(500).json({ error: error.message });
+            next(error);
         }
     });
 
-    app.delete('/api/books/:id', requireAuth, setTenantContext, requireRole('admin'), async (req, res) => {
+    app.delete('/api/books/:id', requireAuth, setTenantContext, requireRole('admin'), async (req, res, next) => {
         const { id } = req.params;
         
         try {
@@ -561,7 +558,7 @@ function registerBooksRoutes(app, deps) {
             }
         } catch (error) {
             logger.error({ err: error, bookId: id }, 'Error archiving book');
-            res.status(500).json({ error: error.message });
+            next(error);
         }
     });
 
@@ -573,17 +570,11 @@ function registerBooksRoutes(app, deps) {
     });
 
     // ============ DROPS API - Personal Cloud OS ============
-    app.post('/api/drops', requireAuth, setTenantContext, async (req, res) => {
+    app.post('/api/drops', requireAuth, setTenantContext, validate(schemas.createDrop), async (req, res, next) => {
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
-            const { book_id, discord_message_id, metadata_text } = req.body;
+            const { book_id, discord_message_id, metadata_text } = req.validated;
             const client = req.dbClient || pool;
-            
-            if (!book_id || !discord_message_id || !metadata_text) {
-                return res.status(400).json({ 
-                    error: 'Missing required fields: book_id, discord_message_id, metadata_text' 
-                });
-            }
             
             const bookResult = await client.query(
                 `SELECT id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
@@ -630,11 +621,11 @@ function registerBooksRoutes(app, deps) {
             res.json({ success: true, drop: dropResult.rows[0], extracted });
         } catch (error) {
             logger.error({ err: error }, 'Error creating drop');
-            res.status(500).json({ error: error.message });
+            next(error);
         }
     });
 
-    app.get('/api/drops/:book_id', requireAuth, setTenantContext, async (req, res) => {
+    app.get('/api/drops/:book_id', requireAuth, setTenantContext, async (req, res, next) => {
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
             const { book_id } = req.params;
@@ -657,11 +648,11 @@ function registerBooksRoutes(app, deps) {
             res.json({ drops: dropsResult.rows });
         } catch (error) {
             logger.error({ err: error }, 'Error fetching drops');
-            res.status(500).json({ error: error.message });
+            next(error);
         }
     });
 
-    app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res) => {
+    app.delete('/api/drops/tag', requireAuth, setTenantContext, async (req, res, next) => {
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
             const { book_id, discord_message_id, tag } = req.body;

@@ -57,7 +57,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Vegapunk Kernel Architecture**: Factory pattern with dependency injection. Named after Dr. Vegapunk (One Piece) - the genius who splits consciousness into satellite bodies while maintaining a pure core. vegapunk.js orchestrates 6 modular routes (satellites) via DI.
   - **Kernel (vegapunk.js)**: 1299 lines (85% reduction from 8500-line monolith)
   - **Routes (satellites)**: auth.js (1335), books.js (1232: CRUD + drops + messages + search), inpipe.js (405), prometheus.js (505), nyan-ai.js (769), export.js (224)
-  - **Shared libs**: deps.js (85), heartbeat.js (269: phi-breathe orchestrator), discord-webhooks.js (232), heal-queue.js (266), logger.js (26)
+  - **Shared libs**: deps.js (85), heartbeat.js (269: phi-breathe orchestrator), discord-webhooks.js (232), heal-queue.js (266), logger.js (26), validators.js (137: Zod schemas), error-handler.js (108: global Express error middleware), route-registry.js (49: centralized route registration)
   - **Total endpoints**: 61 (health/pages: 11, auth: 19, books: 20, inpipe: 1, prometheus: 4, nyan-ai: 4, export: 2)
   - **Code stats**: Kernel 1299 + Routes 4470 + Libs 878 = 6647 total lines (vs ~9000 original = 26% net reduction with better modularity)
   - Unified auth removes separate admin terminology (no admin/back-door impression)

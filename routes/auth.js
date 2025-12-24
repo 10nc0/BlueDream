@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const { validate, schemas } = require('../lib/validators');
 
 function createAuthMiddleware(pool, authService, logger) {
     async function requireAuth(req, res, next) {
@@ -157,18 +158,14 @@ function registerAuthRoutes(app, deps) {
         }
     });
 
-    app.post('/api/auth/login', async (req, res) => {
+    app.post('/api/auth/login', validate(schemas.login), async (req, res) => {
         noCacheHeaders(res);
         
-        const { email, password } = req.body;
+        const { email, password } = req.validated;
         
         logger.info({ email, ip: req.ip }, 'Login attempt');
         
         try {
-            if (!email || !password) {
-                return res.status(400).json({ error: 'Email and password are required' });
-            }
-            
             const normalizedEmail = email.toLowerCase().trim();
             
             const mappingResult = await pool.query(
@@ -269,20 +266,12 @@ function registerAuthRoutes(app, deps) {
         }
     });
 
-    app.post('/api/auth/signup', async (req, res) => {
-        const { email, password, inviteToken } = req.body;
+    app.post('/api/auth/signup', validate(schemas.signup), async (req, res) => {
+        const { email, password, inviteToken } = req.validated;
         
         logger.info({ email, ip: req.ip, hasInvite: !!inviteToken }, 'Signup attempt');
         
         try {
-            if (!email || !password) {
-                return res.status(400).json({ error: 'Email and password are required' });
-            }
-            
-            if (password.length < 6) {
-                return res.status(400).json({ error: 'Password must be at least 6 characters' });
-            }
-            
             const normalizedEmail = email.toLowerCase().trim();
             
             const emailCheck = await pool.query(

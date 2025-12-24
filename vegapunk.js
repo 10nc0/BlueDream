@@ -36,16 +36,14 @@ const { recordInMemory, clearSessionMemory } = require('./utils/context-extracto
 const { getMemoryManager, cleanupOldSessions } = require('./utils/memory-manager');
 
 const { initialize: initDeps, setMiddleware: setDepsMiddleware, deps } = require('./lib/deps');
-const { registerAuthRoutes, createAuthMiddleware } = require('./routes/auth');
-// Admin routes merged into routes/auth.js (no separate admin terminology)
-const { registerBooksRoutes } = require('./routes/books');
-const { registerInpipeRoutes } = require('./routes/inpipe');
-const { registerExportRoutes } = require('./routes/export');
-const { registerPrometheusRoutes } = require('./routes/prometheus');
-const { registerNyanAIRoutes, capacityManager, usageTracker } = require('./routes/nyan-ai');
+const { createAuthMiddleware } = require('./routes/auth');
+const { registerAllRoutes } = require('./lib/route-registry');
+const { capacityManager, usageTracker } = require('./routes/nyan-ai');
 const { healQueue } = require('./lib/heal-queue');
 const phiBreathe = require('./lib/heartbeat');
 const { splitMessageIntoChunks, postPayloadToWebhook, createSendToLedger, createSendToUserOutput } = require('./lib/discord-webhooks');
+const { createErrorHandler, notFoundHandler } = require('./lib/error-handler');
+const { config, buildConnectionString, getDbHost } = require('./config');
 
 // ============================================================================
 // SECURITY: Fail-Closed Secret Guards (Critical Infrastructure Only)
@@ -1237,7 +1235,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         },
         tenantMiddleware: {
             setTenantContext,
-            getAllTenantSchemas: () => tenantManager.getAllSchemas(),
+            getAllTenantSchemas,
             sanitizeForRole
         },
         helpers: {
@@ -1248,15 +1246,15 @@ app.listen(PORT, '0.0.0.0', async () => {
         }
     });
     
-    // Register modular routes (after deps initialized with live bots)
-    const authMiddleware = registerAuthRoutes(app, deps);
-    setDepsMiddleware(authMiddleware.requireAuth, authMiddleware.requireRole);
-    registerBooksRoutes(app, deps);
-    registerInpipeRoutes(app, deps);
-    registerExportRoutes(app, deps);
-    registerPrometheusRoutes(app, deps);
-    registerNyanAIRoutes(app, deps);
-    console.log('📦 Modular routes registered: auth, books, inpipe, export, prometheus, nyan-ai');
+    // Register modular routes via route registry (after deps initialized with live bots)
+    registerAllRoutes(app, deps, { 
+        logger: console,
+        setDepsMiddleware 
+    });
+    
+    // Global error handling (must be after all routes)
+    app.use(notFoundHandler);
+    app.use(createErrorHandler({ isProd, logger: console }));
     
     // DEFERRED STARTUP: Run non-critical tasks via unified phi breathe orchestrator
     // This prevents connection pool exhaustion during startup
