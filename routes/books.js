@@ -38,14 +38,14 @@ function registerBooksRoutes(app, deps) {
             );
             
             if (!userResult.rows.length) {
-                logger.error({ userId: req.userId, tenantSchema }, 'User not found');
+                logger.error({ userId: req.userId }, 'User not found');
                 return res.status(404).json({ error: 'User not found' });
             }
             
             const user = userResult.rows[0];
             const tenantId = user.tenant_id;
             
-            logger.info({ email: user.email, tenantSchema }, 'Loading books');
+            logger.info({ userId: req.userId }, 'Loading books');
             
             let books = [];
             const hasExtendedAccess = req.userRole === 'dev' && user.is_genesis_admin;
@@ -65,11 +65,11 @@ function registerBooksRoutes(app, deps) {
                         `);
                         books.push(...schemaResult.rows);
                     } catch (error) {
-                        logger.warn({ schemaName, err: error }, 'Could not query schema');
+                        logger.warn({ err: error }, 'Query error');
                     }
                 }
                 
-                logger.info({ count: books.length, schemas: allSchemas.length }, 'Found books across schemas');
+                logger.info({ count: books.length }, 'Books retrieved');
             } else {
                 const result = await pool.query(`
                     SELECT b.*
@@ -80,7 +80,7 @@ function registerBooksRoutes(app, deps) {
                 `);
                 books = result.rows;
                 
-                logger.info({ count: books.length, tenantSchema, email: user.email }, 'Found owned books');
+                logger.info({ count: books.length }, 'Books retrieved');
                 
                 const userPhonesResult = await pool.query(`
                     SELECT DISTINCT ep.phone
@@ -92,7 +92,7 @@ function registerBooksRoutes(app, deps) {
                 const userPhones = userPhonesResult.rows.map(r => r.phone);
                 
                 if (userPhones.length > 0) {
-                    logger.info({ email: user.email, phones: userPhones }, 'User has verified phones');
+                    logger.info({ count: userPhones.length }, 'Phones retrieved');
                     
                     const contributedBooksResult = await pool.query(`
                         SELECT DISTINCT 
@@ -125,7 +125,7 @@ function registerBooksRoutes(app, deps) {
                         }
                     }
                     
-                    logger.info({ count: books.length, email: user.email }, 'Total books (owned + contributed)');
+                    logger.info({ count: books.length }, 'Books retrieved');
                 }
             }
             
@@ -364,7 +364,7 @@ function registerBooksRoutes(app, deps) {
                 JSON.stringify(outpipesUser)
             ]);
             
-            logger.info({ fractalId: generatedFractalId, tenantEmail }, 'Registered book in global registry');
+            logger.info({ fractalId: generatedFractalId }, 'Book registered');
             
             if (hermesBot && hermesBot.isReady()) {
                 try {
@@ -523,7 +523,7 @@ function registerBooksRoutes(app, deps) {
             }
             
             const book = bookResult.rows[0];
-            logger.info({ bookId: id, tenantSchema }, 'Archiving book (soft delete)');
+            logger.info({ bookId: id }, 'Archiving book');
             
             if (book.output_0n_url) {
                 try {

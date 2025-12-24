@@ -114,7 +114,6 @@ async function setTenantContext(req, res, next) {
             // Only dev users get to know about tenant IDs
             req.tenantContext.tenantId = tenant_id;
             req.tenantContext.tenantSchema = tenant_schema;
-            console.log(`📍 tenant_${tenant_id}`);
         } else if (tenant_id && tenant_schema) {
             // Admin/write-only/read-only: Restrict to their tenant schema
             // Routes will use ${tenantSchema}.table_name for isolation
@@ -123,7 +122,6 @@ async function setTenantContext(req, res, next) {
             // sanitizeForRole() will strip it from API responses to prevent horizontal awareness
             req.tenantContext.tenantId = tenant_id;
             req.tenantContext.tenantSchema = tenant_schema;
-            console.log(`📍 tenant_${tenant_id}`);
         } else {
             // User without tenant (shouldn't happen for non-dev users)
             if (!res.headersSent) {
