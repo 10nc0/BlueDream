@@ -3108,7 +3108,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     initDeps({
         pool,
         tenantManager,
-        authService: { /* placeholder for future auth service */ },
+        authService,
         fractalId: process.env.FRACTAL_ID,
         constants: {
             NYANBOOK_LEDGER_WEBHOOK: process.env.NYANBOOK_LEDGER_WEBHOOK,
