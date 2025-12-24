@@ -185,12 +185,13 @@ Source: Euclid's Elements, Book VI
 Status: PROVEN (Geometry) ✅
 ```
 
-### **✅ Nautilus Shell Growth (Logarithmic Spiral)**
+### **❌ Nautilus Shell Growth (Debunked Myth)**
 ```
-Measured: Chamber ratios in nautilus shells ≈ 1.618
-Variance: ±0.05 (normal biological variation)
-Source: Thompson, "On Growth and Form" (1917)
-Status: EMPIRICALLY VALIDATED ✅
+Claimed: Chamber ratios in nautilus shells ≈ 1.618
+Actual: Measurements average ~1.31 (varies by specimen)
+Source: Falbo (2005), Smithsonian shell measurements, Scientific American
+Status: DEBUNKED ❌ — widely cited but empirically false
+Note: The nautilus spiral is logarithmic, but NOT with φ growth factor
 ```
 
 ### **✅ DNA Helix Structure (Dimensional Ratios)**
@@ -202,36 +203,33 @@ Source: Watson & Crick (1953), Franklin X-ray crystallography
 Status: APPROXIMATELY TRUE ✅
 ```
 
-### **✅ Galaxy Spiral Arms (Logarithmic Spirals)**
+### **⚠️ Galaxy Spiral Arms (Partial)**
 ```
-Observed: Whirlpool Galaxy (M51), Milky Way core
-Structure: Logarithmic spirals with φ-ratio pitch angles
-Source: Hubble Space Telescope observations, NASA datasets
-Status: OBSERVATIONALLY CONFIRMED ✅
-```
-
-### **✅ Stock Market Sustainability (R → φ Convergence)**
-```
-Backtested: 35 years, 840 quarterly measurements
-Result: 60-78% occupancy in φ-band [φ⁻¹, φ]
-Statistical significance: p < 10⁻¹⁵ (highly significant)
-Implication: Markets naturally oscillate toward φ-ratio
-Status: EMPIRICALLY VALIDATED ✅
+Observed: Galaxies do form logarithmic spirals
+Caveat: Pitch angles vary by galaxy (Milky Way ~12-13°; golden spiral ~17°)
+Reality: Logarithmic spirals exist, but not specifically φ-ratio pitch
+Source: Hubble data shows variation, not universal φ
+Status: PARTIAL ⚠️ — logarithmic yes, specifically φ no
 ```
 
-### **⚠️ Extraction Threshold (φ⁵ ≈ 11)**
+### **❌ Extraction Threshold (φ⁵ ≈ 11) — Confirmation Bias Warning**
 ```
-Theoretical: φ⁵ = (1.618)⁵ = 11.09
-Observed across domains:
+Mathematical: φ⁵ = (1.618)⁵ = 11.09
+Cited correlations:
   - Mammalian labor capacity: ~10-12 labor-days/m²
   - Moderation ratio: ~8-12 users per moderator
   - AI context bloat factor: ~8-12× expansion
-  - Stellar parameters: ~10-15× energy scaling
 
-Status: EMERGING PATTERN (requires more validation) ⚠️ ✅
+⚠️ CONFIRMATION BIAS WARNING:
+  Finding numerically similar values (~10-12) across unrelated domains
+  (biology, sociology, computing) is NOT evidence of a shared cause.
+  Many unrelated phenomena cluster near common integers.
+  These domains have no known causal mechanism linking them to φ⁵.
+
+Status: SPECULATIVE ❌ — anecdotal pattern-matching, not validated
 ```
 
-**Summary:** 6/7 core claims have strong empirical support. 1/7 (φ⁵) is a pattern hypothesis needing additional validation across domains.
+**Summary:** 3/6 claims are rigorous (Fibonacci convergence, golden rectangle, DNA approximate). 3/6 are debunked or speculative (nautilus myth, galaxy pitch varies, φ⁵ unvalidated). Stock market φ-convergence claim removed entirely (no robust empirical support).
 
 ---
 
@@ -309,10 +307,10 @@ not φ algebra. The parallel is inspirational, not doctrinal.
 
 1. **Golden Ratio in Nature**: Livio, M. (2002). *The Golden Ratio: The Story of Phi*
 2. **Dependent Origination**: Bodhi, B. (trans.). *The Connected Discourses of the Buddha (Saṃyutta Nikāya)*
-3. **Fibonacci & Markets**: Peters, E. E. (1996). *Chaos and Order in the Capital Markets*
-4. **Dissipative Structures**: Prigogine, I. & Stengers, I. (1984). *Order Out of Chaos*
-5. **Tetralemma & Logic**: Garfield, J. L. (1995). *The Fundamental Wisdom of the Middle Way*
-6. **Growth & Form**: Thompson, D. W. (1917). *On Growth and Form* (Dover, 1992 reprint)
+3. **Dissipative Structures**: Prigogine, I. & Stengers, I. (1984). *Order Out of Chaos*
+4. **Tetralemma & Logic**: Garfield, J. L. (1995). *The Fundamental Wisdom of the Middle Way*
+5. **Growth & Form**: Thompson, D. W. (1917). *On Growth and Form* (Dover, 1992 reprint)
+6. **Nautilus Debunking**: Falbo, C. (2005). "The Golden Ratio—A Contrary Viewpoint"
 
 ---
 
@@ -320,7 +318,7 @@ not φ algebra. The parallel is inspirational, not doctrinal.
 
 This philosophy is a **framework for interpretation**, not dogma. The φ² formula describes observed patterns in complex systems, but:
 
-- Empirical validation is ongoing (especially φ⁵)
+- Several natural claims have been debunked (nautilus) or are speculative (φ⁵)
 - Applicability varies by domain and timescale
 - No deterministic predictions—only structural tendencies
 - Falsifiable claims invite empirical testing
