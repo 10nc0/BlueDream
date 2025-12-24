@@ -1037,6 +1037,109 @@ function calculatePhiConvergence(zFlows) {
 }
 
 /**
+ * Calculate Absolute Convergence |R| = |z(t)| / |z(t-1)|
+ * 
+ * For oscillating data (seasonal patterns, alternating flows), signed R fails
+ * because sign flips every period → R always negative → false "decay" signal.
+ * 
+ * This function analyzes MAGNITUDE ONLY, ignoring direction.
+ * Use for: quarterly earnings, seasonal revenue, any oscillating time series.
+ * 
+ * @param {number[]} zFlows - Z-score time series
+ * @returns {Object} Absolute convergence analysis (magnitude only)
+ */
+function calculateAbsoluteConvergence(zFlows) {
+  if (!zFlows || zFlows.length < 2) {
+    return { absRatios: [], meanAbsRatio: null, converged: false, error: 'Insufficient data' };
+  }
+  
+  const absRatios = [];
+  const validResults = [];
+  
+  for (let i = 1; i < zFlows.length; i++) {
+    const current = Math.abs(zFlows[i]);
+    const previous = Math.abs(zFlows[i - 1]);
+    
+    // Guard: skip if either z-score is too small (consolidation)
+    if (previous < 0.1 || current < 0.001) {
+      continue;
+    }
+    
+    const absR = current / previous;
+    // Clamp to reasonable range
+    const clampedAbsR = Math.max(0.1, Math.min(10, absR));
+    
+    absRatios.push(clampedAbsR);
+    validResults.push({
+      absR: clampedAbsR,
+      raw: absR,
+      current,
+      previous
+    });
+  }
+  
+  if (absRatios.length === 0) {
+    return {
+      absRatios: [],
+      meanAbsRatio: null,
+      converged: false,
+      error: 'No valid absolute ratios',
+      warning: '|R| undefined — z-scores near zero throughout series.'
+    };
+  }
+  
+  const meanAbsR = mean(absRatios);
+  const recentAbsRatios = absRatios.slice(-5);
+  const recentMeanAbsR = recentAbsRatios.length > 0 ? mean(recentAbsRatios) : meanAbsR;
+  
+  // Classify based on |R| only (no sign)
+  let magnitudeRegime;
+  if (recentMeanAbsR < R_BOUNDS.LOWER) {
+    magnitudeRegime = {
+      regime: 'DAMPING',
+      label: `|R| < φ⁻¹ (Amplitude Damping)`,
+      emoji: '🔵',
+      hypothesis: `H₀: |R| < φ⁻¹ (${R_BOUNDS.LOWER.toFixed(3)})`,
+      description: 'Oscillation amplitude decreasing over time.'
+    };
+  } else if (recentMeanAbsR <= R_BOUNDS.UPPER + R_BOUNDS.TOLERANCE) {
+    magnitudeRegime = {
+      regime: 'PHI_STABLE',
+      label: `|R| ∈ [φ⁻¹, φ] (φ-Stable Oscillation)`,
+      emoji: '🟢',
+      hypothesis: `H₀: |R| ∈ [${R_BOUNDS.LOWER.toFixed(3)}, ${R_BOUNDS.UPPER.toFixed(3)}]`,
+      description: 'Oscillation amplitude in φ-band. Stable seasonal pattern.'
+    };
+  } else {
+    magnitudeRegime = {
+      regime: 'AMPLIFYING',
+      label: `|R| > φ (Amplitude Growing)`,
+      emoji: '🔴',
+      hypothesis: `H₀: |R| > φ (${R_BOUNDS.UPPER.toFixed(3)})`,
+      description: 'Oscillation amplitude increasing over time.'
+    };
+  }
+  
+  // Count how many |R| values fall in φ-band
+  const inPhiBand = absRatios.filter(r => r >= R_BOUNDS.LOWER && r <= R_BOUNDS.UPPER + R_BOUNDS.TOLERANCE);
+  const phiBandRate = inPhiBand.length / absRatios.length;
+  
+  return {
+    absRatios,
+    meanAbsRatio: meanAbsR,
+    recentMeanAbsRatio: recentMeanAbsR,
+    distanceFromPhi: Math.abs(recentMeanAbsR - PHI),
+    converged: recentMeanAbsR >= R_BOUNDS.LOWER && recentMeanAbsR <= R_BOUNDS.UPPER + R_BOUNDS.TOLERANCE,
+    convergenceStrength: 1 - Math.min(1, Math.abs(recentMeanAbsR - PHI) / PHI),
+    magnitudeRegime,
+    phiBandRate,
+    phiBandCount: inPhiBand.length,
+    totalCount: absRatios.length,
+    note: 'Absolute convergence ignores sign (direction). Use for oscillating/seasonal data.'
+  };
+}
+
+/**
  * Classify regime based on R ratio
  * 
  * vφ⁴: Now separates MAGNITUDE (|R|) from DIRECTION (sign of R)
@@ -2168,6 +2271,7 @@ module.exports = {
   
   // Convergence analysis
   calculatePhiConvergence,
+  calculateAbsoluteConvergence,
   classifyRegime,
   getPhiDeviationAlert,
   analyzeConvergence,
