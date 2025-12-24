@@ -58,10 +58,11 @@ The system utilizes a Node.js backend with Express and a Single Page Application
   - **Kernel (vegapunk.js)**: 1299 lines (85% reduction from 8500-line monolith)
   - **Routes (satellites)**: auth.js (1335), books.js (1232: CRUD + drops + messages + search), inpipe.js (405), prometheus.js (505), nyan-ai.js (769), export.js (224)
   - **Shared libs**: deps.js (85), heartbeat.js (269: phi-breathe orchestrator), discord-webhooks.js (232), heal-queue.js (266), logger.js (26), validators.js (137: Zod schemas), error-handler.js (108: global Express error middleware), route-registry.js (49: centralized route registration)
-  - **Total endpoints**: 61 (health/pages: 11, auth: 19, books: 20, inpipe: 1, prometheus: 4, nyan-ai: 4, export: 2)
+  - **Total endpoints**: 62 (health/pages: 11, auth: 19, books: 20, inpipe: 1, prometheus: 4, nyan-ai: 5, export: 2)
   - **Code stats**: Kernel 1299 + Routes 4470 + Libs 878 = 6647 total lines (vs ~9000 original = 26% net reduction with better modularity)
   - Unified auth removes separate admin terminology (no admin/back-door impression)
 - **AI Architecture Split**: Nyan AI (public playground) and Prometheus AI (authenticated ledger auditor) for independent rate limiting and security.
+- **Dual AI Engine Audit Panel**: Dashboard AI Audit modal supports engine selection (Local Prometheus vs Cloud Nyan AI) with multi-book chip selector. Nyan AI accesses book substrate via authenticated /api/nyan-ai/audit endpoint, loading user-selected book context from Discord threads.
 - **Phi Breathe Orchestrator**: Unified φ-rhythm background task scheduler (lib/heartbeat.js) for:
   - Memory cleanup (15min cycle, 1h max age)
   - 3-day media purge (immediate + 24h cycle)
