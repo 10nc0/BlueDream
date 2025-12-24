@@ -22,7 +22,7 @@ function registerBooksRoutes(app, deps) {
     const metadataExtractor = new MetadataExtractor();
 
     app.get('/api/books', requireAuth, async (req, res) => {
-        logger.info({ userId: req.userId }, '/api/books called');
+        logger.debug({ userId: req.userId }, '/api/books called');
         
         try {
             const tenantSchema = req.tenantSchema;
@@ -45,7 +45,7 @@ function registerBooksRoutes(app, deps) {
             const user = userResult.rows[0];
             const tenantId = user.tenant_id;
             
-            logger.info({ userId: req.userId }, 'Loading books');
+            logger.debug({ userId: req.userId }, 'Loading books');
             
             let books = [];
             const hasExtendedAccess = req.userRole === 'dev' && user.is_genesis_admin;
@@ -69,7 +69,7 @@ function registerBooksRoutes(app, deps) {
                     }
                 }
                 
-                logger.info({ count: books.length }, 'Books retrieved');
+                logger.debug({ count: books.length }, 'Books retrieved');
             } else {
                 const result = await pool.query(`
                     SELECT b.*
@@ -80,7 +80,7 @@ function registerBooksRoutes(app, deps) {
                 `);
                 books = result.rows;
                 
-                logger.info({ count: books.length }, 'Books retrieved');
+                logger.debug({ count: books.length }, 'Books retrieved');
                 
                 const userPhonesResult = await pool.query(`
                     SELECT DISTINCT ep.phone
@@ -92,7 +92,7 @@ function registerBooksRoutes(app, deps) {
                 const userPhones = userPhonesResult.rows.map(r => r.phone);
                 
                 if (userPhones.length > 0) {
-                    logger.info({ count: userPhones.length }, 'Phones retrieved');
+                    logger.debug({ count: userPhones.length }, 'Phones retrieved');
                     
                     const contributedBooksResult = await pool.query(`
                         SELECT DISTINCT 
@@ -125,7 +125,7 @@ function registerBooksRoutes(app, deps) {
                         }
                     }
                     
-                    logger.info({ count: books.length }, 'Books retrieved');
+                    logger.debug({ count: books.length }, 'Books retrieved');
                 }
             }
             
@@ -364,7 +364,7 @@ function registerBooksRoutes(app, deps) {
                 JSON.stringify(outpipesUser)
             ]);
             
-            logger.info({ fractalId: generatedFractalId }, 'Book registered');
+            logger.debug({ fractalId: generatedFractalId }, 'Book registered');
             
             if (hermesBot && hermesBot.isReady()) {
                 try {
@@ -523,7 +523,7 @@ function registerBooksRoutes(app, deps) {
             }
             
             const book = bookResult.rows[0];
-            logger.info({ bookId: id }, 'Archiving book');
+            logger.debug({ bookId: id }, 'Archiving book');
             
             if (book.output_0n_url) {
                 try {
