@@ -100,7 +100,8 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - `lib/deps.js` - Dependency injection container with pool, bots, middleware, helpers, constants
 - `lib/logger.js` - Pino structured logging
 - `lib/heal-queue.js` - Auto-heal immune system (lease-based priority queue, O(log n) selection)
-- `routes/auth-admin.js` (1278 lines) - Auth routes (login, signup, password reset, refresh, logout, invites) + Admin routes (sessions, users, audit-logs)
+- `routes/auth.js` (877 lines) - Auth routes (login, signup, password reset, refresh, logout, invites)
+- `routes/admin.js` (409 lines) - Admin routes (sessions, users CRUD, audit-logs)
 - `routes/books.js` (270 lines) - Core CRUD (get books, archive/unarchive, stats)
 - `routes/inpipe.js` (406 lines) - Multi-channel input with abstract channel interface
 - `routes/export.js` (210 lines) - Book export as ZIP (messages + attachments)
@@ -114,12 +115,13 @@ The system employs a Node.js backend with Express and a Single Page Application 
 **Wiring Order** (in index.js app.listen callback):
 1. Initialize pool, bots, middleware
 2. Call `deps.initialize()` with all dependencies (after bots are ready)
-3. `registerAuthAdminRoutes(app, deps)` → returns `{requireAuth, requireRole}`
+3. `registerAuthRoutes(app, deps)` → returns `{requireAuth, requireRole}`
 4. `deps.setMiddleware(requireAuth, requireRole)`
-5. `registerBooksRoutes(app, deps)`
-6. `registerInpipeRoutes(app, deps)`
-7. `registerExportRoutes(app, deps)`
-8. `healQueue.setDependencies(pool, hermesBot)` → `healQueue.initialize()` → `healQueue.start()`
+5. `registerAdminRoutes(app, deps)`
+6. `registerBooksRoutes(app, deps)`
+7. `registerInpipeRoutes(app, deps)`
+8. `registerExportRoutes(app, deps)`
+9. `healQueue.setDependencies(pool, hermesBot)` → `healQueue.initialize()` → `healQueue.start()`
 
 **Architecture Notes:**
 - **Background Workers** (e.g., healQueue): Singleton-managed outside deps.js via lazy `setDependencies()` pattern. Only add to deps container if shared across multiple modules.

@@ -38,7 +38,8 @@ const { recordInMemory, clearSessionMemory } = require('./utils/context-extracto
 const { getMemoryManager, cleanupOldSessions } = require('./utils/memory-manager');
 
 const { initialize: initDeps, setMiddleware: setDepsMiddleware, deps } = require('./lib/deps');
-const { registerAuthAdminRoutes } = require('./routes/auth-admin');
+const { registerAuthRoutes } = require('./routes/auth');
+const { registerAdminRoutes } = require('./routes/admin');
 const { registerBooksRoutes } = require('./routes/books');
 const { registerInpipeRoutes } = require('./routes/inpipe');
 const { registerExportRoutes } = require('./routes/export');
@@ -7775,12 +7776,13 @@ app.listen(PORT, '0.0.0.0', async () => {
     });
     
     // Register modular routes (after deps initialized with live bots)
-    const authMiddleware = registerAuthAdminRoutes(app, deps);
+    const authMiddleware = registerAuthRoutes(app, deps);
     setDepsMiddleware(authMiddleware.requireAuth, authMiddleware.requireRole);
+    registerAdminRoutes(app, deps);
     registerBooksRoutes(app, deps);
     registerInpipeRoutes(app, deps);
     registerExportRoutes(app, deps);
-    console.log('📦 Modular routes registered: auth-admin, books, inpipe, export');
+    console.log('📦 Modular routes registered: auth, admin, books, inpipe, export');
     
     // DEFERRED STARTUP: Run non-critical tasks after server is ready
     // This prevents connection pool exhaustion during startup
