@@ -36,9 +36,11 @@ const { recordInMemory, clearSessionMemory } = require('./utils/context-extracto
 const { getMemoryManager, cleanupOldSessions } = require('./utils/memory-manager');
 
 const { initialize: initDeps, setMiddleware: setDepsMiddleware, deps } = require('./lib/deps');
-const { createAuthMiddleware } = require('./routes/auth');
-const { registerAllRoutes } = require('./lib/route-registry');
-const { capacityManager, usageTracker } = require('./routes/nyan-ai');
+const { createAuthMiddleware, registerAuthRoutes } = require('./routes/auth');
+const { registerBooksRoutes } = require('./routes/books');
+const { registerInpipeRoutes } = require('./routes/inpipe');
+const { registerPrometheusRoutes } = require('./routes/prometheus');
+const { registerNyanAIRoutes, capacityManager, usageTracker } = require('./routes/nyan-ai');
 const { healQueue } = require('./lib/heal-queue');
 const phiBreathe = require('./lib/phi-breathe');
 const { splitMessageIntoChunks, postPayloadToWebhook, createSendToLedger, createSendToUserOutput } = require('./lib/discord-webhooks');
@@ -1246,11 +1248,38 @@ app.listen(PORT, '0.0.0.0', async () => {
         }
     });
     
-    // Register modular routes via route registry (after deps initialized with live bots)
-    registerAllRoutes(app, deps, { 
-        logger: console,
-        setDepsMiddleware 
-    });
+    // === SATELLITE REGISTRATION (inlined from route-registry) ===
+    const SATELLITE_META = {
+        'auth': { emoji: '🔐', desc: 'lifecycle, sessions, JWT, audit trail', endpoints: 19 },
+        'books': { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export', endpoints: 22 },
+        'inpipe': { emoji: '📥', desc: 'Twilio webhook, media relay', endpoints: 1 },
+        'prometheus': { emoji: '🔮', desc: 'φ-auditor, history, multi-book context', endpoints: 4 },
+        'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit bridge', endpoints: 5 }
+    };
+    
+    const formatPulseLog = (satellites, phiStatus = 'online') => {
+        const timestamp = new Date().toISOString();
+        const lines = [`🫀 PULSE │ ${timestamp} │ Vegapunk`];
+        const lastIdx = satellites.length - 1;
+        satellites.forEach((name, idx) => {
+            const meta = SATELLITE_META[name] || { emoji: '📦', desc: 'unknown', endpoints: '?' };
+            const prefix = idx === lastIdx ? '└─' : '├─';
+            lines.push(`${prefix} ${meta.emoji} ${name.padEnd(10)} (${String(meta.endpoints).padStart(2)}) → ${meta.desc}`);
+        });
+        const satelliteEndpoints = satellites.reduce((sum, name) => sum + (SATELLITE_META[name]?.endpoints || 0), 0);
+        lines.push(`📊 VITALS: ${satelliteEndpoints + 11} endpoints │ ${satellites.length} satellites + kernel(11) │ O(1) │ φ-rhythm: ${phiStatus}`);
+        return lines.join('\n');
+    };
+    
+    // Register all satellites in priority order
+    const authResult = registerAuthRoutes(app, deps);
+    setDepsMiddleware(authResult.requireAuth, authResult.requireRole);
+    registerBooksRoutes(app, deps);
+    registerInpipeRoutes(app, deps);
+    registerPrometheusRoutes(app, deps);
+    registerNyanAIRoutes(app, deps);
+    
+    console.log('\n' + formatPulseLog(['auth', 'books', 'inpipe', 'prometheus', 'nyan-ai']) + '\n');
     
     // Global error handling (must be after all routes)
     app.use(notFoundHandler);
@@ -1279,7 +1308,6 @@ app.listen(PORT, '0.0.0.0', async () => {
         console.log('🔢 Genesis counter started (cat + φ breath tiers)');
         
         // === PHI BREATHE: Unified orchestrator for all background tasks ===
-        const { formatPulseLog } = require('./lib/route-registry');
         phiBreathe.setPool(pool);
         phiBreathe.setBots({ idris: idrisBot });
         phiBreathe.setCleanupFunctions({ cleanupOldSessions });
