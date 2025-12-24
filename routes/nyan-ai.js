@@ -391,7 +391,208 @@ const orchestrator = createPipelineOrchestrator({
 });
 
 function registerNyanAIRoutes(app, deps) {
-    const { pool } = deps;
+    const { pool, middleware, bots } = deps;
+    const requireAuth = middleware?.requireAuth;
+    const thothBot = bots?.thoth;
+
+    async function fetchBookContextForNyanAI(fractalId, tenantSchema, client = pool) {
+        if (!fractalId || !tenantSchema) return null;
+        
+        try {
+            const bookResult = await client.query(
+                `SELECT id, name, output_credentials, created_at FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                [fractalId]
+            );
+            
+            if (bookResult.rows.length === 0) return null;
+            
+            const book = bookResult.rows[0];
+            const bookCreatedAt = new Date(book.created_at);
+            
+            let outputCredentials = book.output_credentials;
+            if (typeof outputCredentials === 'string') {
+                outputCredentials = JSON.parse(outputCredentials);
+            }
+            
+            const outputData = outputCredentials?.output_01;
+            if (!outputData?.thread_id) {
+                return {
+                    name: book.name,
+                    fractalId: fractalId,
+                    createdAt: bookCreatedAt.toISOString(),
+                    totalMessages: 0,
+                    recentMessages: []
+                };
+            }
+            
+            if (!thothBot || !thothBot.client || !thothBot.ready) {
+                return {
+                    name: book.name,
+                    fractalId: fractalId,
+                    createdAt: bookCreatedAt.toISOString(),
+                    totalMessages: 0,
+                    recentMessages: [],
+                    error: 'Discord bot not ready'
+                };
+            }
+            
+            const thread = await thothBot.client.channels.fetch(outputData.thread_id);
+            if (!thread) return null;
+            
+            const discordMessages = await thread.messages.fetch({ limit: 100, force: true });
+            
+            const messages = Array.from(discordMessages.values())
+                .filter(msg => msg.createdAt >= bookCreatedAt)
+                .map(msg => {
+                    let content = msg.content;
+                    if (!content && msg.embeds.length > 0) {
+                        const embed = msg.embeds[0];
+                        content = embed.description || '';
+                        const bodyField = embed.fields?.find(f => f.name === '📝 Body');
+                        if (bodyField) content = bodyField.value;
+                    }
+                    return {
+                        content: content,
+                        timestamp: msg.createdAt.toISOString(),
+                        author: msg.author?.username || 'Unknown'
+                    };
+                })
+                .filter(msg => msg.content && msg.content.trim().length > 0);
+            
+            return {
+                name: book.name,
+                fractalId: fractalId,
+                createdAt: bookCreatedAt.toISOString(),
+                totalMessages: messages.length,
+                recentMessages: messages.slice(0, 50)
+            };
+        } catch (error) {
+            console.warn(`⚠️ Nyan AI failed to fetch book context:`, error.message);
+            return null;
+        }
+    }
+
+    async function fetchMultiBookContextForNyanAI(bookIds, tenantSchema, client = pool) {
+        if (!bookIds || bookIds.length === 0) return null;
+        
+        const books = [];
+        for (const bookId of bookIds) {
+            const bookContext = await fetchBookContextForNyanAI(bookId, tenantSchema, client);
+            if (bookContext && bookContext.totalMessages > 0) {
+                books.push(bookContext);
+            }
+        }
+        
+        if (books.length === 0) return null;
+        
+        const allMessages = [];
+        for (const book of books) {
+            for (const msg of book.recentMessages) {
+                allMessages.push({
+                    ...msg,
+                    bookName: book.name
+                });
+            }
+        }
+        
+        allMessages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        return {
+            isMultiBook: true,
+            bookCount: books.length,
+            books: books.map(b => ({ name: b.name, fractalId: b.fractalId, totalMessages: b.totalMessages })),
+            totalMessages: books.reduce((sum, b) => sum + b.totalMessages, 0),
+            recentMessages: allMessages.slice(0, 100)
+        };
+    }
+
+    app.post('/api/nyan-ai/audit', requireAuth, async (req, res) => {
+        const { query, bookIds, language } = req.body;
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+        const startTime = Date.now();
+        
+        if (!query || typeof query !== 'string' || query.trim().length === 0) {
+            return res.status(400).json({ error: 'Query is required' });
+        }
+        
+        console.log(`🌈 Nyan AI Audit: User ${req.userId} querying ${bookIds?.length || 0} book(s)`);
+        
+        try {
+            let bookContext = null;
+            let contextPrompt = '';
+            
+            if (bookIds && Array.isArray(bookIds) && bookIds.length > 0 && tenantSchema) {
+                bookContext = await fetchMultiBookContextForNyanAI(bookIds, tenantSchema);
+                
+                if (bookContext && bookContext.totalMessages > 0) {
+                    const bookSummary = bookContext.books.map(b => `- ${b.name}: ${b.totalMessages} messages`).join('\n');
+                    const messagesText = bookContext.recentMessages
+                        .slice(0, 50)
+                        .map(m => `[${m.bookName}] ${m.timestamp.split('T')[0]}: ${m.content}`)
+                        .join('\n');
+                    
+                    contextPrompt = `
+You have access to the user's book data from their Nyanbook ledger.
+
+BOOKS IN CONTEXT (${bookContext.bookCount} book(s), ${bookContext.totalMessages} total messages):
+${bookSummary}
+
+RECENT MESSAGES FROM THESE BOOKS:
+${messagesText}
+
+USER QUERY:
+${query}
+
+Please analyze the data and answer the user's question. Be specific and reference actual data from the messages when relevant.`;
+                } else {
+                    contextPrompt = `The user asked about their books but no messages were found. Please let them know their selected books have no messages yet.\n\nUSER QUERY: ${query}`;
+                }
+            } else {
+                contextPrompt = query;
+            }
+            
+            const response = await groqWithRetry(
+                'llama-3.3-70b-versatile',
+                [
+                    {
+                        role: 'system',
+                        content: `You are Nyan AI, a helpful assistant with access to the user's Nyanbook data. 
+You analyze their archived messages and provide insights. Be concise, accurate, and helpful.
+If asked about specific data, reference the actual messages provided.
+Respond in ${language || 'the same language as the user query'}.`
+                    },
+                    { role: 'user', content: contextPrompt }
+                ],
+                H0_TEMPERATURE,
+                4096
+            );
+            
+            const answer = response.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
+            const processingTime = Date.now() - startTime;
+            
+            console.log(`✅ Nyan AI Audit complete in ${processingTime}ms for user ${req.userId}`);
+            
+            res.json({
+                success: true,
+                answer: answer,
+                engine: 'nyan-ai',
+                model: 'llama-3.3-70b-versatile',
+                processingTime: processingTime,
+                bookContext: bookContext ? {
+                    bookCount: bookContext.bookCount,
+                    totalMessages: bookContext.totalMessages,
+                    books: bookContext.books
+                } : null
+            });
+            
+        } catch (error) {
+            console.error('❌ Nyan AI Audit error:', error.message);
+            res.status(500).json({ 
+                error: 'Failed to process audit query',
+                message: error.message
+            });
+        }
+    });
 
     app.get('/api/playground/usage', (req, res) => {
         try {

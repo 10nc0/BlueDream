@@ -2520,6 +2520,26 @@
                                 <button class="book-fan-close" id="prometheusAuditClose" style="position: static; margin: 0;">×</button>
                             </div>
                             
+                            <!-- AI Engine & Book Selection Controls -->
+                            <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: flex-start;">
+                                <!-- AI Engine Dropdown -->
+                                <div style="flex: 1; min-width: 180px;">
+                                    <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 0.35rem; font-weight: 600;">🧠 AI Engine</div>
+                                    <select id="auditAiEngine" style="width: 100%; padding: 0.5rem 0.75rem; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 6px; color: #e2e8f0; font-size: 0.85rem; cursor: pointer;">
+                                        <option value="prometheus">🏛️ Local (Prometheus)</option>
+                                        <option value="nyan-ai">🌈 Cloud (Nyan AI)</option>
+                                    </select>
+                                </div>
+                                
+                                <!-- Book Selector -->
+                                <div style="flex: 2; min-width: 280px;">
+                                    <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 0.35rem; font-weight: 600;">📚 Books (click to select)</div>
+                                    <div id="auditBookSelector" style="display: flex; flex-wrap: wrap; gap: 0.35rem; padding: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; min-height: 36px; max-height: 80px; overflow-y: auto;">
+                                        <span style="color: #64748b; font-size: 0.75rem;">Loading books...</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <div id="prometheusAuditGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; flex: 1; min-height: 0; overflow: hidden;">
                                 <!-- Left Pane: Input -->
                                 <div style="display: flex; flex-direction: column; min-height: 0;">
@@ -2576,6 +2596,7 @@
                 });
                 document.getElementById('prometheusAuditClose').addEventListener('click', closePrometheusAuditModal);
                 document.getElementById('prometheusCheckBtn').addEventListener('click', runPrometheusCheck);
+                document.getElementById('auditAiEngine').addEventListener('change', updateBookContextDisplay);
             }
             
             // Reset state
@@ -2588,15 +2609,72 @@
             `;
             document.getElementById('prometheusCheckBtn').disabled = false;
             document.getElementById('prometheusCheckBtn').textContent = '🔮 Run AI Check';
+            document.getElementById('auditAiEngine').value = 'prometheus';
             
-            // Update book context display
-            const bookCount = books?.length || 0;
-            const contextDiv = document.getElementById('prometheusBookContext');
-            if (contextDiv && bookCount > 0) {
-                contextDiv.innerHTML = `📚 Searching ${bookCount} authorized book${bookCount !== 1 ? 's' : ''}`;
+            // Populate book selector chips
+            const bookSelector = document.getElementById('auditBookSelector');
+            if (bookSelector && books && books.length > 0) {
+                window.auditSelectedBooks = new Set(books.map(b => b.fractal_id));
+                
+                bookSelector.innerHTML = books.map(book => `
+                    <span class="audit-book-chip" data-fractal-id="${book.fractal_id}" 
+                          style="padding: 0.25rem 0.5rem; background: rgba(34, 211, 238, 0.2); border: 1px solid rgba(34, 211, 238, 0.4); border-radius: 4px; color: #22d3ee; font-size: 0.7rem; cursor: pointer; transition: all 0.2s; user-select: none;"
+                          title="Click to toggle">
+                        📚 ${escapeHtml(book.name.length > 15 ? book.name.substring(0, 15) + '...' : book.name)}
+                    </span>
+                `).join('');
+                
+                bookSelector.querySelectorAll('.audit-book-chip').forEach(chip => {
+                    chip.addEventListener('click', function() {
+                        const fractalId = this.getAttribute('data-fractal-id');
+                        if (window.auditSelectedBooks.has(fractalId)) {
+                            window.auditSelectedBooks.delete(fractalId);
+                            this.style.background = 'rgba(100, 116, 139, 0.2)';
+                            this.style.borderColor = 'rgba(100, 116, 139, 0.4)';
+                            this.style.color = '#64748b';
+                        } else {
+                            window.auditSelectedBooks.add(fractalId);
+                            this.style.background = 'rgba(34, 211, 238, 0.2)';
+                            this.style.borderColor = 'rgba(34, 211, 238, 0.4)';
+                            this.style.color = '#22d3ee';
+                        }
+                        updateBookContextDisplay();
+                    });
+                });
+            } else {
+                bookSelector.innerHTML = '<span style="color: #64748b; font-size: 0.75rem;">No books available</span>';
+                window.auditSelectedBooks = new Set();
             }
             
+            updateBookContextDisplay();
             auditModal.style.display = 'flex';
+        }
+        
+        function updateBookContextDisplay() {
+            const contextDiv = document.getElementById('prometheusBookContext');
+            const selectedCount = window.auditSelectedBooks?.size || 0;
+            const totalCount = books?.length || 0;
+            const engine = document.getElementById('auditAiEngine')?.value || 'prometheus';
+            const engineName = engine === 'nyan-ai' ? 'Nyan AI' : 'Prometheus';
+            
+            if (contextDiv) {
+                if (selectedCount === 0) {
+                    contextDiv.innerHTML = `⚠️ No books selected - ${engineName} will answer without book context`;
+                    contextDiv.style.background = 'rgba(245, 158, 11, 0.1)';
+                    contextDiv.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+                    contextDiv.style.color = '#f59e0b';
+                } else if (selectedCount === totalCount) {
+                    contextDiv.innerHTML = `📚 ${engineName}: Searching ALL ${totalCount} book${totalCount !== 1 ? 's' : ''}`;
+                    contextDiv.style.background = 'rgba(34, 211, 238, 0.1)';
+                    contextDiv.style.borderColor = 'rgba(34, 211, 238, 0.3)';
+                    contextDiv.style.color = '#22d3ee';
+                } else {
+                    contextDiv.innerHTML = `📚 ${engineName}: Searching ${selectedCount} of ${totalCount} book${totalCount !== 1 ? 's' : ''}`;
+                    contextDiv.style.background = 'rgba(168, 85, 247, 0.1)';
+                    contextDiv.style.borderColor = 'rgba(168, 85, 247, 0.3)';
+                    contextDiv.style.color = '#a855f7';
+                }
+            }
         }
         
         function closePrometheusAuditModal() {
@@ -2631,34 +2709,25 @@
             const message = document.getElementById('prometheusMessage').value.trim();
             const btn = document.getElementById('prometheusCheckBtn');
             const resultContent = document.getElementById('prometheusResultContent');
+            const engine = document.getElementById('auditAiEngine')?.value || 'prometheus';
+            const selectedBookIds = window.auditSelectedBooks ? Array.from(window.auditSelectedBooks) : [];
             
             if (!message) {
                 showToast('⚠️ Please enter a message to check', 'error');
                 return;
             }
             
-            // Wait for books to load if not yet available
-            if (!books || books.length === 0) {
-                showToast('⏳ Waiting for books to load...', 'info');
-                await new Promise(resolve => {
-                    const checkBooks = setInterval(() => {
-                        if (books && books.length > 0) {
-                            clearInterval(checkBooks);
-                            resolve();
-                        }
-                    }, 200);
-                    setTimeout(() => { clearInterval(checkBooks); resolve(); }, 5000);
-                });
-            }
+            const engineName = engine === 'nyan-ai' ? 'Nyan AI' : 'Prometheus';
+            const engineIcon = engine === 'nyan-ai' ? '🌈' : '🔮';
             
             // Loading state - show spinner in result pane
             btn.disabled = true;
-            btn.textContent = '🔮 Analyzing...';
+            btn.textContent = `${engineIcon} Analyzing...`;
             resultContent.innerHTML = `
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;">
-                    <div style="font-size: 2.5rem; margin-bottom: 0.75rem; animation: pulse 1.5s ease-in-out infinite;">🔮</div>
-                    <p style="margin: 0; color: #a855f7;">Analyzing your query...</p>
-                    <p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 0.75rem;">Searching ${books?.length || 0} books</p>
+                    <div style="font-size: 2.5rem; margin-bottom: 0.75rem; animation: pulse 1.5s ease-in-out infinite;">${engineIcon}</div>
+                    <p style="margin: 0; color: #a855f7;">${engineName} analyzing your query...</p>
+                    <p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 0.75rem;">Searching ${selectedBookIds.length} book${selectedBookIds.length !== 1 ? 's' : ''}</p>
                 </div>
                 <style>
                     @keyframes pulse {
@@ -2668,86 +2737,117 @@
                 </style>
             `;
             
-            // SINGULARITY: Comprehensive search - ALWAYS search ALL books for thorough analysis
-            const detectedBooks = detectBookNamesInQuery(message);
-            console.log(`📚 Books available for analysis: ${books?.length || 0}, query: "${message.substring(0, 50)}..."`);
-            
-            // Always use ALL authorized books for comprehensive domain-wide search
-            let detectedBookIds = books.map(b => b.fractal_id);
-            
-            if (detectedBooks.length > 0) {
-                console.log(`📖 Detected ${detectedBooks.length} book(s) in query: ${detectedBooks.map(b => b.name).join(', ')} - plus ALL other books`);
-            } else {
-                console.log(`🌐 Domain-wide search: Analyzing ALL ${detectedBookIds.length} authorized books comprehensively`);
-            }
+            console.log(`${engineIcon} ${engineName}: Querying ${selectedBookIds.length} book(s)`);
             
             try {
-                console.log(`🔮 Prometheus: Sending request with fractalId="${selectedBookFractalId}", bookIds=${JSON.stringify(detectedBookIds.slice(0, 3))}${detectedBookIds.length > 3 ? `... (${detectedBookIds.length} total)` : ''}`);
-                const response = await window.authFetch('/api/prometheus/check', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ 
-                        messages: message, 
-                        ruleType: 'general',
-                        fractalId: selectedBookFractalId || null,
-                        bookIds: detectedBookIds
-                    })
-                });
+                let response, data;
                 
-                const data = await response.json();
-                
-                if (!response.ok) {
-                    throw new Error(data.error || 'Prometheus check failed');
+                if (engine === 'nyan-ai') {
+                    response = await window.authFetch('/api/nyan-ai/audit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            query: message,
+                            bookIds: selectedBookIds
+                        })
+                    });
+                    
+                    data = await response.json();
+                    
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Nyan AI audit failed');
+                    }
+                    
+                    const bookInfo = data.bookContext 
+                        ? `${data.bookContext.bookCount} book(s), ${data.bookContext.totalMessages} messages`
+                        : 'No book context';
+                    
+                    resultContent.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+                            <span style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 4px; color: #a855f7; font-weight: 600;">
+                                🌈 Nyan AI
+                            </span>
+                            <span style="color: #64748b; font-size: 0.75rem;">
+                                ${data.processingTime}ms
+                            </span>
+                            <span style="color: #22d3ee; font-size: 0.75rem;">📚 ${bookInfo}</span>
+                        </div>
+                        
+                        <div style="padding: 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; margin-bottom: 0.75rem;">
+                            <p style="color: #e2e8f0; margin: 0; line-height: 1.6; font-size: 0.9rem; white-space: pre-wrap;">${escapeHtml(data.answer)}</p>
+                        </div>
+                        
+                        <div style="font-size: 0.7rem; color: #64748b; text-align: right;">
+                            Model: ${data.model || 'llama-3.3-70b'}
+                        </div>
+                    `;
+                    
+                    showToast(`🌈 Nyan AI response complete`, 'success');
+                    
+                } else {
+                    response = await window.authFetch('/api/prometheus/check', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            messages: message, 
+                            ruleType: 'general',
+                            fractalId: selectedBookFractalId || null,
+                            bookIds: selectedBookIds
+                        })
+                    });
+                    
+                    data = await response.json();
+                    
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Prometheus check failed');
+                    }
+                    
+                    const result = data.result;
+                    const hasBookContext = data.has_book_context;
+                    const statusColors = {
+                        'PASS': '#10b981',
+                        'FAIL': '#ef4444',
+                        'WARNING': '#f59e0b',
+                        'REVIEW': '#6366f1'
+                    };
+                    const statusColor = statusColors[result.status] || '#94a3b8';
+                    
+                    resultContent.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+                            <span style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 4px; color: ${statusColor}; font-weight: 600;">
+                                ${escapeHtml(result.status)}
+                            </span>
+                            <span style="color: #64748b; font-size: 0.75rem;">
+                                ${(result.confidence * 100).toFixed(0)}% confidence
+                            </span>
+                            ${hasBookContext ? `<span style="color: #22d3ee; font-size: 0.75rem;">📚 ${result.totalMessages || 0} msgs</span>` : ''}
+                        </div>
+                        
+                        ${result.answer ? `
+                        <div style="padding: 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; margin-bottom: 0.75rem;">
+                            <p style="color: #e2e8f0; margin: 0; line-height: 1.6; font-size: 0.9rem;">${escapeHtml(result.answer)}</p>
+                        </div>
+                        ` : ''}
+                        
+                        ${result.data_extracted && Object.keys(result.data_extracted).length > 0 ? `
+                        <details style="margin-bottom: 0.5rem;">
+                            <summary style="color: #94a3b8; cursor: pointer; font-size: 0.8rem;">📊 Extracted Data</summary>
+                            <pre style="margin: 0.5rem 0; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; color: #94a3b8; font-size: 0.7rem; overflow-x: auto; max-height: 120px; overflow-y: auto;">${escapeHtml(JSON.stringify(result.data_extracted, null, 2))}</pre>
+                        </details>
+                        ` : ''}
+                        
+                        ${result.needs_human_review ? `
+                        <div style="padding: 0.375rem 0.5rem; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 4px; color: #a5b4fc; font-size: 0.75rem;">
+                            ⚠️ Human review recommended
+                        </div>
+                        ` : ''}
+                    `;
+                    
+                    showToast(`🧿 Check complete: ${result.status}`, result.status === 'PASS' ? 'success' : 'info');
                 }
                 
-                // Display result
-                const result = data.result;
-                const hasBookContext = data.has_book_context;
-                const statusColors = {
-                    'PASS': '#10b981',
-                    'FAIL': '#ef4444',
-                    'WARNING': '#f59e0b',
-                    'REVIEW': '#6366f1'
-                };
-                const statusColor = statusColors[result.status] || '#94a3b8';
-                
-                resultContent.innerHTML = `
-                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
-                        <span style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 4px; color: ${statusColor}; font-weight: 600;">
-                            ${escapeHtml(result.status)}
-                        </span>
-                        <span style="color: #64748b; font-size: 0.75rem;">
-                            ${(result.confidence * 100).toFixed(0)}% confidence
-                        </span>
-                        ${hasBookContext ? `<span style="color: #22d3ee; font-size: 0.75rem;">📚 ${result.totalMessages || 0} msgs</span>` : ''}
-                    </div>
-                    
-                    ${result.answer ? `
-                    <div style="padding: 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; margin-bottom: 0.75rem;">
-                        <p style="color: #e2e8f0; margin: 0; line-height: 1.6; font-size: 0.9rem;">${escapeHtml(result.answer)}</p>
-                    </div>
-                    ` : ''}
-                    
-                    ${result.data_extracted && Object.keys(result.data_extracted).length > 0 ? `
-                    <details style="margin-bottom: 0.5rem;">
-                        <summary style="color: #94a3b8; cursor: pointer; font-size: 0.8rem;">📊 Extracted Data</summary>
-                        <pre style="margin: 0.5rem 0; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; color: #94a3b8; font-size: 0.7rem; overflow-x: auto; max-height: 120px; overflow-y: auto;">${escapeHtml(JSON.stringify(result.data_extracted, null, 2))}</pre>
-                    </details>
-                    ` : ''}
-                    
-                    ${result.needs_human_review ? `
-                    <div style="padding: 0.375rem 0.5rem; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 4px; color: #a5b4fc; font-size: 0.75rem;">
-                        ⚠️ Human review recommended
-                    </div>
-                    ` : ''}
-                `;
-                
-                showToast(`🧿 Check complete: ${result.status}`, result.status === 'PASS' ? 'success' : 'info');
-                
             } catch (error) {
-                console.error('Prometheus check error:', error);
+                console.error('AI check error:', error);
                 showToast(`⚠️ ${error.message}`, 'error');
                 
                 resultContent.innerHTML = `
