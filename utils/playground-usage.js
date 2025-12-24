@@ -146,14 +146,21 @@ async function loadTodayUsageFromDb() {
 
 function cleanupOldBuckets() {
     const todayKey = getTodayKey();
+    let cleaned = 0;
     for (const key of dailyUsage.keys()) {
         if (!key.startsWith(todayKey)) {
             dailyUsage.delete(key);
+            cleaned++;
         }
+    }
+    if (cleaned > 0) {
+        console.log(`🧹 Usage cleanup: removed ${cleaned} stale bucket(s)`);
     }
 }
 
-setInterval(cleanupOldBuckets, 60 * 60 * 1000);
+function registerWithHeartbeat(heartbeat) {
+    heartbeat.subscribe('usage-cleanup', 60 * 60 * 1000, cleanupOldBuckets);
+}
 
 module.exports = {
     setDbPool,
@@ -161,5 +168,7 @@ module.exports = {
     getUsageStats,
     getAllUsageStats,
     loadTodayUsageFromDb,
+    cleanupOldBuckets,
+    registerWithHeartbeat,
     DAILY_LIMITS
 };
