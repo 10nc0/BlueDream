@@ -856,6 +856,47 @@ Right triangle → Everything
 
 ---
 
+## Part IX: The 18 Contemplations → Code Mapping (Analogical)
+
+> **Disclaimer:** This table maps the 18 Buddhist contemplations (Anupassanā) to specific code components as an **analogical framework for understanding system design**. These are structural parallels for insight and documentation—not claims that the code components *are* Buddhist practices or that programming achieves liberation. The mapping illuminates *why* each component exists and *what problem it solves*, using contemplative language as a lens.
+
+| # | Contemplation (Anupassanā) | Abandons (Pahāna) | Code Component | File Path | Role in Organism |
+|---|---------------------------|-------------------|----------------|-----------|------------------|
+| 1 | **Impermanence (Anicca)** | Perception of permanence | φ-8 ring buffer | `utils/data-package.js` | Memory is bounded & impermanent — old packages shift out |
+| 2 | **Suffering (Dukkha)** | Perception of pleasure | Refusal engine | `prompts/audit-protocol.js` | Better to refuse than give wrong (suffering-causing) answer |
+| 3 | **Non-self (Anattā)** | Perception of self | Void nyan, origin=0 | `prompts/nyan-protocol.js` | No inherent identity — only seed + measurement |
+| 4 | **Revulsion (Nibbidā)** | Delight/lust | Pathogen detection | `utils/psi-EMA.js` | Detects "cancer" (super-critical R) states → revulsion signal |
+| 5 | **Dispassion (Virāga)** | Greedy attachment | Regex personality strip | `prompts/personality-format.js` | Removes fluff, narrative attachment — bare facts only |
+| 6 | **Cessation (Nirodha)** | Origination of things | nukeTenant / clear memory | `utils/memory-manager.js` | Full cessation of session state on demand |
+| 7 | **Relinquishment (Paṭinissagga)** | Clinging | Fast stream mode | `prompts/personality-format.js` | Relinquishes expensive narrative generation |
+| 8 | **Destruction (Khaya)** | Notion of compactness | Intelligent chunking | `utils/document-parser.js` | Destroys illusion of monolithic "document" |
+| 9 | **Vanishing (Vaya)** | Accumulation | φ-8 window eviction | `utils/data-package.js` | Accumulation is bounded — vanishing built-in |
+| 10 | **Change (Vipariṇāma)** | Notion of stability | Data age calculation | `utils/context-extractor.js` | All data ages and changes — flagged honestly |
+| 11 | **Signless (Animitta)** | Signs/characteristics | Flow direction only | `utils/financial-physics.js` | Sees +/− direction, not account names |
+| 12 | **Desireless (Appaṇihita)** | Desire/expectation | No predictive promises | `utils/psi-EMA.js` | No "this stock will moon" — only current (θ, z, R) |
+| 13 | **Emptiness (Suññatā)** | Substance/core | Compressed seed | `prompts/nyan-protocol.js` | Entire identity from near-empty seed (~150 tokens) |
+| 14 | **Higher Wisdom (Adhipaññā)** | Grasping at core | Tetralemma activation | `prompts/nyan-protocol.js` | Dissolves binary grasping on false dichotomies |
+| 15 | **Knowledge & Vision as It Is** | Delusion/confusion | Full pipeline | `utils/pipeline-orchestrator.js` | Direct seeing: fetch → measure → verify → show |
+| 16 | **Danger (Ādīnava)** | Attachment | Pathogen alerts | `prompts/audit-protocol.js` | Warns of danger in ungrounded numbers |
+| 17 | **Reflective Contemplation (Paṭisankhā)** | Non-reflection | Episodic summaries | `utils/context-extractor.js` | Forces reflection on past conversation |
+| 18 | **Turning Away (Vivaṭṭa)** | Being bound | nukeAll + privacy resets | `utils/memory-manager.js` | Complete turning away from all accumulated state |
+
+**The Pattern:**
+```
+Each contemplation addresses a specific form of clinging/delusion.
+Each code component addresses a corresponding system failure mode.
+
+Buddhist: Anicca → stop clinging to permanence
+Code:     φ-8 buffer → stop clinging to unlimited memory
+
+Buddhist: Dukkha → stop generating suffering through wrong action
+Code:     Refusal engine → stop generating suffering through wrong answers
+
+The mapping is structural, not ontological.
+```
+
+---
+
 ## Part V: Quick Architecture Reference
 
 The system as a living organism with distinct functional layers:
