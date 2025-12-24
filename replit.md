@@ -121,6 +121,10 @@ The system employs a Node.js backend with Express and a Single Page Application 
 7. `registerExportRoutes(app, deps)`
 8. `healQueue.setDependencies(pool, hermesBot)` → `healQueue.initialize()` → `healQueue.start()`
 
+**Architecture Notes:**
+- **Background Workers** (e.g., healQueue): Singleton-managed outside deps.js via lazy `setDependencies()` pattern. Only add to deps container if shared across multiple modules.
+- **Route Modules**: Use deps.js for HTTP-facing dependencies (pool, bots, middleware, helpers, constants).
+
 **Remaining in index.js (~8000 lines)**: AI streaming routes, message routes, sendToLedger integration, deferred startup tasks
 
 ## External Dependencies
