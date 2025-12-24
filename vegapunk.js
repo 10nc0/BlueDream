@@ -1,7 +1,9 @@
-const axios = require('axios');
-const querystring = require('querystring');
+// Vegapunk.js - The Kernel
+// Named after Dr. Vegapunk (One Piece) - the genius scientist who splits
+// his consciousness into satellite bodies while maintaining a pure core.
+// This kernel orchestrates 6 modular routes (satellites) via dependency injection.
+
 const { execSync } = require('child_process');
-const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { AsyncLocalStorage } = require('async_hooks');
@@ -12,8 +14,6 @@ const helmet = require('helmet');
 const { Pool } = require('pg');
 const session = require('express-session');
 const connectPg = require('connect-pg-simple');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 const twilio = require('twilio');
 const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
@@ -23,12 +23,10 @@ const ThothBot = require('./thoth-bot');
 const IdrisBot = require('./idris-bot');
 const HorusBot = require('./horus-bot');
 const fractalId = require('./utils/fractal-id');
-// MetadataExtractor moved to routes/books.js
 const genesisCounter = require('./server/genesis-counter');
 const Prometheus = require('./prometheus');
 const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document-parser');
 const { identifyFileType, executeExtractionCascade, formatJSONForGroq, getFinancialPhysicsSeed, intelligentChunking, buildMultiDocContext } = require('./utils/attachment-cascade');
-const JSZip = require('jszip');
 const CONSTANTS = require('./config/constants');
 const { getLegalAnalysisSeed, detectLegalDocument, LEGAL_KEYWORDS_REGEX } = require('./prompts/legal-analysis');
 const { formatAuditBadge, runAuditPass } = require('./utils/two-pass-verification');
