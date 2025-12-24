@@ -279,6 +279,11 @@ function registerBooksRoutes(app, deps) {
                 return res.status(400).json({ error: 'Tenant context required' });
             }
             
+            if (!NYANBOOK_LEDGER_WEBHOOK) {
+                logger.error('NYANBOOK_WEBHOOK_URL environment variable not configured');
+                return res.status(500).json({ error: 'System configuration error: Ledger not available. Please contact administrator.' });
+            }
+            
             const output01Url = NYANBOOK_LEDGER_WEBHOOK;
             const output0nUrl = userOutputUrl || null;
             
@@ -360,7 +365,7 @@ function registerBooksRoutes(app, deps) {
                 null,
                 'pending',
                 inputPlatform,
-                output01Url,
+                output01Url || 'https://nyanbook-ledger.local',
                 JSON.stringify(outpipesUser)
             ]);
             
