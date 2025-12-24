@@ -94,13 +94,16 @@ The system employs a Node.js backend with Express and a Single Page Application 
 
 ## Route Modularization (Dec 2024)
 **Pattern**: Factory pattern with dependency injection. Each route file exports `registerXRoutes(app, deps)`.
+**Progress**: index.js reduced from 8500 → 8033 lines (~5% reduction so far). Target: ~3000 lines.
 
 **Files**:
 - `lib/deps.js` - Dependency injection container with pool, bots, middleware, helpers, constants
 - `lib/logger.js` - Pino structured logging
+- `lib/heal-queue.js` - Auto-heal immune system (lease-based priority queue, O(log n) selection)
 - `routes/auth-admin.js` (1278 lines) - Auth routes (login, signup, password reset, refresh, logout, invites) + Admin routes (sessions, users, audit-logs)
 - `routes/books.js` (270 lines) - Core CRUD (get books, archive/unarchive, stats)
 - `routes/inpipe.js` (406 lines) - Multi-channel input with abstract channel interface
+- `routes/export.js` (210 lines) - Book export as ZIP (messages + attachments)
 
 **Inpipe Architecture** (Multi-In Pattern):
 - `lib/channels/base.js` - Abstract channel interface (validateSignature, parsePayload, normalizeMessage, sendReply)
@@ -108,15 +111,17 @@ The system employs a Node.js backend with Express and a Single Page Application 
 - Future channels: telegram.js, twitter.js (same interface)
 - Flow: Channel → normalize() → routeMessage() → Discord out
 
-**Wiring Order** (in index.js):
+**Wiring Order** (in index.js app.listen callback):
 1. Initialize pool, bots, middleware
-2. Call `deps.initialize()` with all dependencies
+2. Call `deps.initialize()` with all dependencies (after bots are ready)
 3. `registerAuthAdminRoutes(app, deps)` → returns `{requireAuth, requireRole}`
 4. `deps.setMiddleware(requireAuth, requireRole)`
 5. `registerBooksRoutes(app, deps)`
 6. `registerInpipeRoutes(app, deps)`
+7. `registerExportRoutes(app, deps)`
+8. `healQueue.setDependencies(pool, hermesBot)` → `healQueue.initialize()` → `healQueue.start()`
 
-**Remaining in index.js**: AI streaming routes, sendToLedger integration
+**Remaining in index.js (~8000 lines)**: AI streaming routes, message routes, sendToLedger integration, deferred startup tasks
 
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)
