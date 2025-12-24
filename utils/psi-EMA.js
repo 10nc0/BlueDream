@@ -3,7 +3,7 @@
  * 
  * GLOSSARY & SUBSTRATE-AGNOSTIC FRAMING:
  * ═════════════════════════════════════════════════════════════════════════════
- * Ψ-EMA is a GENERAL-PURPOSE time series oscillator applicable to any domain with
+ * Ψ-EMA is a GENERAL-PURPOSE time series survival/oscillation observer applicable to any domain with
  * stock/flow decomposition. Examples herein use capital markets due to data accessibility,
  * but the same framework applies to:
  *   • Climate: Temperature (stock) vs heating/cooling flow (anomaly detection)

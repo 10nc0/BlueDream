@@ -1,4 +1,4 @@
-// Vegapunk.js - The Kernel
+// Vegapunk.js - The Kernel (previously index.js 8000+ lines)
 // Named after Dr. Vegapunk (One Piece) - the genius scientist who splits
 // his consciousness into satellite bodies while maintaining a pure core.
 // This kernel orchestrates 6 modular routes (satellites) via dependency injection.
