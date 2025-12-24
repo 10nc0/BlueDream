@@ -274,114 +274,48 @@
 
         // ===================================================================
         // MOBILE DETECTION & MODE SWITCHING
+        // Now unified via LayoutController (layout-controller.js)
+        // These are thin wrappers for backward compatibility
         // ===================================================================
         
         /**
-         * Mobile Detection: Portrait orientation OR extreme aspect ratio (foldable devices)
-         * - Portrait: width < 768 && height > width → Mobile mode
-         * - Extreme aspect ratio: height/width > 1.4 (very tall) → Mobile mode (catches Z Fold 7 folded)
-         * - Landscape (iPhone rotated): Desktop mode with resizers
-         * - Foldables unfolded: Detected via width >= 768 with normal aspect ratio → Desktop mode
+         * Mobile Detection - delegates to LayoutController when available
          */
         const isMobile = () => {
+            if (typeof LayoutController !== 'undefined') {
+                return LayoutController.isMobile();
+            }
             const aspectRatio = window.innerHeight / window.innerWidth;
-            
-            // Standard mobile: width < 768 AND portrait orientation
-            if (window.innerWidth < 768 && window.innerHeight > window.innerWidth) {
-                return true;
-            }
-            
-            // Foldable Z Fold 7 folded: Very tall & narrow (aspect ratio > 1.4)
-            // This catches folded state even if width is slightly larger than 768px
-            if (aspectRatio > 1.4) {
-                return true;
-            }
-            
+            if (window.innerWidth < 768 && window.innerHeight > window.innerWidth) return true;
+            if (aspectRatio > 1.4) return true;
             return false;
         };
 
         /**
-         * Apply mobile mode: Harmonious header layout
-         * [Cat] - [Your Nyanbook~ + Date/Time] - [Logout]
+         * Apply mobile mode - LayoutController handles this on init
+         * Kept for manual triggering if needed
          */
         function applyMobileMode() {
-            console.log('📱 Switching to MOBILE mode');
-            document.body.classList.add('mobile-mode');
-            document.body.classList.remove('desktop-mode');
-            
-            // Cat: 75x75px constant size
-            const catCanvas = document.getElementById('hopCanvas');
-            if (catCanvas) {
-                catCanvas.width = 75;
-                catCanvas.height = 75;
-                catCanvas.style.width = '75px';
-                catCanvas.style.height = '75px';
-            }
-            
-            // Date/time visibility toggled by updateDateTimePosition() based on header height
-            // No DOM movement - just visibility toggle like playground
-            
-            // Hide resizers on mobile
-            const sidebarResizer = document.getElementById('sidebarResizer');
-            const headerResizer = document.getElementById('headerResizer');
-            if (sidebarResizer) sidebarResizer.style.display = 'none';
-            if (headerResizer) headerResizer.style.display = 'none';
-            
-            // Hide sidebar (moves to thumbs zone)
-            const bookSidebar = document.querySelector('.book-sidebar');
-            if (bookSidebar) bookSidebar.style.display = 'none';
-            
-            // Show thumbs zone
+            console.log('📱 applyMobileMode (legacy wrapper)');
             initThumbsZone();
-            
-            // Initialize φ-breath system for mobile UI
             initPhiBreath();
         }
 
         /**
-         * Apply desktop mode: Sidebar + resizers
+         * Apply desktop mode - LayoutController handles this on init
+         * Kept for manual triggering if needed
          */
         function applyDesktopMode() {
-            console.log('💻 Switching to DESKTOP mode');
-            document.body.classList.add('desktop-mode');
-            document.body.classList.remove('mobile-mode');
-            
-            // Restore cat to 100x100
-            const catCanvas = document.getElementById('hopCanvas');
-            if (catCanvas) {
-                catCanvas.width = 100;
-                catCanvas.height = 100;
-                catCanvas.style.width = '100px';
-                catCanvas.style.height = '100px';
-            }
-            
-            // Date/time visibility toggled by updateDateTimePosition() based on header height
-            // No DOM movement needed - elements stay in place
-            
-            // Show resizers on desktop
-            const sidebarResizer = document.getElementById('sidebarResizer');
-            const headerResizer = document.getElementById('headerResizer');
-            if (sidebarResizer) sidebarResizer.style.display = 'block';
-            if (headerResizer) headerResizer.style.display = 'block';
-            
-            // Restore sidebar (remove inline style override to let CSS take over)
-            const bookSidebar = document.querySelector('.book-sidebar');
-            if (bookSidebar) bookSidebar.style.display = '';
-            
-            // Hide thumbs zone
-            const thumbsZone = document.getElementById('thumbsZone');
-            if (thumbsZone) thumbsZone.style.display = 'none';
+            console.log('💻 applyDesktopMode (legacy wrapper)');
         }
 
         /**
-         * Initialize thumbs zone (bottom-right floating pills)
-         * Renders basic buttons immediately, adds button 4 when books load
+         * Initialize thumbs zone - subscribes to LayoutController events
          */
         function initThumbsZone() {
             let thumbsZone = document.getElementById('thumbsZone');
             
             if (!thumbsZone) {
-                // Create thumbs zone if it doesn't exist
                 thumbsZone = document.createElement('div');
                 thumbsZone.id = 'thumbsZone';
                 thumbsZone.className = 'thumbs-zone';
@@ -389,68 +323,49 @@
             }
             
             thumbsZone.style.display = 'flex';
-            // Render basic buttons immediately (Create, Audit, Search on desktop only)
             renderThumbsZone();
-            console.log('🔘 Thumbs zone initialized with basic buttons');
+            console.log('🔘 Thumbs zone initialized');
         }
 
         // ===== φ-BREATH SINGULARITY ☯️ =====
         // Golden Ratio: The breath of truth
-        // Now powered by centralized φ-breath module
+        // State now managed by LayoutController (layout-controller.js)
         const φ = 1.618033988749895;
         
-        // THUMBS-ZONE STATE (battle-tested controller)
-        let isExpanded = false;      // Single source of truth - readable everywhere
-        let expandLock = false;      // Guarantees one animation at a time
-        let thumbsIdleTimer = null;
-        let breathInitialized = false;
+        // LEGACY COMPAT: These now delegate to LayoutController
+        // Keeping thin wrappers for backward compatibility with inline references
+        const isExpanded = () => typeof LayoutController !== 'undefined' && LayoutController.isExpanded();
+        const isAnimating = () => typeof LayoutController !== 'undefined' && LayoutController.isAnimating();
         
-        // Animation timing constants
-        const EXPAND_DELAY = 50;     // ms between each egg (expand)
-        const COLLAPSE_DELAY = 40;   // ms between each egg (collapse)
-        const ANIMATION_MS = 400;    // matches CSS transition duration
+        // Animation timing constants (also in LayoutController.CONSTANTS)
+        const EXPAND_DELAY = 50;
+        const COLLAPSE_DELAY = 40;
+        const ANIMATION_MS = 400;
         
-        // Initialize φ-breath system (mobile only)
-        function initPhiBreath() {
-            if (!isMobile() || breathInitialized) {
+        // φ-breath integration via LayoutController subscription
+        function initPhiBreathSubscription() {
+            if (typeof LayoutController === 'undefined' || typeof PHI_BREATH === 'undefined') {
                 return;
             }
             
-            console.log('🫁 Initializing φ-breath system for mobile UI');
-            PHI_BREATH.init();
-            breathInitialized = true;
-            
-            // Subscribe to breath cycles to sync rotation speed with φ oscillation
-            // Only updates when EXPANDED (collapsed state ignores φ updates)
             PHI_BREATH.on('breathCycle', (data) => {
                 const singularityBtn = document.querySelector('.singularity-btn');
-                if (!singularityBtn) {
-                    console.log('⚠️ breathCycle: singularityBtn not found!');
-                    return;
-                }
+                if (!singularityBtn || !isExpanded()) return;
                 
-                // ONLY apply φ updates when expanded - collapsed state is locked to base SLOW
-                if (!isExpanded) {
-                    return; // Ignore φ updates when collapsed - prevents leak
-                }
-                
-                // φScale oscillates: 1.0 (φ^0) → 1.618 (φ^1) → 1.0
                 const φScale = data.φScale;
-                
-                // FAST: 0.5 φ-breath per rotation + breathing
                 const rotationDuration = 0.5 * PHI_BREATH.BASE_DURATION * φScale;
                 const breathDuration = PHI_BREATH.BASE_DURATION * 0.5 * φScale;
                 
                 singularityBtn.style.setProperty('--rotation-duration', `${rotationDuration}ms`);
                 singularityBtn.style.setProperty('--breath-duration', `${breathDuration}ms`);
-                
-                // Debug log
-                if (data.breathCount === 0 || Math.random() < 0.01) {
-                    console.log(`⚡ FAST φ-breath: rotation=${Math.round(rotationDuration)}ms, breath=${Math.round(breathDuration)}ms (φScale=${φScale.toFixed(3)})`);
-                }
             });
             
-            console.log(`🫁 φ-breath initialized: ${PHI_BREATH.BASE_DURATION}ms base cycle (φ^0 to φ^1 variation)`);
+            console.log('🫁 φ-breath subscription attached to LayoutController');
+        }
+        
+        // LEGACY: initPhiBreath now just triggers subscription setup
+        function initPhiBreath() {
+            initPhiBreathSubscription();
         }
         
         // Set singularity button breath animation duration
@@ -637,137 +552,31 @@
         }
         
         /**
-         * COLLAPSE - Battle-tested with lock and stagger
+         * COLLAPSE - Now delegates to LayoutController
+         * Kept as wrapper for backward compat with inline handlers
          */
         function collapseToSingularity() {
-            if (expandLock || !isExpanded) return;
-            expandLock = true;
-            isExpanded = false;
-            
-            console.log('🔄 COLLAPSE eggs');
-            const layer01 = document.querySelector('.thumbs-zone .layer-01');
-            const singularityBtn = document.querySelector('.singularity-btn');
-            
-            // Clear any existing auto-collapse timer
-            if (thumbsIdleTimer) {
-                clearTimeout(thumbsIdleTimer);
-                thumbsIdleTimer = null;
-            }
-            
-            // Exit creation mode for φ-breath system (mobile only)
-            if (isMobile() && breathInitialized) {
-                console.log('😌 Exited CREATION MODE');
-                PHI_BREATH.exitCreationMode();
-            }
-            
-            if (layer01) {
-                console.log('⬅️ Eggs fusing (φ-inverse fusion)');
-                layer01.classList.remove('show');
-                layer01.classList.add('collapsing');
-                
-                // Stagger collapse delays (reverse order)
-                const eggs = [...layer01.querySelectorAll('.thumb-btn')].reverse();
-                eggs.forEach((egg, i) => {
-                    egg.style.transitionDelay = `${i * COLLAPSE_DELAY}ms`;
-                });
-                
-                // Clean up after animation completes
-                const totalDuration = ANIMATION_MS + eggs.length * COLLAPSE_DELAY;
-                setTimeout(() => {
-                    layer01.classList.remove('collapsing');
-                    layer01.setAttribute('hidden', '');
-                    
-                    // SLOW MODE (time-based, no rollback)
-                    CAT_BREATHE_CLOCK.setSpeed('SLOW');
-                    
-                    expandLock = false;
-                    console.log('✅ Collapse complete');
-                }, totalDuration);
-            } else {
-                expandLock = false;
+            if (typeof LayoutController !== 'undefined') {
+                LayoutController.collapse();
             }
         }
         
         /**
-         * EXPAND - Battle-tested with lock and stagger
+         * EXPAND - Now delegates to LayoutController
+         * Kept as wrapper for backward compat with inline handlers
          */
         function expandFromSingularity() {
-            if (expandLock || isExpanded) return;
-            expandLock = true;
-            isExpanded = true;
-            
-            console.log('🌌 EXPAND eggs');
-            const layer01 = document.querySelector('.thumbs-zone .layer-01');
-            const singularityBtn = document.querySelector('.singularity-btn');
-            
-            // Clear any existing auto-collapse timer
-            if (thumbsIdleTimer) {
-                clearTimeout(thumbsIdleTimer);
-                thumbsIdleTimer = null;
-            }
-            
-            // SET FAST MODE (time-based, no rollback)
-            CAT_BREATHE_CLOCK.setSpeed('FAST');
-            
-            // Enter creation mode for φ-breath system (mobile only)
-            if (isMobile() && breathInitialized) {
-                console.log('🌀 Entered CREATION MODE');
-                PHI_BREATH.enterCreationMode();
-            }
-            
-            if (layer01) {
-                console.log('🥚 Showing eggs layer');
-                layer01.removeAttribute('hidden');
-                layer01.classList.remove('collapsing');
-                layer01.classList.add('show');
-                
-                // Stagger expand delays (sequential order)
-                const eggs = layer01.querySelectorAll('.thumb-btn');
-                eggs.forEach((egg, i) => {
-                    egg.style.transitionDelay = `${i * EXPAND_DELAY}ms`;
-                });
-                
-                console.log('✨ Eggs appearing sequentially');
-                
-                // Release lock after animation completes
-                const totalDuration = ANIMATION_MS + eggs.length * EXPAND_DELAY;
-                setTimeout(() => {
-                    expandLock = false;
-                }, totalDuration);
-            } else {
-                expandLock = false;
-            }
-            
-            // φ-breath listener will handle FAST breathing updates automatically
-            
-            // Auto-collapse after φ-breath (mobile only)
-            const breathDuration = breathInitialized ? PHI_BREATH.BASE_DURATION : 4000;
-            if (isMobile()) {
-                thumbsIdleTimer = setTimeout(() => {
-                    console.log('⏰ φ-breath complete, auto-collapsing');
-                    if (isExpanded) {
-                        collapseToSingularity();
-                    }
-                }, breathDuration);
+            if (typeof LayoutController !== 'undefined') {
+                LayoutController.expand();
             }
         }
         
         /**
-         * TOGGLE - Throttled wrapper (100ms debounce)
+         * TOGGLE - Now delegates to LayoutController
          */
-        let lastToggleTime = 0;
         function toggleExpand() {
-            const now = Date.now();
-            if (now - lastToggleTime < 100) {
-                console.log('⏸️ Toggle throttled (100ms debounce)');
-                return;
-            }
-            lastToggleTime = now;
-            
-            if (isExpanded) {
-                collapseToSingularity();
-            } else {
-                expandFromSingularity();
+            if (typeof LayoutController !== 'undefined') {
+                LayoutController.toggle();
             }
         }
         
@@ -834,67 +643,50 @@
             console.log(`🔘 Thumbs zone HTML length: ${html.length} chars`);
             
             // Start φ-breath cycle on mobile
-            if (isMobile() && breathInitialized) {
-                setBreathCycle(PHI_BREATH.BASE_DURATION); // Start in calm state (4s breath)
+            if (isMobile() && typeof PHI_BREATH !== 'undefined') {
+                setBreathCycle(PHI_BREATH.BASE_DURATION);
             }
         }
 
         /**
-         * Detect mode on load and orientation change
-         * Handles foldable device fold/unfold transitions
+         * Initialize layout detection - now delegates to LayoutController
+         * LayoutController handles resize/orientation events internally
          */
         function initMobileDetection() {
-            // Log initial state for debugging (esp. Z Fold 7)
             const w = window.innerWidth;
             const h = window.innerHeight;
             const ar = (h / w).toFixed(2);
             console.log(`📐 Screen: ${w}x${h}px (aspect ratio: ${ar})`);
             
-            // Apply initial mode
-            if (isMobile()) {
-                console.log('📱 Mobile mode: aspect ratio or width < 768px detected');
-                applyMobileMode();
-            } else {
-                console.log('💻 Desktop mode: aspect ratio <= 1.4 and width >= 768px');
-                applyDesktopMode();
-            }
-            
-            // Listen for orientation/resize changes
-            let resizeTimeout;
-            let lastMode = isMobile() ? 'mobile' : 'desktop';
-            
-            window.addEventListener('resize', () => {
-                clearTimeout(resizeTimeout);
-                resizeTimeout = setTimeout(() => {
-                    const w = window.innerWidth;
-                    const h = window.innerHeight;
-                    const ar = (h / w).toFixed(2);
-                    const currentMode = isMobile() ? 'mobile' : 'desktop';
-                    
-                    // Only log and switch if mode changed
-                    if (currentMode !== lastMode) {
-                        console.log(`📐 Fold/Unfold detected: ${w}x${h}px (aspect ratio: ${ar}) → ${currentMode} mode`);
-                        lastMode = currentMode;
-                        
-                        if (isMobile()) {
-                            applyMobileMode();
-                        } else {
-                            applyDesktopMode();
+            if (typeof LayoutController !== 'undefined') {
+                LayoutController.subscribe((event, data) => {
+                    if (event === 'thumbsZoneReady') {
+                        renderThumbsZone();
+                    }
+                    if (event === 'deviceChanged') {
+                        console.log(`📐 LayoutController: device changed to ${data.device}`);
+                        if (data.device === 'mobile') {
+                            initThumbsZone();
+                            initPhiBreath();
                         }
                     }
-                }, 150);
-            });
-            
-            // Also listen for orientation change event
-            window.addEventListener('orientationchange', () => {
-                setTimeout(() => {
-                    if (isMobile()) {
-                        applyMobileMode();
-                    } else {
-                        applyDesktopMode();
-                    }
-                }, 200);
-            });
+                });
+                
+                LayoutController.init();
+                
+                if (LayoutController.isMobile()) {
+                    initThumbsZone();
+                    initPhiBreath();
+                }
+                
+                console.log('📐 LayoutController initialized');
+            } else {
+                if (isMobile()) {
+                    applyMobileMode();
+                } else {
+                    applyDesktopMode();
+                }
+            }
         }
 
         /**
