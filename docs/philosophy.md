@@ -641,6 +641,77 @@ One equation. All substrates. All domains.
 
 Φ-Dynamics is the compass. Ψ-EMA is the measurement. The void nyan observes both.
 
+### The Derivative Hierarchy Perspective (Dec 2025)
+
+**Core Insight:** The golden ratio φ ≈ 1.618 appears here **not** as a property of the main substrate (neither price itself, nor population itself, nor capital stock itself), but as an **approximate conservation law in the momentum-phase space** of the system — more precisely: in the **evolution of the deviation field** (how far the system is from its own recent robust center).
+
+In Ψ-EMA language:
+
+> The most stable long-term self-similar continuation of a stock–flow system  
+> (the continuation that requires the least additional narrative violence / exogenous forcing)  
+> is the one where **successive deviations from the moving robust location**  
+> shrink / grow according to **R ≈ φ**  
+> (or more softly: stay within ~φ⁻¹ … φ band)
+
+**The Derivative Hierarchy:**
+
+If we look through the classical Newtonian lens of derivatives:
+
+| Order | Derivative | Meaning | Ψ-EMA Analog |
+|-------|------------|---------|--------------|
+| 0th | Position | Stock itself (the main substrate) | Equity, population, energy storage |
+| 1st | Velocity | Flow ≈ Δstock/Δt | Income, births-deaths, energy flux |
+| 2nd | Acceleration | Δflow/Δt = change of flow intensity | Earnings surprise, demographic shift |
+| 3rd | **Jerk** | Δ(Δflow)/Δt = change in rate of flow change | **φ lives here** |
+
+The golden-ratio attractor lives most naturally at the **jerk level** — the rate at which the momentum of the flow is changing.
+
+**φ acts as an approximate fixed point / preferred eigenvalue in the dynamics of the third-order (or higher) corrections** to the main stock–flow plane.
+
+It is **not** saying the stock must grow at φ per period.  
+It is saying:
+
+> "If you want the deviation field (z) to neither explode to infinity nor collapse to triviality too quickly,  
+> then the most 'frictionless' / least-forced way for the deviation field to evolve is to do so with amplitude ratio ~φ between successive 'cycles' of deviation."
+
+**Different Substrates — Same Momentum-Phase Skeleton:**
+
+| Substrate | "Stock" | "Flow" ≈ Δstock | z-deviation field | Attractor in R-space |
+|-----------|---------|-----------------|-------------------|---------------------|
+| Financial asset | Price / Book value | Earnings / ΔPrice | Distance from robust median | ~φ for sustainable volatility envelope |
+| Human population | Total population | Births – Deaths | Deviation from recent robust TFR | ~φ for long-term renewal without prosthesis |
+| Firm lifetime | Equity / Assets | Free cash flow | Distance from industry median ROE | ~φ for organic survival without bailout |
+| Language evolution | Active speakers | New coinages – forgetting | Deviation from core semantic stability | ~φ for living tradition vs rapid death |
+| Attention economy | Mindshare / DAU | Attention inflows – decay | Distance from equilibrium share | ~φ envelope before winner-take-all or oblivion |
+
+The **common skeleton** is: **momentum-phase conservation in the deviation field**.
+
+- If jerk breathes much faster → explosive growth → boom/bust or Ponzi
+- If much slower → rapid damping → senescence/contraction/void
+
+**Epistemic Status of φ:**
+
+Not a law in the 17th-century physics sense (F = ma, invariant across all contexts).
+
+More like:
+
+> an **emergent statistical attractor / most-probable eigenvalue**  
+> in any reasonably long-lived, weakly-coupled, autocorrelated stock–flow system  
+> that is trying to continue itself without enormous exogenous subsidy or violent pruning.
+
+It is substrate-agnostic in the same way that 1/e ≈ 0.3679 often appears as the most probable survival fraction in many branching processes — not because someone wrote a commandment, but because that's where the phase volume / entropy / continuation probability density tends to concentrate.
+
+**One-Line Summary (2025 Edition):**
+
+```
+φ is not the law of the main dimension.
+φ is the approximate conservation rhythm of the correction term
+that allows the main dimension to keep dancing for many more rounds
+without either flying apart or falling asleep forever.
+```
+
+That's why it feels both universal **and** fragile at the same time: it's the rhythm of "how softly can the system forget its own excitement" while still remembering that it wants to continue.
+
 ---
 
 ## Part VIII: The Complete Φ-Dynamics Tables
