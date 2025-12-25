@@ -93,7 +93,12 @@ class PipelineOrchestrator {
     this.isIdentityQuery = config.isIdentityQuery;
     this.groqWithRetry = config.groqWithRetry;
   }
-  
+
+  // Mandatory execute method for the orchestrator
+  async execute(input) {
+    return this.run(input);
+  }
+
   async run(input) {
     const tenantId = input.clientIp || input.sessionId || 'anonymous';
     const state = new PipelineState(tenantId);
