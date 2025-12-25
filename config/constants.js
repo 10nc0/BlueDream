@@ -94,6 +94,17 @@ const FILE_UPLOAD = {
   JPEG_QUALITY: 0.85               // 85% JPEG quality for compression
 };
 
+// ==================== Playground (shared client/server) ====================
+const PLAYGROUND = {
+  MAX_ATTACHMENTS: 10,             // Maximum file attachments per message
+  MAX_HISTORY_TURNS: 8,            // 8 turns = 16 messages (user + assistant)
+  MAX_FILE_SIZE_MB: 25,            // Single file size limit
+  SUPPORTED_IMAGE_TYPES: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+  SUPPORTED_DOC_TYPES: ['application/pdf', 'text/plain', 'text/csv', 
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+};
+
 // ==================== Miscellaneous ====================
 const MISC = {
   PLAYROUND_GC_INTERVAL_MS: 24 * 60 * 60 * 1000, // 24 hour maintenance window
@@ -112,5 +123,6 @@ module.exports = {
   GROQ_RETRY,
   REPUTATION,
   FILE_UPLOAD,
+  PLAYGROUND,
   MISC
 };
