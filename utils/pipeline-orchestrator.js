@@ -103,8 +103,17 @@ class PipelineOrchestrator {
     const tenantId = input.clientIp || input.sessionId || 'anonymous';
     const state = new PipelineState(tenantId);
     
+    // Normalize input: streaming endpoint uses 'message', non-streaming uses 'query'
+    // Also normalize 'history' to 'conversationHistory'
+    const normalizedInput = {
+      ...input,
+      query: input.query || input.message || 'Analyze content',
+      conversationHistory: input.conversationHistory || input.history || [],
+      extractedContent: input.extractedContent || []
+    };
+    
     // Track if this is first query for NYAN boot optimization (check early, before any exits)
-    const isFirstQuery = input.sessionId ? isSessionFirstQuery(input.sessionId) : false;
+    const isFirstQuery = normalizedInput.sessionId ? isSessionFirstQuery(normalizedInput.sessionId) : false;
     state.isFirstQuery = isFirstQuery;
     
     try {
@@ -115,13 +124,13 @@ class PipelineOrchestrator {
       state.transition(PIPELINE_STEPS.CONTEXT_EXTRACT);
       
       // Use memory-enhanced extraction if sessionId provided
-      if (input.sessionId) {
+      if (normalizedInput.sessionId) {
         state.contextResult = await extractContextWithMemory(
-          input.sessionId,
-          input.query,
-          input.conversationHistory || [],
-          input.attachmentHistory || [],
-          input.currentAttachment || null
+          normalizedInput.sessionId,
+          normalizedInput.query,
+          normalizedInput.conversationHistory,
+          normalizedInput.attachmentHistory || [],
+          normalizedInput.currentAttachment || null
         );
         
         if (state.contextResult.hasMemory) {
@@ -131,8 +140,8 @@ class PipelineOrchestrator {
       } else {
         // Fallback to basic entity extraction
         state.contextResult = extractContext(
-          input.conversationHistory || [],
-          input.attachmentHistory || [],
+          normalizedInput.conversationHistory,
+          normalizedInput.attachmentHistory || [],
           8  // 8-message window
         );
       }
@@ -157,14 +166,14 @@ class PipelineOrchestrator {
       }
       
       // Merge context with current query for enhanced detection
-      const contextAwareQuery = mergeContextForTickerDetection(input.query, state.contextResult);
+      const contextAwareQuery = mergeContextForTickerDetection(normalizedInput.query, state.contextResult);
       
       // ========================================
       // STAGE 0: Preflight (mode detection, external data)
       // ========================================
       // Support pre-computed preflight (avoids duplicate calls when endpoint already ran it)
-      if (input.preComputedPreflight) {
-        state.preflight = input.preComputedPreflight;
+      if (normalizedInput.preComputedPreflight) {
+        state.preflight = normalizedInput.preComputedPreflight;
         state.mode = state.preflight.mode;
         console.log(`📊 Preflight (pre-computed): mode=${state.mode}, ticker=${state.preflight.ticker || 'none'}`);
         
@@ -178,8 +187,8 @@ class PipelineOrchestrator {
         });
         
         // Still do seed-metric search if needed
-        const safeDocContext = input.docContext || {};
-        if (state.mode === 'seed-metric' && input.query && !safeDocContext.isClosedLoop) {
+        const safeDocContext = normalizedInput.docContext || {};
+        if (state.mode === 'seed-metric' && normalizedInput.query && !safeDocContext.isClosedLoop) {
           console.log(`🌱 Seed Metric (pre-computed): MANDATORY web search for grounded data`);
           
           const searchQueries = state.preflight.seedMetricSearchQueries || [];
@@ -187,7 +196,7 @@ class PipelineOrchestrator {
           
           if (searchQueries.length > 0) {
             for (const sq of searchQueries.slice(0, 4)) {
-              const result = await this.searchBrave(sq, input.clientIp);
+              const result = await this.searchBrave(sq, normalizedInput.clientIp);
               if (result) {
                 searchResults.push(`[${sq}]\n${result}`);
               } else {
@@ -199,8 +208,8 @@ class PipelineOrchestrator {
             }
             console.log(`🔍 Seed Metric: ${searchResults.length}/${searchQueries.length} searches returned data`);
           } else {
-            const searchQuery = await this.extractCoreQuestion(input.query);
-            const result = await this.searchBrave(searchQuery, input.clientIp);
+            const searchQuery = await this.extractCoreQuestion(normalizedInput.query);
+            const result = await this.searchBrave(searchQuery, normalizedInput.clientIp);
             if (result) searchResults.push(result);
             else {
               const ddgResult = await this.searchDuckDuckGo(searchQuery);
@@ -252,8 +261,8 @@ MANDATORY INSTRUCTIONS:
         globalPackageStore.storePackage(state.dataPackage.tenantId, state.dataPackage);
         
         // Mark NYAN booted on fast-path success too (didn't need full NYAN, but next query should use compressed)
-        if (input.sessionId && state.isFirstQuery) {
-          markSessionNyanBooted(input.sessionId);
+        if (normalizedInput.sessionId && state.isFirstQuery) {
+          markSessionNyanBooted(normalizedInput.sessionId);
         }
         
         return {
@@ -270,20 +279,20 @@ MANDATORY INSTRUCTIONS:
         };
       }
       
-      await this.stepContextBuild(state, input);
-      await this.stepReasoning(state, input);
-      await this.stepAudit(state, input);
+      await this.stepContextBuild(state, normalizedInput);
+      await this.stepReasoning(state, normalizedInput);
+      await this.stepAudit(state, normalizedInput);
       
       if (state.auditResult?.verdict === 'REJECTED' && state.retryCount < state.maxRetries) {
-        await this.stepRetry(state, input);
+        await this.stepRetry(state, normalizedInput);
       }
       
       await this.stepOutput(state);
       
       // Mark NYAN as booted AFTER successful completion (not during context build)
       // This ensures retries within same request still get full NYAN
-      if (input.sessionId && state.isFirstQuery) {
-        markSessionNyanBooted(input.sessionId);
+      if (normalizedInput.sessionId && state.isFirstQuery) {
+        markSessionNyanBooted(normalizedInput.sessionId);
       }
       
       return {
@@ -686,6 +695,9 @@ User query: ${query}`;
     
     const { query, clientIp, conversationHistory } = input;
     
+    // Ensure query is valid before processing
+    const safeQuery = query || input.query || input.message || 'general query';
+    
     // Sanitize conversation history to prevent Groq 400 errors
     const sanitizedHistory = (conversationHistory || input.history || [])
       .filter(msg => msg && msg.content && msg.content.trim().length > 0);
@@ -697,7 +709,7 @@ User query: ${query}`;
     
     console.log(`🔄 Retry ${state.retryCount}: Searching for better data...`);
     
-    const searchQuery = await this.extractCoreQuestion(query);
+    const searchQuery = await this.extractCoreQuestion(safeQuery);
     state.searchContext = await this.searchBrave(searchQuery, clientIp);
     if (!state.searchContext) {
       state.searchContext = await this.searchDuckDuckGo(searchQuery);
@@ -710,9 +722,9 @@ User query: ${query}`;
       const reasoningInput = { 
         ...input, 
         conversationHistory: sanitizedHistory,
-        query: query || input.query || 'Analyze content',
+        query: safeQuery,
         clientIp: clientIp || input.clientIp || '127.0.0.1',
-        extractedContent: input.extractedContent || extractedContent || []
+        extractedContent: input.extractedContent || []
       };
       
       await this.stepReasoning(state, reasoningInput);

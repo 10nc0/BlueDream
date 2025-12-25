@@ -235,6 +235,11 @@ async function searchDuckDuckGo(query) {
 }
 
 async function extractCoreQuestion(message) {
+    // Guard against undefined/null message
+    if (!message || typeof message !== 'string') {
+        return message || 'general query';
+    }
+    
     const GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
     if (!GROQ_TOKEN || message.length < 100) {
         return message.substring(0, 200);
@@ -781,10 +786,9 @@ Respond in ${language || 'the same language as the user query'}.`
         res.setHeader('Connection', 'keep-alive');
         res.setHeader('X-Accel-Buffering', 'no');
         
-        let isClientDisconnected = false;
-        req.on('close', () => {
-            isClientDisconnected = true;
-        });
+        const isClientDisconnected = () => {
+            return res.writableEnded || res.destroyed || !res.writable;
+        };
         
         try {
             let { message, photo, photos, document, documentName, documents, history, zipData, contextAttachments, cachedFileHashes } = req.body;
@@ -899,7 +903,7 @@ Respond in ${language || 'the same language as the user query'}.`
             
             const pipelineResult = await orchestrator.execute(pipelineInput);
             
-            if (isClientDisconnected) return;
+            if (isClientDisconnected()) return;
             
             const verifiedAnswer = pipelineResult.answer || '';
             const badge = pipelineResult.badge || 'unverified';
@@ -921,7 +925,7 @@ Respond in ${language || 'the same language as the user query'}.`
                 res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
                 res.end();
             } else if (badge === 'verified' || badge === 'unverified') {
-                if (isClientDisconnected) return;
+                if (isClientDisconnected()) return;
                 
                 await fastStreamPersonality(res, verifiedAnswer, auditMetadata);
             } else {
