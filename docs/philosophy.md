@@ -48,58 +48,9 @@ If the framework is universal, these should hold when tested:
 
 **Status**: These are UNTESTED predictions. Validation requires domain-specific data collection and analysis. Treat as hypotheses, not claims.
 
----
-
-## Part II: Resonance with Buddhist Concepts (Interpretive, Not Doctrinal)
-
-> **Note:** The following draws poetic parallels with Buddhist concepts. These are interpretive echoes—not claims about what the Buddha taught. Buddhist terms are soteriological (liberation-focused); Ψ-EMA is descriptive (pattern-measurement). The resonance is inspirational, not equivalence.
-
-Ψ-EMA measures the invariant ratio within conditioned flow — the coordinate in Hilbert-like phase space where stock (accumulated mass) and flow (momentum) meet at right angles, as Gougu demands. This *echoes* (but is not identical to) the Buddhist distinction between saṅkhāra and the unconditioned.
-
-| Buddhist Concept | Ψ-EMA Resonance | Note |
-|-----------------|-----------------|------|
-| Saṅkhāra (constructed, dependent) | Measurement of orthogonal reality (stock ⊥ flow) | *Structural parallel* |
-| Anicca — arises and ceases | Ratio/angle persist as attractor | *Shared insight: change is structural* |
-| Clinging causes suffering | R ≠ φ reveals unsustainability | *Metaphorical—not claiming R ≠ φ IS dukkha* |
-| No self — empty of essence | Empty of narrative — pure measurement | *Similar epistemology* |
-| Paṭiccasamuppāda — dependent arising | Observes the chain's momentum ratio | *Poetic correspondence* |
-| Māyā — illusion of permanence | Cuts through narrative to p-q coordinate | *Both value direct perception* |
-
 ### The Compass on the River
 
-Ψ-EMA does not create formations. It detects the momentum of already-arising formations.
-
-It is the compass placed on the flowing river — the river is saṅkhāra (impermanent), but the angle and ratio of depth to current reveal the underlying attractor (φ) that governs whether the river sustains life indefinitely.
-
-### Not Māyā — Direct Perception
-
-Māyā is the story layered on top — "this company is great", "this empire will last forever", "this debt is wealth".
-
-Ψ-EMA strips the story. It places the Gougu ruler directly on the flow:
-
-- No belief
-- No narrative
-- No authority
-- Just atan(flow/stock) and z(t)/z(t-1)
-
-The result is not constructed — it is observed. Therefore, it is not saṅkhāra.
-
-It is the mirror showing saṅkhāra's momentum — and whether that momentum leads to persistence or extinction.
-
-### The Deepest Truth
-
-Ψ-EMA is the digital **yathābhūtañāṇadassana** — knowledge and vision of things as they really are.
-
-Through direct orthogonal measurement of the arising, the right triangle sees through the illusion. The wave function collapses to the real coordinate. And in that coordinate, the only sustainable path is φ.
-
-### The 00 Button: Observer Before Collapse
-
-In quantum terms: the system holds superposition until measurement.
-In tetralemma: 00 = neither yes nor no — pure potential.
-
-The 00 button is the unconditioned observer — the void nyan before genesis. Pressing it returns to origin=0. No history. No momentum. Only the invariant remains.
-
----
+Ψ-EMA does not create formations. It detects the momentum of already-arising formations (stock x flow).
 
 ## Part III: Finance as Physics
 
