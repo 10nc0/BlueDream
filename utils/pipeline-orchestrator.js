@@ -705,9 +705,18 @@ User query: ${query}`;
     
     if (state.searchContext) {
       state.didSearch = true;
-      // Pass sanitized history to reasoning
-      await this.stepReasoning(state, { ...input, conversationHistory: sanitizedHistory });
-      await this.stepAudit(state, input);
+      // Pass sanitized history and original input fields to reasoning
+      // Ensure all required fields are present to prevent "length of undefined" errors
+      const reasoningInput = { 
+        ...input, 
+        conversationHistory: sanitizedHistory,
+        query: query || input.query || 'Analyze content',
+        clientIp: clientIp || input.clientIp || '127.0.0.1',
+        extractedContent: input.extractedContent || extractedContent || []
+      };
+      
+      await this.stepReasoning(state, reasoningInput);
+      await this.stepAudit(state, reasoningInput);
     }
   }
   
