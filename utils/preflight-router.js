@@ -448,8 +448,7 @@ ${tetralemmaAlert}
 ${fundamentalsSection}
 
 **Confidence**: ${confidenceLine}
-
-🔥 ~nyan`;
+`;
 }
 
 /**
@@ -502,8 +501,6 @@ ${reasonText}
 - **Missing**: Phase θ, Anomaly z, Convergence R signals
 
 The price and fundamentals above are verified.
-
-**End with "🔥 ~nyan"**
 `;
 }
 
