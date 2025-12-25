@@ -12,11 +12,19 @@
  */
 
 const { detectStockTicker, detectPsiEMAKeys, smartDetectTicker, fetchStockPrices, calculateDataAge } = require('./stock-fetcher');
-const { getPsiEMAContext, PsiEMADashboard } = require('./psi-EMA');
+const { getPsiEMAContext, PsiEMADashboard, PSI_EMA_DOCUMENTATION } = require('./psi-EMA');
 const { getFinancialPhysicsSeed } = require('./financial-physics');
 const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal-analysis');
 const { detectForexPair, isForexQuery, fetchForexRate, buildForexContext } = require('./forex-fetcher');
 const { getSeedMetricProxy, detectSeedMetricIntent } = require('../prompts/seed-metric');
+
+const PSI_EMA_IDENTITY_PATTERNS = [
+  /^what\s+is\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
+  /^(?:explain|describe)\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
+  /^tell\s+me\s+about\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
+  /^how\s+does\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\s+work\??$/i,
+  /^what\s+(?:are|is)\s+(?:the\s+)?(?:theta|θ|z|r)\s+(?:in|for)\s+(?:psi|ψ)[\s\-]?ema\??$/i,
+];
 
 /**
  * @typedef {Object} PreflightResult
@@ -73,10 +81,12 @@ async function preflightRouter(options) {
     ticker: null,
     stockData: null,
     psiEmaAnalysis: null,
+    psiEmaIdentityContext: null,
     dataAge: null,
     searchStrategy: 'none',
     routingFlags: {
       usesPsiEMA: false,
+      isPsiEmaIdentity: false,
       isSeedMetric: false,
       usesFinancialPhysics: false,
       usesLegalAnalysis: false,
@@ -94,6 +104,18 @@ async function preflightRouter(options) {
     // ========================================
     // MODE DETECTION (Priority Order)
     // ========================================
+    
+    // -1. Ψ-EMA IDENTITY: "What is Ψ-EMA?" queries → inject actual documentation (H0 ground truth)
+    const hasTicker = /\$[A-Z]{1,5}\b/.test(query);
+    const isPsiEmaIdentity = !hasTicker && PSI_EMA_IDENTITY_PATTERNS.some(p => p.test(query.trim()));
+    
+    if (isPsiEmaIdentity) {
+      console.log(`📚 Preflight: Ψ-EMA identity query detected → injecting documentation`);
+      result.mode = 'psi-ema-identity';
+      result.routingFlags.isPsiEmaIdentity = true;
+      result.psiEmaIdentityContext = PSI_EMA_DOCUMENTATION;
+      return result;
+    }
     
     // 0. FOREX: Detect currency pair queries FIRST (before stock detection)
     // USD/JPY, EUR/USD, "yen rate", "dollar to euro", etc.
@@ -551,6 +573,12 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
   
   if (preflight.routingFlags.usesLegalAnalysis) {
     messages.push({ role: 'system', content: getLegalAnalysisSeed() });
+  }
+  
+  // Ψ-EMA identity context (H0 ground truth for "what is psi ema" queries)
+  if (preflight.routingFlags.isPsiEmaIdentity && preflight.psiEmaIdentityContext) {
+    messages.push({ role: 'system', content: preflight.psiEmaIdentityContext });
+    console.log('📚 Ψ-EMA identity documentation injected (H0 ground truth)');
   }
   
   // Ψ-EMA context

@@ -56,6 +56,48 @@ const PHI_SQUARED = PHI * PHI;            // φ² = φ + 1 ≈ 2.618
 const PHI_INVERSE = 1 / PHI;              // φ⁻¹ = φ - 1 ≈ 0.618
 const PHI_INV_SQUARED = PHI_INVERSE ** 2; // φ⁻² ≈ 0.382
 
+const PSI_EMA_DOCUMENTATION = `
+[Ψ-EMA SYSTEM DOCUMENTATION - SOURCE: utils/psi-EMA.js]
+
+Ψ-EMA is a GENERAL-PURPOSE three-dimensional time series oscillator applicable to any domain with stock/flow decomposition. All thresholds derive from φ (1.618), the golden ratio from x = 1 + 1/x.
+
+THE THREE DIMENSIONS (substrate-agnostic):
+
+θ (PHASE) - Cycle Position
+• Formula: atan2(Flow, Stock) → 0° to 360°
+• Measures WHERE in the oscillation cycle the system is
+• 0°-90° = Early Expansion, 90°-180° = Late Expansion
+• 180°-270° = Early Contraction, 270°-360° = Late Contraction
+
+z (ANOMALY) - Deviation from Equilibrium  
+• Formula: (Value - Median) / MAD (robust z-score using Median Absolute Deviation)
+• |z| < φ (1.618): Normal range
+• φ < |z| < φ² (2.618): Alert zone
+• |z| > φ²: Extreme deviation
+
+R (CONVERGENCE) - Amplitude Ratio
+• Formula: z(t) / z(t-1)
+• R < φ⁻¹ (0.618): Amplitude decay (weakening signal)
+• R ∈ [φ⁻¹, φ]: Stable oscillation (sustainable)
+• R > φ: Amplitude growth (potentially unsustainable)
+
+φ-DERIVED THRESHOLDS (Zero Dogma):
+• φ⁻² ≈ 0.382: Tolerance band around φ
+• φ⁻¹ ≈ 0.618: Lower convergence bound
+• φ   ≈ 1.618: Upper convergence bound  
+• φ²  ≈ 2.618: Extreme deviation flag
+
+FIBONACCI EMA PERIODS: 13, 21, 34, 55 (consecutive Fibonacci numbers where F(n+1)/F(n) → φ)
+
+SUBSTRATE EXAMPLES:
+• Markets: Price (stock) vs momentum (flow)
+• Climate: Temperature (stock) vs heating/cooling rate (flow)
+• Demographics: Population (stock) vs birth/death rate (flow)
+• Sports: Win rate (stock) vs momentum (flow)
+
+To analyze a specific stock, use: "$NVDA psi ema" or "analyze $AAPL chart"
+`;
+
 // Fibonacci EMA periods: consecutive Fibonacci numbers where F(n+1)/F(n) → φ
 const FIB_PERIODS = {
   FAST_R: 13,      // 7th Fibonacci number
@@ -2360,6 +2402,9 @@ module.exports = {
   R_BOUNDS,
   Z_BOUNDS,
   PHI_COMPOSITE_2,
+  
+  // H0 Documentation (ground truth for identity queries)
+  PSI_EMA_DOCUMENTATION,
   
   // EMA functions
   calculateEMA,
