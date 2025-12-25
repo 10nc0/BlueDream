@@ -684,7 +684,11 @@ User query: ${query}`;
     state.transition(PIPELINE_STEPS.RETRY);
     state.retryCount++;
     
-    const { query, clientIp } = input;
+    const { query, clientIp, conversationHistory } = input;
+    
+    // Sanitize conversation history to prevent Groq 400 errors
+    const sanitizedHistory = (conversationHistory || input.history || [])
+      .filter(msg => msg && msg.content && msg.content.trim().length > 0);
     
     if (state.mode === 'psi-ema') {
       console.log(`⏭️ Ψ-EMA: Skip retry (yfinance data pre-verified)`);
@@ -701,7 +705,8 @@ User query: ${query}`;
     
     if (state.searchContext) {
       state.didSearch = true;
-      await this.stepReasoning(state, input);
+      // Pass sanitized history to reasoning
+      await this.stepReasoning(state, { ...input, conversationHistory: sanitizedHistory });
       await this.stepAudit(state, input);
     }
   }
