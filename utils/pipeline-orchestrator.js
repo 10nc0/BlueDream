@@ -407,8 +407,10 @@ MANDATORY INSTRUCTIONS:
     const { query, conversationHistory, extractedContent, temperature, maxTokens } = input;
     
     // Sanitize conversation history to prevent Groq 400 errors
+    // Strip non-standard properties (audit, etc.) - Groq only accepts role + content
     const sanitizedHistory = (conversationHistory || [])
-      .filter(msg => msg && msg.content && msg.content.trim().length > 0);
+      .filter(msg => msg && msg.content && msg.content.trim().length > 0)
+      .map(msg => ({ role: msg.role, content: msg.content }));
     
     // Build final prompt with proper attachment preservation
     // Priority: Memory → Ψ-EMA → Attachments → Search → Query
