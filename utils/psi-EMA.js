@@ -205,12 +205,24 @@ function calculateFidelity(dimensions = {}) {
     total: rCount1.total + rCount2.total
   };
   
+  const calculateLowSignalRatio = (data) => {
+    if (!data || data.length === 0) return 0;
+    const SIGNAL_THRESHOLD = 0.01; // z ≈ 0 threshold
+    const lowSignalCount = data.filter(v => Math.abs(v) < SIGNAL_THRESHOLD).length;
+    return lowSignalCount / data.length;
+  };
+
   return {
     theta,
     z,
     r,
     // Human-readable breakdown string
-    breakdown: `θ: ${theta.real}/${theta.total} | z: ${z.real}/${z.total} | R: ${r.real}/${r.total}`
+    breakdown: `θ: ${theta.real}/${theta.total} | z: ${z.real}/${z.total} | R: ${r.real}/${r.total}`,
+    lowSignal: {
+      theta: calculateLowSignalRatio(theta1.concat(theta2)),
+      z: calculateLowSignalRatio(z1.concat(z2)),
+      r: calculateLowSignalRatio(r1.concat(r2))
+    }
   };
 }
 

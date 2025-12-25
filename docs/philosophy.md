@@ -827,16 +827,28 @@ Classification:
 - `nanRatio < 30%`: Maximum acceptable missing data ratio
 - `isReliable`: Boolean flag combining both checks
 
-**dataQuality Object Structure** (distinct from EMA fidelity which tracks interpolation):
+**Three-Tier Quality Model**:
+1. **dataQuality** (Input Tier): Tracks raw data health before processing.
+   - `nanRatio`: % of true NaN/Infinity values in source data.
+   - `sampleCount`: Number of valid observations.
+   - `isReliable`: Gated by `n >= 8` and `nanRatio < 30%`.
+2. **fidelity.interpolationRatio** (EMA Tier): Tracks bootstrap influence.
+   - Measures % of points filled via `x = 1 + 1/x` extrapolation vs real observations.
+3. **fidelity.lowSignalRatio** (Signal Tier): Tracks signal strength.
+   - % of points where `|z| < 0.01` (z-scores near zero indicating no measurable wave).
+
+**Example Object Structure**:
 ```javascript
-dataQuality: {
-  sampleCount: 43,      // Valid data points
-  nanCount: 2,          // NaN/Infinity values filtered
-  skippedCount: 4,      // Low-signal points (z ≈ 0)
-  nanRatio: 0.04,       // 4% missing
-  minSamples: 8,        // Threshold used
-  isReliable: true,     // Passes all checks
-  warning: null         // Or error message if unreliable
+{
+  dataQuality: {
+    nanRatio: 0.05,
+    isReliable: true
+  },
+  fidelity: {
+    interpolationRatio: 0.12,
+    lowSignalRatio: 0.08,
+    breakdown: "θ: 55/55 | z: 34/34 | R: 21/21"
+  }
 }
 ```
 
