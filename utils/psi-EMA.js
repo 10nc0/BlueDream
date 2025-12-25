@@ -694,43 +694,86 @@ function analyzePhase(phases) {
 // ============================================================================
 
 /**
- * Calculate z-score time series
+ * Calculate z-score flows from raw flow data
  * 
- * vφ³: Now uses MAD (Median Absolute Deviation) by default instead of σ.
- * MAD is more robust to outliers than standard deviation.
- * Scaled by 1.4826 for normal consistency.
+ * vφ³: Uses MAD (Median Absolute Deviation) by default for robustness.
+ * vφ⁵: Added fidelity guards, minSamples threshold, and NaN handling.
  * 
- * @param {number[]} flows - Flow values
+ * @param {number[]} flows - Raw flow values (e.g., earnings differences)
  * @param {Object} options - Configuration options
- * @param {boolean} options.robust - If true (default), use MAD. If false, use σ.
- * @returns {Object} Z-scores and statistics
+ * @param {boolean} options.robust - Use MAD instead of stdDev (default: true)
+ * @param {number} options.minSamples - Minimum samples for reliable z-score (default: 8)
+ * @returns {Object} Z-score analysis with fidelity metrics
  */
-function calculateZFlows(flows, options = { robust: true }) {
+function calculateZFlows(flows, options = {}) {
+  const { robust = true, minSamples = 8 } = options;
+  
   if (!flows || flows.length < 2) {
-    return { zFlows: [], mean: 0, dispersion: 0, method: 'none', error: 'Insufficient data' };
+    return { 
+      zFlows: [], 
+      mean: 0, 
+      dispersion: 0, 
+      method: 'none', 
+      error: 'Insufficient data',
+      dataQuality: { sampleCount: 0, nanCount: 0, isReliable: false, warning: 'No data provided' }
+    };
   }
   
-  const avg = mean(flows);
-  const med = median(flows);
+  // vφ⁵: Filter NaN/Infinity and track data quality (distinct from EMA fidelity)
+  const validFlows = flows.filter(f => Number.isFinite(f));
+  const nanCount = flows.length - validFlows.length;
+  const sampleCount = validFlows.length;
+  const isReliable = sampleCount >= minSamples && nanCount / flows.length < 0.3;
   
-  if (options.robust) {
+  // Build dataQuality object (input data quality, NOT EMA interpolation fidelity)
+  const dataQuality = {
+    sampleCount,
+    nanCount,
+    nanRatio: nanCount / flows.length,
+    minSamples,
+    isReliable,
+    warning: !isReliable 
+      ? (sampleCount < minSamples 
+          ? `Insufficient samples (${sampleCount}/${minSamples} required)` 
+          : `High NaN ratio (${(nanCount / flows.length * 100).toFixed(1)}% missing)`)
+      : null
+  };
+  
+  if (sampleCount < 2) {
+    return { 
+      zFlows: [], 
+      mean: 0, 
+      dispersion: 0, 
+      method: 'none', 
+      error: 'Insufficient valid data after NaN filter',
+      dataQuality
+    };
+  }
+  
+  const avg = mean(validFlows);
+  const med = median(validFlows);
+  
+  if (robust) {
     // vφ³: Use MAD (Median Absolute Deviation) for robustness
-    const dispersion = mad(flows);
+    const dispersion = mad(validFlows);
     const MAD_SCALE = 1.4826;  // Scaling for normal consistency
     
     if (dispersion === 0) {
       return { 
-        zFlows: flows.map(() => 0), 
+        zFlows: flows.map(f => Number.isFinite(f) ? 0 : NaN), 
         mean: avg, 
         median: med,
         dispersion: 0, 
         method: 'MAD',
-        error: 'Zero dispersion' 
+        error: 'Zero dispersion',
+        dataQuality
       };
     }
     
     const scaledDispersion = dispersion * MAD_SCALE;
-    const zFlows = flows.map(f => (f - med) / scaledDispersion);
+    // Map original flows, preserving NaN positions
+    const zFlows = flows.map(f => Number.isFinite(f) ? (f - med) / scaledDispersion : NaN);
+    const validZ = zFlows.filter(z => Number.isFinite(z));
     
     return {
       zFlows,
@@ -738,20 +781,29 @@ function calculateZFlows(flows, options = { robust: true }) {
       median: med,
       dispersion: scaledDispersion,
       method: 'MAD',
-      currentZ: zFlows[zFlows.length - 1],
-      previousZ: zFlows.length > 1 ? zFlows[zFlows.length - 2] : null,
-      anomalyStrength: Math.abs(zFlows[zFlows.length - 1])
+      currentZ: validZ.length > 0 ? validZ[validZ.length - 1] : null,
+      previousZ: validZ.length > 1 ? validZ[validZ.length - 2] : null,
+      anomalyStrength: validZ.length > 0 ? Math.abs(validZ[validZ.length - 1]) : null,
+      dataQuality
     };
   }
   
   // Legacy σ-based calculation
-  const std = stdDev(flows);
+  const std = stdDev(validFlows);
   
   if (std === 0) {
-    return { zFlows: flows.map(() => 0), mean: avg, dispersion: 0, method: 'sigma', error: 'Zero variance' };
+    return { 
+      zFlows: flows.map(f => Number.isFinite(f) ? 0 : NaN), 
+      mean: avg, 
+      dispersion: 0, 
+      method: 'sigma', 
+      error: 'Zero variance',
+      dataQuality
+    };
   }
   
-  const zFlows = flows.map(f => (f - avg) / std);
+  const zFlows = flows.map(f => Number.isFinite(f) ? (f - avg) / std : NaN);
+  const validZ = zFlows.filter(z => Number.isFinite(z));
   
   return {
     zFlows,
@@ -759,9 +811,10 @@ function calculateZFlows(flows, options = { robust: true }) {
     stdDev: std,
     dispersion: std,
     method: 'sigma',
-    currentZ: zFlows[zFlows.length - 1],
-    previousZ: zFlows.length > 1 ? zFlows[zFlows.length - 2] : null,
-    anomalyStrength: Math.abs(zFlows[zFlows.length - 1])
+    currentZ: validZ.length > 0 ? validZ[validZ.length - 1] : null,
+    previousZ: validZ.length > 1 ? validZ[validZ.length - 2] : null,
+    anomalyStrength: validZ.length > 0 ? Math.abs(validZ[validZ.length - 1]) : null,
+    dataQuality
   };
 }
 
@@ -1039,6 +1092,8 @@ function calculatePhiConvergence(zFlows) {
 /**
  * Calculate Absolute Convergence |R| = |z(t)| / |z(t-1)|
  * 
+ * vφ⁵: Added fidelity metrics and NaN handling
+ * 
  * For oscillating data (seasonal patterns, alternating flows), signed R fails
  * because sign flips every period → R always negative → false "decay" signal.
  * 
@@ -1046,22 +1101,41 @@ function calculatePhiConvergence(zFlows) {
  * Use for: quarterly earnings, seasonal revenue, any oscillating time series.
  * 
  * @param {number[]} zFlows - Z-score time series
- * @returns {Object} Absolute convergence analysis (magnitude only)
+ * @param {Object} options - Configuration options
+ * @param {number} options.minSamples - Minimum samples for reliable analysis (default: 8)
+ * @returns {Object} Absolute convergence analysis with fidelity metrics
  */
-function calculateAbsoluteConvergence(zFlows) {
+function calculateAbsoluteConvergence(zFlows, options = {}) {
+  const { minSamples = 8 } = options;
+  
   if (!zFlows || zFlows.length < 2) {
-    return { absRatios: [], meanAbsRatio: null, converged: false, error: 'Insufficient data' };
+    return { 
+      absRatios: [], 
+      meanAbsRatio: null, 
+      converged: false, 
+      error: 'Insufficient data',
+      dataQuality: { sampleCount: 0, nanCount: 0, skippedCount: 0, isReliable: false, warning: 'No data provided' }
+    };
   }
   
   const absRatios = [];
   const validResults = [];
+  let nanCount = 0;
+  let skippedCount = 0;  // Low signal (z near zero)
   
   for (let i = 1; i < zFlows.length; i++) {
+    // vφ⁵: Handle NaN/Infinity in z-scores
+    if (!Number.isFinite(zFlows[i]) || !Number.isFinite(zFlows[i - 1])) {
+      nanCount++;
+      continue;
+    }
+    
     const current = Math.abs(zFlows[i]);
     const previous = Math.abs(zFlows[i - 1]);
     
     // Guard: skip if either z-score is too small (consolidation)
     if (previous < 0.1 || current < 0.001) {
+      skippedCount++;
       continue;
     }
     
@@ -1078,13 +1152,34 @@ function calculateAbsoluteConvergence(zFlows) {
     });
   }
   
+  // vφ⁵: Build dataQuality metrics (input data quality, NOT EMA interpolation fidelity)
+  const potentialPairs = zFlows.length - 1;
+  const sampleCount = absRatios.length;
+  const isReliable = sampleCount >= minSamples && (nanCount + skippedCount) / potentialPairs < 0.3;
+  
+  const dataQuality = {
+    sampleCount,
+    nanCount,
+    skippedCount,
+    potentialPairs,
+    validRatio: sampleCount / potentialPairs,
+    minSamples,
+    isReliable,
+    warning: !isReliable 
+      ? (sampleCount < minSamples 
+          ? `Insufficient valid |R| samples (${sampleCount}/${minSamples} required)` 
+          : `High data loss (${((nanCount + skippedCount) / potentialPairs * 100).toFixed(1)}% invalid/skipped)`)
+      : null
+  };
+  
   if (absRatios.length === 0) {
     return {
       absRatios: [],
       meanAbsRatio: null,
       converged: false,
       error: 'No valid absolute ratios',
-      warning: '|R| undefined — z-scores near zero throughout series.'
+      warning: '|R| undefined — z-scores near zero or NaN throughout series.',
+      dataQuality
     };
   }
   
@@ -1135,6 +1230,7 @@ function calculateAbsoluteConvergence(zFlows) {
     phiBandRate,
     phiBandCount: inPhiBand.length,
     totalCount: absRatios.length,
+    dataQuality,
     note: 'Absolute convergence ignores sign (direction). Use for oscillating/seasonal data.'
   };
 }

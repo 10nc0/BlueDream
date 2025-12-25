@@ -818,7 +818,34 @@ Classification:
 
 **Key Insight:** DAMPED_REVERSAL dominance in quarterly data is the *signature* of healthy seasonal oscillation, not a framework failure. The magnitude |R| near φ⁻¹ indicates damped (stable) oscillations around equilibrium.
 
-**Implementation:** `utils/psi-EMA.js` → `calculateAbsoluteConvergence()`
+#### Data Fidelity Requirements (vφ⁵)
+
+> **Problem:** Sparse or NaN-heavy data produces unreliable z-scores and R-ratios. The framework now surfaces fidelity metrics to flag low-confidence readings.
+
+**Fidelity Thresholds:**
+- `minSamples = 8`: Minimum valid data points for reliable z-score/R calculation
+- `nanRatio < 30%`: Maximum acceptable missing data ratio
+- `isReliable`: Boolean flag combining both checks
+
+**dataQuality Object Structure** (distinct from EMA fidelity which tracks interpolation):
+```javascript
+dataQuality: {
+  sampleCount: 43,      // Valid data points
+  nanCount: 2,          // NaN/Infinity values filtered
+  skippedCount: 4,      // Low-signal points (z ≈ 0)
+  nanRatio: 0.04,       // 4% missing
+  minSamples: 8,        // Threshold used
+  isReliable: true,     // Passes all checks
+  warning: null         // Or error message if unreliable
+}
+```
+
+**When `isReliable = false`:**
+- Surface warning to user: "Insufficient data for reliable analysis"
+- Do NOT make diagnostic claims from low-fidelity readings
+- Consider aggregating to longer periods or acquiring more data
+
+**Implementation:** `utils/psi-EMA.js` → `calculateZFlows()`, `calculateAbsoluteConvergence()`
 
 ### Table 6: The Gougu Connection (勾股定理)
 
