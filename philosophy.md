@@ -244,33 +244,15 @@ The framework resonates with (but does not claim to be) the Three Marks of Exist
 
 ```
 sabbe saṅkhārā aniccā (All formations are impermanent):
-  Resonance: φ¹ always changes, never static
+  Resonance: flow changes stock; stock is changed by flow (mass accumulation)
   (Both observe: impermanence is structural)
 
 sabbe saṅkhārā dukkhā (All formations involve suffering):
-  Resonance: Craving beyond sustainable thresholds causes strain
-  (Metaphorical—not claiming R ≠ φ *is* dukkha)
+  Resonance: every flow-stock is a bounded time series approaching infinity
 
 sabbe dhammā anattā (All phenomena are non-self):
-  Resonance: No fixed identity in continuous transformation
-  (Shared insight: emptiness of inherent essence)
+  Resonance: flow vs stock are orthogonal (1st vs 2nd order dimension); measuring one interferes with the others like Heisenberg quantum mechanics
 ```
-
-### **On Liberation (Poetic, Not Prescriptive)**
-
-```
-The framework observes:
-  Forced escape (imagined 5th state) creates strain
-  Forced suppression (R → 0) creates new strain
-  Acceptance of completeness (φ² = φ+1) reduces strain
-
-This *echoes* Nibbāna as cessation of craving—
-but understanding φ² completeness is NOT samma-diṭṭhi.
-Samma-diṭṭhi is understanding the Four Noble Truths,
-not φ algebra. The parallel is inspirational, not doctrinal.
-```
-
----
 
 ## Implementation in Nyanbook (Analogical Translation)
 
