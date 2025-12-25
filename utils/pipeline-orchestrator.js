@@ -397,10 +397,14 @@ MANDATORY INSTRUCTIONS:
     
     const { query, conversationHistory, extractedContent, temperature, maxTokens } = input;
     
+    // Sanitize conversation history to prevent Groq 400 errors
+    const sanitizedHistory = (conversationHistory || [])
+      .filter(msg => msg && msg.content && msg.content.trim().length > 0);
+    
     // Build final prompt with proper attachment preservation
     // Priority: Memory → Ψ-EMA → Attachments → Search → Query
     // Memory provides human-like context, Ψ-EMA injects wave analysis, Attachments are primary source
-    let finalPrompt = query;
+    let finalPrompt = query || 'Analyze content';
     const hasMemory = state.contextResult?.memoryPrompt?.length > 0;
     const hasAttachments = extractedContent && extractedContent.length > 0;
     const hasSearch = !!state.searchContext;
@@ -531,7 +535,7 @@ ${fundamentals.sector ? `Sector: ${fundamentals.sector}${fundamentals.industry ?
 Ψ-EMA measures three things: **where** a stock is in its price cycle (θ phase), 
 **how unusual** the current price is compared to recent history (z anomaly), 
 and **whether the trend can sustain** (R convergence). When all three align, 
-conviction is higher; when they conflict, caution is warranted.
+caution is warranted.
 
 **DAILY (1d candles, 3-month window)** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade, ${fidelity.percent || 'N/A'}% fidelity]
 ├─ θ (Phase) = **${fmt(phase.current)}°** → ${phase.signal || 'N/A'}
@@ -593,7 +597,7 @@ User query: ${query}`;
     
     const messages = [
       ...state.systemMessages,
-      ...(conversationHistory || []),
+      ...sanitizedHistory,
       { role: 'user', content: finalPrompt }
     ];
     
