@@ -180,8 +180,12 @@ To analyze a specific stock, ask: "show me $NVDA psi ema" or "analyze $AAPL char
           mode: 'identity',
           preflight: { mode: 'identity' },
           auditResult: state.auditResult,
+          audit: { confidence: 100, reason: 'Ψ-EMA system identity query' },
+          badge: 'verified',
           didSearch: false,
+          didSearchRetry: false,
           retryCount: 0,
+          passCount: 1,
           fastPath: true
         };
       }
@@ -340,8 +344,12 @@ MANDATORY INSTRUCTIONS:
           mode: state.mode,
           preflight: state.preflight,
           auditResult: state.auditResult,
+          audit: { confidence: 100, reason: 'No ticker - fast path' },
+          badge: 'verified',
           didSearch: false,
+          didSearchRetry: false,
           retryCount: 0,
+          passCount: 1,
           fastPath: true,
           dataPackageId: state.dataPackage.id,
           dataPackageSummary: state.dataPackage.toCompressedSummary()
@@ -364,14 +372,22 @@ MANDATORY INSTRUCTIONS:
         markSessionNyanBooted(normalizedInput.sessionId);
       }
       
+      // Derive badge from audit verdict
+      // APPROVED/ACCEPTED/BYPASS → verified, FIXABLE → corrected, REJECTED → unverified
+      const badge = this.deriveBadge(state.auditResult);
+      
       return {
         success: true,
         answer: state.finalAnswer,
         mode: state.mode,
         preflight: state.preflight,
         auditResult: state.auditResult,
+        audit: { confidence: state.auditResult?.confidence || 0, reason: state.auditResult?.reason || '' },
+        badge,
         didSearch: state.didSearch,
+        didSearchRetry: state.didSearch && state.retryCount > 0,
         retryCount: state.retryCount,
+        passCount: state.retryCount + 1,
         dataPackageId: state.dataPackage.id,
         dataPackageSummary: state.dataPackage.toCompressedSummary()
       };
@@ -381,6 +397,11 @@ MANDATORY INSTRUCTIONS:
         success: false,
         error: err.message,
         step: state.step,
+        badge: 'unverified',
+        audit: { confidence: 0, reason: err.message },
+        didSearch: false,
+        didSearchRetry: false,
+        passCount: 0,
         dataPackageId: state.dataPackage?.id || null
       };
     }
@@ -725,12 +746,23 @@ User query: ${query}`;
     const isTetralemma = isFalseDichotomy(query);
     const auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
     
+    // Build combined context: uploaded documents + web search results
+    // This allows audit to see that web search was used and approve sourced answers
+    const contextParts = [];
+    if (extractedContent?.length > 0) {
+      contextParts.push('=== UPLOADED DOCUMENTS ===\n' + extractedContent.join('\n'));
+    }
+    if (state.searchContext && state.didSearch) {
+      contextParts.push('=== WEB SEARCH RESULTS ===\n' + state.searchContext);
+    }
+    const combinedContext = contextParts.length > 0 ? contextParts.join('\n\n') : null;
+    
     try {
       state.auditResult = await runAuditPass(
         this.groqToken,
         state.draftAnswer,
         query,
-        extractedContent?.join('\n') || null,
+        combinedContext,
         {
           usesFinancialPhysics: state.preflight.routingFlags?.usesFinancialPhysics,
           usesChemistry: false,
@@ -879,6 +911,25 @@ User query: ${query}`;
     }
     
     return cleaned.trim();
+  }
+  
+  deriveBadge(auditResult) {
+    if (!auditResult || !auditResult.verdict) return 'unverified';
+    
+    const verdict = auditResult.verdict.toUpperCase();
+    
+    // APPROVED, ACCEPTED, BYPASS → verified (web search sourced, identity, or pre-verified data)
+    if (verdict === 'APPROVED' || verdict === 'ACCEPTED' || verdict === 'BYPASS') {
+      return 'verified';
+    }
+    
+    // FIXABLE → corrected (issues were auto-fixed)
+    if (verdict === 'FIXABLE') {
+      return 'corrected';
+    }
+    
+    // REJECTED → unverified (couldn't verify)
+    return 'unverified';
   }
 }
 
