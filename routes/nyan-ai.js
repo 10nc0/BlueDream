@@ -49,6 +49,51 @@ const IDENTITY_PATTERNS = [
     /can\s+you\s+(?:recap|review|recall|remind)\s+/i,
 ];
 
+const PSI_EMA_SYSTEM_PATTERNS = [
+    /what\s+is\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema/i,
+    /(?:explain|describe|tell\s+me\s+about)\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema/i,
+    /how\s+does\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\s+work/i,
+    /(?:psi|ψ)[\s\-]?ema\s+(?:system|oscillator|indicator|analysis)/i,
+    /what\s+(?:are|is)\s+(?:the\s+)?(?:theta|θ|z|r)\s+(?:in|for)\s+(?:psi|ψ)[\s\-]?ema/i,
+    /(?:psi|ψ)[\s\-]?ema\s+(?:dimensions?|parameters?|metrics?)/i,
+];
+
+const PSI_EMA_SYSTEM_EXPLANATION = `Ψ-EMA (Psi-Exponential Moving Average) is Nyan AI's novel three-dimensional time series oscillator for analyzing oscillating systems. Unlike traditional indicators, it uses φ (phi, 1.618) as the ONLY measurement threshold.
+
+**THREE DIMENSIONS:**
+
+**θ (Theta) - Phase Position**
+• Formula: atan2(Flow, Stock) → 0° to 360°
+• Measures WHERE in the cycle the system is
+• 0°-90° = Early Expansion 🟢
+• 90°-180° = Late Expansion 🟡
+• 180°-270° = Early Contraction 🔴
+• 270°-360° = Late Contraction 🔵
+
+**z (Anomaly) - Deviation from Equilibrium**
+• Formula: Robust z-score using Median Absolute Deviation (MAD)
+• |z| < φ (1.618): Normal range
+• |z| > φ: Alert zone
+• |z| > φ² (2.618): Extreme deviation
+
+**R (Convergence) - Amplitude Ratio**
+• Formula: |z(t)| / |z(t-1)|
+• R < φ⁻¹ (0.618): Decay (weakening)
+• R ∈ [φ⁻¹, φ]: Stable oscillation (sustainable)
+• R > φ: Amplification (potentially unsustainable)
+
+**KEY INSIGHT:** All thresholds derive from φ = 1.618 (golden ratio from x = 1 + 1/x), making the system substrate-agnostic - applicable to markets, climate, demographics, or any oscillating system.
+
+To analyze a specific stock, ask: "show me $NVDA psi ema" or "analyze $AAPL chart" nyan~
+
+🔥 ~nyan`;
+
+function isPsiEmaSystemQuery(message) {
+    if (!message) return false;
+    const trimmed = message.trim().toLowerCase();
+    return PSI_EMA_SYSTEM_PATTERNS.some(pattern => pattern.test(trimmed));
+}
+
 const NOT_FOUND_PATTERNS = [
     /couldn'?t\s+find/i,
     /could\s+not\s+find/i,
