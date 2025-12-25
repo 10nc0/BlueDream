@@ -54,6 +54,8 @@ const { config, buildConnectionString, getDbHost } = require('./config');
 // Only enforce truly essential secrets - don't require optional integrations
 
 const criticalSecrets = {
+    DATABASE_URL: 'PostgreSQL connection (Neon pooler)',
+    SESSION_SECRET: 'Session encryption key',
     FRACTAL_SALT: 'Secure book ID generation (crypto salt)',
     NYANBOOK_WEBHOOK_URL: 'Discord Ledger #01 (output book)',
     PLAYGROUND_GROQ_TOKEN: 'AI Playground reasoning (Groq Llama 3.3)'
@@ -86,7 +88,7 @@ const NYANBOOK_LEDGER_WEBHOOK = process.env.NYANBOOK_WEBHOOK_URL;
 const isProd = process.env.REPLIT_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
 
 // TRANSACTION MODE: Append pool_mode=transaction to DATABASE_URL for scalability
-// This allows 10,000+ concurrent connections (vs 3-10 in Session mode)
+// Neon pooler handles 10,000+ concurrent connections; local pool max=20 is direct connection limit
 // Trade-off: Cannot use SET search_path (must use explicit schema prefixes)
 const databaseUrl = process.env.DATABASE_URL;
 const poolModeParam = 'pool_mode=transaction';
@@ -99,7 +101,7 @@ const pool = new Pool({
     ssl: databaseUrl?.includes('localhost') ? false : { 
         rejectUnauthorized: isProd
     },
-    max: 20, // Transaction Mode supports 10,000+ connections - using 20 for production workload
+    max: 20, // Direct pool limit; Neon pooler handles 10k+ upstream
     min: 2,
     connectionTimeoutMillis: 30000, // 30s for cold starts
     idleTimeoutMillis: 30000, // Release idle connections after 30s

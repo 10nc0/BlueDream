@@ -22,7 +22,7 @@ const config = {
       rejectUnauthorized: isProd
     },
     pool: {
-      max: 20,
+      max: 20, // Direct pool limit; Neon pooler handles 10k+ upstream
       min: 2,
       connectionTimeoutMillis: constants.TIMEOUTS.DATABASE_CONNECTION,
       idleTimeoutMillis: constants.TIMEOUTS.SESSION_IDLE,
