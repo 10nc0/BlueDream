@@ -99,7 +99,7 @@ const connectionString = databaseUrl?.includes('?')
 const pool = new Pool({
     connectionString,
     ssl: databaseUrl?.includes('localhost') ? false : { 
-        rejectUnauthorized: isProd
+        rejectUnauthorized: false
     },
     max: 20, // Direct pool limit; Neon pooler handles 10k+ upstream
     min: 2,
