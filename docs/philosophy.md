@@ -70,7 +70,7 @@ The framework is grounded in robust signal processing (EMA, MAD-scaled z-scores,
 
 **Empirical Status (Dec 2024):**
 - Z-score anomaly detection: **Validated** ✅ (92% within φ-band for stable stocks)
-- R-ratio convergence: **Requires refinement** ⚠️ (signed R fails for oscillating data; use |R|)
+- R-ratio convergence: **Validated with |R|** ✅ (41.9% in φ-band, χ² = 42.94, p < 0.001 for KO)
 - φ-thresholds: **Heuristic, not law** (psychological/design significance, not physical necessity)
 - Cross-domain claims: **Analogical** (metaphors for insight, not ontological identity)
 
@@ -808,9 +808,13 @@ Classification:
 ```
 
 **For Oscillating Data, Use:**
-1. `calculateAbsoluteConvergence()` - analyzes |R| only (magnitude)
-2. Annual aggregation - removes seasonal noise
-3. Deseasonalization - adjust for known patterns
+1. `calculateAbsoluteConvergence()` - analyzes |R| only (magnitude). Use for quarterly earnings, seasonal revenue, or alternating flows.
+2. Annual aggregation - removes seasonal noise.
+3. Deseasonalization - adjust for known patterns.
+
+**When to use Signed R vs Absolute |R|:**
+- **Signed R ($z_t / z_{t-1}$):** Use for trending data or same-direction flows (e.g., annual growth, cumulative stock, price trends). Reveals momentum and continuation.
+- **Absolute |R| ($|z_t| / |z_{t-1}|$):** Use for oscillating data or seasonal cycles (e.g., quarterly reports, binary flows, alternating signals). Reveals underlying magnitude convergence while ignoring sign-flip artifacts.
 
 **Key Insight:** DAMPED_REVERSAL dominance in quarterly data is the *signature* of healthy seasonal oscillation, not a framework failure. The magnitude |R| near φ⁻¹ indicates damped (stable) oscillations around equilibrium.
 
