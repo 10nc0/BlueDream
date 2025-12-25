@@ -9,8 +9,8 @@ const attachmentsContainer = document.getElementById('attachmentsContainer');
 const errorToast = document.getElementById('errorToast');
 const inputContainer = document.querySelector('.input-container');
 
-const MAX_ATTACHMENTS = 10;
-const MAX_HISTORY_TURNS = 8;  // 8 turns = 16 messages (user + assistant)
+const MAX_ATTACHMENTS = PLAYGROUND.MAX_ATTACHMENTS;
+const MAX_HISTORY_TURNS = PLAYGROUND.MAX_HISTORY_TURNS;
 let attachments = [];
 let isProcessing = false;
 let conversationHistory = [];

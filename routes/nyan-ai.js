@@ -8,10 +8,11 @@ const { recordInMemory, clearSessionMemory } = require('../utils/context-extract
 const { getMemoryManager, cleanupOldSessions } = require('../utils/memory-manager');
 const capacityManager = require('../utils/playground-capacity');
 const usageTracker = require('../utils/playground-usage');
+const { AI_MODELS } = require('../config/constants');
 
 const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
 const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_GROQ_TOKEN;
-const H0_TEMPERATURE = 0.15;
+const H0_TEMPERATURE = AI_MODELS.TEMPERATURE_REASONING;
 
 const IDENTITY_PATTERNS = [
     /who\s+(?:are|is)\s+(?:you|nyan)/i,
