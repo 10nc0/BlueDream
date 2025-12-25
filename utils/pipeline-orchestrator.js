@@ -166,13 +166,9 @@ To analyze a specific stock, ask: "show me $NVDA psi ema" or "analyze $AAPL char
 🔥 ~nyan`;
         
         state.auditResult = { verdict: 'BYPASS', confidence: 100, reason: 'Ψ-EMA system identity query' };
+        // transition to output but don't mark booted mid-way
         state.mode = 'identity';
         state.transition(PIPELINE_STEPS.OUTPUT);
-        
-        // Mark NYAN booted on fast-path success
-        if (normalizedInput.sessionId && state.isFirstQuery) {
-          markSessionNyanBooted(normalizedInput.sessionId);
-        }
         
         return {
           success: true,
@@ -259,28 +255,31 @@ To analyze a specific stock, ask: "show me $NVDA psi ema" or "analyze $AAPL char
           preComputed: true
         });
         
-        // Still do seed-metric search if needed
-        const safeDocContext = normalizedInput.docContext || {};
-        if (state.mode === 'seed-metric' && normalizedInput.query && !safeDocContext.isClosedLoop) {
-          console.log(`🌱 Seed Metric (pre-computed): MANDATORY web search for grounded data`);
-          
-          const searchQueries = state.preflight.seedMetricSearchQueries || [];
-          const searchResults = [];
-          
-          if (searchQueries.length > 0) {
-            for (const sq of searchQueries.slice(0, 4)) {
-              const result = await this.searchBrave(sq, normalizedInput.clientIp);
-              if (result) {
-                searchResults.push(`[${sq}]\n${result}`);
-              } else {
-                const ddgResult = await this.searchDuckDuckGo(sq);
-                if (ddgResult) {
-                  searchResults.push(`[${sq}]\n${ddgResult}`);
-                }
-              }
+      // still do seed-metric search if needed
+      const safeDocContext = normalizedInput.docContext || {};
+      if (state.mode === 'seed-metric' && normalizedInput.query && !safeDocContext.isClosedLoop) {
+        console.log(`🌱 Seed Metric (pre-computed): MANDATORY web search for grounded data`);
+        
+        const searchQueries = state.preflight.seedMetricSearchQueries || [];
+        const searchResults = [];
+        
+        if (searchQueries.length > 0) {
+          const searchPromises = searchQueries.slice(0, 4).map(async (sq) => {
+            let result = await this.searchBrave(sq, normalizedInput.clientIp);
+            if (!result) {
+              result = await this.searchDuckDuckGo(sq);
             }
-            console.log(`🔍 Seed Metric: ${searchResults.length}/${searchQueries.length} searches returned data`);
-          } else {
+            return result ? `[${sq}]\n${result}` : null;
+          });
+
+          const results = await Promise.allSettled(searchPromises);
+          for (const res of results) {
+            if (res.status === 'fulfilled' && res.value) {
+              searchResults.push(res.value);
+            }
+          }
+          console.log(`🔍 Seed Metric: ${searchResults.length}/${searchQueries.length} searches returned data`);
+        } else {
             const searchQuery = await this.extractCoreQuestion(normalizedInput.query);
             const result = await this.searchBrave(searchQuery, normalizedInput.clientIp);
             if (result) searchResults.push(result);
@@ -312,6 +311,7 @@ MANDATORY INSTRUCTIONS:
         console.log(`⚡ Fast-path: Ψ-EMA mode but no ticker - returning no-data message`);
         state.finalAnswer = `📊 **No Stock Data Available**\n\nI detected a financial analysis request, but couldn't identify a valid public stock ticker.\n\n**Tips:**\n• Use explicit ticker format: "$AAPL", "$NVDA", "$META"\n• Note: Some companies are private (e.g., Bloomberg LP) and have no public stock data\n• Commodities (gold, oil) and crypto require different analysis tools\n\n🔥 ~nyan`;
         state.auditResult = { verdict: 'BYPASS', confidence: 100, reason: 'No ticker - fast path' };
+        // transition to output but don't mark booted mid-way
         state.transition(PIPELINE_STEPS.OUTPUT);
         
         // WRITE to DataPackage: Fast-path audit + output (S3 + S6)
@@ -332,11 +332,6 @@ MANDATORY INSTRUCTIONS:
         // FINALIZE: Store in tenant's φ-8 window
         state.dataPackage.finalize();
         globalPackageStore.storePackage(state.dataPackage.tenantId, state.dataPackage);
-        
-        // Mark NYAN booted on fast-path success too (didn't need full NYAN, but next query should use compressed)
-        if (normalizedInput.sessionId && state.isFirstQuery) {
-          markSessionNyanBooted(normalizedInput.sessionId);
-        }
         
         return {
           success: true,
@@ -439,19 +434,22 @@ MANDATORY INSTRUCTIONS:
       const searchResults = [];
       
       if (searchQueries.length > 0) {
-        // Run targeted searches for $/m² + income data (limit to 4 searches max)
-        for (const sq of searchQueries.slice(0, 4)) {
-          const result = await this.searchBrave(sq, clientIp);
-          if (result) {
-            searchResults.push(`[${sq}]\n${result}`);
-          } else {
-            const ddgResult = await this.searchDuckDuckGo(sq);
-            if (ddgResult) {
-              searchResults.push(`[${sq}]\n${ddgResult}`);
-            }
-          }
+      // Run targeted searches for $/m² + income data (limit to 4 searches max)
+      const searchPromises = searchQueries.slice(0, 4).map(async (sq) => {
+        let result = await this.searchBrave(sq, clientIp);
+        if (!result) {
+          result = await this.searchDuckDuckGo(sq);
         }
-        console.log(`🔍 Seed Metric: ${searchResults.length}/${searchQueries.length} searches returned data`);
+        return result ? `[${sq}]\n${result}` : null;
+      });
+
+      const results = await Promise.allSettled(searchPromises);
+      for (const res of results) {
+        if (res.status === 'fulfilled' && res.value) {
+          searchResults.push(res.value);
+        }
+      }
+      console.log(`🔍 Seed Metric: ${searchResults.length}/${searchQueries.length} searches returned data`);
       } else {
         // Fallback to generic search
         const searchQuery = await this.extractCoreQuestion(query);
