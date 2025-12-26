@@ -134,21 +134,36 @@ function detectPsiEMAKeys(query) {
   const lowerQuery = query.toLowerCase();
   const words = lowerQuery.match(/\b[a-z]+\b/g) || [];
   
-  // Push KEY 1: Verb
-  for (const word of words) {
-    if (PSI_EMA_VERBS.has(word)) {
-      keys.push({ type: 'verb', value: word });
-      usedWords.add(word.toUpperCase()); // Mark as used
-      break; // Only need one
+  // PRIORITY 0: Compound verb detection - "psi ema" / "ψ-ema" / "psi-ema" as a single verb unit
+  // This gives BOTH verb + adjective keys, enabling strong context for ticker rescue
+  const hasPsiEmaCompound = /(?:psi|ψ)[\s\-]?ema/i.test(query);
+  if (hasPsiEmaCompound) {
+    keys.push({ type: 'verb', value: 'psi-ema' });
+    keys.push({ type: 'adjective', value: 'analysis' });
+    usedWords.add('PSI');
+    usedWords.add('EMA');
+    console.log(`🔑 Compound verb detected: "psi ema" → verb + adjective (strong context)`);
+  }
+  
+  // Push KEY 1: Verb (skip if compound already provided one)
+  if (!keys.some(k => k.type === 'verb')) {
+    for (const word of words) {
+      if (PSI_EMA_VERBS.has(word)) {
+        keys.push({ type: 'verb', value: word });
+        usedWords.add(word.toUpperCase()); // Mark as used
+        break; // Only need one
+      }
     }
   }
   
-  // Push KEY 2: Adjective
-  for (const word of words) {
-    if (PSI_EMA_ADJECTIVES.has(word)) {
-      keys.push({ type: 'adjective', value: word });
-      usedWords.add(word.toUpperCase()); // Mark as used
-      break; // Only need one
+  // Push KEY 2: Adjective (skip if compound already provided one)
+  if (!keys.some(k => k.type === 'adjective')) {
+    for (const word of words) {
+      if (PSI_EMA_ADJECTIVES.has(word)) {
+        keys.push({ type: 'adjective', value: word });
+        usedWords.add(word.toUpperCase()); // Mark as used
+        break; // Only need one
+      }
     }
   }
   
@@ -184,12 +199,26 @@ function detectPsiEMAKeys(query) {
 
 /**
  * Detect potential ticker WITH strong context (verb + adjective present)
- * STILL requires capitalization - no lowercase tickers allowed
- * Same as without context - capitalization is the signal of intent
+ * When strong Ψ-EMA context exists (psi + ema + verb/adj), allow lowercase after "for/of/on"
  */
 function detectPotentialTickerWithContext(query, excludeWords) {
-  // Same as strict version - capitalization is required regardless of context
-  return detectPotentialTickerExcluding(query, excludeWords);
+  // First try standard detection (uppercase/$prefix)
+  const strictResult = detectPotentialTickerExcluding(query, excludeWords);
+  if (strictResult) return strictResult;
+  
+  // Strong context rescue: Allow lowercase ticker after "for/of/on" prepositions
+  // Pattern: "psi ema for tsla" / "analyze ema of nvda" / "show psi on aapl"
+  const prepPattern = /\b(?:for|of|on)\s+([a-z]{2,5})\b/i;
+  const prepMatch = query.match(prepPattern);
+  if (prepMatch) {
+    const candidate = prepMatch[1].toUpperCase();
+    if (!COMMON_NON_TICKERS.has(candidate) && !excludeWords.has(candidate) && !COMMON_SHORT_WORDS.has(candidate)) {
+      console.log(`🔧 Context rescue: lowercase "${prepMatch[1]}" → ${candidate} (after preposition)`);
+      return candidate;
+    }
+  }
+  
+  return null;
 }
 
 /**
