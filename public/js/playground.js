@@ -97,13 +97,8 @@ function updateDateTime() {
     if (currentTimeCompactEl) currentTimeCompactEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
 }
 
-let dateTimeRafId = null;
-function updateDateTimeLoop() {
-    updateDateTime();
-    dateTimeRafId = requestAnimationFrame(updateDateTimeLoop);
-}
-updateDateTimeLoop();
 updateDateTime();
+setInterval(updateDateTime, 1000);
 
 // Adaptive date/time positioning
 const dateTimeDefault = document.getElementById('dateTimeDefault');
