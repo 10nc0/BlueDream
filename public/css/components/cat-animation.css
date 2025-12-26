@@ -34,16 +34,19 @@
 }
 
 /* Gentle breathing animation for all date/time elements - globally consistent tempo */
+/* φ-asymmetric timing: 61.8% inhale (accumulation), 38.2% exhale (release) */
+/* Total duration: 4000ms * (1 + φ) ≈ 10472ms */
 @keyframes breathe-datetime {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+    0% { opacity: 1; }
+    61.8% { opacity: 0.5; }
+    100% { opacity: 1; }
 }
 
 #currentTime,
 #currentTimeCompact {
     font-variant-numeric: tabular-nums; /* Monospace digits for stable width */
     color: #94a3b8; /* Base color - works on both light/dark backgrounds */
-    animation: breathe-datetime 2s ease-in-out infinite;
+    animation: breathe-datetime 10.472s ease-in-out infinite;
 }
 
 /* Playground date-time-display - tight width to snap to buttons while preventing digit-change jitter */

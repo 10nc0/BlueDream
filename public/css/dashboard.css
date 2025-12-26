@@ -3535,9 +3535,12 @@ body.desktop-mode .thumbs-zone {
 }
 
 /* Global Breathing Animation for Date/Time */
+/* φ-asymmetric timing: 61.8% inhale (accumulation), 38.2% exhale (release) */
+/* Total duration: 4000ms * (1 + φ) ≈ 10472ms */
 @keyframes breathe-datetime {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    0% { opacity: 1; }
+    61.8% { opacity: 0.4; }
+    100% { opacity: 1; }
 }
 
 /* ===== RESPONSIVE HEADER SQUEEZE: Smooth Progressive Element Hiding =====
