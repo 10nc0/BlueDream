@@ -46,7 +46,7 @@
 #currentTimeCompact {
     font-variant-numeric: tabular-nums; /* Monospace digits for stable width */
     color: #94a3b8; /* Base color - works on both light/dark backgrounds */
-    animation: breathe-datetime 10.472s ease-in-out infinite;
+    animation: breathe-datetime 5s ease-in-out infinite;
 }
 
 /* Playground date-time-display - tight width to snap to buttons while preventing digit-change jitter */

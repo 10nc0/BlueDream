@@ -3536,7 +3536,7 @@ body.desktop-mode .thumbs-zone {
 
 /* Global Breathing Animation for Date/Time */
 /* φ-asymmetric timing: 61.8% inhale (accumulation), 38.2% exhale (release) */
-/* Total duration: 4000ms * (1 + φ) ≈ 10472ms */
+/* Total duration: 5s (12Hz-ish pulse adjusted for smooth loop) */
 @keyframes breathe-datetime {
     0% { opacity: 1; }
     61.8% { opacity: 0.4; }
