@@ -59,29 +59,43 @@ const PHI_BREATH = (function() {
      */
     function startBreathingCycle() {
         const currentTime = performance.now();
-        const elapsed = currentTime - breathStartTime;
-        const progress = (elapsed % currentCycleDuration) / currentCycleDuration;
         
-        // Calculate current breath phase (sinusoidal breathing)
-        // 0.0 → 0.5: Inhale (φ^0 → φ^1)
-        // 0.5 → 1.0: Exhale (φ^1 → φ^0)
-        const breathPhase = Math.sin(progress * Math.PI * 2);
+        // Asymmetric φ-breath durations
+        // Inhale: 4000 * 1.618 ≈ 6472ms (61.8% of total cycle)
+        // Exhale: 4000ms (38.2% of total cycle)
+        const inhaleDuration = BASE_DURATION * φ;
+        const exhaleDuration = BASE_DURATION;
+        const totalDuration = inhaleDuration + exhaleDuration;
         
-        // Map to φ scale: 1.0 → 1.618 → 1.0
-        const φScale = 1.0 + ((φ - 1.0) * ((breathPhase + 1) / 2));
+        const elapsed = (currentTime - breathStartTime) % totalDuration;
+        const inhaleEnd = inhaleDuration;
         
-        // Determine phase
-        const newPhase = progress < 0.5 ? 'inhale' : 'exhale';
+        let progress, newPhase, φScale;
+        
+        if (elapsed < inhaleEnd) {
+            // INHALE PHASE (0 → inhaleEnd)
+            newPhase = 'inhale';
+            progress = elapsed / inhaleDuration;
+            // Linear progression from 1.0 to 1.618
+            φScale = 1.0 + ((φ - 1.0) * progress);
+        } else {
+            // EXHALE PHASE (inhaleEnd → totalDuration)
+            newPhase = 'exhale';
+            progress = (elapsed - inhaleEnd) / exhaleDuration;
+            // Linear regression from 1.618 back to 1.0
+            φScale = φ - ((φ - 1.0) * progress);
+        }
+        
         if (newPhase !== currentPhase && currentPhase !== 'creation') {
             currentPhase = newPhase;
             emit('phaseChange', { phase: currentPhase, scale: φScale, progress });
         }
         
         // Check for breath cycle completion (guard prevents multiple events)
-        const breathTimestamp = Math.floor(elapsed / currentCycleDuration);
-        if (breathTimestamp > lastBreathTimestamp && elapsed > 100) {
+        const breathTimestamp = Math.floor((currentTime - breathStartTime) / totalDuration);
+        if (breathTimestamp > lastBreathTimestamp && (currentTime - breathStartTime) > 100) {
             lastBreathTimestamp = breathTimestamp;
-            onBreathComplete();
+            onBreathComplete(totalDuration);
         }
         
         // Emit continuous breath cycle event
@@ -90,7 +104,7 @@ const PHI_BREATH = (function() {
             progress,
             phase: currentPhase,
             breathCount,
-            elapsed
+            elapsed: currentTime - breathStartTime
         });
         
         animationFrameId = requestAnimationFrame(startBreathingCycle);
@@ -99,13 +113,13 @@ const PHI_BREATH = (function() {
     /**
      * Handle breath cycle completion
      */
-    function onBreathComplete() {
+    function onBreathComplete(duration) {
         breathCount++;
         
         const breathData = {
             count: breathCount,
             timestamp: new Date().toISOString(),
-            duration: currentCycleDuration,
+            duration: Math.round(duration),
             phase: currentPhase
         };
         
