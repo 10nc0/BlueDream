@@ -50,6 +50,10 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Financial Physics System**: 4-tier architecture extending NYAN Protocol for financial cognition.
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis.
 - **Φ-Dynamics & Ψ-EMA System**: Multi-signal time series oscillator using robust signal processing and φ (1.618) as the measurement threshold, applicable across various domains.
+  - **Ontological Foundation**: Core ontology is `x = 1 + 1/x` — the minimal self-referential renewal contract.
+  - **Elegant Form**: `0 + φ⁰ + φ¹ = φ²` (void + identity + self = renewal) — the equation is self-referential: you need φ to write what defines φ.
+  - **Jerk-Level Physics**: At the 3rd derivative, systems that survive must negotiate with this recursive relation. φ is the emergent attractor, not dogma.
+  - **H(0.5) Sweet Spot**: Keep recursive form as ontology, allow φ as observed emergent preference — never treat it as law, only as the statistical preference of systems that managed to survive long enough to be observed.
 - **Unified Personality Layer**: Enforces formatting via regex post-processing.
 - **Code Execution Honesty**: AI provides code for user execution but does not execute it itself.
 

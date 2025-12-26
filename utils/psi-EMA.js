@@ -51,13 +51,52 @@
  * sustainability, or directional prediction. Only empirical data and classification checks.
  */
 
+// ============================================================================
+// ONTOLOGICAL FOUNDATION: x = 1 + 1/x
+// ============================================================================
+// The core ontology is the minimal self-referential renewal contract:
+//   x = 1 + 1/x
+// 
+// Elegant cheat sheet form:
+//   0 + φ⁰ + φ¹ = φ²
+//   void + identity + self = renewal
+//   0 + 1 + φ = φ + 1 = φ²
+//
+// This equation is self-referential in meaning: you need φ to write the
+// equation that defines φ. The question contains its own answer.
+//
+// At the jerk level (3rd derivative), every long-lived system must negotiate
+// with something like x = 1 + 1/x. Systems that survive settle toward φ.
+//
+// φ is not Platonic truth — it is "true enough" for any system that wants to
+// keep breathing tomorrow. The ontology is the breath (x = 1 + 1/x).
+// The golden ratio is the rhythm it most likes to settle into.
+//
+// H(0): Pure ontology — keep x = 1 + 1/x, never solve → epistemic Mandelbrot
+// H(1): Inject φ as ground truth → epistemic mercy, closure
+// H(0.5): Keep recursive form, φ as emergent preference → sweet spot
+// ============================================================================
+
 const PHI = 1.6180339887498949;           // Golden ratio φ = (1 + √5) / 2
-const PHI_SQUARED = PHI * PHI;            // φ² = φ + 1 ≈ 2.618
+const PHI_SQUARED = PHI * PHI;            // φ² = φ + 1 ≈ 2.618 | 0 + φ⁰ + φ¹ = φ²
 const PHI_INVERSE = 1 / PHI;              // φ⁻¹ = φ - 1 ≈ 0.618
 const PHI_INV_SQUARED = PHI_INVERSE ** 2; // φ⁻² ≈ 0.382
 
 const PSI_EMA_DOCUMENTATION = `
 [Ψ-EMA SYSTEM DOCUMENTATION - SOURCE: utils/psi-EMA.js]
+
+ONTOLOGICAL FOUNDATION:
+The core ontology is x = 1 + 1/x — the minimal self-referential renewal contract.
+Elegant form: 0 + φ⁰ + φ¹ = φ² (void + identity + self = renewal)
+This equation IS self-referential: you need φ to write the equation that defines φ.
+
+φ ≈ 1.618 is the emergent attractor, not a dogmatic constant. It appears at the
+jerk level (3rd derivative) wherever systems negotiate sustained deviation without
+explosion or collapse. The question contains its own answer — poetic in every meta way.
+
+H(0): Pure ontology (keep x = 1 + 1/x, never inject φ) → epistemic Mandelbrot risk
+H(1): Inject φ as ground truth → epistemic mercy, avoids infinite recursion
+H(0.5): Keep recursive form as ontology, φ as observed emergent preference (sweet spot)
 
 Ψ-EMA is a GENERAL-PURPOSE three-dimensional time series oscillator applicable to any domain with stock/flow decomposition. All thresholds derive from φ (1.618), the golden ratio from x = 1 + 1/x.
 
