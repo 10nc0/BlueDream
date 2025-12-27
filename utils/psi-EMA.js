@@ -1,9 +1,9 @@
 /**
- * Ψ-EMA: Time Series Oscillator (Three-Dimensional Wave Function Observer)
+ * Ψ-EMA: Three-Dimensional Number Series Compass (Fourier Waves)
  * 
  * GLOSSARY & SUBSTRATE-AGNOSTIC FRAMING:
  * ═════════════════════════════════════════════════════════════════════════════
- * Ψ-EMA is a GENERAL-PURPOSE time series survival/oscillation observer applicable to any domain with
+ * Ψ-EMA is a GENERAL-PURPOSE time series oscillation observer applicable to any domain with
  * stock/flow decomposition. Examples herein use capital markets due to data accessibility,
  * but the same framework applies to:
  *   • Climate: Temperature (stock) vs heating/cooling flow (anomaly detection)
@@ -34,11 +34,11 @@
  * │ Amplitude Ratio │                          │ is "critical"  │ convergent state             │
  * └─────────────────┴──────────────────────────┴────────────────┴──────────────────────────────┘
  * 
- * THRESHOLDS (All φ-Derived, Zero Dogma):
- * - φ⁻² ≈ 0.382: Tolerance band around φ (|R - φ| ≤ φ⁻²)
- * - φ⁻¹ ≈ 0.618: Lower bound (R < φ⁻¹ → amplitude decay)
- * - φ   ≈ 1.618: Upper bound (R > φ → amplitude growth)
- * - φ²  ≈ 2.618: Extreme deviation flag (|z| > φ²)
+ * R THRESHOLDS (All φ-Derived, Zero Dogma):
+ * - φ⁻² ≈ 0.382: Tolerance band around φ (|R - φ| ≤ φ⁻²) -> fatalism
+ * - φ⁻¹ ≈ 0.618: Lower bound (R < φ⁻¹ → amplitude decay) -> fatalism leaning
+ * - φ   ≈ 1.618: Upper bound (R > φ → amplitude growth) -> stable
+ * - φ²  ≈ 2.618: Extreme deviation flag (|z| > φ²) -> optimism / euphoria leaning
  * - 1 = φ⁰:     Reference point
  * - 2 = φ⁰ + φ⁻¹ + φ⁻²: Composite bound (1 + 0.618 + 0.382 ≈ 2)
  * 
@@ -48,7 +48,7 @@
  * 
  * Measurement Data Only (No Interpretation):
  * All output is observed measurement + φ-distance. No claims about regime,
- * sustainability, or directional prediction. Only empirical data and classification checks.
+ * sustainability, or directional prediction. Only empirical data and classification checks (compass).
  */
 
 // ============================================================================
@@ -59,7 +59,7 @@
 // 
 // Elegant cheat sheet form:
 //   0 + φ⁰ + φ¹ = φ²
-//   void + identity + self = renewal
+//   void + identity + self = renewal (genesis)
 //   0 + 1 + φ = φ + 1 = φ²
 //
 // This equation is self-referential in meaning: you need φ to write the
@@ -72,9 +72,9 @@
 // keep breathing tomorrow. The ontology is the breath (x = 1 + 1/x).
 // The golden ratio is the rhythm it most likes to settle into.
 //
-// H(0): Pure ontology — keep x = 1 + 1/x, never solve → epistemic Mandelbrot
-// H(1): Inject φ as ground truth → epistemic mercy, closure
-// H(0.5): Keep recursive form, φ as emergent preference → sweet spot
+// H(0) - Pure Falsifiability: Pure ontology — keep x = 1 + 1/x, never solve → epistemic Mandelbrot
+// H(1) - Pure Doctrine: Inject φ as ground truth → epistemic mercy, closure
+// H(0.5) - Hybrid Empiric Falsifiability & Emergent Hint: Keep recursive form, φ as emergent preference → sweet spot
 // ============================================================================
 
 const PHI = 1.6180339887498949;           // Golden ratio φ = (1 + √5) / 2
@@ -87,26 +87,24 @@ const PSI_EMA_DOCUMENTATION = `
 
 ONTOLOGICAL FOUNDATION:
 The core ontology is x = 1 + 1/x — the minimal self-referential renewal contract.
-Elegant form: 0 + φ⁰ + φ¹ = φ² (void + identity + self = renewal)
+Elegant form: 0 + φ⁰ + φ¹ = φ² (void + identity + self = renewal or genesis)
 This equation IS self-referential: you need φ to write the equation that defines φ.
 
 φ ≈ 1.618 is the emergent attractor, not a dogmatic constant. It appears at the
 jerk level (3rd derivative) wherever systems negotiate sustained deviation without
-explosion or collapse. The question contains its own answer — poetic in every meta way.
+explosion or collapse. The question contains its own answer.
 
-H(0): Pure ontology (keep x = 1 + 1/x, never inject φ) → epistemic Mandelbrot risk
-H(1): Inject φ as ground truth → epistemic mercy, avoids infinite recursion
-H(0.5): Keep recursive form as ontology, φ as observed emergent preference (sweet spot)
-
-Ψ-EMA is a GENERAL-PURPOSE three-dimensional time series oscillator applicable to any domain with stock/flow decomposition. All thresholds derive from φ (1.618), the golden ratio from x = 1 + 1/x.
+Ψ-EMA is a GENERAL-PURPOSE three-dimensional time series oscillator applicable to any domain with stock/flow decomposition.
 
 THE THREE DIMENSIONS (substrate-agnostic):
 
 θ (PHASE) - Cycle Position
 • Formula: atan2(Flow, Stock) → 0° to 360°
 • Measures WHERE in the oscillation cycle the system is
-• 0°-90° = Early Expansion, 90°-180° = Late Expansion
-• 180°-270° = Early Contraction, 270°-360° = Late Contraction
+• 0°-360°/φ² = Growth (1st phase),
+• 360°/φ² + 360° - 2 * (360°/φ²) = Peak/Reversal (2nd phase),
+• Final 360°/φ² = Renew (3rd phase)
+• Total 360° - heavily depended on R (Convergence) values whether R<1 or R>1
 
 z (ANOMALY) - Deviation from Equilibrium  
 • Formula: (Value - Median) / MAD (robust z-score using Median Absolute Deviation)
