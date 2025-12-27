@@ -1004,7 +1004,8 @@ function parseUserAgent(userAgent) {
 
 // IP geolocation cache: prevents rate limiting on ipapi.co (1h TTL)
 const ipGeoCache = new Map();
-const IP_GEO_TTL_MS = 60 * 60 * 1000; // 1 hour
+const IP_GEO_TTL_MS = 60 * 60 * 1000; // 1 hour for success
+const IP_GEO_FAILURE_TTL_MS = 5 * 60 * 1000; // 5 mins for failure
 
 // Simple location detection from IP (with caching and proper timeout)
 async function getLocationFromIP(ipAddress) {
@@ -1016,8 +1017,14 @@ async function getLocationFromIP(ipAddress) {
         
         // Check cache first
         const cached = ipGeoCache.get(ipAddress);
-        if (cached && Date.now() - cached.timestamp < IP_GEO_TTL_MS) {
+        if (cached && Date.now() - cached.timestamp < (cached.location === 'Unknown Location' ? IP_GEO_FAILURE_TTL_MS : IP_GEO_TTL_MS)) {
             return cached.location;
+        }
+        
+        // Prune cache if it grows too large (simple LRU-ish: delete first entry)
+        if (ipGeoCache.size > 5000) {
+            const firstKey = ipGeoCache.keys().next().value;
+            ipGeoCache.delete(firstKey);
         }
         
         // Use AbortController for proper fetch timeout (native fetch ignores timeout option)
@@ -1046,15 +1053,17 @@ async function getLocationFromIP(ipAddress) {
         } catch (fetchError) {
             clearTimeout(timeoutId);
             if (fetchError.name === 'AbortError') {
-                console.warn(`⏱️ IP geo lookup timed out for ${ipAddress}`);
+                console.warn(`[${getTimestamp()}] ⏱️ IP geo lookup timed out for ${ipAddress}`);
             } else {
                 throw fetchError;
             }
         }
         
+        // Cache the failure for 5 mins to prevent immediate retry
+        ipGeoCache.set(ipAddress, { location: 'Unknown Location', timestamp: Date.now() });
         return 'Unknown Location';
     } catch (error) {
-        console.error('Error getting location:', error.message);
+        console.error(`[${getTimestamp()}] Error getting location:`, error.message);
         return 'Unknown Location';
     }
 }
