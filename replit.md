@@ -49,11 +49,10 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Nyan Protocol**: System prompt framework for historical comparison and socio-economic analysis, using a Seed Metric to prevent LLM hallucinations via mandatory source requirements.
 - **Financial Physics System**: 4-tier architecture extending NYAN Protocol for financial cognition.
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis.
-- **Φ-Dynamics & Ψ-EMA System**: Multi-signal time series oscillator using robust signal processing and φ (1.618) as the measurement threshold, applicable across various domains.
-  - **Ontological Foundation**: Core ontology is `x = 1 + 1/x` — the minimal self-referential renewal contract.
-  - **Elegant Form**: `0 + φ⁰ + φ¹ = φ²` (void + identity + self = renewal) — the equation is self-referential: you need φ to write what defines φ.
-  - **Jerk-Level Physics**: At the 3rd derivative, systems that survive must negotiate with this recursive relation. φ is the emergent attractor, not dogma.
-  - **H(0.5) Sweet Spot**: Keep recursive form as ontology, allow φ as observed emergent preference — never treat it as law, only as the statistical preference of systems that managed to survive long enough to be observed.
+- **Ψ-EMA System**: Fourier compass for time series — calibrates position (θ, z, R) relative to equilibrium (θ=0°), like Google Maps for Hilbert space instead of geospace.
+  - **ehi passiko**: "Come and see" — users upload CSV/SQL/TXT time series, apply the compass, diagnose anomalies themselves. No predictions, no mysticism, just coordinates.
+  - **Coordinate System**: θ (phase angle 0°-360°), z (deviation from median via MAD), R (convergence ratio). φ-derived thresholds provide consistent measurement scale.
+  - **Tool-First Design**: Framework measures where you ARE on the wave, not where you're going. Users navigate; the compass just shows true north (equilibrium).
 - **Unified Personality Layer**: Enforces formatting via regex post-processing.
 - **Mode Registry (lib/mode-registry.js)**: Plug-and-play mode configuration for the 7-stage pipeline:
   - Each mode declares: detection heuristics, personality formatting rules (skipIntroOutro, preserveVerdicts)
