@@ -1145,6 +1145,7 @@ async function logAudit(client, req, actionType, targetType, targetId, targetEma
 const webhookLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
     max: 60, // 60 requests per minute per IP
+    keyGenerator: (req) => req.ip || req.connection?.remoteAddress || 'unknown', // Explicitly use IP for proxied environments
     handler: (req, res) => {
         console.warn(`[${getTimestamp()}] ⚠️ Webhook rate limit exceeded - IP: ${req.ip}`);
         res.status(429).json({ error: 'Too many requests, please try again later.' });
