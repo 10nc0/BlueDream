@@ -767,6 +767,13 @@ User query: ${query}`;
     const sanitizedHistory = (conversationHistory || input.history || [])
       .filter(msg => msg && msg.content && msg.content.trim().length > 0);
     
+    // SKIP SEARCH RETRY for identity modes - internal documentation is the ground truth
+    const isIdentityMode = state.mode && state.mode.includes('identity');
+    if (isIdentityMode) {
+      console.log(`⏭️ Identity mode: Skip retry (internal docs are ground truth)`);
+      return;
+    }
+    
     if (state.mode === 'psi-ema') {
       console.log(`⏭️ Ψ-EMA: Skip retry (yfinance data pre-verified)`);
       return;
@@ -890,15 +897,28 @@ User query: ${query}`;
       cleaned = cleaned.replace(pattern, '');
     }
     
-    // Ensure signature exists (add if missing, don't duplicate)
-    // Uses registry-driven signature based on mode
-    if (!hasAnySignature(cleaned)) {
-      cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText;
+    const now = new Date();
+    const HH = String(now.getHours()).padStart(2, '0');
+    const MM = String(now.getMinutes()).padStart(2, '0');
+    const SS = String(now.getSeconds()).padStart(2, '0');
+    const YYYY = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const DD = String(now.getDate()).padStart(2, '0');
+    const ts = `${HH}:${MM}:${SS} - ${YYYY}/${month}/${DD}`;
+    const signatureWithTs = `${config.signatureText} [${ts}]`;
+
+    // Use regex to detect any existing nyan signature and replace it with the timestamped version
+    const anyNyanSigPattern = /🔥\s*(?:~nyan|nyan~)(?:\s*\[.*?\])?/i;
+
+    if (anyNyanSigPattern.test(cleaned)) {
+      cleaned = cleaned.replace(anyNyanSigPattern, signatureWithTs);
+    } else {
+      cleaned = cleaned.trimEnd() + '\n\n' + signatureWithTs;
     }
-    
+
     return cleaned.trim();
   }
-  
+
   deriveBadge(auditResult) {
     if (!auditResult || !auditResult.verdict) return 'unverified';
     
