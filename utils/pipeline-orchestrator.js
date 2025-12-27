@@ -994,14 +994,13 @@ function applyPersonalityFormat(answer, mode = 'general') {
   const ts = `${HH}:${MM}:${SS} - ${YYYY}/${month}/${DD}`;
   const signatureWithTs = `${config.signatureText} [${ts}]`;
   
-  if (!hasAnySignature(cleaned)) {
-    cleaned = cleaned.trimEnd() + '\n\n' + signatureWithTs;
+  // Use regex to detect any existing nyan signature and replace it with the timestamped version
+  const anyNyanSigPattern = /🔥\s*(?:~nyan|nyan~)(?:\s*\[.*?\])?/i;
+  
+  if (anyNyanSigPattern.test(cleaned)) {
+    cleaned = cleaned.replace(anyNyanSigPattern, signatureWithTs);
   } else {
-    // If a signature already exists, replace it with timestamped one
-    const sig = config.signatureText;
-    if (cleaned.includes(sig)) {
-      cleaned = cleaned.replace(sig, signatureWithTs);
-    }
+    cleaned = cleaned.trimEnd() + '\n\n' + signatureWithTs;
   }
   
   return cleaned.trim();
