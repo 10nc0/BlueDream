@@ -33,7 +33,7 @@
  */
 
 const { preflightRouter, buildSystemContext } = require('./preflight-router');
-const { extractContext, extractContextWithMemory, mergeContextForTickerDetection, isSessionFirstQuery, markSessionNyanBooted } = require('./context-extractor');
+const { extractContext, extractContextWithMemory, mergeContextForTickerDetection, isSessionFirstQuery, markSessionNyanBooted, isCodeContent } = require('./context-extractor');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT, NYAN_PROTOCOL_COMPRESSED } = require('../prompts/nyan-protocol');
 const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
@@ -441,10 +441,22 @@ MANDATORY INSTRUCTIONS:
     // Priority: Memory → Ψ-EMA → Attachments → Search → Query
     // Memory provides human-like context, Ψ-EMA injects wave analysis, Attachments are primary source
     let finalPrompt = query || 'Analyze content';
+    
+    // S5 Personality Injection - Integrated with personality layer
+    const isCodeReview = state.mode === 'code-audit';
+    
     const hasMemory = state.contextResult?.memoryPrompt?.length > 0;
     const hasAttachments = extractedContent && extractedContent.length > 0;
     const hasSearch = !!state.searchContext;
     const isPsiEma = state.mode === 'psi-ema' && state.preflight?.psiEmaAnalysis;
+    
+    // Add code review guard if in code-audit mode
+    if (isCodeReview && hasAttachments) {
+        const latest = extractedContent[extractedContent.length - 1];
+        if (latest.fileName && isCodeContent('', latest.fileName)) {
+            finalPrompt = `[CODE AUDIT PROTOCOL ACTIVE]\n${finalPrompt}`;
+        }
+    }
     
     // Prepend φ-compressed memory context if available (human-like recall)
     let memoryPrefix = '';
@@ -771,27 +783,40 @@ User query: ${query}`;
   }
   
   async stepOutput(state) {
-    state.transition(PIPELINE_STEPS.OUTPUT);
+    // Stage 5: Personality (Regex-based formatting)
+    state.transition(PIPELINE_STEPS.PERSONALITY);
+    const isCodeAudit = state.mode === 'code-audit';
     
-    if (state.auditResult?.fixedAnswer) {
-      state.finalAnswer = state.auditResult.fixedAnswer;
-    } else {
-      state.finalAnswer = state.draftAnswer;
+    // Applying personality layer before S6 Output
+    const draft = state.auditResult?.fixedAnswer || state.draftAnswer;
+    
+    // Ensure Verdict is preserved by passing mode to formatter
+    state.finalAnswer = this.applyPersonalityFormat(draft, state.mode);
+    
+    if (isCodeAudit && !state.finalAnswer.includes('Verdict')) {
+        console.warn('⚠️ Personality: Verdict alignment check');
     }
     
-    // Apply personality formatting (unified, single-pass)
-    // Note: Personality layer strips FLUFF only, never alters actual DATA
-    state.finalAnswer = this.applyPersonalityFormat(state.finalAnswer, state.mode);
+    // WRITE to DataPackage: Stage S5 personality result
+    state.writeToPackage(STAGE_IDS.PERSONALITY, {
+      outputLength: state.finalAnswer.length,
+      isCodeAudit,
+      mode: state.mode
+    });
+
+    // Stage 6: Output finalization
+    state.transition(PIPELINE_STEPS.OUTPUT);
     
     // WRITE to DataPackage: Stage S6 output (personality-formatted)
     state.writeToPackage(STAGE_IDS.OUTPUT, {
       mode: state.mode,
       outputLength: state.finalAnswer.length,
       didSearch: state.didSearch,
-      retryCount: state.retryCount
+      retryCount: state.retryCount,
+      verdictPreserved: isCodeAudit
     });
     
-    // FINALIZE: Package is now read-only, store in tenant's φ-8 window
+    // FINALIZE: Store in tenant's φ-8 window
     state.dataPackage.finalize();
     globalPackageStore.storePackage(state.dataPackage.tenantId, state.dataPackage);
     
@@ -808,7 +833,13 @@ User query: ${query}`;
     
     let cleaned = answer;
     
-    // INTRO FLUFF: Remove generic intro paragraphs (case-insensitive)
+    // For code audits, we skip intro/outro stripping to preserve technical verdict and context
+    if (mode === 'code-audit') {
+        if (!cleaned.includes('~nyan')) {
+          cleaned = cleaned.trimEnd() + '\n\n🔥 ~nyan';
+        }
+        return cleaned.trim();
+    }
     const introFluffPatterns = [
       /^##?\s*Summary[^\n]*\n+[^\n]*(?:comprehensive|detailed|provides|uncertain)[^\n]*\n+/i,
       /^##?\s*Summary[^\n]*\n+[^\n]*following[^\n]*\n+/i,
@@ -881,6 +912,13 @@ function applyPersonalityFormat(answer, mode = 'general') {
   if (!answer) return answer;
   
   let cleaned = answer;
+  
+  if (mode === 'code-audit') {
+    if (!cleaned.includes('~nyan')) {
+      cleaned = cleaned.trimEnd() + '\n\n🔥 ~nyan';
+    }
+    return cleaned.trim();
+  }
   
   const introFluffPatterns = [
     /^##?\s*Summary[^\n]*\n+[^\n]*(?:comprehensive|detailed|provides|uncertain)[^\n]*\n+/i,

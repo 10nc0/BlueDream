@@ -226,5 +226,6 @@ function markSessionNyanBooted(sessionId) {
 module.exports = {
   extractContext, extractContextWithMemory, extractEntitiesFromText,
   mergeContextForTickerDetection, recordInMemory, clearSessionMemory,
-  isSessionFirstQuery, markSessionNyanBooted, KNOWN_COMPANIES, FINANCIAL_TOPICS
+  isSessionFirstQuery, markSessionNyanBooted, KNOWN_COMPANIES, FINANCIAL_TOPICS,
+  isCodeContent, isLikelyCode: isCodeContent
 };
