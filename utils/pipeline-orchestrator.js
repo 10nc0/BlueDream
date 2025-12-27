@@ -831,15 +831,15 @@ User query: ${query}`;
   applyPersonalityFormat(answer, mode) {
     if (!answer) return answer;
     
-    const { getPersonalityConfig } = require('../lib/mode-registry');
+    const { getPersonalityConfig, hasAnySignature } = require('../lib/mode-registry');
     const config = getPersonalityConfig(mode);
     
     let cleaned = answer;
     
     // Registry-driven: skip intro/outro stripping for modes that need it
     if (config.skipIntroOutro) {
-      if (config.appendSignature && !cleaned.includes('~nyan')) {
-        cleaned = cleaned.trimEnd() + '\n\n🔥 ~nyan';
+      if (config.appendSignature && !hasAnySignature(cleaned)) {
+        cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText;
       }
       return cleaned.trim();
     }
@@ -875,9 +875,10 @@ User query: ${query}`;
       cleaned = cleaned.replace(pattern, '');
     }
     
-    // Ensure ~nyan signature exists (add if missing, don't duplicate)
-    if (!cleaned.includes('~nyan')) {
-      cleaned = cleaned.trimEnd() + '\n\n🔥 ~nyan';
+    // Ensure signature exists (add if missing, don't duplicate)
+    // Uses registry-driven signature based on mode
+    if (!hasAnySignature(cleaned)) {
+      cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText;
     }
     
     return cleaned.trim();
@@ -915,15 +916,15 @@ function createPipelineOrchestrator(config) {
 function applyPersonalityFormat(answer, mode = 'general') {
   if (!answer) return answer;
   
-  const { getPersonalityConfig } = require('../lib/mode-registry');
+  const { getPersonalityConfig, hasAnySignature } = require('../lib/mode-registry');
   const config = getPersonalityConfig(mode);
   
   let cleaned = answer;
   
   // Registry-driven: skip intro/outro stripping for modes that need it
   if (config.skipIntroOutro) {
-    if (config.appendSignature && !cleaned.includes('~nyan')) {
-      cleaned = cleaned.trimEnd() + '\n\n🔥 ~nyan';
+    if (config.appendSignature && !hasAnySignature(cleaned)) {
+      cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText;
     }
     return cleaned.trim();
   }
@@ -958,8 +959,9 @@ function applyPersonalityFormat(answer, mode = 'general') {
     cleaned = cleaned.replace(pattern, '');
   }
   
-  if (!cleaned.includes('~nyan')) {
-    cleaned = cleaned.trimEnd() + '\n\n🔥 ~nyan';
+  // Registry-driven signature (general = 🔥 nyan~, others = 🔥 ~nyan)
+  if (!hasAnySignature(cleaned)) {
+    cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText;
   }
   
   return cleaned.trim();
