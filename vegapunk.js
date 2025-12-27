@@ -97,24 +97,20 @@ const connectionString = databaseUrl?.includes('?')
     ? `${databaseUrl}&${poolModeParam}`  // Has existing params, append with &
     : `${databaseUrl}?${poolModeParam}`;  // No params yet, start with ?
 
-// SECURITY NOTE: Supabase uses its own CA chain for SSL connections
-// Options: 1) Download prod-ca-2021.crt from Supabase Dashboard → Settings → Database → SSL
-//          2) Set DATABASE_CA_CERT env var with certificate contents (full verify-full mode)
-//          3) Use rejectUnauthorized: false (encrypted but no cert pinning - acceptable for cloud)
-// Supabase pooler handles TLS termination at edge; connection is always encrypted
-// PRODUCTION HARDENING: Set DATABASE_CA_CERT for verify-full mode (prevents theoretical MITM)
+// SECURITY NOTE: Supabase SSL/TLS
+// - SSL/TLS is automatic and enforced by Supabase pooler
+// - Connection is always encrypted (TLS termination at Supabase edge)
+// - Supabase uses self-signed certificates → rejectUnauthorized: false by default
+// - Optional: Set DATABASE_CA_CERT for verify-full mode (download from Supabase Dashboard)
+// - Production hardening: Use RLS policies, Attack Protection (CAPTCHA), secure key management
+// - See: https://supabase.com/docs/guides/platform/ssl-enforcement
 const isLocalDb = databaseUrl?.includes('localhost') || databaseUrl?.includes('127.0.0.1');
 const hasCustomCA = !!process.env.DATABASE_CA_CERT;
-
-// Log SSL verification status at startup
-if (!isLocalDb && !hasCustomCA) {
-    console.warn('⚠️ SSL: Encrypted but not verify-full (no DATABASE_CA_CERT). Download CA from Supabase Dashboard for production hardening.');
-}
 
 const pool = new Pool({
     connectionString,
     ssl: isLocalDb ? false : { 
-        rejectUnauthorized: hasCustomCA,  // SECURITY: Enable if CA provided, else trust cloud provider
+        rejectUnauthorized: hasCustomCA,  // verify-full if CA provided, else trust Supabase infrastructure
         ...(hasCustomCA && { ca: process.env.DATABASE_CA_CERT })
     },
     max: 20, // Direct pool limit; Supabase pooler handles 10k+ upstream

@@ -84,10 +84,13 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Inpipe Architecture**: Multi-channel input with an abstract channel interface for extensibility.
 
 ## Security Configuration
-- **Database SSL**: Connection encrypted via TLS. For production hardening with verify-full mode:
-  1. Download `prod-ca-2021.crt` from Supabase Dashboard → Settings → Database → SSL
-  2. Set `DATABASE_CA_CERT` env var with certificate contents
-  3. Without CA, connection is encrypted but not certificate-pinned (acceptable for cloud)
+- **Database SSL**: Supabase handles SSL/TLS automatically. Connection is always encrypted.
+- **Production Hardening** (via Supabase Dashboard):
+  1. Enable **Row Level Security (RLS)** on all tables (Authentication → Policies)
+  2. Enable **Attack Protection** with CAPTCHA for sign-up/sign-in (Authentication → Attack Protection)
+  3. Use **database functions and policies** to restrict direct table access
+  4. Store credentials in **environment variables** (never hardcode)
+- **Optional verify-full mode**: Set `DATABASE_CA_CERT` env var with Supabase CA (download from Dashboard → Settings → Database → SSL) for strict certificate verification
 - **Webhook Validation**: All external webhooks validated with Zod schemas + regex patterns
 - **Secrets Compartmentalization**: Route satellites receive only required dependencies via DI
 
