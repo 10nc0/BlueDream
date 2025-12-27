@@ -595,7 +595,7 @@ function calculatePhase(flow, stock, options = { normalize: true }) {
   }
   
   // atan2(y, x) returns radians in range (-π, π]
-  const radians = Math.atan2(flowNorm, stockNorm);
+  const radians = Math.atan2(stockNorm, flowNorm);
   let degrees = radians * (180 / Math.PI);
   // Normalize to 0°-360° range
   if (degrees < 0) degrees += 360;
