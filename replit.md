@@ -13,6 +13,11 @@
 ## System Architecture
 The system utilizes a Node.js backend with Express and a Single Page Application (SPA) frontend, featuring an Apple glassmorphism design and a Discord-style two-pane layout with real-time updates. It treats financial statements as physical systems, applying conservation laws and sustainability metrics.
 
+**3-Layer Perception-Substrate-Cognition Model:**
+- **L1: Perception (attachment-cascade.js + attachment-ingestion.js)**: File classification, extraction, and cache hydration.
+- **L2: Substrate (data-package.js)**: Immutable state containers, shared caches, and system constants.
+- **L3: Cognition (pipeline-orchestrator.js)**: 7-stage state machine (S-1 to S6) for reasoning and auditing.
+
 **7-Layer AI Processing Pipeline:**
 - **Layer 7: AI Interface** (user interaction)
 - **Layer 6: Orchestration** (7-stage state machine)

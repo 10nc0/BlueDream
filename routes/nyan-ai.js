@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const JSZip = require('jszip');
 const logger = require('../lib/logger');
 const { createPipelineOrchestrator, fastStreamPersonality, applyPersonalityFormat } = require('../utils/pipeline-orchestrator');
+const { AttachmentIngestion } = require('../utils/attachment-ingestion');
 const { recordInMemory, clearSessionMemory } = require('../utils/context-extractor');
 const { getMemoryManager, cleanupOldSessions } = require('../utils/memory-manager');
 const capacityManager = require('../utils/playground-capacity');
@@ -781,11 +782,14 @@ Respond in ${language || 'the same language as the user query'}.`
                 });
             }
             
+            // L1 Perception Ingestion
+            const perception = await AttachmentIngestion.ingest(docList, clientIp);
+            
             const pipelineInput = {
                 message: finalPrompt,
                 photos: photoList,
                 documents: docList,
-                extractedContent,
+                extractedContent: perception.files, // HARMONIZED: Use perception output
                 history: history || [],
                 clientIp,
                 isVisionRequest: photoList.length > 0,

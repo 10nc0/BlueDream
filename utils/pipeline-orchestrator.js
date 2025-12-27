@@ -51,6 +51,8 @@ const PIPELINE_STEPS = {
   OUTPUT: 'S6'
 };
 
+const { AttachmentIngestion } = require('./attachment-ingestion');
+
 class PipelineState {
   constructor(tenantId = null) {
     this.step = PIPELINE_STEPS.CONTEXT_EXTRACT;
@@ -111,18 +113,27 @@ class PipelineOrchestrator {
       conversationHistory: input.conversationHistory || input.history || [],
       extractedContent: input.extractedContent || []
     };
-    
-    // Track if this is first query for NYAN boot optimization (check early, before any exits)
+
+    // ========================================
+    // STAGE -1: Context Extraction with φ-Compressed Memory
+    // ========================================
+    state.transition(PIPELINE_STEPS.CONTEXT_EXTRACT);
+
+    // L1 Perception Ingestion
+    const perception = await AttachmentIngestion.ingest(
+      input.attachments || [],
+      tenantId
+    );
+
+    // Merge ingested content into input for downstream stages
+    normalizedInput.extractedContent = perception.files;
+    normalizedInput.extractedText = perception.extractedText;
+
+    // Track if this is first query for NYAN boot optimization
     const isFirstQuery = normalizedInput.sessionId ? isSessionFirstQuery(normalizedInput.sessionId) : false;
     state.isFirstQuery = isFirstQuery;
-    
+
     try {
-      // ========================================
-      // STAGE -1: Context Extraction with φ-Compressed Memory
-      // Entity extraction + human-like episodic memory (5/8 ≈ 1/φ)
-      // ========================================
-      state.transition(PIPELINE_STEPS.CONTEXT_EXTRACT);
-      
       // Use memory-enhanced extraction if sessionId provided
       if (normalizedInput.sessionId) {
         state.contextResult = await extractContextWithMemory(
@@ -130,29 +141,32 @@ class PipelineOrchestrator {
           normalizedInput.query,
           normalizedInput.conversationHistory,
           normalizedInput.attachmentHistory || [],
-          normalizedInput.currentAttachment || null
+          perception.hasAttachments ? perception.files[0] : null
         );
-        
-        if (state.contextResult.hasMemory) {
-          console.log(`📝 Stage -1: Memory active - summary: ${state.contextResult.memorySummary ? 'yes' : 'no'}, ` +
-            `messages: ${state.contextResult.memoryStats?.messageCount || 0}`);
-        }
       } else {
-        // Fallback to basic entity extraction
         state.contextResult = extractContext(
           normalizedInput.conversationHistory,
           normalizedInput.attachmentHistory || [],
-          8  // 8-message window
+          8
         );
       }
-      
+
+      // If no file in memory but we just ingested one, use it for mode detection
+      if (!state.contextResult.attachmentContext && perception.hasAttachments) {
+        state.contextResult.attachmentContext = {
+          name: perception.files[0].fileName,
+          isCode: perception.files[0].fileType === 'code'
+        };
+      }
+
       // WRITE to DataPackage: Stage S-1 context extraction result
       state.writeToPackage(STAGE_IDS.CONTEXT_EXTRACT, {
         inferredTicker: state.contextResult.inferredTicker,
         hasFinancialContext: state.contextResult.hasFinancialContext,
         hasMemory: state.contextResult.hasMemory,
         attachmentContext: state.contextResult.attachmentContext?.name || null,
-        isCodeReview: state.contextResult.attachmentContext?.isCode || false
+        isCodeReview: state.contextResult.attachmentContext?.isCode || false,
+        perceptionFiles: perception.files.length
       });
       
       if (state.contextResult.attachmentContext?.isCode) {
