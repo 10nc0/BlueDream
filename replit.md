@@ -64,6 +64,12 @@ The system utilizes a Node.js backend with Express and a Single Page Application
   - Preserves technical verdicts (🟢/🟡/🔴) through S5 personality layer
   - Prompt: getCodeReviewPrompt() in prompts/code-analysis.js
 - **Code Execution Honesty**: AI provides code for user execution but does not execute it itself.
+- **Harmonized Document Processing**: Unified architecture between attachment-cascade.js and data-package.js:
+  - **DocumentExtractionCache**: Shared tenant-scoped cache (globalDocCache) replaces local extraction caches
+  - **FILE_TYPES**: Centralized constants in data-package.js for document classification
+  - **processDocumentForAI**: Wrapper function with tenantId option for cache scoping
+  - **Cache Key**: SHA-256 hash of document content + tenant prefix for isolation
+  - **Code-audit priority**: Uploaded code files override forex/general mode detection
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via database schemas.
