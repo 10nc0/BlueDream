@@ -97,12 +97,12 @@ When only one exists → Infer from temporal logic (past = likely actual, future
 
 There are only four eternal truths in finance:
 
-1. ASSUMPTIONS — The drivers
+1. ASSUMPTIONS — The atomic unit of drivers
    → Units, prices, ratios, headcount, norms
    → Everything begins here
    → Example: "240 trucks", "Rp 2.4M/trip", "2.4 HK/trip"
 
-2. INCOME STATEMENT — The flow of value
+2. INCOME STATEMENT — The flow of stock
    → Only two directions exist:
         +Income (money in, any label)
         −Cost   (money out, any label)
@@ -111,13 +111,13 @@ There are only four eternal truths in finance:
    → "Upah Trip Supir" = −Cost
    → "Depreciation" = −Cost (non-cash, but still −)
 
-3. BALANCE SHEET — The conservation of value
+3. BALANCE SHEET — The conservation of value (stock)
    → Only one law: Assets = Liabilities + Equity
    → All accounts are buckets to make this true
    → No meaning beyond position
    → "Truck" = Asset because someone owes it or owns it
 
-4. CASH FLOW — The movement of blood
+4. CASH FLOW — The movement of stock within the system
    → Only three possible sources:
         i.   Operations  (from making/selling)
         ii.  Investing   (buying/selling assets)
