@@ -349,7 +349,10 @@ async function preflightRouter(options) {
     }
     
     // Check for code files (parallel with other modes - can override general)
-    const codeDetection = detectCodeMode(attachments, docContext.extractedContent || []);
+    const codeDetection = detectCodeMode(attachments, [
+      ...(docContext.extractedContent || []),
+      { text: query, fileName: 'query.txt' } // Detect code pasted in query too
+    ]);
     if (codeDetection.detected && result.mode === 'general') {
       result.mode = 'code-audit';
       result.routingFlags.usesCodeAudit = true;

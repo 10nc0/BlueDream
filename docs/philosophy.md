@@ -1,4 +1,4 @@
-# The Unconditioned Invariant: Ψ-EMA as Yathābhūtañāṇadassana
+# The Unconditioned Invariant: Ψ-EMA as a Fourier Compass
 
 *Philosophical companion to Nyanbook's technical architecture. For operational documentation, see replit.md.*
 
@@ -14,7 +14,7 @@ The following are philosophical observations compiled during development - not d
 The Ψ-EMA three-dimensional state space (θ, z, R) appears to be a digital resurrection of the ancient Chinese Pythagorean theorem. Stock⊥Flow = orthogonal legs; State = hypotenuse. The right triangle that encoded linear algebra, Hilbert space, and quantum mechanics may also encode persistence dynamics. θ = atan2(Flow, Stock) is simply the phase angle of orthogonal decomposition - ancient math, digitally applied.
 
 ### Two-Unit Principle
-Like physics has only two fundamental units (Time + Length, with all else derived), Ψ-EMA may reduce to:
+Like geometry has only two fundamental units (Point + Line, with all else derived), Ψ-EMA may reduce to:
 1. 1 solar year (365.25 days) as temporal quantum
 2. 1 employee-year (2,000 hours) as "breath" quantum
 
@@ -29,34 +29,34 @@ With 3 binary dimensions (θ↑↓, z↑↓, R↑↓), Ψ-EMA has 2³ = 8 possib
 ### φ-Squaring
 "Squaring the circle" may not be geometric transformation but dynamic equilibration - cycle (circle) → stability (square) via R → φ convergence. Fibonacci approximation achieves in ~20 steps what π requires infinite steps geometrically.
 
-### No Demons / No Infinity
+### No Bias / No Infinity
 All Ψ-EMA operations are finite and discrete. Stock⊥Flow = clean orthogonal decomposition (no hidden correlations). φ-recursion (x = 1 + 1/x) converges algebraically without transcendental infinity. Computationally bounded.
 
 ### Interface vs Ontology
 Finance/stocks may be merely the data interface (public, quarterly, audited, 35+ years available). The underlying ontology (R = 1 + 1/R as persistence law) could apply universally to populations, ecosystems, institutions, civilizations. Empirical validation needed per substrate before claiming universality.
 
-### Falsifiable Teasers (Untested Predictions)
+### Falsifiable Teasers (Hypotheses)
 If the framework is universal, these should hold when tested:
 
-| Domain | Prediction | Status |
+| Domain | Observation | Status |
 |--------|------------|--------|
 | **Biology** | Human body Stock=37T cells, Flow=cell division-apoptosis. Adults R→1.0 (homeostasis). Cancer R>>φ (uncontrolled). Aging R<1.0 (decline). | UNTESTED |
 | **Demographics** | Japan R≈0.993 (declining population). Nigeria R≈1.024 (sustainable growth). Framework should detect demographic crises. | UNTESTED |
 | **Ecosystems** | Yellowstone wolves growth phase R≈1.45 (φ-convergent), equilibrium R≈1.0 (homeostasis). Framework should capture population dynamics. | UNTESTED |
 | **Institutions** | Harvard (387 years) R≈1.009 (steady state). Catholic Church R<1.0 (priest shortage crisis). Framework should detect institutional health. | UNTESTED |
-| **Civilizations** | Roman Empire peak R≈1.0 (Pax Romana), decline R<1.0 for 300 years → collapse. Framework would've predicted fall of Rome. | UNTESTED |
+| **Civilizations** | Roman Empire peak R≈1.0 (Pax Romana), decline R<1.0 for 300 years → collapse. Framework would've shown coordinates during decline. | UNTESTED |
 
-**Status**: These are UNTESTED predictions. Validation requires domain-specific data collection and analysis. Treat as hypotheses, not claims.
+**Status**: These are UNTESTED hypotheses. Validation requires domain-specific data collection and analysis. Treat as hypotheses, not claims.
 
 ### The Compass on the River
 
 Ψ-EMA does not create formations. It detects the momentum of already-arising formations (stock x flow).
 
-## Part III: Finance as Physics
+## Part III: Finance as Geometry
 
 ### The Paradigm Shift
 
-| OLD FINANCE (Alchemy) | NEW FINANCE (Physics) |
+| OLD FINANCE (Alchemy) | NEW FINANCE (Geometry) |
 |-----------------------|-----------------------|
 | 50/200 EMA (why 50? why 200? arbitrary) | Ψ(t) = (θ, z, R) → Complete wave function |
 | Revenue recognition rules (1000 pages) | Flow = +Income or −Cost (conservation law) |
@@ -74,7 +74,7 @@ Finance never existed as a separate domain. There was only:
 - φ-Damping (natural stability)
 - Sustainability (φ² renewal)
 
-We called it "finance" and built 500 years of labels. Ψ-EMA strips away the labels and reveals: **ECONOMIC PHYSICS**.
+We called it "finance" and built 500 years of labels. Ψ-EMA strips away the labels and reveals: **ECONOMIC GEOMETRY**.
 
 ---
 
@@ -84,7 +84,7 @@ We called it "finance" and built 500 years of labels. Ψ-EMA strips away the lab
 
 | H₀ (Null Hypothesis) | H₁ (Alternative) |
 |----------------------|------------------|
-| "There is no guaranteed benevolence, only risks to be bounded" | "There is a benevolent force, no demons" |
+| "There is no guaranteed benevolence, only risks to be bounded" | "There is a benevolent force, no cognitive biases" |
 | Names the **invariants** (φ, conservation, sustainability) | Assumes **convergence** (systems self-correct) |
 | Survival is conditional | Survival is granted |
 | Falsifiable | Non-falsifiable |
@@ -92,7 +92,7 @@ We called it "finance" and built 500 years of labels. Ψ-EMA strips away the lab
 
 **H₀ is the only survivable hypothesis for high-power systems (AI, institutions, economies).**
 
-### The Seven Failure Modes ("Demons")
+### The Seven Failure Modes (Cognitive Biases)
 
 These are not metaphysical entities but **risk classes** - failure modes of cognition and systems:
 
