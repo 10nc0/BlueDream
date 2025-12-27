@@ -1371,19 +1371,17 @@ function calculateAbsoluteConvergence(zFlows, options = {}) {
 function classifyRegime(ratio, options = {}) {
   const { hasLowSignal = false, currentZScore = null, warning = null } = options;
   
-  // Handle LOW_SIGNAL case: R undefined due to z near zero
-  // CRITICAL: If current z-score is near zero (consolidation zone), force CONSOLIDATION
-  // regardless of computed R ratio from older data
-  if (ratio === null || hasLowSignal || (currentZScore !== null && Math.abs(currentZScore) < 0.15)) {
+  // Handle LOW_SIGNAL or CONSOLIDATION: R === 0 or undefined
+  if (ratio === 0 || ratio === null || hasLowSignal) {
     return {
       regime: 'CONSOLIDATION',
-      label: 'R Undefined (Consolidation)',
+      label: 'R = 0 (Consolidation)',
       emoji: '⚪',
-      hypothesis: 'H₀: R is undefined (z-scores near zero, price at median)',
-      description: 'Price consolidating at current level. Not always fatalism.',
-      warning: warning || 'Near-equilibrium state. R undefined.',
-      magnitude: null,
-      direction: null
+      hypothesis: 'H₀: R is zero or undefined (Equilibrium)',
+      description: 'Price consolidating. Not always fatalism.',
+      warning: warning || 'Consolidation detected. R=0.',
+      magnitude: 0,
+      direction: 'NEUTRAL'
     };
   }
   
@@ -1391,154 +1389,87 @@ function classifyRegime(ratio, options = {}) {
   const magnitude = Math.abs(ratio);
   const direction = ratio >= 0 ? 'SAME' : 'REVERSED';
   const isReversal = ratio < 0;
-  const zPositive = currentZScore !== null && currentZScore > 0;
   
   // PHASE REVERSAL: R < 0 (direction changed)
-  // vφ⁶: Z-score-aware reversal classification
-  // - PANIC_REVERSAL: R < 0 AND z < 0 (falling and accelerating down)
-  // - RELIEF_REVERSAL: R < 0 AND z > 0 (above median but direction changing)
-  // Magnitude (|R| vs φ) determines isExplosive flag
   if (isReversal) {
-    const isExplosive = magnitude > R_BOUNDS.UPPER;
+    const isExplosive = magnitude > PHI; // Use 1.618 for explosive check
     const zNegative = currentZScore !== null && currentZScore < 0;
+    const zPositive = currentZScore !== null && currentZScore > 0;
     
     if (zNegative) {
-      // PANIC REVERSAL: R < 0 AND z < 0 (accelerating selloff)
+      // PANIC REVERSAL: R < 0 AND z < 0
       return {
         regime: 'PANIC_REVERSAL',
         label: `R < 0, Z < 0 (Panic Reversal)`,
         emoji: '🔻',
-        hypothesis: `H₀: R = ${ratio.toFixed(3)} (reversed), Z = ${currentZScore.toFixed(2)} < 0`,
-        description: 'Panic reversal: direction changed while below median. Accelerating selloff.',
+        description: 'Panic reversal: accelerating selloff.',
         magnitude,
         direction,
-        isExplosive,
-        zScore: currentZScore,
-        warning: isExplosive 
-          ? 'Flash risk: Explosive panic reversal. High-volatility selloff in progress.'
-          : 'Panic reversal detected. Monitor for capitulation or stabilization.'
-      };
-    } else if (zPositive) {
-      // RELIEF REVERSAL: R < 0 AND z > 0 (profit taking / distribution)
-      return {
-        regime: 'RELIEF_REVERSAL',
-        label: `R < 0, Z > 0 (Relief Reversal)`,
-        emoji: '🔺',
-        hypothesis: `H₀: R = ${ratio.toFixed(3)} (reversed), Z = ${currentZScore.toFixed(2)} > 0`,
-        description: 'Relief reversal: direction changed while above median. Distribution or profit taking.',
-        magnitude,
-        direction,
-        isExplosive,
-        zScore: currentZScore,
-        warning: isExplosive
-          ? 'Flash risk: Explosive relief reversal. Potential top formation.'
-          : 'Relief reversal detected. Controlled deorbiting from high position.'
+        isExplosive
       };
     } else {
-      // Z-score unavailable: fall back to magnitude-based classification
-      if (isExplosive) {
-        return {
-          regime: 'PHASE_REVERSAL',
-          label: `R < 0, |R| > φ (Explosive Reversal)`,
-          emoji: '💥',
-          hypothesis: `H₀: R = ${ratio.toFixed(3)} (phase reversed, |R| = ${magnitude.toFixed(3)} > φ)`,
-          description: 'Phase reversed with amplitude explosion. High volatility event.',
-          magnitude,
-          direction,
-          isExplosive: true,
-          warning: 'Explosive phase reversal detected. System in high-volatility transition.'
-        };
-      } else {
-        return {
-          regime: 'DAMPED_REVERSAL',
-          label: `R < 0, |R| ≤ φ (Damped Reversal)`,
-          emoji: '🔄',
-          hypothesis: `H₀: R = ${ratio.toFixed(3)} (phase reversed, |R| = ${magnitude.toFixed(3)} ≤ φ)`,
-          description: 'Phase reversed with damped amplitude. Normal oscillation crossing equilibrium.',
-          magnitude,
-          direction,
-          isExplosive: false
-        };
-      }
+      // PROFIT TAKING: R < 0 AND z > 0 (Relief Reversal)
+      return {
+        regime: 'RELIEF_REVERSAL', // Keeps existing key for compatibility
+        label: `R < 0, Z > 0 (Profit Taking)`,
+        emoji: '🔺',
+        description: 'Profit taking / Distribution.',
+        magnitude,
+        direction,
+        isExplosive
+      };
     }
   }
   
   // POSITIVE R: φ-Orbital Classification
-  // φ-derived bounds: φ⁻² ≈ 0.382, φ⁻¹ ≈ 0.618, φ ≈ 1.618, φ² ≈ 2.618
-  
-  if (ratio > PHI_SQUARED) {
-    // ESCAPE VELOCITY: R > φ² (bubble → crash risk)
-    return {
-      regime: 'ESCAPE',
-      label: `R > φ² (Escape Velocity)`,
-      emoji: '🚀',
-      hypothesis: `H₀: R > φ² (${PHI_SQUARED.toFixed(3)})`,
-      description: 'Escape velocity exceeded. Bubble formation → potential crash.',
-      magnitude,
-      direction,
-      warning: 'Flash risk: System exceeded escape velocity. Unsustainable acceleration.'
-    };
-  } else if (ratio >= R_BOUNDS.UPPER) {
-    // OPTIMISM: R ∈ [φ, φ²] (accelerating orbit)
-    return {
-      regime: 'OPTIMISM',
-      label: `R ∈ [φ, φ²] (Optimism)`,
-      emoji: '🟡',
-      hypothesis: `H₀: R ∈ [${R_BOUNDS.UPPER.toFixed(3)}, ${PHI_SQUARED.toFixed(3)}]`,
-      description: 'Accelerating orbit. Growth phase, watch for escape velocity.',
-      magnitude,
-      direction
-    };
-  } else if (ratio >= R_BOUNDS.LOWER) {
-    // BREATHING: R ∈ [φ⁻¹, φ] (circular orbit, golden rhythm)
-    return {
-      regime: 'BREATHING',
-      label: `R ∈ [φ⁻¹, φ] (Breathing)`,
-      emoji: '🟢',
-      hypothesis: `H₀: R ∈ [${R_BOUNDS.LOWER.toFixed(3)}, ${R_BOUNDS.UPPER.toFixed(3)}]`,
-      description: 'Circular orbit. Golden rhythm, sustainable oscillation.',
-      magnitude,
-      direction
-    };
-  } else if (ratio >= R_BOUNDS.TOLERANCE) {
-    // FATALISM CLIFF: R ∈ [φ⁻², φ⁻¹] (danger zone, decaying orbit)
-    return {
-      regime: 'FATALISM_CLIFF',
-      label: `R ∈ [φ⁻², φ⁻¹] (Fatalism Cliff)`,
-      emoji: '🟠',
-      hypothesis: `H₀: R ∈ [${R_BOUNDS.TOLERANCE.toFixed(3)}, ${R_BOUNDS.LOWER.toFixed(3)}]`,
-      description: 'Danger zone. Decaying orbit approaching capture velocity.',
-      magnitude,
-      direction,
-      warning: 'Approaching fatalism threshold. Monitor for reversal or collapse.'
-    };
-  } else {
-    // R < φ⁻² (capture velocity zone)
-    if (zPositive) {
-      // BULLISH REVERSAL: R < φ⁻² but Z > 0 (momentum still positive)
+  if (ratio < 0.382) {
+    // BULLISH REVERSAL / FATALISM
+    if (currentZScore > 0) {
       return {
         regime: 'BULLISH_REVERSAL',
-        label: `R < φ⁻², Z > 0 (Bullish Reversal)`,
+        label: `R < 0.382, Z > 0 (Bullish Reversal)`,
         emoji: '💚',
-        hypothesis: `H₀: R < φ⁻² (${R_BOUNDS.TOLERANCE.toFixed(3)}) but Z = ${currentZScore.toFixed(2)} > 0`,
-        description: 'Capture velocity zone but positive momentum. Potential reversal forming.',
+        description: 'Bullish reversal.',
         magnitude,
-        direction,
-        zScore: currentZScore
+        direction
       };
     } else {
-      // FATALISM: R < φ⁻² and Z ≤ 0 (capture velocity → void)
       return {
         regime: 'FATALISM',
-        label: `R < φ⁻² (Fatalism)`,
+        label: `R < 0.382 (Fatalism)`,
         emoji: '🔵',
-        hypothesis: `H₀: R < φ⁻² (${R_BOUNDS.TOLERANCE.toFixed(3)})`,
-        description: 'Capture velocity. Falling inward toward singularity.',
+        description: 'Fatalism: falling toward void.',
         magnitude,
-        direction,
-        warning: 'System below capture velocity. Amplitude collapsing.'
+        direction
       };
     }
+  } else if (ratio < 0.6) {
+    return {
+      regime: 'FATALISM_CLIFF',
+      label: `R < 0.6 (Fatalism Cliff)`,
+      emoji: '🟠',
+      description: 'Fatalism cliff.',
+      magnitude,
+      direction
+    };
+  } else if (ratio < 1.618) {
+    return {
+      regime: 'BREATHING',
+      label: `R < 1.618 (Breathing)`,
+      emoji: '🟢',
+      description: 'Breathing.',
+      magnitude,
+      direction
+    };
+  } else {
+    return {
+      regime: 'OPTIMISM',
+      label: `R >= 1.618 (Optimism)`,
+      emoji: '🟡',
+      description: 'Optimism / Accelerating.',
+      magnitude,
+      direction
+    };
   }
 }
 
