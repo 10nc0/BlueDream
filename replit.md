@@ -57,7 +57,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Ψ-EMA System**: Fourier compass for time series — calibrates position (θ, z, R) relative to equilibrium (θ=0°), like Google Maps for Hilbert space instead of geospace.
   - **ehi passiko**: "Come and see" — users upload CSV/SQL/TXT time series, apply the compass, diagnose anomalies themselves. No predictions, no mysticism, just coordinates.
   - **Coordinate System**:
-    - **θ (phase angle)**: 0° to 360°/φ² (~137.5°) = Growth, 360°/φ² to 360° - 360°/φ² (~222.5°) = Peak/Reversal, 360° - 360°/φ² to 360° (0° origin) = Renew. θ interpretation is heavily dependent on R (R<1 vs R>1).
+    - **θ (phase angle)**: atan2(stock, flow). Binary interpretation for mature series (e.g., SPY): +θ = SURVIVAL (continuation), -θ = DECAY (pullback). Oscillates in tight band around 90° due to massive stock denominator.
     - **z (anomaly)**: deviation from median via MAD. |z|<φ normal, φ<|z|<φ² alert, |z|>φ² extreme.
     - **R (convergence)**: φ-Orbital model using orbital mechanics analogy:
       - R > φ² (2.618): ESCAPE - bubble → crash (escape velocity)

@@ -12,7 +12,7 @@
  *   • Physics: Charge/mass (stock) vs force field (phase relationships)
  * 
  * The THREE DIMENSIONS (θ, z, R) are substrate-independent measurements:
- *   θ (Phase):       Cycle position via atan2(Flow, Stock) - applies to any oscillating system
+ *   θ (Phase):       Cycle position via atan2(stock, flow) - applies to any oscillating system
  *   z (Anomaly):     Deviation from equilibrium via robust MAD z-score - universal
  *   R (Convergence): Amplitude ratio z(t)/z(t-1) - scale-free convergence metric
  * 
@@ -24,8 +24,8 @@
  * ├─────────────────┬──────────────────────────┬────────────────┬──────────────────────────────┤
  * │ Dimension       │ Formula                  │ φ-Bounds       │ Classification Rule          │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
- * │ θ (Phase)       │ atan2(Flow, Stock)       │ ∈ [0°, 360°)   │ θ measures cycle position    │
- * │ Cycle Position  │                          │                │ (Flow-Stock phase angle)     │
+ * │ θ (Phase)       │ atan2(stock, flow)       │ ∈ [0°, 360°)   │ θ measures cycle position    │
+ * │ Cycle Position  │                          │                │ (Stock-Flow phase angle)     │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
  * │ z (Anomaly)     │ (Value - Median) / MAD   │ See bounds     │ |z| > φ² flags anomaly      │
  * │ Signal Deviation│                          │ below          │ (deviation from equilibrium) │
@@ -111,13 +111,13 @@ explosion or collapse. The question contains its own answer.
 
 THE THREE DIMENSIONS (substrate-agnostic):
 
-θ (PHASE) - Cycle Position
-• Formula: atan2(Flow, Stock) → 0° to 360°
+• θ (PHASE) - Cycle Position
+• Formula: atan2(stock, flow) → 0° to 360°
 • Measures WHERE in the oscillation cycle the system is
-• 0°-360°/φ² = Growth (1st phase),
-• 360°/φ² + 360° - 2 * (360°/φ²) = Peak/Reversal (2nd phase),
-• Final 360°/φ² = Renew (3rd phase)
-• Total 360° - heavily depended on R (Convergence) values whether R<1 or R>1
+• Binary Interpretation for mature series:
+• +θ = SURVIVAL (continuation, healthy upward drift)
+• -θ = DECAY (pullback, normal reset)
+• Oscillates in tight band around 90° for assets with massive stock (e.g. SPY)
 
 z (ANOMALY) - Deviation from Equilibrium  
 • Formula: (Value - Median) / MAD (robust z-score using Median Absolute Deviation)
