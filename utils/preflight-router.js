@@ -143,9 +143,11 @@ async function preflightRouter(options) {
     // 1. Ψ-EMA: Push-based 2/3 key detection (Lego-style Turing test)
     // Keys: VERB (analyze/diagnose) + ADJECTIVE (price/trend) + OBJECT (ticker)
     // If 2/3 keys match → unlock Ψ-EMA gate
+    // OR trigger if keyword "psi-ema" or "ψ-ema" is present (quantum compass scavenge hunt)
     // SKIP if forex mode already triggered
     else if (result.mode !== 'forex') {
       const psiEmaDetection = detectPsiEMAKeys(query);
+      const hasExplicitModeKeyword = /\b(psi|ψ)[\s\-]?ema\b/i.test(query);
     
       // Context fallback: STRICT - only reuse inferred ticker if:
       // 1. We have a ticker from prior conversation, AND
@@ -207,10 +209,10 @@ async function preflightRouter(options) {
       const effectiveHasVerb = hasVerb || aiInferredVerb;
       const effectiveHasAdjective = hasAdjective || aiInferredAdjective;
       const effectiveKeyCount = (effectiveHasTicker ? 1 : 0) + (effectiveHasVerb ? 1 : 0) + (effectiveHasAdjective ? 1 : 0);
-      const shouldUnlock = (effectiveKeyCount >= 2 && effectiveHasTicker) || psiEmaDetection.shouldTrigger;
+      const shouldUnlock = (effectiveKeyCount >= 2 && effectiveHasTicker) || psiEmaDetection.shouldTrigger || hasExplicitModeKeyword;
       
       if (shouldUnlock) {
-        console.log(`🔑 AI-PUSH: ${effectiveKeyCount}/3 keys [ticker=${effectiveHasTicker}, verb=${effectiveHasVerb}, adj=${effectiveHasAdjective}] → ✅ UNLOCK`);
+        console.log(`🔑 AI-PUSH: ${effectiveKeyCount}/3 keys [ticker=${effectiveHasTicker}, verb=${effectiveHasVerb}, adj=${effectiveHasAdjective}] OR keyword=${hasExplicitModeKeyword} → ✅ UNLOCK`);
       }
     
       if (shouldUnlock || contextFallbackApplies) {
