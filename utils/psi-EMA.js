@@ -1368,67 +1368,104 @@ function calculateAbsoluteConvergence(zFlows, options = {}) {
  * @param {string} options.warning - Warning message from convergence analysis
  * @returns {Object} Regime classification with magnitude and direction
  */
+/**
+ * Unified Pathogen and Regime Classification (vφ⁷)
+ * 1-pass, 1-cluster categorization for market state and disease stage
+ * 
+ * Cascade:
+ * R = 0 → CONSOLIDATION (healthy)
+ * R < 0 → Reversal states (Panic/Profit Taking)
+ * R < 0.382 → Fatalism / Bullish Reversal
+ * R < 0.6 → Fatalism Cliff
+ * R < 1.618 → Breathing (healthy)
+ * R >= 1.618 → Optimism
+ * R > 2.0 AND z > 3 → Bubble Cancer (Pathogen)
+ * R > 2.5 → Ponzi Virus (Pathogen)
+ * 
+ * @param {number} ratio - Convergence R ratio
+ * @param {Object} options - Classification context
+ * @returns {Object} Unified classification result
+ */
 function classifyRegime(ratio, options = {}) {
   const { hasLowSignal = false, currentZScore = null, warning = null } = options;
+  const currentZ = currentZScore || 0;
   
-  // Handle LOW_SIGNAL or CONSOLIDATION: R === 0 or undefined
+  // 1. CONSOLIDATION / LOW SIGNAL
   if (ratio === 0 || ratio === null || hasLowSignal) {
     return {
       regime: 'CONSOLIDATION',
+      pathogen: null,
       label: 'R = 0 (Consolidation)',
       emoji: '⚪',
-      hypothesis: 'H₀: R is zero or undefined (Equilibrium)',
       description: 'Price consolidating. Not always fatalism.',
-      warning: warning || 'Consolidation detected. R=0.',
       magnitude: 0,
       direction: 'NEUTRAL'
     };
   }
   
-  // vφ⁵: Separate magnitude from direction
   const magnitude = Math.abs(ratio);
   const direction = ratio >= 0 ? 'SAME' : 'REVERSED';
   const isReversal = ratio < 0;
+  const zPositive = currentZ > 0;
+  const zNegative = currentZ < 0;
+
+  // 2. PATHOGEN DETECTION (Top-priority clusters)
+  let pathogen = null;
   
-  // PHASE REVERSAL: R < 0 (direction changed)
+  // Bubble Cancer: |z| > 3 AND R > 2.0
+  if (Math.abs(currentZ) > 3 && ratio > 2.0) {
+    const severity = (Math.abs(currentZ) - 3) / 2;
+    pathogen = {
+      ...PATHOGENS.BUBBLE_CANCER,
+      severity: Math.min(1, severity),
+      stage: classifyStage(severity, 'bubble')
+    };
+  } 
+  // Ponzi Virus: R > 2.5
+  else if (ratio > 2.5) {
+    const severity = (ratio - 2.5) / 1.5;
+    pathogen = {
+      ...PATHOGENS.PONZI_VIRUS,
+      severity: Math.min(1, severity),
+      stage: classifyStage(severity, 'ponzi')
+    };
+  }
+
+  // 3. REGIME CLASSIFICATION
   if (isReversal) {
-    const isExplosive = magnitude > PHI; // Use 1.618 for explosive check
-    const zNegative = currentZScore !== null && currentZScore < 0;
-    const zPositive = currentZScore !== null && currentZScore > 0;
-    
+    const isExplosive = magnitude > PHI;
     if (zNegative) {
-      // PANIC REVERSAL: R < 0 AND z < 0
       return {
         regime: 'PANIC_REVERSAL',
+        pathogen,
         label: `R < 0, Z < 0 (Panic Reversal)`,
-        emoji: '🔻',
-        description: 'Panic reversal: accelerating selloff.',
+        emoji: pathogen?.emoji || '🔻',
+        description: pathogen ? `${pathogen.name} in Panic.` : 'Panic reversal: accelerating selloff.',
         magnitude,
         direction,
         isExplosive
       };
     } else {
-      // PROFIT TAKING: R < 0 AND z > 0 (Relief Reversal)
       return {
-        regime: 'RELIEF_REVERSAL', // Keeps existing key for compatibility
+        regime: 'RELIEF_REVERSAL',
+        pathogen,
         label: `R < 0, Z > 0 (Profit Taking)`,
-        emoji: '🔺',
-        description: 'Profit taking / Distribution.',
+        emoji: pathogen?.emoji || '🔺',
+        description: pathogen ? `${pathogen.name} taking profit.` : 'Profit taking / Distribution.',
         magnitude,
         direction,
         isExplosive
       };
     }
   }
-  
-  // POSITIVE R: φ-Orbital Classification
+
   if (ratio < 0.382) {
-    // BULLISH REVERSAL / FATALISM
-    if (currentZScore > 0) {
+    if (zPositive) {
       return {
         regime: 'BULLISH_REVERSAL',
+        pathogen,
         label: `R < 0.382, Z > 0 (Bullish Reversal)`,
-        emoji: '💚',
+        emoji: pathogen?.emoji || '💚',
         description: 'Bullish reversal.',
         magnitude,
         direction
@@ -1436,8 +1473,9 @@ function classifyRegime(ratio, options = {}) {
     } else {
       return {
         regime: 'FATALISM',
+        pathogen,
         label: `R < 0.382 (Fatalism)`,
-        emoji: '🔵',
+        emoji: pathogen?.emoji || '🔵',
         description: 'Fatalism: falling toward void.',
         magnitude,
         direction
@@ -1446,8 +1484,9 @@ function classifyRegime(ratio, options = {}) {
   } else if (ratio < 0.6) {
     return {
       regime: 'FATALISM_CLIFF',
+      pathogen,
       label: `R < 0.6 (Fatalism Cliff)`,
-      emoji: '🟠',
+      emoji: pathogen?.emoji || '🟠',
       description: 'Fatalism cliff.',
       magnitude,
       direction
@@ -1455,18 +1494,31 @@ function classifyRegime(ratio, options = {}) {
   } else if (ratio < 1.618) {
     return {
       regime: 'BREATHING',
+      pathogen,
       label: `R < 1.618 (Breathing)`,
-      emoji: '🟢',
+      emoji: pathogen?.emoji || '🟢',
       description: 'Breathing.',
       magnitude,
       direction
     };
-  } else {
+  } else if (ratio < 2.0 && !pathogen) {
     return {
       regime: 'OPTIMISM',
-      label: `R >= 1.618 (Optimism)`,
+      pathogen,
+      label: `R < 2.0 (Optimism)`,
       emoji: '🟡',
       description: 'Optimism / Accelerating.',
+      magnitude,
+      direction
+    };
+  } else {
+    // Extreme zones (Bubble/Ponzi territory)
+    return {
+      regime: pathogen ? 'PATHOLOGICAL' : 'EXTREME_OPTIMISM',
+      pathogen,
+      label: pathogen ? `${pathogen.name} (${pathogen.stage.label})` : 'Extreme Optimism',
+      emoji: pathogen?.emoji || '🔥',
+      description: pathogen ? pathogen.mechanism : 'Extreme acceleration beyond φ².',
       magnitude,
       direction
     };
