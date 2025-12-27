@@ -826,20 +826,24 @@ User query: ${query}`;
   /**
    * PERSONALITY LAYER (S5) - Unified format enforcement
    * All formatting happens HERE, not scattered across prompts/contexts
-   * This is the SINGLE source of truth for output formatting
+   * Uses MODE REGISTRY for per-mode formatting rules
    */
   applyPersonalityFormat(answer, mode) {
     if (!answer) return answer;
     
+    const { getPersonalityConfig } = require('../lib/mode-registry');
+    const config = getPersonalityConfig(mode);
+    
     let cleaned = answer;
     
-    // For code audits, we skip intro/outro stripping to preserve technical verdict and context
-    if (mode === 'code-audit') {
-        if (!cleaned.includes('~nyan')) {
-          cleaned = cleaned.trimEnd() + '\n\n🔥 ~nyan';
-        }
-        return cleaned.trim();
+    // Registry-driven: skip intro/outro stripping for modes that need it
+    if (config.skipIntroOutro) {
+      if (config.appendSignature && !cleaned.includes('~nyan')) {
+        cleaned = cleaned.trimEnd() + '\n\n🔥 ~nyan';
+      }
+      return cleaned.trim();
     }
+    
     const introFluffPatterns = [
       /^##?\s*Summary[^\n]*\n+[^\n]*(?:comprehensive|detailed|provides|uncertain)[^\n]*\n+/i,
       /^##?\s*Summary[^\n]*\n+[^\n]*following[^\n]*\n+/i,
@@ -911,10 +915,14 @@ function createPipelineOrchestrator(config) {
 function applyPersonalityFormat(answer, mode = 'general') {
   if (!answer) return answer;
   
+  const { getPersonalityConfig } = require('../lib/mode-registry');
+  const config = getPersonalityConfig(mode);
+  
   let cleaned = answer;
   
-  if (mode === 'code-audit') {
-    if (!cleaned.includes('~nyan')) {
+  // Registry-driven: skip intro/outro stripping for modes that need it
+  if (config.skipIntroOutro) {
+    if (config.appendSignature && !cleaned.includes('~nyan')) {
       cleaned = cleaned.trimEnd() + '\n\n🔥 ~nyan';
     }
     return cleaned.trim();

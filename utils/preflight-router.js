@@ -17,6 +17,7 @@ const { getFinancialPhysicsSeed } = require('./financial-physics');
 const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal-analysis');
 const { detectForexPair, isForexQuery, fetchForexRate, buildForexContext } = require('./forex-fetcher');
 const { getSeedMetricProxy, detectSeedMetricIntent } = require('../prompts/seed-metric');
+const { detectCodeMode, getLanguageFromExtension } = require('../lib/mode-registry');
 
 const PSI_EMA_IDENTITY_PATTERNS = [
   /^what\s+is\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
@@ -343,6 +344,18 @@ async function preflightRouter(options) {
     if (docContext.hasLegalDoc || 
         attachments.some(a => LEGAL_KEYWORDS_REGEX?.test(a.name || ''))) {
       result.routingFlags.usesLegalAnalysis = true;
+    }
+    
+    // Check for code files (parallel with other modes - can override general)
+    const codeDetection = detectCodeMode(attachments, docContext.extractedContent || []);
+    if (codeDetection.detected && result.mode === 'general') {
+      result.mode = 'code-audit';
+      result.routingFlags.usesCodeAudit = true;
+      result.codeAuditMeta = {
+        fileName: codeDetection.fileName,
+        language: codeDetection.language
+      };
+      console.log(`🔍 Preflight: CODE_AUDIT detected for ${codeDetection.fileName} (${codeDetection.language})`);
     }
     
   } catch (err) {
