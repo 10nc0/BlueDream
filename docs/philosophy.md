@@ -188,8 +188,10 @@ All systems collapse when extraction exceeds ~10-12× baseline efficiency (φ⁵
 | **FATALISM_CLIFF** | R ∈ [φ⁻², φ⁻¹] | 0.382 - 0.618 | 🟠 | Danger zone, decaying orbit |
 | **BULLISH_REVERSAL** | R < φ⁻², Z > 0 | < 0.382 | 💚 | Capture zone but positive momentum |
 | **FATALISM** | R < φ⁻², Z ≤ 0 | < 0.382 | 🔵 | Capture velocity → void |
-| **DAMPED_REVERSAL** | R < 0, \|R\| ≤ φ | Reversed | 🔄 | Normal oscillation crossing zero |
-| **PHASE_REVERSAL** | R < 0, \|R\| > φ | Reversed | 💥 | Explosive direction change |
+| **PANIC_REVERSAL** | R < 0, Z < 0 | Reversed | 🔻 | Accelerating selloff (falling + direction change) |
+| **RELIEF_REVERSAL** | R < 0, Z > 0 | Reversed | 🔺 | Distribution/profit taking (above median + direction change) |
+| **DAMPED_REVERSAL** | R < 0, Z unavailable, \|R\| ≤ φ | Reversed | 🔄 | Normal oscillation crossing zero (fallback) |
+| **PHASE_REVERSAL** | R < 0, Z unavailable, \|R\| > φ | Reversed | 💥 | Explosive direction change (fallback) |
 
 ---
 

@@ -66,6 +66,10 @@ The system utilizes a Node.js backend with Express and a Single Page Application
       - R ∈ [φ⁻², φ⁻¹] (0.382-0.618): FATALISM_CLIFF - danger zone, decaying orbit
       - R < φ⁻² + Z > 0: BULLISH_REVERSAL - capture zone but positive momentum
       - R < φ⁻² + Z ≤ 0: FATALISM - capture velocity → void
+    - **Phase Reversals (R < 0)**: Z-score-aware reversal classification:
+      - R < 0 + Z < 0: PANIC_REVERSAL - accelerating selloff (falling + direction change)
+      - R < 0 + Z > 0: RELIEF_REVERSAL - distribution/profit taking (above median + direction change)
+      - R < 0 + Z unavailable: fallback to PHASE_REVERSAL (|R|>φ) or DAMPED_REVERSAL (|R|≤φ)
   - **Tool-First Design**: Framework measures where you ARE on the wave, not where you're going. Users navigate; the compass just shows true north (equilibrium).
 - **Unified Personality Layer**: Enforces formatting via regex post-processing.
 - **Mode Registry (lib/mode-registry.js)**: Plug-and-play mode configuration for the 7-stage pipeline:

@@ -1394,32 +1394,72 @@ function classifyRegime(ratio, options = {}) {
   const zPositive = currentZScore !== null && currentZScore > 0;
   
   // PHASE REVERSAL: R < 0 (direction changed)
+  // vφ⁶: Z-score-aware reversal classification
+  // - PANIC_REVERSAL: R < 0 AND z < 0 (falling and accelerating down)
+  // - RELIEF_REVERSAL: R < 0 AND z > 0 (above median but direction changing)
+  // Magnitude (|R| vs φ) determines isExplosive flag
   if (isReversal) {
-    if (magnitude > R_BOUNDS.UPPER) {
-      // Explosive reversal: |R| > φ with sign flip = volatility explosion
+    const isExplosive = magnitude > R_BOUNDS.UPPER;
+    const zNegative = currentZScore !== null && currentZScore < 0;
+    
+    if (zNegative) {
+      // PANIC REVERSAL: R < 0 AND z < 0 (accelerating selloff)
       return {
-        regime: 'PHASE_REVERSAL',
-        label: `R < 0, |R| > φ (Explosive Reversal)`,
-        emoji: '💥',
-        hypothesis: `H₀: R = ${ratio.toFixed(3)} (phase reversed, |R| = ${magnitude.toFixed(3)} > φ)`,
-        description: 'Phase reversed with amplitude explosion. High volatility event.',
+        regime: 'PANIC_REVERSAL',
+        label: `R < 0, Z < 0 (Panic Reversal)`,
+        emoji: '🔻',
+        hypothesis: `H₀: R = ${ratio.toFixed(3)} (reversed), Z = ${currentZScore.toFixed(2)} < 0`,
+        description: 'Panic reversal: direction changed while below median. Accelerating selloff.',
         magnitude,
         direction,
-        isExplosive: true,
-        warning: 'Explosive phase reversal detected. System in high-volatility transition.'
+        isExplosive,
+        zScore: currentZScore,
+        warning: isExplosive 
+          ? 'Flash risk: Explosive panic reversal. High-volatility selloff in progress.'
+          : 'Panic reversal detected. Monitor for capitulation or stabilization.'
+      };
+    } else if (zPositive) {
+      // RELIEF REVERSAL: R < 0 AND z > 0 (profit taking / distribution)
+      return {
+        regime: 'RELIEF_REVERSAL',
+        label: `R < 0, Z > 0 (Relief Reversal)`,
+        emoji: '🔺',
+        hypothesis: `H₀: R = ${ratio.toFixed(3)} (reversed), Z = ${currentZScore.toFixed(2)} > 0`,
+        description: 'Relief reversal: direction changed while above median. Distribution or profit taking.',
+        magnitude,
+        direction,
+        isExplosive,
+        zScore: currentZScore,
+        warning: isExplosive
+          ? 'Flash risk: Explosive relief reversal. Potential top formation.'
+          : 'Relief reversal detected. Controlled deorbiting from high position.'
       };
     } else {
-      // Damped reversal: |R| ≤ φ with sign flip = normal oscillation crossing zero
-      return {
-        regime: 'DAMPED_REVERSAL',
-        label: `R < 0, |R| ≤ φ (Damped Reversal)`,
-        emoji: '🔄',
-        hypothesis: `H₀: R = ${ratio.toFixed(3)} (phase reversed, |R| = ${magnitude.toFixed(3)} ≤ φ)`,
-        description: 'Phase reversed with damped amplitude. Normal oscillation crossing equilibrium.',
-        magnitude,
-        direction,
-        isExplosive: false
-      };
+      // Z-score unavailable: fall back to magnitude-based classification
+      if (isExplosive) {
+        return {
+          regime: 'PHASE_REVERSAL',
+          label: `R < 0, |R| > φ (Explosive Reversal)`,
+          emoji: '💥',
+          hypothesis: `H₀: R = ${ratio.toFixed(3)} (phase reversed, |R| = ${magnitude.toFixed(3)} > φ)`,
+          description: 'Phase reversed with amplitude explosion. High volatility event.',
+          magnitude,
+          direction,
+          isExplosive: true,
+          warning: 'Explosive phase reversal detected. System in high-volatility transition.'
+        };
+      } else {
+        return {
+          regime: 'DAMPED_REVERSAL',
+          label: `R < 0, |R| ≤ φ (Damped Reversal)`,
+          emoji: '🔄',
+          hypothesis: `H₀: R = ${ratio.toFixed(3)} (phase reversed, |R| = ${magnitude.toFixed(3)} ≤ φ)`,
+          description: 'Phase reversed with damped amplitude. Normal oscillation crossing equilibrium.',
+          magnitude,
+          direction,
+          isExplosive: false
+        };
+      }
     }
   }
   
