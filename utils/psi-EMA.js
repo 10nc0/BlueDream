@@ -101,10 +101,10 @@ THE THREE DIMENSIONS (substrate-agnostic):
 θ (PHASE) - Cycle Position
 • Formula: atan2(Flow, Stock) → 0° to 360°
 • Measures WHERE in the oscillation cycle the system is
-• 0°-360°/φ² = Growth (1st phase),
-• 360°/φ² + 360° - 2 * (360°/φ²) = Peak/Reversal (2nd phase),
-• Final 360°/φ² = Renew (3rd phase)
-• Total 360° - heavily depended on R (Convergence) values whether R<1 or R>1
+• 0° to 360°/φ² (~137.5°) = Growth (1st phase)
+• 360°/φ² to 360° - 360°/φ² (~137.5° to ~222.5°) = Peak/Reversal (2nd phase)
+• 360° - 360°/φ² to 360° (~222.5° to 0° origin) = Renew (3rd phase)
+• Total 360° (1 full cycle) — θ interpretation is heavily dependent on R (Convergence): R<1 vs R>1
 
 z (ANOMALY) - Deviation from Equilibrium  
 • Formula: (Value - Median) / MAD (robust z-score using Median Absolute Deviation)

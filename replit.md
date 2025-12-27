@@ -56,7 +56,10 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis.
 - **Ψ-EMA System**: Fourier compass for time series — calibrates position (θ, z, R) relative to equilibrium (θ=0°), like Google Maps for Hilbert space instead of geospace.
   - **ehi passiko**: "Come and see" — users upload CSV/SQL/TXT time series, apply the compass, diagnose anomalies themselves. No predictions, no mysticism, just coordinates.
-  - **Coordinate System**: θ (phase angle 0°-360°), z (deviation from median via MAD), R (convergence ratio). φ-derived thresholds provide consistent measurement scale.
+  - **Coordinate System**:
+    - **θ (phase angle)**: 0° to 360°/φ² (~137.5°) = Growth, 360°/φ² to 360° - 360°/φ² (~222.5°) = Peak/Reversal, 360° - 360°/φ² to 360° (0° origin) = Renew. θ interpretation is heavily dependent on R (R<1 vs R>1).
+    - **z (anomaly)**: deviation from median via MAD. |z|<φ normal, φ<|z|<φ² alert, |z|>φ² extreme.
+    - **R (convergence)**: amplitude ratio. R<φ⁻¹ decay, R∈[φ⁻¹,φ] stable, R>φ growth.
   - **Tool-First Design**: Framework measures where you ARE on the wave, not where you're going. Users navigate; the compass just shows true north (equilibrium).
 - **Unified Personality Layer**: Enforces formatting via regex post-processing.
 - **Mode Registry (lib/mode-registry.js)**: Plug-and-play mode configuration for the 7-stage pipeline:
