@@ -23,6 +23,7 @@
     "discord.js": "^14.24.2",
     "exceljs": "^4.4.0",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.2.1",
     "express-session": "^1.18.2",
     "form-data": "^4.0.4",
     "helmet": "^8.1.0",

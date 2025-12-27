@@ -14,6 +14,7 @@ const helmet = require('helmet');
 const { Pool } = require('pg');
 const session = require('express-session');
 const connectPg = require('connect-pg-simple');
+const rateLimit = require('express-rate-limit');
 const twilio = require('twilio');
 const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
@@ -124,6 +125,10 @@ const pool = new Pool({
 
 // CONNECTION POOL MONITORING: Track connection lifecycle
 pool.on('connect', () => {
+    const usage = (pool.totalCount / pool.options.max) * 100;
+    if (usage > 80) {
+        console.warn(`[${getTimestamp()}] ⚠️ Pool at ${usage.toFixed(0)}% capacity! (${pool.totalCount}/${pool.options.max})`);
+    }
     console.log(`🔌 Pool: Connection acquired (Total: ${pool.totalCount}, Idle: ${pool.idleCount}, Waiting: ${pool.waitingCount})`);
 });
 
@@ -1135,7 +1140,18 @@ async function logAudit(client, req, actionType, targetType, targetId, targetEma
 // ============ WEBHOOK INPUT ENDPOINT (HYBRID MODEL) ============
 // Support ANY input: Telegram bot, Twitter/X, SMS, Email → Discord
 // Example: POST /api/webhook/bridge_t6_abc123 with { text, username, avatar_url, media_url }
-app.post('/api/webhook/:fractalId', async (req, res) => {
+
+// Rate limiting for the webhook endpoint (prevents flood attacks)
+const webhookLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 60, // 60 requests per minute per IP
+    handler: (req, res) => {
+        console.warn(`[${getTimestamp()}] ⚠️ Webhook rate limit exceeded - IP: ${req.ip}`);
+        res.status(429).json({ error: 'Too many requests, please try again later.' });
+    }
+});
+
+app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
     try {
         const fractalIdParam = req.params.fractalId;
         
