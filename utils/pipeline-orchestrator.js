@@ -939,7 +939,9 @@ function applyPersonalityFormat(answer, mode = 'general') {
   // Registry-driven: skip intro/outro stripping for modes that need it
   if (config.skipIntroOutro) {
     if (config.appendSignature && !hasAnySignature(cleaned)) {
-      cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText;
+      const now = new Date();
+      const ts = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+      cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText + ` [${ts}]`;
     }
     return cleaned.trim();
   }
@@ -975,8 +977,18 @@ function applyPersonalityFormat(answer, mode = 'general') {
   }
   
   // Registry-driven signature (general = 🔥 nyan~, others = 🔥 ~nyan)
+  const now = new Date();
+  const ts = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  const signatureWithTs = `${config.signatureText} [${ts}]`;
+  
   if (!hasAnySignature(cleaned)) {
-    cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText;
+    cleaned = cleaned.trimEnd() + '\n\n' + signatureWithTs;
+  } else {
+    // If a signature already exists, try to append the timestamp to it if not present
+    const sig = config.signatureText;
+    if (cleaned.includes(sig) && !cleaned.includes(`[${ts.substring(0, 2)}:`)) {
+      cleaned = cleaned.replace(sig, signatureWithTs);
+    }
   }
   
   return cleaned.trim();
