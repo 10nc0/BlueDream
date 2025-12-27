@@ -55,6 +55,15 @@ The system utilizes a Node.js backend with Express and a Single Page Application
   - **Jerk-Level Physics**: At the 3rd derivative, systems that survive must negotiate with this recursive relation. φ is the emergent attractor, not dogma.
   - **H(0.5) Sweet Spot**: Keep recursive form as ontology, allow φ as observed emergent preference — never treat it as law, only as the statistical preference of systems that managed to survive long enough to be observed.
 - **Unified Personality Layer**: Enforces formatting via regex post-processing.
+- **Mode Registry (lib/mode-registry.js)**: Plug-and-play mode configuration for the 7-stage pipeline:
+  - Each mode declares: detection heuristics, personality formatting rules (skipIntroOutro, preserveVerdicts)
+  - Modes: `psi-ema`, `psi-ema-identity`, `forex`, `seed-metric`, `legal`, `code-audit`, `general`
+  - Code detection uses soft consensus (2+ pattern matches) to avoid Excel/data false positives
+  - Personality layer reads from registry instead of hardcoded if-else chains
+- **Code Audit Mode**: Professional security auditor for uploaded code files:
+  - Detects .js/.ts/.py/.go/.java/.cpp/etc. via extension + content patterns (console.log, const, require, async/await)
+  - Preserves technical verdicts (🟢/🟡/🔴) through S5 personality layer
+  - Prompt: getCodeReviewPrompt() in prompts/code-analysis.js
 - **Code Execution Honesty**: AI provides code for user execution but does not execute it itself.
 
 **System Design Choices:**
