@@ -1002,7 +1002,11 @@ function parseUserAgent(userAgent) {
     return { deviceType, browser, os };
 }
 
-// Simple location detection from IP (basic implementation)
+// IP geolocation cache: prevents rate limiting on ipapi.co (1h TTL)
+const ipGeoCache = new Map();
+const IP_GEO_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// Simple location detection from IP (with caching and proper timeout)
 async function getLocationFromIP(ipAddress) {
     try {
         // For local/private IPs, return Unknown
@@ -1010,17 +1014,41 @@ async function getLocationFromIP(ipAddress) {
             return 'Local Network';
         }
         
-        // Use free ipapi.co service for geolocation (no API key needed)
-        const response = await fetch(`https://ipapi.co/${ipAddress}/json/`, {
-            timeout: 3000 // 3 second timeout
-        });
+        // Check cache first
+        const cached = ipGeoCache.get(ipAddress);
+        if (cached && Date.now() - cached.timestamp < IP_GEO_TTL_MS) {
+            return cached.location;
+        }
         
-        if (response.ok) {
-            const data = await response.json();
-            if (data.city && data.country_name) {
-                return `${data.city}, ${data.country_name}`;
-            } else if (data.country_name) {
-                return data.country_name;
+        // Use AbortController for proper fetch timeout (native fetch ignores timeout option)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        
+        try {
+            const response = await fetch(`https://ipapi.co/${ipAddress}/json/`, {
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+                const data = await response.json();
+                let location = 'Unknown Location';
+                if (data.city && data.country_name) {
+                    location = `${data.city}, ${data.country_name}`;
+                } else if (data.country_name) {
+                    location = data.country_name;
+                }
+                
+                // Cache the result
+                ipGeoCache.set(ipAddress, { location, timestamp: Date.now() });
+                return location;
+            }
+        } catch (fetchError) {
+            clearTimeout(timeoutId);
+            if (fetchError.name === 'AbortError') {
+                console.warn(`⏱️ IP geo lookup timed out for ${ipAddress}`);
+            } else {
+                throw fetchError;
             }
         }
         
@@ -1159,8 +1187,14 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
             const internalId = book.id;
             
             // Parse JSON if needed (PostgreSQL returns JSON as string sometimes)
+            // BUG FIX: Wrap in try-catch to handle corrupted JSON gracefully
             if (book && typeof book.output_credentials === 'string') {
-                book.output_credentials = JSON.parse(book.output_credentials);
+                try {
+                    book.output_credentials = JSON.parse(book.output_credentials);
+                } catch (jsonError) {
+                    console.error(`[${getTimestamp()}] ⚠️ Corrupted output_credentials for book ${fractalIdParam}:`, jsonError.message);
+                    book.output_credentials = {};
+                }
             }
             
             // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
