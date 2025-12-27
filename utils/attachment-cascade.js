@@ -2183,6 +2183,83 @@ function formatJSONForGroq(cascadeResult, userQuery) {
     return contextParts.join('\n');
 }
 
+/**
+ * Process document for AI consumption
+ * Wrapper function that handles file type identification and extraction cascade
+ * Returns { text, fileName, success } format expected by nyan-ai.js
+ */
+async function processDocumentForAI(buffer, fileName, mimeType) {
+    try {
+        // Handle base64 encoded data with proper detection
+        let dataBuffer = buffer;
+        if (typeof buffer === 'string') {
+            // Strip data URL prefix if present
+            const base64Match = buffer.match(/^data:[^;]+;base64,(.+)$/);
+            if (base64Match) {
+                dataBuffer = Buffer.from(base64Match[1], 'base64');
+            } else {
+                // Detect if string is valid base64 or plain text
+                // Base64 strings are typically longer and contain only valid chars
+                const isBase64 = /^[A-Za-z0-9+/=]+$/.test(buffer) && buffer.length > 100;
+                if (isBase64) {
+                    dataBuffer = Buffer.from(buffer, 'base64');
+                } else {
+                    // Plain text - encode as UTF-8
+                    dataBuffer = Buffer.from(buffer, 'utf-8');
+                }
+            }
+        } else if (!Buffer.isBuffer(buffer)) {
+            dataBuffer = Buffer.from(buffer);
+        }
+        
+        // Get file type with fallback to TEXT for unknown types
+        const fileType = identifyFileType(fileName, mimeType) || { 
+            type: FILE_TYPES.TEXT, 
+            extension: (fileName || '').split('.').pop() || 'txt',
+            mime: mimeType || 'text/plain'
+        };
+        console.log(`📄 Processing document: ${fileName} (type: ${fileType.type})`);
+        
+        const result = await executeExtractionCascade(dataBuffer, fileType, fileName);
+        
+        if (result.success && result.extractedData) {
+            // Build text from extracted data
+            let text = '';
+            
+            if (result.extractedData.text) {
+                text = result.extractedData.text;
+            }
+            
+            // Append table data if present
+            if (result.extractedData.tables && result.extractedData.tables.length > 0) {
+                text += '\n\n--- TABLES ---\n';
+                result.extractedData.tables.forEach((table, i) => {
+                    text += `\nTable ${i + 1}:\n`;
+                    if (table.headers) text += table.headers.join(' | ') + '\n';
+                    if (table.rows) {
+                        table.rows.forEach(row => {
+                            text += row.join(' | ') + '\n';
+                        });
+                    }
+                });
+            }
+            
+            return {
+                text: text.trim(),
+                fileName,
+                success: true,
+                fileType: fileType.type,
+                toolsUsed: result.toolsUsed
+            };
+        }
+        
+        return { text: '', fileName, success: false, error: 'No data extracted' };
+    } catch (error) {
+        console.error(`❌ processDocumentForAI error for ${fileName}:`, error.message);
+        return { text: '', fileName, success: false, error: error.message };
+    }
+}
+
 module.exports = {
     FILE_TYPES,
     DATA_STRUCTURES,
@@ -2192,6 +2269,7 @@ module.exports = {
     executeExtractionCascade,
     formatJSONForGroq,
     getFinancialPhysicsSeed,
+    processDocumentForAI,
     // New functions for multi-doc corporate support
     intelligentChunking,
     buildMultiDocContext

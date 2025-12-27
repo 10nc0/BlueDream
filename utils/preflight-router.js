@@ -348,12 +348,24 @@ async function preflightRouter(options) {
       result.routingFlags.usesLegalAnalysis = true;
     }
     
-    // Check for code files (parallel with other modes - can override general)
+    // Check for code files (HIGH PRIORITY - overrides general AND forex when code files uploaded)
+    // Code audit from attachments takes precedence over ambient mode detection
     const codeDetection = detectCodeMode(attachments, [
       ...(docContext.extractedContent || []),
       { text: query, fileName: 'query.txt' } // Detect code pasted in query too
     ]);
-    if (codeDetection.detected && result.mode === 'general') {
+    const codeFromAttachment = attachments.length > 0 && codeDetection.detected;
+    const codeFromQuery = codeDetection.detected && codeDetection.fileName === 'query.txt';
+    
+    // Override if: (1) code from attachment OR (2) code pasted in query + mode is general/forex
+    if (codeFromAttachment || (codeFromQuery && ['general', 'forex'].includes(result.mode))) {
+      // Clear stale forex state when promoting to code-audit
+      if (result.mode === 'forex') {
+        result.ticker = null;
+        result.forexPair = null;
+        result.routingFlags.usesPsiEma = false;
+        console.log(`🔄 Preflight: Clearing forex state for code-audit override`);
+      }
       result.mode = 'code-audit';
       result.routingFlags.usesCodeAudit = true;
       result.codeAuditMeta = {
