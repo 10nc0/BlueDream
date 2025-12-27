@@ -5,7 +5,30 @@
 const { executeExtractionCascade } = require('./attachment-cascade');
 const { FILE_TYPES } = require('./data-package');
 
+// 30-second timeout for extraction operations (protects against hung file parsing)
+const EXTRACTION_TIMEOUT_MS = 30 * 1000;
+
 class AttachmentIngestion {
+  /**
+   * Wrap promise with timeout for extraction protection
+   * @param {Promise} promise - The promise to wrap
+   * @param {number} ms - Timeout in milliseconds
+   * @param {string} operation - Operation name for error message
+   * @returns {Promise} Wrapped promise that rejects on timeout
+   */
+  static _withTimeout(promise, ms, operation = 'operation') {
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`${operation} timed out after ${ms}ms`));
+      }, ms);
+    });
+    
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      clearTimeout(timeoutId);
+    });
+  }
+
   /**
    * Ingest attachments and prepare S-1 Perception payload
    * @param {Array} attachments - Array of attachment objects
@@ -25,7 +48,30 @@ class AttachmentIngestion {
       };
     }
 
-    const extractionResult = await executeExtractionCascade(attachments, { tenantId });
+    let extractionResult;
+    try {
+      // Wrap extraction cascade with 30s timeout to prevent hung file parsing
+      extractionResult = await this._withTimeout(
+        executeExtractionCascade(attachments, { tenantId }),
+        EXTRACTION_TIMEOUT_MS,
+        'File extraction'
+      );
+    } catch (err) {
+      console.error(`⚠️ AttachmentIngestion: ${err.message}`);
+      // Return partial result on timeout/error
+      return {
+        hasAttachments: true,
+        files: [],
+        extractedText: `[Extraction failed: ${err.message}]`,
+        meta: {
+          fileCount: attachments.length,
+          timestamp: new Date().toISOString(),
+          tenantId,
+          toolsUsed: [],
+          error: err.message
+        }
+      };
+    }
     
     return {
       hasAttachments: true,

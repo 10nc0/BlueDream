@@ -53,6 +53,37 @@ class DocumentExtractionCache {
     this.ttl = 24 * 60 * 60 * 1000; // 24 hours
     this.lastCleanup = Date.now();
     this.cleanupInterval = 5 * 60 * 1000; // 5 minutes
+    
+    // Proactive interval-based cleanup (runs even if no get/set calls)
+    this._cleanupTimer = setInterval(() => {
+      this._forceCleanup();
+    }, this.cleanupInterval);
+    
+    // Allow GC to clean up timer if cache is dereferenced
+    if (this._cleanupTimer.unref) {
+      this._cleanupTimer.unref();
+    }
+  }
+  
+  /**
+   * Force cleanup regardless of time since last cleanup
+   * Called by interval timer for proactive maintenance
+   */
+  _forceCleanup() {
+    const now = Date.now();
+    this.lastCleanup = now;
+    let expired = 0;
+    
+    for (const [key, entry] of this.cache) {
+      if (now - entry.timestamp > this.ttl) {
+        this.cache.delete(key);
+        expired++;
+      }
+    }
+    
+    if (expired > 0) {
+      console.log(`🧹 DocCache: Proactive cleanup removed ${expired} expired entries`);
+    }
   }
 
   /**

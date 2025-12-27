@@ -172,16 +172,24 @@ All systems collapse when extraction exceeds ~10-12× baseline efficiency (φ⁵
 | **Ecology** | Biomass | NPP | Productivity | Ecosystem health |
 | **Institutions** | Members | Intake-Exits | Recruitment | Organizational vitality |
 
-### Table 3: The 6-Regime Classification (vφ⁴)
+### Table 3: The φ-Orbital Model (vφ⁵)
 
-| Regime | R Condition | Magnitude | Direction | Emoji | Interpretation |
-|--------|-------------|-----------|-----------|-------|----------------|
-| **CONSOLIDATION** | z ≈ 0 | — | — | ⚪ | Price at median |
-| **DECAY** | 0 < R < φ⁻¹ | Low | Same | 🔵 | Amplitude shrinking |
-| **CONVERGENCE** | φ⁻¹ ≤ R ≤ φ | Optimal | Same | 🟢 | Stable oscillation |
-| **AMPLIFICATION** | R > φ | High | Same | 🔴 | Amplitude growing |
-| **DAMPED_REVERSAL** | R < 0, \|R\| ≤ φ | Low/Optimal | Reversed | 🔄 | Normal oscillation |
-| **PHASE_REVERSAL** | R < 0, \|R\| > φ | High | Reversed | 💥 | Explosive direction change |
+**Orbital Mechanics Analogy:**
+- φ ≈ 1.618 → circular orbit velocity: stay forever in the golden rhythm  
+- > φ² ≈ 2.618 → escape velocity: break free into hyperbolic flight (bubble → crash)  
+- < φ⁻² ≈ 0.382 → capture velocity: fall inward to singularity (fatalism → void)
+
+| Regime | R Condition | Zone | Emoji | Interpretation |
+|--------|-------------|------|-------|----------------|
+| **CONSOLIDATION** | z ≈ 0 | Equilibrium | ⚪ | Price at median, R undefined |
+| **ESCAPE** | R > φ² | > 2.618 | 🚀 | Escape velocity → bubble/crash |
+| **OPTIMISM** | R ∈ [φ, φ²] | 1.618 - 2.618 | 🟡 | Accelerating orbit |
+| **BREATHING** | R ∈ [φ⁻¹, φ] | 0.618 - 1.618 | 🟢 | Circular orbit, golden rhythm |
+| **FATALISM_CLIFF** | R ∈ [φ⁻², φ⁻¹] | 0.382 - 0.618 | 🟠 | Danger zone, decaying orbit |
+| **BULLISH_REVERSAL** | R < φ⁻², Z > 0 | < 0.382 | 💚 | Capture zone but positive momentum |
+| **FATALISM** | R < φ⁻², Z ≤ 0 | < 0.382 | 🔵 | Capture velocity → void |
+| **DAMPED_REVERSAL** | R < 0, \|R\| ≤ φ | Reversed | 🔄 | Normal oscillation crossing zero |
+| **PHASE_REVERSAL** | R < 0, \|R\| > φ | Reversed | 💥 | Explosive direction change |
 
 ---
 

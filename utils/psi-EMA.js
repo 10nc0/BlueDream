@@ -30,17 +30,30 @@
  * │ z (Anomaly)     │ (Value - Median) / MAD   │ See bounds     │ |z| > φ² flags anomaly      │
  * │ Signal Deviation│                          │ below          │ (deviation from equilibrium) │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
- * │ R (Convergence) │ z(t) / z(t-1)            │ φ⁻¹ ≤ R ≤ φ    │ R ∈ [φ⁻¹, φ] classifies as  │
- * │ Amplitude Ratio │                          │ is "critical"  │ convergent state             │
+ * │ R (Convergence) │ z(t) / z(t-1)            │ φ-Orbital      │ R ∈ [φ⁻¹, φ] = BREATHING     │
+ * │ Amplitude Ratio │                          │ Model          │ (golden rhythm, sustainable) │
  * └─────────────────┴──────────────────────────┴────────────────┴──────────────────────────────┘
  * 
- * R THRESHOLDS (All φ-Derived, Zero Dogma):
- * - φ⁻² ≈ 0.382: Tolerance band around φ (|R - φ| ≤ φ⁻²) -> fatalism
- * - φ⁻¹ ≈ 0.618: Lower bound (R < φ⁻¹ → amplitude decay) -> fatalism leaning
- * - φ   ≈ 1.618: Upper bound (R > φ → amplitude growth) -> stable
- * - φ²  ≈ 2.618: Extreme deviation flag (|z| > φ²) -> optimism / euphoria leaning
- * - 1 = φ⁰:     Reference point
- * - 2 = φ⁰ + φ⁻¹ + φ⁻²: Composite bound (1 + 0.618 + 0.382 ≈ 2)
+ * R THRESHOLDS (φ-Orbital Model - Orbital Mechanics Analogy):
+ * ┌──────────────────────────────────────────────────────────────────────────────┐
+ * │ R Zone           │ Threshold      │ Regime           │ Orbital Analogy      │
+ * ├──────────────────┼────────────────┼──────────────────┼──────────────────────┤
+ * │ R > φ²           │ > 2.618        │ ESCAPE           │ Escape velocity      │
+ * │                  │                │                  │ (bubble → crash)     │
+ * │ R ∈ [φ, φ²]      │ 1.618 - 2.618  │ OPTIMISM         │ Accelerating orbit   │
+ * │ R ∈ [φ⁻¹, φ]     │ 0.618 - 1.618  │ BREATHING        │ Circular orbit       │
+ * │                  │                │                  │ (golden rhythm)      │
+ * │ R ∈ [φ⁻², φ⁻¹]   │ 0.382 - 0.618  │ FATALISM_CLIFF   │ Decaying orbit       │
+ * │                  │                │                  │ (danger zone)        │
+ * │ R < φ⁻², Z > 0   │ < 0.382        │ BULLISH_REVERSAL │ Capture zone but     │
+ * │                  │                │                  │ positive momentum    │
+ * │ R < φ⁻², Z ≤ 0   │ < 0.382        │ FATALISM         │ Capture velocity     │
+ * │                  │                │                  │ (falling to void)    │
+ * └──────────────────┴────────────────┴──────────────────┴──────────────────────┘
+ * 
+ * KEY INSIGHT: φ ≈ 1.618 is the "circular orbit" — stay forever in golden rhythm
+ * - > φ² (escape velocity): break free into hyperbolic flight → bubble → crash
+ * - < φ⁻² (capture velocity): fall inward to singularity → fatalism → void
  * 
  * FIBONACCI EMA PERIODS:
  * - 13, 21, 34, 55 (consecutive Fibonacci numbers)
@@ -1327,26 +1340,31 @@ function calculateAbsoluteConvergence(zFlows, options = {}) {
 }
 
 /**
- * Classify regime based on R ratio
+ * Classify regime based on R ratio (φ-Orbital Model)
  * 
- * vφ⁴: Now separates MAGNITUDE (|R|) from DIRECTION (sign of R)
+ * vφ⁵: φ-Orbital interpretation using orbital mechanics analogy:
+ * - φ² ≈ 2.618 → escape velocity (bubble → crash)
+ * - φ  ≈ 1.618 → circular orbit velocity (golden rhythm, sustainable)
+ * - φ⁻¹ ≈ 0.618 → lower stable bound
+ * - φ⁻² ≈ 0.382 → capture velocity (fatalism → void)
  * 
- * Phase Reversal Detection:
- * - R < 0 indicates phase reversal (flow changed direction)
- * - |R| >> φ indicates amplitude explosion (volatility spike)
- * - Combined: R < 0 AND |R| > φ = PHASE_REVERSAL (explosive direction change)
- * 
- * 5-Regime Classification (plus consolidation):
+ * 7-Regime Classification (φ-Orbital):
  * 1. CONSOLIDATION: R undefined (z near zero)
- * 2. DECAY: 0 < R < φ⁻¹ (amplitude shrinking, same direction)
- * 3. CONVERGENCE: φ⁻¹ ≤ R ≤ φ (φ-band, stable oscillation)
- * 4. AMPLIFICATION: R > φ (amplitude growing, same direction)
- * 5. PHASE_REVERSAL: R < 0 AND |R| > φ (explosive direction change)
- * 6. DAMPED_REVERSAL: R < 0 AND |R| ≤ φ (mild direction change, damping)
+ * 2. ESCAPE: R > φ² (escape velocity → bubble/crash)
+ * 3. OPTIMISM: R ∈ [φ, φ²] (accelerating orbit, watch for escape)
+ * 4. BREATHING: R ∈ [φ⁻¹, φ] (circular orbit, golden rhythm)
+ * 5. FATALISM_CLIFF: R ∈ [φ⁻², φ⁻¹] (danger zone, decaying orbit)
+ * 6. BULLISH_REVERSAL: R < φ⁻² AND Z > 0 (capture velocity but positive momentum)
+ * 7. FATALISM: R < φ⁻² AND Z ≤ 0 (capture velocity → void)
+ * 
+ * Phase Reversal (R < 0):
+ * - PHASE_REVERSAL: R < 0 AND |R| > φ (explosive direction change)
+ * - DAMPED_REVERSAL: R < 0 AND |R| ≤ φ (mild direction change)
  * 
  * @param {number|null} ratio - Mean convergence ratio (null if undefined)
  * @param {Object} options - Additional context for classification
  * @param {boolean} options.hasLowSignal - Whether R is unstable due to low z-scores
+ * @param {number} options.currentZScore - Current z-score for regime detection
  * @param {string} options.warning - Warning message from convergence analysis
  * @returns {Object} Regime classification with magnitude and direction
  */
@@ -1362,17 +1380,18 @@ function classifyRegime(ratio, options = {}) {
       label: 'R Undefined (Consolidation)',
       emoji: '⚪',
       hypothesis: 'H₀: R is undefined (z-scores near zero, price at median)',
-      description: 'Price consolidating at current level. Amplitude ratio unreliable.',
+      description: 'Price consolidating at current level. Not always fatalism.',
       warning: warning || 'Near-equilibrium state. R undefined.',
       magnitude: null,
       direction: null
     };
   }
   
-  // vφ⁴: Separate magnitude from direction
+  // vφ⁵: Separate magnitude from direction
   const magnitude = Math.abs(ratio);
   const direction = ratio >= 0 ? 'SAME' : 'REVERSED';
   const isReversal = ratio < 0;
+  const zPositive = currentZScore !== null && currentZScore > 0;
   
   // PHASE REVERSAL: R < 0 (direction changed)
   if (isReversal) {
@@ -1404,38 +1423,82 @@ function classifyRegime(ratio, options = {}) {
     }
   }
   
-  // POSITIVE R: Same direction (standard classification)
-  // H₀: Regime classification based on φ-derived bounds
-  if (ratio < R_BOUNDS.LOWER) {
+  // POSITIVE R: φ-Orbital Classification
+  // φ-derived bounds: φ⁻² ≈ 0.382, φ⁻¹ ≈ 0.618, φ ≈ 1.618, φ² ≈ 2.618
+  
+  if (ratio > PHI_SQUARED) {
+    // ESCAPE VELOCITY: R > φ² (bubble → crash risk)
     return {
-      regime: 'DECAY',
-      label: 'R < φ⁻¹ (Amplitude Decay)',
-      emoji: '🔵',
-      hypothesis: `H₀: R < φ⁻¹ (${R_BOUNDS.LOWER.toFixed(3)})`,
-      description: 'Successive amplitudes decreasing.',
+      regime: 'ESCAPE',
+      label: `R > φ² (Escape Velocity)`,
+      emoji: '🚀',
+      hypothesis: `H₀: R > φ² (${PHI_SQUARED.toFixed(3)})`,
+      description: 'Escape velocity exceeded. Bubble formation → potential crash.',
+      magnitude,
+      direction,
+      warning: 'Flash risk: System exceeded escape velocity. Unsustainable acceleration.'
+    };
+  } else if (ratio >= R_BOUNDS.UPPER) {
+    // OPTIMISM: R ∈ [φ, φ²] (accelerating orbit)
+    return {
+      regime: 'OPTIMISM',
+      label: `R ∈ [φ, φ²] (Optimism)`,
+      emoji: '🟡',
+      hypothesis: `H₀: R ∈ [${R_BOUNDS.UPPER.toFixed(3)}, ${PHI_SQUARED.toFixed(3)}]`,
+      description: 'Accelerating orbit. Growth phase, watch for escape velocity.',
       magnitude,
       direction
     };
-  } else if (ratio <= R_BOUNDS.UPPER + R_BOUNDS.TOLERANCE) {
+  } else if (ratio >= R_BOUNDS.LOWER) {
+    // BREATHING: R ∈ [φ⁻¹, φ] (circular orbit, golden rhythm)
     return {
-      regime: 'CONVERGENCE',
-      label: `R ∈ [φ⁻¹, φ] (φ-Convergent)`,
+      regime: 'BREATHING',
+      label: `R ∈ [φ⁻¹, φ] (Breathing)`,
       emoji: '🟢',
       hypothesis: `H₀: R ∈ [${R_BOUNDS.LOWER.toFixed(3)}, ${R_BOUNDS.UPPER.toFixed(3)}]`,
-      description: 'Oscillations exhibit φ-convergence.',
+      description: 'Circular orbit. Golden rhythm, sustainable oscillation.',
       magnitude,
       direction
+    };
+  } else if (ratio >= R_BOUNDS.TOLERANCE) {
+    // FATALISM CLIFF: R ∈ [φ⁻², φ⁻¹] (danger zone, decaying orbit)
+    return {
+      regime: 'FATALISM_CLIFF',
+      label: `R ∈ [φ⁻², φ⁻¹] (Fatalism Cliff)`,
+      emoji: '🟠',
+      hypothesis: `H₀: R ∈ [${R_BOUNDS.TOLERANCE.toFixed(3)}, ${R_BOUNDS.LOWER.toFixed(3)}]`,
+      description: 'Danger zone. Decaying orbit approaching capture velocity.',
+      magnitude,
+      direction,
+      warning: 'Approaching fatalism threshold. Monitor for reversal or collapse.'
     };
   } else {
-    return {
-      regime: 'AMPLIFICATION',
-      label: `R > φ (Amplitude Growth)`,
-      emoji: '🔴',
-      hypothesis: `H₀: R > φ (${R_BOUNDS.UPPER.toFixed(3)})`,
-      description: 'Successive amplitudes increasing.',
-      magnitude,
-      direction
-    };
+    // R < φ⁻² (capture velocity zone)
+    if (zPositive) {
+      // BULLISH REVERSAL: R < φ⁻² but Z > 0 (momentum still positive)
+      return {
+        regime: 'BULLISH_REVERSAL',
+        label: `R < φ⁻², Z > 0 (Bullish Reversal)`,
+        emoji: '💚',
+        hypothesis: `H₀: R < φ⁻² (${R_BOUNDS.TOLERANCE.toFixed(3)}) but Z = ${currentZScore.toFixed(2)} > 0`,
+        description: 'Capture velocity zone but positive momentum. Potential reversal forming.',
+        magnitude,
+        direction,
+        zScore: currentZScore
+      };
+    } else {
+      // FATALISM: R < φ⁻² and Z ≤ 0 (capture velocity → void)
+      return {
+        regime: 'FATALISM',
+        label: `R < φ⁻² (Fatalism)`,
+        emoji: '🔵',
+        hypothesis: `H₀: R < φ⁻² (${R_BOUNDS.TOLERANCE.toFixed(3)})`,
+        description: 'Capture velocity. Falling inward toward singularity.',
+        magnitude,
+        direction,
+        warning: 'System below capture velocity. Amplitude collapsing.'
+      };
+    }
   }
 }
 

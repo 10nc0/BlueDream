@@ -59,7 +59,13 @@ The system utilizes a Node.js backend with Express and a Single Page Application
   - **Coordinate System**:
     - **θ (phase angle)**: 0° to 360°/φ² (~137.5°) = Growth, 360°/φ² to 360° - 360°/φ² (~222.5°) = Peak/Reversal, 360° - 360°/φ² to 360° (0° origin) = Renew. θ interpretation is heavily dependent on R (R<1 vs R>1).
     - **z (anomaly)**: deviation from median via MAD. |z|<φ normal, φ<|z|<φ² alert, |z|>φ² extreme.
-    - **R (convergence)**: amplitude ratio. R<φ⁻¹ decay, R∈[φ⁻¹,φ] stable, R>φ growth.
+    - **R (convergence)**: φ-Orbital model using orbital mechanics analogy:
+      - R > φ² (2.618): ESCAPE - bubble → crash (escape velocity)
+      - R ∈ [φ, φ²] (1.618-2.618): OPTIMISM - accelerating orbit
+      - R ∈ [φ⁻¹, φ] (0.618-1.618): BREATHING - circular orbit, golden rhythm
+      - R ∈ [φ⁻², φ⁻¹] (0.382-0.618): FATALISM_CLIFF - danger zone, decaying orbit
+      - R < φ⁻² + Z > 0: BULLISH_REVERSAL - capture zone but positive momentum
+      - R < φ⁻² + Z ≤ 0: FATALISM - capture velocity → void
   - **Tool-First Design**: Framework measures where you ARE on the wave, not where you're going. Users navigate; the compass just shows true north (equilibrium).
 - **Unified Personality Layer**: Enforces formatting via regex post-processing.
 - **Mode Registry (lib/mode-registry.js)**: Plug-and-play mode configuration for the 7-stage pipeline:
