@@ -83,8 +83,16 @@ The system utilizes a Node.js backend with Express and a Single Page Application
   - Usage tracking via heartbeat subscription pattern. One φ-rhythm, multiple bells.
 - **Inpipe Architecture**: Multi-channel input with an abstract channel interface for extensibility.
 
+## Security Configuration
+- **Database SSL**: Connection encrypted via TLS. For production hardening with verify-full mode:
+  1. Download `prod-ca-2021.crt` from Supabase Dashboard → Settings → Database → SSL
+  2. Set `DATABASE_CA_CERT` env var with certificate contents
+  3. Without CA, connection is encrypted but not certificate-pinned (acceptable for cloud)
+- **Webhook Validation**: All external webhooks validated with Zod schemas + regex patterns
+- **Secrets Compartmentalization**: Route satellites receive only required dependencies via DI
+
 ## External Dependencies
-- **Database**: PostgreSQL (Supabase)
+- **Database**: PostgreSQL (Supabase) with transaction pooler
 - **WhatsApp**: Twilio WhatsApp Business API
 - **Email**: Resend API
 - **AI**: Groq API

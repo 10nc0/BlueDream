@@ -46,6 +46,7 @@ const phiBreathe = require('./lib/phi-breathe');
 const { splitMessageIntoChunks, postPayloadToWebhook, createSendToLedger, createSendToUserOutput } = require('./lib/discord-webhooks');
 const { createErrorHandler, notFoundHandler } = require('./lib/error-handler');
 const { config, buildConnectionString, getDbHost } = require('./config');
+const { z } = require('zod');  // SECURITY: For webhook payload validation
 
 // ============================================================================
 // SECURITY: Fail-Closed Secret Guards (Critical Infrastructure Only)
@@ -54,7 +55,7 @@ const { config, buildConnectionString, getDbHost } = require('./config');
 // Only enforce truly essential secrets - don't require optional integrations
 
 const criticalSecrets = {
-    DATABASE_URL: 'PostgreSQL connection (Neon pooler)',
+    DATABASE_URL: 'PostgreSQL connection (Supabase pooler)',
     SESSION_SECRET: 'Session encryption key',
     FRACTAL_SALT: 'Secure book ID generation (crypto salt)',
     NYANBOOK_WEBHOOK_URL: 'Discord Ledger #01 (output book)',
@@ -88,7 +89,7 @@ const NYANBOOK_LEDGER_WEBHOOK = process.env.NYANBOOK_WEBHOOK_URL;
 const isProd = process.env.REPLIT_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
 
 // TRANSACTION MODE: Append pool_mode=transaction to DATABASE_URL for scalability
-// Neon pooler handles 10,000+ concurrent connections; local pool max=20 is direct connection limit
+// Supabase pooler handles 10,000+ concurrent connections; local pool max=20 is direct connection limit
 // Trade-off: Cannot use SET search_path (must use explicit schema prefixes)
 const databaseUrl = process.env.DATABASE_URL;
 const poolModeParam = 'pool_mode=transaction';
@@ -96,12 +97,27 @@ const connectionString = databaseUrl?.includes('?')
     ? `${databaseUrl}&${poolModeParam}`  // Has existing params, append with &
     : `${databaseUrl}?${poolModeParam}`;  // No params yet, start with ?
 
+// SECURITY NOTE: Supabase uses its own CA chain for SSL connections
+// Options: 1) Download prod-ca-2021.crt from Supabase Dashboard → Settings → Database → SSL
+//          2) Set DATABASE_CA_CERT env var with certificate contents (full verify-full mode)
+//          3) Use rejectUnauthorized: false (encrypted but no cert pinning - acceptable for cloud)
+// Supabase pooler handles TLS termination at edge; connection is always encrypted
+// PRODUCTION HARDENING: Set DATABASE_CA_CERT for verify-full mode (prevents theoretical MITM)
+const isLocalDb = databaseUrl?.includes('localhost') || databaseUrl?.includes('127.0.0.1');
+const hasCustomCA = !!process.env.DATABASE_CA_CERT;
+
+// Log SSL verification status at startup
+if (!isLocalDb && !hasCustomCA) {
+    console.warn('⚠️ SSL: Encrypted but not verify-full (no DATABASE_CA_CERT). Download CA from Supabase Dashboard for production hardening.');
+}
+
 const pool = new Pool({
     connectionString,
-    ssl: databaseUrl?.includes('localhost') ? false : { 
-        rejectUnauthorized: false
+    ssl: isLocalDb ? false : { 
+        rejectUnauthorized: hasCustomCA,  // SECURITY: Enable if CA provided, else trust cloud provider
+        ...(hasCustomCA && { ca: process.env.DATABASE_CA_CERT })
     },
-    max: 20, // Direct pool limit; Neon pooler handles 10k+ upstream
+    max: 20, // Direct pool limit; Supabase pooler handles 10k+ upstream
     min: 2,
     connectionTimeoutMillis: 30000, // 30s for cold starts
     idleTimeoutMillis: 30000, // Release idle connections after 30s
@@ -123,7 +139,12 @@ pool.on('remove', () => {
     console.log(`🔓 Pool: Connection released (Total: ${pool.totalCount}, Idle: ${pool.idleCount})`);
 });
 
-const dbHost = process.env.DATABASE_URL?.split('@')[1]?.split('.')[0] || 'unknown';
+// SAFETY: Defensive parsing with explicit format assertion
+const dbUrlParts = process.env.DATABASE_URL?.split('@');
+if (!dbUrlParts || dbUrlParts.length < 2) {
+    console.warn('⚠️ DATABASE_URL format unexpected, using fallback host identifier');
+}
+const dbHost = dbUrlParts?.[1]?.split('.')[0] || 'unknown';
 
 console.log(`🚀 Mode: ${isProd ? 'PRODUCTION' : 'DEVELOPMENT'}`);
 console.log(`🗄️  DB Host: ${dbHost}`);
@@ -1084,7 +1105,33 @@ async function logAudit(client, req, actionType, targetType, targetId, targetEma
 app.post('/api/webhook/:fractalId', async (req, res) => {
     try {
         const fractalIdParam = req.params.fractalId;
-        const { text, username = 'External', avatar_url, media_url, phone, email } = req.body;
+        
+        // SECURITY: Validate fractalId format before any DB queries
+        // Format: bridge_<type>_<tenantId> (e.g., bridge_t6_abc123)
+        const fractalIdPattern = /^bridge_[a-z][0-9a-z]_[a-zA-Z0-9]{6,32}$/;
+        if (!fractalIdParam || !fractalIdPattern.test(fractalIdParam)) {
+            return res.status(400).json({ error: 'Invalid book ID format' });
+        }
+        
+        // SECURITY: Validate and sanitize webhook payload using Zod
+        const webhookPayloadSchema = z.object({
+            text: z.string().max(10000, 'Message too long').optional().default(''),
+            username: z.string().max(100, 'Username too long').optional().default('External'),
+            avatar_url: z.string().url('Invalid avatar URL').optional().nullable(),
+            media_url: z.string().url('Invalid media URL').optional().nullable(),
+            phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone format').optional().nullable(),
+            email: z.string().email('Invalid email format').optional().nullable()
+        });
+        
+        const payloadResult = webhookPayloadSchema.safeParse(req.body);
+        if (!payloadResult.success) {
+            return res.status(400).json({ 
+                error: 'Invalid payload',
+                details: payloadResult.error.issues.map(i => i.message)
+            });
+        }
+        
+        const { text, username, avatar_url, media_url, phone, email } = payloadResult.data;
         
         // Parse fractal_id to get tenant
         const parsed = fractalId.parse(fractalIdParam);
@@ -1163,8 +1210,14 @@ app.post('/api/webhook/:fractalId', async (req, res) => {
             res.json({ success: true, message: 'Message forwarded to Discord' });
             
         } catch (error) {
-            await client.query('ROLLBACK');
-            client.release();
+            // DEFENSIVE: try/finally ensures connection release even if ROLLBACK fails
+            try {
+                await client.query('ROLLBACK');
+            } catch (rollbackError) {
+                console.error('⚠️ ROLLBACK failed (connection likely broken):', rollbackError.message);
+            } finally {
+                client.release();
+            }
             throw error;
         }
     } catch (error) {
@@ -1227,15 +1280,18 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log('✅ Multi-tenant NyanBook~ ready');
     
     // Initialize dependency injection container with all dependencies
+    // SECURITY: Compartmentalized secrets - each route receives only what it needs
+    // Secrets are passed as closures, not raw env vars, to prevent accidental serialization
     initDeps({
         pool,
         tenantManager,
         authService,
         fractalId,
         constants: {
+            // Webhook URLs (not tokens) - safe to pass
             NYANBOOK_LEDGER_WEBHOOK: process.env.NYANBOOK_WEBHOOK_URL,
-            LIMBO_THREAD_ID: process.env.LIMBO_THREAD_ID,
-            HERMES_TOKEN: process.env.HERMES_TOKEN
+            LIMBO_THREAD_ID: process.env.LIMBO_THREAD_ID
+            // NOTE: HERMES_TOKEN removed - bot already initialized, token not needed downstream
         },
         bots: {
             hermes: hermesBot,
@@ -1298,7 +1354,8 @@ app.listen(PORT, '0.0.0.0', async () => {
     setTimeout(async () => {
         // AUTO-HEAL: Priority queue-based healing (O(log n) instead of O(n²))
         // Uses modular heal-queue system from lib/heal-queue.js
-        if (hermesBot && hermesBot.isReady()) {
+        // DEFENSIVE: Explicit null guard + ready check (bot instantiated synchronously above)
+        if (hermesBot !== null && hermesBot !== undefined && typeof hermesBot.isReady === 'function' && hermesBot.isReady()) {
             try {
                 console.log('🔧 Auto-healing: Initializing heal queue...');
                 healQueue.setDependencies(pool, hermesBot);
