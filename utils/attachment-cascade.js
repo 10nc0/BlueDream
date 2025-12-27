@@ -5,6 +5,8 @@ const crypto = require('crypto');
 const axios = require('axios');
 const querystring = require('querystring');
 const { analyzeFinancialDocument, formatPhysicsAnalysis, getFinancialPhysicsSeed, quickNonFinancialCheck } = require('./financial-physics');
+// Harmonized imports from data-package for shared caching
+const { globalDocCache, computeDocHash, FILE_TYPES: DP_FILE_TYPES } = require('./data-package');
 
 // ===== INTELLIGENT CHUNKING (GroundX-inspired) =====
 // Splits text by sections without cutting mid-table or mid-paragraph
@@ -1057,23 +1059,10 @@ async function processChemistryContent(visionObservations) {
     };
 }
 
-// Content-based cache: SHA-256 hash → extraction result
-const extractionCache = new Map();
-const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-const CACHE_MAX_SIZE = 1000; // LRU eviction threshold
-
+// HARMONIZED: Use shared DocumentExtractionCache from data-package.js
+// This unifies caching across the pipeline
 function getCacheKey(buffer) {
-    return crypto.createHash('sha256').update(buffer).digest('hex');
-}
-
-function pruneCache() {
-    if (extractionCache.size > CACHE_MAX_SIZE) {
-        // Simple LRU: delete oldest 10% of entries
-        const deleteCount = Math.floor(CACHE_MAX_SIZE * 0.1);
-        const keys = Array.from(extractionCache.keys()).slice(0, deleteCount);
-        keys.forEach(k => extractionCache.delete(k));
-        console.log(`🧹 Cache: Pruned ${deleteCount} old entries`);
-    }
+    return computeDocHash(buffer);
 }
 
 const FILE_TYPES = {
@@ -1203,13 +1192,14 @@ function selectExtractionPipeline(fileType) {
 }
 
 async function executeExtractionCascade(buffer, fileType, fileName, options = {}) {
-    // Check cache first (SHA-256 content hash)
+    // HARMONIZED: Use shared DocumentExtractionCache from data-package.js
     const cacheKey = getCacheKey(buffer);
-    const cached = extractionCache.get(cacheKey);
+    const tenantId = options.tenantId || 'global';
+    const cached = globalDocCache.get(cacheKey, tenantId);
     
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    if (cached) {
         console.log(`📦 Cache HIT for ${fileName} (${cacheKey.slice(0, 8)}...)`);
-        return { ...cached.result, fromCache: true };
+        return { ...cached, fromCache: true };
     }
     
     const pipeline = selectExtractionPipeline(fileType);
@@ -1266,11 +1256,9 @@ async function executeExtractionCascade(buffer, fileType, fileName, options = {}
     
     result.jsonOutput = formatAsJSON(result);
     
-    // Cache successful extractions
+    // HARMONIZED: Cache successful extractions in shared cache
     if (result.success) {
-        extractionCache.set(cacheKey, { result, timestamp: Date.now() });
-        pruneCache();
-        console.log(`📦 Cache SET for ${fileName} (${cacheKey.slice(0, 8)}...)`);
+        globalDocCache.set(cacheKey, result, tenantId);
     }
     
     return result;
@@ -2185,10 +2173,15 @@ function formatJSONForGroq(cascadeResult, userQuery) {
 
 /**
  * Process document for AI consumption
- * Wrapper function that handles file type identification and extraction cascade
+ * HARMONIZED: Wrapper function using shared cache from data-package.js
  * Returns { text, fileName, success } format expected by nyan-ai.js
+ * 
+ * @param {Buffer|string} buffer - Document content (Buffer or base64 string)
+ * @param {string} fileName - Original file name
+ * @param {string} mimeType - MIME type
+ * @param {Object} options - Optional: { tenantId } for cache scoping
  */
-async function processDocumentForAI(buffer, fileName, mimeType) {
+async function processDocumentForAI(buffer, fileName, mimeType, options = {}) {
     try {
         // Handle base64 encoded data with proper detection
         let dataBuffer = buffer;
@@ -2220,7 +2213,10 @@ async function processDocumentForAI(buffer, fileName, mimeType) {
         };
         console.log(`📄 Processing document: ${fileName} (type: ${fileType.type})`);
         
-        const result = await executeExtractionCascade(dataBuffer, fileType, fileName);
+        // HARMONIZED: Pass tenantId through for cache scoping
+        const result = await executeExtractionCascade(dataBuffer, fileType, fileName, { 
+            tenantId: options.tenantId 
+        });
         
         if (result.success && result.extractedData) {
             // Build text from extracted data

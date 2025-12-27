@@ -26,6 +26,138 @@ const STAGE_IDS = {
   OUTPUT: 'S6'
 };
 
+/**
+ * FILE_TYPES - Shared constants for document classification
+ * Harmonized from attachment-cascade.js for unified interface
+ */
+const FILE_TYPES = {
+  PDF: 'pdf',
+  EXCEL: 'excel',
+  WORD: 'word',
+  PRESENTATION: 'presentation',
+  IMAGE: 'image',
+  TEXT: 'text',
+  CODE: 'code',
+  AUDIO: 'audio',
+  UNKNOWN: 'unknown'
+};
+
+/**
+ * DocumentExtractionCache - Shared cache for extracted document content
+ * Harmonizes attachment-cascade's extractionCache with DataPackage storage
+ */
+class DocumentExtractionCache {
+  constructor() {
+    this.cache = new Map();
+    this.maxSize = 100;
+    this.ttl = 24 * 60 * 60 * 1000; // 24 hours
+    this.lastCleanup = Date.now();
+    this.cleanupInterval = 5 * 60 * 1000; // 5 minutes
+  }
+
+  /**
+   * Generate cache key from content hash + tenant
+   * @param {string} contentHash - SHA-256 hash of document content
+   * @param {string} tenantId - Tenant identifier (IP hash)
+   * @returns {string} Cache key
+   */
+  getKey(contentHash, tenantId = 'global') {
+    return `${tenantId}:${contentHash}`;
+  }
+
+  /**
+   * Get cached extraction result
+   * @param {string} contentHash - Document content hash
+   * @param {string} tenantId - Tenant identifier
+   * @returns {Object|null} Cached result or null
+   */
+  get(contentHash, tenantId = 'global') {
+    this._maybeCleanup();
+    const key = this.getKey(contentHash, tenantId);
+    const entry = this.cache.get(key);
+    
+    if (entry && Date.now() - entry.timestamp < this.ttl) {
+      console.log(`📦 DocCache HIT: ${contentHash.slice(0, 8)}...`);
+      return entry.result;
+    }
+    
+    if (entry) {
+      this.cache.delete(key); // Expired
+    }
+    return null;
+  }
+
+  /**
+   * Store extraction result
+   * @param {string} contentHash - Document content hash
+   * @param {Object} result - Extraction result {text, fileName, fileType, toolsUsed}
+   * @param {string} tenantId - Tenant identifier
+   */
+  set(contentHash, result, tenantId = 'global') {
+    this._maybeCleanup();
+    const key = this.getKey(contentHash, tenantId);
+    
+    this.cache.set(key, {
+      result,
+      timestamp: Date.now()
+    });
+    
+    // Prune if over capacity
+    if (this.cache.size > this.maxSize) {
+      const deleteCount = Math.floor(this.maxSize * 0.2);
+      const keys = Array.from(this.cache.keys()).slice(0, deleteCount);
+      keys.forEach(k => this.cache.delete(k));
+      console.log(`📦 DocCache: Pruned ${deleteCount} entries`);
+    }
+    
+    console.log(`📦 DocCache SET: ${contentHash.slice(0, 8)}... (${this.cache.size}/${this.maxSize})`);
+  }
+
+  /**
+   * Periodic cleanup of expired entries
+   */
+  _maybeCleanup() {
+    const now = Date.now();
+    if (now - this.lastCleanup < this.cleanupInterval) return;
+    
+    this.lastCleanup = now;
+    let expired = 0;
+    
+    for (const [key, entry] of this.cache) {
+      if (now - entry.timestamp > this.ttl) {
+        this.cache.delete(key);
+        expired++;
+      }
+    }
+    
+    if (expired > 0) {
+      console.log(`🧹 DocCache: Cleaned ${expired} expired entries`);
+    }
+  }
+
+  /**
+   * Get cache stats for monitoring
+   * @returns {Object} {size, maxSize, ttlHours}
+   */
+  getStats() {
+    return {
+      size: this.cache.size,
+      maxSize: this.maxSize,
+      ttlHours: this.ttl / (60 * 60 * 1000)
+    };
+  }
+
+  /**
+   * Clear all cached extractions
+   */
+  clear() {
+    const count = this.cache.size;
+    this.cache.clear();
+    console.log(`🧹 DocCache: Cleared ${count} entries`);
+    return count;
+  }
+}
+
 class DataPackage {
   constructor(tenantId = null) {
     this.id = crypto.randomUUID();
@@ -324,11 +456,25 @@ class TenantPackageStore {
 }
 
 const globalPackageStore = new TenantPackageStore();
+const globalDocCache = new DocumentExtractionCache();
+
+/**
+ * Compute SHA-256 hash of buffer for document caching
+ * @param {Buffer} buffer - Document content
+ * @returns {string} Hex hash
+ */
+function computeDocHash(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
 
 module.exports = {
   DataPackage,
   TenantPackageStore,
+  DocumentExtractionCache,
   globalPackageStore,
+  globalDocCache,
   hashTenantKey,
-  STAGE_IDS
+  computeDocHash,
+  STAGE_IDS,
+  FILE_TYPES
 };

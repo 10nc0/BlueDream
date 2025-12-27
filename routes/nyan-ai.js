@@ -742,7 +742,8 @@ Respond in ${language || 'the same language as the user query'}.`
                 
                 try {
                     const { processDocumentForAI } = require('../utils/attachment-cascade');
-                    const result = await processDocumentForAI(doc.data, doc.name, doc.type);
+                    // HARMONIZED: Pass tenantId for shared cache scoping
+                    const result = await processDocumentForAI(doc.data, doc.name, doc.type, { tenantId: clientIp });
                     if (result && result.text) {
                         extractedContent.push(result.text);
                         setCachedDocumentContext(fileHash, { extractedText: result.text }, clientIp);
@@ -893,7 +894,8 @@ Respond in ${language || 'the same language as the user query'}.`
                 
                 try {
                     const { processDocumentForAI } = require('../utils/attachment-cascade');
-                    const result = await processDocumentForAI(doc.data, doc.name, doc.type);
+                    // HARMONIZED: Pass tenantId for shared cache scoping
+                    const result = await processDocumentForAI(doc.data, doc.name, doc.type, { tenantId: clientIp });
                     if (result && result.text) {
                         extractedContent.push(result.text);
                         setCachedDocumentContext(fileHash, { extractedText: result.text }, clientIp);
