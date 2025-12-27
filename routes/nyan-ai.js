@@ -941,11 +941,14 @@ Respond in ${language || 'the same language as the user query'}.`
             
             res.write(`data: ${JSON.stringify({ type: 'status', message: 'Processing...' })}\n\n`);
             
+            // L1 Perception Ingestion
+            const perception = await AttachmentIngestion.ingest(docList, clientIp);
+            
             const pipelineInput = {
                 message: message || '',
                 photos: photoList,
                 documents: docList,
-                extractedContent,
+                extractedContent: perception.files, // HARMONIZED: Use perception output
                 history: history || [],
                 clientIp,
                 isVisionRequest: photoList.length > 0,

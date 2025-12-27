@@ -166,7 +166,8 @@ class PipelineOrchestrator {
         hasMemory: state.contextResult.hasMemory,
         attachmentContext: state.contextResult.attachmentContext?.name || null,
         isCodeReview: state.contextResult.attachmentContext?.isCode || false,
-        perceptionFiles: perception.files.length
+        perceptionFiles: perception.files.length,
+        extractedTextLength: perception.extractedText.length
       });
       
       if (state.contextResult.attachmentContext?.isCode) {
