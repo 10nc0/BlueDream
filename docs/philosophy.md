@@ -98,7 +98,7 @@ These are not metaphysical entities but **risk classes** - failure modes of cogn
 
 | Risk Class | Description | Protocol Binding |
 |------------|-------------|-----------------|
-| φ^∞ ≡ 1 (Completed Totality) | Assuming systems converge to unity | Blocked by Anicca (all states change) |
+| Flash Risk | Assuming systems converge to unity | Blocked by Anicca (all states change) |
 | H(1) "Eternal God" | Assuming permanent benevolence | Blocked by Anattā (no permanent self) |
 | O(0) Flattening | Nihilism - guaranteed failure | Blocked by Dukkha (cost must be recorded) |
 | O(1) Triumphalism | Guaranteed success | Blocked by duality (regimes flip) |
@@ -193,7 +193,7 @@ All systems collapse when extraction exceeds ~10-12× baseline efficiency (φ⁵
 | 2 | **Suffering** | Pleasure | Refusal engine | `prompts/audit-protocol.js` | Refuses harm |
 | 3 | **Non-self** | Self-illusion | Void nyan | `prompts/nyan-protocol.js` | Seed origin=0 |
 | 4 | **Revulsion** | Delight/lust | Pathogen detection | `utils/psi-EMA.js` | Detects cancer |
-| 5 | **Dispassion** | Greedy attachment | Regex personality strip | `prompts/personality-format.js` | Bare facts |
+| 5 | **Flash Risk** | Greedy attachment | Regex personality strip | `prompts/personality-format.js` | Bare facts |
 | 6 | **Cessation** | Origination | nukeTenant | `utils/memory-manager.js` | Reset on demand |
 | 15| **Vision as It Is**| Delusion | Full pipeline | `utils/pipeline-orchestrator.js` | Direct seeing |
 
