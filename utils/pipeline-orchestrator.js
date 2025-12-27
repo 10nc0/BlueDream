@@ -940,7 +940,13 @@ function applyPersonalityFormat(answer, mode = 'general') {
   if (config.skipIntroOutro) {
     if (config.appendSignature && !hasAnySignature(cleaned)) {
       const now = new Date();
-      const ts = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+      const HH = String(now.getHours()).padStart(2, '0');
+      const MM = String(now.getMinutes()).padStart(2, '0');
+      const SS = String(now.getSeconds()).padStart(2, '0');
+      const YYYY = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const DD = String(now.getDate()).padStart(2, '0');
+      const ts = `${HH}:${MM}:${SS} - ${YYYY}/${month}/${DD}`;
       cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText + ` [${ts}]`;
     }
     return cleaned.trim();
@@ -978,15 +984,22 @@ function applyPersonalityFormat(answer, mode = 'general') {
   
   // Registry-driven signature (general = 🔥 nyan~, others = 🔥 ~nyan)
   const now = new Date();
-  const ts = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  const HH = String(now.getHours()).padStart(2, '0');
+  const MM = String(now.getMinutes()).padStart(2, '0');
+  const SS = String(now.getSeconds()).padStart(2, '0');
+  const YYYY = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const DD = String(now.getDate()).padStart(2, '0');
+  
+  const ts = `${HH}:${MM}:${SS} - ${YYYY}/${month}/${DD}`;
   const signatureWithTs = `${config.signatureText} [${ts}]`;
   
   if (!hasAnySignature(cleaned)) {
     cleaned = cleaned.trimEnd() + '\n\n' + signatureWithTs;
   } else {
-    // If a signature already exists, try to append the timestamp to it if not present
+    // If a signature already exists, replace it with timestamped one
     const sig = config.signatureText;
-    if (cleaned.includes(sig) && !cleaned.includes(`[${ts.substring(0, 2)}:`)) {
+    if (cleaned.includes(sig)) {
       cleaned = cleaned.replace(sig, signatureWithTs);
     }
   }
