@@ -164,6 +164,27 @@ function lookupSettledScience(formula) {
     return CHEMICAL_CONSTANTS[normalized] || null;
 }
 
+// ===== CODE DETECTION HEURISTICS =====
+// Determines if a text file likely contains code
+function isLikelyCode(text, fileName) {
+    const ext = (fileName || '').toLowerCase().split('.').pop();
+    const codeExts = ['js', 'ts', 'py', 'go', 'java', 'cpp', 'c', 'cs', 'php', 'rb', 'rs', 'swift', 'sh', 'sql', 'html', 'css'];
+    if (codeExts.includes(ext)) return true;
+    
+    // Heuristics for .txt files
+    if (ext === 'txt') {
+        const codePatterns = [
+            /function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=/,
+            /import\s+.*\s+from|require\s*\(|module\.exports\s*=/,
+            /class\s+\w+|def\s+\w+\s*\(|if\s+__name__\s*==\s*['"]__main__['"]/,
+            /interface\s+\w+|enum\s+\w+|type\s+\w+\s*=/
+        ];
+        return codePatterns.some(p => p.test(text.substring(0, 2000)));
+    }
+    
+    return false;
+}
+
 // ===== COMPOUND IDENTIFICATION =====
 // Extract molecular formula and known name from Vision description
 function extractFormulaAndKnownName(text) {

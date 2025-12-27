@@ -151,8 +151,14 @@ class PipelineOrchestrator {
         inferredTicker: state.contextResult.inferredTicker,
         hasFinancialContext: state.contextResult.hasFinancialContext,
         hasMemory: state.contextResult.hasMemory,
-        attachmentContext: state.contextResult.attachmentContext?.name || null
+        attachmentContext: state.contextResult.attachmentContext?.name || null,
+        isCodeReview: state.contextResult.attachmentContext?.isCode || false
       });
+      
+      if (state.contextResult.attachmentContext?.isCode) {
+        state.mode = 'code-audit';
+        console.log(`🛡️ Stage -1: Code Audit mode engaged for "${state.contextResult.attachmentContext.name}"`);
+      }
       
       if (state.contextResult.inferredTicker) {
         console.log(`📜 Stage -1: Context extracted - inferred ticker: ${state.contextResult.inferredTicker}`);
