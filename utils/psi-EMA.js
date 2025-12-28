@@ -202,13 +202,6 @@ function stdDev(arr) {
   return Math.sqrt(mean(squareDiffs));
 }
 
-function zScore(value, arr) {
-  const avg = mean(arr);
-  const std = stdDev(arr);
-  if (std === 0) return 0;
-  return (value - avg) / std;
-}
-
 /**
  * Calculate Median Absolute Deviation (MAD) - robust dispersion measure
  * Less sensitive to outliers than standard deviation
