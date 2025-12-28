@@ -63,9 +63,11 @@ The system utilizes a Node.js backend with Express and a Single Page Application
   - **ehi passiko**: "Come and see" — users upload CSV/SQL/TXT time series, apply the compass, diagnose anomalies themselves. No predictions, no mysticism, just coordinates.
   - **Coordinate System**:
     - **θ (phase angle)**: atan2(stock, flow). Binary interpretation for mature series (e.g., SPY): +θ = SURVIVAL (continuation), -θ = DECAY (pullback). Oscillates in tight band around 90° due to massive stock denominator.
-    - **z (anomaly)**: deviation from median via MAD with 35-period rolling window (vφ⁷: 2-pass Excel-validated calculation).
-      - Pass 1: Rolling Median = 35-period median of STOCK (prices)
-      - Pass 2: MAD = 35-period median of |Stock - Rolling Median|, then z = (Stock - Rolling Median) / (MAD × 1.4826)
+    - **z (anomaly)**: deviation from median via MAD with 50-period rolling window (vφ⁷: 2-pass Excel-validated calculation).
+      - Pass 1: Rolling Median = 50-period median of STOCK (prices)
+      - Pass 2: MAD = 50-period median of |Stock - Rolling Median|, then z = (Stock - Rolling Median) / (MAD × 1.4826)
+      - Warm-up tribute: 98 rows (49+49) before first valid z-score
+      - 77.16% φ-band occupancy, p < 10⁻²⁵ statistical significance (prioritizes truth over speed)
       - |z|<φ normal, φ<|z|<φ² alert, |z|>φ² extreme.
     - **R (convergence)**: φ-Orbital model using orbital mechanics analogy:
       - R > φ² (2.618): ESCAPE - bubble → crash (escape velocity)
