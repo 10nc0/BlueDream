@@ -18,6 +18,11 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **L2: Substrate (data-package.js)**: Immutable state containers, shared caches, and system constants.
 - **L3: Cognition (pipeline-orchestrator.js)**: 7-stage state machine (S-1 to S6) for reasoning and auditing.
 
+**Pipeline Stage Responsibilities (Clean Separation):**
+- **S-1 Context Extractor (utils/context-extractor.js)**: Pure extraction only - entities from history, memory management, attachment metadata. NO mode decisions.
+- **S0 Preflight Router (utils/preflight-router.js)**: Single source of truth for mode detection. Classifies queries, fetches external data, sets `state.mode`.
+- **Mode Registry (lib/mode-registry.js)**: Centralized code detection (isCodeFile, isCodeContent, detectCodeMode) - no duplication across stages.
+
 **7-Layer AI Processing Pipeline:**
 - **Layer 7: AI Interface** (user interaction)
 - **Layer 6: Orchestration** (7-stage state machine)
