@@ -269,18 +269,37 @@ function calculateFidelity(dimensions = {}) {
   const rCount1 = countFidelity(r1);
   const rCount2 = countFidelity(r2);
   
+  // Dimensional validation thresholds (φ-derived)
+  // 0.618 (φ⁻¹): Minimum fidelity for signal reliability
+  // 0.382 (φ⁻²): Minimum fidelity for signal existence
+  const MIN_FIDELITY = PHI_INVERSE;
+  const MIN_SIGNAL_FIDELITY = PHI_INV_SQUARED;
+
+  const thetaFidelity = (thetaCount1.real + thetaCount2.real) / (thetaCount1.total + thetaCount2.total || 1);
+  const zFidelity = (zCount1.real + zCount2.real) / (zCount1.total + zCount2.total || 1);
+  const rFidelity = (rCount1.real + rCount2.real) / (rCount1.total + rCount2.total || 1);
+
   // Aggregate within each dimension only
   const theta = {
     real: thetaCount1.real + thetaCount2.real,
-    total: thetaCount1.total + thetaCount2.total
+    total: thetaCount1.total + thetaCount2.total,
+    fidelity: thetaFidelity,
+    isValid: thetaFidelity >= MIN_FIDELITY,
+    hasSignal: thetaFidelity >= MIN_SIGNAL_FIDELITY
   };
   const z = {
     real: zCount1.real + zCount2.real,
-    total: zCount1.total + zCount2.total
+    total: zCount1.total + zCount2.total,
+    fidelity: zFidelity,
+    isValid: zFidelity >= MIN_FIDELITY,
+    hasSignal: zFidelity >= MIN_SIGNAL_FIDELITY
   };
   const r = {
     real: rCount1.real + rCount2.real,
-    total: rCount1.total + rCount2.total
+    total: rCount1.total + rCount2.total,
+    fidelity: rFidelity,
+    isValid: rFidelity >= MIN_FIDELITY,
+    hasSignal: rFidelity >= MIN_SIGNAL_FIDELITY
   };
   
   const calculateLowSignalRatio = (data) => {
@@ -294,8 +313,10 @@ function calculateFidelity(dimensions = {}) {
     theta,
     z,
     r,
+    isValid: theta.isValid && z.isValid && r.isValid,
+    hasSignal: theta.hasSignal || z.hasSignal || r.hasSignal,
     // Human-readable breakdown string
-    breakdown: `θ: ${theta.real}/${theta.total} | z: ${z.real}/${z.total} | R: ${r.real}/${r.total}`,
+    breakdown: `θ: ${theta.real}/${theta.total} (${(theta.fidelity * 100).toFixed(0)}%) | z: ${z.real}/${z.total} (${(z.fidelity * 100).toFixed(0)}%) | R: ${r.real}/${r.total} (${(r.fidelity * 100).toFixed(0)}%)`,
     lowSignal: {
       theta: calculateLowSignalRatio(theta1.concat(theta2)),
       z: calculateLowSignalRatio(z1.concat(z2)),
@@ -917,6 +938,8 @@ function calculateZFlows(stocks, options = {}) {
       const windowAbsDevs = absDevs.slice(Math.max(0, startIdx), i + 1).filter(x => x !== null);
       
       // Require full rolling window for MAD (matches Excel behavior)
+      // EXTRAPOLATION GUARD: If we have enough for median but not for MAD, return NaN
+      // This prevents "hallucinated" z-scores during the second half of the warm-up
       if (windowAbsDevs.length < rollingWindow) {
         zFlows.push(NaN);  // Warm-up period
         continue;
@@ -937,6 +960,10 @@ function calculateZFlows(stocks, options = {}) {
     
     const validZ = zFlows.filter(z => Number.isFinite(z));
     
+    // Final fidelity check: total valid samples / expected window size
+    const expectedSamples = stocks.length - (rollingWindow * 2 - 2);
+    const fidelity = expectedSamples > 0 ? validZ.length / expectedSamples : 0;
+    
     // Use final window for summary stats
     const finalWindow = validStocks.slice(-rollingWindow);
     const finalMed = median(finalWindow);
@@ -953,6 +980,8 @@ function calculateZFlows(stocks, options = {}) {
       currentZ: validZ.length > 0 ? validZ[validZ.length - 1] : null,
       previousZ: validZ.length > 1 ? validZ[validZ.length - 2] : null,
       anomalyStrength: validZ.length > 0 ? Math.abs(validZ[validZ.length - 1]) : null,
+      fidelity,
+      isValid: fidelity >= PHI_INVERSE, // Gated by φ⁻¹ (0.618)
       dataQuality
     };
   }
