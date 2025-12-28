@@ -12,7 +12,7 @@
  *   • Physics: Charge/mass (stock) vs force field (phase relationships)
  * 
  * The THREE DIMENSIONS (θ, z, R) are substrate-independent measurements:
- *   θ (Phase):       Cycle position via atan2(price, Δprice) - stock/flow phase angle
+ *   θ (Phase):       Cycle position via atan2(Δprice, price) - 0° true north, +θ rising, -θ falling
  *   z (Anomaly):     Deviation from equilibrium via robust MAD z-score - universal
  *   R (Convergence): Amplitude ratio z(t)/z(t-1) - scale-free convergence metric
  * 
@@ -24,7 +24,7 @@
  * ├─────────────────┬──────────────────────────┬────────────────┬──────────────────────────────┤
  * │ Dimension       │ Formula                  │ φ-Bounds       │ Classification Rule          │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
- * │ θ (Phase)       │ atan2(price, Δprice)     │ ∈ (0°, 180°)   │ θ measures cycle position    │
+ * │ θ (Phase)       │ atan2(Δprice, price)     │ 0°=true north  │ +θ rising, -θ falling        │
  * │ Cycle Position  │                          │                │ (Stock-Flow phase angle)     │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
  * │ z (Anomaly)     │ (Value - Median) / MAD   │ See bounds     │ |z| > φ² flags anomaly      │
@@ -112,12 +112,12 @@ explosion or collapse. The question contains its own answer.
 THE THREE DIMENSIONS (substrate-agnostic):
 
 • θ (PHASE) - Cycle Position
-• Formula: atan2(price, Δprice) → 0° to 180° for positive prices
-• stock = price, flow = Δprice (rate of change)
+• Formula: atan2(Δprice, price) where y=flow, x=stock
+• 0° = true north (equilibrium)
 • Binary interpretation:
-  - θ < 90° = SURVIVAL (price rising)
-  - θ ≈ 90° = WAIT (price stable)
-  - θ > 90° = DECAY (price falling)
+  - +θ = SURVIVAL (price rising)
+  - -θ = DECAY (price falling)
+  - θ ≈ 0° = WAIT (equilibrium)
 
 z (ANOMALY) - Deviation from Equilibrium  
 • Formula: (Value - Median) / MAD (robust z-score using Median Absolute Deviation)
@@ -563,42 +563,35 @@ function detectCrossover(fastEMA, slowEMA, options = {}) {
 // ============================================================================
 
 /**
- * Calculate phase angle θ = atan2(Flow, Stock) for full 0°-360° quadrant coverage
+ * Calculate phase angle θ = atan2(flow, stock)
  * 
- * vφ³: Now normalizes inputs for scale invariance. Raw atan2 is unit-sensitive;
- * normalization ensures consistent phase regardless of absolute magnitudes.
+ * DEPRECATED: Use analyzePhase() for price series analysis.
  * 
- * Using atan2 gives full 4-quadrant coverage:
- * - Q1 (0°-90°): +Stock, +Flow = Early Expansion
- * - Q2 (90°-180°): -Stock, +Flow = Late Expansion  
- * - Q3 (180°-270°): -Stock, -Flow = Early Contraction
- * - Q4 (270°-360°): +Stock, -Flow = Late Contraction
+ * θ = atan2(y=flow, x=stock):
+ *   - 0° = true north (equilibrium)
+ *   - +θ = flow positive (rising)
+ *   - -θ = flow negative (falling)
  * 
- * @param {number} flow - Income statement value (net income, revenue)
- * @param {number} stock - Balance sheet value (equity, assets)
+ * @param {number} flow - Flow value (Δprice, net income)
+ * @param {number} stock - Stock value (price, equity)
  * @param {Object} options - Normalization options
- * @param {boolean} options.normalize - If true (default), normalize inputs for scale invariance
- * @param {number} options.flowScale - Historical flow magnitude for normalization (default: |flow|)
- * @param {number} options.stockScale - Historical stock magnitude for normalization (default: |stock|)
- * @returns {number} Phase angle in degrees (0°-360°)
+ * @returns {number} Phase angle in degrees
+ * @deprecated Use analyzePhase() instead
  */
 function calculatePhase(flow, stock, options = { normalize: true }) {
   let flowNorm = flow;
   let stockNorm = stock;
   
   if (options.normalize) {
-    // Normalize each to its own scale (avoid division by zero)
     const flowScale = options.flowScale || Math.abs(flow) || 1;
     const stockScale = options.stockScale || Math.abs(stock) || 1;
     flowNorm = flow / flowScale;
     stockNorm = stock / stockScale;
   }
   
-  // atan2(y, x) returns radians in range (-π, π]
-  const radians = Math.atan2(stockNorm, flowNorm);
-  let degrees = radians * (180 / Math.PI);
-  // Normalize to 0°-360° range
-  if (degrees < 0) degrees += 360;
+  // atan2(y=flow, x=stock) → 0° true north, +θ rising, -θ falling
+  const radians = Math.atan2(flowNorm, stockNorm);
+  const degrees = radians * (180 / Math.PI);
   return degrees;
 }
 
@@ -710,59 +703,52 @@ function calculatePhaseEMACircular(phaseAngles, period, options = { interpolate:
 /**
  * Get cycle phase interpretation from angle
  * 
- * θ = atan2(price, Δprice) where price > 0
- * For positive prices:
- *   θ ∈ (0°, 90°) when Δprice > 0 (price rising)
- *   θ = 90° when Δprice = 0 (price unchanged)
- *   θ ∈ (90°, 180°) when Δprice < 0 (price falling)
+ * θ = atan2(Δprice, price) where:
+ *   - y = Δprice (flow), x = price (stock)
+ *   - 0° = true north (equilibrium, no change)
+ *   - +θ = price rising (positive delta)
+ *   - -θ = price falling (negative delta)
  * 
  * Binary interpretation:
- *   θ < 90° → SURVIVAL (price rising)
- *   θ > 90° → DECAY (price falling)
+ *   +θ → SURVIVAL (price rising)
+ *   -θ → DECAY (price falling)
+ *   θ ≈ 0° → WAIT (equilibrium)
  * 
- * @param {number} theta - Phase angle in degrees
+ * @param {number} theta - Phase angle in degrees (-90 to +90 for typical prices)
  * @returns {Object} Phase interpretation
  */
 function interpretPhase(theta) {
-  if (theta > 0 && theta < 90) {
+  if (theta > 1) {
     return { 
       phase: 'SURVIVAL', 
       emoji: '🟢',
       description: 'Price rising.',
       signal: 'HOLD_LONG'
     };
-  } else if (theta === 90 || (theta > 85 && theta < 95)) {
+  } else if (theta >= -1 && theta <= 1) {
     return { 
       phase: 'WAIT', 
       emoji: '⏸️',
-      description: 'Price stable / consolidating.',
+      description: 'Price stable / equilibrium.',
       signal: 'WAIT'
     };
-  } else if (theta > 90 && theta < 180) {
+  } else {
     return { 
       phase: 'DECAY', 
       emoji: '🔴',
       description: 'Price falling.',
       signal: 'CAUTION'
     };
-  } else {
-    return { 
-      phase: 'NEUTRAL', 
-      emoji: '⚪',
-      description: 'Neutral.',
-      signal: 'WAIT'
-    };
   }
 }
 
 /**
- * Analyze Phase θ = atan2(price, Δprice)
+ * Analyze Phase θ = atan2(Δprice, price)
  * 
- * Simple formula: θ = atan2(stock, flow) where:
- *   - stock = price (accumulated value)
- *   - flow = Δprice (rate of change)
- * 
- * For mature series, θ stays near 90° since price >> Δprice.
+ * Formula: θ = atan2(y, x) where y=Δprice (flow), x=price (stock)
+ *   - 0° = true north (equilibrium, no change)
+ *   - +θ = price rising (positive Δprice)
+ *   - -θ = price falling (negative Δprice)
  * 
  * @param {number[]} prices - Price time series
  * @returns {Object} Phase analysis with signals
@@ -776,14 +762,15 @@ function analyzePhase(prices) {
     };
   }
   
-  // Calculate θ = atan2(price, Δprice) for each period
+  // Calculate θ = atan2(Δprice, price) for each period
+  // True north = 0° (equilibrium), +θ = rising, -θ = falling
   const thetaSeries = [];
   for (let i = 1; i < prices.length; i++) {
-    const stock = prices[i];           // Current price (stock)
-    const flow = prices[i] - prices[i - 1]; // Price change (flow)
+    const stock = prices[i];                  // Current price (x)
+    const flow = prices[i] - prices[i - 1];   // Price change (y)
     
-    // atan2(stock, flow) per unified formula
-    const radians = Math.atan2(stock, flow);
+    // atan2(y=flow, x=stock) → 0° at equilibrium, +θ rising, -θ falling
+    const radians = Math.atan2(flow, stock);
     const degrees = radians * (180 / Math.PI);
     thetaSeries.push(degrees);
   }
@@ -821,7 +808,7 @@ function analyzePhase(prices) {
     emaSlow: ema55Result.values,
     ema34Interpolated: ema34Result.interpolated,
     ema55Interpolated: ema55Result.interpolated,
-    formula: 'θ = atan2(price, Δprice)'
+    formula: 'θ = atan2(Δprice, price)'
   };
 }
 
