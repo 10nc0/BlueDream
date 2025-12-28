@@ -308,6 +308,9 @@ function calculateFidelity(dimensions = {}) {
     const lowSignalCount = data.filter(v => Math.abs(v) < SIGNAL_THRESHOLD).length;
     return lowSignalCount / data.length;
   };
+  
+  // Safe concat with null guards
+  const safeConcat = (a, b) => (a || []).concat(b || []);
 
   return {
     theta,
@@ -318,9 +321,9 @@ function calculateFidelity(dimensions = {}) {
     // Human-readable breakdown string
     breakdown: `θ: ${theta.real}/${theta.total} (${(theta.fidelity * 100).toFixed(0)}%) | z: ${z.real}/${z.total} (${(z.fidelity * 100).toFixed(0)}%) | R: ${r.real}/${r.total} (${(r.fidelity * 100).toFixed(0)}%)`,
     lowSignal: {
-      theta: calculateLowSignalRatio(theta1.concat(theta2)),
-      z: calculateLowSignalRatio(z1.concat(z2)),
-      r: calculateLowSignalRatio(r1.concat(r2))
+      theta: calculateLowSignalRatio(safeConcat(theta1, theta2)),
+      z: calculateLowSignalRatio(safeConcat(z1, z2)),
+      r: calculateLowSignalRatio(safeConcat(r1, r2))
     }
   };
 }

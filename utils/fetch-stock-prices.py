@@ -281,15 +281,20 @@ def fetch_stock_data(ticker: str) -> dict:
     Fetch historical closing prices and fundamental data for a stock ticker.
     Returns BOTH daily and weekly timeframes for dual Ψ-EMA analysis.
     
-    Optimized minimal-fetch strategy (Dec 23, 2025):
-    - Daily: '3mo' = ~55 trading days (covers EMA-55)
-    - Weekly: '13mo' = ~55 weeks (exact for EMA-55)
+    Optimized minimal-fetch strategy (Dec 28, 2025):
+    - Daily: '6mo' = ~130 trading days (covers 98-row warm-up + 30+ usable rows)
+    - Weekly: '2y' = ~104 weeks (covers 98-row warm-up + usable rows)
     
-    Fidelity grading (not hard-gating) handles data quality:
+    z-score warm-up requirement (vφ⁷ 2-pass MAD):
+    - Pass 1: 50-period rolling median = 49 warm-up rows
+    - Pass 2: 50-period MAD of |price - median| = 49 more rows
+    - Total: 98 rows before first valid z-score
+    
+    Fidelity grading handles data quality:
     - ≥174 bars: A grade (full crossover fidelity)
-    - ≥55 bars: B/C grade (real θ, z, R values)
-    - ≥13 bars: D grade (basic EMA, limited precision)
-    - <13 bars: Unavailable (synthetic values not useful)
+    - ≥99 bars: B grade (valid z-scores available)
+    - ≥55 bars: C grade (θ available, z partial)
+    - <55 bars: D grade (limited precision)
     
     Weekly candles are self-contained OHLC snapshots - no gap filling needed.
     Like blockchain logs, each candle compresses all activity in that period.
@@ -311,8 +316,8 @@ def fetch_stock_data(ticker: str) -> dict:
     try:
         stock = yf.Ticker(ticker.upper())
         
-        # Fetch DAILY data - exact 3mo (~55 trading days for EMA-55)
-        hist_daily = stock.history(period='3mo', interval='1d')
+        # Fetch DAILY data - 6mo (~130 trading days for 98-row z-score warm-up)
+        hist_daily = stock.history(period='6mo', interval='1d')
         
         if hist_daily.empty:
             return {
@@ -326,9 +331,9 @@ def fetch_stock_data(ticker: str) -> dict:
         # φ-interpolate small gaps in daily data (conservative: 2-3 days only)
         closes_daily, dates_daily, daily_flags = phi_interpolate(closes_daily, dates_daily)
         
-        # Fetch WEEKLY data - exact 13mo (~55 weeks for EMA-55)
+        # Fetch WEEKLY data - 2y (~104 weeks for 98-row z-score warm-up)
         # Weekly candles = compressed OHLC, no gaps to fill
-        hist_weekly = stock.history(period='13mo', interval='1wk')
+        hist_weekly = stock.history(period='2y', interval='1wk')
         
         closes_weekly = hist_weekly['Close'].tolist() if not hist_weekly.empty else []
         dates_weekly = [d.strftime('%Y-%m-%d') for d in hist_weekly.index] if not hist_weekly.empty else []
