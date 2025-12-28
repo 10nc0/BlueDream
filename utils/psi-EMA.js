@@ -161,17 +161,17 @@ const FIB_PERIODS = {
 // R (Convergence) Regime Bounds - φ-Derived from x = 1 + 1/x
 // Classification: Amplitude ratio near φ indicates self-similar oscillations
 const R_BOUNDS = {
-  LOWER: PHI_INVERSE,      // φ⁻¹ ≈ 0.618: R < φ⁻¹ → amplitude decay
-  UPPER: PHI,              // φ ≈ 1.618: R > φ → amplitude growth
-  TOLERANCE: PHI_INV_SQUARED // φ⁻² ≈ 0.382: band around φ for convergence test
+  LOWER: 0.618,      // φ⁻¹: R < 0.618 → decaying orbit
+  UPPER: 1.618,      // φ: R > 1.618 → accelerating orbit
+  TOLERANCE: 0.382   // φ⁻²: band for regime classification
 };
 
 // Z (Anomaly) Thresholds - φ-Derived from x = 1 + 1/x
 // Classification: Deviation from equilibrium measured in MAD units
 const Z_BOUNDS = {
-  NORMAL: PHI,             // |z| < φ: within expected range
-  ALERT: PHI_SQUARED,      // φ < |z| < φ²: elevated deviation
-  EXTREME: PHI_SQUARED     // |z| > φ²: extreme deviation flag
+  NORMAL: 1.618,             // |z| < φ: within expected range
+  ALERT: 2.618,              // φ < |z| < φ²: elevated deviation
+  EXTREME: 2.618             // |z| > φ²: extreme deviation flag
 };
 
 // Composite φ-sums (no arbitrary numbers)
@@ -1085,12 +1085,14 @@ function safeConvergenceRatio(currentZ, previousZ, epsilon = 0.15) {
   
   // Interpret regime using clamped value (φ-zone as band, not law)
   let interpretation;
-  if (clampedAbsRatio < 1.3) {
-    interpretation = 'anomaly contracting — momentum declining';
-  } else if (clampedAbsRatio < 2.0) {
-    interpretation = 'anomaly momentum in φ-zone — sustainable growth';
+  if (clampedAbsRatio < 0.618) {
+    interpretation = 'decaying orbit — momentum declining';
+  } else if (clampedAbsRatio < 1.618) {
+    interpretation = 'breathing orbit — sustainable growth';
+  } else if (clampedAbsRatio < 2.618) {
+    interpretation = 'optimistic orbit — accelerating momentum';
   } else {
-    interpretation = 'anomaly expanding — accelerating momentum';
+    interpretation = 'escape velocity — potential bubble';
   }
   
   return {
@@ -1186,12 +1188,14 @@ function calculatePhiConvergence(zFlows) {
     trendStatus = 'LOW_SIGNAL_CONSOLIDATION';
   } else if (isReversingTrend) {
     trendStatus = 'UNSTABLE_REVERSING';
-  } else if (recentMean >= 1.3 && recentMean <= 2.0) {
-    trendStatus = 'STABLE_CONVERGING';
-  } else if (recentMean < 1.3) {
-    trendStatus = 'DECAYING';
+  } else if (recentMean >= 0.618 && recentMean <= 1.618) {
+    trendStatus = 'BREATHING';
+  } else if (recentMean < 0.618) {
+    trendStatus = 'FATALISM_CLIFF';
+  } else if (recentMean <= 2.618) {
+    trendStatus = 'OPTIMISM';
   } else {
-    trendStatus = 'ACCELERATING';
+    trendStatus = 'ESCAPE';
   }
   
   return {
