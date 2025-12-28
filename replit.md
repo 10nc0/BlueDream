@@ -63,7 +63,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
   - **ehi passiko**: "Come and see" — users upload CSV/SQL/TXT time series, apply the compass, diagnose anomalies themselves. No predictions, no mysticism, just coordinates.
   - **Coordinate System**:
     - **θ (phase angle)**: atan2(stock, flow). Binary interpretation for mature series (e.g., SPY): +θ = SURVIVAL (continuation), -θ = DECAY (pullback). Oscillates in tight band around 90° due to massive stock denominator.
-    - **z (anomaly)**: deviation from median via MAD. |z|<φ normal, φ<|z|<φ² alert, |z|>φ² extreme.
+    - **z (anomaly)**: deviation from median via MAD with 35-period rolling window. |z|<φ normal, φ<|z|<φ² alert, |z|>φ² extreme.
     - **R (convergence)**: φ-Orbital model using orbital mechanics analogy:
       - R > φ² (2.618): ESCAPE - bubble → crash (escape velocity)
       - R ∈ [φ, φ²] (1.618-2.618): OPTIMISM - accelerating orbit
