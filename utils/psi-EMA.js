@@ -2664,7 +2664,6 @@ module.exports = {
   // Utilities
   mean,
   stdDev,
-  zScore,
   calculateFidelity,
   calculateFidelityLegacy,
   
