@@ -276,7 +276,7 @@ def phi_interpolate(closes, dates):
     return interpolated, interpolated_dates, flags
 
 
-def fetch_stock_data(ticker: str) -> dict:
+def fetch_stock_data(ticker: str, custom_period: str = None) -> dict:
     """
     Fetch historical closing prices and fundamental data for a stock ticker.
     Returns BOTH daily and weekly timeframes for dual Ψ-EMA analysis.
@@ -301,6 +301,7 @@ def fetch_stock_data(ticker: str) -> dict:
     
     Args:
         ticker: Stock symbol (e.g., 'NVDA', 'AAPL')
+        custom_period: Optional custom period (e.g., '1y', '5y')
     
     Returns:
         dict with keys:
@@ -316,8 +317,13 @@ def fetch_stock_data(ticker: str) -> dict:
     try:
         stock = yf.Ticker(ticker.upper())
         
-        # Fetch DAILY data - 6mo (~130 trading days for 98-row z-score warm-up)
-        hist_daily = stock.history(period='6mo', interval='1d')
+        # Scale periods with null guards and cushion
+        # Default: 98 rows + cushion -> 6mo daily (~130 bars), 2y weekly (~104 bars)
+        daily_period = custom_period if custom_period else '6mo'
+        weekly_period = '2y' if not custom_period else (custom_period if 'y' in custom_period else '2y')
+
+        # Fetch DAILY data
+        hist_daily = stock.history(period=daily_period, interval='1d')
         
         if hist_daily.empty:
             return {
@@ -331,9 +337,8 @@ def fetch_stock_data(ticker: str) -> dict:
         # φ-interpolate small gaps in daily data (conservative: 2-3 days only)
         closes_daily, dates_daily, daily_flags = phi_interpolate(closes_daily, dates_daily)
         
-        # Fetch WEEKLY data - 2y (~104 weeks for 98-row z-score warm-up)
-        # Weekly candles = compressed OHLC, no gaps to fill
-        hist_weekly = stock.history(period='2y', interval='1wk')
+        # Fetch WEEKLY data
+        hist_weekly = stock.history(period=weekly_period, interval='1wk')
         
         closes_weekly = hist_weekly['Close'].tolist() if not hist_weekly.empty else []
         dates_weekly = [d.strftime('%Y-%m-%d') for d in hist_weekly.index] if not hist_weekly.empty else []
@@ -455,9 +460,10 @@ def fetch_stock_data(ticker: str) -> dict:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print(json.dumps({"error": "Usage: python fetch-stock-prices.py TICKER"}))
+        print(json.dumps({"error": "Usage: python fetch-stock-prices.py TICKER [PERIOD]"}))
         sys.exit(1)
     
     ticker = sys.argv[1]
-    result = fetch_stock_data(ticker)
+    custom_period = sys.argv[2] if len(sys.argv) > 2 else None
+    result = fetch_stock_data(ticker, custom_period)
     print(json.dumps(result))

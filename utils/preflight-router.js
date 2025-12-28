@@ -140,7 +140,7 @@ async function preflightRouter(options) {
         console.log(`💱 Preflight: Forex query detected but no specific pair extracted`);
       }
     }
-    // 1. Ψ-EMA: Push-based 2/3 key detection (Lego-style Turing test)
+        // 1. Ψ-EMA: Push-based 2/3 key detection (Lego-style Turing test)
     // Keys: VERB (analyze/diagnose) + ADJECTIVE (price/trend) + OBJECT (ticker)
     // If 2/3 keys match → unlock Ψ-EMA gate
     // OR trigger if keyword "psi-ema" or "ψ-ema" is present (quantum compass scavenge hunt)
@@ -148,6 +148,15 @@ async function preflightRouter(options) {
     else if (result.mode !== 'forex') {
       const psiEmaDetection = detectPsiEMAKeys(query);
       const hasExplicitModeKeyword = /\b(psi|ψ)[\s\-]?ema\b/i.test(query);
+
+      // Extract dynamic data period if specified: "1y daily", "5y weekly", "nd psi ema"
+      // Default: null (fetcher uses 6mo/2y defaults)
+      let customPeriod = null;
+      const ndMatch = query.match(/\b(\d+)([dwmy])\b/i);
+      if (ndMatch) {
+        customPeriod = ndMatch[1] + ndMatch[2].toLowerCase();
+        console.log(`📊 Preflight: Detected custom data period: ${customPeriod}`);
+      }
     
       // Context fallback: STRICT - only reuse inferred ticker if:
       // 1. We have a ticker from prior conversation, AND
@@ -233,7 +242,7 @@ async function preflightRouter(options) {
           
           // Fetch stock data (exact periods: 3mo daily, 15mo weekly)
           try {
-            result.stockData = await fetchStockPrices(result.ticker);
+            result.stockData = await fetchStockPrices(result.ticker, customPeriod);
             result.dataAge = calculateDataAge(result.stockData?.endDate);
             
             // Use barCount from optimized fetch (exact data, no buffer)

@@ -285,7 +285,7 @@ function sanitizeTicker(ticker) {
   return sanitized;
 }
 
-function fetchStockPrices(ticker) {
+function fetchStockPrices(ticker, customPeriod = null) {
   return new Promise((resolve, reject) => {
     const safeTicker = sanitizeTicker(ticker);
     if (!safeTicker) {
@@ -294,8 +294,10 @@ function fetchStockPrices(ticker) {
     }
     
     const scriptPath = path.join(__dirname, 'fetch-stock-prices.py');
+    const args = [scriptPath, safeTicker];
+    if (customPeriod) args.push(customPeriod);
     
-    const python = spawn('python', [scriptPath, safeTicker]);
+    const python = spawn('python', args);
     
     let stdout = '';
     let stderr = '';
