@@ -230,28 +230,6 @@ function median(arr) {
 }
 
 /**
- * Calculate robust z-score using MAD (Median Absolute Deviation)
- * Scaled by 1.4826 for normal consistency (matches σ for Gaussian data)
- * 
- * Uses 35-period rolling window by default (validated vs 30-year S&P 500 backtest)
- * Shorter than 50-period: faster regime detection without excessive noise
- * 
- * @param {number} value - Current value
- * @param {number[]} arr - Array of historical values
- * @param {number} window - Rolling window size (default: ROLLING_WINDOW = 35)
- * @returns {number} MAD-scaled z-score
- */
-function robustZScore(value, arr, window = ROLLING_WINDOW) {
-  // Use only the last 'window' periods for rolling median/MAD
-  const rollingArr = arr.length > window ? arr.slice(-window) : arr;
-  const med = median(rollingArr);
-  const dispersion = mad(rollingArr);
-  if (dispersion === 0) return 0;
-  const MAD_SCALE = 1.4826;  // Scaling factor for normal consistency
-  return (value - med) / (dispersion * MAD_SCALE);
-}
-
-/**
  * Count real vs interpolated points in an array
  * @param {boolean[]} arr - Interpolation flag array
  * @returns {Object} { real, total }
@@ -2670,7 +2648,6 @@ module.exports = {
   // Robust statistics
   mad,
   median,
-  robustZScore,
   
   // Financial Microbiology (Dec 23, 2025)
   PATHOGENS,
