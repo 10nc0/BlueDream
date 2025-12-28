@@ -1,5 +1,12 @@
 /**
  * Context Extractor - Stage -1 Pre-processing
+ * 
+ * Responsibilities (PURE EXTRACTION, NO MODE DECISIONS):
+ * - Extract entities from conversation history (companies, tickers, topics)
+ * - Manage session memory (sliding window)
+ * - Infer context from prior messages
+ * 
+ * Mode detection is delegated to preflight-router.js via mode-registry.js
  */
 
 const { getMemoryManager } = require('./memory-manager');
@@ -26,23 +33,6 @@ const FINANCIAL_TOPICS = [
   'ema', 'psi', 'ψ', 'phi', 'φ', 'crossover', 'golden cross', 'death cross',
   'bullish', 'bearish', 'momentum', 'volatility', 'forecast', 'outlook'
 ];
-
-function isCodeContent(text, fileName) {
-  if (!text) return false;
-  const ext = (fileName || '').toLowerCase().split('.').pop();
-  const codeExts = ['js', 'ts', 'py', 'go', 'java', 'cpp', 'c', 'cs', 'php', 'rb', 'rs', 'swift', 'sh', 'sql', 'html', 'css'];
-  if (codeExts.includes(ext)) return true;
-  
-  if (ext === 'txt' || !ext) {
-    const codePatterns = [
-      /function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=/,
-      /import\s+.*\s+from|require\s*\(|module\.exports\s*=/,
-      /class\s+\w+|def\s+\w+\s*\(|if\s+__name__\s*==\s*['"]__main__['"]/
-    ];
-    return codePatterns.some(p => p.test(text.substring(0, 2000)));
-  }
-  return false;
-}
 
 function extractContext(history = [], attachmentHistory = [], windowSize = 8) {
   const result = {
@@ -181,12 +171,6 @@ async function extractContextWithMemory(sessionId, currentQuery, history = [], a
   const memoryContext = memory.getContextForPrompt(currentQuery);
   const memoryPrompt = memory.buildMemoryPrompt(currentQuery);
   
-  if (memoryContext.attachmentContext) {
-    memoryContext.attachmentContext.isCode = isCodeContent(
-      memoryContext.attachmentContext.content,
-      memoryContext.attachmentContext.name
-    );
-  }
 
   return {
     entities: entityContext.entities,
@@ -226,6 +210,5 @@ function markSessionNyanBooted(sessionId) {
 module.exports = {
   extractContext, extractContextWithMemory, extractEntitiesFromText,
   mergeContextForTickerDetection, recordInMemory, clearSessionMemory,
-  isSessionFirstQuery, markSessionNyanBooted, KNOWN_COMPANIES, FINANCIAL_TOPICS,
-  isCodeContent, isLikelyCode: isCodeContent
+  isSessionFirstQuery, markSessionNyanBooted, KNOWN_COMPANIES, FINANCIAL_TOPICS
 };

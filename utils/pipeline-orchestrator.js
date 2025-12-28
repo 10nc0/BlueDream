@@ -33,7 +33,7 @@
  */
 
 const { preflightRouter, buildSystemContext } = require('./preflight-router');
-const { extractContext, extractContextWithMemory, mergeContextForTickerDetection, isSessionFirstQuery, markSessionNyanBooted, isCodeContent } = require('./context-extractor');
+const { extractContext, extractContextWithMemory, mergeContextForTickerDetection, isSessionFirstQuery, markSessionNyanBooted } = require('./context-extractor');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT, NYAN_PROTOCOL_COMPRESSED } = require('../prompts/nyan-protocol');
 const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
@@ -151,29 +151,22 @@ class PipelineOrchestrator {
         );
       }
 
-      // If no file in memory but we just ingested one, use it for mode detection
+      // If no file in memory but we just ingested one, record metadata (no mode decision)
       if (!state.contextResult.attachmentContext && perception.hasAttachments) {
         state.contextResult.attachmentContext = {
-          name: perception.files[0].fileName,
-          isCode: perception.files[0].fileType === 'code'
+          name: perception.files[0].fileName
         };
       }
 
-      // WRITE to DataPackage: Stage S-1 context extraction result
+      // WRITE to DataPackage: Stage S-1 context extraction result (mode-agnostic)
       state.writeToPackage(STAGE_IDS.CONTEXT_EXTRACT, {
         inferredTicker: state.contextResult.inferredTicker,
         hasFinancialContext: state.contextResult.hasFinancialContext,
         hasMemory: state.contextResult.hasMemory,
         attachmentContext: state.contextResult.attachmentContext?.name || null,
-        isCodeReview: state.contextResult.attachmentContext?.isCode || false,
         perceptionFiles: perception.files.length,
         extractedTextLength: perception.extractedText.length
       });
-      
-      if (state.contextResult.attachmentContext?.isCode) {
-        state.mode = 'code-audit';
-        console.log(`🛡️ Stage -1: Code Audit mode engaged for "${state.contextResult.attachmentContext.name}"`);
-      }
       
       if (state.contextResult.inferredTicker) {
         console.log(`📜 Stage -1: Context extracted - inferred ticker: ${state.contextResult.inferredTicker}`);
@@ -465,12 +458,9 @@ MANDATORY INSTRUCTIONS:
     const hasSearch = !!state.searchContext;
     const isPsiEma = state.mode === 'psi-ema' && state.preflight?.psiEmaAnalysis;
     
-    // Add code review guard if in code-audit mode
+    // Add code review guard if in code-audit mode (mode already set by preflight)
     if (isCodeReview && hasAttachments) {
-        const latest = extractedContent[extractedContent.length - 1];
-        if (latest.fileName && isCodeContent('', latest.fileName)) {
-            finalPrompt = `[CODE AUDIT PROTOCOL ACTIVE]\n${finalPrompt}`;
-        }
+        finalPrompt = `[CODE AUDIT PROTOCOL ACTIVE]\n${finalPrompt}`;
     }
     
     // Prepend φ-compressed memory context if available (human-like recall)
