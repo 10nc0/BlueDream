@@ -12,7 +12,7 @@
  *   • Physics: Charge/mass (stock) vs force field (phase relationships)
  * 
  * The THREE DIMENSIONS (θ, z, R) are substrate-independent measurements:
- *   θ (Phase):       Cycle position via atan2(stock, flow) - applies to any oscillating system
+ *   θ (Phase):       Cycle position via atan2(price, Δprice) - stock/flow phase angle
  *   z (Anomaly):     Deviation from equilibrium via robust MAD z-score - universal
  *   R (Convergence): Amplitude ratio z(t)/z(t-1) - scale-free convergence metric
  * 
@@ -24,7 +24,7 @@
  * ├─────────────────┬──────────────────────────┬────────────────┬──────────────────────────────┤
  * │ Dimension       │ Formula                  │ φ-Bounds       │ Classification Rule          │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
- * │ θ (Phase)       │ atan2(stock, flow)       │ ∈ [0°, 360°)   │ θ measures cycle position    │
+ * │ θ (Phase)       │ atan2(price, Δprice)     │ ∈ (0°, 180°)   │ θ measures cycle position    │
  * │ Cycle Position  │                          │                │ (Stock-Flow phase angle)     │
  * ├─────────────────┼──────────────────────────┼────────────────┼──────────────────────────────┤
  * │ z (Anomaly)     │ (Value - Median) / MAD   │ See bounds     │ |z| > φ² flags anomaly      │
@@ -112,12 +112,12 @@ explosion or collapse. The question contains its own answer.
 THE THREE DIMENSIONS (substrate-agnostic):
 
 • θ (PHASE) - Cycle Position
-• Formula: atan2(stock, flow) → 0° to 360°
-• Measures WHERE in the oscillation cycle the system is
-• Binary Interpretation for mature series:
-• +θ = SURVIVAL (continuation, healthy upward drift)
-• -θ = DECAY (pullback, normal reset)
-• Oscillates in tight band around 90° for assets with massive stock (e.g. SPY)
+• Formula: atan2(price, Δprice) → 0° to 180° for positive prices
+• stock = price, flow = Δprice (rate of change)
+• Binary interpretation:
+  - θ < 90° = SURVIVAL (price rising)
+  - θ ≈ 90° = WAIT (price stable)
+  - θ > 90° = DECAY (price falling)
 
 z (ANOMALY) - Deviation from Equilibrium  
 • Formula: (Value - Median) / MAD (robust z-score using Median Absolute Deviation)
@@ -709,87 +709,119 @@ function calculatePhaseEMACircular(phaseAngles, period, options = { interpolate:
 
 /**
  * Get cycle phase interpretation from angle
+ * 
+ * θ = atan2(price, Δprice) where price > 0
+ * For positive prices:
+ *   θ ∈ (0°, 90°) when Δprice > 0 (price rising)
+ *   θ = 90° when Δprice = 0 (price unchanged)
+ *   θ ∈ (90°, 180°) when Δprice < 0 (price falling)
+ * 
+ * Binary interpretation:
+ *   θ < 90° → SURVIVAL (price rising)
+ *   θ > 90° → DECAY (price falling)
+ * 
  * @param {number} theta - Phase angle in degrees
  * @returns {Object} Phase interpretation
  */
 function interpretPhase(theta) {
-  // Normalize to 0-360 range
-  let normalizedTheta = ((theta % 360) + 360) % 360;
-  
-  if (normalizedTheta >= 0 && normalizedTheta < 90) {
+  if (theta > 0 && theta < 90) {
     return { 
-      phase: 'EARLY_EXPANSION', 
+      phase: 'SURVIVAL', 
       emoji: '🟢',
-      description: 'Stock → Flow transition (early expansion)',
-      stockDominant: true,
-      flowRising: true
+      description: 'Price rising.',
+      signal: 'HOLD_LONG'
     };
-  } else if (normalizedTheta >= 90 && normalizedTheta < 180) {
+  } else if (theta === 90 || (theta > 85 && theta < 95)) {
     return { 
-      phase: 'LATE_EXPANSION', 
-      emoji: '🟡',
-      description: 'Flow peak (late expansion)',
-      stockDominant: false,
-      flowRising: false
+      phase: 'WAIT', 
+      emoji: '⏸️',
+      description: 'Price stable / consolidating.',
+      signal: 'WAIT'
     };
-  } else if (normalizedTheta >= 180 && normalizedTheta < 270) {
+  } else if (theta > 90 && theta < 180) {
     return { 
-      phase: 'EARLY_CONTRACTION', 
+      phase: 'DECAY', 
       emoji: '🔴',
-      description: 'Flow → Stock transition (early contraction)',
-      stockDominant: false,
-      flowRising: false
+      description: 'Price falling.',
+      signal: 'CAUTION'
     };
   } else {
     return { 
-      phase: 'LATE_CONTRACTION', 
-      emoji: '🔵',
-      description: 'Stock trough (late contraction)',
-      stockDominant: true,
-      flowRising: true
+      phase: 'NEUTRAL', 
+      emoji: '⚪',
+      description: 'Neutral.',
+      signal: 'WAIT'
     };
   }
 }
 
 /**
- * Analyze Phase θ with EMA-34/EMA-55 crossover
+ * Analyze Phase θ = atan2(price, Δprice)
  * 
- * Uses circular mean EMA (hardened against wraparound artifacts).
+ * Simple formula: θ = atan2(stock, flow) where:
+ *   - stock = price (accumulated value)
+ *   - flow = Δprice (rate of change)
  * 
- * @param {number[]} phases - Phase angle time series (in degrees)
+ * For mature series, θ stays near 90° since price >> Δprice.
+ * 
+ * @param {number[]} prices - Price time series
  * @returns {Object} Phase analysis with signals
  */
-function analyzePhase(phases) {
-  // Use circular mean EMA to eliminate wraparound artifacts at 0°/360° boundary
-  const ema34Result = calculatePhaseEMACircular(phases, FIB_PERIODS.FAST_THETA);
-  const ema55Result = calculatePhaseEMACircular(phases, FIB_PERIODS.SLOW_THETA);
-  const ema34 = ema34Result.values;
-  const ema55 = ema55Result.values;
+function analyzePhase(prices) {
+  if (!prices || prices.length < 2) {
+    return { 
+      error: 'Insufficient data (need at least 2 periods)',
+      dimension: 'PHASE_θ',
+      current: null
+    };
+  }
   
-  // vφ³: Pass fidelity info to gate crossover signals
-  const crossover = detectCrossover(ema34, ema55, {
+  // Calculate θ = atan2(price, Δprice) for each period
+  const thetaSeries = [];
+  for (let i = 1; i < prices.length; i++) {
+    const stock = prices[i];           // Current price (stock)
+    const flow = prices[i] - prices[i - 1]; // Price change (flow)
+    
+    // atan2(stock, flow) per unified formula
+    const radians = Math.atan2(stock, flow);
+    const degrees = radians * (180 / Math.PI);
+    thetaSeries.push(degrees);
+  }
+  
+  // Current values
+  const currentTheta = thetaSeries[thetaSeries.length - 1];
+  const currentPrice = prices[prices.length - 1];
+  const currentDelta = prices[prices.length - 1] - prices[prices.length - 2];
+  
+  // Interpret phase
+  const interpretation = interpretPhase(currentTheta);
+  
+  // EMA for smoothing (optional, for crossover signals)
+  const ema34Result = calculateEMA(prices, FIB_PERIODS.FAST_THETA);
+  const ema55Result = calculateEMA(prices, FIB_PERIODS.SLOW_THETA);
+  
+  const crossover = detectCrossover(ema34Result.values, ema55Result.values, {
     fastInterpolated: ema34Result.interpolated,
     slowInterpolated: ema55Result.interpolated
   });
   
-  const currentPhase = phases[phases.length - 1];
-  const currentEMA34 = ema34[ema34.length - 1];
-  const currentEMA55 = ema55[ema55.length - 1];
-  const interpretation = interpretPhase(currentPhase);
-  
   return {
     dimension: 'PHASE_θ',
-    current: currentPhase,
-    ema34: currentEMA34,
-    ema55: currentEMA55,
+    current: currentTheta,
+    currentPhase: currentTheta,
+    price: currentPrice,
+    deltaPrice: currentDelta,
+    ema34: ema34Result.values[ema34Result.values.length - 1],
+    ema55: ema55Result.values[ema55Result.values.length - 1],
     crossover,
     interpretation,
-    signal: crossover.signal,
-    raw: phases,
-    emaFast: ema34,
-    emaSlow: ema55,
+    signal: interpretation.signal || crossover.signal,
+    raw: thetaSeries,
+    emaFast: ema34Result.values,
+    emaSlow: ema55Result.values,
     ema34Interpolated: ema34Result.interpolated,
-    ema55Interpolated: ema55Result.interpolated
+    ema55Interpolated: ema55Result.interpolated,
+    formula: 'θ = atan2(price, Δprice)'
   };
 }
 
@@ -2082,14 +2114,12 @@ class PsiEMADashboard {
       return { error: zFlowResult.error };
     }
     
-    // Calculate phases
-    const phases = calculatePhaseTimeSeries(stocks, actualFlows);
-    
     // Calculate convergence ratios
     const convergenceResult = calculatePhiConvergence(zFlowResult.zFlows);
     
     // Analyze all three dimensions
-    const phaseAnalysis = analyzePhase(phases);
+    // vφ⁸: analyzePhase now takes raw prices (stocks) and computes θ = atan2(ΔEMA-55, ΔEMA-34)
+    const phaseAnalysis = analyzePhase(stocks);
     const anomalyAnalysis = analyzeAnomaly(zFlowResult.zFlows);
     const currentZ = anomalyAnalysis.current || 0;
     
