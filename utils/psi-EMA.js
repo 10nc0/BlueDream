@@ -831,23 +831,25 @@ function analyzePhase(prices) {
 // ============================================================================
 
 /**
- * Calculate z-score flows from raw flow data
+ * Calculate z-scores from stock (price) data using rolling window
  * 
  * vφ³: Uses MAD (Median Absolute Deviation) by default for robustness.
  * vφ⁵: Added fidelity guards, minSamples threshold, and NaN handling.
  * vφ⁶: Added rolling window option (35-period default, validated vs 30-year S&P 500)
+ * vφ⁷: FIXED - z-score now computed on STOCK (prices), not flows
+ *       Excel reference: z = (Stock - Rolling Median of Stock) / (MAD × 1.4826)
  * 
- * @param {number[]} flows - Raw flow values (e.g., earnings differences)
+ * @param {number[]} stocks - Stock values (prices) - the finite series to analyze
  * @param {Object} options - Configuration options
  * @param {boolean} options.robust - Use MAD instead of stdDev (default: true)
  * @param {number} options.minSamples - Minimum samples for reliable z-score (default: 8)
  * @param {number} options.rollingWindow - Rolling window for median/MAD (default: ROLLING_WINDOW = 35)
  * @returns {Object} Z-score analysis with fidelity metrics
  */
-function calculateZFlows(flows, options = {}) {
+function calculateZFlows(stocks, options = {}) {
   const { robust = true, minSamples = 8, rollingWindow = ROLLING_WINDOW } = options;
   
-  if (!flows || flows.length < 2) {
+  if (!stocks || stocks.length < 2) {
     return { 
       zFlows: [], 
       mean: 0, 
@@ -859,22 +861,22 @@ function calculateZFlows(flows, options = {}) {
   }
   
   // vφ⁵: Filter NaN/Infinity and track data quality (distinct from EMA fidelity)
-  const validFlows = flows.filter(f => Number.isFinite(f));
-  const nanCount = flows.length - validFlows.length;
-  const sampleCount = validFlows.length;
-  const isReliable = sampleCount >= minSamples && nanCount / flows.length < 0.3;
+  const validStocks = stocks.filter(s => Number.isFinite(s));
+  const nanCount = stocks.length - validStocks.length;
+  const sampleCount = validStocks.length;
+  const isReliable = sampleCount >= minSamples && nanCount / stocks.length < 0.3;
   
   // Build dataQuality object (input data quality, NOT EMA interpolation fidelity)
   const dataQuality = {
     sampleCount,
     nanCount,
-    nanRatio: nanCount / flows.length,
+    nanRatio: nanCount / stocks.length,
     minSamples,
     isReliable,
     warning: !isReliable 
       ? (sampleCount < minSamples 
           ? `Insufficient samples (${sampleCount}/${minSamples} required)` 
-          : `High NaN ratio (${(nanCount / flows.length * 100).toFixed(1)}% missing)`)
+          : `High NaN ratio (${(nanCount / stocks.length * 100).toFixed(1)}% missing)`)
       : null
   };
   
@@ -889,50 +891,82 @@ function calculateZFlows(flows, options = {}) {
     };
   }
   
-  const avg = mean(validFlows);
-  const med = median(validFlows);
+  const avg = mean(validStocks);
+  const med = median(validStocks);
   
   if (robust) {
-    // vφ⁶: Use rolling window for MAD z-score calculation
-    // Each z-score is computed using the last `rollingWindow` periods ending at that index
-    // This matches the Excel reference: z = (Stock - Rolling Median) / (MAD × 1.4826)
+    // vφ⁷: 2-PASS Excel-style calculation (validated vs 30-year S&P 500)
+    // Pass 1: Compute rolling median and abs dev for each row
+    // Pass 2: Compute MAD as rolling median of abs devs, then z-score
+    // Excel reference: z = (Stock - Rolling Median) / (MAD × 1.4826)
     const MAD_SCALE = 1.4826;  // Scaling for normal consistency
+    
+    // Pass 1: Rolling medians and absolute deviations
+    const rollingMedians = [];
+    const absDevs = [];
+    
+    for (let i = 0; i < stocks.length; i++) {
+      const stock = stocks[i];
+      if (!Number.isFinite(stock) || i < rollingWindow - 1) {
+        rollingMedians.push(null);
+        absDevs.push(null);
+        continue;
+      }
+      
+      const startIdx = i - rollingWindow + 1;
+      const windowStocks = stocks.slice(startIdx, i + 1).filter(x => Number.isFinite(x));
+      
+      if (windowStocks.length < minSamples) {
+        rollingMedians.push(null);
+        absDevs.push(null);
+        continue;
+      }
+      
+      const windowMed = median(windowStocks);
+      rollingMedians.push(windowMed);
+      absDevs.push(Math.abs(stock - windowMed));  // |Stock - Rolling Median|
+    }
+    
+    // Pass 2: z-scores using rolling MAD of abs devs
     const zFlows = [];
     
-    // Build z-scores with rolling window
-    for (let i = 0; i < flows.length; i++) {
-      const f = flows[i];
-      if (!Number.isFinite(f)) {
+    for (let i = 0; i < stocks.length; i++) {
+      const stock = stocks[i];
+      const med = rollingMedians[i];
+      
+      if (!Number.isFinite(stock) || med === null) {
         zFlows.push(NaN);
         continue;
       }
       
-      // Get rolling window ending at current index
-      const startIdx = Math.max(0, i - rollingWindow + 1);
-      const windowFlows = flows.slice(startIdx, i + 1).filter(x => Number.isFinite(x));
+      // Get rolling window of absolute deviations
+      // Excel requires full 35-period window for MAD calculation
+      const startIdx = i - rollingWindow + 1;
+      const windowAbsDevs = absDevs.slice(Math.max(0, startIdx), i + 1).filter(x => x !== null);
       
-      // Need at least minSamples for meaningful stats (warm-up period)
-      if (windowFlows.length < minSamples) {
+      // Require full rolling window for MAD (matches Excel behavior)
+      if (windowAbsDevs.length < rollingWindow) {
         zFlows.push(NaN);  // Warm-up period
         continue;
       }
       
-      const windowMed = median(windowFlows);
-      const windowMAD = mad(windowFlows);
+      // MAD = median of rolling absolute deviations
+      const madVal = median(windowAbsDevs);
       
-      if (windowMAD === 0) {
+      if (madVal === 0) {
         zFlows.push(0);  // No dispersion = at median
         continue;
       }
       
-      const z = (f - windowMed) / (windowMAD * MAD_SCALE);
+      // z = (Stock - Rolling Median) / (MAD × 1.4826)
+      const z = (stock - med) / (madVal * MAD_SCALE);
       zFlows.push(z);
     }
     
     const validZ = zFlows.filter(z => Number.isFinite(z));
     
     // Use final window for summary stats
-    const finalWindow = validFlows.slice(-rollingWindow);
+    const finalWindow = validStocks.slice(-rollingWindow);
     const finalMed = median(finalWindow);
     const finalMAD = mad(finalWindow);
     const finalDispersion = finalMAD * MAD_SCALE;
@@ -951,12 +985,12 @@ function calculateZFlows(flows, options = {}) {
     };
   }
   
-  // Legacy σ-based calculation
-  const std = stdDev(validFlows);
+  // Legacy σ-based calculation on stocks
+  const std = stdDev(validStocks);
   
   if (std === 0) {
     return { 
-      zFlows: flows.map(f => Number.isFinite(f) ? 0 : NaN), 
+      zFlows: stocks.map(s => Number.isFinite(s) ? 0 : NaN), 
       mean: avg, 
       dispersion: 0, 
       method: 'sigma', 
@@ -965,7 +999,7 @@ function calculateZFlows(flows, options = {}) {
     };
   }
   
-  const zFlows = flows.map(f => Number.isFinite(f) ? (f - avg) / std : NaN);
+  const zFlows = stocks.map(s => Number.isFinite(s) ? (s - avg) / std : NaN);
   const validZ = zFlows.filter(z => Number.isFinite(z));
   
   return {
@@ -2147,11 +2181,12 @@ class PsiEMADashboard {
       return { error: 'Need at least 3 periods of stock data' };
     }
     
-    // Derive flows if not provided
+    // Derive flows if not provided (used for theta calculation)
     const actualFlows = flows || this._deriveFlows(stocks);
     
-    // Calculate z-scores
-    const zFlowResult = calculateZFlows(actualFlows);
+    // vφ⁷: Calculate z-scores on STOCKS (prices), not flows
+    // Excel reference: z = (Stock - Rolling Median of Stock) / (MAD × 1.4826)
+    const zFlowResult = calculateZFlows(stocks);
     if (zFlowResult.error && zFlowResult.zFlows.length === 0) {
       return { error: zFlowResult.error };
     }
