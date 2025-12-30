@@ -831,7 +831,7 @@ function analyzePhase(prices) {
  * 
  * vφ³: Uses MAD (Median Absolute Deviation) by default for robustness.
  * vφ⁵: Added fidelity guards, minSamples threshold, and NaN handling.
- * vφ⁶: Added rolling window option (50-period default, 77.16% φ-band validation)
+ * vφ⁶: Added rolling window option (50-period default)
  * vφ⁷: FIXED - z-score now computed on STOCK (prices), not flows
  *       Excel reference: z = (Stock - Rolling Median of Stock) / (MAD × 1.4826)
  * 
