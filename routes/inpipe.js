@@ -19,10 +19,22 @@ function registerInpipeRoutes(app, deps) {
     logger.info('Registering inpipe routes: POST /api/twilio/webhook');
     
     app.post('/api/twilio/webhook', async (req, res) => {
+        console.log('🔔 TWILIO WEBHOOK HIT - Request received');
+        console.log('🔔 Headers:', JSON.stringify({
+            'x-twilio-signature': req.get('X-Twilio-Signature') ? 'present' : 'missing',
+            'x-forwarded-proto': req.get('X-Forwarded-Proto'),
+            'x-forwarded-host': req.get('X-Forwarded-Host'),
+            'host': req.get('Host'),
+            'content-type': req.get('Content-Type')
+        }));
+        console.log('🔔 Body keys:', Object.keys(req.body || {}));
+        
         try {
             const validation = twilioChannel.validateSignature(req);
+            console.log('🔔 Validation result:', JSON.stringify(validation));
             if (!validation.valid) {
                 logger.warn({ error: validation.error }, 'Twilio signature validation failed');
+                console.log('🔔 RETURNING 401:', validation.error);
                 return res.status(validation.status).json({ error: validation.error });
             }
             
