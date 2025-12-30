@@ -276,7 +276,7 @@ def phi_interpolate(closes, dates):
     return interpolated, interpolated_dates, flags
 
 
-def fetch_stock_data(ticker: str, custom_period: str = None) -> dict:
+def fetch_stock_data(ticker: str, custom_period: str | None = None) -> dict:
     """
     Fetch historical closing prices and fundamental data for a stock ticker.
     Returns BOTH daily and weekly timeframes for dual Ψ-EMA analysis.
