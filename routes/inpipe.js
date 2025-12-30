@@ -1,6 +1,5 @@
 const axios = require('axios');
 const FormData = require('form-data');
-const twilio = require('twilio');
 const { TwilioChannel } = require('../lib/channels/twilio');
 
 function registerInpipeRoutes(app, deps) {
@@ -21,25 +20,13 @@ function registerInpipeRoutes(app, deps) {
     
     app.post('/api/twilio/webhook', async (req, res) => {
         try {
-            const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-            if (!TWILIO_AUTH_TOKEN) {
-                logger.error('TWILIO_AUTH_TOKEN not configured - rejecting request');
-                return res.status(503).json({ error: 'Twilio not configured' });
+            const validation = twilioChannel.validateSignature(req);
+            if (!validation.valid) {
+                logger.warn({ error: validation.error }, 'Twilio signature validation failed');
+                return res.status(validation.status).json({ error: validation.error });
             }
             
-            const isValid = twilio.validateExpressRequest(req, TWILIO_AUTH_TOKEN, {
-                url: process.env.TWILIO_WEBHOOK_URL,
-                protocol: 'https'
-            });
-            
-            if (!isValid) {
-                logger.warn({ 
-                    url: process.env.TWILIO_WEBHOOK_URL,
-                    bodyKeys: Object.keys(req.body || {})
-                }, 'Twilio signature validation failed');
-                return res.status(401).json({ error: 'Invalid signature' });
-            }
-            logger.info('Twilio signature verified');
+            logger.info('Twilio signature verified (O(1) push guard passed)');
             
             const rawPayload = twilioChannel.parsePayload(req);
             const msg = twilioChannel.normalizeMessage(rawPayload);
