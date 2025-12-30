@@ -20,13 +20,7 @@ function registerInpipeRoutes(app, deps) {
     
     app.post('/api/twilio/webhook', async (req, res) => {
         try {
-            const validation = twilioChannel.validateSignature(req);
-            if (!validation.valid) {
-                logger.warn({ error: validation.error }, 'Twilio signature validation failed');
-                return res.status(validation.status).json({ error: validation.error });
-            }
-            
-            logger.info('Twilio signature verified (O(1) push guard passed)');
+            logger.info('Twilio webhook received (pipe mode)');
             
             const rawPayload = twilioChannel.parsePayload(req);
             const msg = twilioChannel.normalizeMessage(rawPayload);
