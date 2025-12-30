@@ -1,5 +1,6 @@
 const axios = require('axios');
 const FormData = require('form-data');
+const twilio = require('twilio');
 const { TwilioChannel } = require('../lib/channels/twilio');
 
 function registerInpipeRoutes(app, deps) {
@@ -19,26 +20,26 @@ function registerInpipeRoutes(app, deps) {
     logger.info('Registering inpipe routes: POST /api/twilio/webhook');
     
     app.post('/api/twilio/webhook', async (req, res) => {
-        console.log('🔔 TWILIO WEBHOOK HIT - Request received');
-        console.log('🔔 Headers:', JSON.stringify({
-            'x-twilio-signature': req.get('X-Twilio-Signature') ? 'present' : 'missing',
-            'x-forwarded-proto': req.get('X-Forwarded-Proto'),
-            'x-forwarded-host': req.get('X-Forwarded-Host'),
-            'host': req.get('Host'),
-            'content-type': req.get('Content-Type')
-        }));
-        console.log('🔔 Body keys:', Object.keys(req.body || {}));
-        
         try {
-            const validation = twilioChannel.validateSignature(req);
-            console.log('🔔 Validation result:', JSON.stringify(validation));
-            if (!validation.valid) {
-                logger.warn({ error: validation.error }, 'Twilio signature validation failed');
-                console.log('🔔 RETURNING 401:', validation.error);
-                return res.status(validation.status).json({ error: validation.error });
+            const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+            if (!TWILIO_AUTH_TOKEN) {
+                logger.error('TWILIO_AUTH_TOKEN not configured - rejecting request');
+                return res.status(503).json({ error: 'Twilio not configured' });
             }
             
-            logger.info('Twilio signature verified (O(1) push guard passed)');
+            const isValid = twilio.validateExpressRequest(req, TWILIO_AUTH_TOKEN, {
+                url: process.env.TWILIO_WEBHOOK_URL,
+                protocol: 'https'
+            });
+            
+            if (!isValid) {
+                logger.warn({ 
+                    url: process.env.TWILIO_WEBHOOK_URL,
+                    bodyKeys: Object.keys(req.body || {})
+                }, 'Twilio signature validation failed');
+                return res.status(401).json({ error: 'Invalid signature' });
+            }
+            logger.info('Twilio signature verified');
             
             const rawPayload = twilioChannel.parsePayload(req);
             const msg = twilioChannel.normalizeMessage(rawPayload);

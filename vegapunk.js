@@ -405,7 +405,13 @@ app.use(cors({
 }));
 
 app.use(bodyParser.json({ limit: '10mb' })); // Increased for image uploads
-app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' })); // For Twilio webhooks
+app.use(bodyParser.urlencoded({ 
+    extended: true, 
+    limit: '10mb',
+    verify: (req, res, buf) => {
+        req.rawBody = buf.toString();
+    }
+})); // For Twilio webhooks - rawBody preserved for signature validation
 
 // REQUEST ID MIDDLEWARE: Add unique ID to every request for tracing
 // Uses AsyncLocalStorage for proper request-scoped context (no global console patching)
