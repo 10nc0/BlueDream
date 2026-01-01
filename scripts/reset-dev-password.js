@@ -31,7 +31,6 @@ async function resetDevPassword() {
         
         console.log('✅ Dev password reset successfully!');
         console.log(`📧 Email: ${result.rows[0].email}`);
-        console.log(`🔑 Password: ${newPassword}`);
         console.log(`👤 Role: ${result.rows[0].role}`);
         
     } catch (error) {
