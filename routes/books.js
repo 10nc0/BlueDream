@@ -1230,10 +1230,29 @@ function registerBooksRoutes(app, deps) {
                                 }
                             }
                             
+                            const formatTimestamp = (date) => {
+                                const offset = -date.getTimezoneOffset();
+                                const sign = offset >= 0 ? '+' : '-';
+                                const absOffset = Math.abs(offset);
+                                const tzHours = Math.floor(absOffset / 60);
+                                const tzMinutes = absOffset % 60;
+                                const tzString = `GMT${sign}${tzHours.toString().padStart(2, '0')}${tzMinutes > 0 ? ':' + tzMinutes.toString().padStart(2, '0') : ''}`;
+                                
+                                return date.toLocaleString('en-US', {
+                                    year: 'numeric',
+                                    month: '2-digit',
+                                    day: '2-digit',
+                                    hour: 'numeric',
+                                    minute: 'numeric',
+                                    second: 'numeric',
+                                    hour12: true
+                                }).replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3/$1/$2') + ' ' + tzString;
+                            };
+
                             return {
                                 id: m.id,
                                 phone: getField('Phone'),
-                                time: getField('Time'),
+                                time: formatTimestamp(m.createdAt),
                                 text: embed?.description || '',
                                 media,
                                 attachments: m.attachments.size > 0 ? m.attachments.map(a => ({
@@ -1303,16 +1322,22 @@ function registerBooksRoutes(app, deps) {
             for (const msg of messages) {
                 if (msg.attachments && msg.attachments.length > 0) {
                     const timestamp = new Date(msg._timestamp);
-                    const dateFolder = timestamp.toISOString().split('T')[0];
-                    const isoTime = timestamp.toISOString().split('T')[1].substring(0, 8);
-                    const timeFolder = isoTime.replace(/:/g, '').replace(/(\d{2})(\d{2})(\d{2})/, '$1h$2m$3s');
-                    
                     const offset = -timestamp.getTimezoneOffset();
                     const sign = offset >= 0 ? '+' : '-';
                     const absOffset = Math.abs(offset);
                     const tzHours = Math.floor(absOffset / 60);
                     const tzMinutes = absOffset % 60;
                     const tzString = `GMT${sign}${tzHours.toString().padStart(2, '0')}${tzMinutes > 0 ? ':' + tzMinutes.toString().padStart(2, '0') : ''}`;
+
+                    const formattedTime = timestamp.toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: 'numeric',
+                        minute: 'numeric',
+                        second: 'numeric',
+                        hour12: true
+                    }).replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3/$1/$2').replace(/[/:]/g, '_').replace(/, /g, ' - ');
                     
                     for (const attachment of msg.attachments) {
                         attachmentStats.total++;
@@ -1323,7 +1348,7 @@ function registerBooksRoutes(app, deps) {
                             });
                             
                             const ext = attachment.filename.split('.').pop();
-                            const renamedFile = `${dateFolder} - ${timeFolder} - ${msg.id}.${ext}`;
+                            const renamedFile = `${formattedTime} - ${tzString} - ${msg.id}.${ext}`;
                             const folderPath = `attachments/${renamedFile}`;
                             
                             archive.append(response.data, { name: folderPath });
@@ -1353,7 +1378,7 @@ This archive contains:
   - Total attempted: ${attachmentStats.total}
 
 Naming Convention:
-YYYY-MM-DD - HHhMMmSSs - {message_id}.{extension}
+YYYY_MM_DD - HH_MM_SS AM/PM - GMTXX - {message_id}.{extension}
 `;
             archive.append(readme, { name: 'README.txt' });
             
