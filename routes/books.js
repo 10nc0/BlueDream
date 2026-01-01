@@ -1242,10 +1242,10 @@ function registerBooksRoutes(app, deps) {
                                     year: 'numeric',
                                     month: '2-digit',
                                     day: '2-digit',
-                                    hour: 'numeric',
-                                    minute: 'numeric',
-                                    second: 'numeric',
-                                    hour12: true
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                    hour12: false
                                 }).replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3/$1/$2') + ' ' + tzString;
                             };
 
@@ -1333,10 +1333,10 @@ function registerBooksRoutes(app, deps) {
                         year: 'numeric',
                         month: '2-digit',
                         day: '2-digit',
-                        hour: 'numeric',
-                        minute: 'numeric',
-                        second: 'numeric',
-                        hour12: true
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
                     }).replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3/$1/$2').replace(/[/:]/g, '_').replace(/, /g, ' - ');
                     
                     for (const attachment of msg.attachments) {
@@ -1378,7 +1378,7 @@ This archive contains:
   - Total attempted: ${attachmentStats.total}
 
 Naming Convention:
-YYYY_MM_DD - HH_MM_SS AM/PM - GMTXX - {message_id}.{extension}
+YYYY_MM_DD - HH_MM_SS - GMTXX - {message_id}.{extension}
 `;
             archive.append(readme, { name: 'README.txt' });
             
