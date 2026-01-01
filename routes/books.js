@@ -1214,22 +1214,36 @@ function registerBooksRoutes(app, deps) {
                         const channel = await thothBot.client.channels.fetch(threadId);
                         const fetchedMessages = await channel.messages.fetch({ limit: 100 });
                         
-                        let allMessages = fetchedMessages.map(m => ({
-                            id: m.id,
-                            content: m.content,
-                            author: m.author.username,
-                            timestamp: m.createdAt.toISOString(),
-                            embeds: m.embeds.map(e => ({
-                                title: e.title,
-                                description: e.description,
-                                fields: e.fields
-                            })),
-                            attachments: m.attachments.map(a => ({
-                                url: a.url,
-                                filename: a.name,
-                                size: a.size
-                            }))
-                        }));
+                        let allMessages = fetchedMessages.map(m => {
+                            const embed = m.embeds[0];
+                            const fields = embed?.fields || [];
+                            const getField = (name) => fields.find(f => f.name === name)?.value;
+                            
+                            const mediaField = getField('Media');
+                            let media = null;
+                            if (mediaField) {
+                                const match = mediaField.match(/^(.+?)\s*\((.+?)\)$/);
+                                if (match) {
+                                    media = { type: match[1], size: match[2] };
+                                } else {
+                                    media = { type: mediaField };
+                                }
+                            }
+                            
+                            return {
+                                id: m.id,
+                                phone: getField('Phone'),
+                                time: getField('Time'),
+                                text: embed?.description || '',
+                                media,
+                                attachments: m.attachments.size > 0 ? m.attachments.map(a => ({
+                                    url: a.url,
+                                    filename: a.name,
+                                    size: a.size
+                                })) : undefined,
+                                _timestamp: m.createdAt.toISOString()
+                            };
+                        });
                         
                         if (selectedMessageIds && selectedMessageIds.length > 0) {
                             const selectedSet = new Set(selectedMessageIds);
@@ -1253,10 +1267,13 @@ function registerBooksRoutes(app, deps) {
                 dropsMap.set(drop.discord_message_id, drop);
             });
             
-            const enrichedMessages = messages.map(msg => ({
-                ...msg,
-                metadata: dropsMap.get(msg.id) || null
-            }));
+            const enrichedMessages = messages.map(msg => {
+                const { _timestamp, ...cleanMsg } = msg;
+                return {
+                    ...cleanMsg,
+                    metadata: dropsMap.get(msg.id) || null
+                };
+            });
             
             const exportData = {
                 book: {
@@ -1283,9 +1300,9 @@ function registerBooksRoutes(app, deps) {
             
             let attachmentStats = { total: 0, downloaded: 0, failed: 0 };
             
-            for (const msg of enrichedMessages) {
+            for (const msg of messages) {
                 if (msg.attachments && msg.attachments.length > 0) {
-                    const timestamp = new Date(msg.timestamp);
+                    const timestamp = new Date(msg._timestamp);
                     const dateFolder = timestamp.toISOString().split('T')[0];
                     const isoTime = timestamp.toISOString().split('T')[1].substring(0, 8);
                     const timeFolder = isoTime.replace(/:/g, '').replace(/(\d{2})(\d{2})(\d{2})/, '$1h$2m$3s');
