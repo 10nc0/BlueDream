@@ -1825,8 +1825,8 @@ body::before {
   }
   
   .logout-btn {
-    width: 100%;
-    max-width: 200px;
+    width: auto;
+    max-width: none;
   }
   
   .container {
@@ -3220,6 +3220,7 @@ body.mobile-mode .logout-btn {
     border-radius: 4px;
     height: 28px !important;
     min-height: 28px !important;
+    width: auto !important;
 }
 
 /* Mobile Mode: Hide Book Header for maximum message space */
