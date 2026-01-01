@@ -1322,7 +1322,10 @@ function registerBooksRoutes(app, deps) {
                                 timeout: 30000 
                             });
                             
-                            const folderPath = `attachments/${dateFolder}/${timeFolder}_${tzString}/${attachment.filename}`;
+                            const ext = attachment.filename.split('.').pop();
+                            const renamedFile = `${dateFolder} - ${timeFolder} - ${msg.id}.${ext}`;
+                            const folderPath = `attachments/${renamedFile}`;
+                            
                             archive.append(response.data, { name: folderPath });
                             attachmentStats.downloaded++;
                         } catch (err) {
@@ -1344,13 +1347,13 @@ This archive contains:
   - ${dropsResult.rows.length} metadata drops
   - ${enrichedMessages.filter(m => m.metadata).length} messages with metadata
 
-- attachments/: Media files organized by timestamp
+- attachments/: Media files renamed for chronological sorting
   - ${attachmentStats.downloaded} files downloaded
   - ${attachmentStats.failed} files failed to download
   - Total attempted: ${attachmentStats.total}
 
-Folder Structure:
-attachments/YYYY-MM-DD/HhMMmSSs_GMTxx/{filename}
+Naming Convention:
+YYYY-MM-DD - HHhMMmSSs - {message_id}.{extension}
 `;
             archive.append(readme, { name: 'README.txt' });
             
