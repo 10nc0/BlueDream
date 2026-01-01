@@ -167,6 +167,14 @@ async function fetchMediaFromServer(messageId, retryCount = 0, maxRetries = 3) {
     }
 }
 
+// Helper to create error div
+function createMediaErrorDiv(message) {
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'media-error';
+    errorDiv.textContent = message;
+    return errorDiv;
+}
+
 // Load and render media for a message
 async function loadMedia(messageId) {
     const previewEl = document.getElementById(`media-preview-${messageId}`);
@@ -221,11 +229,8 @@ async function loadMedia(messageId) {
     } catch (error) {
         console.error(`❌ Error loading media for message ${messageId}:`, error);
         // Show error message (safe DOM manipulation to prevent XSS)
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'media-error';
-        errorDiv.textContent = `Failed to load media: ${error.message}`;
-        previewEl.innerHTML = ''; // Clear existing content
-        previewEl.appendChild(errorDiv);
+        const errorDiv = createMediaErrorDiv(`Failed to load media: ${error.message}`);
+        previewEl.replaceChildren(errorDiv);
     }
 }
 
@@ -261,7 +266,8 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
         };
         
         img.onerror = () => {
-            containerEl.innerHTML = '<div class="media-error">Failed to load image from Discord CDN</div>';
+            const errorDiv = createMediaErrorDiv('Failed to load image from Discord CDN');
+            containerEl.replaceChildren(errorDiv);
         };
         
         // Click to view full size in same page (lightbox effect)
@@ -283,8 +289,7 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
             img.src = mediaUrl;
         }, 50);
         
-        containerEl.innerHTML = '';
-        containerEl.appendChild(img);
+        containerEl.replaceChildren(img);
         
     } else if (isVideo) {
         const video = document.createElement('video');
@@ -295,11 +300,11 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
         video.src = mediaUrl;
         
         video.onerror = () => {
-            containerEl.innerHTML = '<div class="media-error">Failed to load video from Discord CDN</div>';
+            const errorDiv = createMediaErrorDiv('Failed to load video from Discord CDN');
+            containerEl.replaceChildren(errorDiv);
         };
         
-        containerEl.innerHTML = '';
-        containerEl.appendChild(video);
+        containerEl.replaceChildren(video);
         
     } else if (isAudio) {
         const audio = document.createElement('audio');
@@ -309,11 +314,11 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
         audio.src = mediaUrl;
         
         audio.onerror = () => {
-            containerEl.innerHTML = '<div class="media-error">Failed to load audio from Discord CDN</div>';
+            const errorDiv = createMediaErrorDiv('Failed to load audio from Discord CDN');
+            containerEl.replaceChildren(errorDiv);
         };
         
-        containerEl.innerHTML = '';
-        containerEl.appendChild(audio);
+        containerEl.replaceChildren(audio);
         
     } else if (isPDF) {
         // Inline PDF viewer using embed
@@ -327,17 +332,16 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
         
         pdfContainer.appendChild(embed);
         
-        containerEl.innerHTML = '';
-        containerEl.appendChild(pdfContainer);
+        containerEl.replaceChildren(pdfContainer);
         
     } else if (isOfficeDoc) {
         // Office documents - no preview needed (📎 download button provides access)
-        containerEl.innerHTML = '';
+        containerEl.replaceChildren();
         containerEl.style.display = 'none'; // Hide preview area entirely
         
     } else {
         // Other files - no preview needed (📎 download button provides access)
-        containerEl.innerHTML = '';
+        containerEl.replaceChildren();
         containerEl.style.display = 'none'; // Hide preview area entirely
     }
 }
@@ -363,7 +367,8 @@ function renderMedia(containerEl, messageId, mediaData) {
     // Validate media_data exists
     if (!media_data) {
         console.error(`❌ No media_data for message ${messageId}`);
-        containerEl.innerHTML = '<div class="media-error">No media data available</div>';
+        const errorDiv = createMediaErrorDiv('No media data available');
+        containerEl.replaceChildren(errorDiv);
         return;
     }
     
@@ -383,7 +388,8 @@ function renderMedia(containerEl, messageId, mediaData) {
         mediaDataString = media_data;
     } else {
         console.error(`❌ Unknown media_data type for message ${messageId}:`, typeof media_data);
-        containerEl.innerHTML = '<div class="media-error">Invalid media data format</div>';
+        const errorDiv = createMediaErrorDiv('Invalid media data format');
+        containerEl.replaceChildren(errorDiv);
         return;
     }
     
@@ -410,64 +416,89 @@ function renderMedia(containerEl, messageId, mediaData) {
         console.log(`📊 Generated dataUrl for message ${messageId}: ${dataUrl.substring(0, 100)}... (length: ${dataUrl.length})`);
     }
     
-    let mediaHTML = '';
-    
     if (isImage) {
         const blurPlaceholder = generateBlurPlaceholder();
-        mediaHTML = `
-            <div class="media-progressive-container" style="position: relative; overflow: hidden; border-radius: 8px;">
-                <img 
-                    class="media-blur-placeholder"
-                    src="${blurPlaceholder}"
-                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; filter: blur(20px); transform: scale(1.1); transition: opacity 0.3s ease-out;"
-                    alt=""
-                />
-                <img 
-                    class="discord-media-image" 
-                    src="${dataUrl}" 
-                    alt="Image from ${escapeHtml(sender_name)}"
-                    loading="lazy"
-                    data-message-id="${messageId}"
-                    data-media-url="${dataUrl}"
-                    onload="this.previousElementSibling.style.opacity = '0'; this.style.opacity = '1';"
-                    onerror="handleMediaError('${messageId}', this)"
-                    style="position: relative; opacity: 0; transition: opacity 0.3s ease-in; cursor: pointer;"
-                />
-            </div>
-            <div class="media-expand-hint" style="margin-top: 0.5rem; color: #94a3b8; font-size: 0.75rem;">🔍 Click to expand</div>
-        `;
+        
+        // Create container div
+        const containerDiv = document.createElement('div');
+        containerDiv.className = 'media-progressive-container';
+        containerDiv.style.cssText = 'position: relative; overflow: hidden; border-radius: 8px;';
+        
+        // Create blur placeholder image
+        const placeholderImg = document.createElement('img');
+        placeholderImg.className = 'media-blur-placeholder';
+        placeholderImg.src = blurPlaceholder;
+        placeholderImg.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; filter: blur(20px); transform: scale(1.1); transition: opacity 0.3s ease-out;';
+        placeholderImg.alt = '';
+        
+        // Create main image
+        const mainImg = document.createElement('img');
+        mainImg.className = 'discord-media-image';
+        mainImg.src = dataUrl;
+        mainImg.alt = `Image from ${escapeHtml(sender_name)}`;
+        mainImg.loading = 'lazy';
+        mainImg.dataset.messageId = messageId;
+        mainImg.dataset.mediaUrl = dataUrl;
+        mainImg.style.cssText = 'position: relative; opacity: 0; transition: opacity 0.3s ease-in; cursor: pointer;';
+        
+        mainImg.onload = function() {
+            placeholderImg.style.opacity = '0';
+            mainImg.style.opacity = '1';
+        };
+        
+        mainImg.onerror = function() {
+            handleMediaError(messageId, mainImg);
+        };
+        
+        containerDiv.appendChild(placeholderImg);
+        containerDiv.appendChild(mainImg);
+        
+        // Create expand hint
+        const hintDiv = document.createElement('div');
+        hintDiv.className = 'media-expand-hint';
+        hintDiv.style.cssText = 'margin-top: 0.5rem; color: #94a3b8; font-size: 0.75rem;';
+        hintDiv.textContent = '🔍 Click to expand';
+        
+        containerEl.replaceChildren(containerDiv, hintDiv);
+        
     } else if (isVideo) {
-        mediaHTML = `
-            <video 
-                class="discord-media-video" 
-                controls 
-                preload="metadata"
-                style="border-radius: 8px;"
-            >
-                <source src="${dataUrl}" type="${escapeHtml(media_type)}">
-                Your browser does not support video playback.
-            </video>
-        `;
+        const video = document.createElement('video');
+        video.className = 'discord-media-video';
+        video.controls = true;
+        video.preload = 'metadata';
+        video.style.borderRadius = '8px';
+        
+        const source = document.createElement('source');
+        source.src = dataUrl;
+        source.type = media_type;
+        
+        video.appendChild(source);
+        video.appendChild(document.createTextNode('Your browser does not support video playback.'));
+        
+        containerEl.replaceChildren(video);
+        
     } else if (isAudio) {
-        mediaHTML = `
-            <audio 
-                class="discord-media-audio" 
-                controls 
-                preload="metadata"
-                style="width: 100%;"
-            >
-                <source src="${dataUrl}" type="${escapeHtml(media_type)}">
-                Your browser does not support audio playback.
-            </audio>
-        `;
+        const audio = document.createElement('audio');
+        audio.className = 'discord-media-audio';
+        audio.controls = true;
+        audio.preload = 'metadata';
+        audio.style.width = '100%';
+        
+        const source = document.createElement('source');
+        source.src = dataUrl;
+        source.type = media_type;
+        
+        audio.appendChild(source);
+        audio.appendChild(document.createTextNode('Your browser does not support audio playback.'));
+        
+        containerEl.replaceChildren(audio);
+        
     } else {
-        mediaHTML = `
-            <div class="media-error">Unsupported media type: ${escapeHtml(media_type)}</div>
-        `;
+        const errorDiv = createMediaErrorDiv(`Unsupported media type: ${media_type}`);
+        containerEl.replaceChildren(errorDiv);
     }
     
-    containerEl.innerHTML = mediaHTML;
-    console.log(`✅ HTML inserted for message ${messageId}`);
+    console.log(`✅ Media elements inserted for message ${messageId}`);
 }
 
 // Handle media loading errors with retry
@@ -483,7 +514,11 @@ function handleMediaError(messageId, imgElement) {
             loadMedia(messageId);
         }, 1000 * (retryCount + 1));
     } else {
-        imgElement.parentElement.innerHTML = '<div class="media-error" style="padding: 1rem; text-align: center; color: #ef4444; background: rgba(239, 68, 68, 0.1); border-radius: 8px;">Failed to load media after multiple attempts</div>';
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'media-error';
+        errorDiv.style.cssText = 'padding: 1rem; text-align: center; color: #ef4444; background: rgba(239, 68, 68, 0.1); border-radius: 8px;';
+        errorDiv.textContent = 'Failed to load media after multiple attempts';
+        imgElement.parentElement.replaceChildren(errorDiv);
     }
 }
 
@@ -614,11 +649,15 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// Helper function (if not already defined globally)
+// Helper function for HTML escaping (pure string-based, no innerHTML)
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (text === null || text === undefined) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 // Export functions for global use

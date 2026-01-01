@@ -601,48 +601,82 @@
                 console.log(`🔘 Books:`, activeBooks.map(b => b.name));
             }
             
-            let html = '';
+            const fragment = document.createDocumentFragment();
             
-            // Layer 01 buttons - The expanded reality (start hidden, expand on singularity tap)
-            html += `<div class="layer-01" hidden>`;
+            const layer01 = document.createElement('div');
+            layer01.className = 'layer-01';
+            layer01.hidden = true;
             
-            // Position 1: Create button (ONLY way to genesis form)
-            html += `<button class="thumb-btn" data-action="create" aria-label="Create new book">✍🏻</button>`;
+            const createBtn = document.createElement('button');
+            createBtn.className = 'thumb-btn';
+            createBtn.dataset.action = 'create';
+            createBtn.setAttribute('aria-label', 'Create new book');
+            createBtn.textContent = '✍🏻';
+            layer01.appendChild(createBtn);
             
-            // Position 2: Audit button (always visible)
-            html += `<button class="thumb-btn" data-action="audit" aria-label="View audit log">🧿</button>`;
+            const auditBtn = document.createElement('button');
+            auditBtn.className = 'thumb-btn';
+            auditBtn.dataset.action = 'audit';
+            auditBtn.setAttribute('aria-label', 'View audit log');
+            auditBtn.textContent = '🧿';
+            layer01.appendChild(auditBtn);
             
-            // Position 3: Search button (hidden on mobile via CSS)
-            html += `<button class="thumb-btn desktop-only" data-action="search" aria-label="Search messages">🔍</button>`;
+            const searchBtn = document.createElement('button');
+            searchBtn.className = 'thumb-btn desktop-only';
+            searchBtn.dataset.action = 'search';
+            searchBtn.setAttribute('aria-label', 'Search messages');
+            searchBtn.textContent = '🔍';
+            layer01.appendChild(searchBtn);
             
-            // Position 4: Book Actions (ONLY if current book exists)
-            // Shows stacked menu with book actions: ℹ️ 📚 ✏️ 🗑️
             if (hasBooks) {
                 const currentBookId = document.querySelector('.discord-messages-container')?.id?.replace('discord-messages-', '');
                 const currentBook = activeBooks.find(b => b.fractal_id === currentBookId) || activeBooks[0];
                 
                 console.log(`🔘 Adding button 4 (🤔) for book: ${currentBook.name}`);
-                html += `<button class="thumb-btn" data-action="book-actions" data-book-id="${currentBook.fractal_id}" aria-label="Book actions">🤔</button>`;
+                const bookActionsBtn = document.createElement('button');
+                bookActionsBtn.className = 'thumb-btn';
+                bookActionsBtn.dataset.action = 'book-actions';
+                bookActionsBtn.dataset.bookId = currentBook.fractal_id;
+                bookActionsBtn.setAttribute('aria-label', 'Book actions');
+                bookActionsBtn.textContent = '🤔';
+                layer01.appendChild(bookActionsBtn);
             } else {
                 console.log(`🔘 NO button 4 - no books found`);
             }
             
-            // Position 5: All Books (ONLY if 4+ books)
             if (activeBooks.length >= 4) {
-                html += `<button class="thumb-btn" data-action="fan" aria-label="All books (${activeBooks.length} total)">📚</button>`;
+                const fanBtn = document.createElement('button');
+                fanBtn.className = 'thumb-btn';
+                fanBtn.dataset.action = 'fan';
+                fanBtn.setAttribute('aria-label', `All books (${activeBooks.length} total)`);
+                fanBtn.textContent = '📚';
+                layer01.appendChild(fanBtn);
             }
             
-            html += `</div>`; // Close layer-01
+            fragment.appendChild(layer01);
             
-            // ☯️ SINGULARITY BUTTON (Button 00) - Transcendental layer that splits into buttons
-            // v1.2: GHOST LAYER architecture - separate breathing (core) from spinning (symbol)
-            // Appears AFTER layer-01 so CSS ~ selector works
-            html += `<button class="singularity-btn" data-action="singularity" aria-label="Expand all actions"><span class="core"><span class="symbol">☯️</span></span><span class="aura"></span></button>`;
+            const singularityBtn = document.createElement('button');
+            singularityBtn.className = 'singularity-btn';
+            singularityBtn.dataset.action = 'singularity';
+            singularityBtn.setAttribute('aria-label', 'Expand all actions');
             
-            thumbsZone.innerHTML = html;
-            console.log(`🔘 Thumbs zone HTML length: ${html.length} chars`);
+            const core = document.createElement('span');
+            core.className = 'core';
+            const symbol = document.createElement('span');
+            symbol.className = 'symbol';
+            symbol.textContent = '☯️';
+            core.appendChild(symbol);
+            singularityBtn.appendChild(core);
             
-            // Start φ-breath cycle on mobile
+            const aura = document.createElement('span');
+            aura.className = 'aura';
+            singularityBtn.appendChild(aura);
+            
+            fragment.appendChild(singularityBtn);
+            
+            thumbsZone.replaceChildren(fragment);
+            console.log(`🔘 Thumbs zone rendered with SafeDOM`);
+            
             if (isMobile() && typeof PHI_BREATH !== 'undefined') {
                 setBreathCycle(PHI_BREATH.BASE_DURATION);
             }
@@ -833,14 +867,19 @@
                 animation: fadeIn 0.2s ease;
             `;
             
-            modal.innerHTML = `
-                <img src="${escapeHtml(src)}" style="max-width: 95vw; max-height: 95vh; border-radius: 12px; object-fit: contain;">
-                <button class="media-close-btn" style="position: absolute; top: 20px; right: 20px; width: 44px; height: 44px; background: rgba(0,0,0,0.7); color: white; border: none; border-radius: 50%; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px);">×</button>
-            `;
+            const img = document.createElement('img');
+            img.src = src;
+            img.style.cssText = 'max-width: 95vw; max-height: 95vh; border-radius: 12px; object-fit: contain;';
+            modal.appendChild(img);
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'media-close-btn';
+            closeBtn.style.cssText = 'position: absolute; top: 20px; right: 20px; width: 44px; height: 44px; background: rgba(0,0,0,0.7); color: white; border: none; border-radius: 50%; font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px);';
+            closeBtn.textContent = '×';
+            modal.appendChild(closeBtn);
             
             document.body.appendChild(modal);
             
-            // Close on background tap or button
             modal.addEventListener('click', function(e) {
                 if (e.target === modal || e.target.classList.contains('media-close-btn')) {
                     modal.style.animation = 'fadeOut 0.2s ease';
@@ -880,33 +919,38 @@
                     'read-only': '#f59e0b',
                     'write-only': '#3b82f6'
                 };
-                userInfo.innerHTML = `<span style="color: ${roleColors[currentUser.role] || '#94a3b8'}; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.4;">
-                    <span>● ${currentUser.email || currentUser.phone}</span>
-                    <span style="font-size: 0.85em; opacity: 0.9;">(${currentUser.role})</span>
-                </span>`;
                 
-                // Role hierarchy: dev > admin > user
-                // Show tabs based on role AND genesis admin status
+                function renderUserInfo(isGenesis = false) {
+                    const span = document.createElement('span');
+                    span.style.cssText = `color: ${roleColors[currentUser.role] || '#94a3b8'}; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.4;`;
+                    
+                    const emailSpan = document.createElement('span');
+                    emailSpan.textContent = `● ${currentUser.email || currentUser.phone}`;
+                    span.appendChild(emailSpan);
+                    
+                    const roleSpan = document.createElement('span');
+                    roleSpan.style.cssText = 'font-size: 0.85em; opacity: 0.9;';
+                    roleSpan.textContent = isGenesis ? `(${currentUser.role}) 🌟 Genesis` : `(${currentUser.role})`;
+                    span.appendChild(roleSpan);
+                    
+                    userInfo.replaceChildren(span);
+                }
+                
+                renderUserInfo(false);
+                
                 const devTab = document.getElementById('devPanelBtn');
                 const usersTabBtn = document.getElementById('usersTabBtn');
                 
-                // Genesis admins get dev role and full access
                 const isGenesisAdmin = currentUser.isGenesisAdmin || currentUser.is_genesis_admin;
                 
                 if (currentUser.role === 'dev' || isGenesisAdmin) {
-                    // Devs and Genesis Admins see everything including dev panel
                     if (devTab) devTab.style.display = 'block';
                     if (usersTabBtn) usersTabBtn.style.display = 'block';
                     
-                    // Add visual indicator for Genesis Admin
                     if (isGenesisAdmin) {
-                        userInfo.innerHTML = `<span style="color: ${roleColors[currentUser.role] || '#94a3b8'}; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.4;">
-                            <span>● ${currentUser.email || currentUser.phone}</span>
-                            <span style="font-size: 0.85em; opacity: 0.9;">(${currentUser.role}) 🌟 Genesis</span>
-                        </span>`;
+                        renderUserInfo(true);
                     }
                 } else if (currentUser.role === 'admin') {
-                    // Regular admins see users tab but not dev panel
                     if (usersTabBtn) usersTabBtn.style.display = 'block';
                 }
                 
@@ -981,21 +1025,25 @@
             const container = document.getElementById('tagContainer');
             const input = document.getElementById('botTagsInput');
             
-            // Clear container except input
-            container.innerHTML = '';
+            while (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
             
-            // Add tag bubbles
             botTags.forEach(tag => {
                 const bubble = document.createElement('div');
                 bubble.className = 'tag-bubble';
-                bubble.innerHTML = `
-                    ${tag}
-                    <button type="button" class="tag-remove" data-tag="${tag}">×</button>
-                `;
+                bubble.appendChild(document.createTextNode(tag));
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'tag-remove';
+                removeBtn.dataset.tag = tag;
+                removeBtn.textContent = '×';
+                bubble.appendChild(removeBtn);
+                
                 container.appendChild(bubble);
             });
             
-            // Re-add input
             container.appendChild(input);
         }
 
@@ -1020,34 +1068,44 @@
 
         function renderWebhooks() {
             const container = document.getElementById('webhooksList');
-            container.innerHTML = botWebhooks.map(webhook => `
-                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;">
-                    <input 
-                        type="text" 
-                        class="form-input" 
-                        placeholder="Webhook Name (e.g., Main Channel)" 
-                        value="${escapeHtml(webhook.name)}"
-                        data-webhook-id="${webhook.id}"
-                        data-webhook-field="name"
-                        style="flex: 0 0 30%;"
-                    >
-                    <input 
-                        type="url" 
-                        class="form-input" 
-                        placeholder="https://discord.com/api/webhooks/..." 
-                        value="${escapeHtml(webhook.url)}"
-                        data-webhook-id="${webhook.id}"
-                        data-webhook-field="url"
-                        style="flex: 1;"
-                    >
-                    <button 
-                        type="button" 
-                        class="btn" 
-                        data-remove-webhook="${webhook.id}"
-                        style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 0.5rem 1rem;"
-                    >×</button>
-                </div>
-            `).join('');
+            const fragment = document.createDocumentFragment();
+            
+            botWebhooks.forEach(webhook => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;';
+                
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.className = 'form-input';
+                nameInput.placeholder = 'Webhook Name (e.g., Main Channel)';
+                nameInput.value = webhook.name;
+                nameInput.dataset.webhookId = webhook.id;
+                nameInput.dataset.webhookField = 'name';
+                nameInput.style.cssText = 'flex: 0 0 30%;';
+                row.appendChild(nameInput);
+                
+                const urlInput = document.createElement('input');
+                urlInput.type = 'url';
+                urlInput.className = 'form-input';
+                urlInput.placeholder = 'https://discord.com/api/webhooks/...';
+                urlInput.value = webhook.url;
+                urlInput.dataset.webhookId = webhook.id;
+                urlInput.dataset.webhookField = 'url';
+                urlInput.style.cssText = 'flex: 1;';
+                row.appendChild(urlInput);
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.className = 'btn';
+                removeBtn.dataset.removeWebhook = webhook.id;
+                removeBtn.style.cssText = 'background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; padding: 0.5rem 1rem;';
+                removeBtn.textContent = '×';
+                row.appendChild(removeBtn);
+                
+                fragment.appendChild(row);
+            });
+            
+            container.replaceChildren(fragment);
         }
 
         // Book CRUD Functions
@@ -1116,74 +1174,83 @@
 
         let selectedBookFractalId = null;
 
+        function createBookListItem(book, selectedFractalId) {
+            const searchBox = document.getElementById('searchBox');
+            const searchTerm = searchBox ? searchBox.value.trim() : '';
+            const hasSearchMatch = searchTerm && (book._matchType === 'message' || book._matchType === 'metadata');
+            const isSelected = book.fractal_id === selectedFractalId;
+            
+            const item = document.createElement('div');
+            item.className = `book-list-item ${isSelected ? 'selected' : ''}`;
+            item.dataset.fractalId = book.fractal_id;
+            item.style.cssText = `display: flex; justify-content: space-between; align-items: center; padding: 0.625rem 0.875rem; cursor: pointer; background: ${isSelected ? 'rgba(88, 101, 242, 0.12)' : 'transparent'}; border-bottom: 1px solid rgba(148, 163, 184, 0.08); transition: background 0.12s ease; user-select: none;`;
+            
+            if (hasSearchMatch) {
+                const matchIndicator = document.createElement('div');
+                matchIndicator.style.cssText = 'flex-shrink: 0; width: 1.25rem; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;';
+                const checkmark = document.createElement('span');
+                checkmark.style.cssText = 'color: #22c55e; font-weight: 700; font-size: 0.875rem;';
+                checkmark.textContent = '✓';
+                matchIndicator.appendChild(checkmark);
+                item.appendChild(matchIndicator);
+            }
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.style.cssText = 'flex: 1; min-width: 0;';
+            
+            const nameDiv = document.createElement('div');
+            nameDiv.style.cssText = `color: ${isSelected ? '#e2e8f0' : '#cbd5e1'}; font-weight: ${isSelected ? '600' : '500'}; font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;`;
+            nameDiv.textContent = book.name || `${book.input_platform} → Discord`;
+            contentDiv.appendChild(nameDiv);
+            
+            if (book.message_count > 0) {
+                const countDiv = document.createElement('div');
+                countDiv.style.cssText = 'color: #64748b; font-size: 0.6875rem; margin-top: 0.25rem; line-height: 1;';
+                countDiv.textContent = `${book.message_count} messages`;
+                contentDiv.appendChild(countDiv);
+            }
+            
+            item.appendChild(contentDiv);
+            return item;
+        }
+        
         function renderBooks(skipDetailRender = false) {
             const sidebar = document.getElementById('bookListContainer');
             const detail = document.getElementById('bookDetail');
             
             if (filteredBooks.length === 0) {
-                sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.875rem;">No books found</p>';
-                detail.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Create your first book to get started!</p>';
+                const sidebarMsg = document.createElement('p');
+                sidebarMsg.style.cssText = 'text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.875rem;';
+                sidebarMsg.textContent = 'No books found';
+                sidebar.replaceChildren(sidebarMsg);
+                
+                const detailMsg = document.createElement('p');
+                detailMsg.style.cssText = 'text-align: center; color: #94a3b8; padding: 2rem;';
+                detailMsg.textContent = 'Create your first book to get started!';
+                detail.replaceChildren(detailMsg);
                 return;
             }
             
-            // Auto-select first book if none selected (use fractalized ID)
             const wasAutoSelected = !selectedBookFractalId || !filteredBooks.find(b => b.fractal_id === selectedBookFractalId);
             if (wasAutoSelected) {
                 selectedBookFractalId = filteredBooks[0].fractal_id;
             }
             
-            // macOS-style scrollable list widget
-            sidebar.innerHTML = filteredBooks.map((book, index) => {
-                const searchBox = document.getElementById('searchBox');
-                const searchTerm = searchBox ? searchBox.value.trim() : '';
-                const hasSearchMatch = searchTerm && (book._matchType === 'message' || book._matchType === 'metadata');
-                
-                return `
-                <div class="book-list-item ${book.fractal_id === selectedBookFractalId ? 'selected' : ''}" 
-                     data-fractal-id="${book.fractal_id}" 
-                     style="
-                        display: flex; 
-                        justify-content: space-between; 
-                        align-items: center; 
-                        padding: 0.625rem 0.875rem; 
-                        cursor: pointer; 
-                        background: ${book.fractal_id === selectedBookFractalId ? 'rgba(88, 101, 242, 0.12)' : 'transparent'}; 
-                        border-bottom: 1px solid rgba(148, 163, 184, 0.08); 
-                        transition: background 0.12s ease;
-                        user-select: none;
-                    ">
-                    ${hasSearchMatch ? `<div style="flex-shrink: 0; width: 1.25rem; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;"><span style="color: #22c55e; font-weight: 700; font-size: 0.875rem;">✓</span></div>` : ''}
-                    <div style="flex: 1; min-width: 0;">
-                        <div style="
-                            color: ${book.fractal_id === selectedBookFractalId ? '#e2e8f0' : '#cbd5e1'}; 
-                            font-weight: ${book.fractal_id === selectedBookFractalId ? '600' : '500'}; 
-                            font-size: 0.8125rem; 
-                            white-space: nowrap; 
-                            overflow: hidden; 
-                            text-overflow: ellipsis;
-                            line-height: 1.3;
-                        ">${book.name || `${book.input_platform} → Discord`}</div>
-                        ${book.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.25rem; line-height: 1;">${book.message_count} messages</div>` : ''}
-                    </div>
-                    
-                </div>
-            `;
-            }).join('');
+            const fragment = document.createDocumentFragment();
+            filteredBooks.forEach(book => {
+                fragment.appendChild(createBookListItem(book, selectedBookFractalId));
+            });
+            sidebar.replaceChildren(fragment);
             
-            // Only render detail panel if not skipping (avoids destroying loaded media during auto-refresh)
             if (!skipDetailRender) {
                 renderBookDetail();
-                
-                // Always load messages for selected book to ensure they appear
                 loadBookMessages(selectedBookFractalId, 1);
             }
         }
 
         async function selectBook(fractalId) {
-            // Store fractalized ID (opaque, non-enumerable)
             selectedBookFractalId = fractalId;
             
-            // SEAMLESS SEARCH: Store search context if this book has message match
             const selectedBook = filteredBooks.find(b => b.fractal_id === fractalId);
             if (selectedBook && selectedBook._matchType === 'message' && selectedBook._searchQuery) {
                 bookSearchContext = {
@@ -1191,57 +1258,18 @@
                     bookId: fractalId
                 };
             } else {
-                // Clear context if not a message match
                 bookSearchContext = { query: '', bookId: null };
             }
             
-            // Re-render sidebar to update active state (macOS list widget)
             const sidebar = document.getElementById('bookListContainer');
+            const fragment = document.createDocumentFragment();
+            filteredBooks.forEach(book => {
+                fragment.appendChild(createBookListItem(book, selectedBookFractalId));
+            });
+            sidebar.replaceChildren(fragment);
             
-            sidebar.innerHTML = filteredBooks.map((book, index) => {
-                const searchBox = document.getElementById('searchBox');
-                const searchTerm = searchBox ? searchBox.value.trim() : '';
-                const hasSearchMatch = searchTerm && (book._matchType === 'message' || book._matchType === 'metadata');
-                
-                return `
-                <div class="book-list-item ${book.fractal_id === selectedBookFractalId ? 'selected' : ''}" 
-                     data-fractal-id="${book.fractal_id}" 
-                     style="
-                        display: flex; 
-                        justify-content: space-between; 
-                        align-items: center; 
-                        padding: 0.625rem 0.875rem; 
-                        cursor: pointer; 
-                        background: ${book.fractal_id === selectedBookFractalId ? 'rgba(88, 101, 242, 0.12)' : 'transparent'}; 
-                        border-bottom: 1px solid rgba(148, 163, 184, 0.08); 
-                        transition: background 0.12s ease;
-                        user-select: none;
-                    ">
-                    ${hasSearchMatch ? `<div style="flex-shrink: 0; width: 1.25rem; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;"><span style="color: #22c55e; font-weight: 700; font-size: 0.875rem;">✓</span></div>` : ''}
-                    <div style="flex: 1; min-width: 0;">
-                        <div style="
-                            color: ${book.fractal_id === selectedBookFractalId ? '#e2e8f0' : '#cbd5e1'}; 
-                            font-weight: ${book.fractal_id === selectedBookFractalId ? '600' : '500'}; 
-                            font-size: 0.8125rem; 
-                            white-space: nowrap; 
-                            overflow: hidden; 
-                            text-overflow: ellipsis;
-                            line-height: 1.3;
-                        ">${book.name || `${book.input_platform} → Discord`}</div>
-                        ${book.message_count > 0 ? `<div style="color: #64748b; font-size: 0.6875rem; margin-top: 0.25rem; line-height: 1;">${book.message_count} messages</div>` : ''}
-                    </div>
-                    
-                </div>
-            `;
-            }).join('');
-            
-            // Render detail panel for selected book
             await renderBookDetail();
-            
-            // Always load messages for newly selected book
             await loadBookMessages(selectedBookFractalId, 1);
-            
-            // Start smart polling for real-time message updates
             startPolling(fractalId);
         }
 
@@ -1264,11 +1292,9 @@
             const book = filteredBooks.find(b => b.fractal_id === selectedBookFractalId);
             if (!book) return;
             
-            // Get status colors based on thresholds
             const failedClass = getStatusColor(book.failed_count || 0);
             const successClass = getSuccessBadgeClass(book.forwarded_count || 0);
             
-            // Fetch WhatsApp status if this is a WhatsApp bot
             let whatsappStatus = null;
             const platform = (book.input_platform || book.platform || '').toLowerCase();
             if (platform === 'whatsapp') {
@@ -1282,111 +1308,203 @@
                 }
             }
             
-            // WhatsApp status badge
-            const getWhatsAppStatusBadge = () => {
-                if (!whatsappStatus) return '';
-                const status = whatsappStatus.status;
-                const badges = {
-                    'ready': '<span class="stat-badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981;">✅ Connected</span>',
-                    'qr_ready': '<span class="stat-badge" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6;">📱 Pending Activation</span>',
-                    'initializing': '<span class="stat-badge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">⏳ Starting...</span>',
-                    'authenticated': '<span class="stat-badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981;">🔐 Authenticated</span>',
-                    'inactive': '<span class="stat-badge" style="background: rgba(148, 163, 184, 0.2); color: #94a3b8;">⏸️ Inactive</span>',
-                    'disconnected': '<span class="stat-badge error" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">🔌 Disconnected</span>',
-                    'auth_failed': '<span class="stat-badge error" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">❌ Auth Failed</span>',
-                    'error': '<span class="stat-badge error" style="background: rgba(239, 68, 68, 0.2); color: #ef4444;">⚠️ Error</span>'
-                };
-                return badges[status] || '';
-            };
-            
-            // WhatsApp action buttons - 3 buttons only: Generate QR, Edit, Delete
-            const getWhatsAppActions = () => {
-                if (!whatsappStatus) return '';
-                
-                // Button 1: Connect WhatsApp (Twilio sandbox)
-                const joinCode = book.contact_info || 'join baby-ability';
-                const whatsappLink = `https://wa.me/14155238886?text=${encodeURIComponent(joinCode)}`;
-                return `<a href="${whatsappLink}" target="_blank" rel="noopener noreferrer" class="btn-icon" title="Connect WhatsApp" style="background: rgba(34, 197, 94, 0.2); color: #22c55e; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">📱</a>`;
-            };
-            
             const detail = document.getElementById('bookDetail');
-            detail.innerHTML = `
-                <!-- Minimal header bar -->
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(148, 163, 184, 0.1);">
-                    <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;">
-                        <div style="color: #e2e8f0; font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${book.name || `${platform} → Discord`}</div>
-                        ${platform === 'whatsapp' && whatsappStatus ? `<span style="background: ${whatsappStatus === 'ready' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(251, 191, 36, 0.2)'}; color: ${whatsappStatus === 'ready' ? '#10b981' : '#fbbf24'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${whatsappStatus === 'ready' ? '✅' : '⏳'}</span>` : ''}
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <button class="btn-icon" data-show-book-info="${book.fractal_id}" title="Book Information" style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">ℹ️</button>
-                        ${!isDevPanelView && platform === 'whatsapp' ? `<button class="btn-icon" data-show-whatsapp-activation="${book.fractal_id}" title="WhatsApp Activation" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; display: inline-flex; align-items: center; justify-content: center;">📱</button>` : ''}
-                        ${!isDevPanelView ? `<button class="btn-icon" data-edit-book="${book.fractal_id}" title="Edit" style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">✏️</button>` : ''}
-                        ${!isDevPanelView ? `<button class="btn-icon" data-download-entire-book="${book.fractal_id}" title="Download Entire Book" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">⬇️</button>` : ''}
-                        ${!isDevPanelView ? `<button class="btn-icon" data-delete-book="${book.fractal_id}" title="Delete" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">🗑️</button>` : ''}
-                    </div>
-                </div>
-
-                ${!book.output_credentials?.output_01?.thread_id ? `
-                    <!-- WARNING: Missing Ledger thread (critical) -->
-                    <div style="margin: 0.75rem; padding: 0.75rem 1rem; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px;">
-                        <div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.75rem;">
-                            <div style="font-size: 1.5rem;">📱</div>
-                            <div style="flex: 1;">
-                                <div style="color: #22c55e; font-weight: 600; font-size: 0.9375rem; margin-bottom: 0.5rem;">Connect Your WhatsApp</div>
-                                <div style="color: #cbd5e1; font-size: 0.8125rem; line-height: 1.5; margin-bottom: 0.75rem;">
-                                    Send this message from WhatsApp to activate your book. Each code works only once for security.
-                                </div>
-                                ${platform === 'whatsapp' ? `
-                                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
-                                        <a href="https://wa.me/14155238886?text=${encodeURIComponent(book.contact_info || 'join baby-ability')}" target="_blank" rel="noopener noreferrer" style="background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
-                                            📱 Open WhatsApp
-                                        </a>
-                                        <button class="copy-code-btn" data-copy-text="${(book.contact_info || 'join baby-ability').replace(/"/g, '&quot;')}" style="background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #cbd5e1; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap;">
-                                            📋 Copy Code
-                                        </button>
-                                    </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                        <div style="background: rgba(15, 23, 42, 0.6); padding: 0.625rem; border-radius: 4px;">
-                            <div style="color: #94a3b8; font-size: 0.75rem; font-family: monospace;">Message: <span style="color: #22c55e; user-select: all;">${book.contact_info || 'join baby-ability'}</span></div>
-                        </div>
-                    </div>
-                ` : ''}
-
-                ${book.output_credentials?.output_01?.thread_id ? `
-                    <!-- MESSAGES: Snap to bottom - fills all available space -->
-                    <div style="display: flex; flex-direction: column; flex: 1; margin-top: 0.5rem; min-height: 0;">
-                        <!-- Compact search toolbar -->
-                        <div style="display: flex; gap: 0.5rem; padding: 0.5rem; background: rgba(30, 41, 59, 0.4); border-radius: 6px; margin-bottom: 0.5rem; flex-shrink: 0;">
-                            <label style="display: flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.625rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.75rem; cursor: pointer; white-space: nowrap;">
-                                <input type="checkbox" id="select-all-${book.fractal_id}" data-select-all="${book.fractal_id}" style="cursor: pointer;">
-                                All
-                            </label>
-                            <input type="text" id="msg-search-${book.fractal_id}" placeholder="🔍 Search..." 
-                                style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem; flex: 1;" 
-                                data-filter-messages="${book.fractal_id}">
-                            <select id="status-filter-${book.fractal_id}" data-status-filter="${book.fractal_id}"
-                                style="padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem;">
-                                <option value="all">All</option>
-                                <option value="success">✓</option>
-                                <option value="failed">✗</option>
-                            </select>
-                            <button id="download-selected-${book.fractal_id}" data-download-book="${book.fractal_id}" disabled style="padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;">⬇️ Attachment</button>
-                            <button id="tag-selected-${book.fractal_id}" data-tag-book="${book.fractal_id}" disabled style="padding: 0.375rem 0.75rem; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 0.375rem; color: #a855f7; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;">🏷️ Tag</button>
-                        </div>
-                        <!-- Search indicator (if active) -->
-                        <div id="search-indicator-${book.fractal_id}" style="display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between; margin-bottom: 0.5rem; flex-shrink: 0;">
-                            <span>🔍 Filtered from book search</span>
-                            <button data-clear-filter="${book.fractal_id}" style="background: none; border: none; color: #22c55e; cursor: pointer; font-size: 1.25rem; padding: 0; line-height: 1; font-weight: bold;" title="Clear filter">×</button>
-                        </div>
-                        <!-- Messages: Fill remaining space, snap to bottom -->
-                        <div id="discord-messages-${book.fractal_id}" class="discord-messages-container" style="flex: 1; overflow-y: auto; background: rgba(30, 41, 59, 0.3); border-radius: 6px; padding: 0.75rem; min-height: 0;">
-                            <div class="no-messages">Loading messages...</div>
-                        </div>
-                    </div>
-                ` : ''}
-            `;
+            const fragment = document.createDocumentFragment();
+            
+            const headerBar = document.createElement('div');
+            headerBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(148, 163, 184, 0.1);';
+            
+            const headerLeft = document.createElement('div');
+            headerLeft.style.cssText = 'display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;';
+            
+            const bookName = document.createElement('div');
+            bookName.style.cssText = 'color: #e2e8f0; font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+            bookName.textContent = book.name || `${platform} → Discord`;
+            headerLeft.appendChild(bookName);
+            
+            if (platform === 'whatsapp' && whatsappStatus) {
+                const statusBadge = document.createElement('span');
+                statusBadge.style.cssText = `background: ${whatsappStatus.status === 'ready' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(251, 191, 36, 0.2)'}; color: ${whatsappStatus.status === 'ready' ? '#10b981' : '#fbbf24'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;`;
+                statusBadge.textContent = whatsappStatus.status === 'ready' ? '✅' : '⏳';
+                headerLeft.appendChild(statusBadge);
+            }
+            headerBar.appendChild(headerLeft);
+            
+            const headerRight = document.createElement('div');
+            headerRight.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+            
+            const createIconBtn = (dataAttr, value, title, bgColor, textColor, icon) => {
+                const btn = document.createElement('button');
+                btn.className = 'btn-icon';
+                btn.dataset[dataAttr] = value;
+                btn.title = title;
+                btn.style.cssText = `background: ${bgColor}; color: ${textColor}; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;`;
+                btn.textContent = icon;
+                return btn;
+            };
+            
+            headerRight.appendChild(createIconBtn('showBookInfo', book.fractal_id, 'Book Information', 'rgba(148, 163, 184, 0.15)', '#94a3b8', 'ℹ️'));
+            if (!isDevPanelView && platform === 'whatsapp') {
+                const waBtn = createIconBtn('showWhatsappActivation', book.fractal_id, 'WhatsApp Activation', 'rgba(34, 197, 94, 0.15)', '#22c55e', '📱');
+                waBtn.style.cssText += 'display: inline-flex; align-items: center; justify-content: center;';
+                headerRight.appendChild(waBtn);
+            }
+            if (!isDevPanelView) {
+                headerRight.appendChild(createIconBtn('editBook', book.fractal_id, 'Edit', 'rgba(251, 191, 36, 0.15)', '#fbbf24', '✏️'));
+                headerRight.appendChild(createIconBtn('downloadEntireBook', book.fractal_id, 'Download Entire Book', 'rgba(34, 197, 94, 0.15)', '#22c55e', '⬇️'));
+                headerRight.appendChild(createIconBtn('deleteBook', book.fractal_id, 'Delete', 'rgba(239, 68, 68, 0.15)', '#ef4444', '🗑️'));
+            }
+            headerBar.appendChild(headerRight);
+            fragment.appendChild(headerBar);
+            
+            if (!book.output_credentials?.output_01?.thread_id) {
+                const warningBox = document.createElement('div');
+                warningBox.style.cssText = 'margin: 0.75rem; padding: 0.75rem 1rem; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px;';
+                
+                const contentRow = document.createElement('div');
+                contentRow.style.cssText = 'display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.75rem;';
+                
+                const iconDiv = document.createElement('div');
+                iconDiv.style.cssText = 'font-size: 1.5rem;';
+                iconDiv.textContent = '📱';
+                contentRow.appendChild(iconDiv);
+                
+                const textDiv = document.createElement('div');
+                textDiv.style.cssText = 'flex: 1;';
+                
+                const title = document.createElement('div');
+                title.style.cssText = 'color: #22c55e; font-weight: 600; font-size: 0.9375rem; margin-bottom: 0.5rem;';
+                title.textContent = 'Connect Your WhatsApp';
+                textDiv.appendChild(title);
+                
+                const desc = document.createElement('div');
+                desc.style.cssText = 'color: #cbd5e1; font-size: 0.8125rem; line-height: 1.5; margin-bottom: 0.75rem;';
+                desc.textContent = 'Send this message from WhatsApp to activate your book. Each code works only once for security.';
+                textDiv.appendChild(desc);
+                
+                if (platform === 'whatsapp') {
+                    const btnsRow = document.createElement('div');
+                    btnsRow.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.75rem;';
+                    
+                    const waLink = document.createElement('a');
+                    waLink.href = `https://wa.me/14155238886?text=${encodeURIComponent(book.contact_info || 'join baby-ability')}`;
+                    waLink.target = '_blank';
+                    waLink.rel = 'noopener noreferrer';
+                    waLink.style.cssText = 'background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;';
+                    waLink.textContent = '📱 Open WhatsApp';
+                    btnsRow.appendChild(waLink);
+                    
+                    const copyBtn = document.createElement('button');
+                    copyBtn.className = 'copy-code-btn';
+                    copyBtn.dataset.copyText = book.contact_info || 'join baby-ability';
+                    copyBtn.style.cssText = 'background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #cbd5e1; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap;';
+                    copyBtn.textContent = '📋 Copy Code';
+                    btnsRow.appendChild(copyBtn);
+                    
+                    textDiv.appendChild(btnsRow);
+                }
+                contentRow.appendChild(textDiv);
+                warningBox.appendChild(contentRow);
+                
+                const codeBox = document.createElement('div');
+                codeBox.style.cssText = 'background: rgba(15, 23, 42, 0.6); padding: 0.625rem; border-radius: 4px;';
+                const codeText = document.createElement('div');
+                codeText.style.cssText = 'color: #94a3b8; font-size: 0.75rem; font-family: monospace;';
+                codeText.appendChild(document.createTextNode('Message: '));
+                const codeSpan = document.createElement('span');
+                codeSpan.style.cssText = 'color: #22c55e; user-select: all;';
+                codeSpan.textContent = book.contact_info || 'join baby-ability';
+                codeText.appendChild(codeSpan);
+                codeBox.appendChild(codeText);
+                warningBox.appendChild(codeBox);
+                
+                fragment.appendChild(warningBox);
+            }
+            
+            if (book.output_credentials?.output_01?.thread_id) {
+                const messagesWrapper = document.createElement('div');
+                messagesWrapper.style.cssText = 'display: flex; flex-direction: column; flex: 1; margin-top: 0.5rem; min-height: 0;';
+                
+                const toolbar = document.createElement('div');
+                toolbar.style.cssText = 'display: flex; gap: 0.5rem; padding: 0.5rem; background: rgba(30, 41, 59, 0.4); border-radius: 6px; margin-bottom: 0.5rem; flex-shrink: 0;';
+                
+                const selectAllLabel = document.createElement('label');
+                selectAllLabel.style.cssText = 'display: flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.625rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.75rem; cursor: pointer; white-space: nowrap;';
+                const selectAllCheckbox = document.createElement('input');
+                selectAllCheckbox.type = 'checkbox';
+                selectAllCheckbox.id = `select-all-${book.fractal_id}`;
+                selectAllCheckbox.dataset.selectAll = book.fractal_id;
+                selectAllCheckbox.style.cssText = 'cursor: pointer;';
+                selectAllLabel.appendChild(selectAllCheckbox);
+                selectAllLabel.appendChild(document.createTextNode('All'));
+                toolbar.appendChild(selectAllLabel);
+                
+                const searchInput = document.createElement('input');
+                searchInput.type = 'text';
+                searchInput.id = `msg-search-${book.fractal_id}`;
+                searchInput.placeholder = '🔍 Search...';
+                searchInput.style.cssText = 'padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem; flex: 1;';
+                searchInput.dataset.filterMessages = book.fractal_id;
+                toolbar.appendChild(searchInput);
+                
+                const statusSelect = document.createElement('select');
+                statusSelect.id = `status-filter-${book.fractal_id}`;
+                statusSelect.dataset.statusFilter = book.fractal_id;
+                statusSelect.style.cssText = 'padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem;';
+                [['all', 'All'], ['success', '✓'], ['failed', '✗']].forEach(([val, txt]) => {
+                    const opt = document.createElement('option');
+                    opt.value = val;
+                    opt.textContent = txt;
+                    statusSelect.appendChild(opt);
+                });
+                toolbar.appendChild(statusSelect);
+                
+                const downloadBtn = document.createElement('button');
+                downloadBtn.id = `download-selected-${book.fractal_id}`;
+                downloadBtn.dataset.downloadBook = book.fractal_id;
+                downloadBtn.disabled = true;
+                downloadBtn.style.cssText = 'padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;';
+                downloadBtn.textContent = '⬇️ Attachment';
+                toolbar.appendChild(downloadBtn);
+                
+                const tagBtn = document.createElement('button');
+                tagBtn.id = `tag-selected-${book.fractal_id}`;
+                tagBtn.dataset.tagBook = book.fractal_id;
+                tagBtn.disabled = true;
+                tagBtn.style.cssText = 'padding: 0.375rem 0.75rem; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 0.375rem; color: #a855f7; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;';
+                tagBtn.textContent = '🏷️ Tag';
+                toolbar.appendChild(tagBtn);
+                
+                messagesWrapper.appendChild(toolbar);
+                
+                const searchIndicator = document.createElement('div');
+                searchIndicator.id = `search-indicator-${book.fractal_id}`;
+                searchIndicator.style.cssText = 'display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between; margin-bottom: 0.5rem; flex-shrink: 0;';
+                const indicatorText = document.createElement('span');
+                indicatorText.textContent = '🔍 Filtered from book search';
+                searchIndicator.appendChild(indicatorText);
+                const clearBtn = document.createElement('button');
+                clearBtn.dataset.clearFilter = book.fractal_id;
+                clearBtn.style.cssText = 'background: none; border: none; color: #22c55e; cursor: pointer; font-size: 1.25rem; padding: 0; line-height: 1; font-weight: bold;';
+                clearBtn.title = 'Clear filter';
+                clearBtn.textContent = '×';
+                searchIndicator.appendChild(clearBtn);
+                messagesWrapper.appendChild(searchIndicator);
+                
+                const messagesContainer = document.createElement('div');
+                messagesContainer.id = `discord-messages-${book.fractal_id}`;
+                messagesContainer.className = 'discord-messages-container';
+                messagesContainer.style.cssText = 'flex: 1; overflow-y: auto; background: rgba(30, 41, 59, 0.3); border-radius: 6px; padding: 0.75rem; min-height: 0;';
+                const loadingMsg = document.createElement('div');
+                loadingMsg.className = 'no-messages';
+                loadingMsg.textContent = 'Loading messages...';
+                messagesContainer.appendChild(loadingMsg);
+                messagesWrapper.appendChild(messagesContainer);
+                
+                fragment.appendChild(messagesWrapper);
+            }
+            
+            detail.replaceChildren(fragment);
         }
 
         // Helper function to format timestamp with timezone
@@ -1609,26 +1727,26 @@
                 ].join(' ').toLowerCase();
                 
                 return `
-                <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml(searchableText)}" data-status="${msg.discord_status}" style="position: relative;">
+                <div class="discord-message" data-msg-id="${escapeHtml(msg.id)}" data-search-text="${escapeHtml(searchableText)}" data-status="${escapeHtml(msg.discord_status)}" style="position: relative;">
                     <div style="position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 6px; z-index: 10;">
                         ${msg.media_url ? `
                             <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 4px; color: #60a5fa; text-decoration: none; font-size: 0.9rem; transition: all 0.2s; flex-shrink: 0; line-height: 1;">
                                 📎
                             </a>
                         ` : ''}
-                        <button class="tag-add-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.9rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                        <button class="tag-add-btn" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.9rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                             🏷️
                         </button>
-                        <label class="custom-checkbox-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="Select for export" style="position: relative; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.9rem; cursor: pointer; margin: 0; padding: 0; flex-shrink: 0; transition: all 0.2s; line-height: 1;">
-                            <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-book-id="${bookId}" style="display: none;">
+                        <label class="custom-checkbox-btn" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" title="Select for export" style="position: relative; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.9rem; cursor: pointer; margin: 0; padding: 0; flex-shrink: 0; transition: all 0.2s; line-height: 1;">
+                            <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" style="display: none;">
                             <span class="checkbox-icon" style="font-size: 0.9rem; line-height: 1; pointer-events: none;">☐</span>
                         </label>
                     </div>
                     <div class="discord-avatar">
                         ${msg.sender_photo_url ? 
                             `<img src="${escapeHtml(msg.sender_photo_url)}" alt="${escapeHtml(msg.sender_name || 'User')}" class="avatar-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
-                             <div class="avatar-fallback" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center;">${msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?'}</div>` :
-                            `${msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?'}`
+                             <div class="avatar-fallback" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center;">${escapeHtml(msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?')}</div>` :
+                            `${escapeHtml(msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?')}`
                         }
                     </div>
                     <div class="discord-content">
@@ -1636,11 +1754,11 @@
                             <span class="discord-username">${escapeHtml(msg.sender_name || 'Unknown')}</span>
                             ${msg.sender_contact ? `<span class="sender-role" title="${msg.is_creator ? 'Book Creator' : 'Contributor'}" style="color: ${msg.is_creator ? '#22c55e' : '#60a5fa'};">${msg.is_creator ? '🌟' : '👥'}</span>` : ''}
                             <span class="discord-timestamp discord-timestamp-desktop">${formatDiscordTime(msg.timestamp)}</span>
-                            <span class="discord-status-badge status-${msg.discord_status}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
-                            <button class="jump-to-msg-btn" data-msg-id="${msg.id}" data-book-id="${bookId}">Jump</button>
+                            <span class="discord-status-badge status-${escapeHtml(msg.discord_status)}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
+                            <button class="jump-to-msg-btn" data-msg-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}">Jump</button>
                         </div>
                         <div class="discord-timestamp discord-timestamp-mobile">${formatDiscordTime(msg.timestamp)}</div>
-                        <div class="message-drop-section" data-message-id="${msg.id}" data-book-id="${bookId}">
+                        <div class="message-drop-section" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}">
                             <div class="drop-display hidden"></div>
                         </div>
                         ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
@@ -1663,7 +1781,7 @@
                             </div>
                         `).join('') : ''}
                         ${msg.has_media ? `
-                            <div class="discord-media-preview" id="media-preview-${msg.id}" data-message-id="${msg.id}" data-media-url="${escapeHtml(msg.media_url || '')}" data-media-type="${escapeHtml(msg.media_type || '')}">
+                            <div class="discord-media-preview" id="media-preview-${escapeHtml(msg.id)}" data-message-id="${escapeHtml(msg.id)}" data-media-url="${escapeHtml(msg.media_url || '')}" data-media-type="${escapeHtml(msg.media_type || '')}">
                                 <div class="media-loading">Loading media...</div>
                             </div>
                         ` : ''}
@@ -1887,38 +2005,55 @@
                         header.style.display = matchCount > 0 ? 'flex' : 'none';
                     }
                     
-                    // Create preview bubbles for search results (show first 3 matches)
                     if (searchText.trim() && matchCount > 0) {
-                        let previewHTML = '';
-                        const previewLimit = 3;
-                        
-                        for (let i = 0; i < Math.min(previewLimit, matchingMessages.length); i++) {
-                            const msg = matchingMessages[i];
-                            const username = msg.querySelector('.discord-username')?.textContent || 'Unknown';
-                            const textEl = msg.querySelector('.discord-text');
-                            const content = textEl?.textContent || '(No text content)';
-                            const msgId = msg.getAttribute('data-msg-id');
+                        const buildPreviewElements = () => {
+                            const fragment = document.createDocumentFragment();
+                            const previewLimit = 3;
                             
-                            previewHTML += `
-                                <div class="search-preview-bubble" data-target-id="${msgId}">
-                                    <strong>${escapeHtml(username)}:</strong> 
-                                    <span class="preview-text">${highlightText(content, searchText)}</span>
-                                    <span class="preview-jump">Jump</span>
-                                </div>`;
-                        }
+                            for (let i = 0; i < Math.min(previewLimit, matchingMessages.length); i++) {
+                                const msg = matchingMessages[i];
+                                const username = msg.querySelector('.discord-username')?.textContent || 'Unknown';
+                                const textEl = msg.querySelector('.discord-text');
+                                const content = textEl?.textContent || '(No text content)';
+                                const msgId = msg.getAttribute('data-msg-id');
+                                
+                                const bubble = document.createElement('div');
+                                bubble.className = 'search-preview-bubble';
+                                bubble.dataset.targetId = msgId;
+                                
+                                const strong = document.createElement('strong');
+                                strong.textContent = `${username}: `;
+                                bubble.appendChild(strong);
+                                
+                                const previewText = document.createElement('span');
+                                previewText.className = 'preview-text';
+                                previewText.textContent = content;
+                                bubble.appendChild(previewText);
+                                
+                                const jumpSpan = document.createElement('span');
+                                jumpSpan.className = 'preview-jump';
+                                jumpSpan.textContent = 'Jump';
+                                bubble.appendChild(jumpSpan);
+                                
+                                fragment.appendChild(bubble);
+                            }
+                            
+                            if (matchCount > previewLimit) {
+                                const moreDiv = document.createElement('div');
+                                moreDiv.className = 'more-matches';
+                                moreDiv.textContent = `...and ${matchCount - previewLimit} more`;
+                                fragment.appendChild(moreDiv);
+                            }
+                            return fragment;
+                        };
                         
-                        if (matchCount > previewLimit) {
-                            previewHTML += `<div class="more-matches">...and ${matchCount - previewLimit} more</div>`;
-                        }
-                        
-                        // Insert or update preview container
                         let existingPreview = header.nextElementSibling;
                         if (existingPreview && existingPreview.classList.contains('search-preview-container')) {
-                            existingPreview.innerHTML = previewHTML;
+                            existingPreview.replaceChildren(buildPreviewElements());
                         } else {
                             const previewContainer = document.createElement('div');
                             previewContainer.className = 'search-preview-container';
-                            previewContainer.innerHTML = previewHTML;
+                            previewContainer.appendChild(buildPreviewElements());
                             header.after(previewContainer);
                         }
                     } else {
@@ -2036,9 +2171,9 @@
                         </thead>
                         <tbody>
                             ${messages.map((msg, index) => `
-                                <tr data-timestamp="${msg.timestamp}" data-contact="${escapeHtml(msg.sender_contact || '')}" data-message="${escapeHtml(msg.message_content)}" data-status="${msg.discord_status}" data-msg-id="${msg.id}">
+                                <tr data-timestamp="${escapeHtml(msg.timestamp)}" data-contact="${escapeHtml(msg.sender_contact || '')}" data-message="${escapeHtml(msg.message_content)}" data-status="${escapeHtml(msg.discord_status)}" data-msg-id="${escapeHtml(msg.id)}">
                                     <td style="text-align: center;">
-                                        <input type="checkbox" class="message-checkbox" data-msg-id="${msg.id}" data-book-id="${bookId}">
+                                        <input type="checkbox" class="message-checkbox" data-msg-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}">
                                     </td>
                                     <td class="timestamp-col">${formatTimestampWithTZ(msg.timestamp)}</td>
                                     <td class="contact-col">
@@ -2047,13 +2182,13 @@
                                     </td>
                                     <td class="message-col">${escapeHtml(msg.message_content)}</td>
                                     <td style="text-align: center;">
-                                        <span class="status-badge status-${msg.discord_status}">
-                                            ${escapeHtml(msg.discord_status.toUpperCase())}
+                                        <span class="status-badge status-${escapeHtml(msg.discord_status)}">
+                                            ${escapeHtml(msg.discord_status ? msg.discord_status.toUpperCase() : '')}
                                         </span>
                                     </td>
                                     <td class="attachment-col">
                                         ${msg.has_media ? `
-                                            <span class="attachment-icon" data-message-id="${msg.id}" title="${escapeHtml(msg.media_type || 'Media')}">
+                                            <span class="attachment-icon" data-message-id="${escapeHtml(msg.id)}" title="${escapeHtml(msg.media_type || 'Media')}">
                                                 📎
                                             </span>
                                         ` : '-'}
@@ -2149,16 +2284,37 @@
                 
                 modalCaption.textContent = `${data.sender_name || 'Unknown'} - ${data.media_type || 'Media'}`;
                 
-                // Handle both simple types ("image") and MIME types ("image/jpeg")
                 const mediaType = (data.media_type || '').toLowerCase();
+                modalContent.replaceChildren();
+                
                 if (mediaType.includes('image')) {
-                    modalContent.innerHTML = `<img src="${data.media_data}" alt="Media Preview">`;
+                    const img = document.createElement('img');
+                    img.src = data.media_data;
+                    img.alt = 'Media Preview';
+                    modalContent.appendChild(img);
                 } else if (mediaType.includes('video')) {
-                    modalContent.innerHTML = `<video controls autoplay><source src="${data.media_data}" type="${data.media_type}"></video>`;
+                    const video = document.createElement('video');
+                    video.controls = true;
+                    video.autoplay = true;
+                    const source = document.createElement('source');
+                    source.src = data.media_data;
+                    source.type = data.media_type;
+                    video.appendChild(source);
+                    modalContent.appendChild(video);
                 } else if (mediaType.includes('audio')) {
-                    modalContent.innerHTML = `<audio controls autoplay><source src="${data.media_data}" type="${data.media_type}"></audio>`;
+                    const audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.autoplay = true;
+                    const source = document.createElement('source');
+                    source.src = data.media_data;
+                    source.type = data.media_type;
+                    audio.appendChild(source);
+                    modalContent.appendChild(audio);
                 } else {
-                    modalContent.innerHTML = `<div style="color: white; padding: 2rem;">Preview not available for ${data.media_type}</div>`;
+                    const fallback = document.createElement('div');
+                    fallback.style.cssText = 'color: white; padding: 2rem;';
+                    fallback.textContent = `Preview not available for ${data.media_type}`;
+                    modalContent.appendChild(fallback);
                 }
                 
                 modal.classList.add('active');
@@ -2171,7 +2327,7 @@
         function closeMediaModal() {
             const modal = document.getElementById('mediaModal');
             modal.classList.remove('active');
-            document.getElementById('mediaModalContent').innerHTML = '';
+            document.getElementById('mediaModalContent').replaceChildren();
         }
 
         // Book Actions Menu - Stacked options for button 4
@@ -2213,7 +2369,6 @@
                 document.getElementById('actionsMenuClose').addEventListener('click', closeBookActionsMenu);
             }
             
-            // Build stacked action buttons (5 options)
             const actions = [
                 { icon: 'ℹ️', label: 'Book Info', action: 'info', color: '#3b82f6' },
                 { icon: '📚', label: 'View All Books', action: 'fan', color: '#10b981' },
@@ -2222,32 +2377,34 @@
                 { icon: '🗑️', label: 'Delete Book', action: 'delete', color: '#ef4444' }
             ];
             
-            const actionsHtml = `
-                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                    ${actions.map(action => `
-                        <button class="book-action-btn" data-action="${action.action}" style="
-                            width: 100%;
-                            padding: 1rem;
-                            background: rgba(15, 23, 42, 0.6);
-                            border: 1px solid rgba(148, 163, 184, 0.2);
-                            border-radius: 12px;
-                            color: #e2e8f0;
-                            font-size: 1rem;
-                            cursor: pointer;
-                            display: flex;
-                            align-items: center;
-                            gap: 0.75rem;
-                            transition: all 0.2s ease;
-                        ">
-                            <span style="font-size: 1.5rem;">${action.icon}</span>
-                            <span style="flex: 1; text-align: left;">${action.label}</span>
-                            <span style="opacity: 0.5;">→</span>
-                        </button>
-                    `).join('')}
-                </div>
-            `;
+            const actionsContainer = document.createElement('div');
+            actionsContainer.style.cssText = 'display: flex; flex-direction: column; gap: 0.75rem;';
             
-            document.getElementById('bookActionsContent').innerHTML = actionsHtml;
+            actions.forEach(action => {
+                const btn = document.createElement('button');
+                btn.className = 'book-action-btn';
+                btn.dataset.action = action.action;
+                btn.style.cssText = 'width: 100%; padding: 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; color: #e2e8f0; font-size: 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; transition: all 0.2s ease;';
+                
+                const iconSpan = document.createElement('span');
+                iconSpan.style.cssText = 'font-size: 1.5rem;';
+                iconSpan.textContent = action.icon;
+                btn.appendChild(iconSpan);
+                
+                const labelSpan = document.createElement('span');
+                labelSpan.style.cssText = 'flex: 1; text-align: left;';
+                labelSpan.textContent = action.label;
+                btn.appendChild(labelSpan);
+                
+                const arrowSpan = document.createElement('span');
+                arrowSpan.style.cssText = 'opacity: 0.5;';
+                arrowSpan.textContent = '→';
+                btn.appendChild(arrowSpan);
+                
+                actionsContainer.appendChild(btn);
+            });
+            
+            document.getElementById('bookActionsContent').replaceChildren(actionsContainer);
             
             // Add click handlers to action buttons
             actionsMenu.querySelectorAll('.book-action-btn').forEach(btn => {
@@ -2412,14 +2569,21 @@
                 document.getElementById('auditAiEngine').addEventListener('change', updateBookContextDisplay);
             }
             
-            // Reset state
             document.getElementById('prometheusMessage').value = '';
-            document.getElementById('prometheusResultContent').innerHTML = `
-                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;">
-                    <div style="font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.6;">🔮</div>
-                    <p style="margin: 0; color: #64748b;">Enter your query and click "Run AI Check" to get an answer</p>
-                </div>
-            `;
+            
+            const resultContent = document.getElementById('prometheusResultContent');
+            const emptyState = document.createElement('div');
+            emptyState.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;';
+            const emptyIcon = document.createElement('div');
+            emptyIcon.style.cssText = 'font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.6;';
+            emptyIcon.textContent = '🔮';
+            emptyState.appendChild(emptyIcon);
+            const emptyText = document.createElement('p');
+            emptyText.style.cssText = 'margin: 0; color: #64748b;';
+            emptyText.textContent = 'Enter your query and click "Run AI Check" to get an answer';
+            emptyState.appendChild(emptyText);
+            resultContent.replaceChildren(emptyState);
+            
             document.getElementById('prometheusCheckBtn').disabled = false;
             document.getElementById('prometheusCheckBtn').textContent = '🔮 Run AI Check';
             document.getElementById('auditAiEngine').value = 'prometheus';
@@ -2433,33 +2597,38 @@
                 if (!bubblesDiv) return;
                 
                 if (window.auditSelectedBooks.size === 0) {
-                    bubblesDiv.innerHTML = '<span style="color: #64748b; font-size: 0.7rem;">No books selected</span>';
+                    const noBooks = document.createElement('span');
+                    noBooks.style.cssText = 'color: #64748b; font-size: 0.7rem;';
+                    noBooks.textContent = 'No books selected';
+                    bubblesDiv.replaceChildren(noBooks);
                 } else {
-                    const bubbles = Array.from(window.auditSelectedBooks)
-                        .map(fractalId => {
-                            const book = window.auditAllBooks.find(b => b.fractal_id === fractalId);
-                            const name = book ? book.name : fractalId;
-                            return `
-                                <span class="audit-selected-bubble" data-fractal-id="${fractalId}" 
-                                      style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(34, 211, 238, 0.25); border: 1px solid rgba(34, 211, 238, 0.4); border-radius: 12px; color: #22d3ee; font-size: 0.7rem; white-space: nowrap;">
-                                    📚 ${escapeHtml(name.length > 12 ? name.substring(0, 12) + '...' : name)}
-                                    <button class="bubble-remove" style="background: none; border: none; color: #22d3ee; cursor: pointer; font-size: 0.8rem; padding: 0; line-height: 1;">×</button>
-                                </span>
-                            `;
-                        })
-                        .join('');
-                    bubblesDiv.innerHTML = bubbles;
-                    
-                    document.querySelectorAll('.bubble-remove').forEach(btn => {
-                        btn.addEventListener('click', function(e) {
+                    const fragment = document.createDocumentFragment();
+                    Array.from(window.auditSelectedBooks).forEach(fractalId => {
+                        const book = window.auditAllBooks.find(b => b.fractal_id === fractalId);
+                        const name = book ? book.name : fractalId;
+                        const displayName = name.length > 12 ? name.substring(0, 12) + '...' : name;
+                        
+                        const bubble = document.createElement('span');
+                        bubble.className = 'audit-selected-bubble';
+                        bubble.dataset.fractalId = fractalId;
+                        bubble.style.cssText = 'display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(34, 211, 238, 0.25); border: 1px solid rgba(34, 211, 238, 0.4); border-radius: 12px; color: #22d3ee; font-size: 0.7rem; white-space: nowrap;';
+                        bubble.appendChild(document.createTextNode(`📚 ${displayName}`));
+                        
+                        const removeBtn = document.createElement('button');
+                        removeBtn.className = 'bubble-remove';
+                        removeBtn.style.cssText = 'background: none; border: none; color: #22d3ee; cursor: pointer; font-size: 0.8rem; padding: 0; line-height: 1;';
+                        removeBtn.textContent = '×';
+                        removeBtn.addEventListener('click', function(e) {
                             e.stopPropagation();
-                            const fractalId = this.closest('.audit-selected-bubble').getAttribute('data-fractal-id');
                             window.auditSelectedBooks.delete(fractalId);
                             renderSelectedBubbles();
                             renderDropdownList('');
                             updateBookContextDisplay();
                         });
+                        bubble.appendChild(removeBtn);
+                        fragment.appendChild(bubble);
                     });
+                    bubblesDiv.replaceChildren(fragment);
                 }
             };
             
@@ -2473,19 +2642,21 @@
                 );
                 
                 if (filtered.length === 0) {
-                    dropdown.innerHTML = `<div style="padding: 0.5rem; color: #64748b; font-size: 0.75rem;">No unselected books found</div>`;
+                    const emptyDiv = document.createElement('div');
+                    emptyDiv.style.cssText = 'padding: 0.5rem; color: #64748b; font-size: 0.75rem;';
+                    emptyDiv.textContent = 'No unselected books found';
+                    dropdown.replaceChildren(emptyDiv);
                 } else {
-                    dropdown.innerHTML = filtered.map(book => `
-                        <div class="dropdown-book-item" data-fractal-id="${book.fractal_id}" 
-                             style="padding: 0.5rem 0.75rem; cursor: pointer; color: #e2e8f0; font-size: 0.8rem; border-bottom: 1px solid rgba(148, 163, 184, 0.1); transition: background 0.2s;">
-                            📚 ${escapeHtml(book.name)}
-                        </div>
-                    `).join('');
-                    
-                    document.querySelectorAll('.dropdown-book-item').forEach(item => {
+                    const fragment = document.createDocumentFragment();
+                    filtered.forEach(book => {
+                        const item = document.createElement('div');
+                        item.className = 'dropdown-book-item';
+                        item.dataset.fractalId = book.fractal_id;
+                        item.style.cssText = 'padding: 0.5rem 0.75rem; cursor: pointer; color: #e2e8f0; font-size: 0.8rem; border-bottom: 1px solid rgba(148, 163, 184, 0.1); transition: background 0.2s;';
+                        item.textContent = `📚 ${book.name}`;
+                        
                         item.addEventListener('click', function() {
-                            const fractalId = this.getAttribute('data-fractal-id');
-                            window.auditSelectedBooks.add(fractalId);
+                            window.auditSelectedBooks.add(book.fractal_id);
                             renderSelectedBubbles();
                             renderDropdownList('');
                             document.getElementById('bookSearchInput').value = '';
@@ -2497,7 +2668,9 @@
                         item.addEventListener('mouseout', function() {
                             this.style.background = 'transparent';
                         });
+                        fragment.appendChild(item);
                     });
+                    dropdown.replaceChildren(fragment);
                 }
             };
             
@@ -2571,17 +2744,17 @@
             
             if (contextDiv) {
                 if (selectedCount === 0) {
-                    contextDiv.innerHTML = `⚠️ No books selected - ${engineName} will answer without book context`;
+                    contextDiv.textContent = `⚠️ No books selected - ${engineName} will answer without book context`;
                     contextDiv.style.background = 'rgba(245, 158, 11, 0.1)';
                     contextDiv.style.borderColor = 'rgba(245, 158, 11, 0.3)';
                     contextDiv.style.color = '#f59e0b';
                 } else if (selectedCount === totalCount) {
-                    contextDiv.innerHTML = `📚 ${engineName}: Searching ALL ${totalCount} book${totalCount !== 1 ? 's' : ''}`;
+                    contextDiv.textContent = `📚 ${engineName}: Searching ALL ${totalCount} book${totalCount !== 1 ? 's' : ''}`;
                     contextDiv.style.background = 'rgba(34, 211, 238, 0.1)';
                     contextDiv.style.borderColor = 'rgba(34, 211, 238, 0.3)';
                     contextDiv.style.color = '#22d3ee';
                 } else {
-                    contextDiv.innerHTML = `📚 ${engineName}: Searching ${selectedCount} of ${totalCount} book${totalCount !== 1 ? 's' : ''}`;
+                    contextDiv.textContent = `📚 ${engineName}: Searching ${selectedCount} of ${totalCount} book${totalCount !== 1 ? 's' : ''}`;
                     contextDiv.style.background = 'rgba(168, 85, 247, 0.1)';
                     contextDiv.style.borderColor = 'rgba(168, 85, 247, 0.3)';
                     contextDiv.style.color = '#a855f7';
@@ -2632,22 +2805,24 @@
             const engineName = engine === 'nyan-ai' ? 'Nyan AI' : 'Prometheus';
             const engineIcon = engine === 'nyan-ai' ? '🌈' : '🔮';
             
-            // Loading state - show spinner in result pane
             btn.disabled = true;
             btn.textContent = `${engineIcon} Analyzing...`;
-            resultContent.innerHTML = `
-                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;">
-                    <div style="font-size: 2.5rem; margin-bottom: 0.75rem; animation: pulse 1.5s ease-in-out infinite;">${engineIcon}</div>
-                    <p style="margin: 0; color: #a855f7;">${engineName} analyzing your query...</p>
-                    <p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 0.75rem;">Searching ${selectedBookIds.length} book${selectedBookIds.length !== 1 ? 's' : ''}</p>
-                </div>
-                <style>
-                    @keyframes pulse {
-                        0%, 100% { opacity: 1; transform: scale(1); }
-                        50% { opacity: 0.6; transform: scale(1.1); }
-                    }
-                </style>
-            `;
+            
+            const loadingDiv = document.createElement('div');
+            loadingDiv.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;';
+            const loadingIcon = document.createElement('div');
+            loadingIcon.style.cssText = 'font-size: 2.5rem; margin-bottom: 0.75rem; animation: pulse 1.5s ease-in-out infinite;';
+            loadingIcon.textContent = engineIcon;
+            loadingDiv.appendChild(loadingIcon);
+            const loadingText = document.createElement('p');
+            loadingText.style.cssText = 'margin: 0; color: #a855f7;';
+            loadingText.textContent = `${engineName} analyzing your query...`;
+            loadingDiv.appendChild(loadingText);
+            const loadingSubtext = document.createElement('p');
+            loadingSubtext.style.cssText = 'margin: 0.5rem 0 0 0; color: #64748b; font-size: 0.75rem;';
+            loadingSubtext.textContent = `Searching ${selectedBookIds.length} book${selectedBookIds.length !== 1 ? 's' : ''}`;
+            loadingDiv.appendChild(loadingSubtext);
+            resultContent.replaceChildren(loadingDiv);
             
             console.log(`${engineIcon} ${engineName}: Querying ${selectedBookIds.length} book(s)`);
             
@@ -2674,26 +2849,41 @@
                         ? `${data.bookContext.bookCount} book(s), ${data.bookContext.totalMessages} messages`
                         : 'No book context';
                     
-                    resultContent.innerHTML = `
-                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
-                            <span style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 4px; color: #a855f7; font-weight: 600;">
-                                🌈 Nyan AI
-                            </span>
-                            <span style="color: #64748b; font-size: 0.75rem;">
-                                ${data.processingTime}ms
-                            </span>
-                            <span style="color: #22d3ee; font-size: 0.75rem;">📚 ${bookInfo}</span>
-                        </div>
-                        
-                        <div style="padding: 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; margin-bottom: 0.75rem;">
-                            <p style="color: #e2e8f0; margin: 0; line-height: 1.6; font-size: 0.9rem; white-space: pre-wrap;">${escapeHtml(data.answer)}</p>
-                        </div>
-                        
-                        <div style="font-size: 0.7rem; color: #64748b; text-align: right;">
-                            Model: ${data.model || 'llama-3.3-70b'}
-                        </div>
-                    `;
+                    const fragment = document.createDocumentFragment();
                     
+                    const headerRow = document.createElement('div');
+                    headerRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;';
+                    
+                    const nyanBadge = document.createElement('span');
+                    nyanBadge.style.cssText = 'font-size: 0.8rem; padding: 0.25rem 0.5rem; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 4px; color: #a855f7; font-weight: 600;';
+                    nyanBadge.textContent = '🌈 Nyan AI';
+                    headerRow.appendChild(nyanBadge);
+                    
+                    const timeSpan = document.createElement('span');
+                    timeSpan.style.cssText = 'color: #64748b; font-size: 0.75rem;';
+                    timeSpan.textContent = `${data.processingTime}ms`;
+                    headerRow.appendChild(timeSpan);
+                    
+                    const bookSpan = document.createElement('span');
+                    bookSpan.style.cssText = 'color: #22d3ee; font-size: 0.75rem;';
+                    bookSpan.textContent = `📚 ${bookInfo}`;
+                    headerRow.appendChild(bookSpan);
+                    fragment.appendChild(headerRow);
+                    
+                    const answerBox = document.createElement('div');
+                    answerBox.style.cssText = 'padding: 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; margin-bottom: 0.75rem;';
+                    const answerP = document.createElement('p');
+                    answerP.style.cssText = 'color: #e2e8f0; margin: 0; line-height: 1.6; font-size: 0.9rem; white-space: pre-wrap;';
+                    answerP.textContent = data.answer;
+                    answerBox.appendChild(answerP);
+                    fragment.appendChild(answerBox);
+                    
+                    const modelDiv = document.createElement('div');
+                    modelDiv.style.cssText = 'font-size: 0.7rem; color: #64748b; text-align: right;';
+                    modelDiv.textContent = `Model: ${data.model || 'llama-3.3-70b'}`;
+                    fragment.appendChild(modelDiv);
+                    
+                    resultContent.replaceChildren(fragment);
                     showToast(`🌈 Nyan AI response complete`, 'success');
                     
                 } else {
@@ -2724,37 +2914,61 @@
                     };
                     const statusColor = statusColors[result.status] || '#94a3b8';
                     
-                    resultContent.innerHTML = `
-                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
-                            <span style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 4px; color: ${statusColor}; font-weight: 600;">
-                                ${escapeHtml(result.status)}
-                            </span>
-                            <span style="color: #64748b; font-size: 0.75rem;">
-                                ${(result.confidence * 100).toFixed(0)}% confidence
-                            </span>
-                            ${hasBookContext ? `<span style="color: #22d3ee; font-size: 0.75rem;">📚 ${result.totalMessages || 0} msgs</span>` : ''}
-                        </div>
-                        
-                        ${result.answer ? `
-                        <div style="padding: 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; margin-bottom: 0.75rem;">
-                            <p style="color: #e2e8f0; margin: 0; line-height: 1.6; font-size: 0.9rem;">${escapeHtml(result.answer)}</p>
-                        </div>
-                        ` : ''}
-                        
-                        ${result.data_extracted && Object.keys(result.data_extracted).length > 0 ? `
-                        <details style="margin-bottom: 0.5rem;">
-                            <summary style="color: #94a3b8; cursor: pointer; font-size: 0.8rem;">📊 Extracted Data</summary>
-                            <pre style="margin: 0.5rem 0; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; color: #94a3b8; font-size: 0.7rem; overflow-x: auto; max-height: 120px; overflow-y: auto;">${escapeHtml(JSON.stringify(result.data_extracted, null, 2))}</pre>
-                        </details>
-                        ` : ''}
-                        
-                        ${result.needs_human_review ? `
-                        <div style="padding: 0.375rem 0.5rem; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 4px; color: #a5b4fc; font-size: 0.75rem;">
-                            ⚠️ Human review recommended
-                        </div>
-                        ` : ''}
-                    `;
+                    const fragment = document.createDocumentFragment();
                     
+                    const headerRow = document.createElement('div');
+                    headerRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;';
+                    
+                    const statusBadge = document.createElement('span');
+                    statusBadge.style.cssText = `font-size: 0.8rem; padding: 0.25rem 0.5rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 4px; color: ${statusColor}; font-weight: 600;`;
+                    statusBadge.textContent = result.status;
+                    headerRow.appendChild(statusBadge);
+                    
+                    const confSpan = document.createElement('span');
+                    confSpan.style.cssText = 'color: #64748b; font-size: 0.75rem;';
+                    confSpan.textContent = `${(result.confidence * 100).toFixed(0)}% confidence`;
+                    headerRow.appendChild(confSpan);
+                    
+                    if (hasBookContext) {
+                        const msgsSpan = document.createElement('span');
+                        msgsSpan.style.cssText = 'color: #22d3ee; font-size: 0.75rem;';
+                        msgsSpan.textContent = `📚 ${result.totalMessages || 0} msgs`;
+                        headerRow.appendChild(msgsSpan);
+                    }
+                    fragment.appendChild(headerRow);
+                    
+                    if (result.answer) {
+                        const answerBox = document.createElement('div');
+                        answerBox.style.cssText = 'padding: 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; margin-bottom: 0.75rem;';
+                        const answerP = document.createElement('p');
+                        answerP.style.cssText = 'color: #e2e8f0; margin: 0; line-height: 1.6; font-size: 0.9rem;';
+                        answerP.textContent = result.answer;
+                        answerBox.appendChild(answerP);
+                        fragment.appendChild(answerBox);
+                    }
+                    
+                    if (result.data_extracted && Object.keys(result.data_extracted).length > 0) {
+                        const details = document.createElement('details');
+                        details.style.cssText = 'margin-bottom: 0.5rem;';
+                        const summary = document.createElement('summary');
+                        summary.style.cssText = 'color: #94a3b8; cursor: pointer; font-size: 0.8rem;';
+                        summary.textContent = '📊 Extracted Data';
+                        details.appendChild(summary);
+                        const pre = document.createElement('pre');
+                        pre.style.cssText = 'margin: 0.5rem 0; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; color: #94a3b8; font-size: 0.7rem; overflow-x: auto; max-height: 120px; overflow-y: auto;';
+                        pre.textContent = JSON.stringify(result.data_extracted, null, 2);
+                        details.appendChild(pre);
+                        fragment.appendChild(details);
+                    }
+                    
+                    if (result.needs_human_review) {
+                        const reviewDiv = document.createElement('div');
+                        reviewDiv.style.cssText = 'padding: 0.375rem 0.5rem; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 4px; color: #a5b4fc; font-size: 0.75rem;';
+                        reviewDiv.textContent = '⚠️ Human review recommended';
+                        fragment.appendChild(reviewDiv);
+                    }
+                    
+                    resultContent.replaceChildren(fragment);
                     showToast(`🧿 Check complete: ${result.status}`, result.status === 'PASS' ? 'success' : 'info');
                 }
                 
@@ -2762,12 +2976,20 @@
                 console.error('AI check error:', error);
                 showToast(`⚠️ ${error.message}`, 'error');
                 
-                resultContent.innerHTML = `
-                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;">
-                        <div style="font-size: 2rem; margin-bottom: 0.75rem;">❌</div>
-                        <p style="color: #ef4444; margin: 0; font-size: 0.875rem;"><strong>Error:</strong> ${escapeHtml(error.message)}</p>
-                    </div>
-                `;
+                const errorDiv = document.createElement('div');
+                errorDiv.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;';
+                const errorIcon = document.createElement('div');
+                errorIcon.style.cssText = 'font-size: 2rem; margin-bottom: 0.75rem;';
+                errorIcon.textContent = '❌';
+                errorDiv.appendChild(errorIcon);
+                const errorText = document.createElement('p');
+                errorText.style.cssText = 'color: #ef4444; margin: 0; font-size: 0.875rem;';
+                const strong = document.createElement('strong');
+                strong.textContent = 'Error: ';
+                errorText.appendChild(strong);
+                errorText.appendChild(document.createTextNode(error.message));
+                errorDiv.appendChild(errorText);
+                resultContent.replaceChildren(errorDiv);
             } finally {
                 btn.disabled = false;
                 btn.textContent = '🔮 Run AI Check';
@@ -2833,16 +3055,22 @@
                 
                 const data = await response.json();
                 
-                // Handle message when no thread exists yet
                 if (data.message || !data.logs || data.logs.length === 0) {
-                    contentDiv.innerHTML = `
-                        <div style="text-align: center; padding: 2rem; color: #94a3b8;">
-                            <div style="font-size: 3rem; margin-bottom: 1rem;">👁️</div>
-                            <p>No audit history yet.</p>
-                            <p style="font-size: 0.875rem; margin-top: 0.5rem;">Run your first AI check to see results here.</p>
-                        </div>
-                    `;
-                    paginationDiv.innerHTML = '';
+                    const emptyDiv = document.createElement('div');
+                    emptyDiv.style.cssText = 'text-align: center; padding: 2rem; color: #94a3b8;';
+                    const iconDiv = document.createElement('div');
+                    iconDiv.style.cssText = 'font-size: 3rem; margin-bottom: 1rem;';
+                    iconDiv.textContent = '👁️';
+                    emptyDiv.appendChild(iconDiv);
+                    const p1 = document.createElement('p');
+                    p1.textContent = 'No audit history yet.';
+                    emptyDiv.appendChild(p1);
+                    const p2 = document.createElement('p');
+                    p2.style.cssText = 'font-size: 0.875rem; margin-top: 0.5rem;';
+                    p2.textContent = 'Run your first AI check to see results here.';
+                    emptyDiv.appendChild(p2);
+                    contentDiv.replaceChildren(emptyDiv);
+                    paginationDiv.replaceChildren();
                     return;
                 }
                 
@@ -2853,32 +3081,29 @@
                     'REVIEW': '#6366f1'
                 };
                 
-                // Show stats summary if available
-                let statsHtml = '';
-                if (data.stats && data.stats.total > 0) {
-                    statsHtml = `
-                        <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap;">
-                            <div style="padding: 0.5rem 0.75rem; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 6px; color: #10b981; font-size: 0.8rem;">
-                                ✅ Pass: ${data.stats.pass}
-                            </div>
-                            <div style="padding: 0.5rem 0.75rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; color: #ef4444; font-size: 0.8rem;">
-                                ❌ Fail: ${data.stats.fail}
-                            </div>
-                            <div style="padding: 0.5rem 0.75rem; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; color: #f59e0b; font-size: 0.8rem;">
-                                ⚠️ Warning: ${data.stats.warning}
-                            </div>
-                            <div style="padding: 0.5rem 0.75rem; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 6px; color: #6366f1; font-size: 0.8rem;">
-                                🔍 Review: ${data.stats.review}
-                            </div>
-                            <div style="padding: 0.5rem 0.75rem; background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 6px; color: #94a3b8; font-size: 0.8rem;">
-                                🎯 Avg: ${data.stats.averageConfidence}%
-                            </div>
-                        </div>
-                    `;
-                }
+                const buildStatsDiv = () => {
+                    if (!data.stats || data.stats.total === 0) return null;
+                    const statsDiv = document.createElement('div');
+                    statsDiv.style.cssText = 'display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap;';
+                    
+                    const statItems = [
+                        { icon: '✅', label: 'Pass', value: data.stats.pass, bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.3)', color: '#10b981' },
+                        { icon: '❌', label: 'Fail', value: data.stats.fail, bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.3)', color: '#ef4444' },
+                        { icon: '⚠️', label: 'Warning', value: data.stats.warning, bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.3)', color: '#f59e0b' },
+                        { icon: '🔍', label: 'Review', value: data.stats.review, bg: 'rgba(99, 102, 241, 0.15)', border: 'rgba(99, 102, 241, 0.3)', color: '#6366f1' },
+                        { icon: '🎯', label: 'Avg', value: `${data.stats.averageConfidence}%`, bg: 'rgba(148, 163, 184, 0.15)', border: 'rgba(148, 163, 184, 0.3)', color: '#94a3b8' }
+                    ];
+                    
+                    statItems.forEach(item => {
+                        const el = document.createElement('div');
+                        el.style.cssText = `padding: 0.5rem 0.75rem; background: ${item.bg}; border: 1px solid ${item.border}; border-radius: 6px; color: ${item.color}; font-size: 0.8rem;`;
+                        el.textContent = `${item.icon} ${item.label}: ${item.value}`;
+                        statsDiv.appendChild(el);
+                    });
+                    return statsDiv;
+                };
                 
-                // Render logs from Horus (Discord-based)
-                const historyHtml = data.logs.map(log => {
+                const buildLogItem = (log) => {
                     const parsed = log.parsed || {};
                     const status = parsed.status?.toUpperCase() || 'UNKNOWN';
                     const statusColor = statusColors[status] || '#94a3b8';
@@ -2888,44 +3113,82 @@
                     const confidence = parsed.confidence;
                     const bookContext = parsed.bookContext;
                     
-                    return `
-                        <div style="padding: 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; margin-bottom: 0.75rem;">
-                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
-                                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                    <span style="padding: 0.25rem 0.5rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 4px; color: ${statusColor}; font-weight: 600; font-size: 0.75rem;">
-                                        ${escapeHtml(status)}
-                                    </span>
-                                    ${bookContext ? `<span style="color: #60a5fa; font-size: 0.75rem;">📚 ${escapeHtml(bookContext)}</span>` : ''}
-                                </div>
-                                <span style="color: #64748b; font-size: 0.75rem;">${date}</span>
-                            </div>
-                            <div style="color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.5rem;">
-                                <strong>Query:</strong> ${escapeHtml(query.substring(0, 150))}${query.length > 150 ? '...' : ''}
-                            </div>
-                            <div style="color: #e2e8f0; font-size: 0.875rem;">
-                                <strong>Answer:</strong> ${escapeHtml(answer.substring(0, 200))}${answer.length > 200 ? '...' : ''}
-                            </div>
-                            ${confidence ? `
-                            <div style="color: #64748b; font-size: 0.75rem; margin-top: 0.5rem;">
-                                Confidence: ${confidence}%
-                            </div>
-                            ` : ''}
-                        </div>
-                    `;
-                }).join('');
+                    const card = document.createElement('div');
+                    card.style.cssText = 'padding: 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; margin-bottom: 0.75rem;';
+                    
+                    const headerRow = document.createElement('div');
+                    headerRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;';
+                    
+                    const leftGroup = document.createElement('div');
+                    leftGroup.style.cssText = 'display: flex; align-items: center; gap: 0.75rem;';
+                    const statusBadge = document.createElement('span');
+                    statusBadge.style.cssText = `padding: 0.25rem 0.5rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 4px; color: ${statusColor}; font-weight: 600; font-size: 0.75rem;`;
+                    statusBadge.textContent = status;
+                    leftGroup.appendChild(statusBadge);
+                    
+                    if (bookContext) {
+                        const bookSpan = document.createElement('span');
+                        bookSpan.style.cssText = 'color: #60a5fa; font-size: 0.75rem;';
+                        bookSpan.textContent = `📚 ${bookContext}`;
+                        leftGroup.appendChild(bookSpan);
+                    }
+                    headerRow.appendChild(leftGroup);
+                    
+                    const dateSpan = document.createElement('span');
+                    dateSpan.style.cssText = 'color: #64748b; font-size: 0.75rem;';
+                    dateSpan.textContent = date;
+                    headerRow.appendChild(dateSpan);
+                    card.appendChild(headerRow);
+                    
+                    const queryDiv = document.createElement('div');
+                    queryDiv.style.cssText = 'color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.5rem;';
+                    const queryStrong = document.createElement('strong');
+                    queryStrong.textContent = 'Query: ';
+                    queryDiv.appendChild(queryStrong);
+                    queryDiv.appendChild(document.createTextNode(query.substring(0, 150) + (query.length > 150 ? '...' : '')));
+                    card.appendChild(queryDiv);
+                    
+                    const answerDiv = document.createElement('div');
+                    answerDiv.style.cssText = 'color: #e2e8f0; font-size: 0.875rem;';
+                    const answerStrong = document.createElement('strong');
+                    answerStrong.textContent = 'Answer: ';
+                    answerDiv.appendChild(answerStrong);
+                    answerDiv.appendChild(document.createTextNode(answer.substring(0, 200) + (answer.length > 200 ? '...' : '')));
+                    card.appendChild(answerDiv);
+                    
+                    if (confidence) {
+                        const confDiv = document.createElement('div');
+                        confDiv.style.cssText = 'color: #64748b; font-size: 0.75rem; margin-top: 0.5rem;';
+                        confDiv.textContent = `Confidence: ${confidence}%`;
+                        card.appendChild(confDiv);
+                    }
+                    return card;
+                };
                 
-                contentDiv.innerHTML = statsHtml + historyHtml;
-                paginationDiv.innerHTML = `<span style="color: #64748b; font-size: 0.75rem;">👁️ Powered by Horus | Showing ${data.logs.length} logs</span>`;
+                const fragment = document.createDocumentFragment();
+                const statsDiv = buildStatsDiv();
+                if (statsDiv) fragment.appendChild(statsDiv);
+                data.logs.forEach(log => fragment.appendChild(buildLogItem(log)));
+                contentDiv.replaceChildren(fragment);
+                
+                const paginationSpan = document.createElement('span');
+                paginationSpan.style.cssText = 'color: #64748b; font-size: 0.75rem;';
+                paginationSpan.textContent = `👁️ Powered by Horus | Showing ${data.logs.length} logs`;
+                paginationDiv.replaceChildren(paginationSpan);
                 
             } catch (error) {
                 console.error('Failed to load Prometheus history:', error);
-                contentDiv.innerHTML = `
-                    <div style="text-align: center; padding: 2rem; color: #ef4444;">
-                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">⚠️</div>
-                        <p>${escapeHtml(error.message)}</p>
-                    </div>
-                `;
-                paginationDiv.innerHTML = '';
+                const errDiv = document.createElement('div');
+                errDiv.style.cssText = 'text-align: center; padding: 2rem; color: #ef4444;';
+                const errIcon = document.createElement('div');
+                errIcon.style.cssText = 'font-size: 2rem; margin-bottom: 0.5rem;';
+                errIcon.textContent = '⚠️';
+                errDiv.appendChild(errIcon);
+                const errP = document.createElement('p');
+                errP.textContent = error.message;
+                errDiv.appendChild(errP);
+                contentDiv.replaceChildren(errDiv);
+                paginationDiv.replaceChildren();
             }
         }
         
@@ -2976,48 +3239,92 @@
             const platform = currentBook.input_platform || 'Unknown';
             const tags = currentBook.tags || [];
             
-            const infoHtml = `
-                <div style="display: flex; flex-direction: column; gap: 1rem;">
-                    <div class="form-group">
-                        <label class="form-label">Book Name</label>
-                        <div style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0;">
-                            ${escapeHtml(currentBook.name)}
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Platform</label>
-                        <div style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; text-transform: capitalize;">
-                            ${escapeHtml(platform)}
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Your Discord Webhook</label>
-                        <div style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; word-break: break-all; font-size: 0.875rem;">
-                            ${webhookUrl === 'Not configured' ? '<span style="color: #94a3b8;">Not configured</span>' : escapeHtml(webhookUrl)}
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Status</label>
-                        <div style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: ${statusColor}; text-transform: capitalize; font-weight: 500;">
-                            ${escapeHtml(status)}
-                        </div>
-                    </div>
-                    
-                    ${tags.length > 0 ? `
-                    <div class="form-group">
-                        <label class="form-label">Tags</label>
-                        <div style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 0.5rem;">
-                            ${tags.map(tag => `<span style="padding: 0.25rem 0.75rem; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; color: #c084fc; font-size: 0.875rem;">${escapeHtml(tag)}</span>`).join('')}
-                        </div>
-                    </div>
-                    ` : ''}
-                </div>
-            `;
+            // Helper to create a form group
+            const createFormGroup = (labelText, valueContent, extraStyles = '') => {
+                const group = document.createElement('div');
+                group.className = 'form-group';
+                
+                const label = document.createElement('label');
+                label.className = 'form-label';
+                label.textContent = labelText;
+                group.appendChild(label);
+                
+                const valueDiv = document.createElement('div');
+                valueDiv.style.cssText = 'padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0;' + extraStyles;
+                
+                if (typeof valueContent === 'string') {
+                    valueDiv.textContent = valueContent;
+                } else if (valueContent instanceof Node) {
+                    valueDiv.appendChild(valueContent);
+                }
+                group.appendChild(valueDiv);
+                
+                return group;
+            };
             
-            document.getElementById('bookInfoContent').innerHTML = infoHtml;
+            const container = document.createElement('div');
+            container.style.cssText = 'display: flex; flex-direction: column; gap: 1rem;';
+            
+            // Book Name
+            container.appendChild(createFormGroup('Book Name', currentBook.name));
+            
+            // Platform
+            container.appendChild(createFormGroup('Platform', platform, ' text-transform: capitalize;'));
+            
+            // Webhook URL
+            const webhookGroup = document.createElement('div');
+            webhookGroup.className = 'form-group';
+            const webhookLabel = document.createElement('label');
+            webhookLabel.className = 'form-label';
+            webhookLabel.textContent = 'Your Discord Webhook';
+            webhookGroup.appendChild(webhookLabel);
+            const webhookValueDiv = document.createElement('div');
+            webhookValueDiv.style.cssText = 'padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; word-break: break-all; font-size: 0.875rem;';
+            if (webhookUrl === 'Not configured') {
+                const span = document.createElement('span');
+                span.style.color = '#94a3b8';
+                span.textContent = 'Not configured';
+                webhookValueDiv.appendChild(span);
+            } else {
+                webhookValueDiv.textContent = webhookUrl;
+            }
+            webhookGroup.appendChild(webhookValueDiv);
+            container.appendChild(webhookGroup);
+            
+            // Status
+            const statusGroup = document.createElement('div');
+            statusGroup.className = 'form-group';
+            const statusLabel = document.createElement('label');
+            statusLabel.className = 'form-label';
+            statusLabel.textContent = 'Status';
+            statusGroup.appendChild(statusLabel);
+            const statusValueDiv = document.createElement('div');
+            statusValueDiv.style.cssText = `padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: ${statusColor}; text-transform: capitalize; font-weight: 500;`;
+            statusValueDiv.textContent = status;
+            statusGroup.appendChild(statusValueDiv);
+            container.appendChild(statusGroup);
+            
+            // Tags (if any)
+            if (tags.length > 0) {
+                const tagsGroup = document.createElement('div');
+                tagsGroup.className = 'form-group';
+                const tagsLabel = document.createElement('label');
+                tagsLabel.className = 'form-label';
+                tagsLabel.textContent = 'Tags';
+                tagsGroup.appendChild(tagsLabel);
+                const tagsValueDiv = document.createElement('div');
+                tagsValueDiv.style.cssText = 'padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 0.5rem;';
+                tags.forEach(tag => {
+                    const tagSpan = document.createElement('span');
+                    tagSpan.style.cssText = 'padding: 0.25rem 0.75rem; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; color: #c084fc; font-size: 0.875rem;';
+                    tagSpan.textContent = tag;
+                    tagsValueDiv.appendChild(tagSpan);
+                });
+                tagsGroup.appendChild(tagsValueDiv);
+                container.appendChild(tagsGroup);
+            }
+            
+            document.getElementById('bookInfoContent').replaceChildren(container);
             bookInfoModal.style.display = 'flex';
         }
         
@@ -3102,12 +3409,25 @@
             const fanList = document.getElementById('bookFanList');
             const activeBooks = filteredBooks.length > 0 ? filteredBooks : books;
             
-            fanList.innerHTML = activeBooks.map((book, index) => `
-                <div class="book-fan-item" data-book-id="${book.fractal_id}">
-                    <span class="book-fan-item-name">${index + 1}. ${escapeHtml(book.name)}</span>
-                    <span class="book-fan-item-arrow">→</span>
-                </div>
-            `).join('');
+            const fragment = document.createDocumentFragment();
+            activeBooks.forEach((book, index) => {
+                const item = document.createElement('div');
+                item.className = 'book-fan-item';
+                item.dataset.bookId = book.fractal_id;
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'book-fan-item-name';
+                nameSpan.textContent = `${index + 1}. ${book.name}`;
+                item.appendChild(nameSpan);
+                
+                const arrowSpan = document.createElement('span');
+                arrowSpan.className = 'book-fan-item-arrow';
+                arrowSpan.textContent = '→';
+                item.appendChild(arrowSpan);
+                
+                fragment.appendChild(item);
+            });
+            fanList.replaceChildren(fragment);
             
             bookFanModal.classList.add('active');
         }
@@ -3544,8 +3864,21 @@
             const filter = document.getElementById('platformFilter');
             if (!filter) return; // Desktop-only feature, skip in mobile mode
             const platforms = [...new Set(books.map(book => book.input_platform))];
-            filter.innerHTML = '<option value="">All Platforms</option>' + 
-                platforms.map(p => `<option value="${p}">${p}</option>`).join('');
+            
+            const fragment = document.createDocumentFragment();
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'All Platforms';
+            fragment.appendChild(defaultOption);
+            
+            platforms.forEach(p => {
+                const option = document.createElement('option');
+                option.value = p;
+                option.textContent = p;
+                fragment.appendChild(option);
+            });
+            
+            filter.replaceChildren(fragment);
         }
 
         // QR-FIRST ARCHITECTURE: Open in-page modal (no popup window friction)
@@ -3657,7 +3990,11 @@
                     const submitBtn = bookForm.querySelector('button[type="submit"]');
                     const originalText = submitBtn.textContent;
                     submitBtn.disabled = true;
-                    submitBtn.innerHTML = '<span class="book-loading"></span> Creating book...';
+                    submitBtn.replaceChildren();
+                    const loadingSpan = document.createElement('span');
+                    loadingSpan.className = 'book-loading';
+                    submitBtn.appendChild(loadingSpan);
+                    submitBtn.appendChild(document.createTextNode(' Creating book...'));
                     
                     try {
                         // 1. CREATE BOOK (webhook optional - add later in Edit tab)
@@ -3834,7 +4171,18 @@
             const banner = document.createElement('div');
             banner.className = 'setup-banner';
             banner.style.cssText = 'background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 0.875rem;';
-            banner.innerHTML = '<strong>🎯 Step 1:</strong> Fill in book name → <strong>Step 2:</strong> Send join code via WhatsApp → <strong>Done!</strong> Add webhook later in Edit';
+            const strong1 = document.createElement('strong');
+            strong1.textContent = '🎯 Step 1:';
+            const strong2 = document.createElement('strong');
+            strong2.textContent = 'Step 2:';
+            const strong3 = document.createElement('strong');
+            strong3.textContent = 'Done!';
+            banner.appendChild(strong1);
+            banner.appendChild(document.createTextNode(' Fill in book name → '));
+            banner.appendChild(strong2);
+            banner.appendChild(document.createTextNode(' Send join code via WhatsApp → '));
+            banner.appendChild(strong3);
+            banner.appendChild(document.createTextNode(' Add webhook later in Edit'));
             form.insertBefore(banner, form.firstChild);
         }
 
@@ -4065,68 +4413,79 @@
                     padding: 1rem;
                 `;
                 
-                modal.innerHTML = `
-                    <div style="
-                        background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
-                        border: 1px solid rgba(148, 163, 184, 0.2);
-                        border-radius: 16px;
-                        padding: 2rem;
-                        max-width: 500px;
-                        width: 100%;
-                        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-                    ">
-                        <div style="text-align: center; margin-bottom: 1.5rem;">
-                            <div style="font-size: 3rem; margin-bottom: 1rem;">⚠️</div>
-                            <h2 style="margin: 0; color: #e2e8f0; font-size: 1.5rem; font-weight: 600;">Reconnect WhatsApp?</h2>
-                        </div>
-                        
-                        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;">
-                            <p style="margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
-                                <strong style="color: #fca5a5;">Book:</strong> ${bookName}
-                            </p>
-                            <p style="margin: 0 0 0.75rem 0; color: #fca5a5; font-size: 0.95rem; line-height: 1.6;">
-                                ⚠️ <strong>Your book will be temporarily disconnected</strong>
-                            </p>
-                            <p style="margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
-                                📉 <strong>Messages sent during reconnection may be lost</strong>
-                            </p>
-                            <p style="margin: 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;">
-                                ⏱️ Brief downtime (~30 seconds) while you scan the new QR code
-                            </p>
-                        </div>
-                        
-                        <div style="display: flex; gap: 0.75rem;">
-                            <button id="cancelRelink" class="modal-btn-cancel" style="
-                                flex: 1;
-                                padding: 0.875rem 1.5rem;
-                                background: rgba(71, 85, 105, 0.3);
-                                border: 1px solid rgba(148, 163, 184, 0.3);
-                                border-radius: 8px;
-                                color: #94a3b8;
-                                font-weight: 600;
-                                cursor: pointer;
-                                font-size: 1rem;
-                                transition: all 0.2s;
-                            ">
-                                Cancel
-                            </button>
-                            <button id="confirmRelink" class="modal-btn-confirm" style="
-                                flex: 1;
-                                padding: 0.875rem 1.5rem;
-                                background: rgba(59, 130, 246, 0.2);
-                                border: 1px solid rgba(59, 130, 246, 0.4);
-                                border-radius: 8px;
-                                color: #60a5fa;
-                                font-weight: 600;
-                                cursor: pointer;
-                                font-size: 1rem;
-                                transition: all 0.2s;
-                            ">
-                                🔗 Generate QR
-                            </button>
-                        </div>
-                    </div>
-                `;
+                // Build modal content using safe DOM methods
+                const contentDiv = document.createElement('div');
+                contentDiv.style.cssText = 'background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95)); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 16px; padding: 2rem; max-width: 500px; width: 100%; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);';
+                
+                // Header section
+                const headerDiv = document.createElement('div');
+                headerDiv.style.cssText = 'text-align: center; margin-bottom: 1.5rem;';
+                const iconDiv = document.createElement('div');
+                iconDiv.style.cssText = 'font-size: 3rem; margin-bottom: 1rem;';
+                iconDiv.textContent = '⚠️';
+                headerDiv.appendChild(iconDiv);
+                const h2 = document.createElement('h2');
+                h2.style.cssText = 'margin: 0; color: #e2e8f0; font-size: 1.5rem; font-weight: 600;';
+                h2.textContent = 'Reconnect WhatsApp?';
+                headerDiv.appendChild(h2);
+                contentDiv.appendChild(headerDiv);
+                
+                // Warning section
+                const warningDiv = document.createElement('div');
+                warningDiv.style.cssText = 'background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;';
+                
+                const p1 = document.createElement('p');
+                p1.style.cssText = 'margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;';
+                const strong1 = document.createElement('strong');
+                strong1.style.color = '#fca5a5';
+                strong1.textContent = 'Book:';
+                p1.appendChild(strong1);
+                p1.appendChild(document.createTextNode(' ' + bookName));
+                warningDiv.appendChild(p1);
+                
+                const p2 = document.createElement('p');
+                p2.style.cssText = 'margin: 0 0 0.75rem 0; color: #fca5a5; font-size: 0.95rem; line-height: 1.6;';
+                p2.textContent = '⚠️ ';
+                const strong2 = document.createElement('strong');
+                strong2.textContent = 'Your book will be temporarily disconnected';
+                p2.appendChild(strong2);
+                warningDiv.appendChild(p2);
+                
+                const p3 = document.createElement('p');
+                p3.style.cssText = 'margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;';
+                p3.textContent = '📉 ';
+                const strong3 = document.createElement('strong');
+                strong3.textContent = 'Messages sent during reconnection may be lost';
+                p3.appendChild(strong3);
+                warningDiv.appendChild(p3);
+                
+                const p4 = document.createElement('p');
+                p4.style.cssText = 'margin: 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;';
+                p4.textContent = '⏱️ Brief downtime (~30 seconds) while you scan the new QR code';
+                warningDiv.appendChild(p4);
+                
+                contentDiv.appendChild(warningDiv);
+                
+                // Button section
+                const buttonDiv = document.createElement('div');
+                buttonDiv.style.cssText = 'display: flex; gap: 0.75rem;';
+                
+                const cancelBtn = document.createElement('button');
+                cancelBtn.id = 'cancelRelink';
+                cancelBtn.className = 'modal-btn-cancel';
+                cancelBtn.style.cssText = 'flex: 1; padding: 0.875rem 1.5rem; background: rgba(71, 85, 105, 0.3); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 8px; color: #94a3b8; font-weight: 600; cursor: pointer; font-size: 1rem; transition: all 0.2s;';
+                cancelBtn.textContent = 'Cancel';
+                buttonDiv.appendChild(cancelBtn);
+                
+                const confirmBtn = document.createElement('button');
+                confirmBtn.id = 'confirmRelink';
+                confirmBtn.className = 'modal-btn-confirm';
+                confirmBtn.style.cssText = 'flex: 1; padding: 0.875rem 1.5rem; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 8px; color: #60a5fa; font-weight: 600; cursor: pointer; font-size: 1rem; transition: all 0.2s;';
+                confirmBtn.textContent = '🔗 Generate QR';
+                buttonDiv.appendChild(confirmBtn);
+                
+                contentDiv.appendChild(buttonDiv);
+                modal.appendChild(contentDiv);
                 
                 document.body.appendChild(modal);
                 
@@ -4135,8 +4494,8 @@
                     resolve(confirmed);
                 };
                 
-                modal.querySelector('#confirmRelink').addEventListener('click', () => closeModal(true));
-                modal.querySelector('#cancelRelink').addEventListener('click', () => closeModal(false));
+                confirmBtn.addEventListener('click', () => closeModal(true));
+                cancelBtn.addEventListener('click', () => closeModal(false));
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) closeModal(false);
                 });
@@ -4228,13 +4587,15 @@
             const bgColor = isSuccess ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
             const borderColor = isSuccess ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
             
-            errorMsg.innerHTML = `
-                <div style="background: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 12px; padding: 1.5rem;">
-                    <p style="margin: 0; color: rgba(255, 255, 255, 0.9); font-size: 1rem; line-height: 1.6;">
-                        ${message}
-                    </p>
-                </div>
-            `;
+            const container = document.createElement('div');
+            container.style.cssText = `background: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 12px; padding: 1.5rem;`;
+            
+            const p = document.createElement('p');
+            p.style.cssText = 'margin: 0; color: rgba(255, 255, 255, 0.9); font-size: 1rem; line-height: 1.6;';
+            p.textContent = message;
+            container.appendChild(p);
+            
+            errorMsg.replaceChildren(container);
         }
 
         // Global QR watcher interval tracker
@@ -4271,17 +4632,25 @@
                         qrWatcherInterval = null;
                         
                         const qrContainer = document.getElementById('qrCodeContainer');
-                        qrContainer.innerHTML = `
-                            <div style="text-align: center;">
-                                <div style="font-size: 5rem; margin-bottom: 1rem;">🎉</div>
-                                <p style="color: rgba(16, 185, 129, 1); font-size: 1.5rem; font-weight: bold; margin: 0;">
-                                    Connected Successfully!
-                                </p>
-                                <p style="color: rgba(255, 255, 255, 0.8); font-size: 1rem; margin-top: 0.5rem;">
-                                    Closing in 1.5 seconds...
-                                </p>
-                            </div>
-                        `;
+                        const successDiv = document.createElement('div');
+                        successDiv.style.textAlign = 'center';
+                        
+                        const emojiDiv = document.createElement('div');
+                        emojiDiv.style.cssText = 'font-size: 5rem; margin-bottom: 1rem;';
+                        emojiDiv.textContent = '🎉';
+                        successDiv.appendChild(emojiDiv);
+                        
+                        const successP = document.createElement('p');
+                        successP.style.cssText = 'color: rgba(16, 185, 129, 1); font-size: 1.5rem; font-weight: bold; margin: 0;';
+                        successP.textContent = 'Connected Successfully!';
+                        successDiv.appendChild(successP);
+                        
+                        const closingP = document.createElement('p');
+                        closingP.style.cssText = 'color: rgba(255, 255, 255, 0.8); font-size: 1rem; margin-top: 0.5rem;';
+                        closingP.textContent = 'Closing in 1.5 seconds...';
+                        successDiv.appendChild(closingP);
+                        
+                        qrContainer.replaceChildren(successDiv);
                         
                         setTimeout(() => {
                             closeQRModal();
@@ -4449,7 +4818,10 @@
                                 selectedBookId = null;
                                 const detail = document.getElementById('bookDetail');
                                 if (detail) {
-                                    detail.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem;">Select a book to view messages</p>';
+                                    const p = document.createElement('p');
+                                    p.style.cssText = 'text-align: center; color: #94a3b8; padding: 2rem;';
+                                    p.textContent = 'Select a book to view messages';
+                                    detail.replaceChildren(p);
                                 }
                             }
                             
@@ -4462,7 +4834,12 @@
                             // If no books left, show empty state
                             if (books.length === 0) {
                                 const sidebar = document.getElementById('bookListContainer');
-                                if (sidebar) sidebar.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.875rem;">No books found</p>';
+                                if (sidebar) {
+                                    const p = document.createElement('p');
+                                    p.style.cssText = 'text-align: center; color: #94a3b8; padding: 2rem; font-size: 0.875rem;';
+                                    p.textContent = 'No books found';
+                                    sidebar.replaceChildren(p);
+                                }
                             }
                             
                             // Trigger full render to ensure consistency
@@ -4683,12 +5060,12 @@
                 // Collapse
                 expandedBots.delete(bookId);
                 container.style.display = 'none';
-                button.innerHTML = '▼ Show Messages';
+                button.textContent = '▼ Show Messages';
             } else {
                 // Expand
                 expandedBots.add(bookId);
                 container.style.display = 'block';
-                button.innerHTML = '▲ Hide Messages';
+                button.textContent = '▲ Hide Messages';
                 
                 // Load messages if not cached
                 if (!messageCache[bookId]) {
@@ -4708,7 +5085,7 @@
                 // Switch to Discord embed
                 messagesContainer.style.display = 'none';
                 embedContainer.style.display = 'block';
-                toggleButton.innerHTML = '📋 Custom View';
+                toggleButton.textContent = '📋 Custom View';
                 toggleButton.title = 'Back to custom message view';
                 if (searchContainer) {
                     const inputEl = searchContainer.querySelector('input');
@@ -4720,7 +5097,7 @@
                 // Switch to custom view
                 messagesContainer.style.display = 'block';
                 embedContainer.style.display = 'none';
-                toggleButton.innerHTML = '🎭 Discord UI';
+                toggleButton.textContent = '🎭 Discord UI';
                 toggleButton.title = 'View in Discord (native UI with full features)';
                 if (searchContainer) {
                     const inputEl = searchContainer.querySelector('input');
@@ -4777,12 +5154,19 @@
                     const html = renderDiscordMessages(data.messages, bookId);
                     console.log(`📝 Generated HTML length: ${html.length} chars`);
                     if (append) {
-                        // Append to existing messages (infinite scroll)
-                        container.innerHTML += html;
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = html;
+                        while (tempDiv.firstChild) {
+                            container.appendChild(tempDiv.firstChild);
+                        }
                         console.log(`✅ Appended ${data.messages?.length || 0} messages`);
                     } else {
-                        // Replace all (fresh load)
-                        container.innerHTML = html;
+                        container.replaceChildren();
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = html;
+                        while (tempDiv.firstChild) {
+                            container.appendChild(tempDiv.firstChild);
+                        }
                         console.log(`✅ Rendered ${data.messages?.length || 0} messages to container`);
                     }
                     
@@ -4850,7 +5234,12 @@
                 messagePageState[bookId].isLoading = false;
                 const container = document.getElementById(`discord-messages-${bookId}`);
                 if (container) {
-                    container.innerHTML = '<div class="no-messages" style="color: #ef4444;">Error loading messages. Please try refreshing.</div>';
+                    container.replaceChildren();
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'no-messages';
+                    errorDiv.style.color = '#ef4444';
+                    errorDiv.textContent = 'Error loading messages. Please try refreshing.';
+                    container.appendChild(errorDiv);
                 }
             }
         }
@@ -4953,29 +5342,29 @@
                     ].join(' ').toLowerCase();
                     
                     const html = `
-                    <div class="discord-message" data-msg-id="${msg.id}" data-search-text="${escapeHtml(searchableText)}" data-status="${msg.discord_status || 'success'}" style="position: relative;">
+                    <div class="discord-message" data-msg-id="${escapeHtml(msg.id)}" data-search-text="${escapeHtml(searchableText)}" data-status="${escapeHtml(msg.discord_status || 'success')}" style="position: relative;">
                         <div style="position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 8px; z-index: 10;">
                             ${msg.media_url ? `
                                 <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 4px; color: #60a5fa; text-decoration: none; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; line-height: 1;">
                                     📎
                                 </a>
                             ` : ''}
-                            <button class="agent-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="🧿 Audit action & closure" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                            <button class="agent-btn" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" title="🧿 Audit action & closure" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                                 🧿
                             </button>
-                            <button class="tag-add-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
+                            <button class="tag-add-btn" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" title="Add tags" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; cursor: pointer; margin: 0; padding: 0; line-height: 1;">
                                 🏷️
                             </button>
-                            <label class="custom-checkbox-btn" data-message-id="${msg.id}" data-book-id="${bookId}" title="Select for export" style="position: relative; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; cursor: pointer; margin: 0; padding: 0; flex-shrink: 0; transition: all 0.2s; line-height: 1;">
-                                <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${msg.id}" data-book-id="${bookId}" style="display: none;">
+                            <label class="custom-checkbox-btn" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" title="Select for export" style="position: relative; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(148, 163, 184, 0.2); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 4px; color: #cbd5e1; font-size: 0.875rem; cursor: pointer; margin: 0; padding: 0; flex-shrink: 0; transition: all 0.2s; line-height: 1;">
+                                <input type="checkbox" class="message-export-checkbox message-checkbox" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}" style="display: none;">
                                 <span class="checkbox-icon" style="font-size: 0.875rem; line-height: 1; pointer-events: none;">☐</span>
                             </label>
                         </div>
                         <div class="discord-avatar">
                             ${msg.sender_photo_url ? 
                                 `<img src="${escapeHtml(msg.sender_photo_url)}" alt="${escapeHtml(msg.sender_name || 'User')}" class="avatar-photo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">
-                                 <div class="avatar-fallback" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center;">${msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?'}</div>` :
-                                `${msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?'}`
+                                 <div class="avatar-fallback" style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center;">${escapeHtml(msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?')}</div>` :
+                                `${escapeHtml(msg.sender_name ? msg.sender_name.charAt(0).toUpperCase() : '?')}`
                             }
                         </div>
                         <div class="discord-content">
@@ -4983,14 +5372,14 @@
                                 <span class="discord-username">${escapeHtml(msg.sender_name || 'Unknown')}</span>
                                 ${msg.sender_contact ? `<span class="sender-role" title="${msg.is_creator ? 'Book Creator' : 'Contributor'}" style="color: ${msg.is_creator ? '#22c55e' : '#60a5fa'};">${msg.is_creator ? '🌟' : '👥'}</span>` : ''}
                                 <span class="discord-timestamp">${formatDiscordTime(msg.timestamp)}</span>
-                                <span class="discord-status-badge status-${msg.discord_status || 'success'}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
+                                <span class="discord-status-badge status-${escapeHtml(msg.discord_status || 'success')}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
                             </div>
-                            <div class="message-drop-section" data-message-id="${msg.id}" data-book-id="${bookId}">
+                            <div class="message-drop-section" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}">
                                 <div class="drop-display hidden"></div>
                             </div>
                             ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
                             ${msg.has_media ? `
-                                <div class="discord-media-preview" id="media-preview-${msg.id}" data-message-id="${msg.id}" data-media-url="${escapeHtml(msg.media_url || '')}" data-media-type="${escapeHtml(msg.media_type || '')}">
+                                <div class="discord-media-preview" id="media-preview-${escapeHtml(msg.id)}" data-message-id="${escapeHtml(msg.id)}" data-media-url="${escapeHtml(msg.media_url || '')}" data-media-type="${escapeHtml(msg.media_type || '')}">
                                     <div class="media-loading">Loading media...</div>
                                 </div>
                             ` : ''}
@@ -5194,52 +5583,77 @@
             try {
                 const response = await window.authFetch(`/api/messages/${messageId}/media`);
                 if (!response.ok) {
-                    previewContainer.innerHTML = '<div class="media-error">Media unavailable</div>';
+                    previewContainer.replaceChildren();
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'media-error';
+                    errorDiv.textContent = 'Media unavailable';
+                    previewContainer.appendChild(errorDiv);
                     return;
                 }
                 
                 const data = await response.json();
                 const mediaType = (data.media_type || '').toLowerCase();
                 
+                previewContainer.replaceChildren();
+                
                 if (mediaType.includes('image')) {
-                    // Image preview - click to enlarge
-                    previewContainer.innerHTML = `
-                        <img src="${data.media_data}" 
-                             alt="Image attachment" 
-                             class="discord-media-image"
-                             data-message-id="${messageId}"
-                             loading="lazy"
-                             style="cursor: pointer;">
-                    `;
+                    const img = document.createElement('img');
+                    img.src = data.media_data;
+                    img.alt = 'Image attachment';
+                    img.className = 'discord-media-image';
+                    img.dataset.messageId = messageId;
+                    img.loading = 'lazy';
+                    img.style.cursor = 'pointer';
+                    previewContainer.appendChild(img);
                 } else if (mediaType.includes('video')) {
-                    // Inline video player
-                    previewContainer.innerHTML = `
-                        <video controls class="discord-media-video">
-                            <source src="${data.media_data}" type="${data.media_type}">
-                            Your browser doesn't support video playback.
-                        </video>
-                        <div class="media-expand-hint" data-message-id="${messageId}" style="cursor: pointer;">Click to view fullscreen</div>
-                    `;
+                    const video = document.createElement('video');
+                    video.controls = true;
+                    video.className = 'discord-media-video';
+                    const source = document.createElement('source');
+                    source.src = data.media_data;
+                    source.type = data.media_type;
+                    video.appendChild(source);
+                    video.appendChild(document.createTextNode("Your browser doesn't support video playback."));
+                    previewContainer.appendChild(video);
+                    
+                    const hint = document.createElement('div');
+                    hint.className = 'media-expand-hint';
+                    hint.dataset.messageId = messageId;
+                    hint.style.cursor = 'pointer';
+                    hint.textContent = 'Click to view fullscreen';
+                    previewContainer.appendChild(hint);
                 } else if (mediaType.includes('audio')) {
-                    // Inline audio player
-                    previewContainer.innerHTML = `
-                        <audio controls class="discord-media-audio">
-                            <source src="${data.media_data}" type="${data.media_type}">
-                            Your browser doesn't support audio playback.
-                        </audio>
-                    `;
+                    const audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.className = 'discord-media-audio';
+                    const source = document.createElement('source');
+                    source.src = data.media_data;
+                    source.type = data.media_type;
+                    audio.appendChild(source);
+                    audio.appendChild(document.createTextNode("Your browser doesn't support audio playback."));
+                    previewContainer.appendChild(audio);
                 } else {
-                    // Fallback for other types
-                    previewContainer.innerHTML = `
-                        <div class="discord-attachment" data-message-id="${messageId}" style="cursor: pointer;">
-                            <span class="attachment-icon">📎</span>
-                            <span class="attachment-type">${escapeHtml(data.media_type || 'Attachment')}</span>
-                        </div>
-                    `;
+                    const attachDiv = document.createElement('div');
+                    attachDiv.className = 'discord-attachment';
+                    attachDiv.dataset.messageId = messageId;
+                    attachDiv.style.cursor = 'pointer';
+                    const iconSpan = document.createElement('span');
+                    iconSpan.className = 'attachment-icon';
+                    iconSpan.textContent = '📎';
+                    const typeSpan = document.createElement('span');
+                    typeSpan.className = 'attachment-type';
+                    typeSpan.textContent = data.media_type || 'Attachment';
+                    attachDiv.appendChild(iconSpan);
+                    attachDiv.appendChild(typeSpan);
+                    previewContainer.appendChild(attachDiv);
                 }
             } catch (error) {
                 console.error('Error loading media preview:', error);
-                previewContainer.innerHTML = '<div class="media-error">Failed to load media</div>';
+                previewContainer.replaceChildren();
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'media-error';
+                errorDiv.textContent = 'Failed to load media';
+                previewContainer.appendChild(errorDiv);
             }
         }
 
@@ -5407,25 +5821,28 @@
         }
 
         function openCreateUserModal() {
-            // Populate role dropdown based on creator's role (security: prevent privilege escalation)
             const roleSelect = document.getElementById('userRole');
-            roleSelect.innerHTML = ''; // Clear existing options
+            roleSelect.replaceChildren();
             
-            if (currentUser.role === 'dev') {
-                // Dev can create any role
-                roleSelect.innerHTML = `
-                    <option value="dev">Dev (Full Access)</option>
-                    <option value="admin">Admin (Tenant Manager)</option>
-                    <option value="read-only" selected>Read-Only (View Only)</option>
-                    <option value="write-only">Write-Only (Create/Edit)</option>
-                `;
-            } else if (currentUser.role === 'admin') {
-                // Admin can only create read-only or write-only (NOT dev, NOT admin)
-                roleSelect.innerHTML = `
-                    <option value="read-only" selected>Read-Only (View Only)</option>
-                    <option value="write-only">Write-Only (Create/Edit)</option>
-                `;
-            }
+            const roles = currentUser.role === 'dev' 
+                ? [
+                    { value: 'dev', label: 'Dev (Full Access)' },
+                    { value: 'admin', label: 'Admin (Tenant Manager)' },
+                    { value: 'read-only', label: 'Read-Only (View Only)', selected: true },
+                    { value: 'write-only', label: 'Write-Only (Create/Edit)' }
+                ]
+                : [
+                    { value: 'read-only', label: 'Read-Only (View Only)', selected: true },
+                    { value: 'write-only', label: 'Write-Only (Create/Edit)' }
+                ];
+            
+            roles.forEach(role => {
+                const option = document.createElement('option');
+                option.value = role.value;
+                option.textContent = role.label;
+                if (role.selected) option.selected = true;
+                roleSelect.appendChild(option);
+            });
             
             document.getElementById('userModal').classList.add('active');
         }
@@ -5630,42 +6047,79 @@
                 const data = await response.json();
                 
                 if (!data.sessions || data.sessions.length === 0) {
-                    sessionsList.innerHTML = '<p style="text-align: center; color: #94a3b8; padding: 3rem;">No active sessions found. Sessions will appear here when users log in.</p>';
+                    sessionsList.replaceChildren();
+                    const emptyMsg = document.createElement('p');
+                    emptyMsg.style.cssText = 'text-align: center; color: #94a3b8; padding: 3rem;';
+                    emptyMsg.textContent = 'No active sessions found. Sessions will appear here when users log in.';
+                    sessionsList.appendChild(emptyMsg);
                     return;
                 }
                 
-                sessionsList.innerHTML = data.sessions.map(session => {
-                    const loginDate = new Date(session.login_time).toLocaleString();
-                    const lastActivity = new Date(session.last_activity).toLocaleString();
-                    const statusBadge = session.is_active 
-                        ? '<span style="color: #10b981; font-weight: 600;">● Active</span>' 
-                        : '<span style="color: #94a3b8;">○ Inactive</span>';
+                sessionsList.replaceChildren();
+                data.sessions.forEach(session => {
+                    const card = document.createElement('div');
+                    card.className = 'user-card';
+                    card.style.opacity = session.is_active ? '1' : '0.6';
                     
-                    return `
-                        <div class="user-card" style="opacity: ${session.is_active ? '1' : '0.6'}">
-                            <div class="user-info">
-                                <div class="user-email">${escapeHtml(session.email || session.phone || 'Unknown User')}</div>
-                                <div class="user-role">${statusBadge}</div>
-                            </div>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; font-size: 0.875rem; color: #cbd5e1;">
-                                <div><strong>Device:</strong> ${escapeHtml(session.device_type || 'Unknown')}</div>
-                                <div><strong>Browser:</strong> ${escapeHtml(session.browser || 'Unknown')}</div>
-                                <div><strong>OS:</strong> ${escapeHtml(session.os || 'Unknown')}</div>
-                                <div><strong>IP:</strong> ${escapeHtml(session.ip_address || 'Unknown')}</div>
-                                <div><strong>Location:</strong> 🌍 ${escapeHtml(session.location || 'Unknown Location')}</div>
-                                <div><strong>Login:</strong> ${loginDate}</div>
-                                <div><strong>Last Activity:</strong> ${lastActivity}</div>
-                            </div>
-                            <div class="user-actions">
-                                ${session.is_active ? `<button class="btn btn-delete" data-revoke-session="${session.id}">Revoke</button>` : ''}
-                            </div>
-                        </div>
-                    `;
-                }).join('');
+                    const userInfo = document.createElement('div');
+                    userInfo.className = 'user-info';
+                    const userEmail = document.createElement('div');
+                    userEmail.className = 'user-email';
+                    userEmail.textContent = session.email || session.phone || 'Unknown User';
+                    const userRole = document.createElement('div');
+                    userRole.className = 'user-role';
+                    const statusSpan = document.createElement('span');
+                    statusSpan.style.cssText = session.is_active ? 'color: #10b981; font-weight: 600;' : 'color: #94a3b8;';
+                    statusSpan.textContent = session.is_active ? '● Active' : '○ Inactive';
+                    userRole.appendChild(statusSpan);
+                    userInfo.appendChild(userEmail);
+                    userInfo.appendChild(userRole);
+                    
+                    const details = document.createElement('div');
+                    details.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; margin-top: 0.75rem; font-size: 0.875rem; color: #cbd5e1;';
+                    
+                    const fields = [
+                        { label: 'Device:', value: session.device_type || 'Unknown' },
+                        { label: 'Browser:', value: session.browser || 'Unknown' },
+                        { label: 'OS:', value: session.os || 'Unknown' },
+                        { label: 'IP:', value: session.ip_address || 'Unknown' },
+                        { label: 'Location:', value: '🌍 ' + (session.location || 'Unknown Location') },
+                        { label: 'Login:', value: new Date(session.login_time).toLocaleString() },
+                        { label: 'Last Activity:', value: new Date(session.last_activity).toLocaleString() }
+                    ];
+                    
+                    fields.forEach(field => {
+                        const div = document.createElement('div');
+                        const strong = document.createElement('strong');
+                        strong.textContent = field.label;
+                        div.appendChild(strong);
+                        div.appendChild(document.createTextNode(' ' + field.value));
+                        details.appendChild(div);
+                    });
+                    
+                    const actions = document.createElement('div');
+                    actions.className = 'user-actions';
+                    if (session.is_active) {
+                        const btn = document.createElement('button');
+                        btn.className = 'btn btn-delete';
+                        btn.dataset.revokeSession = session.id;
+                        btn.textContent = 'Revoke';
+                        actions.appendChild(btn);
+                    }
+                    
+                    card.appendChild(userInfo);
+                    card.appendChild(details);
+                    card.appendChild(actions);
+                    sessionsList.appendChild(card);
+                });
             } catch (error) {
                 console.error('Error loading sessions:', error);
                 if (sessionsList) {
-                    sessionsList.innerHTML = '<div style="text-align: center; padding: 3rem; color: #ef4444;">Error loading sessions. Please try refreshing the page.</div>';
+                    sessionsList.replaceChildren();
+                    const errorDiv = document.createElement('div');
+                    errorDiv.style.cssText = 'text-align: center; padding: 3rem; color: #ef4444;';
+                    errorDiv.textContent = 'Error loading sessions. Please try refreshing the page.';
+                    sessionsList.appendChild(errorDiv);
                 }
             }
         }
@@ -5725,7 +6179,14 @@
                 }
             } catch (error) {
                 console.error('Error loading users for admin panel:', error);
-                document.getElementById('adminUserList').innerHTML = '<div style="color: #ef4444; text-align: center; padding: 1rem;">Error loading users</div>';
+                const userList = document.getElementById('adminUserList');
+                if (userList) {
+                    userList.replaceChildren();
+                    const errorDiv = document.createElement('div');
+                    errorDiv.style.cssText = 'color: #ef4444; text-align: center; padding: 1rem;';
+                    errorDiv.textContent = 'Error loading users';
+                    userList.appendChild(errorDiv);
+                }
             }
 
             // Load sessions
@@ -5737,7 +6198,14 @@
                 }
             } catch (error) {
                 console.error('Error loading sessions for admin panel:', error);
-                document.getElementById('adminSessionsList').innerHTML = '<div style="color: #ef4444; text-align: center; padding: 1rem;">Error loading sessions</div>';
+                const sessionsList = document.getElementById('adminSessionsList');
+                if (sessionsList) {
+                    sessionsList.replaceChildren();
+                    const errorDiv = document.createElement('div');
+                    errorDiv.style.cssText = 'color: #ef4444; text-align: center; padding: 1rem;';
+                    errorDiv.textContent = 'Error loading sessions';
+                    sessionsList.appendChild(errorDiv);
+                }
             }
 
             // Load audit logs
@@ -5751,14 +6219,26 @@
                 }
             } catch (error) {
                 console.error('Error loading audit logs for admin panel:', error);
-                document.getElementById('adminAuditLogs').innerHTML = '<div style="color: #ef4444; text-align: center; padding: 1rem;">Error loading audit logs</div>';
+                const auditLogs = document.getElementById('adminAuditLogs');
+                if (auditLogs) {
+                    auditLogs.replaceChildren();
+                    const errorDiv = document.createElement('div');
+                    errorDiv.style.cssText = 'color: #ef4444; text-align: center; padding: 1rem;';
+                    errorDiv.textContent = 'Error loading audit logs';
+                    auditLogs.appendChild(errorDiv);
+                }
             }
         }
 
         function renderAdminUsers(users) {
             const container = document.getElementById('adminUserList');
+            container.replaceChildren();
+            
             if (!users || users.length === 0) {
-                container.innerHTML = '<div style="text-align: center; padding: 1rem; color: #94a3b8;">No users found</div>';
+                const emptyDiv = document.createElement('div');
+                emptyDiv.style.cssText = 'text-align: center; padding: 1rem; color: #94a3b8;';
+                emptyDiv.textContent = 'No users found';
+                container.appendChild(emptyDiv);
                 return;
             }
 
@@ -5768,52 +6248,85 @@
                 'write-only': '#3b82f6'
             };
 
-            container.innerHTML = users.map(user => `
-                <div style="padding: 0.75rem; margin-bottom: 0.5rem; background: rgba(255, 255, 255, 0.05); border-radius: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.1);">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <div style="font-weight: 600; color: white;">${escapeHtml(user.email || user.phone)}</div>
-                            <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
-                                ID: ${user.id} • Role: <span style="color: ${roleColors[user.role]};">${user.role}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
+            users.forEach(user => {
+                const card = document.createElement('div');
+                card.style.cssText = 'padding: 0.75rem; margin-bottom: 0.5rem; background: rgba(255, 255, 255, 0.05); border-radius: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.1);';
+                
+                const flex = document.createElement('div');
+                flex.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
+                
+                const info = document.createElement('div');
+                const emailDiv = document.createElement('div');
+                emailDiv.style.cssText = 'font-weight: 600; color: white;';
+                emailDiv.textContent = user.email || user.phone;
+                
+                const metaDiv = document.createElement('div');
+                metaDiv.style.cssText = 'font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;';
+                metaDiv.appendChild(document.createTextNode('ID: ' + user.id + ' • Role: '));
+                const roleSpan = document.createElement('span');
+                roleSpan.style.color = roleColors[user.role] || '#94a3b8';
+                roleSpan.textContent = user.role;
+                metaDiv.appendChild(roleSpan);
+                
+                info.appendChild(emailDiv);
+                info.appendChild(metaDiv);
+                flex.appendChild(info);
+                card.appendChild(flex);
+                container.appendChild(card);
+            });
         }
 
         function renderAdminSessions(sessions) {
             const container = document.getElementById('adminSessionsList');
+            container.replaceChildren();
+            
             if (!sessions || sessions.length === 0) {
-                container.innerHTML = '<div style="text-align: center; padding: 1rem; color: #94a3b8;">No active sessions</div>';
+                const emptyDiv = document.createElement('div');
+                emptyDiv.style.cssText = 'text-align: center; padding: 1rem; color: #94a3b8;';
+                emptyDiv.textContent = 'No active sessions';
+                container.appendChild(emptyDiv);
                 return;
             }
 
-            container.innerHTML = sessions.map(session => {
-                const loginTime = new Date(session.login_time).toLocaleString();
+            sessions.forEach(session => {
                 const lastActivity = new Date(session.last_activity).toLocaleString();
                 
-                return `
-                    <div style="padding: 0.75rem; margin-bottom: 0.5rem; background: rgba(255, 255, 255, 0.05); border-radius: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.1);">
-                        <div style="font-weight: 600; color: white;">${escapeHtml(session.user_email || session.user_phone)}</div>
-                        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
-                            📍 ${escapeHtml(session.location || 'Unknown')}
-                        </div>
-                        <div style="font-size: 0.75rem; color: #94a3b8;">
-                            💻 ${escapeHtml(session.device_type)} • ${escapeHtml(session.browser)}
-                        </div>
-                        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">
-                            Last: ${lastActivity}
-                        </div>
-                    </div>
-                `;
-            }).join('');
+                const card = document.createElement('div');
+                card.style.cssText = 'padding: 0.75rem; margin-bottom: 0.5rem; background: rgba(255, 255, 255, 0.05); border-radius: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.1);';
+                
+                const emailDiv = document.createElement('div');
+                emailDiv.style.cssText = 'font-weight: 600; color: white;';
+                emailDiv.textContent = session.user_email || session.user_phone;
+                
+                const locationDiv = document.createElement('div');
+                locationDiv.style.cssText = 'font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;';
+                locationDiv.textContent = '📍 ' + (session.location || 'Unknown');
+                
+                const deviceDiv = document.createElement('div');
+                deviceDiv.style.cssText = 'font-size: 0.75rem; color: #94a3b8;';
+                deviceDiv.textContent = '💻 ' + session.device_type + ' • ' + session.browser;
+                
+                const lastDiv = document.createElement('div');
+                lastDiv.style.cssText = 'font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;';
+                lastDiv.textContent = 'Last: ' + lastActivity;
+                
+                card.appendChild(emailDiv);
+                card.appendChild(locationDiv);
+                card.appendChild(deviceDiv);
+                card.appendChild(lastDiv);
+                container.appendChild(card);
+            });
         }
 
         function renderAdminAuditLogs(logs) {
             const container = document.getElementById('adminAuditLogs');
+            container.replaceChildren();
+            
             if (!logs || logs.length === 0) {
-                container.innerHTML = '<div style="text-align: center; padding: 1rem; color: #94a3b8;">No audit logs found</div>';
+                const emptyDiv = document.createElement('div');
+                emptyDiv.style.cssText = 'text-align: center; padding: 1rem; color: #94a3b8;';
+                emptyDiv.textContent = 'No audit logs found';
+                container.appendChild(emptyDiv);
                 return;
             }
 
@@ -5832,30 +6345,63 @@
                 'SELF_REGISTER': '📝'
             };
 
-            container.innerHTML = logs.map(log => {
+            logs.forEach(log => {
                 const timestamp = new Date(log.timestamp).toLocaleString();
                 const icon = actionIcons[log.action_type] || '📋';
-                const details = log.details ? JSON.parse(log.details) : {};
                 
-                return `
-                    <div style="padding: 0.75rem; margin-bottom: 0.5rem; background: rgba(255, 255, 255, 0.03); border-radius: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.875rem;">
-                        <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <div style="flex: 1;">
-                                <span style="font-size: 1.25rem;">${icon}</span>
-                                <strong style="color: white; margin-left: 0.5rem;">${log.action_type}</strong>
-                                <div style="color: #94a3b8; margin-top: 0.25rem; margin-left: 2rem;">
-                                    Actor: <span style="color: #60a5fa;">${escapeHtml(log.actor_email || 'System')}</span>
-                                    ${log.target_email ? `→ Target: <span style="color: #f59e0b;">${escapeHtml(log.target_email)}</span>` : ''}
-                                </div>
-                                ${log.ip_address ? `<div style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem; margin-left: 2rem;">IP: ${escapeHtml(log.ip_address)}</div>` : ''}
-                            </div>
-                            <div style="text-align: right; color: #64748b; font-size: 0.75rem; white-space: nowrap;">
-                                ${timestamp}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+                const card = document.createElement('div');
+                card.style.cssText = 'padding: 0.75rem; margin-bottom: 0.5rem; background: rgba(255, 255, 255, 0.03); border-radius: 0.5rem; border: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.875rem;';
+                
+                const flex = document.createElement('div');
+                flex.style.cssText = 'display: flex; justify-content: space-between; align-items: start;';
+                
+                const content = document.createElement('div');
+                content.style.flex = '1';
+                
+                const iconSpan = document.createElement('span');
+                iconSpan.style.fontSize = '1.25rem';
+                iconSpan.textContent = icon;
+                
+                const actionStrong = document.createElement('strong');
+                actionStrong.style.cssText = 'color: white; margin-left: 0.5rem;';
+                actionStrong.textContent = log.action_type;
+                
+                const actorDiv = document.createElement('div');
+                actorDiv.style.cssText = 'color: #94a3b8; margin-top: 0.25rem; margin-left: 2rem;';
+                actorDiv.appendChild(document.createTextNode('Actor: '));
+                const actorSpan = document.createElement('span');
+                actorSpan.style.color = '#60a5fa';
+                actorSpan.textContent = log.actor_email || 'System';
+                actorDiv.appendChild(actorSpan);
+                
+                if (log.target_email) {
+                    actorDiv.appendChild(document.createTextNode(' → Target: '));
+                    const targetSpan = document.createElement('span');
+                    targetSpan.style.color = '#f59e0b';
+                    targetSpan.textContent = log.target_email;
+                    actorDiv.appendChild(targetSpan);
+                }
+                
+                content.appendChild(iconSpan);
+                content.appendChild(actionStrong);
+                content.appendChild(actorDiv);
+                
+                if (log.ip_address) {
+                    const ipDiv = document.createElement('div');
+                    ipDiv.style.cssText = 'color: #64748b; font-size: 0.75rem; margin-top: 0.25rem; margin-left: 2rem;';
+                    ipDiv.textContent = 'IP: ' + log.ip_address;
+                    content.appendChild(ipDiv);
+                }
+                
+                const timeDiv = document.createElement('div');
+                timeDiv.style.cssText = 'text-align: right; color: #64748b; font-size: 0.75rem; white-space: nowrap;';
+                timeDiv.textContent = timestamp;
+                
+                flex.appendChild(content);
+                flex.appendChild(timeDiv);
+                card.appendChild(flex);
+                container.appendChild(card);
+            });
         }
 
         // SCHEMA SWITCHEROO: Global variable to control which webhook source to use
@@ -5947,7 +6493,11 @@
                 console.error('Error loading users tab:', error);
                 const container = document.getElementById('adminCards');
                 if (container) {
-                    container.innerHTML = `<div style="padding: 3rem; color: #ef4444;">Error loading users: ${error.message}</div>`;
+                    container.replaceChildren();
+                    const errorDiv = document.createElement('div');
+                    errorDiv.style.cssText = 'padding: 3rem; color: #ef4444;';
+                    errorDiv.textContent = 'Error loading users: ' + error.message;
+                    container.appendChild(errorDiv);
                 }
             }
         }
@@ -5971,58 +6521,110 @@
             const container = document.getElementById('devPanelAdminCards');
             if (!container) return;
             
+            container.replaceChildren();
+            
             if (tenants.length === 0) {
-                container.innerHTML = '<div style="padding: 3rem; color: #94a3b8;">No admins found</div>';
+                const emptyDiv = document.createElement('div');
+                emptyDiv.style.cssText = 'padding: 3rem; color: #94a3b8;';
+                emptyDiv.textContent = 'No admins found';
+                container.appendChild(emptyDiv);
                 return;
             }
             
-            container.innerHTML = tenants.map((tenant, index) => {
+            tenants.forEach((tenant) => {
                 const users = adminsByTenant[tenant];
                 const genesisAdmin = users.find(u => u.role === 'admin' || u.role === 'dev') || users[0];
                 const adminNumber = tenant.replace('tenant_', '').padStart(2, '0');
                 const botCount = genesisAdmin.bridge_count || 0;
                 const messageCount = genesisAdmin.message_count || 0;
                 
-                return `
-                    <div class="glass-card" style="min-width: 300px; flex-shrink: 0; padding: 1.5rem;">
-                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-                            <div style="width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: 700; flex-shrink: 0;">
-                                ${adminNumber}
-                            </div>
-                            <div style="flex: 1; min-width: 0;">
-                                <div style="color: white; font-weight: 600; font-size: 1.125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                    Admin #${adminNumber}
-                                </div>
-                                <div style="color: #94a3b8; font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                    ${escapeHtml(genesisAdmin.email)}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
-                            <div style="flex: 1; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 0.5rem; padding: 0.75rem; text-align: center;">
-                                <div style="color: #3b82f6; font-size: 1.5rem; font-weight: 700;">${botCount}</div>
-                                <div style="color: #94a3b8; font-size: 0.75rem; margin-top: 0.25rem;">Bots</div>
-                            </div>
-                            <div style="flex: 1; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 0.5rem; padding: 0.75rem; text-align: center;">
-                                <div style="color: #10b981; font-size: 1.5rem; font-weight: 700;">${messageCount}</div>
-                                <div style="color: #94a3b8; font-size: 0.75rem; margin-top: 0.25rem;">Messages</div>
-                            </div>
-                        </div>
-                        
-                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.1);">
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #94a3b8; font-size: 0.75rem;">
-                                <span>🏠</span>
-                                <span>${tenant}</span>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #94a3b8; font-size: 0.75rem; margin-top: 0.25rem;">
-                                <span>👤</span>
-                                <span>${users.length} ${users.length === 1 ? 'user' : 'users'} in tenant</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+                const card = document.createElement('div');
+                card.className = 'glass-card';
+                card.style.cssText = 'min-width: 300px; flex-shrink: 0; padding: 1.5rem;';
+                
+                // Header section
+                const header = document.createElement('div');
+                header.style.cssText = 'display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;';
+                
+                const avatar = document.createElement('div');
+                avatar.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: 700; flex-shrink: 0;';
+                avatar.textContent = adminNumber;
+                
+                const info = document.createElement('div');
+                info.style.cssText = 'flex: 1; min-width: 0;';
+                
+                const titleDiv = document.createElement('div');
+                titleDiv.style.cssText = 'color: white; font-weight: 600; font-size: 1.125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+                titleDiv.textContent = 'Admin #' + adminNumber;
+                
+                const emailDiv = document.createElement('div');
+                emailDiv.style.cssText = 'color: #94a3b8; font-size: 0.875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+                emailDiv.textContent = genesisAdmin.email;
+                
+                info.appendChild(titleDiv);
+                info.appendChild(emailDiv);
+                header.appendChild(avatar);
+                header.appendChild(info);
+                
+                // Stats section
+                const stats = document.createElement('div');
+                stats.style.cssText = 'display: flex; gap: 1rem; margin-top: 1rem;';
+                
+                const botStat = document.createElement('div');
+                botStat.style.cssText = 'flex: 1; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 0.5rem; padding: 0.75rem; text-align: center;';
+                const botNum = document.createElement('div');
+                botNum.style.cssText = 'color: #3b82f6; font-size: 1.5rem; font-weight: 700;';
+                botNum.textContent = botCount;
+                const botLabel = document.createElement('div');
+                botLabel.style.cssText = 'color: #94a3b8; font-size: 0.75rem; margin-top: 0.25rem;';
+                botLabel.textContent = 'Bots';
+                botStat.appendChild(botNum);
+                botStat.appendChild(botLabel);
+                
+                const msgStat = document.createElement('div');
+                msgStat.style.cssText = 'flex: 1; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 0.5rem; padding: 0.75rem; text-align: center;';
+                const msgNum = document.createElement('div');
+                msgNum.style.cssText = 'color: #10b981; font-size: 1.5rem; font-weight: 700;';
+                msgNum.textContent = messageCount;
+                const msgLabel = document.createElement('div');
+                msgLabel.style.cssText = 'color: #94a3b8; font-size: 0.75rem; margin-top: 0.25rem;';
+                msgLabel.textContent = 'Messages';
+                msgStat.appendChild(msgNum);
+                msgStat.appendChild(msgLabel);
+                
+                stats.appendChild(botStat);
+                stats.appendChild(msgStat);
+                
+                // Footer section
+                const footer = document.createElement('div');
+                footer.style.cssText = 'margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.1);';
+                
+                const tenantRow = document.createElement('div');
+                tenantRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; color: #94a3b8; font-size: 0.75rem;';
+                const homeIcon = document.createElement('span');
+                homeIcon.textContent = '🏠';
+                const tenantName = document.createElement('span');
+                tenantName.textContent = tenant;
+                tenantRow.appendChild(homeIcon);
+                tenantRow.appendChild(tenantName);
+                
+                const userRow = document.createElement('div');
+                userRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; color: #94a3b8; font-size: 0.75rem; margin-top: 0.25rem;';
+                const userIcon = document.createElement('span');
+                userIcon.textContent = '👤';
+                const userCount = document.createElement('span');
+                userCount.textContent = users.length + ' ' + (users.length === 1 ? 'user' : 'users') + ' in tenant';
+                userRow.appendChild(userIcon);
+                userRow.appendChild(userCount);
+                
+                footer.appendChild(tenantRow);
+                footer.appendChild(userRow);
+                
+                card.appendChild(header);
+                card.appendChild(stats);
+                card.appendChild(footer);
+                container.appendChild(card);
+            });
         }
         
         // Render user management for admins (tenant-specific)
@@ -6030,46 +6632,113 @@
             const container = document.getElementById('adminCards');
             if (!container) return;
             
+            container.replaceChildren();
+            
             // Filter users in this admin's tenant only
             const tenantUsers = allUsers.filter(u => u.tenant_id === currentUser.tenant_id);
             
-            container.innerHTML = `
-                <div style="width: 100%; max-width: 800px;">
-                    <div class="glass-card" style="padding: 1.5rem;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                            <h2 style="font-size: 1.25rem; font-weight: 600; color: white;">👥 Tenant Users</h2>
-                            <button class="create-bot-btn" data-action="openCreateUserModal" style="padding: 0.5rem 1rem; font-size: 0.875rem;">+ Invite User</button>
-                        </div>
-                        
-                        ${tenantUsers.length === 0 ? `
-                            <div style="text-align: center; padding: 3rem; color: #94a3b8;">
-                                <p style="margin-bottom: 1rem;">No additional users in your tenant</p>
-                                <p style="font-size: 0.875rem;">Click "+ Invite User" to add read-only or write-only users</p>
-                            </div>
-                        ` : `
-                            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                                ${tenantUsers.map(user => `
-                                    <div class="user-item">
-                                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                                            <div style="flex: 1;">
-                                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                                    <strong style="color: white;">${escapeHtml(user.email)}</strong>
-                                                    <span class="stat-badge" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6; font-size: 0.75rem; padding: 0.25rem 0.5rem;">${user.role}</span>
-                                                    ${user.is_genesis_admin ? '<span class="stat-badge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24; font-size: 0.75rem; padding: 0.25rem 0.5rem;">Genesis Admin</span>' : ''}
-                                                </div>
-                                                <div style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.25rem;">
-                                                    Created: ${new Date(user.created_at).toLocaleDateString()}
-                                                </div>
-                                            </div>
-                                            ${!user.is_genesis_admin && user.role !== 'admin' ? `<button class="btn-icon btn-danger" data-delete-user="${user.id}" title="Remove User">🗑️</button>` : ''}
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        `}
-                    </div>
-                </div>
-            `;
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'width: 100%; max-width: 800px;';
+            
+            const card = document.createElement('div');
+            card.className = 'glass-card';
+            card.style.padding = '1.5rem';
+            
+            // Header
+            const header = document.createElement('div');
+            header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;';
+            
+            const title = document.createElement('h2');
+            title.style.cssText = 'font-size: 1.25rem; font-weight: 600; color: white;';
+            title.textContent = '👥 Tenant Users';
+            
+            const inviteBtn = document.createElement('button');
+            inviteBtn.className = 'create-bot-btn';
+            inviteBtn.dataset.action = 'openCreateUserModal';
+            inviteBtn.style.cssText = 'padding: 0.5rem 1rem; font-size: 0.875rem;';
+            inviteBtn.textContent = '+ Invite User';
+            
+            header.appendChild(title);
+            header.appendChild(inviteBtn);
+            card.appendChild(header);
+            
+            if (tenantUsers.length === 0) {
+                const emptyState = document.createElement('div');
+                emptyState.style.cssText = 'text-align: center; padding: 3rem; color: #94a3b8;';
+                
+                const p1 = document.createElement('p');
+                p1.style.marginBottom = '1rem';
+                p1.textContent = 'No additional users in your tenant';
+                
+                const p2 = document.createElement('p');
+                p2.style.fontSize = '0.875rem';
+                p2.textContent = 'Click "+ Invite User" to add read-only or write-only users';
+                
+                emptyState.appendChild(p1);
+                emptyState.appendChild(p2);
+                card.appendChild(emptyState);
+            } else {
+                const userList = document.createElement('div');
+                userList.style.cssText = 'display: flex; flex-direction: column; gap: 0.75rem;';
+                
+                tenantUsers.forEach(user => {
+                    const userItem = document.createElement('div');
+                    userItem.className = 'user-item';
+                    
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
+                    
+                    const info = document.createElement('div');
+                    info.style.flex = '1';
+                    
+                    const nameRow = document.createElement('div');
+                    nameRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+                    
+                    const emailStrong = document.createElement('strong');
+                    emailStrong.style.color = 'white';
+                    emailStrong.textContent = user.email;
+                    nameRow.appendChild(emailStrong);
+                    
+                    const roleBadge = document.createElement('span');
+                    roleBadge.className = 'stat-badge';
+                    roleBadge.style.cssText = 'background: rgba(59, 130, 246, 0.2); color: #3b82f6; font-size: 0.75rem; padding: 0.25rem 0.5rem;';
+                    roleBadge.textContent = user.role;
+                    nameRow.appendChild(roleBadge);
+                    
+                    if (user.is_genesis_admin) {
+                        const genesisBadge = document.createElement('span');
+                        genesisBadge.className = 'stat-badge';
+                        genesisBadge.style.cssText = 'background: rgba(251, 191, 36, 0.2); color: #fbbf24; font-size: 0.75rem; padding: 0.25rem 0.5rem;';
+                        genesisBadge.textContent = 'Genesis Admin';
+                        nameRow.appendChild(genesisBadge);
+                    }
+                    
+                    const dateDiv = document.createElement('div');
+                    dateDiv.style.cssText = 'color: #94a3b8; font-size: 0.875rem; margin-top: 0.25rem;';
+                    dateDiv.textContent = 'Created: ' + new Date(user.created_at).toLocaleDateString();
+                    
+                    info.appendChild(nameRow);
+                    info.appendChild(dateDiv);
+                    row.appendChild(info);
+                    
+                    if (!user.is_genesis_admin && user.role !== 'admin') {
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.className = 'btn-icon btn-danger';
+                        deleteBtn.dataset.deleteUser = user.id;
+                        deleteBtn.title = 'Remove User';
+                        deleteBtn.textContent = '🗑️';
+                        row.appendChild(deleteBtn);
+                    }
+                    
+                    userItem.appendChild(row);
+                    userList.appendChild(userItem);
+                });
+                
+                card.appendChild(userList);
+            }
+            
+            wrapper.appendChild(card);
+            container.appendChild(wrapper);
         }
         
         // Load users for Dev Panel
@@ -6085,7 +6754,11 @@
                 console.error('Error loading dev panel users:', error);
                 const userList = document.getElementById('devUserList');
                 if (userList) {
-                    userList.innerHTML = `<div style="text-align: center; padding: 3rem; color: #ef4444;">Error loading users: ${error.message}</div>`;
+                    userList.replaceChildren();
+                    const errorDiv = document.createElement('div');
+                    errorDiv.style.cssText = 'text-align: center; padding: 3rem; color: #ef4444;';
+                    errorDiv.textContent = 'Error loading users: ' + error.message;
+                    userList.appendChild(errorDiv);
                 }
             }
         }
@@ -6108,44 +6781,6 @@
             if (!book) return;
             
             const tenantNum = String(book.tenant_id || 1).padStart(2, '0');
-            const infoHTML = `
-                <div class="modal-content" style="max-width: 600px;">
-                    <div class="modal-header">
-                        <h2 class="modal-title">ℹ️ Book Information</h2>
-                        <button class="close-btn" data-close-modal="bookInfoModal">×</button>
-                    </div>
-                    <div style="padding: 1.5rem;">
-                        <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 1.5rem;">
-                            <div class="detail-row" style="margin-bottom: 1rem;">
-                                <span class="detail-label">Tenant</span>
-                                <span class="detail-value">Admin #${tenantNum} (${book.tenant_owner_email || 'Unknown'})</span>
-                            </div>
-                            <div class="detail-row" style="margin-bottom: 1rem;">
-                                <span class="detail-label">Fractal ID</span>
-                                <span class="detail-value" style="font-family: monospace; font-size: 0.875rem;">${book.fractal_id}</span>
-                            </div>
-                            <div class="detail-row" style="margin-bottom: 1rem;">
-                                <span class="detail-label">Input Platform</span>
-                                <span class="detail-value">${book.input_platform || 'whatsapp'}</span>
-                            </div>
-                            <div class="detail-row" style="margin-bottom: 1rem;">
-                                <span class="detail-label">Output Platform</span>
-                                <span class="detail-value">${book.output_platform || 'discord'}</span>
-                            </div>
-                            <div class="detail-row" style="margin-bottom: 1rem;">
-                                <span class="detail-label">Created</span>
-                                <span class="detail-value">${new Date(book.created_at).toLocaleString()}</span>
-                            </div>
-                            ${book.output_0n_url ? `
-                            <div class="detail-row">
-                                <span class="detail-label">User Webhook (Output #0n)</span>
-                                <span class="detail-value" style="font-size: 0.75rem; word-break: break-all; font-family: monospace;">${book.output_0n_url}</span>
-                            </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                </div>
-            `;
             
             let modal = document.getElementById('bookInfoModal');
             if (!modal) {
@@ -6154,7 +6789,67 @@
                 modal.className = 'modal';
                 document.body.appendChild(modal);
             }
-            modal.innerHTML = infoHTML;
+            modal.replaceChildren();
+            
+            const content = document.createElement('div');
+            content.className = 'modal-content';
+            content.style.maxWidth = '600px';
+            
+            const header = document.createElement('div');
+            header.className = 'modal-header';
+            
+            const title = document.createElement('h2');
+            title.className = 'modal-title';
+            title.textContent = 'ℹ️ Book Information';
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'close-btn';
+            closeBtn.dataset.closeModal = 'bookInfoModal';
+            closeBtn.textContent = '×';
+            
+            header.appendChild(title);
+            header.appendChild(closeBtn);
+            
+            const body = document.createElement('div');
+            body.style.padding = '1.5rem';
+            
+            const details = document.createElement('div');
+            details.style.cssText = 'background: rgba(255,255,255,0.03); border-radius: 12px; padding: 1.5rem;';
+            
+            // Helper to create detail rows
+            function addDetailRow(label, value, extraStyle) {
+                const row = document.createElement('div');
+                row.className = 'detail-row';
+                row.style.marginBottom = '1rem';
+                
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'detail-label';
+                labelSpan.textContent = label;
+                
+                const valueSpan = document.createElement('span');
+                valueSpan.className = 'detail-value';
+                if (extraStyle) valueSpan.style.cssText = extraStyle;
+                valueSpan.textContent = value;
+                
+                row.appendChild(labelSpan);
+                row.appendChild(valueSpan);
+                details.appendChild(row);
+            }
+            
+            addDetailRow('Tenant', 'Admin #' + tenantNum + ' (' + (book.tenant_owner_email || 'Unknown') + ')');
+            addDetailRow('Fractal ID', book.fractal_id, 'font-family: monospace; font-size: 0.875rem;');
+            addDetailRow('Input Platform', book.input_platform || 'whatsapp');
+            addDetailRow('Output Platform', book.output_platform || 'discord');
+            addDetailRow('Created', new Date(book.created_at).toLocaleString());
+            
+            if (book.output_0n_url) {
+                addDetailRow('User Webhook (Output #0n)', book.output_0n_url, 'font-size: 0.75rem; word-break: break-all; font-family: monospace;');
+            }
+            
+            body.appendChild(details);
+            content.appendChild(header);
+            content.appendChild(body);
+            modal.appendChild(content);
             modal.style.display = 'flex';
         }
         
@@ -6188,7 +6883,11 @@
                 console.error('❌ Dev Panel: Failed to load books:', error);
                 const sidebar = document.getElementById('bookListContainer');
                 if (sidebar) {
-                    sidebar.innerHTML = `<div style="padding: 2rem; color: #ef4444; text-align: center;">Error: ${error.message}</div>`;
+                    sidebar.replaceChildren();
+                    const errorDiv = document.createElement('div');
+                    errorDiv.style.cssText = 'padding: 2rem; color: #ef4444; text-align: center;';
+                    errorDiv.textContent = 'Error: ' + error.message;
+                    sidebar.appendChild(errorDiv);
                 }
             }
         }
@@ -6204,8 +6903,13 @@
                 countEl.textContent = devPanelBooks.length;
             }
             
+            sidebar.replaceChildren();
+            
             if (devPanelBooks.length === 0) {
-                sidebar.innerHTML = '<div style="padding: 2rem; color: #94a3b8; text-align: center;">No books</div>';
+                const emptyDiv = document.createElement('div');
+                emptyDiv.style.cssText = 'padding: 2rem; color: #94a3b8; text-align: center;';
+                emptyDiv.textContent = 'No books';
+                sidebar.appendChild(emptyDiv);
                 return;
             }
             
@@ -6217,36 +6921,47 @@
                 byTenant[tenant].push(book);
             });
             
-            sidebar.innerHTML = Object.keys(byTenant).sort().map(tenant => {
+            Object.keys(byTenant).sort().forEach(tenant => {
                 const books = byTenant[tenant];
                 const tenantNum = tenant.replace('tenant_', '');
                 
-                return `
-                    <div style="margin-bottom: 1rem;">
-                        <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem; padding: 0 0.5rem;">
-                            Tenant ${tenantNum}
-                        </div>
-                        ${books.map(book => {
-                            const isSelected = book.fractal_id === selectedDevBookId;
-                            const statusIcon = getStatusBadge(book.status).emoji;
-                            
-                            return `
-                                <div class="channel-item ${isSelected ? 'active' : ''}" 
-                                     data-book-id="${book.fractal_id}"
-                                     data-dev-book="${book.fractal_id}"
-                                     style="padding: 0.75rem; margin: 0.25rem 0; cursor: pointer; border-radius: 8px; background: ${isSelected ? 'rgba(255,255,255,0.1)' : 'transparent'}; transition: all 0.2s;">
-                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                        <span style="font-size: 1rem;">${statusIcon}</span>
-                                        <span style="color: ${isSelected ? 'white' : '#cbd5e1'}; font-weight: ${isSelected ? '600' : '400'}; font-size: 0.875rem;">
-                                            ${book.name || book.input_platform + ' → ' + book.output_platform}
-                                        </span>
-                                    </div>
-                                </div>
-                            `;
-                        }).join('')}
-                    </div>
-                `;
-            }).join('');
+                const section = document.createElement('div');
+                section.style.marginBottom = '1rem';
+                
+                const header = document.createElement('div');
+                header.style.cssText = 'font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem; padding: 0 0.5rem;';
+                header.textContent = 'Tenant ' + tenantNum;
+                section.appendChild(header);
+                
+                books.forEach(book => {
+                    const isSelected = book.fractal_id === selectedDevBookId;
+                    const statusIcon = getStatusBadge(book.status).emoji;
+                    
+                    const item = document.createElement('div');
+                    item.className = 'channel-item' + (isSelected ? ' active' : '');
+                    item.dataset.bookId = book.fractal_id;
+                    item.dataset.devBook = book.fractal_id;
+                    item.style.cssText = 'padding: 0.75rem; margin: 0.25rem 0; cursor: pointer; border-radius: 8px; background: ' + (isSelected ? 'rgba(255,255,255,0.1)' : 'transparent') + '; transition: all 0.2s;';
+                    
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+                    
+                    const iconSpan = document.createElement('span');
+                    iconSpan.style.fontSize = '1rem';
+                    iconSpan.textContent = statusIcon;
+                    
+                    const nameSpan = document.createElement('span');
+                    nameSpan.style.cssText = 'color: ' + (isSelected ? 'white' : '#cbd5e1') + '; font-weight: ' + (isSelected ? '600' : '400') + '; font-size: 0.875rem;';
+                    nameSpan.textContent = book.name || book.input_platform + ' → ' + book.output_platform;
+                    
+                    row.appendChild(iconSpan);
+                    row.appendChild(nameSpan);
+                    item.appendChild(row);
+                    section.appendChild(item);
+                });
+                
+                sidebar.appendChild(section);
+            });
         }
         
         // Select and display dev book details
@@ -6264,90 +6979,134 @@
             const detail = document.getElementById('devPanelBookDetail');
             if (!detail) return;
             
+            detail.replaceChildren();
+            
             const statusBadge = getStatusBadge(book.status);
             const tenantNum = String(book.tenant_id).padStart(2, '0');
             
-            detail.innerHTML = `
-                <div style="margin-bottom: 1.5rem;">
-                    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-                        <h2 style="color: white; font-size: 1.5rem; font-weight: 700; margin: 0;">
-                            ${book.name || book.input_platform + ' → ' + book.output_platform}
-                        </h2>
-                        <span style="background: ${statusBadge.color}; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">
-                            ${statusBadge.emoji} ${statusBadge.label}
-                        </span>
-                    </div>
-                    
-                    <div style="display: grid; gap: 1rem;">
-                        <div class="detail-row">
-                            <span class="detail-label">Tenant</span>
-                            <span class="detail-value">Admin #${tenantNum} (${book.tenant_owner_email})</span>
-                        </div>
-                        
-                        <div class="detail-row">
-                            <span class="detail-label">Fractal ID</span>
-                            <span class="detail-value" style="font-family: monospace; font-size: 0.875rem;">${book.fractal_id}</span>
-                        </div>
-                        
-                        <div class="detail-row">
-                            <span class="detail-label">Input Platform</span>
-                            <span class="detail-value">${book.input_platform}</span>
-                        </div>
-                        
-                        <div class="detail-row">
-                            <span class="detail-label">Output Platform</span>
-                            <span class="detail-value">${book.output_platform}</span>
-                        </div>
-                        
-                        ${book.contact_info ? `
-                        <div class="detail-row">
-                            <span class="detail-label">Contact Info</span>
-                            <span class="detail-value">${book.contact_info}</span>
-                        </div>
-                        ` : ''}
-                        
-                        <div class="detail-row">
-                            <span class="detail-label">Created</span>
-                            <span class="detail-value">${new Date(book.created_at).toLocaleString()}</span>
-                        </div>
-                        
-                        ${book.output_0n_url ? `
-                        <div class="detail-row">
-                            <span class="detail-label">User Webhook (Output #0n)</span>
-                            <span class="detail-value" style="font-size: 0.875rem; word-break: break-all;">${book.output_0n_url}</span>
-                        </div>
-                        ` : ''}
-                    </div>
-                </div>
-            `;
+            const wrapper = document.createElement('div');
+            wrapper.style.marginBottom = '1.5rem';
+            
+            // Header row
+            const headerRow = document.createElement('div');
+            headerRow.style.cssText = 'display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;';
+            
+            const title = document.createElement('h2');
+            title.style.cssText = 'color: white; font-size: 1.5rem; font-weight: 700; margin: 0;';
+            title.textContent = book.name || book.input_platform + ' → ' + book.output_platform;
+            
+            const badge = document.createElement('span');
+            badge.style.cssText = 'background: ' + statusBadge.color + '; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600;';
+            badge.textContent = statusBadge.emoji + ' ' + statusBadge.label;
+            
+            headerRow.appendChild(title);
+            headerRow.appendChild(badge);
+            wrapper.appendChild(headerRow);
+            
+            // Details grid
+            const grid = document.createElement('div');
+            grid.style.cssText = 'display: grid; gap: 1rem;';
+            
+            function addRow(label, value, extraStyle) {
+                const row = document.createElement('div');
+                row.className = 'detail-row';
+                
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'detail-label';
+                labelSpan.textContent = label;
+                
+                const valueSpan = document.createElement('span');
+                valueSpan.className = 'detail-value';
+                if (extraStyle) valueSpan.style.cssText = extraStyle;
+                valueSpan.textContent = value;
+                
+                row.appendChild(labelSpan);
+                row.appendChild(valueSpan);
+                grid.appendChild(row);
+            }
+            
+            addRow('Tenant', 'Admin #' + tenantNum + ' (' + book.tenant_owner_email + ')');
+            addRow('Fractal ID', book.fractal_id, 'font-family: monospace; font-size: 0.875rem;');
+            addRow('Input Platform', book.input_platform);
+            addRow('Output Platform', book.output_platform);
+            
+            if (book.contact_info) {
+                addRow('Contact Info', book.contact_info);
+            }
+            
+            addRow('Created', new Date(book.created_at).toLocaleString());
+            
+            if (book.output_0n_url) {
+                addRow('User Webhook (Output #0n)', book.output_0n_url, 'font-size: 0.875rem; word-break: break-all;');
+            }
+            
+            wrapper.appendChild(grid);
+            detail.appendChild(wrapper);
         }
         
         function renderDevPanelUsers() {
             const userList = document.getElementById('devUserList');
             if (!userList) return;
             
+            userList.replaceChildren();
+            
             if (!users || users.length === 0) {
-                userList.innerHTML = '<div style="text-align: center; padding: 3rem; color: #94a3b8;">No users found</div>';
+                const emptyDiv = document.createElement('div');
+                emptyDiv.style.cssText = 'text-align: center; padding: 3rem; color: #94a3b8;';
+                emptyDiv.textContent = 'No users found';
+                userList.appendChild(emptyDiv);
                 return;
             }
             
-            userList.innerHTML = users.map(user => `
-                <div class="user-item">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="flex: 1;">
-                            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                <strong style="color: white;">${escapeHtml(user.email)}</strong>
-                                <span class="stat-badge" style="background: rgba(59, 130, 246, 0.2); color: #3b82f6; font-size: 0.75rem; padding: 0.25rem 0.5rem;">${user.role}</span>
-                                <span class="stat-badge" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">${user.tenant_schema || 'public'}</span>
-                            </div>
-                            <div style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.25rem;">
-                                Created: ${new Date(user.created_at).toLocaleDateString()}
-                            </div>
-                        </div>
-                        <button class="btn-icon btn-danger" data-delete-user="${user.id}" title="Delete User">🗑️</button>
-                    </div>
-                </div>
-            `).join('');
+            users.forEach(user => {
+                const item = document.createElement('div');
+                item.className = 'user-item';
+                
+                const row = document.createElement('div');
+                row.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
+                
+                const info = document.createElement('div');
+                info.style.flex = '1';
+                
+                const nameRow = document.createElement('div');
+                nameRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+                
+                const emailStrong = document.createElement('strong');
+                emailStrong.style.color = 'white';
+                emailStrong.textContent = user.email;
+                
+                const roleBadge = document.createElement('span');
+                roleBadge.className = 'stat-badge';
+                roleBadge.style.cssText = 'background: rgba(59, 130, 246, 0.2); color: #3b82f6; font-size: 0.75rem; padding: 0.25rem 0.5rem;';
+                roleBadge.textContent = user.role;
+                
+                const schemaBadge = document.createElement('span');
+                schemaBadge.className = 'stat-badge';
+                schemaBadge.style.cssText = 'font-size: 0.75rem; padding: 0.25rem 0.5rem;';
+                schemaBadge.textContent = user.tenant_schema || 'public';
+                
+                nameRow.appendChild(emailStrong);
+                nameRow.appendChild(roleBadge);
+                nameRow.appendChild(schemaBadge);
+                
+                const dateDiv = document.createElement('div');
+                dateDiv.style.cssText = 'color: #94a3b8; font-size: 0.875rem; margin-top: 0.25rem;';
+                dateDiv.textContent = 'Created: ' + new Date(user.created_at).toLocaleDateString();
+                
+                info.appendChild(nameRow);
+                info.appendChild(dateDiv);
+                row.appendChild(info);
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn-icon btn-danger';
+                deleteBtn.dataset.deleteUser = user.id;
+                deleteBtn.title = 'Delete User';
+                deleteBtn.textContent = '🗑️';
+                row.appendChild(deleteBtn);
+                
+                item.appendChild(row);
+                userList.appendChild(item);
+            });
         }
 
         // Cat animation now isolated in /js/ui/cat-animation.js (GLOBAL CONSTANT #2)
@@ -6416,11 +7175,21 @@
             
             // Default view: Two-line format (below cat)
             const currentTimeEl = document.getElementById('currentTime');
-            if (currentTimeEl) currentTimeEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
+            if (currentTimeEl) {
+                currentTimeEl.replaceChildren();
+                currentTimeEl.appendChild(document.createTextNode(`${year}/${month}/${day}`));
+                currentTimeEl.appendChild(document.createElement('br'));
+                currentTimeEl.appendChild(document.createTextNode(`${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`));
+            }
             
             // Compact view: Single-line with dash separator (before user info)
             const currentTimeCompactEl = document.getElementById('currentTimeCompact');
-            if (currentTimeCompactEl) currentTimeCompactEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
+            if (currentTimeCompactEl) {
+                currentTimeCompactEl.replaceChildren();
+                currentTimeCompactEl.appendChild(document.createTextNode(`${year}/${month}/${day}`));
+                currentTimeCompactEl.appendChild(document.createElement('br'));
+                currentTimeCompactEl.appendChild(document.createTextNode(`${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`));
+            }
             
             // Update book count in compact indicators only
             const bookCountEl = document.getElementById('bookCountCompact');
@@ -6487,10 +7256,12 @@
             
             const hintEl = document.createElement('div');
             hintEl.className = 'onboarding-hint';
-            hintEl.innerHTML = `
-                ${hint.text}
-                <button class="close-hint" data-dismiss-hint="${hintKey}">×</button>
-            `;
+            hintEl.appendChild(document.createTextNode(hint.text + ' '));
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'close-hint';
+            closeBtn.dataset.dismissHint = hintKey;
+            closeBtn.textContent = '×';
+            hintEl.appendChild(closeBtn);
             
             const rect = targetEl.getBoundingClientRect();
             hintEl.style.top = `${rect.bottom + 12}px`;
@@ -6609,9 +7380,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const copyBtn = e.target.closest('.copy-code-btn');
         if (copyBtn && copyBtn.dataset.copyText) {
             navigator.clipboard.writeText(copyBtn.dataset.copyText).then(() => {
-                const originalText = copyBtn.innerHTML;
-                copyBtn.innerHTML = '✅ Copied!';
-                setTimeout(() => copyBtn.innerHTML = originalText, 1500);
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = '✅ Copied!';
+                setTimeout(() => copyBtn.textContent = originalText, 1500);
             }).catch(err => {
                 console.error('Copy failed:', err);
                 showToast('Failed to copy', 'error');
@@ -7119,26 +7890,48 @@ function displayDrop(section, drop, extracted, fractalBookId) {
     const tags = extracted?.tags || drop.extracted_tags || [];
     const dates = extracted?.dates || drop.extracted_dates || [];
     
+    display.replaceChildren();
+    
     // Tag bubbles with × delete button (use fractal_id, NOT internal book_id)
-    const tagsHTML = tags.length > 0 
-        ? `<div class="drop-tags">${tags.map(tag => `
-            <span class="drop-tag">
-                ${escapeHtml(tag)}
-                <span class="drop-tag-delete" data-action="remove-tag" data-tag="${escapeHtml(tag)}" data-message-id="${drop.discord_message_id}" data-book-id="${bookFractalId}">×</span>
-            </span>
-        `).join('')}</div>`
-        : '';
+    if (tags.length > 0) {
+        const tagsDiv = document.createElement('div');
+        tagsDiv.className = 'drop-tags';
+        tags.forEach(tag => {
+            const tagSpan = document.createElement('span');
+            tagSpan.className = 'drop-tag';
+            tagSpan.appendChild(document.createTextNode(tag + ' '));
+            const deleteSpan = document.createElement('span');
+            deleteSpan.className = 'drop-tag-delete';
+            deleteSpan.dataset.action = 'remove-tag';
+            deleteSpan.dataset.tag = tag;
+            deleteSpan.dataset.messageId = drop.discord_message_id;
+            deleteSpan.dataset.bookId = bookFractalId;
+            deleteSpan.textContent = '×';
+            tagSpan.appendChild(deleteSpan);
+            tagsDiv.appendChild(tagSpan);
+        });
+        display.appendChild(tagsDiv);
+    }
     
-    const datesHTML = dates.length > 0
-        ? `<div class="drop-dates">${dates.map(date => `
-            <span class="drop-date">
-                📅 ${escapeHtml(date)}
-                <span class="drop-date-delete" data-action="remove-date" data-date="${escapeHtml(date)}" data-message-id="${drop.discord_message_id}" data-book-id="${bookFractalId}">×</span>
-            </span>
-        `).join('')}</div>`
-        : '';
-    
-    display.innerHTML = tagsHTML + datesHTML;
+    if (dates.length > 0) {
+        const datesDiv = document.createElement('div');
+        datesDiv.className = 'drop-dates';
+        dates.forEach(date => {
+            const dateSpan = document.createElement('span');
+            dateSpan.className = 'drop-date';
+            dateSpan.appendChild(document.createTextNode('📅 ' + date + ' '));
+            const deleteSpan = document.createElement('span');
+            deleteSpan.className = 'drop-date-delete';
+            deleteSpan.dataset.action = 'remove-date';
+            deleteSpan.dataset.date = date;
+            deleteSpan.dataset.messageId = drop.discord_message_id;
+            deleteSpan.dataset.bookId = bookFractalId;
+            deleteSpan.textContent = '×';
+            dateSpan.appendChild(deleteSpan);
+            datesDiv.appendChild(dateSpan);
+        });
+        display.appendChild(datesDiv);
+    }
     
     // Show or hide display based on content
     if (tags.length > 0 || dates.length > 0) {
@@ -7153,22 +7946,45 @@ function showTagInputDialog(messageId, bookId) {
     // Create modal overlay
     const modal = document.createElement('div');
     modal.className = 'tag-input-modal';
-    modal.innerHTML = `
-        <div class="tag-input-dialog">
-            <h3>🏷️ Add Tags & Dates</h3>
-            <input type="text" id="tag-input-${messageId}" placeholder="#FromDad Christmas 2021" autocomplete="off">
-            <div class="tag-input-dialog-buttons">
-                <button class="cancel-btn" data-action="close-tag-dialog">Cancel</button>
-                <button class="save-btn" data-action="save-tag-dialog" data-message-id="${messageId}" data-book-id="${bookId}">Save</button>
-            </div>
-        </div>
-    `;
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'tag-input-dialog';
+    
+    const title = document.createElement('h3');
+    title.textContent = '🏷️ Add Tags & Dates';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = `tag-input-${messageId}`;
+    input.placeholder = '#FromDad Christmas 2021';
+    input.autocomplete = 'off';
+    
+    const buttonsDiv = document.createElement('div');
+    buttonsDiv.className = 'tag-input-dialog-buttons';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'cancel-btn';
+    cancelBtn.dataset.action = 'close-tag-dialog';
+    cancelBtn.textContent = 'Cancel';
+    
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'save-btn';
+    saveBtn.dataset.action = 'save-tag-dialog';
+    saveBtn.dataset.messageId = messageId;
+    saveBtn.dataset.bookId = bookId;
+    saveBtn.textContent = 'Save';
+    
+    buttonsDiv.appendChild(cancelBtn);
+    buttonsDiv.appendChild(saveBtn);
+    dialog.appendChild(title);
+    dialog.appendChild(input);
+    dialog.appendChild(buttonsDiv);
+    modal.appendChild(dialog);
     
     document.body.appendChild(modal);
     
     // Focus input
-    const input = document.getElementById(`tag-input-${messageId}`);
-    if (input) input.focus();
+    input.focus();
     
     // Close on overlay click
     modal.addEventListener('click', (e) => {
@@ -7220,22 +8036,44 @@ function showBulkTagModal(bookId) {
     // Create modal overlay
     const modal = document.createElement('div');
     modal.className = 'tag-input-modal';
-    modal.innerHTML = `
-        <div class="tag-input-dialog">
-            <h3>🏷️ Bulk Tag ${selectedIds.length} Message${selectedIds.length > 1 ? 's' : ''}</h3>
-            <input type="text" id="bulk-tag-input" placeholder="#FromDad Christmas 2021" autocomplete="off">
-            <div class="tag-input-dialog-buttons">
-                <button class="cancel-btn" data-action="close-bulk-tag-dialog">Cancel</button>
-                <button class="save-btn" data-action="save-bulk-tag-dialog" data-book-id="${bookId}">Apply to All</button>
-            </div>
-        </div>
-    `;
+    
+    const dialog = document.createElement('div');
+    dialog.className = 'tag-input-dialog';
+    
+    const title = document.createElement('h3');
+    title.textContent = `🏷️ Bulk Tag ${selectedIds.length} Message${selectedIds.length > 1 ? 's' : ''}`;
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'bulk-tag-input';
+    input.placeholder = '#FromDad Christmas 2021';
+    input.autocomplete = 'off';
+    
+    const buttonsDiv = document.createElement('div');
+    buttonsDiv.className = 'tag-input-dialog-buttons';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'cancel-btn';
+    cancelBtn.dataset.action = 'close-bulk-tag-dialog';
+    cancelBtn.textContent = 'Cancel';
+    
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'save-btn';
+    saveBtn.dataset.action = 'save-bulk-tag-dialog';
+    saveBtn.dataset.bookId = bookId;
+    saveBtn.textContent = 'Apply to All';
+    
+    buttonsDiv.appendChild(cancelBtn);
+    buttonsDiv.appendChild(saveBtn);
+    dialog.appendChild(title);
+    dialog.appendChild(input);
+    dialog.appendChild(buttonsDiv);
+    modal.appendChild(dialog);
     
     document.body.appendChild(modal);
     
     // Focus input
-    const input = document.getElementById('bulk-tag-input');
-    if (input) input.focus();
+    input.focus();
     
     // Close on overlay click
     modal.addEventListener('click', (e) => {

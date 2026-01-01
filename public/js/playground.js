@@ -91,10 +91,20 @@ function updateDateTime() {
     const displayHours = timeHours % 12 || 12;
     
     const currentTimeEl = document.getElementById('currentTime');
-    if (currentTimeEl) currentTimeEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
+    if (currentTimeEl) {
+        currentTimeEl.replaceChildren();
+        currentTimeEl.appendChild(document.createTextNode(`${year}/${month}/${day}`));
+        currentTimeEl.appendChild(document.createElement('br'));
+        currentTimeEl.appendChild(document.createTextNode(`${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`));
+    }
     
     const currentTimeCompactEl = document.getElementById('currentTimeCompact');
-    if (currentTimeCompactEl) currentTimeCompactEl.innerHTML = `${year}/${month}/${day}<br>${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`;
+    if (currentTimeCompactEl) {
+        currentTimeCompactEl.replaceChildren();
+        currentTimeCompactEl.appendChild(document.createTextNode(`${year}/${month}/${day}`));
+        currentTimeCompactEl.appendChild(document.createElement('br'));
+        currentTimeCompactEl.appendChild(document.createTextNode(`${displayHours}:${timeMinutes}:${timeSeconds}${ampm}`));
+    }
 }
 
 updateDateTime();
@@ -133,7 +143,7 @@ attachBtn.addEventListener('click', () => universalInput.click());
 
 // ===== MULTI-ATTACHMENT UI =====
 function renderAttachments() {
-    attachmentsContainer.innerHTML = '';
+    attachmentsContainer.replaceChildren();
     
     if (attachments.length === 0) {
         attachmentsContainer.classList.remove('visible');
@@ -145,14 +155,21 @@ function renderAttachments() {
         chip.className = 'attachment-chip';
         
         const icon = att.type === 'photo' ? '📷' : att.type === 'audio' ? '🎙️' : '📄';
-        chip.innerHTML = `
-            <span class="chip-name">${icon} ${att.name}</span>
-            <button class="remove-chip" data-index="${index}">×</button>
-        `;
         
-        chip.querySelector('.remove-chip').addEventListener('click', () => {
+        const chipName = document.createElement('span');
+        chipName.className = 'chip-name';
+        chipName.textContent = `${icon} ${att.name}`;
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'remove-chip';
+        removeBtn.dataset.index = index;
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => {
             removeAttachmentByIndex(index);
         });
+        
+        chip.appendChild(chipName);
+        chip.appendChild(removeBtn);
         
         attachmentsContainer.appendChild(chip);
     });
@@ -550,51 +567,51 @@ function showError(msg) {
     setTimeout(() => errorToast.classList.remove('visible'), 4000);
 }
 
-function addMessage(role, content, messageAttachments = [], auditData = null) {
-    const welcome = messagesEl.querySelector('.welcome');
-    if (welcome) welcome.remove();
+function createAuditBadge(auditData) {
+    const badgeColors = {
+        verified: { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 0.4)', icon: '🟢', text: 'Verified' },
+        corrected: { bg: 'rgba(234, 179, 8, 0.2)', border: 'rgba(234, 179, 8, 0.4)', icon: '🟡', text: 'Corrected' },
+        refused: { bg: 'rgba(239, 68, 68, 0.2)', border: 'rgba(239, 68, 68, 0.4)', icon: '🔴', text: 'Refused' },
+        unverified: { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.4)', icon: '⚪', text: 'Unverified' },
+        bypass: { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.4)', icon: '⚪', text: 'Bypass' }
+    };
+    const badge = badgeColors[auditData.badge] || badgeColors.unverified;
+    const confidence = auditData.confidence || 0;
+    const extensions = auditData.extensionsVerified?.join(', ') || 'NYAN';
     
-    const msgEl = document.createElement('div');
-    msgEl.className = `message ${role}`;
+    const badgeEl = document.createElement('div');
+    badgeEl.className = 'audit-badge';
+    badgeEl.style.cssText = `background: ${badge.bg}; border: 1px solid ${badge.border}; border-radius: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 0.25rem; margin-bottom: 0.5rem; cursor: pointer;`;
+    badgeEl.title = `Confidence: ${confidence}% | Extensions: ${extensions} | Passes: ${auditData.passCount || 1}`;
     
-    let html = `<div class="label">${role === 'user' ? 'You' : 'Nyan AI'}</div>`;
+    const iconSpan = document.createElement('span');
+    iconSpan.textContent = badge.icon;
     
-    // Add verification badge for AI responses (Two-Pass Verification)
-    if (role === 'assistant' && auditData) {
-        const badgeColors = {
-            verified: { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 0.4)', icon: '🟢', text: 'Verified' },
-            corrected: { bg: 'rgba(234, 179, 8, 0.2)', border: 'rgba(234, 179, 8, 0.4)', icon: '🟡', text: 'Corrected' },
-            refused: { bg: 'rgba(239, 68, 68, 0.2)', border: 'rgba(239, 68, 68, 0.4)', icon: '🔴', text: 'Refused' },
-            unverified: { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.4)', icon: '⚪', text: 'Unverified' },
-            bypass: { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.4)', icon: '⚪', text: 'Bypass' }
-        };
-        const badge = badgeColors[auditData.badge] || badgeColors.unverified;
-        const confidence = auditData.confidence || 0;
-        const extensions = auditData.extensionsVerified?.join(', ') || 'NYAN';
-        
-        html += `<div class="audit-badge" style="background: ${badge.bg}; border: 1px solid ${badge.border}; border-radius: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 0.25rem; margin-bottom: 0.5rem; cursor: pointer;" title="Confidence: ${confidence}% | Extensions: ${extensions} | Passes: ${auditData.passCount || 1}">
-            <span>${badge.icon}</span>
-            <span>${badge.text}</span>
-            <span style="opacity: 0.7;">(${confidence}%)</span>
-        </div>`;
-    }
+    const textSpan = document.createElement('span');
+    textSpan.textContent = badge.text;
     
-    // Add copy button for AI responses
-    if (role === 'assistant') {
-        html += `<button class="copy-btn" title="Copy to clipboard">📋 Copy</button>`;
-    }
+    const confSpan = document.createElement('span');
+    confSpan.style.opacity = '0.7';
+    confSpan.textContent = `(${confidence}%)`;
     
-    // Render markdown for AI responses, plain text for user
-    // Use DOMPurify to sanitize HTML and prevent XSS attacks
-    if (role === 'assistant' && typeof marked !== 'undefined') {
+    badgeEl.appendChild(iconSpan);
+    badgeEl.appendChild(textSpan);
+    badgeEl.appendChild(confSpan);
+    
+    return badgeEl;
+}
+
+function renderMarkdownContent(content) {
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'content';
+    
+    if (typeof marked !== 'undefined') {
         try {
-            // Escape tildes in "nyan~" to prevent strikethrough between instances
             const safeContent = content.replace(/nyan~/g, 'nyan\\~');
             let renderedMarkdown = marked.parse(safeContent, {
                 breaks: true,
                 gfm: true
             });
-            // Sanitize HTML output with DOMPurify if available
             if (typeof DOMPurify !== 'undefined') {
                 renderedMarkdown = DOMPurify.sanitize(renderedMarkdown, {
                     ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'b', 'i', 'u', 'code', 'pre', 'blockquote', 
@@ -604,31 +621,71 @@ function addMessage(role, content, messageAttachments = [], auditData = null) {
                     ALLOW_DATA_ATTR: false
                 });
             }
-            html += `<div class="content">${renderedMarkdown}</div>`;
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(renderedMarkdown, 'text/html');
+            while (doc.body.firstChild) {
+                contentDiv.appendChild(doc.body.firstChild);
+            }
         } catch (err) {
             console.error('Markdown parse error:', err);
-            html += `<div class="content">${escapeHtml(content)}</div>`;
+            contentDiv.textContent = content;
         }
     } else {
-        html += `<div class="content">${escapeHtml(content)}</div>`;
+        contentDiv.textContent = content;
     }
     
-    // Show attachments (support both single and array)
+    return contentDiv;
+}
+
+function addMessage(role, content, messageAttachments = [], auditData = null) {
+    const welcome = messagesEl.querySelector('.welcome');
+    if (welcome) welcome.remove();
+    
+    const msgEl = document.createElement('div');
+    msgEl.className = `message ${role}`;
+    
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'label';
+    labelDiv.textContent = role === 'user' ? 'You' : 'Nyan AI';
+    msgEl.appendChild(labelDiv);
+    
+    if (role === 'assistant' && auditData) {
+        msgEl.appendChild(createAuditBadge(auditData));
+    }
+    
+    let copyBtn = null;
+    if (role === 'assistant') {
+        copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.title = 'Copy to clipboard';
+        copyBtn.textContent = '📋 Copy';
+        msgEl.appendChild(copyBtn);
+    }
+    
+    if (role === 'assistant') {
+        msgEl.appendChild(renderMarkdownContent(content));
+    } else {
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'content';
+        contentDiv.textContent = content;
+        msgEl.appendChild(contentDiv);
+    }
+    
     const attList = Array.isArray(messageAttachments) ? messageAttachments : (messageAttachments ? [messageAttachments] : []);
     if (attList.length > 0) {
-        html += '<div class="attachment">';
+        const attachmentDiv = document.createElement('div');
+        attachmentDiv.className = 'attachment';
         attList.forEach(att => {
             const icon = att.type === 'photo' ? '📷' : att.type === 'audio' ? '🎙️' : '📄';
-            html += `<span style="margin-right: 0.5rem;">${icon} ${att.name}</span>`;
+            const span = document.createElement('span');
+            span.style.marginRight = '0.5rem';
+            span.textContent = `${icon} ${att.name}`;
+            attachmentDiv.appendChild(span);
         });
-        html += '</div>';
+        msgEl.appendChild(attachmentDiv);
     }
     
-    msgEl.innerHTML = html;
-    
-    // Add click handler for copy button
-    if (role === 'assistant') {
-        const copyBtn = msgEl.querySelector('.copy-btn');
+    if (copyBtn) {
         copyBtn.addEventListener('click', async () => {
             try {
                 await navigator.clipboard.writeText(content);
@@ -658,13 +715,28 @@ function addLoadingMessage() {
     const msgEl = document.createElement('div');
     msgEl.className = 'message assistant';
     msgEl.id = 'loadingMessage';
-    msgEl.innerHTML = `
-        <div class="label">Nyan AI</div>
-        <div class="loading">
-            <div class="cat-thinking">🐾</div>
-            <span style="color: #94a3b8; font-size: 0.875rem;">Purring over your query...</span>
-        </div>
-    `;
+    
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'label';
+    labelDiv.textContent = 'Nyan AI';
+    
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'loading';
+    
+    const catThinkingDiv = document.createElement('div');
+    catThinkingDiv.className = 'cat-thinking';
+    catThinkingDiv.textContent = '🐾';
+    
+    const statusSpan = document.createElement('span');
+    statusSpan.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
+    statusSpan.textContent = 'Purring over your query...';
+    
+    loadingDiv.appendChild(catThinkingDiv);
+    loadingDiv.appendChild(statusSpan);
+    
+    msgEl.appendChild(labelDiv);
+    msgEl.appendChild(loadingDiv);
+    
     messagesEl.appendChild(msgEl);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 }
@@ -685,12 +757,30 @@ function addStreamingMessage() {
     const msgEl = document.createElement('div');
     msgEl.className = 'message assistant streaming';
     msgEl.id = 'streamingMessage';
-    msgEl.innerHTML = `
-        <div class="label">Nyan AI</div>
-        <div class="audit-badge-placeholder"></div>
-        <button class="copy-btn" title="Copy to clipboard">📋 Copy</button>
-        <div class="content streaming-content"><span class="typing-cursor"></span></div>
-    `;
+    
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'label';
+    labelDiv.textContent = 'Nyan AI';
+    
+    const badgePlaceholder = document.createElement('div');
+    badgePlaceholder.className = 'audit-badge-placeholder';
+    
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'copy-btn';
+    copyBtn.title = 'Copy to clipboard';
+    copyBtn.textContent = '📋 Copy';
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'content streaming-content';
+    const cursor = document.createElement('span');
+    cursor.className = 'typing-cursor';
+    contentDiv.appendChild(cursor);
+    
+    msgEl.appendChild(labelDiv);
+    msgEl.appendChild(badgePlaceholder);
+    msgEl.appendChild(copyBtn);
+    msgEl.appendChild(contentDiv);
+    
     messagesEl.appendChild(msgEl);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return msgEl;
@@ -709,7 +799,7 @@ function updateStreamingContent(token) {
     const cursorSpan = document.createElement('span');
     cursorSpan.className = 'typing-cursor';
     
-    contentEl.innerHTML = '';
+    contentEl.replaceChildren();
     contentEl.appendChild(textNode);
     contentEl.appendChild(cursorSpan);
     
@@ -725,12 +815,26 @@ function finalizeStreamingMessage(fullContent, auditData) {
     streamingTextBuffer = '';
     
     const contentEl = streamingEl.querySelector('.streaming-content');
-    contentEl.innerHTML = '';
+    contentEl.replaceChildren();
     
     if (contentEl && typeof marked !== 'undefined') {
         try {
             const safeContent = fullContent.replace(/nyan~/g, 'nyan\\~');
-            contentEl.innerHTML = marked.parse(safeContent, { breaks: true, gfm: true });
+            let renderedMarkdown = marked.parse(safeContent, { breaks: true, gfm: true });
+            if (typeof DOMPurify !== 'undefined') {
+                renderedMarkdown = DOMPurify.sanitize(renderedMarkdown, {
+                    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'b', 'i', 'u', 'code', 'pre', 'blockquote', 
+                                   'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'a', 'hr',
+                                   'table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'span', 'del'],
+                    ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'class'],
+                    ALLOW_DATA_ATTR: false
+                });
+            }
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(renderedMarkdown, 'text/html');
+            while (doc.body.firstChild) {
+                contentEl.appendChild(doc.body.firstChild);
+            }
         } catch (err) {
             contentEl.textContent = fullContent;
         }
@@ -739,21 +843,8 @@ function finalizeStreamingMessage(fullContent, auditData) {
     if (auditData) {
         const badgePlaceholder = streamingEl.querySelector('.audit-badge-placeholder');
         if (badgePlaceholder) {
-            const badgeColors = {
-                verified: { bg: 'rgba(34, 197, 94, 0.2)', border: 'rgba(34, 197, 94, 0.4)', icon: '🟢', text: 'Verified' },
-                corrected: { bg: 'rgba(234, 179, 8, 0.2)', border: 'rgba(234, 179, 8, 0.4)', icon: '🟡', text: 'Corrected' },
-                refused: { bg: 'rgba(239, 68, 68, 0.2)', border: 'rgba(239, 68, 68, 0.4)', icon: '🔴', text: 'Refused' },
-                unverified: { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.4)', icon: '⚪', text: 'Unverified' },
-                bypass: { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.4)', icon: '⚪', text: 'Bypass' }
-            };
-            const badge = badgeColors[auditData.badge] || badgeColors.unverified;
-            const confidence = auditData.confidence || 0;
-            
-            badgePlaceholder.outerHTML = `<div class="audit-badge" style="background: ${badge.bg}; border: 1px solid ${badge.border}; border-radius: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 0.25rem; margin-bottom: 0.5rem;">
-                <span>${badge.icon}</span>
-                <span>${badge.text}</span>
-                <span style="opacity: 0.7;">(${confidence}%)</span>
-            </div>`;
+            const newBadge = createAuditBadge(auditData);
+            badgePlaceholder.parentNode.replaceChild(newBadge, badgePlaceholder);
         }
     }
     
@@ -782,14 +873,25 @@ function updateThinkingStage(stage) {
     
     const contentEl = streamingEl.querySelector('.streaming-content');
     if (contentEl && contentEl.textContent.trim() === '') {
-        contentEl.innerHTML = `<span style="color: #94a3b8; font-size: 0.875rem;">${stage}</span><span class="typing-cursor"></span>`;
+        contentEl.replaceChildren();
+        const stageSpan = document.createElement('span');
+        stageSpan.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
+        stageSpan.textContent = stage;
+        const cursorSpan = document.createElement('span');
+        cursorSpan.className = 'typing-cursor';
+        contentEl.appendChild(stageSpan);
+        contentEl.appendChild(cursorSpan);
     }
 }
 
 function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (text === null || text === undefined) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 // Create ZIP from multiple attachments for bandwidth optimization
@@ -1039,17 +1141,44 @@ async function clearNyanHistory() {
     // Create and append fresh welcome message
     const welcomeDiv = document.createElement('div');
     welcomeDiv.className = 'welcome';
-    welcomeDiv.innerHTML = `
-        <h2>Welcome to Nyan AI Playground</h2>
-        <p>No login required. No data stored. Just purr intelligence.</p>
-        <p>Powered by Groq's blazing-fast Llama 3.3 70B model.</p>
-        <div class="features">
-            <div class="feature"><span class="feature-icon">💬</span><div>Text</div></div>
-            <div class="feature"><span class="feature-icon">📸</span><div>Photo</div></div>
-            <div class="feature"><span class="feature-icon">📎</span><div>Attachment</div></div>
-            <div class="feature"><span class="feature-icon">🎙️</span><div>Audio</div></div>
-        </div>
-    `;
+    
+    const h2 = document.createElement('h2');
+    h2.textContent = 'Welcome to Nyan AI Playground';
+    
+    const p1 = document.createElement('p');
+    p1.textContent = 'No login required. No data stored. Just purr intelligence.';
+    
+    const p2 = document.createElement('p');
+    p2.textContent = "Powered by Groq's blazing-fast Llama 3.3 70B model.";
+    
+    const featuresDiv = document.createElement('div');
+    featuresDiv.className = 'features';
+    
+    const featureData = [
+        { icon: '💬', label: 'Text' },
+        { icon: '📸', label: 'Photo' },
+        { icon: '📎', label: 'Attachment' },
+        { icon: '🎙️', label: 'Audio' }
+    ];
+    
+    featureData.forEach(f => {
+        const featureDiv = document.createElement('div');
+        featureDiv.className = 'feature';
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'feature-icon';
+        iconSpan.textContent = f.icon;
+        const labelDiv = document.createElement('div');
+        labelDiv.textContent = f.label;
+        featureDiv.appendChild(iconSpan);
+        featureDiv.appendChild(labelDiv);
+        featuresDiv.appendChild(featureDiv);
+    });
+    
+    welcomeDiv.appendChild(h2);
+    welcomeDiv.appendChild(p1);
+    welcomeDiv.appendChild(p2);
+    welcomeDiv.appendChild(featuresDiv);
+    
     messagesEl.appendChild(welcomeDiv);
     console.log('✅ Welcome message re-added');
     

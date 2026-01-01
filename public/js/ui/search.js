@@ -120,10 +120,16 @@ function displaySearchResults(results, bridgeId) {
     // Update message cache with search results
     messageCache[bridgeId] = results;
     
-    // Re-render messages
+    // Re-render messages using safe DOM parsing pattern
     const messagesContainer = document.getElementById(`discord-messages-${bridgeId}`);
     if (messagesContainer) {
-        messagesContainer.innerHTML = renderDiscordMessages(results, bridgeId);
+        const html = renderDiscordMessages(results, bridgeId);
+        messagesContainer.replaceChildren();
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        while (tempDiv.firstChild) {
+            messagesContainer.appendChild(tempDiv.firstChild);
+        }
     }
     
     // Initialize media lazy loading after re-render

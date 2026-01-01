@@ -12,7 +12,10 @@ async function populateAnalyticsBookFilter() {
             const select = document.getElementById('analyticsBookFilter');
             
             // Clear and rebuild options
-            select.innerHTML = '<option value="">All Books</option>';
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'All Books';
+            select.replaceChildren(defaultOption);
             
             analyticsBooks.forEach(book => {
                 const option = document.createElement('option');
@@ -52,7 +55,7 @@ async function loadAnalyticsDashboard() {
     } catch (error) {
         console.error('Failed to load analytics:', error);
         const container = document.getElementById('analyticsContent');
-        container.innerHTML = '';
+        container.replaceChildren();
         
         const wrapper = document.createElement('div');
         wrapper.style.cssText = 'text-align: center; padding: 3rem; color: #94a3b8;';
@@ -95,7 +98,13 @@ function renderAnalyticsCharts() {
     if (analyticsData.book) {
         const bookInfo = document.createElement('div');
         bookInfo.style.cssText = 'background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 0.5rem; padding: 0.75rem 1rem; margin-bottom: 1.5rem; color: #60a5fa; font-size: 0.875rem;';
-        bookInfo.innerHTML = `📊 Showing analytics for: <strong>${analyticsData.book.name || analyticsData.book.input_platform + ' → ' + analyticsData.book.output_platform}</strong>`;
+        
+        bookInfo.replaceChildren();
+        bookInfo.appendChild(document.createTextNode('📊 Showing analytics for: '));
+        const strong = document.createElement('strong');
+        strong.textContent = analyticsData.book.name || `${analyticsData.book.input_platform} → ${analyticsData.book.output_platform}`;
+        bookInfo.appendChild(strong);
+        
         container.appendChild(bookInfo);
     }
     
