@@ -1081,6 +1081,12 @@ async function createSessionRecord(userId, sessionId, req, tenantSchema) {
         const { deviceType, browser, os } = parseUserAgent(userAgent);
         const location = await getLocationFromIP(req.ip);
         
+        // SECURITY: Validate tenant schema name before interpolation
+        if (!/^[a-z_][a-z0-9_]*$/i.test(tenantSchema)) {
+            console.error(`❌ Session creation: Invalid tenant schema: ${tenantSchema}`);
+            return;
+        }
+
         // Use tenant-scoped active_sessions table
         await pool.query(`
             INSERT INTO ${tenantSchema}.active_sessions (user_id, session_id, ip_address, user_agent, device_type, browser, os, location)
@@ -1108,6 +1114,12 @@ async function logAudit(client, req, actionType, targetType, targetId, targetEma
         
         if (!schema) {
             console.warn('⚠️ Audit logging skipped - no tenant schema available');
+            return;
+        }
+
+        // SECURITY: Validate schema name before interpolation
+        if (!/^[a-z_][a-z0-9_]*$/i.test(schema)) {
+            console.error(`❌ Audit logging: Invalid schema skipped: ${schema}`);
             return;
         }
         
@@ -1199,6 +1211,11 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
         }
         const tenantSchema = `tenant_${parsed.tenantId}`;
         
+        // SECURITY: Validate schema name before interpolation
+        if (!/^[a-z_][a-z0-9_]*$/i.test(tenantSchema)) {
+            return res.status(400).json({ error: 'Invalid tenant schema' });
+        }
+
         // Get tenant-scoped database client
         const client = await pool.connect();
         try {

@@ -197,6 +197,11 @@ class TenantManager {
                 VALUES ($1, $2, $3, 'active')
             `, [tenantId, schemaName, userId]);
             
+            // SECURITY: Validate schema name before interpolation
+            if (!/^[a-z_][a-z0-9_]*$/i.test(schemaName)) {
+                throw new Error(`Invalid schema name generated: ${schemaName}`);
+            }
+            
             // Create the actual tenant schema
             await client.query(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
             

@@ -60,7 +60,7 @@ async function setTenantContext(req, res, next) {
             return next();
         }
         
-        // Lookup email → tenant mapping
+        // Look up email → tenant mapping
         const mappingResult = await client.query(
             'SELECT tenant_id, tenant_schema FROM core.user_email_to_tenant WHERE email = $1',
             [userEmail]
@@ -77,7 +77,7 @@ async function setTenantContext(req, res, next) {
         const { tenant_id, tenant_schema } = mappingResult.rows[0];
         
         // Validate tenant_schema is a safe PostgreSQL identifier (defense-in-depth)
-        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tenant_schema)) {
+        if (!tenant_schema || !/^[a-z_][a-z0-9_]*$/i.test(tenant_schema)) {
             client.release();
             console.error('❌ Invalid tenant_schema format:', tenant_schema);
             return res.status(500).json({ error: 'Invalid tenant configuration' });
