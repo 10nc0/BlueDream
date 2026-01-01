@@ -76,6 +76,13 @@ async function setTenantContext(req, res, next) {
         
         const { tenant_id, tenant_schema } = mappingResult.rows[0];
         
+        // Validate tenant_schema is a safe PostgreSQL identifier (defense-in-depth)
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tenant_schema)) {
+            client.release();
+            console.error('❌ Invalid tenant_schema format:', tenant_schema);
+            return res.status(500).json({ error: 'Invalid tenant configuration' });
+        }
+        
         // Get user's full details from tenant-scoped table
         const userResult = await client.query(
             `SELECT id, email, role, tenant_id, is_genesis_admin 
