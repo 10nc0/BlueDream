@@ -2,6 +2,14 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { validate, schemas } = require('../lib/validators');
 
+const VALID_SCHEMA_PATTERN = /^[a-z_][a-z0-9_]*$/i;
+function assertValidSchemaName(schema) {
+    if (!schema || !VALID_SCHEMA_PATTERN.test(schema)) {
+        throw new Error('Invalid schema name');
+    }
+    return schema;
+}
+
 function createAuthMiddleware(pool, authService, logger) {
     async function requireAuth(req, res, next) {
         const authHeader = req.headers.authorization;
@@ -120,8 +128,9 @@ function registerAuthRoutes(app, deps) {
                     
                     if (mappingResult.rows.length > 0) {
                         const { tenant_schema } = mappingResult.rows[0];
+                        const safeSchema = assertValidSchemaName(tenant_schema);
                         const result = await pool.query(
-                            `SELECT id, email, role, is_genesis_admin, tenant_id FROM ${tenant_schema}.users WHERE id = $1`,
+                            `SELECT id, email, role, is_genesis_admin, tenant_id FROM ${safeSchema}.users WHERE id = $1`,
                             [decoded.userId]
                         );
                         
@@ -140,8 +149,9 @@ function registerAuthRoutes(app, deps) {
                 
                 if (mappingResult.rows.length > 0) {
                     const { tenant_schema } = mappingResult.rows[0];
+                    const safeSchema = assertValidSchemaName(tenant_schema);
                     const result = await pool.query(
-                        `SELECT id, email, role, is_genesis_admin, tenant_id FROM ${tenant_schema}.users WHERE id = $1`,
+                        `SELECT id, email, role, is_genesis_admin, tenant_id FROM ${safeSchema}.users WHERE id = $1`,
                         [req.session.userId]
                     );
                     
@@ -178,9 +188,10 @@ function registerAuthRoutes(app, deps) {
             }
             
             const { tenant_schema, user_id } = mappingResult.rows[0];
+            const safeSchema = assertValidSchemaName(tenant_schema);
             
             const result = await pool.query(
-                `SELECT * FROM ${tenant_schema}.users WHERE id = $1 AND LOWER(email) = $2`,
+                `SELECT * FROM ${safeSchema}.users WHERE id = $1 AND LOWER(email) = $2`,
                 [user_id, normalizedEmail]
             );
             
