@@ -956,7 +956,8 @@ app.get('/api/genesis', (req, res) => {
 async function getBookTenantSchema(fractalIdInput) {
     try {
         const parsed = fractalId.parse(fractalIdInput);
-        if (parsed && parsed.tenantId) {
+        // SECURITY: Explicitly validate tenantId is a safe positive integer before SQL interpolation
+        if (parsed && Number.isInteger(parsed.tenantId) && parsed.tenantId > 0 && parsed.tenantId <= 999999) {
             const tenantSchema = `tenant_${parsed.tenantId}`;
             console.log(`✅ Parsed fractal_id: Book belongs to ${tenantSchema}`);
             return tenantSchema;
@@ -1191,6 +1192,11 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
             return res.status(400).json({ error: 'Invalid book ID format' });
         }
         
+        // SECURITY: Explicitly validate tenantId is a safe positive integer before SQL interpolation
+        // This provides defense-in-depth even though parse() already validates the format
+        if (!Number.isInteger(parsed.tenantId) || parsed.tenantId <= 0 || parsed.tenantId > 999999) {
+            return res.status(400).json({ error: 'Invalid tenant ID' });
+        }
         const tenantSchema = `tenant_${parsed.tenantId}`;
         
         // Get tenant-scoped database client
