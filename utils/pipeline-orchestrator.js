@@ -208,6 +208,19 @@ class PipelineOrchestrator {
             if (chemistryResult && chemistryResult.enrichedText) {
               normalizedInput.extractedContent.push(chemistryResult.enrichedText);
               console.log(`✅ S-1: Chemistry enrichment complete - ${chemistryResult.stage || 'unknown stage'}`);
+              
+              // Store compound header for S6 output prepending (source/confidence visible to user)
+              if (chemistryResult.compoundInfo && chemistryResult.compoundInfo.name) {
+                const ci = chemistryResult.compoundInfo;
+                let header = `### 🔬 Compound Identification\n**Name:** ${ci.name}`;
+                if (ci.canonicalFormula) header += `\n**Formula:** ${ci.canonicalFormula}`;
+                else if (chemistryResult.formula) header += `\n**Formula:** ${chemistryResult.formula}`;
+                header += `\n**Confidence:** ${Math.round((ci.confidence || 0.5) * 100)}%`;
+                header += `\n**Source:** ${ci.source || 'DDG/Wikipedia'}`;
+                if (ci.note) header += `\n**Note:** ${ci.note}`;
+                state.chemistryHeader = header;
+                console.log(`📋 S-1: Chemistry header saved for S6 output`);
+              }
             }
           } catch (chemError) {
             console.error(`❌ S-1: Chemistry enrichment error: ${chemError.message}`);
@@ -946,6 +959,12 @@ User query: ${query}`;
 
     // Stage 6: Output finalization
     state.transition(PIPELINE_STEPS.OUTPUT);
+    
+    // Prepend chemistry compound header if available (source/confidence visible to user)
+    if (state.chemistryHeader) {
+      state.finalAnswer = state.chemistryHeader + '\n\n---\n\n' + state.finalAnswer;
+      console.log(`📋 S6: Chemistry header prepended to output`);
+    }
     
     // WRITE to DataPackage: Stage S6 output (personality-formatted)
     state.writeToPackage(STAGE_IDS.OUTPUT, {
