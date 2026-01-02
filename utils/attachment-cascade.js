@@ -1957,17 +1957,16 @@ Respond with a clear description of what you observe.`;
                 {
                     model: AI_MODELS.VISION,
                     messages: [
-                        { role: 'system', content: systemPrompt },
                         {
                             role: 'user',
                             content: [
-                                { type: 'text', text: `Analyze this image from ${fileName}:` },
+                                { type: 'text', text: `${systemPrompt}\n\nAnalyze this image from ${fileName}:` },
                                 { type: 'image_url', image_url: { url: `data:${contentType};base64,${base64}` } }
                             ]
                         }
                     ],
                     temperature: 0.1,
-                    max_tokens: 1024
+                    max_completion_tokens: 1024
                 },
                 {
                     headers: {
@@ -1999,7 +1998,8 @@ Respond with a clear description of what you observe.`;
             contentType: contentType_result
         };
     } catch (error) {
-        console.error(`❌ Groq Vision error for ${fileName}: ${error.message}`);
+        const errData = error.response?.data || {};
+        console.error(`❌ Groq Vision error for ${fileName}: ${error.message}`, JSON.stringify(errData));
         return null;
     }
 }
