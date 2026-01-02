@@ -944,7 +944,7 @@
         }
         
         // MutationObserver to auto-normalize media as it's added or modified in DOM
-        const mediaObserver = new MutationObserver((mutations) => {
+        const mediaNormalizer = new MutationObserver((mutations) => {
             mutations.forEach(mutation => {
                 // Handle newly added nodes
                 if (mutation.type === 'childList') {
@@ -991,7 +991,7 @@
         });
         
         // Start observing the document for media additions and attribute changes
-        mediaObserver.observe(document.body, { 
+        mediaNormalizer.observe(document.body, { 
             childList: true, 
             subtree: true, 
             attributes: true, 
