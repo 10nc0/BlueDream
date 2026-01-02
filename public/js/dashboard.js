@@ -94,8 +94,8 @@
         // Per-message export: Track selected message IDs per book
         let selectedMessages = {}; // { bookId: Set([msgId1, msgId2, ...]) }
         
-        // Track pagination state per book for infinite scroll
-        let messagePageState = {}; // { bookId: { isLoading, hasMore, oldestId, seenIds } }
+        // INFINITE SCROLL: Track pagination state per book
+        let messagePageState = {}; // { bookId: { currentPage, isLoading, hasMore } }
         
         // Platform roadmap for future features
         const roadmapGlossary = {
@@ -5216,7 +5216,7 @@
             }
         }
         
-        async function loadBookMessages(bookId, append = false) {
+        async function loadBookMessages(bookId, page = 1, append = false) {
             try {
                 // SECURITY: Validate bookId is a fractal_id (tenant-scoped, non-enumerable)
                 // Format: [dev_](bridge|book|msg)_t{N}_{HASH} or twilio_book_{PHONE}_{TIMESTAMP}
@@ -5227,7 +5227,7 @@
                 
                 // Initialize page state if needed
                 if (!messagePageState[bookId]) {
-                    messagePageState[bookId] = { isLoading: false, hasMore: true, oldestId: null, seenIds: new Set() };
+                    messagePageState[bookId] = { currentPage: 1, isLoading: false, hasMore: true, seenIds: new Set(), oldestId: null };
                 }
                 
                 // Prevent concurrent loads
@@ -5255,12 +5255,13 @@
                 // This ensures complete tenant isolation in message cache
                 if (!append) {
                     messageCache[bookId] = data.messages;
-                    // Reset pagination state on fresh load
+                    // Reset pagination state on fresh load to allow infinite scroll from start
                     messagePageState[bookId].seenIds = new Set();
+                    messagePageState[bookId].currentPage = 1;
                     messagePageState[bookId].hasMore = true;
                     messagePageState[bookId].oldestId = null;
                 } else {
-                    // Append older messages to cache
+                    // Append new messages to cache
                     messageCache[bookId] = messageCache[bookId] ? [...messageCache[bookId], ...data.messages] : data.messages;
                 }
                 
@@ -5270,13 +5271,55 @@
                 if (container) {
                     const html = renderDiscordMessages(data.messages, bookId);
                     console.log(`📝 Generated HTML length: ${html.length} chars`);
-                    container.replaceChildren();
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = html;
-                    while (tempDiv.firstChild) {
-                        container.appendChild(tempDiv.firstChild);
+                    if (append) {
+                        // APPEND older messages to BOTTOM of container (our UI: newest at top, oldest at bottom)
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = html;
+                        while (tempDiv.firstChild) {
+                            container.appendChild(tempDiv.firstChild);
+                        }
+                        console.log(`✅ Appended ${data.messages?.length || 0} older messages to bottom`);
+                    } else {
+                        container.replaceChildren();
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = html;
+                        while (tempDiv.firstChild) {
+                            container.appendChild(tempDiv.firstChild);
+                        }
+                        console.log(`✅ Rendered ${data.messages?.length || 0} messages to container`);
                     }
-                    console.log(`✅ Rendered ${data.messages?.length || 0} messages to container`);
+                    
+                    // Update page state
+                    messagePageState[bookId].currentPage = page;
+                    
+                    // Check for new messages by comparing IDs
+                    const seenIds = messagePageState[bookId].seenIds || new Set();
+                    let newMessageCount = 0;
+                    if (data.messages) {
+                        data.messages.forEach(msg => {
+                            if (msg.id && !seenIds.has(msg.id)) {
+                                seenIds.add(msg.id);
+                                newMessageCount++;
+                            }
+                        });
+                    }
+                    messagePageState[bookId].seenIds = seenIds;
+                    
+                    // Store oldestId for cursor-based pagination
+                    // The API returns oldestMessageId, or we extract it from the last message
+                    if (data.oldestMessageId) {
+                        messagePageState[bookId].oldestId = data.oldestMessageId;
+                    } else if (data.messages?.length > 0) {
+                        messagePageState[bookId].oldestId = data.messages[data.messages.length - 1].id;
+                    }
+                    
+                    // Use API's hasMore if provided, otherwise check for duplicates
+                    // Stop pagination if: API says no more, or all messages are duplicates
+                    const apiHasMore = data.hasMore === true;
+                    const hasNewMessages = newMessageCount > 0;
+                    messagePageState[bookId].hasMore = apiHasMore && hasNewMessages;
+                    
+                    console.log(`📊 Pagination: received=${data.messages?.length}, new=${newMessageCount}, apiHasMore=${apiHasMore}, hasMore=${messagePageState[bookId].hasMore}, oldestId=${messagePageState[bookId].oldestId}`);
                     
                     // Dynamically create export checkboxes AFTER HTML render
                     // This ensures they're truly interactive and separate from read-only message structure
@@ -5311,6 +5354,36 @@
                         normalizeMediaImages(container);
                     }, 100);
                     
+                    // Add infinite scroll listener (only on first load)
+                    // Our UI: newest at TOP, oldest at BOTTOM. Scroll DOWN to see older history.
+                    if (!append) {
+                        const messagesContainer = document.getElementById(`discord-messages-${bookId}`);
+                        if (messagesContainer && !messagesContainer.dataset.scrollListenerAttached) {
+                            messagesContainer.dataset.scrollListenerAttached = 'true';
+                            console.log(`📜 Infinite scroll listener attached for ${bookId}`);
+                            let scrollDebounce = null;
+                            messagesContainer.addEventListener('scroll', () => {
+                                if (scrollDebounce) return; // Skip if debounce active
+                                
+                                const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
+                                // Distance from bottom in pixels (works better than % when content grows)
+                                const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+                                const pageState = messagePageState[bookId] || {};
+                                
+                                // Trigger when within 200px of bottom
+                                if (distanceFromBottom < 200) {
+                                    if (!pageState.isLoading && pageState.hasMore === true) {
+                                        // Debounce: prevent rapid re-triggers
+                                        scrollDebounce = setTimeout(() => { scrollDebounce = null; }, 1000);
+                                        console.log(`📜 Infinite scroll triggered (${Math.round(distanceFromBottom)}px from bottom) - loading older messages...`);
+                                        loadBookMessages(bookId, 0, true);
+                                    } else if (!pageState.hasMore) {
+                                        console.log(`📜 Near bottom but hasMore=false - all messages loaded`);
+                                    }
+                                }
+                            });
+                        }
+                    }
                 } else {
                     console.error(`❌ Container NOT FOUND: discord-messages-${bookId}`);
                 }
