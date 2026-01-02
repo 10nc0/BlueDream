@@ -873,7 +873,12 @@ function registerBooksRoutes(app, deps) {
                                     mediaFromEmbed = { url: match[2], contentType: match[1] };
                                 }
                             }
-                            const phoneField = embed.fields?.find(f => f.name === '📱 Phone');
+                            const phoneField = embed.fields?.find(f => 
+                                f.name && (
+                                    /[📞📱]/.test(f.name) || 
+                                    f.name.toLowerCase().includes('phone')
+                                )
+                            );
                             if (phoneField?.value) {
                                 senderContact = phoneField.value;
                             }
