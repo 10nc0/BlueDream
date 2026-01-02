@@ -184,7 +184,10 @@ async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
             console.log(`⚠️ pdfinfo failed, assuming 1 page`);
         }
         
-        const pagesToRender = Math.min(totalPages, options.maxPages);
+        const pagesToRender = Math.min(totalPages, parseInt(options.maxPages, 10) || 5);
+        if (!Number.isInteger(pagesToRender) || pagesToRender < 1 || pagesToRender > 100) {
+            throw new Error('Invalid page count');
+        }
         console.log(`🖼️ PDF Poppler: Rendering ${pagesToRender}/${totalPages} pages...`);
         
         // Render pages to JPEG using pdftoppm
