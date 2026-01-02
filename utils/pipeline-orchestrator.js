@@ -52,7 +52,7 @@ const PIPELINE_STEPS = {
 };
 
 const { AttachmentIngestion } = require('./attachment-ingestion');
-const { analyzeImageWithGroqVision } = require('./attachment-cascade');
+const { analyzeImageWithGroqVision, processChemistryContent } = require('./attachment-cascade');
 
 class PipelineState {
   constructor(tenantId = null) {
@@ -138,6 +138,7 @@ class PipelineOrchestrator {
     // Process photos through Groq Vision if present (before setting hasImageAttachment)
     const photos = input.photos || [];
     let visionSuccessCount = 0;
+    const chemicalVisionResults = []; // Collect chemical observations for enrichment
     
     if (photos.length > 0) {
       const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
@@ -188,9 +189,28 @@ class PipelineOrchestrator {
               normalizedInput.extractedContent.push(visionText);
               visionSuccessCount++;
               console.log(`✅ S-1: Vision analysis complete for ${photoName}`);
+              
+              // Collect chemical results for enrichment
+              if (visionResult.contentType === 'chemical') {
+                chemicalVisionResults.push(visionResult);
+              }
             }
           } catch (visionError) {
             console.error(`❌ S-1: Vision analysis error: ${visionError.message}`);
+          }
+        }
+        
+        // If chemical structures detected, run chemistry enrichment pipeline
+        if (chemicalVisionResults.length > 0) {
+          try {
+            console.log(`🧪 S-1: Running chemistry enrichment for ${chemicalVisionResults.length} chemical structure(s)...`);
+            const chemistryResult = await processChemistryContent(chemicalVisionResults);
+            if (chemistryResult && chemistryResult.enrichedText) {
+              normalizedInput.extractedContent.push(chemistryResult.enrichedText);
+              console.log(`✅ S-1: Chemistry enrichment complete - ${chemistryResult.stage || 'unknown stage'}`);
+            }
+          } catch (chemError) {
+            console.error(`❌ S-1: Chemistry enrichment error: ${chemError.message}`);
           }
         }
       } else {

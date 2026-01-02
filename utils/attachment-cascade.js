@@ -2270,5 +2270,7 @@ module.exports = {
     intelligentChunking,
     buildMultiDocContext,
     // Vision analysis for direct image processing
-    analyzeImageWithGroqVision
+    analyzeImageWithGroqVision,
+    // Chemistry enrichment for chemical structure analysis
+    processChemistryContent
 };
