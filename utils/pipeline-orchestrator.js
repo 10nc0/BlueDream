@@ -153,7 +153,7 @@ class PipelineOrchestrator {
             let contentType = 'image/jpeg'; // Default fallback
             
             // Parse data URL to get actual content type (frontend may convert PNG to JPEG during resize)
-            const dataUrlMatch = photoData.match(/^data:([^;]+);base64,(.+)$/);
+            const dataUrlMatch = photoData.match(/^data:([^;]+);base64,(.+)$/s);
             if (dataUrlMatch) {
               contentType = dataUrlMatch[1]; // Actual MIME type from data URL
               base64 = dataUrlMatch[2];      // Raw base64 without prefix
@@ -162,7 +162,10 @@ class PipelineOrchestrator {
               base64 = photoData.split('base64,')[1];
             }
             
-            console.log(`📷 S-1: Photo ${photoName} detected as ${contentType}`);
+            // Sanitize base64: remove whitespace, newlines, and any non-base64 characters
+            base64 = base64.replace(/[\s\r\n]/g, '').trim();
+            
+            console.log(`📷 S-1: Photo ${photoName} detected as ${contentType} (${base64.length} chars)`);
             
             const visionResult = await analyzeImageWithGroqVision(
               base64, contentType, PLAYGROUND_GROQ_VISION_TOKEN, photoName
