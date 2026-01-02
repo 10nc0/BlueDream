@@ -5227,7 +5227,7 @@
                 
                 // Initialize page state if needed
                 if (!messagePageState[bookId]) {
-                    messagePageState[bookId] = { currentPage: 1, isLoading: false, hasMore: true };
+                    messagePageState[bookId] = { currentPage: 1, isLoading: false, hasMore: true, seenIds: new Set(), oldestId: null };
                 }
                 
                 // Prevent concurrent loads
@@ -5235,8 +5235,13 @@
                 messagePageState[bookId].isLoading = true;
                 
                 // SCHEMA SWITCHEROO: Use currentViewSource to pull from correct webhook
-                console.log(`Loading messages for book ${bookId} page ${page} (source: ${currentViewSource})...`);
-                const response = await window.authFetch(`/api/books/${bookId}/messages?page=${page}&limit=50&source=${currentViewSource}`);
+                // Use cursor-based pagination with 'before' parameter for efficient Discord API fetching
+                let url = `/api/books/${bookId}/messages?limit=50&source=${currentViewSource}`;
+                if (append && messagePageState[bookId].oldestId) {
+                    url += `&before=${messagePageState[bookId].oldestId}`;
+                }
+                console.log(`Loading messages for book ${bookId} (source: ${currentViewSource}, cursor: ${messagePageState[bookId].oldestId || 'none'})...`);
+                const response = await window.authFetch(url);
                 
                 if (!response.ok) {
                     console.error(`API returned ${response.status}: ${response.statusText}`);
@@ -5250,6 +5255,11 @@
                 // This ensures complete tenant isolation in message cache
                 if (!append) {
                     messageCache[bookId] = data.messages;
+                    // Reset pagination state on fresh load to allow infinite scroll from start
+                    messagePageState[bookId].seenIds = new Set();
+                    messagePageState[bookId].currentPage = 1;
+                    messagePageState[bookId].hasMore = true;
+                    messagePageState[bookId].oldestId = null;
                 } else {
                     // Append new messages to cache
                     messageCache[bookId] = messageCache[bookId] ? [...messageCache[bookId], ...data.messages] : data.messages;
@@ -5262,12 +5272,13 @@
                     const html = renderDiscordMessages(data.messages, bookId);
                     console.log(`📝 Generated HTML length: ${html.length} chars`);
                     if (append) {
+                        // APPEND older messages to BOTTOM of container (our UI: newest at top, oldest at bottom)
                         const tempDiv = document.createElement('div');
                         tempDiv.innerHTML = html;
                         while (tempDiv.firstChild) {
                             container.appendChild(tempDiv.firstChild);
                         }
-                        console.log(`✅ Appended ${data.messages?.length || 0} messages`);
+                        console.log(`✅ Appended ${data.messages?.length || 0} older messages to bottom`);
                     } else {
                         container.replaceChildren();
                         const tempDiv = document.createElement('div');
@@ -5280,7 +5291,35 @@
                     
                     // Update page state
                     messagePageState[bookId].currentPage = page;
-                    messagePageState[bookId].hasMore = data.messages && data.messages.length > 0;
+                    
+                    // Check for new messages by comparing IDs
+                    const seenIds = messagePageState[bookId].seenIds || new Set();
+                    let newMessageCount = 0;
+                    if (data.messages) {
+                        data.messages.forEach(msg => {
+                            if (msg.id && !seenIds.has(msg.id)) {
+                                seenIds.add(msg.id);
+                                newMessageCount++;
+                            }
+                        });
+                    }
+                    messagePageState[bookId].seenIds = seenIds;
+                    
+                    // Store oldestId for cursor-based pagination
+                    // The API returns oldestMessageId, or we extract it from the last message
+                    if (data.oldestMessageId) {
+                        messagePageState[bookId].oldestId = data.oldestMessageId;
+                    } else if (data.messages?.length > 0) {
+                        messagePageState[bookId].oldestId = data.messages[data.messages.length - 1].id;
+                    }
+                    
+                    // Use API's hasMore if provided, otherwise check for duplicates
+                    // Stop pagination if: API says no more, or all messages are duplicates
+                    const apiHasMore = data.hasMore === true;
+                    const hasNewMessages = newMessageCount > 0;
+                    messagePageState[bookId].hasMore = apiHasMore && hasNewMessages;
+                    
+                    console.log(`📊 Pagination: received=${data.messages?.length}, new=${newMessageCount}, apiHasMore=${apiHasMore}, hasMore=${messagePageState[bookId].hasMore}, oldestId=${messagePageState[bookId].oldestId}`);
                     
                     // Dynamically create export checkboxes AFTER HTML render
                     // This ensures they're truly interactive and separate from read-only message structure
@@ -5316,18 +5355,30 @@
                     }, 100);
                     
                     // Add infinite scroll listener (only on first load)
-                    if (page === 1 && !append) {
+                    // Our UI: newest at TOP, oldest at BOTTOM. Scroll DOWN to see older history.
+                    if (!append) {
                         const messagesContainer = document.getElementById(`discord-messages-${bookId}`);
-                        if (messagesContainer) {
-                            messagesContainer.addEventListener('scroll', async () => {
-                                const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
-                                const scrollPercent = (scrollTop + clientHeight) / scrollHeight;
+                        if (messagesContainer && !messagesContainer.dataset.scrollListenerAttached) {
+                            messagesContainer.dataset.scrollListenerAttached = 'true';
+                            console.log(`📜 Infinite scroll listener attached for ${bookId}`);
+                            let scrollDebounce = null;
+                            messagesContainer.addEventListener('scroll', () => {
+                                if (scrollDebounce) return; // Skip if debounce active
                                 
-                                if (scrollPercent > 0.8) {
-                                    const pageState = messagePageState[bookId] || {};
-                                    if (!pageState.isLoading && pageState.hasMore !== false) {
-                                        const nextPage = (pageState.currentPage || 1) + 1;
-                                        await loadBookMessages(bookId, nextPage, true);
+                                const { scrollTop, scrollHeight, clientHeight } = messagesContainer;
+                                // Distance from bottom in pixels (works better than % when content grows)
+                                const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+                                const pageState = messagePageState[bookId] || {};
+                                
+                                // Trigger when within 200px of bottom
+                                if (distanceFromBottom < 200) {
+                                    if (!pageState.isLoading && pageState.hasMore === true) {
+                                        // Debounce: prevent rapid re-triggers
+                                        scrollDebounce = setTimeout(() => { scrollDebounce = null; }, 1000);
+                                        console.log(`📜 Infinite scroll triggered (${Math.round(distanceFromBottom)}px from bottom) - loading older messages...`);
+                                        loadBookMessages(bookId, 0, true);
+                                    } else if (!pageState.hasMore) {
+                                        console.log(`📜 Near bottom but hasMore=false - all messages loaded`);
                                     }
                                 }
                             });
