@@ -149,23 +149,31 @@ class PipelineOrchestrator {
             // Format: data:image/jpeg;base64,xxxx
             const photoData = photo.data || '';
             const photoName = photo.name || 'image';
-            let base64 = photoData;
+            let base64 = '';
             let contentType = 'image/jpeg'; // Default fallback
+            
+            // Debug: log incoming data format
+            console.log(`📷 S-1: Photo ${photoName} data length: ${photoData.length}, starts with: ${photoData.substring(0, 50)}...`);
             
             // Parse data URL to get actual content type (frontend may convert PNG to JPEG during resize)
             const dataUrlMatch = photoData.match(/^data:([^;]+);base64,(.+)$/s);
             if (dataUrlMatch) {
               contentType = dataUrlMatch[1]; // Actual MIME type from data URL
               base64 = dataUrlMatch[2];      // Raw base64 without prefix
+              console.log(`📷 S-1: Regex matched - contentType: ${contentType}, base64 length: ${base64.length}`);
             } else if (photoData.includes('base64,')) {
               // Fallback: just extract base64 portion
-              base64 = photoData.split('base64,')[1];
+              const parts = photoData.split('base64,');
+              base64 = parts[1] || '';
+              console.log(`📷 S-1: Fallback split - base64 length: ${base64.length}`);
+            } else {
+              console.log(`📷 S-1: No base64 marker found in photoData`);
             }
             
-            // Sanitize base64: remove whitespace, newlines, and any non-base64 characters
-            base64 = base64.replace(/[\s\r\n]/g, '').trim();
+            // Sanitize base64: remove whitespace, newlines
+            base64 = (base64 || '').replace(/[\s\r\n]/g, '');
             
-            console.log(`📷 S-1: Photo ${photoName} detected as ${contentType} (${base64.length} chars)`);
+            console.log(`📷 S-1: Photo ${photoName} detected as ${contentType} (${base64.length} chars after sanitize)`);
             
             const visionResult = await analyzeImageWithGroqVision(
               base64, contentType, PLAYGROUND_GROQ_VISION_TOKEN, photoName
