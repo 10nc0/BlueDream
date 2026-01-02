@@ -1215,6 +1215,8 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
         if (!/^[a-z_][a-z0-9_]*$/i.test(tenantSchema)) {
             return res.status(400).json({ error: 'Invalid tenant schema' });
         }
+        // SECURITY: Escape identifier for defense-in-depth (doubles any quotes per SQL standard)
+        const safeSchema = tenantSchema.replace(/"/g, '""');
 
         // Get tenant-scoped database client
         const client = await pool.connect();
@@ -1224,7 +1226,7 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
             
             // Find book by fractal_id
             const bookResult = await client.query(
-                `SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM "${tenantSchema}".books WHERE fractal_id = $1`,
+                `SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM "${safeSchema}".books WHERE fractal_id = $1`,
                 [fractalIdParam]
             );
             
