@@ -69,6 +69,7 @@ class PipelineState {
     this.finalAnswer = null;
     this.error = null;
     this.dataPackage = new DataPackage(tenantId);
+    this.hasImageAttachment = false;  // Set in S-1 for retry logic
   }
   
   transition(nextStep) {
@@ -129,6 +130,17 @@ class PipelineOrchestrator {
     normalizedInput.extractedContent = perception.files;
     normalizedInput.extractedText = perception.extractedText;
 
+    // Detect image attachments early (for S4 retry logic)
+    const rawAttachments = input.attachments || [];
+    state.hasImageAttachment = rawAttachments.some(att => {
+      const name = (att.name || att.fileName || '').toLowerCase();
+      const mime = (att.mimeType || att.type || '').toLowerCase();
+      return /\.(jpg|jpeg|png|gif|webp|bmp)$/.test(name) || mime.startsWith('image/');
+    });
+    if (state.hasImageAttachment) {
+      console.log(`🖼️ S-1: Image attachment detected - search retry will be skipped`);
+    }
+
     // Track if this is first query for NYAN boot optimization
     const isFirstQuery = normalizedInput.sessionId ? isSessionFirstQuery(normalizedInput.sessionId) : false;
     state.isFirstQuery = isFirstQuery;
@@ -165,7 +177,8 @@ class PipelineOrchestrator {
         hasMemory: state.contextResult.hasMemory,
         attachmentContext: state.contextResult.attachmentContext?.name || null,
         perceptionFiles: perception.files.length,
-        extractedTextLength: perception.extractedText.length
+        extractedTextLength: perception.extractedText.length,
+        hasImageAttachment: state.hasImageAttachment
       });
       
       if (state.contextResult.inferredTicker) {
@@ -769,6 +782,40 @@ User query: ${query}`;
       return;
     }
     
+    // Prepare reasoning input with sanitized history
+    const reasoningInput = { 
+      ...input, 
+      conversationHistory: sanitizedHistory,
+      query: safeQuery,
+      clientIp: clientIp || input.clientIp || '127.0.0.1',
+      extractedContent: input.extractedContent || []
+    };
+    
+    // Check for image attachments via multiple sources for robustness
+    let hasImage = state.hasImageAttachment;
+    if (!hasImage) {
+      // Fallback 1: check DataPackage S-1 data for persisted flag
+      const s1Data = state.readFromPackage(STAGE_IDS.CONTEXT_EXTRACT);
+      hasImage = s1Data?.hasImageAttachment || false;
+    }
+    if (!hasImage) {
+      // Fallback 2: check extractedContent for image markers
+      const extractedContent = input.extractedContent || [];
+      hasImage = extractedContent.some(f => 
+        f?.fileType === 'image' || 
+        f?.type === 'image-vision' ||
+        (typeof f === 'string' && /visual content analysis|image|chemical structure/i.test(f))
+      );
+    }
+    
+    if (hasImage) {
+      // Image attachments: skip web search, re-run reasoning with vision context only
+      console.log(`🖼️ Retry ${state.retryCount}: Image attachment - re-reasoning with vision context (no web search)`);
+      await this.stepReasoning(state, reasoningInput);
+      await this.stepAudit(state, reasoningInput);
+      return;
+    }
+    
     console.log(`🔄 Retry ${state.retryCount}: Searching for better data...`);
     
     const searchQuery = await this.extractCoreQuestion(safeQuery);
@@ -779,16 +826,6 @@ User query: ${query}`;
     
     if (state.searchContext) {
       state.didSearch = true;
-      // Pass sanitized history and original input fields to reasoning
-      // Ensure all required fields are present to prevent "length of undefined" errors
-      const reasoningInput = { 
-        ...input, 
-        conversationHistory: sanitizedHistory,
-        query: safeQuery,
-        clientIp: clientIp || input.clientIp || '127.0.0.1',
-        extractedContent: input.extractedContent || []
-      };
-      
       await this.stepReasoning(state, reasoningInput);
       await this.stepAudit(state, reasoningInput);
     }
