@@ -1763,14 +1763,13 @@
                         </div>
                         ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
                         ${msg.embeds && msg.embeds.length > 0 ? msg.embeds.map(embed => {
-                            const fieldNames = (embed.fields || []).map(f => (f.name || '').toLowerCase());
-                            const isWhatsAppMirror = fieldNames.some(n => n.includes('phone') || n.includes('📞')) && 
-                                                     fieldNames.some(n => n.includes('book') || n.includes('📚'));
+                            const phoneField = (embed.fields || []).find(f => 
+                                (f.name || '').toLowerCase().includes('phone') || f.name.includes('📞') || f.name.includes('📱')
+                            );
+                            const isWhatsAppMirror = !!phoneField;
                             
                             if (isWhatsAppMirror) {
-                                const phoneField = (embed.fields || []).find(f => (f.name || '').toLowerCase().includes('phone') || f.name.includes('📞'));
-                                const phoneValue = phoneField ? phoneField.value : '';
-                                return phoneValue ? `<div class="whatsapp-sender" style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">📞 ${escapeHtml(phoneValue)}</div>` : '';
+                                return '';
                             }
                             
                             return `
