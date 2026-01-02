@@ -78,6 +78,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 ## Coding Guidelines
 
 ### Supabase Multi-Tenant Schema Pattern
+- Tenant > Book > Messages > Messages metadata + tag + attachment, etc.
 - Each tenant gets an isolated PostgreSQL schema (not just row-level filtering)
 - Schema naming: `tenant_{tenantId}` format
 - All tenant-specific tables live within tenant schema
