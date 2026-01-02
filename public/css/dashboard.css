@@ -1002,6 +1002,13 @@ body::before {
   font-size: var(--text-sm);
 }
 
+.sender-role {
+  font-size: 0.75rem;
+  font-weight: 500;
+  opacity: 0.8;
+  padding: 0 0.25rem;
+}
+
 .discord-timestamp {
   font-size: var(--text-xs);
   color: var(--color-text-muted);

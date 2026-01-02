@@ -1752,7 +1752,7 @@
                     <div class="discord-content">
                         <div class="discord-header-row">
                             <span class="discord-username">${escapeHtml(msg.sender_name || 'Unknown')}</span>
-                            ${msg.sender_contact ? `<span class="sender-role" title="${msg.is_creator ? 'Book Creator' : 'Contributor'}" style="color: ${msg.is_creator ? '#22c55e' : '#60a5fa'};">${msg.is_creator ? '🌟' : '👥'}</span>` : ''}
+                            ${msg.sender_contact ? `<span class="sender-role" title="${msg.is_creator ? 'Book Creator' : 'Contributor'}" style="color: ${msg.is_creator ? '#22c55e' : '#60a5fa'}; font-size: 0.75rem; opacity: 0.8; margin-left: 0.25rem;">${formatPhoneNumber(msg.sender_contact)}</span>` : ''}
                             <span class="discord-timestamp discord-timestamp-desktop">${formatDiscordTime(msg.timestamp)}</span>
                             <span class="discord-status-badge status-${escapeHtml(msg.discord_status)}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
                             <button class="jump-to-msg-btn" data-msg-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}">Jump</button>
