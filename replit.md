@@ -74,3 +74,32 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Search**: DuckDuckGo Instant Answer API, Brave Search API
 - **Forex**: fawazahmed0 Currency API
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth`
+
+## Coding Guidelines
+
+### Supabase Multi-Tenant Schema Pattern
+- Each tenant gets an isolated PostgreSQL schema (not just row-level filtering)
+- Schema naming: `tenant_{tenantId}` format
+- All tenant-specific tables live within tenant schema
+- Shared/system tables remain in `public` schema
+- Always use schema-qualified queries: `SELECT * FROM tenant_abc.messages`
+- Connection pooler: Use Supabase transaction pooler for connection efficiency
+
+### innerHTML Security (XSS Prevention)
+- **NEVER use `innerHTML` with user-generated or external content**
+- **ALWAYS use safe alternatives:**
+  - `element.textContent = userInput` for plain text
+  - `element.appendChild(document.createElement(...))` for DOM construction
+  - Template literals with explicit sanitization only for trusted HTML
+- **If HTML rendering is unavoidable:**
+  - Use DOMPurify or similar sanitization library
+  - Validate against allowlist of safe tags/attributes
+  - Never trust data from APIs, databases, or user input
+- **CSP headers** are configured but innerHTML bypasses them — code must be safe at source
+
+### Unified Authentication
+- Single auth system for all users (no separate "admin" terminology)
+- Role-based access control via `user.role` field (owner, contributor, viewer)
+- JWT with 15-min access tokens + refresh token rotation
+- See **Vegapunk Kernel Architecture** → routes/auth.js for implementation
+- Never create parallel auth systems or "back-door" admin routes
