@@ -789,7 +789,7 @@ Respond in ${language || 'the same language as the user query'}.`
                 message: finalPrompt,
                 photos: photoList,
                 documents: docList,
-                extractedContent: perception.files, // HARMONIZED: Use perception output
+                extractedContent: extractedContent, // Use locally populated array from document processing
                 history: history || [],
                 clientIp,
                 isVisionRequest: photoList.length > 0,
@@ -948,7 +948,7 @@ Respond in ${language || 'the same language as the user query'}.`
                 message: message || '',
                 photos: photoList,
                 documents: docList,
-                extractedContent: perception.files, // HARMONIZED: Use perception output
+                extractedContent: extractedContent, // Use locally populated array from document processing
                 history: history || [],
                 clientIp,
                 isVisionRequest: photoList.length > 0,
