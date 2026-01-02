@@ -135,22 +135,10 @@ class PipelineOrchestrator {
       normalizedInput.extractedText = input.extractedText || '';
     }
 
-    // Detect image attachments early (for S4 retry logic)
-    // Check multiple sources: isVisionRequest flag, photos array, or raw attachments
+    // Process photos through Groq Vision if present (before setting hasImageAttachment)
     const photos = input.photos || [];
-    state.hasImageAttachment = 
-      input.isVisionRequest === true ||
-      photos.length > 0 ||
-      rawAttachments.some(att => {
-        const name = (att.name || att.fileName || '').toLowerCase();
-        const mime = (att.mimeType || att.type || '').toLowerCase();
-        return /\.(jpg|jpeg|png|gif|webp|bmp)$/.test(name) || mime.startsWith('image/');
-      });
-    if (state.hasImageAttachment) {
-      console.log(`🖼️ S-1: Image attachment detected (photos=${photos.length}, isVision=${input.isVisionRequest}) - search retry will be skipped`);
-    }
-
-    // Process photos through Groq Vision if present
+    let visionSuccessCount = 0;
+    
     if (photos.length > 0) {
       const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
       if (PLAYGROUND_GROQ_VISION_TOKEN) {
@@ -178,12 +166,9 @@ class PipelineOrchestrator {
                                visionResult.contentType === 'chart' ? '📊 Chart/Graph' :
                                visionResult.contentType === 'diagram' ? '📐 Diagram' : '🖼️ Visual';
               const visionText = `**${photoName} (${typeLabel}):**\n${visionResult.description}`;
-              normalizedInput.extractedContent.push({
-                fileName: photoName,
-                extractedText: visionText,
-                fileType: 'image',
-                type: 'image-vision'
-              });
+              // Use schema matching AttachmentIngestion output
+              normalizedInput.extractedContent.push(visionText);
+              visionSuccessCount++;
               console.log(`✅ S-1: Vision analysis complete for ${photoName}`);
             }
           } catch (visionError) {
@@ -193,6 +178,19 @@ class PipelineOrchestrator {
       } else {
         console.log(`⚠️ S-1: PLAYGROUND_GROQ_VISION_TOKEN not configured - skipping vision analysis`);
       }
+    }
+
+    // Detect image attachments - only set true if we have actual vision content
+    // Check: successful vision processing, or raw image attachments
+    state.hasImageAttachment = 
+      visionSuccessCount > 0 ||
+      rawAttachments.some(att => {
+        const name = (att.name || att.fileName || '').toLowerCase();
+        const mime = (att.mimeType || att.type || '').toLowerCase();
+        return /\.(jpg|jpeg|png|gif|webp|bmp)$/.test(name) || mime.startsWith('image/');
+      });
+    if (state.hasImageAttachment) {
+      console.log(`🖼️ S-1: Image content ready (vision=${visionSuccessCount}) - search retry will be skipped`);
     }
 
     // Track if this is first query for NYAN boot optimization
