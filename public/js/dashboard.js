@@ -1761,7 +1761,7 @@
                         <div class="message-drop-section" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}">
                             <div class="drop-display hidden"></div>
                         </div>
-                        ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : '<div class="discord-text" style="color: #64748b; font-style: italic;">N/A</div>'}
+                        ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
                         ${msg.embeds && msg.embeds.length > 0 ? msg.embeds.map(embed => {
                             const fieldNames = (embed.fields || []).map(f => (f.name || '').toLowerCase());
                             const isWhatsAppMirror = fieldNames.some(n => n.includes('phone') || n.includes('📞')) && 
