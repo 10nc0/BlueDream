@@ -81,7 +81,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
       - R < 0 + Z > 0: RELIEF_REVERSAL - distribution/profit taking (above median + direction change)
       - R < 0 + Z unavailable: fallback to PHASE_REVERSAL (|R|>φ) or DAMPED_REVERSAL (|R|≤φ)
   - **Tool-First Design**: Framework measures where you ARE on the wave, not where you're going. Users navigate; the compass just shows true north (equilibrium).
-- **Unified Personality Layer**: Enforces formatting via regex post-processing.
+- **Unified Personality Layer**: Enforces formatting via regex post-processing. Includes **Epistemic Transparency** — distinguishes verified facts ("From the CSV, I can verify...") from inferred conclusions ("I'm inferring... based on...") with ✓/⚠️ markers in confidence sections.
 - **Mode Registry (lib/mode-registry.js)**: Plug-and-play mode configuration for the 7-stage pipeline:
   - Each mode declares: detection heuristics, personality formatting rules (skipIntroOutro, preserveVerdicts)
   - Modes: `psi-ema`, `psi-ema-identity`, `forex`, `seed-metric`, `legal`, `code-audit`, `general`
