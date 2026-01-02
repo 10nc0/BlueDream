@@ -1762,10 +1762,19 @@
                             <div class="drop-display hidden"></div>
                         </div>
                         ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
-                        ${msg.embeds && msg.embeds.length > 0 ? msg.embeds.map(embed => `
+                        ${msg.embeds && msg.embeds.length > 0 ? msg.embeds.map(embed => {
+                            const fieldNames = (embed.fields || []).map(f => (f.name || '').toLowerCase());
+                            const isWhatsAppMirror = fieldNames.some(n => n.includes('phone') || n.includes('📞')) && 
+                                                     fieldNames.some(n => n.includes('book') || n.includes('📚'));
+                            
+                            if (isWhatsAppMirror) {
+                                return '';
+                            }
+                            
+                            return `
                             <div class="discord-embed" style="background: rgba(47, 49, 54, 0.6); border-radius: 4px; padding: 0.75rem; margin-top: 0.5rem; max-width: 520px;">
                                 ${embed.title ? `<div class="embed-title" style="font-weight: 600; color: #00AFF4; margin-bottom: 0.5rem;">${escapeHtml(embed.title)}</div>` : ''}
-                                ${embed.description ? `<div class="embed-description" style="color: #DCDDDE; margin-bottom: 0.5rem; white-space: pre-wrap;">${escapeHtml(embed.description)}</div>` : ''}
+                                ${embed.description && !embed.description.includes('No text content') ? `<div class="embed-description" style="color: #DCDDDE; margin-bottom: 0.5rem; white-space: pre-wrap;">${escapeHtml(embed.description)}</div>` : ''}
                                 ${embed.fields && embed.fields.length > 0 ? `
                                     <div class="embed-fields" style="display: grid; grid-template-columns: repeat(${embed.fields.some(f => !f.inline) ? '1' : '2'}, 1fr); gap: 0.5rem;">
                                         ${embed.fields.filter(field => !field.name.includes('📝 Attachment')).map(field => `
@@ -1778,8 +1787,8 @@
                                 ` : ''}
                                 ${embed.footer ? `<div class="embed-footer" style="color: #72767D; font-size: 0.75rem; margin-top: 0.5rem;">${escapeHtml(embed.footer.text || embed.footer)}</div>` : ''}
                                 ${embed.image ? `<img src="${escapeHtml(embed.image.url || embed.image)}" style="max-width: 100%; border-radius: 4px; margin-top: 0.5rem;" alt="Embed image">` : ''}
-                            </div>
-                        `).join('') : ''}
+                            </div>`;
+                        }).join('') : ''}
                         ${msg.has_media ? `
                             <div class="discord-media-preview" id="media-preview-${escapeHtml(msg.id)}" data-message-id="${escapeHtml(msg.id)}" data-media-url="${escapeHtml(msg.media_url || '')}" data-media-type="${escapeHtml(msg.media_type || '')}">
                                 <div class="media-loading">Loading media...</div>
