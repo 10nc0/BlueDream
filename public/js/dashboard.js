@@ -1761,14 +1761,16 @@
                         <div class="message-drop-section" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}">
                             <div class="drop-display hidden"></div>
                         </div>
-                        ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
+                        ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : '<div class="discord-text" style="color: #64748b; font-style: italic;">N/A</div>'}
                         ${msg.embeds && msg.embeds.length > 0 ? msg.embeds.map(embed => {
                             const fieldNames = (embed.fields || []).map(f => (f.name || '').toLowerCase());
                             const isWhatsAppMirror = fieldNames.some(n => n.includes('phone') || n.includes('📞')) && 
                                                      fieldNames.some(n => n.includes('book') || n.includes('📚'));
                             
                             if (isWhatsAppMirror) {
-                                return '';
+                                const phoneField = (embed.fields || []).find(f => (f.name || '').toLowerCase().includes('phone') || f.name.includes('📞'));
+                                const phoneValue = phoneField ? phoneField.value : '';
+                                return phoneValue ? `<div class="whatsapp-sender" style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">📞 ${escapeHtml(phoneValue)}</div>` : '';
                             }
                             
                             return `
