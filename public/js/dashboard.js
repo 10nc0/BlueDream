@@ -94,8 +94,8 @@
         // Per-message export: Track selected message IDs per book
         let selectedMessages = {}; // { bookId: Set([msgId1, msgId2, ...]) }
         
-        // Track loading state per book to prevent concurrent loads
-        let messagePageState = {}; // { bookId: { isLoading } }
+        // Track pagination state per book for infinite scroll
+        let messagePageState = {}; // { bookId: { isLoading, hasMore, oldestId, seenIds } }
         
         // Platform roadmap for future features
         const roadmapGlossary = {
@@ -5216,7 +5216,7 @@
             }
         }
         
-        async function loadBookMessages(bookId) {
+        async function loadBookMessages(bookId, append = false) {
             try {
                 // SECURITY: Validate bookId is a fractal_id (tenant-scoped, non-enumerable)
                 // Format: [dev_](bridge|book|msg)_t{N}_{HASH} or twilio_book_{PHONE}_{TIMESTAMP}
@@ -5227,7 +5227,7 @@
                 
                 // Initialize page state if needed
                 if (!messagePageState[bookId]) {
-                    messagePageState[bookId] = { isLoading: false };
+                    messagePageState[bookId] = { isLoading: false, hasMore: true, oldestId: null, seenIds: new Set() };
                 }
                 
                 // Prevent concurrent loads
@@ -5235,8 +5235,13 @@
                 messagePageState[bookId].isLoading = true;
                 
                 // SCHEMA SWITCHEROO: Use currentViewSource to pull from correct webhook
-                console.log(`Loading messages for book ${bookId} (source: ${currentViewSource})...`);
-                const response = await window.authFetch(`/api/books/${bookId}/messages?limit=100&source=${currentViewSource}`);
+                // Use cursor-based pagination with 'before' parameter for efficient Discord API fetching
+                let url = `/api/books/${bookId}/messages?limit=50&source=${currentViewSource}`;
+                if (append && messagePageState[bookId].oldestId) {
+                    url += `&before=${messagePageState[bookId].oldestId}`;
+                }
+                console.log(`Loading messages for book ${bookId} (source: ${currentViewSource}, cursor: ${messagePageState[bookId].oldestId || 'none'})...`);
+                const response = await window.authFetch(url);
                 
                 if (!response.ok) {
                     console.error(`API returned ${response.status}: ${response.statusText}`);
@@ -5248,7 +5253,16 @@
                 
                 // SECURITY: Cache ONLY with tenant-scoped fractal_id
                 // This ensures complete tenant isolation in message cache
-                messageCache[bookId] = data.messages;
+                if (!append) {
+                    messageCache[bookId] = data.messages;
+                    // Reset pagination state on fresh load
+                    messagePageState[bookId].seenIds = new Set();
+                    messagePageState[bookId].hasMore = true;
+                    messagePageState[bookId].oldestId = null;
+                } else {
+                    // Append older messages to cache
+                    messageCache[bookId] = messageCache[bookId] ? [...messageCache[bookId], ...data.messages] : data.messages;
+                }
                 
                 // Re-render Discord-style messages
                 const container = document.getElementById(`discord-messages-${bookId}`);
