@@ -5,6 +5,14 @@ const bcrypt = require('bcrypt');
 const MetadataExtractor = require('../metadata-extractor');
 const { validate, schemas } = require('../lib/validators');
 
+const VALID_SCHEMA_PATTERN = /^[a-z_][a-z0-9_]*$/i;
+function assertValidSchemaName(schema) {
+    if (!schema || !VALID_SCHEMA_PATTERN.test(schema)) {
+        throw new Error('Invalid schema name');
+    }
+    return schema;
+}
+
 function registerBooksRoutes(app, deps) {
     const { pool, bots, helpers, middleware, tenantMiddleware, logger, fractalId, constants } = deps;
     
@@ -787,6 +795,8 @@ function registerBooksRoutes(app, deps) {
                     tenantSchema = registryLookup.rows[0].tenant_schema;
                 }
             }
+            
+            assertValidSchemaName(tenantSchema);
             
             const bookResult = await client.query(
                 `SELECT id, name, output_credentials, created_at FROM ${tenantSchema}.books WHERE fractal_id = $1`,
