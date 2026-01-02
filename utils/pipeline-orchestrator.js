@@ -145,17 +145,24 @@ class PipelineOrchestrator {
         console.log(`🔬 S-1: Processing ${photos.length} photo(s) with Groq Vision...`);
         for (const photo of photos.slice(0, 5)) { // Max 5 photos
           try {
-            // Extract base64 and determine content type
+            // Extract base64 and content type from data URL
+            // Format: data:image/jpeg;base64,xxxx
             const photoData = photo.data || '';
-            const base64 = photoData.includes('base64,') 
-              ? photoData.split('base64,')[1] 
-              : photoData;
             const photoName = photo.name || 'image';
-            const photoType = photo.type || 'image';
-            const contentType = photoType.includes('/') ? photoType : 
-              photoName.endsWith('.png') ? 'image/png' :
-              photoName.endsWith('.gif') ? 'image/gif' :
-              photoName.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+            let base64 = photoData;
+            let contentType = 'image/jpeg'; // Default fallback
+            
+            // Parse data URL to get actual content type (frontend may convert PNG to JPEG during resize)
+            const dataUrlMatch = photoData.match(/^data:([^;]+);base64,(.+)$/);
+            if (dataUrlMatch) {
+              contentType = dataUrlMatch[1]; // Actual MIME type from data URL
+              base64 = dataUrlMatch[2];      // Raw base64 without prefix
+            } else if (photoData.includes('base64,')) {
+              // Fallback: just extract base64 portion
+              base64 = photoData.split('base64,')[1];
+            }
+            
+            console.log(`📷 S-1: Photo ${photoName} detected as ${contentType}`);
             
             const visionResult = await analyzeImageWithGroqVision(
               base64, contentType, PLAYGROUND_GROQ_VISION_TOKEN, photoName
