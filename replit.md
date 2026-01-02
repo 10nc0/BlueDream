@@ -14,35 +14,25 @@
 The system utilizes a Node.js backend with Express and a Single Page Application (SPA) frontend, featuring an Apple glassmorphism design and a Discord-style two-pane layout with real-time updates. It treats financial statements as physical systems, applying conservation laws and sustainability metrics.
 
 **3-Layer Perception-Substrate-Cognition Model:**
-- **L1: Perception (attachment-cascade.js + attachment-ingestion.js)**: File classification, extraction, and cache hydration.
-- **L2: Substrate (data-package.js)**: Immutable state containers, shared caches, and system constants.
-- **L3: Cognition (pipeline-orchestrator.js)**: 7-stage state machine (S-1 to S6) for reasoning and auditing.
-
-**Pipeline Stage Responsibilities (Clean Separation):**
-- **S-1 Context Extractor (utils/context-extractor.js)**: Pure extraction only - entities from history, memory management, attachment metadata. NO mode decisions.
-- **S0 Preflight Router (utils/preflight-router.js)**: Single source of truth for mode detection. Classifies queries, fetches external data, sets `state.mode`.
-- **Mode Registry (lib/mode-registry.js)**: Centralized code detection (isCodeFile, isCodeContent, detectCodeMode) - no duplication across stages.
+- **L1: Perception**: File classification, extraction, and cache hydration.
+- **L2: Substrate**: Immutable state containers, shared caches, and system constants.
+- **L3: Cognition**: 7-stage state machine (S-1 to S6) for reasoning and auditing.
 
 **7-Layer AI Processing Pipeline:**
-- **Layer 7: AI Interface** (user interaction)
+- **Layer 7: AI Interface**
 - **Layer 6: Orchestration** (7-stage state machine)
 - **Layer 5: Verification** (two-pass LLM output validation)
-- **Layer 4: Memory & Context** (session state management)
+- **Layer 4: Memory & Context**
 - **Layer 3: Perception** (document parsing, financial physics)
 - **Layer 2: Measurement** (3D financial analysis: θ, z, R)
 - **Layer 1: Identity** (system prompts, routing)
-- **Layer 0: Constants** (φ=1.618 thresholds, conservation laws)
+- **Layer 0: Constants**
 
 **UI/UX Decisions:**
 - Adaptive & Responsive Design for various devices.
 - Enhanced Touch Interactions for mobile.
 - Visuals include a cat animation, blinking date/time, Discord-style message layout, and fixed scroll for messages.
-- **LayoutController (public/js/layout-controller.js)**: Unified state machine for UI modes:
-  - Device detection (mobile/desktop with foldable device support)
-  - Expansion states (collapsed, expanding, expanded, collapsing)
-  - Animation timing and locking (eliminates race conditions)
-  - Auto-collapse timers for mobile thumbs zone
-  - Replaces scattered layout state variables (77 references consolidated)
+- `LayoutController`: Unified state machine for UI modes, handling device detection, expansion states, animation timing, and auto-collapse timers.
 
 **Technical Implementations:**
 - **Authentication**: Email/password with JWT, role-based access control, secure password recovery, isolated user data.
@@ -55,89 +45,29 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **AI Playground**: Public, unauthenticated multimodal AI playground with multi-file upload, dynamic capacity sharing, abuse prevention, query classification, smart retry, document parsing, and real-time knowledge search.
     - **AI Processing Pipeline**: A 7-stage state machine for context extraction, preflight, context building, reasoning, auditing, retrying, personality application, and output finalization.
     - **Sliding Window Memory**: 8-message context window with periodic summarization.
-    - **DataPackage Flow**: JSON container per message, immutable after finalization.
 - **Nyan Protocol**: System prompt framework for historical comparison and socio-economic analysis, using a Seed Metric to prevent LLM hallucinations via mandatory source requirements.
 - **Financial Physics System**: 4-tier architecture extending NYAN Protocol for financial cognition.
 - **Legal Document Analysis System**: Auto-triggered extension for contract analysis.
-- **Ψ-EMA System**: Fourier compass for time series — calibrates position (θ, z, R) relative to equilibrium (θ=0°), like Google Maps for Hilbert space instead of geospace.
-  - **ehi passiko**: "Come and see" — users upload CSV/SQL/TXT time series, apply the compass, diagnose anomalies themselves. No predictions, no mysticism, just coordinates.
-  - **Coordinate System**:
-    - **θ (phase angle)**: atan2(stock, flow). Binary interpretation for mature series (e.g., SPY): +θ = SURVIVAL (continuation), -θ = DECAY (pullback). Oscillates in tight band around 90° due to massive stock denominator.
-    - **z (anomaly)**: deviation from median via MAD with 50-period rolling window (vφ⁷: 2-pass Excel-validated calculation).
-      - Pass 1: Rolling Median = 50-period median of STOCK (prices)
-      - Pass 2: MAD = 50-period median of |Stock - Rolling Median|, then z = (Stock - Rolling Median) / (MAD × 1.4826)
-      - Warm-up tribute: 98 rows (49+49) before first valid z-score
-      - 77.16% φ-band occupancy, p < 10⁻²⁵ statistical significance (prioritizes truth over speed)
-      - |z|<φ normal, φ<|z|<φ² alert, |z|>φ² extreme.
-    - **R (convergence)**: φ-Orbital model using orbital mechanics analogy:
-      - R > φ² (2.618): ESCAPE - bubble → crash (escape velocity)
-      - R ∈ [φ, φ²] (1.618-2.618): OPTIMISM - accelerating orbit
-      - R ∈ [φ⁻¹, φ] (0.618-1.618): BREATHING - circular orbit, golden rhythm
-      - R ∈ [φ⁻², φ⁻¹] (0.382-0.618): FATALISM_CLIFF - danger zone, decaying orbit
-      - R < φ⁻² + Z > 0: BULLISH_REVERSAL - capture zone but positive momentum
-      - R < φ⁻² + Z ≤ 0: FATALISM - capture velocity → void
-    - **Phase Reversals (R < 0)**: Z-score-aware reversal classification:
-      - R < 0 + Z < 0: PANIC_REVERSAL - accelerating selloff (falling + direction change)
-      - R < 0 + Z > 0: RELIEF_REVERSAL - distribution/profit taking (above median + direction change)
-      - R < 0 + Z unavailable: fallback to PHASE_REVERSAL (|R|>φ) or DAMPED_REVERSAL (|R|≤φ)
-  - **Tool-First Design**: Framework measures where you ARE on the wave, not where you're going. Users navigate; the compass just shows true north (equilibrium).
-- **Unified Personality Layer**: Enforces formatting via regex post-processing. Includes **Epistemic Transparency** — distinguishes verified facts ("From the CSV, I can verify...") from inferred conclusions ("I'm inferring... based on...") with ✓/⚠️ markers in confidence sections.
-- **Mode Registry (lib/mode-registry.js)**: Plug-and-play mode configuration for the 7-stage pipeline:
-  - Each mode declares: detection heuristics, personality formatting rules (skipIntroOutro, preserveVerdicts)
-  - Modes: `psi-ema`, `psi-ema-identity`, `forex`, `seed-metric`, `legal`, `code-audit`, `general`
-  - Code detection uses soft consensus (2+ pattern matches) to avoid Excel/data false positives
-  - Personality layer reads from registry instead of hardcoded if-else chains
-- **Code Audit Mode**: Professional security auditor for uploaded code files:
-  - Detects .js/.ts/.py/.go/.java/.cpp/etc. via extension + content patterns (console.log, const, require, async/await)
-  - Preserves technical verdicts (🟢/🟡/🔴) through S5 personality layer
-  - Prompt: getCodeReviewPrompt() in prompts/code-analysis.js
-- **Code Execution Honesty**: AI provides code for user execution but does not execute it itself.
-- **Harmonized Document Processing**: Unified architecture between attachment-cascade.js and data-package.js:
-  - **DocumentExtractionCache**: Shared tenant-scoped cache (globalDocCache) replaces local extraction caches
-  - **FILE_TYPES**: Centralized constants in data-package.js for document classification
-  - **processDocumentForAI**: Wrapper function with tenantId option for cache scoping
-  - **Cache Key**: SHA-256 hash of document content + tenant prefix for isolation
-  - **Code-audit priority**: Uploaded code files override forex/general mode detection
+- **Ψ-EMA System**: Fourier compass for time series analysis, providing coordinates (θ, z, R) relative to equilibrium for diagnostics.
+- **Unified Personality Layer**: Enforces formatting via regex post-processing and includes Epistemic Transparency to distinguish verified facts from inferred conclusions.
+- **Mode Registry**: Plug-and-play mode configuration for the 7-stage pipeline, including modes like `psi-ema`, `forex`, `seed-metric`, `legal`, `code-audit`, and `general`.
+- **Code Audit Mode**: Professional security auditor for uploaded code files, detecting multiple programming languages.
+- **Harmonized Document Processing**: Unified architecture between `attachment-cascade.js` and `data-package.js` using a shared tenant-scoped `DocumentExtractionCache`.
 
 **System Design Choices:**
-- **Multi-Tenant Isolation**: Complete data separation via database schemas.
+- **Multi-Tenant Isolation**: Complete data separation via PostgreSQL schemas.
 - **Zero-Friction Onboarding**: WhatsApp deep link activation.
 - **Scalability & Recovery**: Designed for Replit Autoscale, PostgreSQL for state recovery.
-- **Push Guard vs Pull Action Pattern**: O(1) validation before expensive work.
-- **Security (10/10 Hardened)**: Sybil attack prevention, JWT security (15-min access token + refresh token revocation), session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, CSP compliance, dev-role bypass blocked in production.
+- **Security (10/10 Hardened)**: Sybil attack prevention, JWT security, session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, CSP compliance.
 - **Discord Bot Trinity Architecture**: Hermes (write-only), Thoth (read-only), Idris (AI write-only), Horus (AI read-only).
-- **Vegapunk Kernel Architecture**: Factory pattern with dependency injection. Named after Dr. Vegapunk (One Piece) - the genius who splits consciousness into satellite bodies while maintaining a pure core. vegapunk.js orchestrates 5 modular routes (satellites) via DI.
-  - **Kernel (vegapunk.js)**: 1299 lines (85% reduction from 8500-line monolith)
-  - **Routes (satellites)**: auth.js (1335), books.js (1381: CRUD + drops + messages + search + export), inpipe.js (405), prometheus.js (505), nyan-ai.js (769)
-  - **Shared libs**: deps.js (85), phi-breathe.js (280: unified background task orchestrator), discord-webhooks.js (232), heal-queue.js (266), logger.js (26), validators.js (137: Zod schemas), error-handler.js (108: global Express error middleware)
-  - **Total endpoints**: 62 (health/pages: 11, auth: 19, books: 22 [includes export], inpipe: 1, prometheus: 4, nyan-ai: 5)
-  - **Code stats**: Kernel ~1330 + Routes 4395 + Libs 829 = ~6554 total lines (route-registry inlined into kernel)
-  - Unified auth removes separate admin terminology (no admin/back-door impression)
-  - **Export consolidation**: Moved 2 export endpoints into books satellite for tighter cohesion
+- **Vegapunk Kernel Architecture**: Factory pattern with dependency injection, orchestrating 5 modular routes (auth, books, inpipe, prometheus, nyan-ai).
 - **AI Architecture Split**: Nyan AI (public playground) and Prometheus AI (authenticated ledger auditor) for independent rate limiting and security.
-- **Dual AI Engine Audit Panel**: Dashboard AI Audit modal supports engine selection (Local Prometheus vs Cloud Nyan AI) with multi-book chip selector. Nyan AI accesses book substrate via authenticated /api/nyan-ai/audit endpoint, loading user-selected book context from Discord threads.
-- **Phi Breathe Orchestrator**: Unified φ-rhythm background task scheduler (lib/phi-breathe.js) with:
-  - Continuous breathing logs (every inhale #1, #2, #3... exhale cycle)
-  - Heartbeat checkpoint every 86 breaths (~15min) for system status PULSE
-  - Memory cleanup (15min cycle, 1h max age)
-  - 3-day media purge (immediate + 24h cycle)
-  - 60-day dormancy contributor revocation (immediate + 24h cycle)
-  - Usage tracking via heartbeat subscription pattern. One φ-rhythm, multiple bells.
+- **Dual AI Engine Audit Panel**: Dashboard AI Audit modal supports engine selection with multi-book chip selector.
+- **Phi Breathe Orchestrator**: Unified φ-rhythm background task scheduler for continuous logs, heartbeat checkpoints, memory cleanup, media purge, and dormancy contributor revocation.
 - **Inpipe Architecture**: Multi-channel input with an abstract channel interface for extensibility.
 
-## Security Configuration
-- **Database SSL**: Supabase handles SSL/TLS automatically. Connection is always encrypted.
-- **Production Hardening** (via Supabase Dashboard):
-  1. Enable **Row Level Security (RLS)** on all tables (Authentication → Policies)
-  2. Enable **Attack Protection** with CAPTCHA for sign-up/sign-in (Authentication → Attack Protection)
-  3. Use **database functions and policies** to restrict direct table access
-  4. Store credentials in **environment variables** (never hardcode)
-- **Optional verify-full mode**: Set `DATABASE_CA_CERT` env var with Supabase CA (download from Dashboard → Settings → Database → SSL) for strict certificate verification
-- **Webhook Validation**: All external webhooks validated with Zod schemas + regex patterns
-- **Secrets Compartmentalization**: Route satellites receive only required dependencies via DI
-
 ## External Dependencies
-- **Database**: PostgreSQL (Supabase) with transaction pooler
+- **Database**: PostgreSQL (Supabase)
 - **WhatsApp**: Twilio WhatsApp Business API
 - **Email**: Resend API
 - **AI**: Groq API
