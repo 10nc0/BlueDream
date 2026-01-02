@@ -251,10 +251,8 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
     if (isImage) {
         // Progressive loading with blur placeholder
         const img = document.createElement('img');
+        img.className = 'discord-media-image';
         img.alt = `Media from Discord`;
-        img.style.width = '100%';
-        img.style.maxWidth = '500px';
-        img.style.height = 'auto';
         img.style.borderRadius = '8px';
         img.style.cursor = 'pointer';
         img.style.transition = 'filter 0.3s ease-in-out, transform 0.2s ease';
@@ -293,9 +291,8 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
         
     } else if (isVideo) {
         const video = document.createElement('video');
+        video.className = 'discord-media-video';
         video.controls = true;
-        video.style.width = '100%';
-        video.style.maxWidth = '600px';
         video.style.borderRadius = '8px';
         video.src = mediaUrl;
         

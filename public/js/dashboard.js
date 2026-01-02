@@ -899,6 +899,105 @@
                 .replace(/'/g, "&#039;");
         }
 
+        // Normalize a single media element to ensure container query constraints apply
+        function normalizeMediaElement(el) {
+            if (!el) return;
+            const tagName = el.tagName.toLowerCase();
+            
+            if (tagName === 'img') {
+                // Skip avatar images
+                if (el.classList.contains('avatar-photo')) return;
+                if (el.classList.contains('media-blur-placeholder')) return;
+                
+                // Add the constraining class if not present
+                if (!el.classList.contains('discord-media-image')) {
+                    el.classList.add('discord-media-image');
+                }
+                
+                // Remove conflicting inline styles
+                el.style.removeProperty('max-width');
+                el.style.removeProperty('max-height');
+                el.style.removeProperty('width');
+                el.style.removeProperty('height');
+            } else if (tagName === 'video') {
+                if (!el.classList.contains('discord-media-video')) {
+                    el.classList.add('discord-media-video');
+                }
+                el.style.removeProperty('max-width');
+                el.style.removeProperty('max-height');
+                el.style.removeProperty('width');
+                el.style.removeProperty('height');
+            }
+        }
+        
+        // Normalize all media images in a container
+        function normalizeMediaImages(container) {
+            if (!container) return;
+            
+            // Find all images inside embeds or attachments that aren't avatars
+            const mediaImages = container.querySelectorAll('.discord-embed img, .discord-attachment img, .discord-media-preview img, .media-progressive-container img');
+            mediaImages.forEach(normalizeMediaElement);
+            
+            // Same for videos
+            const mediaVideos = container.querySelectorAll('.discord-embed video, .discord-attachment video, .discord-media-preview video');
+            mediaVideos.forEach(normalizeMediaElement);
+        }
+        
+        // MutationObserver to auto-normalize media as it's added or modified in DOM
+        const mediaObserver = new MutationObserver((mutations) => {
+            mutations.forEach(mutation => {
+                // Handle newly added nodes
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType !== Node.ELEMENT_NODE) return;
+                        
+                        // Check if it's a media element itself
+                        if (node.tagName === 'IMG' || node.tagName === 'VIDEO') {
+                            // Only normalize if inside a message container
+                            if (node.closest('.discord-messages-container')) {
+                                normalizeMediaElement(node);
+                            }
+                        }
+                        
+                        // Check for media elements inside the added node
+                        if (node.querySelectorAll) {
+                            const imgs = node.querySelectorAll('img');
+                            const videos = node.querySelectorAll('video');
+                            imgs.forEach(img => {
+                                if (img.closest('.discord-messages-container')) {
+                                    normalizeMediaElement(img);
+                                }
+                            });
+                            videos.forEach(video => {
+                                if (video.closest('.discord-messages-container')) {
+                                    normalizeMediaElement(video);
+                                }
+                            });
+                        }
+                    });
+                }
+                
+                // Handle attribute changes (src swaps, style changes)
+                if (mutation.type === 'attributes') {
+                    const target = mutation.target;
+                    if (target.tagName === 'IMG' || target.tagName === 'VIDEO') {
+                        if (target.closest('.discord-messages-container')) {
+                            // Re-normalize on attribute changes to catch lazy-load src swaps
+                            normalizeMediaElement(target);
+                        }
+                    }
+                }
+            });
+        });
+        
+        // Start observing the document for media additions and attribute changes
+        mediaObserver.observe(document.body, { 
+            childList: true, 
+            subtree: true, 
+            attributes: true, 
+            attributeFilter: ['src', 'style'] 
+        });
+
         // Check authentication on page load (uses global window.authFetch)
         async function checkAuth() {
             try {
@@ -1786,7 +1885,7 @@
                                     </div>
                                 ` : ''}
                                 ${embed.footer ? `<div class="embed-footer" style="color: #72767D; font-size: 0.75rem; margin-top: 0.5rem;">${escapeHtml(embed.footer.text || embed.footer)}</div>` : ''}
-                                ${embed.image ? `<img src="${escapeHtml(embed.image.url || embed.image)}" style="max-width: 100%; border-radius: 4px; margin-top: 0.5rem;" alt="Embed image">` : ''}
+                                ${embed.image ? `<img src="${escapeHtml(embed.image.url || embed.image)}" class="discord-media-image" style="margin-top: 0.5rem;" alt="Embed image">` : ''}
                             </div>`;
                         }).join('') : ''}
                         ${msg.has_media ? `
@@ -1796,7 +1895,7 @@
                         ` : ''}
                         ${msg.media_url && !msg.has_media ? `
                             <div class="discord-attachment" style="margin-top: 0.5rem;">
-                                <img src="${escapeHtml(msg.media_url)}" style="max-width: 400px; border-radius: 4px;" alt="Discord attachment" loading="lazy" onerror="this.style.display='none'">
+                                <img src="${escapeHtml(msg.media_url)}" class="discord-media-image" alt="Discord attachment" loading="lazy" onerror="this.style.display='none'">
                             </div>
                         ` : ''}
                     </div>
@@ -5212,6 +5311,8 @@
                         if (window.initMediaLazyLoading) {
                             window.initMediaLazyLoading();
                         }
+                        // Normalize all media images to ensure container query constraints apply
+                        normalizeMediaImages(container);
                     }, 100);
                     
                     // Add infinite scroll listener (only on first load)

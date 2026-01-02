@@ -1102,12 +1102,13 @@ body::before {
 
 /* Media sizing relative to container (80% of visible pane height) */
 /* Fallback for older browsers: conservative vh-based cap */
+/* Uses !important to override any inline styles */
 .discord-media-image {
-  max-width: min(100%, 400px);
-  max-height: 350px; /* Fallback */
-  max-height: min(80cqh, 350px);
-  width: auto;
-  height: auto;
+  max-width: min(100%, 400px) !important;
+  max-height: 350px !important; /* Fallback */
+  max-height: min(80cqh, 350px) !important;
+  width: auto !important;
+  height: auto !important;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1123,10 +1124,11 @@ body::before {
 }
 
 .discord-media-video {
-  max-width: min(100%, 400px);
-  max-height: 300px; /* Fallback */
-  max-height: min(80cqh, 300px);
-  width: auto;
+  max-width: min(100%, 400px) !important;
+  max-height: 300px !important; /* Fallback */
+  max-height: min(80cqh, 300px) !important;
+  width: auto !important;
+  height: auto !important;
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   background: rgba(0, 0, 0, 0.3);
