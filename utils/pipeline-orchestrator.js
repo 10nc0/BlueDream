@@ -237,7 +237,8 @@ class PipelineOrchestrator {
         attachmentContext: state.contextResult.attachmentContext?.name || null,
         perceptionFiles: perception.files.length,
         extractedTextLength: perception.extractedText.length,
-        hasImageAttachment: state.hasImageAttachment
+        hasImageAttachment: state.hasImageAttachment,
+        extractedContent: normalizedInput.extractedContent // STORE ALL EXTRACTED DATA (including Vision results)
       });
       
       if (state.contextResult.inferredTicker) {
