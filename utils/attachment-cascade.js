@@ -2268,5 +2268,7 @@ module.exports = {
     processDocumentForAI,
     // New functions for multi-doc corporate support
     intelligentChunking,
-    buildMultiDocContext
+    buildMultiDocContext,
+    // Vision analysis for direct image processing
+    analyzeImageWithGroqVision
 };

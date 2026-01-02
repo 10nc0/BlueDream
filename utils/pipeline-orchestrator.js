@@ -52,6 +52,7 @@ const PIPELINE_STEPS = {
 };
 
 const { AttachmentIngestion } = require('./attachment-ingestion');
+const { analyzeImageWithGroqVision } = require('./attachment-cascade');
 
 class PipelineState {
   constructor(tenantId = null) {
@@ -120,25 +121,78 @@ class PipelineOrchestrator {
     // ========================================
     state.transition(PIPELINE_STEPS.CONTEXT_EXTRACT);
 
-    // L1 Perception Ingestion
-    const perception = await AttachmentIngestion.ingest(
-      input.attachments || [],
-      tenantId
-    );
+    // L1 Perception Ingestion (only if raw attachments provided)
+    const rawAttachments = input.attachments || [];
+    const perception = await AttachmentIngestion.ingest(rawAttachments, tenantId);
 
-    // Merge ingested content into input for downstream stages
-    normalizedInput.extractedContent = perception.files;
-    normalizedInput.extractedText = perception.extractedText;
+    // Merge ingested content - only overwrite if perception produced files
+    // This preserves pre-processed extractedContent from routes (e.g., playground vision)
+    if (perception.hasAttachments && perception.files.length > 0) {
+      normalizedInput.extractedContent = perception.files;
+      normalizedInput.extractedText = perception.extractedText;
+    } else {
+      // Preserve extractedText from input if provided (e.g., from route pre-processing)
+      normalizedInput.extractedText = input.extractedText || '';
+    }
 
     // Detect image attachments early (for S4 retry logic)
-    const rawAttachments = input.attachments || [];
-    state.hasImageAttachment = rawAttachments.some(att => {
-      const name = (att.name || att.fileName || '').toLowerCase();
-      const mime = (att.mimeType || att.type || '').toLowerCase();
-      return /\.(jpg|jpeg|png|gif|webp|bmp)$/.test(name) || mime.startsWith('image/');
-    });
+    // Check multiple sources: isVisionRequest flag, photos array, or raw attachments
+    const photos = input.photos || [];
+    state.hasImageAttachment = 
+      input.isVisionRequest === true ||
+      photos.length > 0 ||
+      rawAttachments.some(att => {
+        const name = (att.name || att.fileName || '').toLowerCase();
+        const mime = (att.mimeType || att.type || '').toLowerCase();
+        return /\.(jpg|jpeg|png|gif|webp|bmp)$/.test(name) || mime.startsWith('image/');
+      });
     if (state.hasImageAttachment) {
-      console.log(`🖼️ S-1: Image attachment detected - search retry will be skipped`);
+      console.log(`🖼️ S-1: Image attachment detected (photos=${photos.length}, isVision=${input.isVisionRequest}) - search retry will be skipped`);
+    }
+
+    // Process photos through Groq Vision if present
+    if (photos.length > 0) {
+      const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
+      if (PLAYGROUND_GROQ_VISION_TOKEN) {
+        console.log(`🔬 S-1: Processing ${photos.length} photo(s) with Groq Vision...`);
+        for (const photo of photos.slice(0, 5)) { // Max 5 photos
+          try {
+            // Extract base64 and determine content type
+            const photoData = photo.data || '';
+            const base64 = photoData.includes('base64,') 
+              ? photoData.split('base64,')[1] 
+              : photoData;
+            const photoName = photo.name || 'image';
+            const photoType = photo.type || 'image';
+            const contentType = photoType.includes('/') ? photoType : 
+              photoName.endsWith('.png') ? 'image/png' :
+              photoName.endsWith('.gif') ? 'image/gif' :
+              photoName.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+            
+            const visionResult = await analyzeImageWithGroqVision(
+              base64, contentType, PLAYGROUND_GROQ_VISION_TOKEN, photoName
+            );
+            
+            if (visionResult && visionResult.description) {
+              const typeLabel = visionResult.contentType === 'chemical' ? '🧪 Chemical Structure' :
+                               visionResult.contentType === 'chart' ? '📊 Chart/Graph' :
+                               visionResult.contentType === 'diagram' ? '📐 Diagram' : '🖼️ Visual';
+              const visionText = `**${photoName} (${typeLabel}):**\n${visionResult.description}`;
+              normalizedInput.extractedContent.push({
+                fileName: photoName,
+                extractedText: visionText,
+                fileType: 'image',
+                type: 'image-vision'
+              });
+              console.log(`✅ S-1: Vision analysis complete for ${photoName}`);
+            }
+          } catch (visionError) {
+            console.error(`❌ S-1: Vision analysis error: ${visionError.message}`);
+          }
+        }
+      } else {
+        console.log(`⚠️ S-1: PLAYGROUND_GROQ_VISION_TOKEN not configured - skipping vision analysis`);
+      }
     }
 
     // Track if this is first query for NYAN boot optimization
