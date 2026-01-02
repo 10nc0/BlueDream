@@ -1095,27 +1095,28 @@ body::before {
 }
 
 .discord-media-image {
-  max-width: 350px;
-  max-height: 250px;
+  max-width: 180px;
+  max-height: 180px;
   width: auto;
   height: auto;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid var(--color-border);
   display: block;
+  object-fit: cover;
 }
 
 .discord-media-image:hover {
-  transform: scale(1.02);
+  transform: scale(1.03);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   border-color: var(--color-border-hover);
 }
 
 .discord-media-video {
-  max-width: 500px;
-  width: 100%;
-  border-radius: var(--radius-md);
+  max-width: 200px;
+  max-height: 150px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   background: rgba(0, 0, 0, 0.3);
 }
@@ -3478,12 +3479,14 @@ body.desktop-mode .thumbs-zone {
         margin-left: 0.25rem !important;
     }
     
-    /* Message images optimized for tap */
+    /* Message images optimized for tap - WhatsApp-style thumbnails */
     .discord-media-preview img,
     .message img {
-        border-radius: 12px;
-        margin: 8px 0;
-        max-width: 100%;
+        border-radius: 8px;
+        margin: 6px 0;
+        max-width: 150px;
+        max-height: 150px;
+        object-fit: cover;
         cursor: zoom-in;
         -webkit-tap-highlight-color: rgba(168, 85, 247, 0.3);
     }
