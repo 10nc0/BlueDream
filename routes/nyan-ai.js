@@ -766,8 +766,14 @@ Respond in ${language || 'the same language as the user query'}.`
             }
             
             const photoList = [];
-            if (photos && photos.length > 0) {
-                photoList.push(...photos);
+            if (photos && Array.isArray(photos)) {
+                photos.forEach((p, idx) => {
+                    if (typeof p === 'string') {
+                        photoList.push({ name: `photo-${idx}`, data: p, type: 'photo' });
+                    } else if (p && p.data) {
+                        photoList.push(p);
+                    }
+                });
             }
             if (photo) {
                 photoList.push({ name: 'image', data: photo, type: 'image' });
@@ -921,8 +927,14 @@ Respond in ${language || 'the same language as the user query'}.`
             }
             
             const photoList = [];
-            if (photos && photos.length > 0) {
-                photoList.push(...photos);
+            if (photos && Array.isArray(photos)) {
+                photos.forEach((p, idx) => {
+                    if (typeof p === 'string') {
+                        photoList.push({ name: `photo-${idx}`, data: p, type: 'photo' });
+                    } else if (p && p.data) {
+                        photoList.push(p);
+                    }
+                });
             }
             if (photo) {
                 photoList.push({ name: 'image', data: photo, type: 'image' });
