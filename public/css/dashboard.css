@@ -1094,9 +1094,18 @@ body::before {
   max-width: 100%;
 }
 
+/* Container query setup: message container is the sizing reference */
+.discord-messages-container {
+  container-type: size;
+  container-name: messages-pane;
+}
+
+/* Media sizing relative to container (80% of visible pane height) */
+/* Fallback for older browsers: conservative vh-based cap */
 .discord-media-image {
-  max-width: 100%;
-  max-height: 75vh;
+  max-width: min(100%, 400px);
+  max-height: 350px; /* Fallback */
+  max-height: min(80cqh, 350px);
   width: auto;
   height: auto;
   border-radius: var(--radius-sm);
@@ -1114,8 +1123,9 @@ body::before {
 }
 
 .discord-media-video {
-  max-width: 100%;
-  max-height: 75vh;
+  max-width: min(100%, 400px);
+  max-height: 300px; /* Fallback */
+  max-height: min(80cqh, 300px);
   width: auto;
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
@@ -3480,18 +3490,29 @@ body.desktop-mode .thumbs-zone {
         margin-left: 0.25rem !important;
     }
     
-    /* Message images optimized for tap - Dynamic sizing */
+    /* Message images optimized for tap - Capped to fit container */
     .discord-media-preview img,
     .message img {
         border-radius: 8px;
         margin: 6px 0;
-        max-width: 100%;
-        max-height: 75vh;
+        max-width: min(100%, 300px);
+        max-height: min(80cqh, 280px);
         width: auto;
         height: auto;
         object-fit: contain;
         cursor: zoom-in;
         -webkit-tap-highlight-color: rgba(168, 85, 247, 0.3);
+    }
+    
+    /* Mobile-specific media constraints (container-relative) */
+    .discord-media-image {
+        max-width: min(100%, 300px) !important;
+        max-height: min(80cqh, 280px) !important;
+    }
+    
+    .discord-media-video {
+        max-width: min(100%, 300px) !important;
+        max-height: min(80cqh, 250px) !important;
     }
     
     /* Disable text selection on touch (except inputs) */
