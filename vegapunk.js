@@ -1089,7 +1089,7 @@ async function createSessionRecord(userId, sessionId, req, tenantSchema) {
 
         // Use tenant-scoped active_sessions table
         await pool.query(`
-            INSERT INTO ${tenantSchema}.active_sessions (user_id, session_id, ip_address, user_agent, device_type, browser, os, location)
+            INSERT INTO "${tenantSchema}".active_sessions (user_id, session_id, ip_address, user_agent, device_type, browser, os, location)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `, [userId, sessionId, req.ip, userAgent, deviceType, browser, os, location]);
         
@@ -1125,13 +1125,13 @@ async function logAudit(client, req, actionType, targetType, targetId, targetEma
         
         // Fetch email if we have userId but not email (from tenant-scoped users table)
         if (actorUserId && !actorEmail) {
-            const userResult = await client.query(`SELECT email FROM ${schema}.users WHERE id = $1`, [actorUserId]);
+            const userResult = await client.query(`SELECT email FROM "${schema}".users WHERE id = $1`, [actorUserId]);
             actorEmail = userResult.rows[0]?.email || null;
         }
         
         // Use tenant-scoped audit_logs table
         await client.query(`
-            INSERT INTO ${schema}.audit_logs (
+            INSERT INTO "${schema}".audit_logs (
                 actor_user_id, action_type, target_type, 
                 target_id, details, ip_address, user_agent
             ) VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -1224,7 +1224,7 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
             
             // Find book by fractal_id
             const bookResult = await client.query(
-                `SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                `SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM "${tenantSchema}".books WHERE fractal_id = $1`,
                 [fractalIdParam]
             );
             
