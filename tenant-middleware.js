@@ -84,9 +84,11 @@ async function setTenantContext(req, res, next) {
         }
         
         // Get user's full details from tenant-scoped table
+        // Use quoted identifier for schema (defense-in-depth, already validated by regex above)
+        const quotedSchema = '"' + tenant_schema.replace(/"/g, '""') + '"';
         const userResult = await client.query(
             `SELECT id, email, role, tenant_id, is_genesis_admin 
-             FROM ${tenant_schema}.users 
+             FROM ${quotedSchema}.users 
              WHERE id = $1 AND email = $2`,
             [userId, userEmail]
         );
