@@ -60,7 +60,8 @@ const DISCORD = {
 // ==================== AI Models ====================
 const AI_MODELS = {
   TEXT_MODEL: 'llama-3.3-70b-versatile',
-  VISION_MODEL: 'llama-3.3-70b-versatile',
+  VISION_MODEL: 'llama-3.2-11b-vision-preview', // Vision-capable model for image analysis
+  VISION: 'llama-3.2-11b-vision-preview',       // Alias for backward compatibility
   AUDIO_MODEL: 'whisper-large-v3-turbo',
   
   // Temperature settings (H₀ protocol: 0.15 for reasoning, avoids hallucination)
