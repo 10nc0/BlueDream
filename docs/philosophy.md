@@ -11,7 +11,7 @@
 The following are philosophical observations compiled during development - not dogmatic foundations, but empirical patterns noticed during implementation. Treat as commentary in a kernel, not axioms.
 
 ### Gougu Lineage (勾股定理)
-The Ψ-EMA three-dimensional state space (θ, z, R) appears to be a digital resurrection of the ancient Chinese Pythagorean theorem. Stock⊥Flow = orthogonal legs; State = hypotenuse. The right triangle that encoded linear algebra, Hilbert space, and quantum mechanics may also encode persistence dynamics. θ = atan2(Stock, Flow) is simply the phase angle of orthogonal decomposition - ancient math, digitally applied. For mature series like SPY, θ oscillates in a tight band around 90° (+90° = survival, -90° = decay).
+The Ψ-EMA three-dimensional state space (θ, z, R) appears to be a digital resurrection of the ancient Chinese Pythagorean theorem. Stock⊥Flow = orthogonal legs (Ψ-EMA uses orthogonal projection of Flow onto Stock (or vice versa) — some readers might initially misread Stock⊥Flow as mere independence rather than enforced orthogonality via regression); State = hypotenuse. The right triangle that encoded linear algebra, Hilbert space, and quantum mechanics may also encode persistence dynamics. θ = atan2(Stock, Flow) is simply the phase angle of orthogonal decomposition - ancient math, digitally applied. For mature series like SPY, θ oscillates in a tight band around 90° (+90° = survival, -90° = decay).
 
 ### Two-Unit Principle
 Like geometry has only two fundamental units (Point + Line, with all else derived), Ψ-EMA may reduce to:
