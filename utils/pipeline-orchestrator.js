@@ -895,23 +895,60 @@ User query: ${query}`;
     const isTetralemma = isFalseDichotomy(query);
     const auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
     
-    // Build combined context: uploaded documents + web search results
-    // This allows audit to see that web search was used and approve sourced answers
-    const contextParts = [];
+    // Build DIALECTICAL context structure for audit pass
+    // (I) Thesis = Known facts & sources (built here where all data is available)
+    // (II) Antithesis = User query  
+    // (III) Synthesis = Draft answer
+    const thesisParts = [];
+    
+    // Extracted content from documents (passed via input)
     if (extractedContent?.length > 0) {
-      contextParts.push('=== UPLOADED DOCUMENTS ===\n' + extractedContent.join('\n'));
+      const contentPreview = extractedContent.slice(0, 3).map(c => 
+        typeof c === 'string' ? c.slice(0, 1500) : JSON.stringify(c).slice(0, 500)
+      ).join('\n---\n');
+      thesisParts.push(`📎 UPLOADED DOCUMENTS:\n${contentPreview.slice(0, 5000)}`);
     }
+    
+    // Web search results (populated by preflight or retry)
     if (state.searchContext && state.didSearch) {
-      contextParts.push('=== WEB SEARCH RESULTS ===\n' + state.searchContext);
+      thesisParts.push(`🔍 WEB SEARCH RESULTS:\n${state.searchContext.slice(0, 3000)}`);
     }
-    const combinedContext = contextParts.length > 0 ? contextParts.join('\n\n') : null;
+    
+    // Conversation memory context
+    if (state.contextResult?.hasMemory) {
+      const memoryPreview = (input.conversationHistory || [])
+        .slice(-3)
+        .filter(m => m?.content)
+        .map(m => `${m.role}: ${String(m.content).slice(0, 200)}...`)
+        .join('\n');
+      if (memoryPreview) {
+        thesisParts.push(`💭 CONVERSATION MEMORY:\n${memoryPreview}`);
+      }
+    }
+    
+    // Ψ-EMA pre-verified data
+    if (state.preflight?.psiEmaAnalysis) {
+      thesisParts.push(`📊 Ψ-EMA DATA: Pre-verified yfinance stock data injected`);
+    }
+    
+    // Stock context from preflight
+    if (state.preflight?.stockContext) {
+      thesisParts.push(`📈 STOCK CONTEXT: Real-time market data available`);
+    }
+    
+    // Build dialectical structure for audit
+    const dialecticalContext = {
+      thesis: thesisParts.length > 0 ? thesisParts.join('\n\n') : 'No external sources used (LLM knowledge only)',
+      antithesis: query,
+      synthesis: state.draftAnswer
+    };
     
     try {
       state.auditResult = await runAuditPass(
         this.groqToken,
         state.draftAnswer,
         query,
-        combinedContext,
+        dialecticalContext,
         {
           usesFinancialPhysics: state.preflight.routingFlags?.usesFinancialPhysics,
           usesChemistry: false,
@@ -919,7 +956,8 @@ User query: ${query}`;
           usesPsiEMA: state.mode === 'psi-ema',
           isSeedMetric,
           isTetralemma,
-          auditMode
+          auditMode,
+          useDialectical: true
         },
         12000
       );

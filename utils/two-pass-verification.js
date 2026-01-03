@@ -30,15 +30,38 @@ async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, 
     isSeedMetric: extensions.isSeedMetric,
     isTetralemma: extensions.isTetralemma,
     auditMode: extensions.auditMode,
+    useDialectical: extensions.useDialectical,
     currentDate: new Date().toISOString().split('T')[0]
   });
 
+  // Build audit message based on dialectical structure or legacy format
+  let auditContent;
+  if (extensions.useDialectical && userContext && typeof userContext === 'object') {
+    // Dialectical format: thesis/antithesis/synthesis structure
+    auditContent = `═══════════════════════════════════════════════════════════════
+(I) THESIS — Known Facts & Sources
+═══════════════════════════════════════════════════════════════
+${userContext.thesis || 'No external sources used (LLM knowledge only)'}
+
+═══════════════════════════════════════════════════════════════
+(II) ANTITHESIS — User Query
+═══════════════════════════════════════════════════════════════
+${userContext.antithesis || originalQuery}
+
+═══════════════════════════════════════════════════════════════
+(III) SYNTHESIS — Draft Answer to Audit
+═══════════════════════════════════════════════════════════════
+${draftAnswer}
+
+Perform the dialectical audit and output JSON only.`;
+  } else {
+    // Legacy flat format
+    auditContent = `ORIGINAL QUERY:\n${originalQuery}\n\nCONTEXT PROVIDED:\n${userContext || 'None'}\n\nDRAFT ANSWER TO AUDIT:\n${draftAnswer}\n\nPerform the audit and output JSON only.`;
+  }
+
   const auditMessages = [
     { role: 'system', content: auditPrompt },
-    { 
-      role: 'user', 
-      content: `ORIGINAL QUERY:\n${originalQuery}\n\nCONTEXT PROVIDED:\n${userContext || 'None'}\n\nDRAFT ANSWER TO AUDIT:\n${draftAnswer}\n\nPerform the audit and output JSON only.`
-    }
+    { role: 'user', content: auditContent }
   ];
 
   try {
@@ -98,7 +121,8 @@ async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, 
       confidence: parsed.confidence || 80,
       checksPass: parsed.checksPass || [],
       issues: parsed.issues || [],
-      suggestedFixes: parsed.suggestedFixes || []
+      suggestedFixes: parsed.suggestedFixes || [],
+      dialecticalAnalysis: parsed.dialecticalAnalysis || null
     };
   } catch (err) {
     if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {

@@ -213,15 +213,55 @@ const AUDIT_SEED_METRIC_TOPICS = [
   'city comparison'
 ];
 
+const AUDIT_DIALECTICAL = `
+═══════════════════════════════════════════════════════════════
+DIALECTICAL AUDIT FRAMEWORK (Hegelian Method)
+═══════════════════════════════════════════════════════════════
+
+You will receive input structured as:
+(I) THESIS — Known Facts & Sources (what we know/found)
+(II) ANTITHESIS — User Query (the challenge/question)  
+(III) SYNTHESIS — Draft Answer (the AI's resolution)
+
+DIALECTICAL VERIFICATION CHECKLIST:
+
+1. THESIS GROUNDING (Sources → Claims)
+   □ Are all factual claims in SYNTHESIS traceable to THESIS sources?
+   □ Are there claims in SYNTHESIS not supported by THESIS? (= potential hallucination)
+   □ If THESIS is empty, does SYNTHESIS acknowledge using LLM knowledge?
+
+2. ANTITHESIS RESOLUTION (Question → Answer)
+   □ Does SYNTHESIS actually address the question in ANTITHESIS?
+   □ Are implied constraints in ANTITHESIS respected?
+   □ Is any part of ANTITHESIS ignored or deflected?
+
+3. SYNTHESIS INTEGRITY (Internal Consistency)
+   □ Are source citations in SYNTHESIS accurate to THESIS?
+   □ Is the reasoning logically consistent?
+   □ Are confidence levels aligned with THESIS data quality?
+
+RED FLAGS BY LAYER:
+- THESIS thin + SYNTHESIS bold claims = likely hallucination
+- ANTITHESIS specific + SYNTHESIS vague = evasion
+- THESIS rich + SYNTHESIS ignores it = context bleed from LLM pretraining
+
+`;
+
 const AUDIT_OUTPUT_SCHEMA = `
 OUTPUT FORMAT (JSON only, no markdown):
 {
   "verdict": "APPROVED" | "FIXABLE" | "REJECTED",
   "confidence": 0-100,
   "checksPass": ["list", "of", "passed", "checks"],
+  "dialecticalAnalysis": {
+    "thesisGrounding": "STRONG" | "WEAK" | "NONE",
+    "antithesisResolution": "COMPLETE" | "PARTIAL" | "NONE",
+    "synthesisIntegrity": "SOUND" | "FLAWED"
+  },
   "issues": [
     {
-      "severity": "CRITICAL" | "MAJOR" | "MINOR",
+      "severity": "CRITICAL" | "HIGH" | "MAJOR" | "MINOR",
+      "layer": "THESIS" | "ANTITHESIS" | "SYNTHESIS",
       "check": "which check failed",
       "quote": "exact text that is problematic",
       "reason": "why this is a problem"
@@ -237,6 +277,11 @@ Confidence is determined by DATA QUALITY TIER USED in the response:
 - 95% confidence: Response uses EXACT DATA (verified sources, real-time data, direct quotes from documents)
 - 80% confidence: Response uses PROXY AVAILABLE (interpolated/estimated data, clearly flagged, proxy method documented)
 - <50% confidence: Response admits NOTHING (insufficient data, honest refusal, no data available)
+
+DIALECTICAL CONFIDENCE MODIFIER:
+- thesisGrounding=STRONG → +10% to base confidence
+- thesisGrounding=NONE + bold claims → cap confidence at 60%
+- antithesisResolution=NONE → automatic FIXABLE
 
 VERDICT RULES (Map to hierarchy above):
 - APPROVED: All checks pass + uses EXACT DATA or properly flagged PROXY → confidence 95% or 80%
@@ -287,6 +332,7 @@ function buildAuditPrompt(options = {}) {
     isSeedMetric = false,
     isTetralemma = false,
     auditMode = 'STRICT', // 'RESEARCH' | 'STRICT'
+    useDialectical = false,
     currentDate = new Date().toISOString().split('T')[0]
   } = options;
 
@@ -298,6 +344,11 @@ function buildAuditPrompt(options = {}) {
 YOUR SOLE PURPOSE: Detect hallucination, fabrication, and context leakage in the draft answer.
 
 `;
+
+  // Add dialectical framework if enabled
+  if (useDialectical) {
+    prompt += AUDIT_DIALECTICAL + '\n';
+  }
 
   // ===== STEP 1: EXTENSION CHECKS FIRST (Strict protocols) =====
   // These override base mode rules if triggered
@@ -419,6 +470,7 @@ module.exports = {
   AUDIT_SEED_METRIC,
   AUDIT_SEED_METRIC_TOPICS,
   AUDIT_TETRALEMMA,
+  AUDIT_DIALECTICAL,
   FALSE_DICHOTOMY_PATTERNS,
   isFalseDichotomy,
   AUDIT_OUTPUT_SCHEMA,
