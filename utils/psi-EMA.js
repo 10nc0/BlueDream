@@ -420,17 +420,31 @@ function calculateEMA(data, period, options = { interpolate: true, markInterpola
   
   // Seed EMA at index (period-1) with SMA of first 'period' values
   const firstSMA = mean(data.slice(0, period));
-  ema[period - 1] = firstSMA;
+  // NaN guard: if seed SMA is NaN (bad input data), set to null
+  ema[period - 1] = isNaN(firstSMA) ? null : firstSMA;
   interpolationFlags[period - 1] = false; // Seeded value is "real"
   
   // Calculate EMA for remaining values starting at index 'period'
   for (let i = period; i < data.length; i++) {
+    // NaN guard: skip bad input, carry forward previous EMA (don't wipe series)
+    if (isNaN(data[i])) {
+      ema[i] = ema[i - 1]; // Carry forward - maintains continuity
+      interpolationFlags[i] = true; // Mark as interpolated since we skipped real data
+      continue;
+    }
+    // If previous EMA is null (from bad seed), try to recover with current value
+    if (ema[i - 1] === null) {
+      ema[i] = data[i]; // Bootstrap from current value
+      interpolationFlags[i] = true; // Not a proper EMA calculation
+      continue;
+    }
     ema[i] = data[i] * k + ema[i - 1] * (1 - k);
     interpolationFlags[i] = false; // Calculated values are "real"
   }
   
   // Linear interpolation for leading values (indices 0 to period-2)
-  if (options.interpolate && period > 1) {
+  // Skip interpolation if seed is null (bad data) - leave as null to preserve detectability
+  if (options.interpolate && period > 1 && ema[period - 1] !== null) {
     const startValue = data[0];
     const endValue = ema[period - 1];
     const steps = period - 1; // Number of intervals from index 0 to period-1
@@ -617,6 +631,11 @@ function calculatePhase(flow, stock, options = { normalize: true }) {
  * @returns {number[]} Phase angles in degrees
  */
 function calculatePhaseTimeSeries(stocks, flows, options = { normalize: true }) {
+  // Stock-flow relationship validation: flows[i] = stocks[i+1] - stocks[i]
+  // Expected: flows.length === stocks.length - 1
+  if (flows && stocks && flows.length !== stocks.length - 1 && flows.length !== stocks.length) {
+    console.warn(`[Ψ-EMA] Stock-flow length mismatch: stocks=${stocks.length}, flows=${flows.length}. Expected flows.length === stocks.length - 1`);
+  }
   const len = Math.min(stocks.length, flows.length);
   const phases = [];
   
