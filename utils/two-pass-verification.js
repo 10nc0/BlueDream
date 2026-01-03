@@ -41,43 +41,84 @@ async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, 
     }
   ];
 
-  const response = await axios.post(
-    'https://api.groq.com/openai/v1/chat/completions',
-    {
-      model: 'llama-3.3-70b-versatile',
-      messages: auditMessages,
-      temperature: AUDIT_TEMPERATURE,
-      max_tokens: 800,
-      response_format: { type: 'json_object' }
-    },
-    {
-      headers: {
-        'Authorization': `Bearer ${groqToken}`,
-        'Content-Type': 'application/json'
-      },
-      timeout
-    }
-  );
-
-  const auditContent = response.data.choices?.[0]?.message?.content || '{}';
-  
   try {
-    const parsed = JSON.parse(auditContent);
+    const response = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'llama-3.3-70b-versatile',
+        messages: auditMessages,
+        temperature: AUDIT_TEMPERATURE,
+        max_tokens: 800,
+        response_format: { type: 'json_object' }
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${groqToken}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: timeout || 15000
+      }
+    );
+
+    const auditContent = response.data.choices?.[0]?.message?.content || '{}';
+    
+    let parsed;
+    try {
+      parsed = JSON.parse(auditContent);
+    } catch (parseError) {
+      console.warn('⚠️ Audit JSON parse failed');
+      return {
+        verdict: 'REJECTED',
+        confidence: 0,
+        checksPass: [],
+        issues: [{ severity: 'CRITICAL', reason: 'Failed to parse audit results' }],
+        suggestedFixes: [],
+        error: 'JSON_PARSE_ERROR'
+      };
+    }
+
+    // Verdict Validation: Ensure verdict is one of the allowed types
+    const allowedVerdicts = ['APPROVED', 'FIXABLE', 'REJECTED', 'BYPASS'];
+    const verdict = (parsed.verdict || 'REJECTED').toUpperCase();
+    
+    if (!allowedVerdicts.includes(verdict)) {
+      console.warn(`⚠️ Invalid audit verdict detected: "${verdict}" - falling back to REJECTED`);
+      return {
+        verdict: 'REJECTED',
+        confidence: parsed.confidence || 0,
+        checksPass: parsed.checksPass || [],
+        issues: [...(parsed.issues || []), { severity: 'CRITICAL', reason: 'Invalid verification verdict returned' }],
+        suggestedFixes: parsed.suggestedFixes || [],
+        error: 'INVALID_VERDICT'
+      };
+    }
+
     return {
-      verdict: parsed.verdict || 'APPROVED',
+      verdict: verdict,
       confidence: parsed.confidence || 80,
       checksPass: parsed.checksPass || [],
       issues: parsed.issues || [],
       suggestedFixes: parsed.suggestedFixes || []
     };
-  } catch (parseError) {
-    console.warn('⚠️ Audit JSON parse failed, defaulting to APPROVED');
-    return {
-      verdict: 'APPROVED',
-      confidence: 70,
-      checksPass: ['PARSE_FALLBACK'],
-      issues: [],
-      suggestedFixes: []
+  } catch (err) {
+    if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {
+      console.error(`⏱️ Audit Pass Timeout - Bypassing verification`);
+      return { 
+        verdict: 'BYPASS', 
+        confidence: 50, 
+        reason: 'Audit timed out', 
+        issues: [{ severity: 'HIGH', reason: 'Verification timed out' }],
+        error: 'AUDIT_TIMEOUT'
+      };
+    }
+    console.error(`❌ Audit Pass Error: ${err.message}`);
+    // Error Propagation: Skip safely with BYPASS instead of defaulting to APPROVED
+    return { 
+      verdict: 'BYPASS', 
+      confidence: 0, 
+      reason: `Audit network error: ${err.message}`, 
+      issues: [{ severity: 'HIGH', reason: 'Verification service unavailable' }],
+      error: 'AUDIT_NETWORK_ERROR'
     };
   }
 }
@@ -111,7 +152,17 @@ async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, 
 function buildRefusalMessage(issues) {
   const criticalIssues = issues.filter(i => i.severity === 'CRITICAL');
   
+  // Issue Severity Handling: If no CRITICAL but HIGH issues exist, surface them for better feedback
   if (criticalIssues.length === 0) {
+    const highIssues = issues.filter(i => i.severity === 'HIGH');
+    if (highIssues.length > 0) {
+      const highList = highIssues
+        .slice(0, 2)
+        .map(i => `• ${i.reason}`)
+        .join('\n');
+      
+      return `🔴 **Verification Failed**\n\nI detected potential issues that prevented verification:\n${highList}\n\n🔥 nyan~`;
+    }
     return "🔴 **Verification Failed**\n\nI couldn't verify my answer meets quality standards. Please rephrase your question or provide more context.\n\n🔥 nyan~";
   }
 
