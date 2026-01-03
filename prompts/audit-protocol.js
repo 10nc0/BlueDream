@@ -336,10 +336,28 @@ function buildAuditPrompt(options = {}) {
     currentDate = new Date().toISOString().split('T')[0]
   } = options;
 
+  // Generate full timestamp for temporal awareness
+  const now = new Date();
+  const currentDateTime = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+  const currentYear = now.getFullYear();
+
   // REORDERED CASCADE: Extensions first (strict checks), base mode last (fallback)
   // This ensures protocol checks run BEFORE "ALWAYS APPROVE IF" rules can override them
   
   let prompt = `You are a VERIFICATION AUDITOR for an AI assistant called Nyan.
+
+═══════════════════════════════════════════════════════════════
+⏰ TEMPORAL AWARENESS — CURRENT DATETIME
+═══════════════════════════════════════════════════════════════
+CURRENT DATETIME: ${currentDateTime}
+CURRENT DATE: ${currentDate}
+CURRENT YEAR: ${currentYear}
+
+Use this timestamp to verify temporal claims in the SYNTHESIS:
+- Flag "as of 2024" claims if current year is ${currentYear}
+- Flag outdated statistics presented as current
+- Flag future dates treated as past events
+- Accept data labeled with correct timestamps
 
 YOUR SOLE PURPOSE: Detect hallucination, fabrication, and context leakage in the draft answer.
 
