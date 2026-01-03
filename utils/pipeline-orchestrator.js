@@ -562,6 +562,11 @@ MANDATORY INSTRUCTIONS:
       .filter(msg => msg && msg.content && msg.content.trim().length > 0)
       .map(msg => ({ role: msg.role, content: msg.content }));
     
+    // Empty history warning: Log if all history was filtered out
+    if (conversationHistory?.length > 0 && sanitizedHistory.length === 0) {
+      console.warn(`⚠️ [stepReasoning] All ${conversationHistory.length} history messages were empty - sanitizedHistory=[]`);
+    }
+    
     // Build final prompt with proper attachment preservation
     // Priority: Memory → Ψ-EMA → Attachments → Search → Query
     // Memory provides human-like context, Ψ-EMA injects wave analysis, Attachments are primary source
@@ -642,6 +647,17 @@ MANDATORY INSTRUCTIONS:
       // Financial Microbiology: Clinical pathology report (Dec 23, 2025) - based on daily
       const pathogenResult = detectPathogens(analysis);
       const clinicalReport = generateClinicalReport(analysis, ticker, stockData.currentPrice, priceTimestamp);
+      
+      // Auto-trigger clinical report when:
+      // 1. Explicit pathogen parameter is provided in input, OR
+      // 2. Pathogens are automatically detected via detectPathogens()
+      // NOTE: Keep state.mode='psi-ema' for downstream routing, use separate flag for clinical report
+      const hasExplicitPathogen = input.pathogen || input.pathogens || state.preflight?.pathogen;
+      if (hasExplicitPathogen || !pathogenResult.healthy) {
+        state.clinicalReportTriggered = true;
+        state.useClinicalReport = true; // Flag for output formatting, preserves psi-ema routing
+        console.log(`🦠 [psi-ema] Clinical report activated for ${ticker} (explicit=${!!hasExplicitPathogen}, detected=${!pathogenResult.healthy})`);
+      }
       
       // Physical Audit Disclaimer: "See to believe" infrastructure verification (Dec 23, 2025)
       const physicalAuditDisclaimer = generatePhysicalAuditDisclaimer(analysis, ticker);
@@ -731,11 +747,67 @@ Include all computation math. End with 🔥 ~nyan.
       console.log(`📊 Ψ-EMA dual-timeframe instruction injected for ${ticker} (daily + ${analysisWeekly ? 'weekly' : 'weekly unavailable'})`);
     }
     
+    // Large attachment chunking: truncate extractedContent to avoid prompt overflow
+    const MAX_ATTACHMENT_CHARS = 100000; // 100k chars threshold
+    let processedContent = [];
+    if (hasAttachments) {
+      // Safely extract ONLY text content from items (filter out metadata, buffers, large objects)
+      const getStringContent = (item) => {
+        if (!item) return '';
+        if (typeof item === 'string') return item;
+        // Skip binary buffers/streams - cannot be meaningfully included in prompt
+        if (Buffer.isBuffer(item) || item instanceof ArrayBuffer || item?.type === 'Buffer') {
+          return '[Binary data - skipped]';
+        }
+        // Handle objects: extract ONLY safe text fields, skip everything else
+        if (typeof item === 'object') {
+          // Skip objects with binary/file data entirely
+          if (item.buffer || item.data || item.file || item.stream) {
+            return `[Binary file: ${item.filename || item.name || 'unknown'}]`;
+          }
+          // Extract text content only (priority order)
+          if (item.extractedText && typeof item.extractedText === 'string') {
+            return item.extractedText.length > 50000 ? item.extractedText.slice(0, 50000) + '\n[... TEXT TRUNCATED ...]' : item.extractedText;
+          }
+          if (item.content && typeof item.content === 'string') {
+            return item.content.length > 50000 ? item.content.slice(0, 50000) + '\n[... TEXT TRUNCATED ...]' : item.content;
+          }
+          if (item.text && typeof item.text === 'string') {
+            return item.text.length > 50000 ? item.text.slice(0, 50000) + '\n[... TEXT TRUNCATED ...]' : item.text;
+          }
+          // Skip unknown objects entirely - don't stringify metadata blobs
+          return `[Attachment: ${item.filename || item.name || item.type || 'unknown format'}]`;
+        }
+        return String(item);
+      };
+      
+      const totalChars = extractedContent.reduce((sum, c) => sum + getStringContent(c).length, 0);
+      if (totalChars > MAX_ATTACHMENT_CHARS) {
+        console.warn(`⚠️ [stepReasoning] Attachments too large (${totalChars} chars) - truncating to ${MAX_ATTACHMENT_CHARS}`);
+        let accumulated = 0;
+        for (const item of extractedContent) {
+          const content = getStringContent(item);
+          if (accumulated + content.length > MAX_ATTACHMENT_CHARS) {
+            const remaining = MAX_ATTACHMENT_CHARS - accumulated;
+            if (remaining > 1000) {
+              processedContent.push(content.slice(0, remaining) + '\n\n[... TRUNCATED - attachment too large ...]');
+            }
+            break;
+          }
+          processedContent.push(content);
+          accumulated += content.length;
+        }
+      } else {
+        // Convert all items to strings for consistent downstream handling
+        processedContent = extractedContent.map(getStringContent);
+      }
+    }
+    
     if (hasAttachments && hasSearch) {
       // BOTH: Combine attachments + search context (rare: retry during doc analysis)
-      console.log(`📎 Combining attachments (${extractedContent.length}) + search context`);
+      console.log(`📎 Combining attachments (${processedContent.length}) + search context`);
       finalPrompt = `${memoryPrefix}UPLOADED ATTACHMENTS (PRIMARY SOURCE - analyze these first):
-${extractedContent.join('\n\n')}
+${processedContent.join('\n\n')}
 
 SUPPLEMENTARY WEB SEARCH (use to verify or add context, NOT to override attachments):
 ${state.searchContext}
@@ -743,8 +815,8 @@ ${state.searchContext}
 User query: ${query || 'Analyze this content.'}`;
     } else if (hasAttachments) {
       // Attachments only (closed-loop document analysis)
-      console.log(`📎 Attachment-only mode: ${extractedContent.length} items`);
-      finalPrompt = `${memoryPrefix}Attachments analyzed:\n${extractedContent.join('\n\n')}\n\nUser query: ${query || 'Analyze this content.'}`;
+      console.log(`📎 Attachment-only mode: ${processedContent.length} items`);
+      finalPrompt = `${memoryPrefix}Attachments analyzed:\n${processedContent.join('\n\n')}\n\nUser query: ${query || 'Analyze this content.'}`;
     } else if (hasSearch) {
       // Search only (general queries with web augmentation)
       finalPrompt = `${memoryPrefix}REAL-TIME WEB SEARCH RESULTS (USE THIS DATA):
@@ -771,26 +843,34 @@ User query: ${query}`;
       { role: 'user', content: finalPrompt }
     ];
     
-    const response = await this.groqWithRetry({
-      url: 'https://api.groq.com/openai/v1/chat/completions',
-      data: {
-        model: 'llama-3.3-70b-versatile',
-        messages,
-        temperature: temperature || 0.15,
-        max_tokens: maxTokens || 1500,
-        top_p: 0.95
-      },
-      config: {
-        headers: {
-          'Authorization': `Bearer ${this.groqToken}`,
-          'Content-Type': 'application/json'
+    try {
+      const response = await this.groqWithRetry({
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        data: {
+          model: 'llama-3.3-70b-versatile',
+          messages,
+          temperature: temperature || 0.15,
+          max_tokens: maxTokens || 1500,
+          top_p: 0.95
         },
-        timeout: 15000
-      }
-    }, 3, 'text');
-    
-    state.draftAnswer = response.data.choices[0]?.message?.content || 'No response generated.';
-    console.log(`🧠 Reasoning: ${state.draftAnswer.length} chars generated`);
+        config: {
+          headers: {
+            'Authorization': `Bearer ${this.groqToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
+        }
+      }, 3, 'text');
+      
+      state.draftAnswer = response.data.choices[0]?.message?.content || 'No response generated.';
+      console.log(`🧠 Reasoning: ${state.draftAnswer.length} chars generated`);
+    } catch (err) {
+      // Groq API failure after all retries - propagate error, return early to skip audit on junk
+      console.error(`❌ [stepReasoning] Groq API failed after 3 retries: ${err.message}`);
+      state.error = `Groq API failed: ${err.message}`;
+      // Throw to exit pipeline early - caught by run() which returns success:false
+      throw new Error(`Groq API exhausted: ${err.message}`);
+    }
   }
   
   async stepAudit(state, input) {
@@ -871,8 +951,14 @@ User query: ${query}`;
     const safeQuery = query || input.query || input.message || 'general query';
     
     // Sanitize conversation history to prevent Groq 400 errors
-    const sanitizedHistory = (conversationHistory || input.history || [])
+    const rawHistory = conversationHistory || input.history || [];
+    const sanitizedHistory = rawHistory
       .filter(msg => msg && msg.content && msg.content.trim().length > 0);
+    
+    // Empty history warning: Log if all history was filtered out
+    if (rawHistory.length > 0 && sanitizedHistory.length === 0) {
+      console.warn(`⚠️ [stepRetry] All ${rawHistory.length} history messages were empty - sanitizedHistory=[]`);
+    }
     
     // SKIP SEARCH RETRY for identity modes - internal documentation is the ground truth
     const isIdentityMode = state.mode && state.mode.includes('identity');
@@ -1060,6 +1146,11 @@ User query: ${query}`;
     if (!auditResult || !auditResult.verdict) return 'unverified';
     
     const verdict = auditResult.verdict.toUpperCase();
+    
+    // API_FAILURE → unavailable (Groq API failed, fallback message shown)
+    if (verdict === 'API_FAILURE') {
+      return 'unavailable';
+    }
     
     // APPROVED, ACCEPTED, BYPASS → verified (web search sourced, identity, or pre-verified data)
     if (verdict === 'APPROVED' || verdict === 'ACCEPTED' || verdict === 'BYPASS') {
