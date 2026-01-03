@@ -5216,7 +5216,7 @@
             }
         }
         
-        async function loadBookMessages(bookId, page = 1, append = false) {
+        async function loadBookMessages(bookId, append = false) {
             try {
                 // SECURITY: Validate bookId is a fractal_id (tenant-scoped, non-enumerable)
                 // Format: [dev_](bridge|book|msg)_t{N}_{HASH} or twilio_book_{PHONE}_{TIMESTAMP}
@@ -5227,7 +5227,7 @@
                 
                 // Initialize page state if needed
                 if (!messagePageState[bookId]) {
-                    messagePageState[bookId] = { currentPage: 1, isLoading: false, hasMore: true, seenIds: new Set(), oldestId: null };
+                    messagePageState[bookId] = { isLoading: false, hasMore: true, seenIds: new Set(), oldestId: null };
                 }
                 
                 // Prevent concurrent loads
@@ -5257,7 +5257,6 @@
                     messageCache[bookId] = data.messages;
                     // Reset pagination state on fresh load to allow infinite scroll from start
                     messagePageState[bookId].seenIds = new Set();
-                    messagePageState[bookId].currentPage = 1;
                     messagePageState[bookId].hasMore = true;
                     messagePageState[bookId].oldestId = null;
                 } else {
@@ -5288,9 +5287,6 @@
                         }
                         console.log(`✅ Rendered ${data.messages?.length || 0} messages to container`);
                     }
-                    
-                    // Update page state
-                    messagePageState[bookId].currentPage = page;
                     
                     // Check for new messages by comparing IDs
                     const seenIds = messagePageState[bookId].seenIds || new Set();
