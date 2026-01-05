@@ -22,6 +22,9 @@ const { buildAuditPrompt, buildCorrectivePrompt } = require('../prompts/audit-pr
 const AUDIT_TEMPERATURE = 0.1;
 
 async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, extensions, timeout) {
+  // Accept unified timestamp from pipeline's queryTimestamp or fall back to current time
+  const timestamps = extensions.timestamps || {};
+  
   const auditPrompt = buildAuditPrompt({
     usesFinancialPhysics: extensions.usesFinancialPhysics,
     usesChemistry: extensions.usesChemistry,
@@ -31,7 +34,10 @@ async function runAuditPass(groqToken, draftAnswer, originalQuery, userContext, 
     isTetralemma: extensions.isTetralemma,
     auditMode: extensions.auditMode,
     useDialectical: extensions.useDialectical,
-    currentDate: new Date().toISOString().split('T')[0]
+    // Pass unified timestamps from pipeline state (single source of truth)
+    currentDate: timestamps.isoDate || null,
+    currentDateTime: timestamps.isoDateTime || null,
+    currentYear: timestamps.year || null
   });
 
   // Build audit message based on dialectical structure or legacy format

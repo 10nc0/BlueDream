@@ -53,40 +53,7 @@ const PIPELINE_STEPS = {
 
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent } = require('./attachment-cascade');
-
-/**
- * Build temporal awareness system message - injected FIRST for ALL queries
- * Ensures Nyan AI always knows the current date/time for real-time context
- * Uses deterministic UTC timestamps for consistency across all tenants
- * Returns { message, timestamp } - timestamp persisted separately via Stage S1
- */
-function buildTemporalSystemMessage() {
-  const now = new Date();
-  const isoDate = now.toISOString();
-  const humanDate = now.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric',
-    timeZone: 'UTC'
-  });
-  const humanTime = now.toLocaleTimeString('en-US', { 
-    hour: '2-digit', 
-    minute: '2-digit',
-    timeZone: 'UTC'
-  });
-  
-  return {
-    message: {
-      role: 'system',
-      content: `[TEMPORAL AWARENESS - CURRENT DATE/TIME]
-Today is ${humanDate}. Current time: ${humanTime} UTC (${isoDate}).
-Use this timestamp to contextualize any time-sensitive queries (schedules, news, events, deadlines).
-When discussing future or past events, reference dates relative to today.`
-    },
-    timestamp: isoDate
-  };
-}
+const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
 
 class PipelineState {
   constructor(tenantId = null) {
@@ -105,6 +72,10 @@ class PipelineState {
     this.error = null;
     this.dataPackage = new DataPackage(tenantId);
     this.hasImageAttachment = false;  // Set in S-1 for retry logic
+    
+    // UNIFIED TIMESTAMP: Single source of truth for the entire pipeline
+    // Captured once at construction, shared by temporal awareness, audit, and signature
+    this.queryTimestamp = createQueryTimestamp();
   }
   
   transition(nextStep) {
@@ -611,9 +582,12 @@ MANDATORY INSTRUCTIONS:
     
     // ========================================
     // TEMPORAL AWARENESS: Inject current date/time FIRST
-    // Ensures ALL queries have temporal context (schedules, news, events)
+    // Uses unified queryTimestamp from PipelineState (single source of truth)
     // ========================================
-    const temporal = buildTemporalSystemMessage();
+    const temporalMessage = {
+      role: 'system',
+      content: buildTemporalContent(state.queryTimestamp)
+    };
     
     // NYAN Boot Optimization: Full protocol on first query, compressed on subsequent
     // Saves ~1350 tokens per query after session boot
@@ -624,11 +598,11 @@ MANDATORY INSTRUCTIONS:
     });
     
     // Temporal awareness comes FIRST, then NYAN protocol
-    state.systemMessages = [temporal.message, ...nyanMessages];
+    state.systemMessages = [temporalMessage, ...nyanMessages];
     
     // WRITE to DataPackage: Stage S1 context build with temporal metadata
     state.writeToPackage(STAGE_IDS.CONTEXT_BUILD, {
-      temporalTimestamp: temporal.timestamp,
+      temporalTimestamp: state.queryTimestamp.isoUtc,
       nyanMode: state.isFirstQuery ? 'full' : 'compressed',
       systemMessageCount: state.systemMessages.length
     });
@@ -1042,7 +1016,9 @@ User query: ${query}`;
           isSeedMetric,
           isTetralemma,
           auditMode,
-          useDialectical: true
+          useDialectical: true,
+          // Unified timestamp from pipeline state (single source of truth)
+          timestamps: state.queryTimestamp
         },
         12000
       );
@@ -1152,8 +1128,8 @@ User query: ${query}`;
     // Applying personality layer before S6 Output
     const draft = state.auditResult?.fixedAnswer || state.draftAnswer;
     
-    // Ensure Verdict is preserved by passing mode to formatter
-    state.finalAnswer = this.applyPersonalityFormat(draft, state.mode);
+    // Ensure Verdict is preserved by passing mode and unified timestamp to formatter
+    state.finalAnswer = this.applyPersonalityFormat(draft, state.mode, state.queryTimestamp.signatureFormat);
     
     if (isCodeAudit && !state.finalAnswer.includes('Verdict')) {
         console.warn('⚠️ Personality: Verdict alignment check');
@@ -1195,8 +1171,11 @@ User query: ${query}`;
    * PERSONALITY LAYER (S5) - Unified format enforcement
    * All formatting happens HERE, not scattered across prompts/contexts
    * Uses MODE REGISTRY for per-mode formatting rules
+   * @param {string} answer - Draft answer to format
+   * @param {string} mode - Query mode (general, psi-ema, etc.)
+   * @param {string} signatureTs - Pre-formatted timestamp from unified queryTimestamp
    */
-  applyPersonalityFormat(answer, mode) {
+  applyPersonalityFormat(answer, mode, signatureTs) {
     if (!answer) return answer;
     
     const { getPersonalityConfig, hasAnySignature } = require('../lib/mode-registry');
@@ -1207,7 +1186,7 @@ User query: ${query}`;
     // Registry-driven: skip intro/outro stripping for modes that need it
     if (config.skipIntroOutro) {
       if (config.appendSignature && !hasAnySignature(cleaned)) {
-        cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText;
+        cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText + ` [${signatureTs}]`;
       }
       return cleaned.trim();
     }
@@ -1243,15 +1222,8 @@ User query: ${query}`;
       cleaned = cleaned.replace(pattern, '');
     }
     
-    const now = new Date();
-    const HH = String(now.getHours()).padStart(2, '0');
-    const MM = String(now.getMinutes()).padStart(2, '0');
-    const SS = String(now.getSeconds()).padStart(2, '0');
-    const YYYY = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const DD = String(now.getDate()).padStart(2, '0');
-    const ts = `${HH}:${MM}:${SS} - ${YYYY}/${month}/${DD}`;
-    const signatureWithTs = `${config.signatureText} [${ts}]`;
+    // Use unified timestamp from queryTimestamp (single source of truth)
+    const signatureWithTs = `${config.signatureText} [${signatureTs}]`;
 
     // Use regex to detect any existing nyan signature and replace it with the timestamped version
     const anyNyanSigPattern = /🔥\s*(?:~nyan|nyan~)(?:\s*\[.*?\])?/i;
@@ -1298,26 +1270,25 @@ function createPipelineOrchestrator(config) {
  * STANDALONE PERSONALITY FORMAT (exported for use outside pipeline)
  * Regex-based cleanup: O(n) string operations, NOT an LLM call
  * Use this instead of runStreamingPersonalityPass() to save 1 LLM call
+ * @param {string} answer - Answer to format
+ * @param {string} mode - Query mode
+ * @param {string} signatureTs - Optional pre-formatted timestamp (generates if not provided)
  */
-function applyPersonalityFormat(answer, mode = 'general') {
+function applyPersonalityFormat(answer, mode = 'general', signatureTs = null) {
   if (!answer) return answer;
   
   const { getPersonalityConfig, hasAnySignature } = require('../lib/mode-registry');
+  const { formatSignatureTimestamp } = require('./time-format');
   const config = getPersonalityConfig(mode);
+  
+  // Use provided timestamp or generate one (for backwards compatibility)
+  const ts = signatureTs || formatSignatureTimestamp(new Date());
   
   let cleaned = answer;
   
   // Registry-driven: skip intro/outro stripping for modes that need it
   if (config.skipIntroOutro) {
     if (config.appendSignature && !hasAnySignature(cleaned)) {
-      const now = new Date();
-      const HH = String(now.getHours()).padStart(2, '0');
-      const MM = String(now.getMinutes()).padStart(2, '0');
-      const SS = String(now.getSeconds()).padStart(2, '0');
-      const YYYY = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const DD = String(now.getDate()).padStart(2, '0');
-      const ts = `${HH}:${MM}:${SS} - ${YYYY}/${month}/${DD}`;
       cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText + ` [${ts}]`;
     }
     return cleaned.trim();
@@ -1353,16 +1324,7 @@ function applyPersonalityFormat(answer, mode = 'general') {
     cleaned = cleaned.replace(pattern, '');
   }
   
-  // Registry-driven signature (general = 🔥 nyan~, others = 🔥 ~nyan)
-  const now = new Date();
-  const HH = String(now.getHours()).padStart(2, '0');
-  const MM = String(now.getMinutes()).padStart(2, '0');
-  const SS = String(now.getSeconds()).padStart(2, '0');
-  const YYYY = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const DD = String(now.getDate()).padStart(2, '0');
-  
-  const ts = `${HH}:${MM}:${SS} - ${YYYY}/${month}/${DD}`;
+  // Use provided or generated timestamp
   const signatureWithTs = `${config.signatureText} [${ts}]`;
   
   // Use regex to detect any existing nyan signature and replace it with the timestamped version

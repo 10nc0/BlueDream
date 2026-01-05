@@ -333,13 +333,17 @@ function buildAuditPrompt(options = {}) {
     isTetralemma = false,
     auditMode = 'STRICT', // 'RESEARCH' | 'STRICT'
     useDialectical = false,
-    currentDate = new Date().toISOString().split('T')[0]
+    // UNIFIED TIMESTAMP: Accept pre-computed values from pipeline's queryTimestamp
+    currentDate = null,
+    currentDateTime = null,
+    currentYear = null
   } = options;
 
-  // Generate full timestamp for temporal awareness
+  // Fallback to generating timestamps if not provided (backwards compatibility)
   const now = new Date();
-  const currentDateTime = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
-  const currentYear = now.getFullYear();
+  const finalDate = currentDate || now.toISOString().split('T')[0];
+  const finalDateTime = currentDateTime || (now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC');
+  const finalYear = currentYear || now.getUTCFullYear();
 
   // REORDERED CASCADE: Extensions first (strict checks), base mode last (fallback)
   // This ensures protocol checks run BEFORE "ALWAYS APPROVE IF" rules can override them
@@ -349,12 +353,12 @@ function buildAuditPrompt(options = {}) {
 ═══════════════════════════════════════════════════════════════
 ⏰ TEMPORAL AWARENESS — CURRENT DATETIME
 ═══════════════════════════════════════════════════════════════
-CURRENT DATETIME: ${currentDateTime}
-CURRENT DATE: ${currentDate}
-CURRENT YEAR: ${currentYear}
+CURRENT DATETIME: ${finalDateTime}
+CURRENT DATE: ${finalDate}
+CURRENT YEAR: ${finalYear}
 
 Use this timestamp to verify temporal claims in the SYNTHESIS:
-- Flag "as of 2024" claims if current year is ${currentYear}
+- Flag "as of 2024" claims if current year is ${finalYear}
 - Flag outdated statistics presented as current
 - Flag future dates treated as past events
 - Accept data labeled with correct timestamps
