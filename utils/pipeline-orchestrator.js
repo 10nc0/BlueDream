@@ -54,6 +54,40 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent } = require('./attachment-cascade');
 
+/**
+ * Build temporal awareness system message - injected FIRST for ALL queries
+ * Ensures Nyan AI always knows the current date/time for real-time context
+ * Uses deterministic UTC timestamps for consistency across all tenants
+ * Returns { message, timestamp } - timestamp persisted separately via Stage S1
+ */
+function buildTemporalSystemMessage() {
+  const now = new Date();
+  const isoDate = now.toISOString();
+  const humanDate = now.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric',
+    timeZone: 'UTC'
+  });
+  const humanTime = now.toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    timeZone: 'UTC'
+  });
+  
+  return {
+    message: {
+      role: 'system',
+      content: `[TEMPORAL AWARENESS - CURRENT DATE/TIME]
+Today is ${humanDate}. Current time: ${humanTime} UTC (${isoDate}).
+Use this timestamp to contextualize any time-sensitive queries (schedules, news, events, deadlines).
+When discussing future or past events, reference dates relative to today.`
+    },
+    timestamp: isoDate
+  };
+}
+
 class PipelineState {
   constructor(tenantId = null) {
     this.step = PIPELINE_STEPS.CONTEXT_EXTRACT;
@@ -575,15 +609,31 @@ MANDATORY INSTRUCTIONS:
   async stepContextBuild(state, input) {
     state.transition(PIPELINE_STEPS.CONTEXT_BUILD);
     
+    // ========================================
+    // TEMPORAL AWARENESS: Inject current date/time FIRST
+    // Ensures ALL queries have temporal context (schedules, news, events)
+    // ========================================
+    const temporal = buildTemporalSystemMessage();
+    
     // NYAN Boot Optimization: Full protocol on first query, compressed on subsequent
     // Saves ~1350 tokens per query after session boot
     // NOTE: isFirstQuery is set at start of run(), boot flag is set AFTER successful completion
-    state.systemMessages = buildSystemContext(state.preflight, NYAN_PROTOCOL_SYSTEM_PROMPT, {
+    const nyanMessages = buildSystemContext(state.preflight, NYAN_PROTOCOL_SYSTEM_PROMPT, {
       isFirstQuery: state.isFirstQuery,
       nyanCompressed: NYAN_PROTOCOL_COMPRESSED
     });
     
-    console.log(`📝 Context: ${state.systemMessages.length} system messages built (NYAN: ${state.isFirstQuery ? 'full' : 'compressed'})`);
+    // Temporal awareness comes FIRST, then NYAN protocol
+    state.systemMessages = [temporal.message, ...nyanMessages];
+    
+    // WRITE to DataPackage: Stage S1 context build with temporal metadata
+    state.writeToPackage(STAGE_IDS.CONTEXT_BUILD, {
+      temporalTimestamp: temporal.timestamp,
+      nyanMode: state.isFirstQuery ? 'full' : 'compressed',
+      systemMessageCount: state.systemMessages.length
+    });
+    
+    console.log(`📝 Context: ${state.systemMessages.length} system messages built (temporal + NYAN: ${state.isFirstQuery ? 'full' : 'compressed'})`);
   }
   
   async stepReasoning(state, input) {
