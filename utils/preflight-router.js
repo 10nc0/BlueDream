@@ -28,6 +28,43 @@ const PSI_EMA_IDENTITY_PATTERNS = [
 ];
 
 /**
+ * Real-time intent detection - queries that require web search
+ * Cascade: DDG → Brave (following existing pattern)
+ */
+const REALTIME_INTENT_PATTERNS = [
+  // Sports (EPL, NFL, NBA, etc.)
+  /\b(epl|premier\s*league|nfl|nba|mlb|mls|champions\s*league|world\s*cup|la\s*liga|bundesliga|serie\s*a|ligue\s*1)\b/i,
+  /\b(match|game|fixture|score|schedule|standings|results?)\s+(today|tonight|tomorrow|this\s*week|next\s*week|upcoming)\b/i,
+  /\b(upcoming|next|today'?s?|tonight'?s?|this\s*week'?s?)\s+(match|game|fixture|schedule)\b/i,
+  
+  // News & Current Events
+  /\b(latest|breaking|recent|current|today'?s?)\s+(news|headlines|events?|updates?|developments?)\b/i,
+  /\bwhat\s+(?:is\s+)?happen(?:ing|ed)\s+(today|now|recently|this\s*week)\b/i,
+  
+  // Weather
+  /\b(weather|forecast|temperature|rain|snow|sunny|cloudy)\s+(today|tomorrow|this\s*week|in\s+\w+)\b/i,
+  /\b(today'?s?|tomorrow'?s?|current)\s+(weather|forecast|temperature)\b/i,
+  
+  // Time-sensitive queries
+  /\b(when\s+is|what\s+time|schedule\s+for|upcoming)\b/i,
+  /\b(live|real[\s\-]?time|right\s*now|currently)\b/i,
+  
+  // Explicit web search requests
+  /\b(search|google|look\s*up|find\s+(?:me\s+)?(?:the\s+)?(?:latest|current|recent))\b/i,
+  /\b(what\s+is\s+the\s+(?:latest|current|recent))\b/i,
+];
+
+/**
+ * Detect if query needs real-time web search
+ * @param {string} query
+ * @returns {boolean}
+ */
+function detectRealtimeIntent(query) {
+  if (!query || typeof query !== 'string') return false;
+  return REALTIME_INTENT_PATTERNS.some(pattern => pattern.test(query));
+}
+
+/**
  * @typedef {Object} PreflightResult
  * @property {string} mode - Query mode: 'psi-ema' | 'seed-metric' | 'financial' | 'legal' | 'general'
  * @property {string|null} ticker - Extracted stock ticker (e.g., 'META')
@@ -92,6 +129,7 @@ async function preflightRouter(options) {
       usesFinancialPhysics: false,
       usesLegalAnalysis: false,
       usesForex: false,
+      needsRealtimeSearch: false,
       hasAttachments: attachments.length > 0,
       hasDocContext: Object.keys(docContext).length > 0
     },
@@ -390,7 +428,18 @@ async function preflightRouter(options) {
     result.mode = 'general';
   }
   
-  console.log(`🚦 Preflight: mode=${result.mode}, ticker=${result.ticker || 'none'}, search=${result.searchStrategy}`);
+  // ========================================
+  // REAL-TIME INTENT DETECTION (applies to general mode)
+  // Triggers DDG → Brave cascade for sports, news, weather, etc.
+  // searchStrategy stays 'duckduckgo' (primary), cascade tracked via routingFlags
+  // ========================================
+  if (result.mode === 'general' && detectRealtimeIntent(query)) {
+    result.routingFlags.needsRealtimeSearch = true;
+    result.searchStrategy = 'duckduckgo';
+    console.log(`🔍 Preflight: Real-time intent detected → DDG→Brave cascade enabled`);
+  }
+  
+  console.log(`🚦 Preflight: mode=${result.mode}, ticker=${result.ticker || 'none'}, search=${result.searchStrategy}, realtime=${result.routingFlags.needsRealtimeSearch}`);
   return result;
 }
 

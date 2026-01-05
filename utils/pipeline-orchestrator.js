@@ -535,6 +535,41 @@ MANDATORY INSTRUCTIONS:
         state.didSearch = true;
       }
     }
+    
+    // ========================================
+    // REAL-TIME CASCADE: DDG → Brave for sports, news, weather, etc.
+    // Triggered by preflight.routingFlags.needsRealtimeSearch
+    // ========================================
+    if (state.preflight.routingFlags?.needsRealtimeSearch && query) {
+      console.log(`🌐 Real-time cascade: DDG → Brave for general query`);
+      
+      const searchQuery = await this.extractCoreQuestion(query);
+      let searchResult = null;
+      
+      // DDG first (free, no API key required)
+      searchResult = await this.searchDuckDuckGo(searchQuery);
+      
+      // Brave fallback if DDG fails
+      if (!searchResult) {
+        console.log(`🦁 DDG returned no results, trying Brave...`);
+        searchResult = await this.searchBrave(searchQuery, clientIp);
+      }
+      
+      if (searchResult) {
+        state.searchContext = `[REAL-TIME WEB SEARCH RESULTS - USE THIS DATA, NOT TRAINING DATA]
+${searchResult}
+
+MANDATORY INSTRUCTIONS:
+1. Base your answer on the web search results above
+2. If the search results are recent, explicitly mention dates
+3. If search data conflicts with your training data, PREFER the web search results
+4. If the search results don't fully answer the question, acknowledge what's missing`;
+        state.didSearch = true;
+        console.log(`✅ Real-time search successful, context injected`);
+      } else {
+        console.log(`⚠️ Real-time search failed - will rely on training data`);
+      }
+    }
   }
   
   async stepContextBuild(state, input) {
