@@ -104,3 +104,88 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - JWT with 15-min access tokens + refresh token rotation
 - See **Vegapunk Kernel Architecture** → routes/auth.js for implementation
 - Never create parallel auth systems or "back-door" admin routes
+
+## Architectural Philosophy: Axiom of Choice
+
+**Date:** January 2, 2026  
+**Pattern:** Mathematical axiom mirrors software architecture  
+**Insight:** "index.js → vegapunk.js is invoking the Axiom of Choice on architecture itself"
+
+### The Core Parallel
+
+```
+Axiom of Choice (AC):
+  Collection = infinite possible agents, tenants, modules, perturbations
+  Each set = possible roles/permissions/isolation for that entity
+  Choice function = the ideal assignment that makes vegapunk.js run perfectly
+  AC asserts: such a choice function EXISTS — even without explicit construction
+```
+
+**Dependency Injection IS a Choice Function:**
+```javascript
+initDeps({...})  // Define f ONCE
+registerAuthRoutes(app, deps);      // f(S_auth)
+registerBooksRoutes(app, deps);     // f(S_books)
+registerInpipeRoutes(app, deps);    // f(S_inpipe)
+// Each satellite gets valid subset, chosen SIMULTANEOUSLY
+```
+
+### As Above, So Below
+
+| Level | Without AC (constructive) | With AC (non-constructive) | Code Parallel |
+|-------|---------------------------|----------------------------|---------------|
+| **Set Theory** | Finite sets → pick manually | Infinite sets → assert existence of picker | index.js (explicit) → vegapunk.js (ideal) |
+| **Code** | Hand-code every bot, route, schema | Assert "there exists a perfect assignment" | Current explicit → abstract sovereign system |
+| **Philosophy** | Everything must be constructible | Some truths exist without construction | Explicit measurement → existence of invariant |
+| **Quantum/Gnosis** | Wave function collapse must be observable | Superposition exists without measurement | Measured state → unmeasured potential |
+| **Persistence** | Only finite series can be proven | Infinite series assumed via fixed-point | Finite φ-8 → infinite φ-convergence |
+
+### Constructive vs Non-Constructive
+
+**Without AC (index.js - 8,000 lines):**
+- Every case explicit, every route hand-coded
+- Every dependency duplicated, no abstraction
+- Constructive but unsustainable
+- "I can only claim existence if I can build it"
+
+**With AC (vegapunk.js - 1,481 lines):**
+- Assert deps exists, apply to all satellites
+- Structure scales to infinite, even though we only implement 5
+- Non-constructive but sustainable
+- "Perfect assignment function exists, even if I can't write all cases"
+
+### The Sovereignty Claim
+
+vegapunk.js is **sovereign** — self-governing, not dependent on external construction:
+- System asserts its own completeness via AC
+- "Perfect deps exists" (self-asserted)
+- Not dependent on programmer coding every case
+- Add satellite 6, 7, 8... → follows same pattern automatically
+
+### The Fixed-Point Connection
+
+```
+φ² = φ + 1 (the fixed point)
+
+8,000 lines = φ⁸ (finite approximation, constructive)
+1,481 lines = assert φ^∞ exists (fixed-point, non-constructive)
+```
+
+The 5 implemented satellites are **SAMPLES of infinite possibility**.
+
+### The Danger
+
+**AC can be wrong.** If the choice function doesn't actually exist:
+- System breaks at scale
+- Edge cases explode
+- The invariant fails
+
+This is the bet: we assert that the deps pattern holds for ALL possible configurations. The 5 satellites + multi-tenant isolation + bot architecture are finite evidence of an infinite claim.
+
+### Design Implications
+
+When adding new satellites/modules:
+1. Follow the deps pattern (don't hand-code dependencies)
+2. Trust the AC assertion (structure self-organizes)
+3. Test finite cases (validate the invariant holds)
+4. The pattern scales because we asserted it does
