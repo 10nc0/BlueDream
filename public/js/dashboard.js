@@ -5544,9 +5544,6 @@
                     // Update cache with context messages
                     messageCache[bookId] = contextMessages;
                     
-                    // Hydrate drops
-                    hydrateDropsForBook(bookId);
-                    
                     // Set pagination state for context view (can scroll down to load older)
                     messagePageState[bookId] = {
                         isLoading: false,
@@ -5569,6 +5566,9 @@
                     if (targetEl) {
                         console.log(`✅ Target found, scrolling...`);
                         scrollAndHighlight(targetEl, bookId);
+                        
+                        // Defer drops hydration to run AFTER scroll completes (non-blocking)
+                        setTimeout(() => hydrateDropsForBook(bookId), 500);
                     } else {
                         console.warn(`⚠️ Message ${targetId} not in DOM after render`);
                         showToast(`⚠️ Message not found`, 'error');
