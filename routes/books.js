@@ -754,6 +754,157 @@ function registerBooksRoutes(app, deps) {
         });
     });
 
+    app.get('/api/messages/:id/context', requireAuth, setTenantContext, async (req, res) => {
+        try {
+            const messageId = req.params.id;
+            const bookId = req.query.bookId;
+            const contextWindow = parseInt(req.query.context) || 25;
+            
+            if (!messageId || isNaN(Number(messageId))) {
+                return res.status(400).json({ error: 'Invalid message ID' });
+            }
+            
+            if (!bookId) {
+                return res.status(400).json({ error: 'bookId is required' });
+            }
+            
+            if (contextWindow < 0 || !Number.isInteger(contextWindow) || contextWindow > 50) {
+                return res.status(400).json({ error: 'Context must be 0-50' });
+            }
+            
+            const client = req.dbClient || pool;
+            let tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const isDev = req.tenantContext?.userRole === 'dev';
+            
+            if (isDev) {
+                const registryLookup = await client.query(
+                    `SELECT tenant_schema FROM core.book_registry WHERE fractal_id = $1 LIMIT 1`,
+                    [bookId]
+                );
+                if (registryLookup.rows.length > 0) {
+                    tenantSchema = registryLookup.rows[0].tenant_schema;
+                }
+            }
+            
+            assertValidSchemaName(tenantSchema);
+            
+            const bookResult = await client.query(
+                `SELECT id, name, output_credentials, created_at FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+                [bookId]
+            );
+            
+            if (bookResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found' });
+            }
+            
+            const book = bookResult.rows[0];
+            const bookCreatedAt = new Date(book.created_at);
+            
+            let creatorPhone = null;
+            const registryResult = await client.query(
+                `SELECT creator_phone, phone_number FROM core.book_registry WHERE fractal_id = $1 LIMIT 1`,
+                [bookId]
+            );
+            if (registryResult.rows.length > 0) {
+                creatorPhone = registryResult.rows[0].creator_phone || registryResult.rows[0].phone_number;
+            }
+            
+            let outputCredentials = book.output_credentials;
+            if (typeof outputCredentials === 'string') {
+                outputCredentials = JSON.parse(outputCredentials);
+            }
+            
+            const outputData = outputCredentials?.output_01;
+            
+            if (!outputData || !outputData.thread_id) {
+                return res.json({ messages: [], total: 0, hasMore: false, note: 'No Ledger thread configured' });
+            }
+            
+            if (!thothBot || !thothBot.client || !thothBot.ready) {
+                return res.json({ messages: [], total: 0, hasMore: false, note: 'Discord bot not ready' });
+            }
+            
+            try {
+                const thread = await thothBot.client.channels.fetch(outputData.thread_id);
+                
+                if (!thread) {
+                    return res.json({ messages: [], total: 0, hasMore: false, note: 'Thread not found' });
+                }
+                
+                const discordMessages = await thread.messages.fetch({
+                    force: true,
+                    around: messageId,
+                    limit: Math.min(contextWindow * 2 + 1, 100)
+                });
+                
+                const normalizePhone = (phone) => phone ? phone.replace(/\D/g, '') : '';
+                
+                const messages = Array.from(discordMessages.values())
+                    .filter(msg => msg.createdAt >= bookCreatedAt)
+                    .sort((a, b) => b.createdAt - a.createdAt)
+                    .map(msg => {
+                        const attachment = msg.attachments.size > 0 ? msg.attachments.first() : null;
+                        
+                        let mediaFromEmbed = null;
+                        let senderContact = null;
+                        for (const embed of msg.embeds) {
+                            const mediaField = embed.fields?.find(f => f.name === '📎 Media');
+                            if (mediaField?.value) {
+                                const match = mediaField.value.match(/\[(.*?)\]\((.*?)\)/);
+                                if (match) {
+                                    mediaFromEmbed = { url: match[2], contentType: match[1] };
+                                }
+                            }
+                            const phoneField = embed.fields?.find(f => 
+                                f.name && (
+                                    /[📞📱]/.test(f.name) || 
+                                    f.name.toLowerCase().includes('phone')
+                                )
+                            );
+                            if (phoneField?.value) {
+                                senderContact = phoneField.value;
+                            }
+                        }
+                        
+                        const senderPhoneNorm = normalizePhone(senderContact);
+                        const creatorPhoneNorm = normalizePhone(creatorPhone);
+                        const isCreator = senderPhoneNorm && creatorPhoneNorm && senderPhoneNorm === creatorPhoneNorm;
+                        
+                        return {
+                            id: msg.id,
+                            sender_name: msg.author.username,
+                            sender_avatar: msg.author.displayAvatarURL(),
+                            sender_contact: senderContact,
+                            is_creator: isCreator,
+                            message_content: msg.content || (msg.embeds[0]?.description !== '_(No text content)_' ? msg.embeds[0]?.description : '') || '',
+                            timestamp: msg.createdAt.toISOString(),
+                            has_media: msg.attachments.size > 0 || !!mediaFromEmbed,
+                            media_url: attachment ? attachment.url : (mediaFromEmbed ? mediaFromEmbed.url : null),
+                            media_type: attachment ? attachment.contentType : (mediaFromEmbed ? mediaFromEmbed.contentType : null),
+                            embeds: msg.embeds.map(e => ({
+                                title: e.title === '🎉 Book Activated' ? e.title : null,
+                                description: e.description,
+                                color: e.color,
+                                fields: e.fields ? e.fields.filter(f => f.name !== '📖 Book' && f.name !== '👤 Sender') : []
+                            }))
+                        };
+                    });
+                
+                res.json({ 
+                    messages,
+                    total: messages.length,
+                    targetId: messageId
+                });
+            } catch (discordError) {
+                logger.error({ err: discordError }, 'Failed to fetch context from Discord');
+                return res.json({ messages: [], total: 0, error: discordError.message });
+            }
+        } catch (error) {
+            logger.error({ err: error }, 'Error in /api/messages/:id/context');
+            res.status(500).json({ error: error.message });
+        }
+    });
+
     app.get('/api/books/:id/messages', requireAuth, setTenantContext, async (req, res) => {
         try {
             const { id } = req.params;
