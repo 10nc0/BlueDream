@@ -5328,16 +5328,31 @@
                 const container = document.getElementById(`discord-messages-${bookId}`);
                 console.log(`🎯 Container lookup: discord-messages-${bookId}`, container ? 'FOUND' : 'NOT FOUND');
                 if (container) {
-                    const html = renderDiscordMessages(data.messages, bookId);
-                    console.log(`📝 Generated HTML length: ${html.length} chars`);
+                    // LENS MODE: Filter new batch of messages
+                    const filteredMessages = data.messages.filter(msg => {
+                        const filter = lensFilterState[bookId] || { searchText: '', statusFilter: 'all' };
+                        const msgText = (msg.author?.username || '') + ' ' + (msg.content || '') + ' ' + 
+                                       (msg.embeds?.map(e => (e.title || '') + ' ' + (e.description || '')).join(' ') || '');
+                        
+                        // Check if message content is empty/placeholder
+                        if (msg.content === "_(No text content)_") return false;
+
+                        const matchesSearch = window.searchState.performSearch(filter.searchText, msgText);
+                        const matchesStatus = filter.statusFilter === 'all' || msg.status === filter.statusFilter;
+                        return matchesSearch && matchesStatus;
+                    });
+
+                    const html = renderDiscordMessages(filteredMessages, bookId);
+                    console.log(`📝 Generated HTML for ${filteredMessages.length} filtered messages`);
+                    
                     if (effectiveAppend) {
-                        // APPEND older messages to BOTTOM of container (our UI: newest at top, oldest at bottom)
+                        // Incremental append for better performance
                         const tempDiv = document.createElement('div');
                         tempDiv.innerHTML = html;
                         while (tempDiv.firstChild) {
                             container.appendChild(tempDiv.firstChild);
                         }
-                        console.log(`✅ Appended ${data.messages?.length || 0} older messages to bottom`);
+                        console.log(`✅ Appended ${filteredMessages.length} matching messages to bottom`);
                     } else {
                         container.replaceChildren();
                         const tempDiv = document.createElement('div');
@@ -5345,7 +5360,7 @@
                         while (tempDiv.firstChild) {
                             container.appendChild(tempDiv.firstChild);
                         }
-                        console.log(`✅ Rendered ${data.messages?.length || 0} messages to container`);
+                        console.log(`✅ Rendered ${filteredMessages.length} matching messages to container`);
                     }
                     
                     // Check for new messages by comparing IDs
