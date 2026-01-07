@@ -5491,6 +5491,9 @@
                 bookSearchContext.query = '';
                 bookSearchContext.bookId = null;
             }
+            
+            // Re-filter to show all messages (unhide filtered items)
+            filterDiscordMessages(bookId);
         }
 
         // Insert context messages around target without duplicates
