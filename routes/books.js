@@ -894,7 +894,7 @@ function registerBooksRoutes(app, deps) {
                             sender_avatar: msg.author.displayAvatarURL(),
                             sender_contact: senderContact,
                             is_creator: isCreator,
-                            message_content: msg.content || msg.embeds[0]?.description || '',
+                            message_content: msg.content || (msg.embeds[0]?.description !== '_(No text content)_' ? msg.embeds[0]?.description : '') || '',
                             timestamp: msg.createdAt.toISOString(),
                             has_media: msg.attachments.size > 0 || !!mediaFromEmbed,
                             media_url: attachment ? attachment.url : (mediaFromEmbed ? mediaFromEmbed.url : null),
