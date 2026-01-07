@@ -5782,12 +5782,35 @@
                     if (newMessages.length > 0) {
                         console.log(`🔄 Polling: ${newMessages.length} new message(s)`);
                         
-                        // Append new messages silently (no auto-scroll, no banner)
-                        for (const msg of newMessages) {
+                        // LENS MODE: Filter new messages through active filter before inserting
+                        const filter = lensFilterState[bookId] || { searchText: '', statusFilter: 'all' };
+                        const filteredNewMessages = newMessages.filter(msg => {
+                            const msgText = (msg.author?.username || '') + ' ' + (msg.content || '') + ' ' + 
+                                           (msg.embeds?.map(e => (e.title || '') + ' ' + (e.description || '')).join(' ') || '');
+                            
+                            // Skip placeholder content
+                            if (msg.content === "_(No text content)_") return false;
+                            
+                            const matchesSearch = window.searchState.performSearch(filter.searchText, msgText);
+                            const matchesStatus = filter.statusFilter === 'all' || msg.status === filter.statusFilter;
+                            return matchesSearch && matchesStatus;
+                        });
+                        
+                        // Also add to cache (unfiltered)
+                        if (messageCache[bookId]) {
+                            messageCache[bookId] = [...newMessages, ...messageCache[bookId]];
+                        }
+                        
+                        // Append only filtered messages silently (no auto-scroll, no banner)
+                        for (const msg of filteredNewMessages) {
                             const existing = document.querySelector(`.discord-message[data-msg-id="${msg.id}"]`);
                             if (!existing) {
                                 await insertContextMessages([msg], msg.id, bookId);
                             }
+                        }
+                        
+                        if (filter.searchText || filter.statusFilter !== 'all') {
+                            console.log(`🔄 Polling: ${filteredNewMessages.length}/${newMessages.length} messages match current filter`);
                         }
                     }
                 } catch (error) {
