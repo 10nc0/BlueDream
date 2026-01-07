@@ -5424,19 +5424,27 @@
             try {
                 console.log(`🎯 Jumping to message ${targetId}...`);
                 
+                // Check if we're in a filtered view BEFORE clearing (must reload to restore context)
+                const searchBox = document.getElementById(`msg-search-${bookId}`);
+                const wasFiltered = searchBox && searchBox.value.trim() !== '';
+                
                 // Clear search state and UI (clears preview container too)
                 clearSearchState(bookId);
                 
-                // Check if we're in a filtered view - if so, we MUST reload to show context
-                const searchBox = document.getElementById(`msg-search-${bookId}`);
-                const isFiltered = searchBox && searchBox.value.trim() !== '';
+                // Check if target is already in DOM and we're NOT in filtered mode
+                const existingTarget = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                const container = document.getElementById(`discord-messages-${bookId}`);
                 
-                console.log(`📋 Was filtered: ${isFiltered}`);
+                if (existingTarget && container && !wasFiltered) {
+                    // Target already in DOM with full context - just scroll to it immediately
+                    console.log(`✅ Target in DOM (unfiltered), scrolling directly...`);
+                    scrollAndHighlight(existingTarget, bookId);
+                    return;
+                }
                 
-                // CRITICAL: Always reload when jumping from filtered search
-                // This shows messages above and below the target while preserving chronological order
-                console.log(`📥 Loading all messages to show context...`);
-                await loadBookMessages(bookId);
+                // Need to reload: either target not in DOM, or was filtered (need full context)
+                console.log(`📥 Loading messages (wasFiltered=${wasFiltered})...`);
+                await loadBookMessages(bookId, false);
                 
                 console.log(`📄 Load complete, searching for target message...`);
                 
@@ -5456,7 +5464,7 @@
                             }
                         });
                     });
-                }, 50); // Small delay to ensure browser has committed layout
+                }, 100); // Delay to ensure browser has committed layout
                 
             } catch (error) {
                 console.error('Error jumping to message:', error);
@@ -5589,61 +5597,63 @@
             console.log(`📦 Container found:`, !!container);
             
             if (container) {
-                // PRIORITY: (i) Jump pressed (✓) -> (ii) Clear filter (✓) -> (iii) Snap to top -> (iv) Offset
-                
                 // FIXED OFFSET: Time bar height is constant, no need for dynamic calculation
                 const FIXED_OFFSET = 56; // Time bar height (40px) + minimal padding (16px)
                 
-                // STEP 1: Snap to top immediately (rough scroll to element position)
-                const containerRect = container.getBoundingClientRect();
-                const elRect = el.getBoundingClientRect();
-                const elTopRelativeToContainer = elRect.top - containerRect.top;
-                const roughScrollTarget = container.scrollTop + elTopRelativeToContainer - FIXED_OFFSET;
-                container.scrollTop = Math.max(0, roughScrollTarget);
-                console.log(`📐 STEP 1 - Snap to top: scrollTop = ${container.scrollTop}px`);
+                // Helper function to calculate and apply scroll
+                const applyScroll = (label) => {
+                    const containerRect = container.getBoundingClientRect();
+                    const elRect = el.getBoundingClientRect();
+                    const elTopRelativeToContainer = elRect.top - containerRect.top;
+                    const scrollTarget = container.scrollTop + elTopRelativeToContainer - FIXED_OFFSET;
+                    container.scrollTop = Math.max(0, scrollTarget);
+                    console.log(`📐 ${label}: scrollTop = ${container.scrollTop}px (offset=${FIXED_OFFSET}px)`);
+                };
                 
-                // STEP 2: Wait for images in this message to load before final offset
-                // This ensures accurate height calculation once media is rendered
+                // STEP 1: Immediate scroll snap
+                applyScroll('STEP 1 - Initial snap');
+                
+                // STEP 2: Wait for ALL images in this message to fully load, then re-snap
                 const images = el.querySelectorAll('img');
-                const mediaPreview = el.querySelector('.discord-media-preview');
                 
-                if (images.length > 0 || mediaPreview) {
-                    console.log(`⏳ Waiting for ${images.length} image(s) + media to load...`);
-                    
-                    // Create array of image load promises
-                    const imagePromises = Array.from(images).map(img => {
-                        return new Promise(resolve => {
-                            if (img.complete) {
-                                // Image already loaded or cached
-                                resolve();
-                            } else {
-                                // Wait for image to load
-                                img.onload = () => resolve();
-                                img.onerror = () => resolve(); // Resolve even on error to avoid hanging
+                // Attach onload handlers to all images (including future lazy-loaded ones)
+                const attachLoadHandler = (img) => {
+                    if (!img.complete) {
+                        img.addEventListener('load', () => {
+                            applyScroll('Post-image-load correction');
+                        }, { once: true });
+                        img.addEventListener('error', () => {
+                            applyScroll('Post-image-error correction');
+                        }, { once: true });
+                    }
+                };
+                
+                images.forEach(attachLoadHandler);
+                
+                // Also watch for dynamically added images via MutationObserver
+                const observer = new MutationObserver((mutations) => {
+                    for (const mutation of mutations) {
+                        for (const node of mutation.addedNodes) {
+                            if (node.nodeName === 'IMG') {
+                                attachLoadHandler(node);
+                            } else if (node.querySelectorAll) {
+                                node.querySelectorAll('img').forEach(attachLoadHandler);
                             }
-                        });
-                    });
-                    
-                    // STEP 3: After images load, recalculate and apply final offset
-                    Promise.all(imagePromises).then(() => {
-                        console.log(`✅ Images loaded, recalculating scroll offset...`);
-                        
-                        // Recalculate with fully loaded element height
-                        const finalContainerRect = container.getBoundingClientRect();
-                        const finalElRect = el.getBoundingClientRect();
-                        const finalElTopRelativeToContainer = finalElRect.top - finalContainerRect.top;
-                        const finalScrollTarget = container.scrollTop + finalElTopRelativeToContainer - FIXED_OFFSET;
-                        
-                        console.log(`📐 STEP 3 - Final offset: scrollTop = ${finalScrollTarget}px (offset=${FIXED_OFFSET}px)`);
-                        
-                        // Apply final scroll
-                        container.scrollTop = Math.max(0, finalScrollTarget);
-                    });
-                } else {
-                    console.log(`✓ No images/media, scroll offset applied immediately`);
-                }
+                        }
+                    }
+                });
                 
-                console.log(`📍 SCROLL APPLIED: scrollTop now = ${container.scrollTop}px (offset=${FIXED_OFFSET}px)`);
+                observer.observe(el, { childList: true, subtree: true });
+                
+                // Stop observing after 5 seconds (safety limit)
+                setTimeout(() => {
+                    observer.disconnect();
+                }, 5000);
+                
+                // STEP 3: Scheduled corrections for layout shifts
+                setTimeout(() => applyScroll('STEP 2 - 100ms correction'), 100);
+                setTimeout(() => applyScroll('STEP 3 - 300ms correction'), 300);
+                setTimeout(() => applyScroll('STEP 4 - 1s final correction'), 1000);
                 
                 // Add highlight animation to make the target message visible
                 el.classList.add('jump-highlight');
