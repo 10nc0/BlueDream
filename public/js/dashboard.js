@@ -1868,7 +1868,7 @@
                         <div class="message-drop-section" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}">
                             <div class="drop-display hidden"></div>
                         </div>
-                        ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
+                        <div class="discord-text">${escapeHtml(msg.message_content || '(No text content)')}</div>
                         ${msg.embeds && msg.embeds.length > 0 ? msg.embeds.map(embed => {
                             const phoneField = (embed.fields || []).find(f => 
                                 (f.name || '').toLowerCase().includes('phone') || f.name.includes('📞') || f.name.includes('📱')
@@ -5554,7 +5554,7 @@
                             <div class="message-drop-section" data-message-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}">
                                 <div class="drop-display hidden"></div>
                             </div>
-                            ${msg.message_content ? `<div class="discord-text">${escapeHtml(msg.message_content)}</div>` : ''}
+                            <div class="discord-text">${escapeHtml(msg.message_content || '(No text content)')}</div>
                             ${msg.has_media ? `
                                 <div class="discord-media-preview" id="media-preview-${escapeHtml(msg.id)}" data-message-id="${escapeHtml(msg.id)}" data-media-url="${escapeHtml(msg.media_url || '')}" data-media-type="${escapeHtml(msg.media_type || '')}">
                                     <div class="media-loading">Loading media...</div>
