@@ -5495,7 +5495,8 @@
         // ====================================
 
         // Jump to specific message with context window
-        // CONTEXT-FIRST: Fetch target + context directly, works for ANY message age
+        // CONTEXT-FIRST: Always fetch target + context (both older AND newer)
+        // This ensures full bidirectional context is loaded around the target
         async function jumpToMessage(targetId, bookId) {
             if (!targetId || !bookId) return;
             
@@ -5505,16 +5506,8 @@
                 // Clear search state and UI (no re-render, just clear state)
                 clearSearchState(bookId);
                 
-                // FAST PATH: Check if target is already in DOM (unfiltered view)
-                let targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
-                if (targetEl) {
-                    console.log(`✅ Target already in DOM, scrolling directly...`);
-                    scrollAndHighlight(targetEl, bookId);
-                    return;
-                }
-                
-                // CONTEXT-FIRST: Fetch target + surrounding messages directly
-                // This works for ANY message regardless of age or position
+                // ALWAYS fetch context - ensures full bidirectional view (older + newer)
+                // No fast path - we want the complete horizon around the target
                 console.log(`📡 Fetching context for ${targetId}...`);
                 const contextResponse = await window.authFetch(`/api/messages/${targetId}/context?bookId=${bookId}`);
                 
@@ -5572,7 +5565,7 @@
                 // Wait for DOM to update, then scroll
                 await new Promise(resolve => setTimeout(resolve, 100));
                 requestAnimationFrame(() => {
-                    targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                    const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
                     if (targetEl) {
                         console.log(`✅ Target found, scrolling...`);
                         scrollAndHighlight(targetEl, bookId);
