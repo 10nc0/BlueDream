@@ -1343,7 +1343,9 @@
             
             if (!skipDetailRender) {
                 renderBookDetail();
-                loadBookMessages(selectedBookFractalId, 1);
+                // Reset to fresh state for new book (isLoading:false so loadBookMessages can run)
+                messagePageState[selectedBookFractalId] = { isLoading: false, hasMore: true, seenIds: new Set(), oldestId: null };
+                loadBookMessages(selectedBookFractalId, false);
             }
         }
 
@@ -1367,8 +1369,15 @@
             });
             sidebar.replaceChildren(fragment);
             
+            // Stop polling for previous book before switching
+            stopPolling();
+            
+            // Reset to fresh state with null cursor (isLoading:false so loadBookMessages can run)
+            messagePageState[selectedBookFractalId] = { isLoading: false, hasMore: true, seenIds: new Set(), oldestId: null };
+            messageCache[selectedBookFractalId] = null;
+            
             await renderBookDetail();
-            await loadBookMessages(selectedBookFractalId, 1);
+            await loadBookMessages(selectedBookFractalId, false);
             startPolling(fractalId);
         }
 
@@ -5177,7 +5186,7 @@
                 
                 // Load messages if not cached
                 if (!messageCache[bookId]) {
-                    await loadBookMessages(bookId, 1);
+                    await loadBookMessages(bookId, false);
                 }
             }
         }
@@ -5237,10 +5246,13 @@
                 // SCHEMA SWITCHEROO: Use currentViewSource to pull from correct webhook
                 // Use cursor-based pagination with 'before' parameter for efficient Discord API fetching
                 let url = `/api/books/${bookId}/messages?limit=50&source=${currentViewSource}`;
-                if (append && messagePageState[bookId].oldestId) {
+                
+                // SAFEGUARD: Append mode requires valid cursor, otherwise fall back to fresh load
+                const effectiveAppend = append && messagePageState[bookId].oldestId;
+                if (effectiveAppend) {
                     url += `&before=${messagePageState[bookId].oldestId}`;
                 }
-                console.log(`Loading messages for book ${bookId} (source: ${currentViewSource}, cursor: ${messagePageState[bookId].oldestId || 'none'})...`);
+                console.log(`Loading messages for book ${bookId} (source: ${currentViewSource}, mode: ${effectiveAppend ? 'append' : 'fresh'}, cursor: ${messagePageState[bookId].oldestId || 'none'})...`);
                 const response = await window.authFetch(url);
                 
                 if (!response.ok) {
@@ -5253,7 +5265,7 @@
                 
                 // SECURITY: Cache ONLY with tenant-scoped fractal_id
                 // This ensures complete tenant isolation in message cache
-                if (!append) {
+                if (!effectiveAppend) {
                     messageCache[bookId] = data.messages;
                     // Reset pagination state on fresh load to allow infinite scroll from start
                     messagePageState[bookId].seenIds = new Set();
@@ -5270,7 +5282,7 @@
                 if (container) {
                     const html = renderDiscordMessages(data.messages, bookId);
                     console.log(`📝 Generated HTML length: ${html.length} chars`);
-                    if (append) {
+                    if (effectiveAppend) {
                         // APPEND older messages to BOTTOM of container (our UI: newest at top, oldest at bottom)
                         const tempDiv = document.createElement('div');
                         tempDiv.innerHTML = html;
@@ -5352,7 +5364,7 @@
                     
                     // Add infinite scroll listener (only on first load)
                     // Our UI: newest at TOP, oldest at BOTTOM. Scroll DOWN to see older history.
-                    if (!append) {
+                    if (!effectiveAppend) {
                         const messagesContainer = document.getElementById(`discord-messages-${bookId}`);
                         if (messagesContainer && !messagesContainer.dataset.scrollListenerAttached) {
                             messagesContainer.dataset.scrollListenerAttached = 'true';
@@ -5372,7 +5384,7 @@
                                         // Debounce: prevent rapid re-triggers
                                         scrollDebounce = setTimeout(() => { scrollDebounce = null; }, 1000);
                                         console.log(`📜 Infinite scroll triggered (${Math.round(distanceFromBottom)}px from bottom) - loading older messages...`);
-                                        loadBookMessages(bookId, 0, true);
+                                        loadBookMessages(bookId, true);
                                     } else if (!pageState.hasMore) {
                                         console.log(`📜 Near bottom but hasMore=false - all messages loaded`);
                                     }
@@ -8476,12 +8488,11 @@ document.addEventListener('click', function(e) {
         return;
     }
     
-    // Pagination buttons
+    // Pagination buttons (legacy - now uses infinite scroll)
     if (target.hasAttribute('data-load-page')) {
         e.preventDefault();
         const bookId = target.getAttribute('data-book-id');
-        const page = parseInt(target.getAttribute('data-load-page'));
-        if (bookId && page) loadBookMessages(bookId, page);
+        if (bookId) loadBookMessages(bookId, true);  // append=true for loading more
         return;
     }
     
