@@ -2131,7 +2131,7 @@
                                 const msg = matchingMessages[i];
                                 const username = msg.querySelector('.discord-username')?.textContent || 'Unknown';
                                 const textEl = msg.querySelector('.discord-text');
-                                const content = textEl?.textContent || '(No text content)';
+                                const content = textEl?.textContent || '';
                                 const msgId = msg.getAttribute('data-msg-id');
                                 
                                 const bubble = document.createElement('div');
