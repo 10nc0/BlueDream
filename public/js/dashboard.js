@@ -97,6 +97,10 @@
         // INFINITE SCROLL: Track pagination state per book
         let messagePageState = {}; // { bookId: { currentPage, isLoading, hasMore } }
         
+        // LENS MODE: Filter state per book (filter-before-render architecture)
+        // Stores active search text per book for efficient re-rendering from cache
+        let lensFilterState = {}; // { bookId: { searchText: '', statusFilter: 'all' } }
+        
         // Platform roadmap for future features
         const roadmapGlossary = {
             platforms: {
@@ -1794,6 +1798,67 @@
             }));
         }
 
+        // LENS MODE: Filter messages at data level BEFORE rendering
+        // Pure function - filters without DOM manipulation
+        function applyLensFilter(messages, searchText, statusFilter = 'all') {
+            if (!messages || messages.length === 0) return [];
+            if (!searchText?.trim() && statusFilter === 'all') return messages;
+            
+            const searchLower = (searchText || '').toLowerCase().trim();
+            
+            return messages.filter(msg => {
+                // Build searchable text from message data
+                const searchableText = [
+                    msg.sender_name || '',
+                    msg.message_content || '',
+                    msg.sender_contact || '',
+                    extractEmbedSearchText(msg.embeds)
+                ].join(' ').toLowerCase();
+                
+                // Match search text
+                const matchesSearch = !searchLower || window.searchState?.performSearch(searchLower, searchableText) || searchableText.includes(searchLower);
+                
+                // Match status filter
+                const matchesStatus = statusFilter === 'all' || msg.discord_status === statusFilter;
+                
+                return matchesSearch && matchesStatus;
+            });
+        }
+        
+        // Re-render messages from cache with current lens filter
+        async function renderFromCacheWithLens(bookId) {
+            const cached = messageCache[bookId];
+            if (!cached || cached.length === 0) return;
+            
+            const filterState = lensFilterState[bookId] || { searchText: '', statusFilter: 'all' };
+            const filtered = applyLensFilter(cached, filterState.searchText, filterState.statusFilter);
+            
+            const container = document.getElementById(`discord-messages-${bookId}`);
+            if (!container) return;
+            
+            // Render filtered messages
+            const html = renderDiscordMessages(filtered, bookId);
+            container.replaceChildren();
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            while (tempDiv.firstChild) {
+                container.appendChild(tempDiv.firstChild);
+            }
+            
+            // Re-initialize supporting features
+            restoreCheckboxStates(bookId);
+            hydrateDropsForBook(bookId);
+            
+            setTimeout(() => {
+                if (window.initMediaLazyLoading) {
+                    window.initMediaLazyLoading();
+                }
+                normalizeMediaImages(container);
+            }, 100);
+            
+            console.log(`🔍 Lens render: ${filtered.length}/${cached.length} messages (filter: "${filterState.searchText}")`);
+        }
+
         // Render Discord-style messages
         function renderDiscordMessages(data, bookId) {
             const messages = Array.isArray(data) ? data : data?.messages;
@@ -1991,27 +2056,23 @@
             }
         }
 
-        // Universal Search - searches both message content AND drops metadata
+        // Universal Search - LENS MODE: filter-then-render architecture
+        // Filters messages at data level and re-renders from cache
         async function filterDiscordMessages(bookId) {
             const searchText = document.getElementById(`msg-search-${bookId}`)?.value || '';
             const statusFilter = document.getElementById(`status-filter-${bookId}`)?.value || 'all';
-            const messages = document.querySelectorAll(`#discord-messages-${bookId} .discord-message`);
-            const bucketHeaders = document.querySelectorAll(`#discord-messages-${bookId} .time-bucket-header`);
+            
+            // Update lens filter state
+            lensFilterState[bookId] = { searchText, statusFilter };
             
             // Check if search text is a date format
             const dateRange = parseNaturalLanguageDate(searchText);
             if (dateRange) {
                 console.log(`📅 Date detected: ${dateRange.context} (${dateRange.dateFrom} to ${dateRange.dateTo})`);
-                // Jump to the date and show all messages (don't filter)
+                // Clear filter and jump to date
+                lensFilterState[bookId] = { searchText: '', statusFilter: 'all' };
+                await renderFromCacheWithLens(bookId);
                 await jumpToMessageDate(bookId, dateRange);
-                
-                // Show all messages if date is detected
-                messages.forEach(msg => {
-                    msg.style.display = 'flex';
-                });
-                bucketHeaders.forEach(header => {
-                    header.style.display = '';
-                });
                 
                 // Show date context indicator
                 const contextEl = document.createElement('div');
@@ -2030,12 +2091,10 @@
                 `;
                 contextEl.textContent = `📅 Showing: ${dateRange.context}`;
                 
-                // Remove old context indicator
                 document.querySelectorAll('[data-date-context]').forEach(el => el.remove());
                 contextEl.setAttribute('data-date-context', 'true');
                 document.body.appendChild(contextEl);
                 
-                // Auto-hide after 3 seconds
                 setTimeout(() => {
                     contextEl.style.opacity = '0';
                     contextEl.style.transition = 'opacity 0.3s ease';
@@ -2045,47 +2104,36 @@
                 return;
             }
             
-            let dropsMatches = new Set();
+            // LENS MODE: Re-render from cache with filter applied
+            await renderFromCacheWithLens(bookId);
             
-            // If there's a search query, also search drops metadata
+            // Post-render: Search drops metadata and highlight matches
+            let dropsMatches = new Set();
             if (searchText.trim()) {
                 try {
                     const response = await window.authFetch(`/api/drops/search/${bookId}?q=${encodeURIComponent(searchText)}`);
                     if (response.ok) {
                         const drops = await response.json();
-                        // Add all matching message IDs to the set
                         drops.forEach(drop => dropsMatches.add(drop.discord_message_id));
                         console.log(`🔍 Found ${drops.length} drops matching "${searchText}"`);
+                        
+                        // Highlight drop matches in rendered DOM
+                        dropsMatches.forEach(msgId => {
+                            const msgEl = document.querySelector(`.discord-message[data-msg-id="${msgId}"]`);
+                            if (msgEl) {
+                                msgEl.style.borderLeft = '3px solid rgba(167, 139, 250, 0.6)';
+                            }
+                        });
                     }
                 } catch (err) {
                     console.log('Drop search skipped:', err.message);
                 }
             }
             
-            // Filter messages and collect matching ones
-            let totalMatches = 0;
-            messages.forEach(msg => {
-                const msgText = msg.getAttribute('data-search-text') || '';
-                const msgStatus = msg.getAttribute('data-status') || '';
-                const msgId = msg.getAttribute('data-msg-id') || '';
-                
-                // Match if: (message content matches OR drops metadata matches) AND status matches
-                const matchesMessageContent = window.searchState.performSearch(searchText, msgText);
-                const matchesDrops = dropsMatches.has(msgId);
-                const matchesSearch = matchesMessageContent || matchesDrops;
-                const matchesStatus = statusFilter === 'all' || msgStatus === statusFilter;
-                
-                const isVisible = matchesSearch && matchesStatus;
-                msg.style.display = isVisible ? 'flex' : 'none';
-                if (isVisible) totalMatches++;
-                
-                // Highlight messages that matched via drops
-                if (matchesDrops && !matchesMessageContent) {
-                    msg.style.borderLeft = '3px solid rgba(167, 139, 250, 0.6)';
-                } else {
-                    msg.style.borderLeft = '';
-                }
-            });
+            // Get rendered messages and bucket headers for UI updates
+            const messages = document.querySelectorAll(`#discord-messages-${bookId} .discord-message`);
+            const bucketHeaders = document.querySelectorAll(`#discord-messages-${bookId} .time-bucket-header`);
+            const totalMatches = messages.length;
             
             // Update bucket headers with match counts and preview bubbles when searching
             if (searchText.trim() || statusFilter !== 'all') {
@@ -5337,20 +5385,22 @@
                     hydrateDropsForBook(bookId);
                     
                     // SEAMLESS SEARCH: Auto-populate and filter if book was opened from message search
-                    if (bookSearchContext.query && bookSearchContext.bookId === bookId) {
-                        const searchBox = document.getElementById(`msg-search-${bookId}`);
-                        const indicator = document.getElementById(`search-indicator-${bookId}`);
-                        if (searchBox) {
-                            searchBox.value = bookSearchContext.query;
-                            // Show visual indicator
-                            if (indicator) {
-                                indicator.style.display = 'flex';
-                            }
-                            // Auto-trigger filter with slight delay to ensure messages are in DOM
-                            setTimeout(() => {
-                                filterDiscordMessages(bookId);
-                            }, 50);
+                    // OR reapply existing filter after loading more messages
+                    const searchBox = document.getElementById(`msg-search-${bookId}`);
+                    const indicator = document.getElementById(`search-indicator-${bookId}`);
+                    
+                    if (bookSearchContext.query && bookSearchContext.bookId === bookId && searchBox) {
+                        searchBox.value = bookSearchContext.query;
+                        if (indicator) {
+                            indicator.style.display = 'flex';
                         }
+                    }
+                    
+                    // Always reapply filter if search box has content (handles both context and manual typing)
+                    if (searchBox && searchBox.value.trim()) {
+                        setTimeout(() => {
+                            filterDiscordMessages(bookId);
+                        }, 50);
                     }
                     
                     // Initialize media lazy loading for this book's messages
