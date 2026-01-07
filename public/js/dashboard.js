@@ -5328,6 +5328,15 @@
                 const container = document.getElementById(`discord-messages-${bookId}`);
                 console.log(`🎯 Container lookup: discord-messages-${bookId}`, container ? 'FOUND' : 'NOT FOUND');
                 if (container) {
+                    // LENS MODE: Always sync filter state from DOM before filtering
+                    // This ensures filter is applied for any active filter (text or status)
+                    const existingSearch = document.getElementById(`msg-search-${bookId}`);
+                    const statusDropdown = document.getElementById(`status-filter-${bookId}`);
+                    lensFilterState[bookId] = {
+                        searchText: existingSearch?.value?.trim() || '',
+                        statusFilter: statusDropdown?.value || 'all'
+                    };
+                    
                     // LENS MODE: Filter new batch of messages
                     const filteredMessages = data.messages.filter(msg => {
                         const filter = lensFilterState[bookId] || { searchText: '', statusFilter: 'all' };
@@ -5399,23 +5408,21 @@
                     // Hydrate drops (Personal Cloud OS metadata)
                     hydrateDropsForBook(bookId);
                     
-                    // SEAMLESS SEARCH: Auto-populate and filter if book was opened from message search
-                    // OR reapply existing filter after loading more messages
+                    // SEAMLESS SEARCH: Auto-populate search box if book was opened from message search
+                    // NOTE: No longer need to reapply filter - messages are filtered before rendering (lens mode)
                     const searchBox = document.getElementById(`msg-search-${bookId}`);
                     const indicator = document.getElementById(`search-indicator-${bookId}`);
                     
                     if (bookSearchContext.query && bookSearchContext.bookId === bookId && searchBox) {
                         searchBox.value = bookSearchContext.query;
+                        // Update lens filter state to match search box
+                        lensFilterState[bookId] = { 
+                            searchText: bookSearchContext.query, 
+                            statusFilter: document.getElementById(`status-filter-${bookId}`)?.value || 'all' 
+                        };
                         if (indicator) {
                             indicator.style.display = 'flex';
                         }
-                    }
-                    
-                    // Always reapply filter if search box has content (handles both context and manual typing)
-                    if (searchBox && searchBox.value.trim()) {
-                        setTimeout(() => {
-                            filterDiscordMessages(bookId);
-                        }, 50);
                     }
                     
                     // Initialize media lazy loading for this book's messages
@@ -5446,8 +5453,9 @@
                                 // Trigger when within 200px of bottom
                                 if (distanceFromBottom < 200) {
                                     if (!pageState.isLoading && pageState.hasMore === true) {
-                                        // Debounce: prevent rapid re-triggers
-                                        scrollDebounce = setTimeout(() => { scrollDebounce = null; }, 1000);
+                                        // Debounce: prevent rapid re-triggers during continuous scroll
+                                        // isLoading guard prevents request storms - debounce is just for scroll events
+                                        scrollDebounce = setTimeout(() => { scrollDebounce = null; }, 500);
                                         console.log(`📜 Infinite scroll triggered (${Math.round(distanceFromBottom)}px from bottom) - loading older messages...`);
                                         loadBookMessages(bookId, true);
                                     } else if (!pageState.hasMore) {
