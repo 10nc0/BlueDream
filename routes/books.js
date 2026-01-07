@@ -758,7 +758,7 @@ function registerBooksRoutes(app, deps) {
         try {
             const messageId = req.params.id;
             const bookId = req.query.bookId;
-            const contextWindow = parseInt(req.query.context) || 25;
+            const contextWindow = parseInt(req.query.context) || 10;
             
             if (!messageId || isNaN(Number(messageId))) {
                 return res.status(400).json({ error: 'Invalid message ID' });
