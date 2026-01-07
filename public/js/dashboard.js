@@ -5491,53 +5491,86 @@
         // ====================================
 
         // Jump to specific message with context window
+        // CONTEXT-FIRST: Fetch target + context directly, works for ANY message age
         async function jumpToMessage(targetId, bookId) {
             if (!targetId || !bookId) return;
             
             try {
                 console.log(`🎯 Jumping to message ${targetId}...`);
                 
-                // Check if we're in a filtered view BEFORE clearing (must reload to restore context)
-                const searchBox = document.getElementById(`msg-search-${bookId}`);
-                const wasFiltered = searchBox && searchBox.value.trim() !== '';
-                
-                // Clear search state and UI (clears preview container too)
+                // Clear search state and UI (no re-render, just clear state)
                 clearSearchState(bookId);
                 
-                // Check if target is already in DOM and we're NOT in filtered mode
-                const existingTarget = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
-                const container = document.getElementById(`discord-messages-${bookId}`);
-                
-                if (existingTarget && container && !wasFiltered) {
-                    // Target already in DOM with full context - just scroll to it immediately
-                    console.log(`✅ Target in DOM (unfiltered), scrolling directly...`);
-                    scrollAndHighlight(existingTarget, bookId);
+                // FAST PATH: Check if target is already in DOM (unfiltered view)
+                let targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                if (targetEl) {
+                    console.log(`✅ Target already in DOM, scrolling directly...`);
+                    scrollAndHighlight(targetEl, bookId);
                     return;
                 }
                 
-                // Need to reload: either target not in DOM, or was filtered (need full context)
-                console.log(`📥 Loading messages (wasFiltered=${wasFiltered})...`);
-                await loadBookMessages(bookId, false);
+                // CONTEXT-FIRST: Fetch target + surrounding messages directly
+                // This works for ANY message regardless of age or position
+                console.log(`📡 Fetching context for ${targetId}...`);
+                const contextResponse = await window.authFetch(`/api/messages/${targetId}/context?bookId=${bookId}`);
                 
-                console.log(`📄 Load complete, searching for target message...`);
+                if (!contextResponse.ok) {
+                    console.warn(`⚠️ Context API returned ${contextResponse.status}`);
+                    showToast(`⚠️ Message not found`, 'error');
+                    return;
+                }
                 
-                // Use setTimeout + double RAF to ensure DOM is FULLY painted before scrolling
-                setTimeout(() => {
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(() => {
-                            console.log(`🔍 Looking for target element...`);
-                            const targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
-                            
-                            if (targetEl) {
-                                console.log(`✅ Target found, calling scrollAndHighlight...`);
-                                scrollAndHighlight(targetEl, bookId);
-                            } else {
-                                console.warn(`⚠️ Message ${targetId} not found in DOM after reload`);
-                                showToast(`⚠️ Message not found`, 'error');
-                            }
-                        });
-                    });
-                }, 100); // Delay to ensure browser has committed layout
+                const contextData = await contextResponse.json();
+                const contextMessages = contextData.messages || [];
+                
+                if (contextMessages.length === 0) {
+                    console.warn(`⚠️ No context messages returned for ${targetId}`);
+                    showToast(`⚠️ Message not found`, 'error');
+                    return;
+                }
+                
+                console.log(`📦 Got ${contextMessages.length} context messages, rendering view...`);
+                
+                // ANCHOR APPROACH: Replace container with context messages (centered on target)
+                // This is book/length agnostic - we just show the context around the target
+                const container = document.getElementById(`discord-messages-${bookId}`);
+                if (container) {
+                    // Render context messages using existing render function
+                    const html = renderDiscordMessages(contextMessages, bookId);
+                    container.replaceChildren();
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = html;
+                    while (tempDiv.firstChild) {
+                        container.appendChild(tempDiv.firstChild);
+                    }
+                    
+                    // Update cache with context messages
+                    messageCache[bookId] = contextMessages;
+                    
+                    // Hydrate drops
+                    hydrateDropsForBook(bookId);
+                    
+                    // Reset pagination state for context view
+                    messagePageState[bookId] = {
+                        isLoading: false,
+                        hasMore: true, // Can load more in either direction
+                        oldestId: contextMessages[contextMessages.length - 1]?.id,
+                        seenIds: new Set(contextMessages.map(m => m.id))
+                    };
+                }
+                
+                // Wait for DOM to update, then scroll
+                await new Promise(resolve => setTimeout(resolve, 100));
+                requestAnimationFrame(() => {
+                    targetEl = document.querySelector(`.discord-message[data-msg-id="${targetId}"]`);
+                    if (targetEl) {
+                        console.log(`✅ Target found, scrolling...`);
+                        scrollAndHighlight(targetEl, bookId);
+                    } else {
+                        console.warn(`⚠️ Message ${targetId} not in DOM after render`);
+                        showToast(`⚠️ Message not found`, 'error');
+                    }
+                });
                 
             } catch (error) {
                 console.error('Error jumping to message:', error);
@@ -5565,8 +5598,18 @@
                 bookSearchContext.bookId = null;
             }
             
-            // Re-filter to show all messages (unhide filtered items)
-            filterDiscordMessages(bookId);
+            // Clear lens filter state directly (no re-render - caller will reload if needed)
+            lensFilterState[bookId] = { searchText: '', statusFilter: 'all' };
+            
+            // Remove any search preview containers
+            const previewContainers = document.querySelectorAll(`#discord-messages-${bookId} .search-preview-container`);
+            previewContainers.forEach(c => c.remove());
+            
+            // Reset status filter dropdown
+            const statusDropdown = document.getElementById(`status-filter-${bookId}`);
+            if (statusDropdown) {
+                statusDropdown.value = 'all';
+            }
         }
 
         // Insert context messages around target without duplicates
