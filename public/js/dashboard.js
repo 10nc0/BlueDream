@@ -8561,6 +8561,7 @@ document.addEventListener('click', function(e) {
         e.preventDefault();
         const messageId = target.getAttribute('data-msg-id');
         const bookId = target.getAttribute('data-book-id');
+        console.log(`🚀 Jump button clicked: msgId=${messageId}, bookId=${bookId}`);
         if (messageId && bookId) {
             jumpToMessage(messageId, bookId);
         }
