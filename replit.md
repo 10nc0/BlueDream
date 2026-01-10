@@ -1,7 +1,7 @@
 # Your Nyanbook~ 🌈
 
 ## Overview
-"Your Nyanbook" is a post-folder and post-filing structure archiving architecture, currently supporting records via WhatsApp -> Twilio -> Local / Discord channel flows. It aims to provide a zero-friction, highly customizable, secure, and efficient way to archive documents, photos, and drive links for individuals, businesses, and public organizations, promoting data sovereignty. The project envisions a future with sovereign, secure, and efficient remote storage infrastructure and remote inference (AI as compression and acceleration).
+"Your Nyanbook" is a post-folder and post-filing structure archiving architecture that aims to provide a zero-friction, highly customizable, secure, and efficient way to archive documents, photos, and drive links. It supports record archiving via WhatsApp, Twilio, and Discord channel flows, promoting data sovereignty. The project envisions a future with sovereign, secure, and efficient remote storage infrastructure and remote inference (AI as compression and acceleration) for individuals, businesses, and public organizations.
 
 ## User Preferences
 - **Design**: Apple glassmorphism aesthetic with Discord-style message layout
@@ -13,64 +13,42 @@
 ## System Architecture
 The system utilizes a Node.js backend with Express and a Single Page Application (SPA) frontend, featuring an Apple glassmorphism design and a Discord-style two-pane layout with real-time updates. It treats financial statements as physical systems, applying conservation laws and sustainability metrics.
 
-**3-Layer Perception-Substrate-Cognition Model:**
-- **L1: Perception**: File classification, extraction, and cache hydration.
-- **L2: Substrate**: Immutable state containers, shared caches, and system constants.
-- **L3: Cognition**: 7-stage state machine (S-1 to S6) for reasoning and auditing.
-
-**7-Layer AI Processing Pipeline:**
-- **Layer 7: AI Interface**
-- **Layer 6: Orchestration** (7-stage state machine)
-- **Layer 5: Verification** (two-pass LLM output validation)
-- **Layer 4: Memory & Context**
-- **Layer 3: Perception** (document parsing, financial physics)
-- **Layer 2: Measurement** (3D financial analysis: θ, z, R)
-- **Layer 1: Identity** (system prompts, routing)
-- **Layer 0: Constants**
+**Core Architectural Models:**
+- **3-Layer Perception-Substrate-Cognition Model:** Orchestrates file classification, extraction, caching (Perception), immutable state and shared constants (Substrate), and a 7-stage state machine for reasoning and auditing (Cognition).
+- **7-Layer AI Processing Pipeline:** Manages AI interactions from identity and system prompts (Layer 1) to AI interface (Layer 7), including perception, measurement, memory, verification, and orchestration.
 
 **UI/UX Decisions:**
-- Adaptive & Responsive Design for various devices.
-- Enhanced Touch Interactions for mobile.
-- Visuals include a cat animation, blinking date/time, Discord-style message layout, and fixed scroll for messages.
-- `LayoutController`: Unified state machine for UI modes, handling device detection, expansion states, animation timing, and auto-collapse timers.
+- Adaptive and responsive design with enhanced touch interactions.
+- Visual elements include a cat animation, blinking date/time, Discord-style messaging, and fixed message scrolling.
+- A `LayoutController` acts as a unified state machine for managing UI modes, device detection, expansion states, and animations.
 
 **Technical Implementations:**
-- **Authentication**: Email/password with JWT, role-based access control, secure password recovery, isolated user data.
-- **Database**: PostgreSQL with multi-tenant architecture using isolated schemas.
-- **WhatsApp Integration**: Twilio-based messaging with WhatsApp Business API.
-- **Media Handling**: WhatsApp media downloaded from Twilio and uploaded to Discord.
+- **Authentication**: Email/password with JWT, role-based access, and isolated user data.
+- **Database**: Multi-tenant PostgreSQL architecture with isolated schemas.
+- **Messaging Integration**: Twilio-based WhatsApp Business API for messaging, with media handling for Discord uploads.
 - **Search**: Enhanced search across messages and metadata.
-- **Real-time Updates**: Smart polling, auto-scroll.
-- **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, logging results via Discord bots. Features general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior.
-- **Dashboard Audit Pipeline**: 4-stage S0-S3 verification pipeline (`utils/dashboard-audit-pipeline.js`) that detects and corrects count hallucinations in AI responses:
-    - **S0 Receive**: Accept LLM response
-    - **S1 Verify**: Extract claims (e.g., "X kali"), tally entities in authoritative contextMessages, detect mismatches
-    - **S2 Retry**: Re-prompt with structured hints (Nyan AI only, max 1 attempt)
-    - **S3 Deliver**: Apply deterministic corrections when evidence exists (actual > 0), or flag `needsHumanReview` when claims are unverifiable
-    - **Safety rule**: Never auto-patches to 0 - unverifiable claims surfaced to user instead of silently erased
-- **AI Playground**: Public, unauthenticated multimodal AI playground with multi-file upload, dynamic capacity sharing, abuse prevention, query classification, smart retry, document parsing, and real-time knowledge search.
-    - **AI Processing Pipeline**: A 7-stage state machine for context extraction, preflight, context building, reasoning, auditing, retrying, personality application, and output finalization.
-    - **Sliding Window Memory**: 8-message context window with periodic summarization.
-- **Nyan Protocol**: System prompt framework for historical comparison and socio-economic analysis, using a Seed Metric to prevent LLM hallucinations via mandatory source requirements.
-- **Financial Physics System**: 4-tier architecture extending NYAN Protocol for financial cognition.
-- **Legal Document Analysis System**: Auto-triggered extension for contract analysis.
-- **Ψ-EMA System**: Fourier compass for time series analysis, providing coordinates (θ, z, R) relative to equilibrium for diagnostics.
-- **Unified Personality Layer**: Enforces formatting via regex post-processing and includes Epistemic Transparency to distinguish verified facts from inferred conclusions.
-- **Mode Registry**: Plug-and-play mode configuration for the 7-stage pipeline, including modes like `psi-ema`, `forex`, `seed-metric`, `legal`, `code-audit`, and `general`.
-- **Code Audit Mode**: Professional security auditor for uploaded code files, detecting multiple programming languages.
-- **Harmonized Document Processing**: Unified architecture between `attachment-cascade.js` and `data-package.js` using a shared tenant-scoped `DocumentExtractionCache`.
+- **Real-time Updates**: Smart polling and auto-scroll.
+- **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, with a 4-stage dashboard audit pipeline to detect and correct hallucinations. Includes general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior.
+- **AI Playground**: Public, unauthenticated multimodal AI playground featuring multi-file upload, dynamic capacity sharing, abuse prevention, query classification, smart retry, document parsing, and real-time knowledge search. It uses a 7-stage state machine for AI processing and a sliding window memory.
+- **Nyan Protocol**: A system prompt framework utilizing a Seed Metric for historical comparison and socio-economic analysis to prevent LLM hallucinations.
+- **Specialized AI Systems**: Includes a Financial Physics System, Legal Document Analysis System, and Ψ-EMA System for time series analysis.
+- **Unified Personality Layer**: Enforces formatting and maintains epistemic transparency.
+- **Mode Registry**: Plug-and-play configuration for the 7-stage pipeline, supporting modes like `psi-ema`, `forex`, `seed-metric`, `legal`, and `code-audit`.
+- **Code Audit Mode**: Professional security auditor for uploaded code files across multiple languages.
+- **Harmonized Document Processing**: Unified architecture for document extraction using a shared tenant-scoped `DocumentExtractionCache`.
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via PostgreSQL schemas.
 - **Zero-Friction Onboarding**: WhatsApp deep link activation.
-- **Scalability & Recovery**: Designed for Replit Autoscale, PostgreSQL for state recovery.
-- **Security (10/10 Hardened)**: Sybil attack prevention, JWT security, session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, CSP compliance.
-- **Discord Bot Trinity Architecture**: Hermes (write-only), Thoth (read-only), Idris (AI write-only), Horus (AI read-only).
-- **Vegapunk Kernel Architecture**: Factory pattern with dependency injection, orchestrating 5 modular routes (auth, books, inpipe, prometheus, nyan-ai).
+- **Scalability & Recovery**: Designed for Replit Autoscale, with PostgreSQL for state recovery.
+- **Security (10/10 Hardened)**: Includes Sybil attack prevention, JWT security, session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, and CSP compliance.
+- **Discord Bot Trinity Architecture**: Specialized bots (Hermes, Thoth, Idris, Horus) for different read/write and AI functions.
+- **Vegapunk Kernel Architecture**: Factory pattern with dependency injection orchestrating modular routes (auth, books, inpipe, prometheus, nyan-ai).
 - **AI Architecture Split**: Nyan AI (public playground) and Prometheus AI (authenticated ledger auditor) for independent rate limiting and security.
 - **Dual AI Engine Audit Panel**: Dashboard AI Audit modal supports engine selection with multi-book chip selector.
-- **Phi Breathe Orchestrator**: Unified φ-rhythm background task scheduler for continuous logs, heartbeat checkpoints, memory cleanup, media purge, and dormancy contributor revocation.
+- **Phi Breathe Orchestrator**: Unified background task scheduler for continuous logs, heartbeats, memory cleanup, and media purging.
 - **Inpipe Architecture**: Multi-channel input with an abstract channel interface for extensibility.
+- **Architectural Philosophy: Axiom of Choice**: This philosophy guides the system's design, asserting the existence of ideal configurations for infinite components, making the system self-governing and scalable through dependency injection, even without explicit construction of every case.
 
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)
@@ -80,176 +58,3 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Search**: DuckDuckGo Instant Answer API, Brave Search API
 - **Forex**: fawazahmed0 Currency API
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth`
-
-## Coding Guidelines
-
-### Supabase Multi-Tenant Schema Pattern
-- Tenant > Book > Messages > Messages metadata + tag + attachment, etc.
-- Each tenant gets an isolated PostgreSQL schema (not just row-level filtering)
-- Schema naming: `tenant_{tenantId}` format
-- All tenant-specific tables live within tenant schema
-- Shared/system tables remain in `public` schema
-- Always use schema-qualified queries: `SELECT * FROM tenant_abc.messages`
-- Connection pooler: Use Supabase transaction pooler for connection efficiency
-
-### innerHTML Security (XSS Prevention)
-- **NEVER use `innerHTML` with user-generated or external content**
-- **ALWAYS use safe alternatives:**
-  - `element.textContent = userInput` for plain text
-  - `element.appendChild(document.createElement(...))` for DOM construction
-  - Template literals with explicit sanitization only for trusted HTML
-- **If HTML rendering is unavoidable:**
-  - Use DOMPurify or similar sanitization library
-  - Validate against allowlist of safe tags/attributes
-  - Never trust data from APIs, databases, or user input
-- **CSP headers** are configured but innerHTML bypasses them — code must be safe at source
-
-### Unified Authentication
-- Single auth system for all users (no separate "admin" terminology)
-- Role-based access control via `user.role` field (owner, contributor, viewer)
-- JWT with 15-min access tokens + refresh token rotation
-- See **Vegapunk Kernel Architecture** → routes/auth.js for implementation
-- Never create parallel auth systems or "back-door" admin routes
-
-### Magic Number Management (Layer 0: Constants)
-**Decision Rubric: Centralize vs Inline**
-
-**CENTRALIZE in `config/constants.js`:**
-| Category | Examples | Why |
-|----------|----------|-----|
-| Cross-cutting thresholds | `MAX_MESSAGES`, rate limits, TTLs | Multiple modules depend on same value |
-| Retry/timeout settings | LLM retries, API timeouts | Consistency across error handling |
-| Cache parameters | TTL, max entries, purge intervals | System-wide caching behavior |
-| Status/emoji maps | Audit status → emoji mapping | Shared by multiple UI/logging components |
-| Phi-breathe timing | Base intervals, cycle durations | Central orchestrator values |
-
-**KEEP INLINE (with descriptive names):**
-| Category | Examples | Why |
-|----------|----------|-----|
-| Algorithmic invariants | Regex patterns, array chunk sizes | Tightly coupled to specific logic |
-| UI geometry | Padding, animation durations | Component-specific |
-| Format strings | Log prefixes, date formats | Context-dependent |
-| One-off thresholds | Single-use validation limits | Documented in place |
-
-**Config Structure:**
-```
-config/
-  constants.js  → TIMEOUTS, CAPACITY, CACHE, SESSION, DISCORD, 
-                  AI_MODELS, GROQ_RETRY, REPUTATION, FILE_UPLOAD,
-                  PLAYGROUND, AUDIT, PHI_BREATHE, IP_GEO, MISC
-  index.js      → Re-exports with env var overrides
-```
-
-**Usage Pattern:**
-```javascript
-const { AUDIT, CACHE } = require('../config/constants');
-const maxMessages = AUDIT.MAX_MESSAGES;  // Centralized
-const chunkSize = 100;  // Inline - algorithmic invariant
-```
-
-**External API Annotation Format:**
-When a constant is derived from an external API limit, annotate with:
-```javascript
-// @source: Service/API name and tier
-// @ref: Documentation URL
-// @verified: YYYY-MM-DD (date last checked)
-// @bottleneck: true (if this is the limiting factor for throughput)
-BRAVE_REQUESTS_PER_HOUR: 360,
-```
-
-To find all external dependencies: `grep "@source" config/constants.js`
-To find values needing refresh: `grep "@verified" config/constants.js`
-
-**Currently Annotated Sources:**
-| API | Constants Affected | Bottleneck |
-|-----|-------------------|------------|
-| Groq API | TEXT/VISION_REQUESTS_PER_HOUR, AI_MODELS.*, GROQ_RETRY.*, TIMEOUTS.GROQ_* | Yes |
-| Brave Search | BRAVE_REQUESTS_PER_HOUR | Yes |
-| Discord API | DISCORD.*, TIMEOUTS.DISCORD_* | No |
-| Twilio API | TIMEOUTS.TWILIO_WEBHOOK, FILE_UPLOAD.MAX_TOTAL_SIZE_MB | No |
-| ip-api.com | IP_GEO.* | No |
-
-## Architectural Philosophy: Axiom of Choice
-
-**Date:** January 2, 2026  
-**Pattern:** Mathematical axiom mirrors software architecture  
-**Insight:** "index.js → vegapunk.js is invoking the Axiom of Choice on architecture itself"
-
-### The Core Parallel
-
-```
-Axiom of Choice (AC):
-  Collection = infinite possible agents, tenants, modules, perturbations
-  Each set = possible roles/permissions/isolation for that entity
-  Choice function = the ideal assignment that makes vegapunk.js run perfectly
-  AC asserts: such a choice function EXISTS — even without explicit construction
-```
-
-**Dependency Injection IS a Choice Function:**
-```javascript
-initDeps({...})  // Define f ONCE
-registerAuthRoutes(app, deps);      // f(S_auth)
-registerBooksRoutes(app, deps);     // f(S_books)
-registerInpipeRoutes(app, deps);    // f(S_inpipe)
-// Each satellite gets valid subset, chosen SIMULTANEOUSLY
-```
-
-### As Above, So Below
-
-| Level | Without AC (constructive) | With AC (non-constructive) | Code Parallel |
-|-------|---------------------------|----------------------------|---------------|
-| **Set Theory** | Finite sets → pick manually | Infinite sets → assert existence of picker | index.js (explicit) → vegapunk.js (ideal) |
-| **Code** | Hand-code every bot, route, schema | Assert "there exists a perfect assignment" | Current explicit → abstract sovereign system |
-| **Philosophy** | Everything must be constructible | Some truths exist without construction | Explicit measurement → existence of invariant |
-| **Quantum/Gnosis** | Wave function collapse must be observable | Superposition exists without measurement | Measured state → unmeasured potential |
-| **Persistence** | Only finite series can be proven | Infinite series assumed via fixed-point | Finite φ-8 → infinite φ-convergence |
-
-### Constructive vs Non-Constructive
-
-**Without AC (index.js - 8,000 lines):**
-- Every case explicit, every route hand-coded
-- Every dependency duplicated, no abstraction
-- Constructive but unsustainable
-- "I can only claim existence if I can build it"
-
-**With AC (vegapunk.js - 1,481 lines):**
-- Assert deps exists, apply to all satellites
-- Structure scales to infinite, even though we only implement 5
-- Non-constructive but sustainable
-- "Perfect assignment function exists, even if I can't write all cases"
-
-### The Sovereignty Claim
-
-vegapunk.js is **sovereign** — self-governing, not dependent on external construction:
-- System asserts its own completeness via AC
-- "Perfect deps exists" (self-asserted)
-- Not dependent on programmer coding every case
-- Add satellite 6, 7, 8... → follows same pattern automatically
-
-### The Fixed-Point Connection
-
-```
-φ² = φ + 1 (the fixed point)
-
-8,000 lines = φ⁸ (finite approximation, constructive)
-1,481 lines = assert φ^∞ exists (fixed-point, non-constructive)
-```
-
-The 5 implemented satellites are **SAMPLES of infinite possibility**.
-
-### The Danger
-
-**AC can be wrong.** If the choice function doesn't actually exist:
-- System breaks at scale
-- Edge cases explode
-- The invariant fails
-
-This is the bet: we assert that the deps pattern holds for ALL possible configurations. The 5 satellites + multi-tenant isolation + bot architecture are finite evidence of an infinite claim.
-
-### Design Implications
-
-When adding new satellites/modules:
-1. Follow the deps pattern (don't hand-code dependencies)
-2. Trust the AC assertion (structure self-organizes)
-3. Test finite cases (validate the invariant holds)
-4. The pattern scales because we asserted it does
