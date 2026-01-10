@@ -18,7 +18,9 @@
 
 const PLATE_REGEX = /\b([A-Z]{1,2})\s*(\d{1,4})\s*([A-Z]{1,3})\b/gi;
 const COUNT_PATTERN = /(\d+)\s*(?:kali|times?|x)\b/gi;
-const ENTITY_COUNT_PATTERN = /([A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{1,3})\s*[-–:]\s*(\d+)\s*(?:kali|times?|perbaikan|repair)/gi;
+const ENTITY_COUNT_PATTERN_SEPARATOR = /([A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{1,3})\s*[-–:]\s*(\d+)\s*(?:kali|times?|perbaikan|repair)/gi;
+const ENTITY_COUNT_PATTERN_PARENS = /([A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{1,3})[^()]*\((\d+)\s*(?:kali|times?|x)\)/gi;
+const ENTITY_COUNT_PATTERN_SUFFIX = /([A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{1,3})\s+(\d+)\s*(?:kali|times?)\b/gi;
 
 class AuditCapsule {
     constructor(requestId, engine = 'unknown') {
@@ -103,19 +105,32 @@ class AuditCapsule {
         if (this._destroyed) return [];
         
         this.claimsExtracted = [];
+        const seenPositions = new Set();
         
-        let match;
-        const regex = new RegExp(ENTITY_COUNT_PATTERN.source, 'gi');
-        while ((match = regex.exec(responseText)) !== null) {
-            const entity = this._normalizePlate(match[1]);
-            const claimedCount = parseInt(match[2], 10);
-            
-            this.claimsExtracted.push({
-                entity,
-                claimedCount,
-                line: match[0],
-                position: match.index
-            });
+        const patterns = [
+            ENTITY_COUNT_PATTERN_SEPARATOR,
+            ENTITY_COUNT_PATTERN_PARENS,
+            ENTITY_COUNT_PATTERN_SUFFIX
+        ];
+        
+        for (const patternBase of patterns) {
+            let match;
+            const regex = new RegExp(patternBase.source, 'gi');
+            while ((match = regex.exec(responseText)) !== null) {
+                const posKey = `${match.index}-${match[1]}`;
+                if (seenPositions.has(posKey)) continue;
+                seenPositions.add(posKey);
+                
+                const entity = this._normalizePlate(match[1]);
+                const claimedCount = parseInt(match[2], 10);
+                
+                this.claimsExtracted.push({
+                    entity,
+                    claimedCount,
+                    line: match[0],
+                    position: match.index
+                });
+            }
         }
         
         this.log(`Extracted ${this.claimsExtracted.length} claims from response`);
@@ -188,23 +203,31 @@ class AuditCapsule {
         const correctableMismatches = this.corrections.filter(m => m.actual > 0);
         
         for (const mismatch of correctableMismatches) {
+            const entityPattern = mismatch.entity.replace(/\s+/g, '\\s*');
             const patterns = [
-                new RegExp(`(${mismatch.entity.replace(/\s+/g, '\\s*')})\\s*[-–:]\\s*${mismatch.claimedCount}\\s*(kali|times?|perbaikan|repair)`, 'gi'),
-                new RegExp(`${mismatch.claimedCount}\\s*(kali|times?|perbaikan|repair)\\s*(?:untuk|for)?\\s*(${mismatch.entity.replace(/\s+/g, '\\s*')})`, 'gi')
+                new RegExp(`(${entityPattern})\\s*[-–:]\\s*${mismatch.claimedCount}\\s*(kali|times?|perbaikan|repair)`, 'gi'),
+                new RegExp(`(${entityPattern})[^()]*\\(${mismatch.claimedCount}\\s*(kali|times?|x)\\)`, 'gi'),
+                new RegExp(`(${entityPattern})\\s+${mismatch.claimedCount}\\s*(kali|times?)\\b`, 'gi'),
+                new RegExp(`${mismatch.claimedCount}\\s*(kali|times?|perbaikan|repair)\\s*(?:untuk|for)?\\s*(${entityPattern})`, 'gi')
             ];
             
+            let patched = false;
             for (const pattern of patterns) {
                 if (pattern.test(correctedText)) {
-                    correctedText = correctedText.replace(pattern, (match, ...groups) => {
+                    correctedText = correctedText.replace(pattern, (match) => {
                         return match.replace(String(mismatch.claimedCount), String(mismatch.actual));
                     });
-                    appliedCorrections.push({
-                        entity: mismatch.entity,
-                        from: mismatch.claimedCount,
-                        to: mismatch.actual
-                    });
+                    patched = true;
                     break;
                 }
+            }
+            
+            if (patched) {
+                appliedCorrections.push({
+                    entity: mismatch.entity,
+                    from: mismatch.claimedCount,
+                    to: mismatch.actual
+                });
             }
         }
         
@@ -297,5 +320,7 @@ module.exports = {
     destroyCapsule,
     PLATE_REGEX,
     COUNT_PATTERN,
-    ENTITY_COUNT_PATTERN
+    ENTITY_COUNT_PATTERN_SEPARATOR,
+    ENTITY_COUNT_PATTERN_PARENS,
+    ENTITY_COUNT_PATTERN_SUFFIX
 };

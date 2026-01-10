@@ -348,7 +348,7 @@ async function runDashboardAuditPipeline({
               from: m.claimedCount,
               to: m.actual
             })),
-            verified: true,
+            verified: false,
             pipelineLog,
             latencyMs: Date.now() - startTime
           };
@@ -366,7 +366,7 @@ async function runDashboardAuditPipeline({
           corrected: true,
           correctionMethod: 'retry+patch',
           corrections: retryCorrections,
-          verified: retryCapsule.verified,
+          verified: false,
           pipelineLog,
           latencyMs: Date.now() - startTime
         };
@@ -405,7 +405,7 @@ async function runDashboardAuditPipeline({
     corrections: finalStatus.corrections,
     unverifiable: capsule.unverifiable,
     needsHumanReview: capsule.unverifiable.length > 0,
-    verified: finalStatus.corrected && capsule.unverifiable.length === 0,
+    verified: false,
     pipelineLog,
     latencyMs: Date.now() - startTime
   };
