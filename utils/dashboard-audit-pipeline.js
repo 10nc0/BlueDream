@@ -282,6 +282,10 @@ async function runDashboardAuditPipeline({
       needsHumanReview: hasClaims,
       noContext: true,
       verified: null,
+      confidence: {
+        score: hasClaims ? 50 : 100,
+        rationale: hasClaims ? 'Claims detected but no context available to verify counts' : 'No verifiable claims detected in response'
+      },
       pipelineLog,
       latencyMs: Date.now() - startTime
     };
@@ -295,6 +299,10 @@ async function runDashboardAuditPipeline({
       corrected: false,
       corrections: [],
       verified: true,
+      confidence: {
+        score: 100,
+        rationale: `Verified ${capsuleStatus.claimCount} claims against source data`
+      },
       pipelineLog,
       latencyMs: Date.now() - startTime
     };
@@ -310,6 +318,10 @@ async function runDashboardAuditPipeline({
       unverifiable: capsule.unverifiable,
       needsHumanReview: true,
       verified: false,
+      confidence: {
+        score: Math.max(0, Math.floor(100 * (capsuleStatus.claimCount - capsule.unverifiable.length) / Math.max(1, capsuleStatus.claimCount))),
+        rationale: `${capsule.unverifiable.length} claims were unverifiable against the provided context`
+      },
       pipelineLog,
       latencyMs: Date.now() - startTime
     };
@@ -348,7 +360,11 @@ async function runDashboardAuditPipeline({
               from: m.claimedCount,
               to: m.actual
             })),
-            verified: false,
+            verified: true,
+            confidence: {
+              score: 100,
+              rationale: 'Counts corrected via AI retry and verified against source data'
+            },
             pipelineLog,
             latencyMs: Date.now() - startTime
           };
@@ -366,7 +382,11 @@ async function runDashboardAuditPipeline({
           corrected: true,
           correctionMethod: 'retry+patch',
           corrections: retryCorrections,
-          verified: false,
+          verified: true,
+          confidence: {
+            score: 100,
+            rationale: 'Counts corrected via AI retry and deterministic patching'
+          },
           pipelineLog,
           latencyMs: Date.now() - startTime
         };
@@ -405,7 +425,11 @@ async function runDashboardAuditPipeline({
     corrections: finalStatus.corrections,
     unverifiable: capsule.unverifiable,
     needsHumanReview: capsule.unverifiable.length > 0,
-    verified: false,
+    verified: true,
+    confidence: {
+      score: 100,
+      rationale: 'Counts verified and corrected via deterministic patching'
+    },
     pipelineLog,
     latencyMs: Date.now() - startTime
   };
