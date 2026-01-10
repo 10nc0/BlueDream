@@ -1467,13 +1467,12 @@
                 headerRight.appendChild(waBtn);
             }
             if (!isDevPanelView) {
-                // Only show edit/delete buttons for owned books (not shared or contributed)
-                const isViewOnly = book.is_shared || book.is_contributed;
-                if (!isViewOnly) {
+                // Only show edit/delete buttons if canEdit is true (owner only)
+                if (book.canEdit) {
                     headerRight.appendChild(createIconBtn('editBook', book.fractal_id, 'Edit', 'rgba(251, 191, 36, 0.15)', '#fbbf24', '✏️'));
                 }
                 headerRight.appendChild(createIconBtn('downloadEntireBook', book.fractal_id, 'Download Entire Book', 'rgba(34, 197, 94, 0.15)', '#22c55e', '⬇️'));
-                if (!isViewOnly) {
+                if (book.canEdit) {
                     headerRight.appendChild(createIconBtn('deleteBook', book.fractal_id, 'Delete', 'rgba(239, 68, 68, 0.15)', '#ef4444', '🗑️'));
                 }
             }

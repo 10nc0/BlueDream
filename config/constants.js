@@ -12,6 +12,16 @@
  * grep "@verified" to find values needing spec refresh
  */
 
+// ==================== Time Base Units (milliseconds) ====================
+// Use these instead of repeating math like 24 * 60 * 60 * 1000
+const TIME = {
+  SECOND: 1000,
+  MINUTE: 60 * 1000,
+  HOUR: 60 * 60 * 1000,
+  DAY: 24 * 60 * 60 * 1000,
+  WEEK: 7 * 24 * 60 * 60 * 1000
+};
+
 // ==================== Timeouts (milliseconds) ====================
 const TIMEOUTS = {
   DATABASE_CONNECTION: 30000,      // PostgreSQL connection timeout (cold start buffer)
@@ -62,7 +72,7 @@ const CAPACITY = {
   // NOTE: Internal cap; actual API limit varies by plan tier
   BRAVE_REQUESTS_PER_HOUR: 360,    // Internal cap for shared playground
   
-  ACTIVE_USER_WINDOW_MS: 180 * 60 * 1000, // 180 minutes for active user tracking
+  ACTIVE_USER_WINDOW_MS: 180 * TIME.MINUTE, // 180 minutes for active user tracking
   
   // Burst throttling
   BURST_THRESHOLD: 5,              // >5 requests in 15s triggers burst throttle
@@ -73,22 +83,22 @@ const CAPACITY = {
   
   // Circuit breaker
   ABUSE_EVENT_THRESHOLD: 5,        // Events in 1 hour triggers cooldown
-  ABUSE_COOLDOWN_MS: 30 * 60 * 1000, // 30 minute cooldown
-  ABUSE_WINDOW_MS: 60 * 60 * 1000, // 1 hour window for counting abuse
+  ABUSE_COOLDOWN_MS: 30 * TIME.MINUTE, // 30 minute cooldown
+  ABUSE_WINDOW_MS: TIME.HOUR, // 1 hour window for counting abuse
   ABUSE_WARNING_LEVELS: [3, 4],    // Progressive warnings at 3/5 and 4/5
   ABUSE_FORGIVENESS_HOURS: 1       // 1 hour of good behavior resets counter
 };
 
 // ==================== Caching ====================
 const CACHE = {
-  TTL_MS: 24 * 60 * 60 * 1000,    // 24 hour TTL for factual responses
+  TTL_MS: TIME.DAY,    // 24 hour TTL for factual responses
   MAX_ENTRIES: 1000,               // Maximum cache entries (LRU eviction)
-  QUERY_RATE_LIMIT_MS: 60 * 1000   // 1 minute between reputation DB lookups
+  QUERY_RATE_LIMIT_MS: TIME.MINUTE   // 1 minute between reputation DB lookups
 };
 
 // ==================== Session ====================
 const SESSION = {
-  MAX_AGE_MS: 7 * 24 * 60 * 60 * 1000 // 1 week session lifetime
+  MAX_AGE_MS: TIME.WEEK // 1 week session lifetime
 };
 
 // ==================== Discord ====================
@@ -191,10 +201,11 @@ const AUDIT = {
 const PHI_BREATHE = {
   BASE_INTERVAL_MS: 4000,          // φ^0 = 4000ms base interval
   PHI: 1.618033988749895,          // Golden ratio φ
-  MEMORY_CLEANUP_INTERVAL_MS: 15 * 60 * 1000,  // 15 minutes
-  MEDIA_PURGE_INTERVAL_MS: 24 * 60 * 60 * 1000, // 24 hours
-  DORMANCY_CLEANUP_INTERVAL_MS: 24 * 60 * 60 * 1000, // 24 hours
-  USAGE_CLEANUP_INTERVAL_MS: 60 * 60 * 1000 // 1 hour
+  MEMORY_CLEANUP_INTERVAL_MS: 15 * TIME.MINUTE,  // 15 minutes
+  MEDIA_PURGE_INTERVAL_MS: TIME.DAY, // 24 hours
+  DORMANCY_CLEANUP_INTERVAL_MS: TIME.DAY, // 24 hours
+  SHARE_INVITE_CLEANUP_INTERVAL_MS: TIME.DAY, // 24 hours
+  USAGE_CLEANUP_INTERVAL_MS: TIME.HOUR // 1 hour
 };
 
 // ==================== IP Geolocation Cache ====================
@@ -202,20 +213,22 @@ const PHI_BREATHE = {
 // @ref: https://ip-api.com/docs/api:json
 // @verified: 2026-01-10
 const IP_GEO = {
-  SUCCESS_TTL_MS: 60 * 60 * 1000,  // 1 hour for successful lookups (reduce API calls)
-  FAILURE_TTL_MS: 5 * 60 * 1000,   // 5 minutes for failed lookups
+  SUCCESS_TTL_MS: TIME.HOUR,  // 1 hour for successful lookups (reduce API calls)
+  FAILURE_TTL_MS: 5 * TIME.MINUTE,   // 5 minutes for failed lookups
   REQUEST_TIMEOUT_MS: 3000         // 3 second timeout for API calls
 };
 
 // ==================== Miscellaneous ====================
 const MISC = {
-  PLAYROUND_GC_INTERVAL_MS: 24 * 60 * 60 * 1000, // 24 hour maintenance window
+  PLAYROUND_GC_INTERVAL_MS: TIME.DAY, // 24 hour maintenance window
   MEDIA_PURGE_DAYS: 3,             // Clean media older than 3 days
   DORMANCY_CLEANUP_DAYS: 60,       // Revoke access after 60 days dormancy
+  SHARE_INVITE_TIMEOUT_DAYS: 7,    // Expire share invites after 7 days if not registered
   GENESIS_BREATH_RATE: 0.618       // Golden ratio for Hermes breath cycles (φ)
 };
 
 module.exports = {
+  TIME,
   TIMEOUTS,
   CAPACITY,
   CACHE,

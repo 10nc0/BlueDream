@@ -173,12 +173,31 @@ function registerBooksRoutes(app, deps) {
                 }
             }
             
+            // Build new plain objects to avoid mutating pg Row objects (which breaks JSON serialization)
             const booksWithFractalIds = books.map(book => {
-                if (!book.fractal_id && fractalId) {
-                    book.fractal_id = fractalId.generate('book', tenantId, book.id, book.created_by_admin_id);
+                // Create a plain object copy
+                const plainBook = { ...book };
+                
+                if (!plainBook.fractal_id && fractalId) {
+                    plainBook.fractal_id = fractalId.generate('book', tenantId, book.id, book.created_by_admin_id);
                 }
-                delete book.output_01_url;
-                return book;
+                delete plainBook.output_01_url;
+                
+                // Determine ownership: owner = book from user's own tenant without shared/contributed flags
+                // For devs viewing other tenants: they are NOT owners
+                const isFromOwnTenant = !plainBook.tenant_schema || plainBook.tenant_schema === tenantSchema;
+                const isSharedOrContributed = plainBook.is_shared || plainBook.is_contributed;
+                
+                // isOwner = from own tenant AND not marked as shared/contributed
+                plainBook.isOwner = isFromOwnTenant && !isSharedOrContributed;
+                
+                // canEdit = strictly owner only (no dev exception)
+                plainBook.canEdit = plainBook.isOwner;
+                
+                // canView = always true if they can see the book
+                plainBook.canView = true;
+                
+                return plainBook;
             });
             
             const sanitized = sanitizeForRole ? sanitizeForRole(booksWithFractalIds, user.role) : booksWithFractalIds;
