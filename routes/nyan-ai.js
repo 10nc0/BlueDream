@@ -465,29 +465,9 @@ function registerNyanAIRoutes(app, deps) {
             let bookContext = null;
             let contextPrompt = '';
             
-            // Validate bookIds against current tenant - only keep books that exist
-            let validatedBookIds = null;
-            if (bookIds && Array.isArray(bookIds) && bookIds.length > 0 && tenantSchema) {
-                try {
-                    const validationResult = await pool.query(
-                        `SELECT fractal_id FROM ${tenantSchema}.books WHERE fractal_id = ANY($1) OR id::text = ANY($1)`,
-                        [bookIds]
-                    );
-                    const validIds = validationResult.rows.map(r => r.fractal_id);
-                    if (validIds.length > 0) {
-                        validatedBookIds = validIds;
-                        console.log(`🌈 Nyan AI: Validated ${validIds.length}/${bookIds.length} bookIds for ${tenantSchema}`);
-                    } else {
-                        console.log(`⚠️ Nyan AI: No valid bookIds found in ${tenantSchema}`);
-                    }
-                } catch (err) {
-                    console.warn(`⚠️ Nyan AI: BookIds validation failed:`, err.message);
-                }
-            }
-            
-            // Fetch context from validated books
-            if (validatedBookIds && validatedBookIds.length > 0 && tenantSchema) {
-                bookContext = await buildAuditContext(validatedBookIds, tenantSchema, query, {
+            // Trust frontend auth - fetch context from provided bookIds
+            if (bookIds && Array.isArray(bookIds) && bookIds.length > 0) {
+                bookContext = await buildAuditContext(bookIds, tenantSchema, query, {
                     pool,
                     thothBot,
                     userRole,

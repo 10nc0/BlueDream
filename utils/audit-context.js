@@ -132,27 +132,44 @@ function applyQueryAwareFilter(messages, query, options = {}) {
     };
 }
 
-async function buildAuditContext(bookIds, tenantSchema, query, options = {}) {
+// Parse tenant schema from bookId pattern: book_t{N}_* or dev_book_t{N}_*
+function parseTenantFromBookId(bookId) {
+    if (!bookId || typeof bookId !== 'string') return null;
+    
+    // Match patterns like "book_t34_abc123" or "dev_book_t1_abc123"
+    const match = bookId.match(/(?:dev_)?book_t(\d+)_/);
+    if (match) {
+        return `tenant_${match[1]}`;
+    }
+    return null;
+}
+
+async function buildAuditContext(bookIds, fallbackTenantSchema, query, options = {}) {
     const { pool, thothBot, userRole } = options;
     const { maxMessages = 2000 } = options;
 
-    if (!bookIds || !Array.isArray(bookIds) || bookIds.length === 0 || !tenantSchema) {
+    if (!bookIds || !Array.isArray(bookIds) || bookIds.length === 0) {
         return null;
     }
 
-    // Reuse detection logic if needed (optional, depends on use case)
-    // For simplicity, we assume bookIds are already provided correctly by the caller
-
     const books = [];
     for (const bookId of bookIds) {
-        // Fetch book details
+        // Parse tenant from bookId, fallback to provided schema
+        const targetSchema = parseTenantFromBookId(bookId) || fallbackTenantSchema;
+        
+        if (!targetSchema) {
+            console.warn(`🌈 Audit: Cannot determine tenant for book ${bookId}`);
+            continue;
+        }
+        
+        // Fetch book details from the correct tenant schema
         const bookResult = await pool.query(
-            `SELECT id, name, output_credentials, created_at FROM ${tenantSchema}.books WHERE fractal_id = $1 OR id::text = $1`,
+            `SELECT id, name, fractal_id, output_credentials, created_at FROM ${targetSchema}.books WHERE fractal_id = $1 OR id::text = $1`,
             [bookId]
         );
 
         if (bookResult.rows.length === 0) {
-            console.warn(`🌈 Audit: Book ${bookId} not found in ${tenantSchema}`);
+            console.warn(`🌈 Audit: Book ${bookId} not found in ${targetSchema}`);
             continue;
         }
 
@@ -255,5 +272,6 @@ module.exports = {
     extractKeywords,
     serializeCompact,
     applyQueryAwareFilter,
-    buildAuditContext
+    buildAuditContext,
+    parseTenantFromBookId
 };
