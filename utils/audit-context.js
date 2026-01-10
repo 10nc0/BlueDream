@@ -35,8 +35,18 @@ function extractKeywords(query) {
         .slice(0, 5);
 }
 
+function serializeCompact(messages, options = {}) {
+    const { maxChars = 150 } = options;
+    return messages.map(m => {
+        const date = m.timestamp?.split('T')[0] || 'unknown';
+        const content = (m.content || '').substring(0, maxChars);
+        const bookPrefix = m.bookName ? `[${m.bookName}] ` : '';
+        return `${bookPrefix}${date}: ${content}`;
+    });
+}
+
 function applyQueryAwareFilter(messages, query, options = {}) {
-    const { maxMessages = 300 } = options;
+    const { maxMessages = 2000 } = options;
     
     if (!messages || messages.length === 0) {
         return {
@@ -125,5 +135,6 @@ function applyQueryAwareFilter(messages, query, options = {}) {
 module.exports = {
     extractDatePatterns,
     extractKeywords,
+    serializeCompact,
     applyQueryAwareFilter
 };

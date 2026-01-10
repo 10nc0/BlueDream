@@ -253,12 +253,31 @@ function buildMultiBookContextPrompt(userQuery, multiBookContext, language = nul
     `  ${i+1}. "${b.name}" - ${b.totalMessages} messages (${b.dateRange})`
   ).join('\n');
   
-  const messagesWithSource = multiBookContext.recentMessages.map((msg, i) => 
-    `[${i+1}] [${msg.bookName}] ${msg.timestamp || 'Unknown'}: ${msg.content?.substring(0, 200) || 'No content'}${msg.content?.length > 200 ? '...' : ''}`
-  ).join('\n');
+  const MAX_PROMPT_CHARS = 100000;
+  const OVERHEAD_CHARS = 2000;
+  const availableChars = MAX_PROMPT_CHARS - OVERHEAD_CHARS;
   
-  const sampledCount = multiBookContext.sampledCount || multiBookContext.recentMessages.length;
-  const contextNote = multiBookContext.contextNote ? `\nSampling: ${multiBookContext.contextNote}` : '';
+  let messagesText = '';
+  let includedCount = 0;
+  for (const msg of multiBookContext.recentMessages) {
+    const date = msg.timestamp?.split('T')[0] || 'unknown';
+    const content = (msg.content || '').replace(/\n/g, ' ').substring(0, 150);
+    const line = `[${msg.bookName}] ${date}: ${content}\n`;
+    
+    if (messagesText.length + line.length > availableChars) break;
+    messagesText += line;
+    includedCount++;
+  }
+  
+  const messagesWithSource = messagesText.trim();
+  const actualSampledCount = includedCount;
+  
+  const sampledCount = actualSampledCount;
+  const truncatedByTokenLimit = includedCount < multiBookContext.recentMessages.length;
+  let contextNote = multiBookContext.contextNote ? `\nSampling: ${multiBookContext.contextNote}` : '';
+  if (truncatedByTokenLimit) {
+    contextNote += `\n(Token budget: included ${includedCount} of ${multiBookContext.recentMessages.length} filtered messages)`;
+  }
   const overflowWarning = multiBookContext.overflowWarning ? `\n\nIMPORTANT: ${multiBookContext.overflowWarning}` : '';
   
   return `${SYSTEM_PROMPT_MULTI_BOOK}
