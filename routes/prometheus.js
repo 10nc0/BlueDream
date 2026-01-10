@@ -90,12 +90,28 @@ function registerPrometheusRoutes(app, deps) {
             const thread = await thothBot.client.channels.fetch(outputData.thread_id);
             if (!thread) return null;
             
-            const discordMessages = await thread.messages.fetch({ limit: 100, force: true });
+            // PAGINATION: Fetch all messages from the thread
+            let allDiscordMessages = [];
+            let lastId = null;
+            
+            while (true) {
+                const options = { limit: 100 };
+                if (lastId) options.before = lastId;
+                
+                const fetched = await thread.messages.fetch(options);
+                if (fetched.size === 0) break;
+                
+                allDiscordMessages = allDiscordMessages.concat(Array.from(fetched.values()));
+                lastId = fetched.last().id;
+                
+                // Safety break for extremely large threads (> 5000 msgs)
+                if (allDiscordMessages.length >= 5000) break;
+            }
             
             const now = new Date();
             const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
             
-            const messages = Array.from(discordMessages.values())
+            const messages = allDiscordMessages
                 .filter(msg => msg.createdAt >= bookCreatedAt)
                 .map(msg => {
                     let content = msg.content;
@@ -137,7 +153,7 @@ function registerPrometheusRoutes(app, deps) {
                 messagesThisMonth: messagesThisMonth,
                 dateRange: dateRange,
                 messageStats: messagesByMonth,
-                recentMessages: messages.slice(0, 100).map(m => ({
+                recentMessages: messages.map(m => ({ // ALL messages for complete audit
                     timestamp: m.timestamp,
                     content: m.content
                 }))

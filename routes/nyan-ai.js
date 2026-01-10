@@ -491,9 +491,25 @@ function registerNyanAIRoutes(app, deps) {
             const thread = await thothBot.client.channels.fetch(outputData.thread_id);
             if (!thread) return null;
             
-            const discordMessages = await thread.messages.fetch({ limit: 100, force: true });
+            // PAGINATION: Fetch all messages from the thread
+            let allDiscordMessages = [];
+            let lastId = null;
             
-            const messages = Array.from(discordMessages.values())
+            while (true) {
+                const options = { limit: 100 };
+                if (lastId) options.before = lastId;
+                
+                const fetched = await thread.messages.fetch(options);
+                if (fetched.size === 0) break;
+                
+                allDiscordMessages = allDiscordMessages.concat(Array.from(fetched.values()));
+                lastId = fetched.last().id;
+                
+                // Safety break for extremely large threads (> 2000 msgs) during dev
+                if (allDiscordMessages.length >= 2000) break;
+            }
+            
+            const messages = allDiscordMessages
                 .filter(msg => msg.createdAt >= bookCreatedAt)
                 .map(msg => {
                     let content = msg.content;
@@ -516,7 +532,7 @@ function registerNyanAIRoutes(app, deps) {
                 fractalId: fractalId,
                 createdAt: bookCreatedAt.toISOString(),
                 totalMessages: messages.length,
-                recentMessages: messages.slice(0, 50)
+                recentMessages: messages // Use ALL messages for complete context
             };
         } catch (error) {
             console.warn(`⚠️ Nyan AI failed to fetch book context:`, error.message);
@@ -554,7 +570,7 @@ function registerNyanAIRoutes(app, deps) {
             bookCount: books.length,
             books: books.map(b => ({ name: b.name, fractalId: b.fractalId, totalMessages: b.totalMessages })),
             totalMessages: books.reduce((sum, b) => sum + b.totalMessages, 0),
-            recentMessages: allMessages.slice(0, 100)
+            recentMessages: allMessages // Use ALL messages for complete audit
         };
     }
 
@@ -573,13 +589,13 @@ function registerNyanAIRoutes(app, deps) {
             let bookContext = null;
             let contextPrompt = '';
             
+            // Fetch context from book
             if (bookIds && Array.isArray(bookIds) && bookIds.length > 0 && tenantSchema) {
                 bookContext = await fetchMultiBookContextForNyanAI(bookIds, tenantSchema);
                 
                 if (bookContext && bookContext.totalMessages > 0) {
                     const bookSummary = bookContext.books.map(b => `- ${b.name}: ${b.totalMessages} messages`).join('\n');
                     const messagesText = bookContext.recentMessages
-                        .slice(0, 50)
                         .map(m => `[${m.bookName}] ${m.timestamp.split('T')[0]}: ${m.content}`)
                         .join('\n');
                     
@@ -589,7 +605,7 @@ You have access to the user's book data from their Nyanbook ledger.
 BOOKS IN CONTEXT (${bookContext.bookCount} book(s), ${bookContext.totalMessages} total messages):
 ${bookSummary}
 
-RECENT MESSAGES FROM THESE BOOKS:
+MESSAGES FROM THESE BOOKS:
 ${messagesText}
 
 USER QUERY:
@@ -603,21 +619,31 @@ Please analyze the data and answer the user's question. Be specific and referenc
                 contextPrompt = query;
             }
             
-            const response = await groqWithRetry(
-                'llama-3.3-70b-versatile',
-                [
-                    {
-                        role: 'system',
-                        content: `You are Nyan AI, a helpful assistant with access to the user's Nyanbook data. 
+            // Fix: Pass proper axios config object to groqWithRetry
+            const response = await groqWithRetry({
+                url: 'https://api.groq.com/openai/v1/chat/completions',
+                data: {
+                    model: 'llama-3.3-70b-versatile',
+                    messages: [
+                        {
+                            role: 'system',
+                            content: `You are Nyan AI, a helpful assistant with access to the user's Nyanbook data. 
 You analyze their archived messages and provide insights. Be concise, accurate, and helpful.
 If asked about specific data, reference the actual messages provided.
 Respond in ${language || 'the same language as the user query'}.`
-                    },
-                    { role: 'user', content: contextPrompt }
-                ],
-                H0_TEMPERATURE,
-                4096
-            );
+                        },
+                        { role: 'user', content: contextPrompt }
+                    ],
+                    temperature: 0.2,
+                    max_tokens: 4096
+                },
+                config: {
+                    headers: {
+                        'Authorization': `Bearer ${process.env.PLAYGROUND_GROQ_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            });
             
             const answer = response.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
             const processingTime = Date.now() - startTime;
