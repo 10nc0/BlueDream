@@ -106,8 +106,11 @@ function applyQueryAwareFilter(messages, query, options = {}) {
     
     const hasDateFilter = datePatterns.length > 0;
     const hasKeywordFilter = keywords.length > 0;
-    const useAndLogic = hasDateFilter && hasKeywordFilter;
     
+    // DATE FILTER PRIORITY: When date patterns are detected, use DATE-ONLY filtering.
+    // Keywords are passed to the LLM for semantic understanding, NOT for literal message filtering.
+    // This prevents counting queries like "berapa perbaikan di desember 2025" from failing
+    // when repair messages don't literally contain the word "perbaikan".
     let relevantMsgs = messages.filter(m => {
         const content = (m.content || '').toLowerCase();
         const date = m.timestamp?.split('T')[0] || '';
@@ -115,15 +118,16 @@ function applyQueryAwareFilter(messages, query, options = {}) {
         const matchesDate = datePatterns.some(pattern => date.startsWith(pattern));
         const matchesKeyword = keywords.some(kw => content.includes(kw));
         
-        if (useAndLogic) {
-            return matchesDate && matchesKeyword;
-        } else if (hasDateFilter) {
+        // Priority: Date filter takes precedence for counting accuracy
+        if (hasDateFilter) {
             return matchesDate;
         } else if (hasKeywordFilter) {
             return matchesKeyword;
         }
         return false;
     });
+    
+    console.log(`🔍 Audit filter: datePatterns=${JSON.stringify(datePatterns)}, keywords=${JSON.stringify(keywords)}, matched=${relevantMsgs.length}/${messages.length}`);
     
     let contextNote = '';
     let sampledMessages;
@@ -133,9 +137,8 @@ function applyQueryAwareFilter(messages, query, options = {}) {
     if (relevantMsgs.length > 0) {
         relevantMsgs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
         
-        const filterDesc = useAndLogic 
-            ? `date ${datePatterns.join('/')} AND keywords [${keywords.join(', ')}]`
-            : hasDateFilter ? `date ${datePatterns.join('/')}`
+        const filterDesc = hasDateFilter 
+            ? `date ${datePatterns.join('/')}`
             : `keywords [${keywords.join(', ')}]`;
         
         if (relevantMsgs.length <= maxMessages) {
