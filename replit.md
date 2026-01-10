@@ -49,7 +49,8 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Unified AI Architecture**: Single Nyan AI engine handles both public playground and authenticated dashboard audit with 2-key security isolation (`PLAYGROUND_GROQ_TOKEN` for public, `GROQ_API_KEY` for dashboard). Core inference is shared; persona/formatting layers are channel-specific:
   - **Playground** → Uses `PipelineOrchestrator` with S5 personality layer (`fastStreamPersonality`, `applyPersonalityFormat`) for casual, conversational tone
   - **Dashboard Audit** → Uses `prompts/executive-audit.js` + `utils/executive-formatter.js` for direct, executive-style responses
-- **Phi Breathe Orchestrator**: Unified background task scheduler for continuous logs, heartbeats, memory cleanup, and media purging.
+- **Book Sharing**: Email-based book sharing with cross-tenant security. Owners can invite viewers via email, with Resend email notifications. Features include: idempotent share/revoke, 7-day invite timeout for unregistered users (auto-cleaned via phi breathe), and LOWER() normalized email matching. Shared books appear view-only (no edit/delete buttons) for invitees.
+- **Phi Breathe Orchestrator**: Unified background task scheduler for continuous logs, heartbeats, memory cleanup, media purging, and share invite expiration.
 - **Inpipe Architecture**: Multi-channel input with an abstract channel interface for extensibility.
 - **Architectural Philosophy: Axiom of Choice**: This philosophy guides the system's design, asserting the existence of ideal configurations for infinite components, making the system self-governing and scalable through dependency injection, even without explicit construction of every case.
 
