@@ -460,7 +460,12 @@ function registerNyanAIRoutes(app, deps) {
                 [fractalId]
             );
             
-            if (bookResult.rows.length === 0) return null;
+            if (bookResult.rows.length === 0) {
+                console.log(`🌈 Nyan AI: Book not found for fractalId ${fractalId}`);
+                return null;
+            }
+            
+            console.log(`🌈 Nyan AI: Found book "${bookResult.rows[0].name}"`);
             
             const book = bookResult.rows[0];
             const bookCreatedAt = new Date(book.created_at);
@@ -472,6 +477,7 @@ function registerNyanAIRoutes(app, deps) {
             
             const outputData = outputCredentials?.output_01;
             if (!outputData?.thread_id) {
+                console.log(`🌈 Nyan AI: No thread_id found for book "${book.name}"`);
                 return {
                     name: book.name,
                     fractalId: fractalId,
@@ -480,6 +486,8 @@ function registerNyanAIRoutes(app, deps) {
                     recentMessages: []
                 };
             }
+            
+            console.log(`🌈 Nyan AI: Book "${book.name}" has thread_id ${outputData.thread_id}`);
             
             if (!thothBot || !thothBot.client || !thothBot.ready) {
                 console.log(`🌈 Nyan AI: Thoth bot not ready - thothBot:${!!thothBot}, client:${!!thothBot?.client}, ready:${thothBot?.ready}`);
@@ -548,7 +556,7 @@ function registerNyanAIRoutes(app, deps) {
                 recentMessages: messages // Use ALL messages for complete context
             };
         } catch (error) {
-            console.warn(`⚠️ Nyan AI failed to fetch book context:`, error.message);
+            console.error(`⚠️ Nyan AI failed to fetch book context:`, error.message, error.stack);
             return null;
         }
     }
