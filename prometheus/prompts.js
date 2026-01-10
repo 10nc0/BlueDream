@@ -257,28 +257,33 @@ function buildMultiBookContextPrompt(userQuery, multiBookContext, language = nul
     `[${i+1}] [${msg.bookName}] ${msg.timestamp || 'Unknown'}: ${msg.content?.substring(0, 200) || 'No content'}${msg.content?.length > 200 ? '...' : ''}`
   ).join('\n');
   
+  const sampledCount = multiBookContext.sampledCount || multiBookContext.recentMessages.length;
+  const contextNote = multiBookContext.contextNote ? `\nSampling: ${multiBookContext.contextNote}` : '';
+  const overflowWarning = multiBookContext.overflowWarning ? `\n\nIMPORTANT: ${multiBookContext.overflowWarning}` : '';
+  
   return `${SYSTEM_PROMPT_MULTI_BOOK}
 
 ${langInstruction}
 
 === MULTI-BOOK CONTEXT ===
 Number of Books: ${multiBookContext.bookCount}
-Total Messages Across All Books: ${multiBookContext.totalMessages}
+Total Messages in Books: ${multiBookContext.totalMessages}
+Messages Scanned for Query: ${sampledCount}${contextNote}
 Date Range: ${multiBookContext.dateRange || 'Unknown'}
 
 === BOOKS SUMMARY ===
 ${booksOverview}
 
-=== MESSAGES FROM ALL BOOKS (Most Recent ${multiBookContext.recentMessages.length}) ===
+=== MESSAGES ANALYZED (${sampledCount} of ${multiBookContext.totalMessages}) ===
 ${messagesWithSource}
-=== END MULTI-BOOK CONTEXT ===
+=== END MULTI-BOOK CONTEXT ===${overflowWarning}
 
 USER QUERY:
 """
 ${userQuery}
 """
 
-Answer the user's question by analyzing data from ALL books above. Cross-reference and aggregate when needed. Return JSON only:`;
+Answer the user's question by analyzing data from ALL books above. In data_extracted, set total_messages_scanned to ${sampledCount}. Cross-reference and aggregate when needed. Return JSON only:`;
 }
 
 module.exports = {

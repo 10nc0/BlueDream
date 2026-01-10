@@ -1,5 +1,6 @@
 const logger = require('../lib/logger');
 const Prometheus = require('../prometheus');
+const { applyQueryAwareFilter } = require('../utils/audit-context');
 
 function registerPrometheusRoutes(app, deps) {
     const { pool, middleware, tenantMiddleware, helpers, bots } = deps;
@@ -242,7 +243,7 @@ function registerPrometheusRoutes(app, deps) {
             bookCount: books.length,
             books: bookSummaries,
             totalMessages: totalMessages,
-            recentMessages: allMessages.slice(0, 150),
+            allMessages: allMessages,
             dateRange: allMessages.length > 0
                 ? `${allMessages[allMessages.length - 1].timestamp.split('T')[0]} to ${allMessages[0].timestamp.split('T')[0]}`
                 : 'No messages'
@@ -289,7 +290,19 @@ function registerPrometheusRoutes(app, deps) {
                 multiBookContext = await fetchMultiBookContextForPrometheus(detectedBookIds, tenantSchema, userRole);
                 
                 if (multiBookContext && multiBookContext.totalMessages > 0) {
-                    result = await Prometheus.checkWithMultiBookContext(userQuery, multiBookContext, { language });
+                    const filterResult = applyQueryAwareFilter(multiBookContext.allMessages, userQuery, { maxMessages: 300 });
+                    console.log(`🔮 Prometheus filter: ${filterResult.sampledCount}/${filterResult.totalMessages} msgs (${filterResult.strategy})`);
+                    
+                    const filteredContext = {
+                        ...multiBookContext,
+                        recentMessages: filterResult.sampledMessages,
+                        sampledCount: filterResult.sampledCount,
+                        sampleStrategy: filterResult.strategy,
+                        contextNote: filterResult.contextNote,
+                        overflowWarning: filterResult.overflowWarning
+                    };
+                    
+                    result = await Prometheus.checkWithMultiBookContext(userQuery, filteredContext, { language });
                     hasBookContext = true;
                 } else {
                     console.log(`⚠️ No multi-book context available, using regular check`);
