@@ -1,4 +1,5 @@
 const { AUDIT } = require('../config/constants');
+const { CapsuleChain } = require('./capsule-chain');
 
 const MONTH_NAMES_EN = ['january', 'february', 'march', 'april', 'may', 'june', 
                         'july', 'august', 'september', 'october', 'november', 'december'];
@@ -9,82 +10,22 @@ const STOP_WORDS = new Set(['what', 'when', 'where', 'which', 'yang', 'dalam', '
                             'many', 'much', 'book', 'buku', 'message', 'pesan', 'about',
                             'the', 'and', 'atau', 'adalah', 'ada', 'pada', 'untuk']);
 
-const PLATE_REGEX = /\b([A-Z]{1,2})\s*(\d{1,4})\s*([A-Z]{1,3})\b/gi;
-
-const ACTION_KEYWORDS = {
-    repair: ['perbaikan', 'perbaiki', 'servis', 'service', 'ganti', 'repair', 'fix', 'maintenance', 'tune up', 'tune-up', 'overhaul'],
-    masuk: ['masuk', 'datang', 'tiba', 'arrive', 'check-in', 'checkin', 'drop off', 'dropoff'],
-    keluar: ['keluar', 'selesai', 'ambil', 'pick up', 'pickup', 'done', 'complete', 'finish']
-};
-
-function extractActionKeywords(query) {
-    const queryLower = query.toLowerCase();
-    const foundActions = [];
+function buildCapsuleChain(allMessages, query) {
+    const chain = new CapsuleChain();
+    chain.setQuery(query);
     
-    for (const [actionType, keywords] of Object.entries(ACTION_KEYWORDS)) {
-        for (const kw of keywords) {
-            if (queryLower.includes(kw)) {
-                foundActions.push({ type: actionType, keywords });
-                break;
-            }
-        }
-    }
+    const c0 = chain.c0_universe(allMessages);
     
-    return foundActions;
-}
-
-function computeEntityAggregates(messages, query = null) {
-    const tallies = new Map();
-    const entityMessages = new Map();
+    const datePatterns = extractDatePatterns(query);
+    const c1 = chain.c1_timeMatch(c0.output, datePatterns);
     
-    const actionFilters = query ? extractActionKeywords(query) : [];
-    const hasActionFilter = actionFilters.length > 0;
+    const c2 = chain.c2_actionMatch(c1.output, query);
     
-    const allActionKeywords = hasActionFilter 
-        ? actionFilters.flatMap(a => a.keywords)
-        : [];
+    chain.c3_aggregates(c2.output);
     
-    for (const msg of messages) {
-        const content = msg.content || '';
-        const contentLower = content.toLowerCase();
-        
-        if (hasActionFilter) {
-            const matchesAction = allActionKeywords.some(kw => contentLower.includes(kw));
-            if (!matchesAction) continue;
-        }
-        
-        const plates = [];
-        let match;
-        const regex = new RegExp(PLATE_REGEX.source, 'gi');
-        while ((match = regex.exec(content)) !== null) {
-            const normalized = match[0].replace(/\s+/g, ' ').toUpperCase().trim();
-            plates.push(normalized);
-        }
-        
-        for (const plate of plates) {
-            tallies.set(plate, (tallies.get(plate) || 0) + 1);
-            if (!entityMessages.has(plate)) {
-                entityMessages.set(plate, []);
-            }
-            entityMessages.get(plate).push({
-                id: msg.id,
-                timestamp: msg.timestamp,
-                preview: content.substring(0, 80)
-            });
-        }
-    }
+    console.log(`📦 CapsuleChain: ${chain.getTraceCompact()} | ${chain.getTrace()}`);
     
-    const aggregates = {};
-    for (const [entity, count] of tallies) {
-        aggregates[entity] = {
-            count,
-            messages: entityMessages.get(entity) || []
-        };
-    }
-    
-    console.log(`🔢 Entity aggregates: actionFilter=${hasActionFilter ? allActionKeywords.slice(0,3).join(',') : 'none'}, entities=${Object.keys(aggregates).length}`);
-    
-    return aggregates;
+    return chain;
 }
 
 function extractDatePatterns(query) {
@@ -349,9 +290,21 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
     const allMessages = books.flatMap(b => b.messages)
         .sort((a, b) => b.createdAt - a.createdAt);
 
-    const filterResult = applyQueryAwareFilter(allMessages, query, { maxMessages });
+    const capsuleChain = buildCapsuleChain(allMessages, query);
+    const terminalCapsule = capsuleChain.getTerminalCapsule();
     
-    const entityAggregates = computeEntityAggregates(filterResult.sampledMessages, query);
+    const c1Capsule = capsuleChain.capsules.find(c => c.stage === 'C1_TIME_MATCH');
+    const c2Capsule = capsuleChain.capsules.find(c => c.stage === 'C2_ACTION_MATCH');
+    
+    const contextMessages = c2Capsule ? c2Capsule.output : allMessages;
+    const contextNote = capsuleChain.getTrace();
+    const overflowWarning = contextMessages.length > maxMessages 
+        ? `Showing ${maxMessages} of ${contextMessages.length} action-matched messages`
+        : '';
+    
+    const sampledMessages = contextMessages.length > maxMessages 
+        ? contextMessages.slice(0, maxMessages) 
+        : contextMessages;
 
     return {
         isMultiBook: true,
@@ -364,12 +317,13 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
         })),
         totalMessages: allMessages.length,
         allMessages: allMessages,
-        recentMessages: filterResult.sampledMessages,
-        sampledCount: filterResult.sampledCount,
-        sampleStrategy: filterResult.strategy,
-        contextNote: filterResult.contextNote,
-        overflowWarning: filterResult.overflowWarning,
-        entityAggregates: entityAggregates,
+        recentMessages: sampledMessages,
+        sampledCount: sampledMessages.length,
+        sampleStrategy: 'capsule_chain',
+        contextNote: contextNote,
+        overflowWarning: overflowWarning,
+        entityAggregates: terminalCapsule.output,
+        capsuleChain: capsuleChain.toJSON(),
         dateRange: allMessages.length > 0 
             ? `${allMessages[allMessages.length-1].timestamp.split('T')[0]} to ${allMessages[0].timestamp.split('T')[0]}`
             : 'No messages'
@@ -383,5 +337,5 @@ module.exports = {
     applyQueryAwareFilter,
     buildAuditContext,
     parseTenantFromBookId,
-    computeEntityAggregates
+    buildCapsuleChain
 };
