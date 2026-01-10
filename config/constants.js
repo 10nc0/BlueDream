@@ -106,6 +106,46 @@ const PLAYGROUND = {
                         'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
 };
 
+// ==================== AI Audit (Prometheus & Nyan AI) ====================
+const AUDIT = {
+  MAX_MESSAGES: 2000,              // Maximum messages to sample for context (unified for both engines)
+  MAX_PROMPT_CHARS: 100000,        // Maximum characters in prompt to LLM
+  PROMPT_OVERHEAD_CHARS: 2000,     // Reserved chars for system prompt/formatting
+  MESSAGE_TRUNCATE_LENGTH: 150,    // Truncate individual messages to this length in context
+  
+  // LLM call settings
+  LLM_MAX_RETRIES: 3,              // Retry attempts for failed LLM calls
+  LLM_TIMEOUT_MS: 60000,           // 60 second timeout for LLM calls
+  LLM_RETRY_DELAYS: [1000, 2000, 4000], // Exponential backoff delays
+  
+  // Status emoji mapping (shared by Idris bot)
+  STATUS_EMOJI: {
+    'PASS': '✅',
+    'FAIL': '❌',
+    'WARNING': '⚠️',
+    'REVIEW': '🔍',
+    'NYAN': '🌈',
+    'UNKNOWN': '❓'
+  }
+};
+
+// ==================== Phi Breathe Orchestrator ====================
+const PHI_BREATHE = {
+  BASE_INTERVAL_MS: 4000,          // φ^0 = 4000ms base interval
+  PHI: 1.618033988749895,          // Golden ratio φ
+  MEMORY_CLEANUP_INTERVAL_MS: 15 * 60 * 1000,  // 15 minutes
+  MEDIA_PURGE_INTERVAL_MS: 24 * 60 * 60 * 1000, // 24 hours
+  DORMANCY_CLEANUP_INTERVAL_MS: 24 * 60 * 60 * 1000, // 24 hours
+  USAGE_CLEANUP_INTERVAL_MS: 60 * 60 * 1000 // 1 hour
+};
+
+// ==================== IP Geolocation Cache ====================
+const IP_GEO = {
+  SUCCESS_TTL_MS: 60 * 60 * 1000,  // 1 hour for successful lookups
+  FAILURE_TTL_MS: 5 * 60 * 1000,   // 5 minutes for failed lookups
+  REQUEST_TIMEOUT_MS: 3000         // 3 second timeout for API calls
+};
+
 // ==================== Miscellaneous ====================
 const MISC = {
   PLAYROUND_GC_INTERVAL_MS: 24 * 60 * 60 * 1000, // 24 hour maintenance window
@@ -125,5 +165,8 @@ module.exports = {
   REPUTATION,
   FILE_UPLOAD,
   PLAYGROUND,
+  AUDIT,
+  PHI_BREATHE,
+  IP_GEO,
   MISC
 };

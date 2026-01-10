@@ -5,6 +5,8 @@
  * CRITICAL: Strict no-hallucination protocol
  */
 
+const { AUDIT } = require('../config/constants');
+
 const SYSTEM_PROMPT = `You are the AI assistant for Nyanbook, a message archiving system.
 
 MISSION: Answer user queries and analyze messages intelligently.
@@ -253,8 +255,8 @@ function buildMultiBookContextPrompt(userQuery, multiBookContext, language = nul
     `  ${i+1}. "${b.name}" - ${b.totalMessages} messages (${b.dateRange})`
   ).join('\n');
   
-  const MAX_PROMPT_CHARS = 100000;
-  const OVERHEAD_CHARS = 2000;
+  const MAX_PROMPT_CHARS = AUDIT.MAX_PROMPT_CHARS;
+  const OVERHEAD_CHARS = AUDIT.PROMPT_OVERHEAD_CHARS;
   const availableChars = MAX_PROMPT_CHARS - OVERHEAD_CHARS;
   
   let messagesText = '';

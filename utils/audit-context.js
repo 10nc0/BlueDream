@@ -1,3 +1,5 @@
+const { AUDIT } = require('../config/constants');
+
 const MONTH_NAMES_EN = ['january', 'february', 'march', 'april', 'may', 'june', 
                         'july', 'august', 'september', 'october', 'november', 'december'];
 const MONTH_NAMES_ID = ['januari', 'februari', 'maret', 'april', 'mei', 'juni',
@@ -46,7 +48,7 @@ function serializeCompact(messages, options = {}) {
 }
 
 function applyQueryAwareFilter(messages, query, options = {}) {
-    const { maxMessages = 2000 } = options;
+    const { maxMessages = AUDIT.MAX_MESSAGES } = options;
     
     if (!messages || messages.length === 0) {
         return {
@@ -146,7 +148,7 @@ function parseTenantFromBookId(bookId) {
 
 async function buildAuditContext(bookIds, fallbackTenantSchema, query, options = {}) {
     const { pool, thothBot, userRole } = options;
-    const { maxMessages = 2000 } = options;
+    const { maxMessages = AUDIT.MAX_MESSAGES } = options;
 
     if (!bookIds || !Array.isArray(bookIds) || bookIds.length === 0) {
         return null;

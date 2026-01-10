@@ -13,12 +13,13 @@
  */
 
 const axios = require('axios');
+const { AUDIT } = require('../config/constants');
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_TOKEN = process.env.GROQ_API_KEY;
 
-const MAX_PROMPT_LENGTH = 50000;
+const MAX_PROMPT_LENGTH = 50000; // Note: AUDIT.MAX_PROMPT_CHARS is for context, this is for raw prompt safety
 
 /**
  * Sanitize input before sending to LLM
@@ -48,9 +49,9 @@ const DEFAULT_PARAMS = {
   top_p: 0.95                 // Minimal diversity without hallucination
 };
 
-const MAX_RETRIES = 3;
-const TIMEOUT_MS = 60000;  // 60 seconds
-const RETRY_DELAYS = [1000, 2000, 4000];  // Exponential backoff
+const MAX_RETRIES = AUDIT.LLM_MAX_RETRIES;
+const TIMEOUT_MS = AUDIT.LLM_TIMEOUT_MS;
+const RETRY_DELAYS = AUDIT.LLM_RETRY_DELAYS;
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));

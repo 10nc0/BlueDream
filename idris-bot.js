@@ -6,6 +6,7 @@
 
 const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
 const axios = require('axios');
+const { AUDIT } = require('./config/constants');
 
 class IdrisBot {
     constructor() {
@@ -173,14 +174,7 @@ class IdrisBot {
     }
 
     async postAuditResult(threadId, auditResult, query, bookName = null) {
-        const statusEmoji = {
-            'PASS': '✅',
-            'FAIL': '❌',
-            'WARNING': '⚠️',
-            'REVIEW': '🔍',
-            'NYAN': '🌈',
-            'UNKNOWN': '❓'
-        };
+        const statusEmoji = AUDIT.STATUS_EMOJI;
 
         const emoji = statusEmoji[auditResult.status] || '❓';
         const confidence = auditResult.confidence || 0;

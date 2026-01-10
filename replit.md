@@ -105,6 +105,42 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - See **Vegapunk Kernel Architecture** → routes/auth.js for implementation
 - Never create parallel auth systems or "back-door" admin routes
 
+### Magic Number Management (Layer 0: Constants)
+**Decision Rubric: Centralize vs Inline**
+
+**CENTRALIZE in `config/constants.js`:**
+| Category | Examples | Why |
+|----------|----------|-----|
+| Cross-cutting thresholds | `MAX_MESSAGES`, rate limits, TTLs | Multiple modules depend on same value |
+| Retry/timeout settings | LLM retries, API timeouts | Consistency across error handling |
+| Cache parameters | TTL, max entries, purge intervals | System-wide caching behavior |
+| Status/emoji maps | Audit status → emoji mapping | Shared by multiple UI/logging components |
+| Phi-breathe timing | Base intervals, cycle durations | Central orchestrator values |
+
+**KEEP INLINE (with descriptive names):**
+| Category | Examples | Why |
+|----------|----------|-----|
+| Algorithmic invariants | Regex patterns, array chunk sizes | Tightly coupled to specific logic |
+| UI geometry | Padding, animation durations | Component-specific |
+| Format strings | Log prefixes, date formats | Context-dependent |
+| One-off thresholds | Single-use validation limits | Documented in place |
+
+**Config Structure:**
+```
+config/
+  constants.js  → TIMEOUTS, CAPACITY, CACHE, SESSION, DISCORD, 
+                  AI_MODELS, GROQ_RETRY, REPUTATION, FILE_UPLOAD,
+                  PLAYGROUND, AUDIT, PHI_BREATHE, IP_GEO, MISC
+  index.js      → Re-exports with env var overrides
+```
+
+**Usage Pattern:**
+```javascript
+const { AUDIT, CACHE } = require('../config/constants');
+const maxMessages = AUDIT.MAX_MESSAGES;  // Centralized
+const chunkSize = 100;  // Inline - algorithmic invariant
+```
+
 ## Architectural Philosophy: Axiom of Choice
 
 **Date:** January 2, 2026  

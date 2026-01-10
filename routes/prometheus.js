@@ -1,6 +1,7 @@
 const logger = require('../lib/logger');
 const Prometheus = require('../prometheus');
 const { buildAuditContext } = require('../utils/audit-context');
+const { AUDIT } = require('../config/constants');
 
 function registerPrometheusRoutes(app, deps) {
     const { pool, middleware, tenantMiddleware, helpers, bots } = deps;
@@ -77,7 +78,7 @@ function registerPrometheusRoutes(app, deps) {
                     pool,
                     thothBot,
                     userRole,
-                    maxMessages: 2000
+                    maxMessages: AUDIT.MAX_MESSAGES
                 });
                 
                 if (multiBookContext && multiBookContext.totalMessages > 0) {

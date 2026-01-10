@@ -442,13 +442,14 @@ const orchestrator = createPipelineOrchestrator({
     groqWithRetry
 });
 
+const { AUDIT } = require('../config/constants');
+const { buildAuditContext } = require('../utils/audit-context');
+
 function registerNyanAIRoutes(app, deps) {
     const { pool, middleware, bots } = deps;
     const requireAuth = middleware?.requireAuth;
     const thothBot = bots?.thoth;
     const idrisBot = bots?.idris;
-
-    const { buildAuditContext } = require('../utils/audit-context');
 
     app.post('/api/nyan-ai/audit', requireAuth, async (req, res) => {
         const { query, bookIds, language } = req.body;
@@ -472,7 +473,7 @@ function registerNyanAIRoutes(app, deps) {
                     pool,
                     thothBot,
                     userRole,
-                    maxMessages: 2000 // Match Prometheus for consistent results
+                    maxMessages: AUDIT.MAX_MESSAGES
                 });
                 
                 if (bookContext && bookContext.totalMessages > 0) {
