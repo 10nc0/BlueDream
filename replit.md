@@ -28,7 +28,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Messaging Integration**: Twilio-based WhatsApp Business API for messaging, with media handling for Discord uploads.
 - **Search**: Enhanced search across messages and metadata.
 - **Real-time Updates**: Smart polling and auto-scroll.
-- **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, with a 4-stage dashboard audit pipeline to detect and correct hallucinations. Includes general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior.
+- **Unified AI Engine (Nyan AI)**: Single AI engine for both public playground and authenticated dashboard audit. Uses 2-key security model: `PLAYGROUND_GROQ_TOKEN` for public access, `GROQ_API_KEY` for authenticated dashboard users. Features a 4-stage dashboard audit pipeline (S0-S3) to detect and correct count hallucinations.
 - **AuditCapsule**: Session-scoped temporal cache (`utils/audit-capsule.js`) that captures entity extraction and tallies, shares pre-computed counts between pipeline stages, and burns after delivery. Integrated with `buildAuditContext` which now returns `entityAggregates` alongside `recentMessages`.
 - **AI Playground**: Public, unauthenticated multimodal AI playground featuring multi-file upload, dynamic capacity sharing, abuse prevention, query classification, smart retry, document parsing, and real-time knowledge search. It uses a 7-stage state machine for AI processing and a sliding window memory.
 - **Nyan Protocol**: A system prompt framework utilizing a Seed Metric for historical comparison and socio-economic analysis to prevent LLM hallucinations.
@@ -44,9 +44,8 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Scalability & Recovery**: Designed for Replit Autoscale, with PostgreSQL for state recovery.
 - **Security (10/10 Hardened)**: Includes Sybil attack prevention, JWT security, session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, and CSP compliance.
 - **Discord Bot Trinity Architecture**: Specialized bots (Hermes, Thoth, Idris, Horus) for different read/write and AI functions.
-- **Vegapunk Kernel Architecture**: Factory pattern with dependency injection orchestrating modular routes (auth, books, inpipe, prometheus, nyan-ai).
-- **AI Architecture Split**: Nyan AI (public playground) and Prometheus AI (authenticated ledger auditor) for independent rate limiting and security.
-- **Dual AI Engine Audit Panel**: Dashboard AI Audit modal supports engine selection with multi-book chip selector.
+- **Vegapunk Kernel Architecture**: Factory pattern with dependency injection orchestrating modular routes (auth, books, inpipe, nyan-ai).
+- **Unified AI Architecture**: Single Nyan AI engine handles both public playground and authenticated dashboard audit with 2-key security isolation (`PLAYGROUND_GROQ_TOKEN` for public, `GROQ_API_KEY` for dashboard).
 - **Phi Breathe Orchestrator**: Unified background task scheduler for continuous logs, heartbeats, memory cleanup, and media purging.
 - **Inpipe Architecture**: Multi-channel input with an abstract channel interface for extensibility.
 - **Architectural Philosophy: Axiom of Choice**: This philosophy guides the system's design, asserting the existence of ideal configurations for infinite components, making the system self-governing and scalable through dependency injection, even without explicit construction of every case.

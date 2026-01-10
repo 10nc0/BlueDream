@@ -507,7 +507,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 contextPrompt = query;
             }
             
-            // Fix: Pass proper axios config object to groqWithRetry
+            // Use GROQ_API_KEY for authenticated audit (separate from public playground)
             const response = await groqWithRetry({
                 url: 'https://api.groq.com/openai/v1/chat/completions',
                 data: {
@@ -527,7 +527,7 @@ Respond in ${language || 'the same language as the user query'}.`
                 },
                 config: {
                     headers: {
-                        'Authorization': `Bearer ${process.env.PLAYGROUND_GROQ_TOKEN}`,
+                        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
                         'Content-Type': 'application/json'
                     }
                 }
@@ -560,7 +560,7 @@ Respond in ${language || 'the same language as the user query'}.`
                         },
                         config: {
                             headers: {
-                                'Authorization': `Bearer ${process.env.PLAYGROUND_GROQ_TOKEN}`,
+                                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
                                 'Content-Type': 'application/json'
                             }
                         }
@@ -669,6 +669,46 @@ Respond in ${language || 'the same language as the user query'}.`
                 error: 'Failed to process audit query',
                 message: error.message
             });
+        }
+    });
+
+    // Discord audit history endpoint (migrated from prometheus)
+    app.get('/api/nyan-ai/discord-history', requireAuth, async (req, res) => {
+        try {
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const { limit = 50 } = req.query;
+            const horusBot = bots?.horus;
+            
+            if (!tenantSchema) {
+                return res.status(400).json({ error: 'Tenant context required' });
+            }
+            
+            if (!horusBot || !horusBot.isReady()) {
+                return res.status(503).json({ error: 'AI audit log reader not available' });
+            }
+            
+            const tenantInfo = await pool.query(`
+                SELECT ai_log_thread_id FROM core.tenant_catalog WHERE tenant_schema = $1
+            `, [tenantSchema]);
+            
+            const threadId = tenantInfo.rows[0]?.ai_log_thread_id;
+            
+            if (!threadId) {
+                return res.json({ success: true, logs: [], message: 'No AI audit log thread exists yet' });
+            }
+            
+            const logs = await horusBot.fetchAuditLogs(threadId, parseInt(limit));
+            const stats = await horusBot.getAuditStats(threadId);
+            
+            res.json({
+                success: true,
+                logs,
+                stats,
+                thread_id: threadId
+            });
+        } catch (error) {
+            console.error('❌ Discord history error:', error);
+            res.status(500).json({ error: error.message });
         }
     });
 

@@ -25,7 +25,6 @@ const IdrisBot = require('./idris-bot');
 const HorusBot = require('./horus-bot');
 const fractalId = require('./utils/fractal-id');
 const genesisCounter = require('./server/genesis-counter');
-const Prometheus = require('./prometheus');
 const { extractTextFromDocument, getDocumentPrompt } = require('./utils/document-parser');
 const { identifyFileType, executeExtractionCascade, formatJSONForGroq, getFinancialPhysicsSeed, intelligentChunking, buildMultiDocContext } = require('./utils/attachment-cascade');
 const CONSTANTS = require('./config/constants');
@@ -40,7 +39,6 @@ const { initialize: initDeps, setMiddleware: setDepsMiddleware, deps } = require
 const { createAuthMiddleware, registerAuthRoutes } = require('./routes/auth');
 const { registerBooksRoutes } = require('./routes/books');
 const { registerInpipeRoutes } = require('./routes/inpipe');
-const { registerPrometheusRoutes } = require('./routes/prometheus');
 const { registerNyanAIRoutes, capacityManager, usageTracker } = require('./routes/nyan-ai');
 const { healQueue } = require('./lib/heal-queue');
 const phiBreathe = require('./lib/phi-breathe');
@@ -1400,8 +1398,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         'auth': { emoji: '🔐', desc: 'lifecycle, sessions, JWT, audit trail', endpoints: 19 },
         'books': { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export', endpoints: 22 },
         'inpipe': { emoji: '📥', desc: 'Twilio webhook, media relay', endpoints: 1 },
-        'prometheus': { emoji: '🔮', desc: 'φ-auditor, history, multi-book context', endpoints: 4 },
-        'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit bridge', endpoints: 5 }
+        'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit, discord history', endpoints: 7 }
     };
     
     const formatPulseLog = (satellites, phiStatus = 'online') => {
@@ -1423,10 +1420,9 @@ app.listen(PORT, '0.0.0.0', async () => {
     setDepsMiddleware(authResult.requireAuth, authResult.requireRole);
     registerBooksRoutes(app, deps);
     registerInpipeRoutes(app, deps);
-    registerPrometheusRoutes(app, deps);
     registerNyanAIRoutes(app, deps);
     
-    console.log('\n' + formatPulseLog(['auth', 'books', 'inpipe', 'prometheus', 'nyan-ai']) + '\n');
+    console.log('\n' + formatPulseLog(['auth', 'books', 'inpipe', 'nyan-ai']) + '\n');
     
     // Global error handling (must be after all routes)
     app.use(notFoundHandler);
@@ -1462,7 +1458,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         
         // Heartbeat checkpoint every 86 breaths (~15min)
         phiBreathe.setHeartbeatCallback((breathCount) => {
-            const satellites = ['auth', 'books', 'inpipe', 'prometheus', 'nyan-ai'];
+            const satellites = ['auth', 'books', 'inpipe', 'nyan-ai'];
             console.log('\n' + formatPulseLog(satellites, 'online') + '\n');
         });
         

@@ -2639,17 +2639,8 @@
                                 <button class="book-fan-close" id="prometheusAuditClose" style="position: static; margin: 0;">×</button>
                             </div>
                             
-                            <!-- AI Engine & Book Selection Controls -->
+                            <!-- Book Selection Controls -->
                             <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: flex-start;">
-                                <!-- AI Engine Dropdown -->
-                                <div style="flex: 1; min-width: 180px;">
-                                    <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 0.35rem; font-weight: 600;">🧠 AI Engine</div>
-                                    <select id="auditAiEngine" style="width: 100%; padding: 0.5rem 0.75rem; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 6px; color: #e2e8f0; font-size: 0.85rem; cursor: pointer;">
-                                        <option value="prometheus">🏛️ Local (Prometheus)</option>
-                                        <option value="nyan-ai">🌈 Cloud (Nyan AI)</option>
-                                    </select>
-                                </div>
-                                
                                 <!-- Book Selector -->
                                 <div style="flex: 2; min-width: 280px;">
                                     <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 0.35rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
@@ -2736,7 +2727,6 @@
                 });
                 document.getElementById('prometheusAuditClose').addEventListener('click', closePrometheusAuditModal);
                 document.getElementById('prometheusCheckBtn').addEventListener('click', runPrometheusCheck);
-                document.getElementById('auditAiEngine').addEventListener('change', updateBookContextDisplay);
             }
             
             document.getElementById('prometheusMessage').value = '';
@@ -2756,7 +2746,6 @@
             
             document.getElementById('prometheusCheckBtn').disabled = false;
             document.getElementById('prometheusCheckBtn').textContent = '🔮 Run AI Check';
-            document.getElementById('auditAiEngine').value = 'prometheus';
             
             // Initialize book selector with dropdown + search + bubbles
             window.auditSelectedBooks = new Set(books && books.length > 0 ? books.map(b => b.fractal_id) : []);
@@ -2909,22 +2898,20 @@
             const contextDiv = document.getElementById('prometheusBookContext');
             const selectedCount = window.auditSelectedBooks?.size || 0;
             const totalCount = books?.length || 0;
-            const engine = document.getElementById('auditAiEngine')?.value || 'prometheus';
-            const engineName = engine === 'nyan-ai' ? 'Nyan AI' : 'Prometheus';
             
             if (contextDiv) {
                 if (selectedCount === 0) {
-                    contextDiv.textContent = `⚠️ No books selected - ${engineName} will answer without book context`;
+                    contextDiv.textContent = `⚠️ No books selected - Nyan AI will answer without book context`;
                     contextDiv.style.background = 'rgba(245, 158, 11, 0.1)';
                     contextDiv.style.borderColor = 'rgba(245, 158, 11, 0.3)';
                     contextDiv.style.color = '#f59e0b';
                 } else if (selectedCount === totalCount) {
-                    contextDiv.textContent = `📚 ${engineName}: Searching ALL ${totalCount} book${totalCount !== 1 ? 's' : ''}`;
+                    contextDiv.textContent = `📚 Nyan AI: Searching ALL ${totalCount} book${totalCount !== 1 ? 's' : ''}`;
                     contextDiv.style.background = 'rgba(34, 211, 238, 0.1)';
                     contextDiv.style.borderColor = 'rgba(34, 211, 238, 0.3)';
                     contextDiv.style.color = '#22d3ee';
                 } else {
-                    contextDiv.textContent = `📚 ${engineName}: Searching ${selectedCount} of ${totalCount} book${totalCount !== 1 ? 's' : ''}`;
+                    contextDiv.textContent = `📚 Nyan AI: Searching ${selectedCount} of ${totalCount} book${totalCount !== 1 ? 's' : ''}`;
                     contextDiv.style.background = 'rgba(168, 85, 247, 0.1)';
                     contextDiv.style.borderColor = 'rgba(168, 85, 247, 0.3)';
                     contextDiv.style.color = '#a855f7';
@@ -2964,7 +2951,6 @@
             const message = document.getElementById('prometheusMessage').value.trim();
             const btn = document.getElementById('prometheusCheckBtn');
             const resultContent = document.getElementById('prometheusResultContent');
-            const engine = document.getElementById('auditAiEngine')?.value || 'prometheus';
             const selectedBookIds = window.auditSelectedBooks ? Array.from(window.auditSelectedBooks) : [];
             
             if (!message) {
@@ -2972,21 +2958,18 @@
                 return;
             }
             
-            const engineName = engine === 'nyan-ai' ? 'Nyan AI' : 'Prometheus';
-            const engineIcon = engine === 'nyan-ai' ? '🌈' : '🔮';
-            
             btn.disabled = true;
-            btn.textContent = `${engineIcon} Analyzing...`;
+            btn.textContent = '🌈 Analyzing...';
             
             const loadingDiv = document.createElement('div');
             loadingDiv.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;';
             const loadingIcon = document.createElement('div');
             loadingIcon.style.cssText = 'font-size: 2.5rem; margin-bottom: 0.75rem; animation: pulse 1.5s ease-in-out infinite;';
-            loadingIcon.textContent = engineIcon;
+            loadingIcon.textContent = '🌈';
             loadingDiv.appendChild(loadingIcon);
             const loadingText = document.createElement('p');
             loadingText.style.cssText = 'margin: 0; color: #a855f7;';
-            loadingText.textContent = `${engineName} analyzing your query...`;
+            loadingText.textContent = 'Nyan AI analyzing your query...';
             loadingDiv.appendChild(loadingText);
             const loadingSubtext = document.createElement('p');
             loadingSubtext.style.cssText = 'margin: 0.5rem 0 0 0; color: #64748b; font-size: 0.75rem;';
@@ -2994,153 +2977,64 @@
             loadingDiv.appendChild(loadingSubtext);
             resultContent.replaceChildren(loadingDiv);
             
-            console.log(`${engineIcon} ${engineName}: Querying ${selectedBookIds.length} book(s)`);
+            console.log(`🌈 Nyan AI: Querying ${selectedBookIds.length} book(s)`);
             
             try {
-                let response, data;
+                const response = await window.authFetch('/api/nyan-ai/audit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        query: message,
+                        bookIds: selectedBookIds
+                    })
+                });
                 
-                if (engine === 'nyan-ai') {
-                    response = await window.authFetch('/api/nyan-ai/audit', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            query: message,
-                            bookIds: selectedBookIds
-                        })
-                    });
-                    
-                    data = await response.json();
-                    
-                    if (!response.ok) {
-                        throw new Error(data.error || 'Nyan AI audit failed');
-                    }
-                    
-                    const bookInfo = data.bookContext 
-                        ? `${data.bookContext.bookCount} book(s), ${data.bookContext.totalMessages} messages`
-                        : 'No book context';
-                    
-                    const fragment = document.createDocumentFragment();
-                    
-                    const headerRow = document.createElement('div');
-                    headerRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;';
-                    
-                    const nyanBadge = document.createElement('span');
-                    nyanBadge.style.cssText = 'font-size: 0.8rem; padding: 0.25rem 0.5rem; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 4px; color: #a855f7; font-weight: 600;';
-                    nyanBadge.textContent = '🌈 Nyan AI';
-                    headerRow.appendChild(nyanBadge);
-                    
-                    const timeSpan = document.createElement('span');
-                    timeSpan.style.cssText = 'color: #64748b; font-size: 0.75rem;';
-                    timeSpan.textContent = `${data.processingTime}ms`;
-                    headerRow.appendChild(timeSpan);
-                    
-                    const bookSpan = document.createElement('span');
-                    bookSpan.style.cssText = 'color: #22d3ee; font-size: 0.75rem;';
-                    bookSpan.textContent = `📚 ${bookInfo}`;
-                    headerRow.appendChild(bookSpan);
-                    fragment.appendChild(headerRow);
-                    
-                    const answerBox = document.createElement('div');
-                    answerBox.style.cssText = 'padding: 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; margin-bottom: 0.75rem;';
-                    const answerP = document.createElement('p');
-                    answerP.style.cssText = 'color: #e2e8f0; margin: 0; line-height: 1.6; font-size: 0.9rem; white-space: pre-wrap;';
-                    answerP.textContent = data.answer;
-                    answerBox.appendChild(answerP);
-                    fragment.appendChild(answerBox);
-                    
-                    const modelDiv = document.createElement('div');
-                    modelDiv.style.cssText = 'font-size: 0.7rem; color: #64748b; text-align: right;';
-                    modelDiv.textContent = `Model: ${data.model || 'llama-3.3-70b'}`;
-                    fragment.appendChild(modelDiv);
-                    
-                    resultContent.replaceChildren(fragment);
-                    showToast(`🌈 Nyan AI response complete`, 'success');
-                    
-                } else {
-                    response = await window.authFetch('/api/prometheus/check', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ 
-                            messages: message, 
-                            ruleType: 'general',
-                            fractalId: selectedBookFractalId || null,
-                            bookIds: selectedBookIds
-                        })
-                    });
-                    
-                    data = await response.json();
-                    
-                    if (!response.ok) {
-                        throw new Error(data.error || 'Prometheus check failed');
-                    }
-                    
-                    const result = data.result;
-                    const hasBookContext = data.has_book_context;
-                    const statusColors = {
-                        'PASS': '#10b981',
-                        'FAIL': '#ef4444',
-                        'WARNING': '#f59e0b',
-                        'REVIEW': '#6366f1'
-                    };
-                    const statusColor = statusColors[result.status] || '#94a3b8';
-                    
-                    const fragment = document.createDocumentFragment();
-                    
-                    const headerRow = document.createElement('div');
-                    headerRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;';
-                    
-                    const statusBadge = document.createElement('span');
-                    statusBadge.style.cssText = `font-size: 0.8rem; padding: 0.25rem 0.5rem; background: ${statusColor}20; border: 1px solid ${statusColor}; border-radius: 4px; color: ${statusColor}; font-weight: 600;`;
-                    statusBadge.textContent = result.status;
-                    headerRow.appendChild(statusBadge);
-                    
-                    const confSpan = document.createElement('span');
-                    confSpan.style.cssText = 'color: #64748b; font-size: 0.75rem;';
-                    confSpan.textContent = `${(result.confidence * 100).toFixed(0)}% confidence`;
-                    headerRow.appendChild(confSpan);
-                    
-                    if (hasBookContext) {
-                        const msgsSpan = document.createElement('span');
-                        msgsSpan.style.cssText = 'color: #22d3ee; font-size: 0.75rem;';
-                        msgsSpan.textContent = `📚 ${result.totalMessages || 0} msgs`;
-                        headerRow.appendChild(msgsSpan);
-                    }
-                    fragment.appendChild(headerRow);
-                    
-                    if (result.answer) {
-                        const answerBox = document.createElement('div');
-                        answerBox.style.cssText = 'padding: 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; margin-bottom: 0.75rem;';
-                        const answerP = document.createElement('p');
-                        answerP.style.cssText = 'color: #e2e8f0; margin: 0; line-height: 1.6; font-size: 0.9rem;';
-                        answerP.textContent = result.answer;
-                        answerBox.appendChild(answerP);
-                        fragment.appendChild(answerBox);
-                    }
-                    
-                    if (result.data_extracted && Object.keys(result.data_extracted).length > 0) {
-                        const details = document.createElement('details');
-                        details.style.cssText = 'margin-bottom: 0.5rem;';
-                        const summary = document.createElement('summary');
-                        summary.style.cssText = 'color: #94a3b8; cursor: pointer; font-size: 0.8rem;';
-                        summary.textContent = '📊 Extracted Data';
-                        details.appendChild(summary);
-                        const pre = document.createElement('pre');
-                        pre.style.cssText = 'margin: 0.5rem 0; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 4px; color: #94a3b8; font-size: 0.7rem; overflow-x: auto; max-height: 120px; overflow-y: auto;';
-                        pre.textContent = JSON.stringify(result.data_extracted, null, 2);
-                        details.appendChild(pre);
-                        fragment.appendChild(details);
-                    }
-                    
-                    if (result.needs_human_review) {
-                        const reviewDiv = document.createElement('div');
-                        reviewDiv.style.cssText = 'padding: 0.375rem 0.5rem; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 4px; color: #a5b4fc; font-size: 0.75rem;';
-                        reviewDiv.textContent = '⚠️ Human review recommended';
-                        fragment.appendChild(reviewDiv);
-                    }
-                    
-                    resultContent.replaceChildren(fragment);
-                    showToast(`🧿 Check complete: ${result.status}`, result.status === 'PASS' ? 'success' : 'info');
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'AI audit failed');
                 }
+                
+                const bookInfo = data.bookContext 
+                    ? `${data.bookContext.bookCount} book(s), ${data.bookContext.totalMessages} messages`
+                    : 'No book context';
+                
+                const fragment = document.createDocumentFragment();
+                
+                const headerRow = document.createElement('div');
+                headerRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;';
+                
+                const nyanBadge = document.createElement('span');
+                nyanBadge.style.cssText = 'font-size: 0.8rem; padding: 0.25rem 0.5rem; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 4px; color: #a855f7; font-weight: 600;';
+                nyanBadge.textContent = '🌈 Nyan AI';
+                headerRow.appendChild(nyanBadge);
+                
+                const timeSpan = document.createElement('span');
+                timeSpan.style.cssText = 'color: #64748b; font-size: 0.75rem;';
+                timeSpan.textContent = `${data.processingTime}ms`;
+                headerRow.appendChild(timeSpan);
+                
+                const bookSpan = document.createElement('span');
+                bookSpan.style.cssText = 'color: #22d3ee; font-size: 0.75rem;';
+                bookSpan.textContent = `📚 ${bookInfo}`;
+                headerRow.appendChild(bookSpan);
+                fragment.appendChild(headerRow);
+                
+                const answerBox = document.createElement('div');
+                answerBox.style.cssText = 'padding: 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; margin-bottom: 0.75rem;';
+                const answerP = document.createElement('p');
+                answerP.style.cssText = 'color: #e2e8f0; margin: 0; line-height: 1.6; font-size: 0.9rem; white-space: pre-wrap;';
+                answerP.textContent = data.answer;
+                answerBox.appendChild(answerP);
+                fragment.appendChild(answerBox);
+                
+                const modelDiv = document.createElement('div');
+                modelDiv.style.cssText = 'font-size: 0.7rem; color: #64748b; text-align: right;';
+                modelDiv.textContent = `Model: ${data.model || 'llama-3.3-70b'}`;
+                fragment.appendChild(modelDiv);
+                
+                resultContent.replaceChildren(fragment);
+                showToast(`🌈 Nyan AI response complete`, 'success');
                 
             } catch (error) {
                 console.error('AI check error:', error);
@@ -3209,7 +3103,7 @@
             const paginationDiv = document.getElementById('prometheusHistoryPagination');
             
             try {
-                const response = await window.authFetch(`/api/prometheus/discord-history?limit=${limit}`);
+                const response = await window.authFetch(`/api/nyan-ai/discord-history?limit=${limit}`);
                 
                 if (!response.ok) {
                     const text = await response.text();
