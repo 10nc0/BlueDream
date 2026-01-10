@@ -61,12 +61,34 @@ function registerPrometheusRoutes(app, deps) {
             
             const userQuery = Array.isArray(messages) ? messages.join('\n') : messages;
             
+            // Validate bookIds against current tenant - only keep books that exist
             let targetBookIds = null;
-            if (bookIds && Array.isArray(bookIds) && bookIds.length > 0) {
-                targetBookIds = bookIds;
-            } else if (fractalId) {
+            if (bookIds && Array.isArray(bookIds) && bookIds.length > 0 && tenantSchema) {
+                try {
+                    const validationResult = await pool.query(
+                        `SELECT fractal_id FROM ${tenantSchema}.books WHERE fractal_id = ANY($1) OR id::text = ANY($1)`,
+                        [bookIds]
+                    );
+                    const validIds = validationResult.rows.map(r => r.fractal_id);
+                    if (validIds.length > 0) {
+                        targetBookIds = validIds;
+                        console.log(`🔮 Prometheus: Validated ${validIds.length}/${bookIds.length} bookIds for ${tenantSchema}`);
+                    } else {
+                        console.log(`⚠️ Prometheus: No valid bookIds found in ${tenantSchema}, falling back to fractalId`);
+                    }
+                } catch (err) {
+                    console.warn(`⚠️ Prometheus: BookIds validation failed:`, err.message);
+                }
+            }
+            
+            // Fallback to fractalId (current book being viewed)
+            if (!targetBookIds && fractalId) {
                 targetBookIds = [fractalId];
-            } else {
+                console.log(`🔮 Prometheus: Using fractalId fallback: ${fractalId}`);
+            }
+            
+            // Last resort: detect book names from query
+            if (!targetBookIds) {
                 targetBookIds = await detectAndLookupBookNames(userQuery, tenantSchema);
             }
             
