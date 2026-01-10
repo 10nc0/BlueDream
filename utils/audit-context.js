@@ -11,12 +11,48 @@ const STOP_WORDS = new Set(['what', 'when', 'where', 'which', 'yang', 'dalam', '
 
 const PLATE_REGEX = /\b([A-Z]{1,2})\s*(\d{1,4})\s*([A-Z]{1,3})\b/gi;
 
-function computeEntityAggregates(messages) {
+const ACTION_KEYWORDS = {
+    repair: ['perbaikan', 'perbaiki', 'servis', 'service', 'ganti', 'repair', 'fix', 'maintenance', 'tune up', 'tune-up', 'overhaul'],
+    masuk: ['masuk', 'datang', 'tiba', 'arrive', 'check-in', 'checkin', 'drop off', 'dropoff'],
+    keluar: ['keluar', 'selesai', 'ambil', 'pick up', 'pickup', 'done', 'complete', 'finish']
+};
+
+function extractActionKeywords(query) {
+    const queryLower = query.toLowerCase();
+    const foundActions = [];
+    
+    for (const [actionType, keywords] of Object.entries(ACTION_KEYWORDS)) {
+        for (const kw of keywords) {
+            if (queryLower.includes(kw)) {
+                foundActions.push({ type: actionType, keywords });
+                break;
+            }
+        }
+    }
+    
+    return foundActions;
+}
+
+function computeEntityAggregates(messages, query = null) {
     const tallies = new Map();
     const entityMessages = new Map();
     
+    const actionFilters = query ? extractActionKeywords(query) : [];
+    const hasActionFilter = actionFilters.length > 0;
+    
+    const allActionKeywords = hasActionFilter 
+        ? actionFilters.flatMap(a => a.keywords)
+        : [];
+    
     for (const msg of messages) {
         const content = msg.content || '';
+        const contentLower = content.toLowerCase();
+        
+        if (hasActionFilter) {
+            const matchesAction = allActionKeywords.some(kw => contentLower.includes(kw));
+            if (!matchesAction) continue;
+        }
+        
         const plates = [];
         let match;
         const regex = new RegExp(PLATE_REGEX.source, 'gi');
@@ -45,6 +81,8 @@ function computeEntityAggregates(messages) {
             messages: entityMessages.get(entity) || []
         };
     }
+    
+    console.log(`🔢 Entity aggregates: actionFilter=${hasActionFilter ? allActionKeywords.slice(0,3).join(',') : 'none'}, entities=${Object.keys(aggregates).length}`);
     
     return aggregates;
 }
@@ -313,7 +351,7 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
 
     const filterResult = applyQueryAwareFilter(allMessages, query, { maxMessages });
     
-    const entityAggregates = computeEntityAggregates(filterResult.sampledMessages);
+    const entityAggregates = computeEntityAggregates(filterResult.sampledMessages, query);
 
     return {
         isMultiBook: true,
