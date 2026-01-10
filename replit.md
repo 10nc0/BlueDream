@@ -42,6 +42,12 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Search**: Enhanced search across messages and metadata.
 - **Real-time Updates**: Smart polling, auto-scroll.
 - **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, logging results via Discord bots. Features general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior.
+- **Dashboard Audit Pipeline**: 4-stage S0-S3 verification pipeline (`utils/dashboard-audit-pipeline.js`) that detects and corrects count hallucinations in AI responses:
+    - **S0 Receive**: Accept LLM response
+    - **S1 Verify**: Extract claims (e.g., "X kali"), tally entities in authoritative contextMessages, detect mismatches
+    - **S2 Retry**: Re-prompt with structured hints (Nyan AI only, max 1 attempt)
+    - **S3 Deliver**: Apply deterministic corrections when evidence exists (actual > 0), or flag `needsHumanReview` when claims are unverifiable
+    - **Safety rule**: Never auto-patches to 0 - unverifiable claims surfaced to user instead of silently erased
 - **AI Playground**: Public, unauthenticated multimodal AI playground with multi-file upload, dynamic capacity sharing, abuse prevention, query classification, smart retry, document parsing, and real-time knowledge search.
     - **AI Processing Pipeline**: A 7-stage state machine for context extraction, preflight, context building, reasoning, auditing, retrying, personality application, and output finalization.
     - **Sliding Window Memory**: 8-message context window with periodic summarization.
