@@ -9,21 +9,22 @@ const APOLOGY_PATTERNS = [
   /maaf[^.]*kesalahan[^.]*\.\s*/gi,
   /saya mohon maaf[^.]*\.\s*/gi,
   /i('m| am) sorry[^.]*\.\s*/gi,
+  /i apologize[^.]*\.\s*/gi,
   /my apologies[^.]*\.\s*/gi,
   /apologies for[^.]*\.\s*/gi,
 ];
 
 const FILLER_PATTERNS = [
-  /saya berharap[^.]*\.\s*/gi,
-  /semoga informasi ini[^.]*\.\s*/gi,
-  /terima kasih atas[^.]*\.\s*/gi,
-  /i hope this[^.]*\.\s*/gi,
-  /hope this helps[^.]*\.\s*/gi,
-  /thank you for[^.]*\.\s*/gi,
-  /please let me know[^.]*\.\s*/gi,
-  /if you have any[^.]*\.\s*/gi,
-  /jika ada pertanyaan[^.]*\.\s*/gi,
-  /silakan hubungi[^.]*\.\s*/gi,
+  /saya berharap[^.!]*[.!]\s*/gi,
+  /semoga informasi ini[^.!]*[.!]\s*/gi,
+  /terima kasih atas[^.!]*[.!]\s*/gi,
+  /i hope this[^.!]*[.!]\s*/gi,
+  /hope this helps[^.!]*[.!]\s*/gi,
+  /thank you for[^.!]*[.!]\s*/gi,
+  /please let me know[^.!]*[.!]\s*/gi,
+  /if you have any[^.!]*[.!]\s*/gi,
+  /jika ada pertanyaan[^.!]*[.!]\s*/gi,
+  /silakan hubungi[^.!]*[.!]\s*/gi,
 ];
 
 const INTRO_FILLER_PATTERNS = [
