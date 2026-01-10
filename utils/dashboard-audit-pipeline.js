@@ -13,6 +13,7 @@
  */
 
 const { AUDIT } = require('../config/constants');
+const { createCapsule, destroyCapsule } = require('./audit-capsule');
 
 // ==================== Entity Extractors ====================
 
@@ -100,23 +101,36 @@ function countEntityInResponse(responseText, entity) {
   return count;
 }
 
-function verifyResponse(responseText, contextMessages = []) {
+function verifyResponse(responseText, contextMessages = [], entityAggregates = {}) {
   const claims = extractClaimsFromResponse(responseText);
   const mismatches = [];
   const unverifiable = [];
   
-  if (contextMessages.length === 0) {
+  const hasContext = contextMessages.length > 0;
+  const hasAggregates = Object.keys(entityAggregates).length > 0;
+  
+  if (!hasContext && !hasAggregates) {
     return {
       passed: true,
       claims,
       mismatches: [],
       unverifiable: claims.length > 0 ? claims : [],
-      hasContext: false
+      hasContext: false,
+      hasAggregates: false
     };
   }
   
   for (const claim of claims) {
-    const actualCount = countEntityInContext(contextMessages, claim.entity);
+    let actualCount = 0;
+    let verificationSource = null;
+    
+    if (hasAggregates && entityAggregates[claim.entity]) {
+      actualCount = entityAggregates[claim.entity].count || entityAggregates[claim.entity];
+      verificationSource = 'aggregates';
+    } else if (hasContext) {
+      actualCount = countEntityInContext(contextMessages, claim.entity);
+      verificationSource = 'context';
+    }
     
     if (claim.claimedCount !== actualCount) {
       if (actualCount === 0) {
@@ -132,7 +146,8 @@ function verifyResponse(responseText, contextMessages = []) {
           entity: claim.entity,
           claimed: claim.claimedCount,
           actual: actualCount,
-          line: claim.line
+          line: claim.line,
+          verificationSource
         });
       }
     }
@@ -143,7 +158,8 @@ function verifyResponse(responseText, contextMessages = []) {
     claims,
     mismatches,
     unverifiable,
-    hasContext: true
+    hasContext,
+    hasAggregates
   };
 }
 
@@ -228,139 +244,168 @@ async function runDashboardAuditPipeline({
   query,
   initialResponse,
   contextMessages = [],
+  entityAggregates = {},
   llmCallFn = null,
   engine = 'unknown',
-  maxRetries = 1
+  maxRetries = 1,
+  requestId = null
 }) {
   const startTime = Date.now();
+  const capsuleId = requestId || `${engine}-${Date.now()}`;
+  const capsule = createCapsule(capsuleId, engine);
   const pipelineLog = [];
   
+  const flatAggregates = Object.fromEntries(
+    Object.entries(entityAggregates).map(([k, v]) => [k, typeof v === 'object' ? v.count : v])
+  );
+  
+  capsule.hydrate({ contextMessages, aggregates: flatAggregates });
+  
   pipelineLog.push(`S0: Received ${engine} response (${initialResponse.length} chars)`);
+  pipelineLog.push(`S0: Capsule hydrated - ${contextMessages.length} messages, ${Object.keys(entityAggregates).length} aggregates, ${capsule.tallyByEntity.size} unique entities`);
   
-  const verification = verifyResponse(initialResponse, contextMessages);
-  pipelineLog.push(`S1: Verify - ${verification.claims.length} claims, ${verification.mismatches.length} mismatches, ${verification.unverifiable?.length || 0} unverifiable`);
+  capsule.extractClaimsFromResponse(initialResponse);
+  capsule.verify();
   
-  if (!verification.hasContext) {
-    const hasClaims = verification.claims && verification.claims.length > 0;
+  const capsuleStatus = capsule.getStatus();
+  pipelineLog.push(`S1: Verify - ${capsuleStatus.claimCount} claims, ${capsule.corrections.length} mismatches, ${capsule.unverifiable.length} unverifiable`);
+  
+  if (!capsuleStatus.contextSize && !capsuleStatus.hasAggregates) {
+    const hasClaims = capsuleStatus.claimCount > 0;
     pipelineLog.push(`S3: Deliver - No context available, ${hasClaims ? 'claims exist but cannot verify' : 'no claims detected'}`);
+    destroyCapsule(capsuleId);
     return {
       text: initialResponse,
       corrected: false,
       corrections: [],
-      unverifiable: hasClaims ? verification.claims : [],
+      unverifiable: hasClaims ? capsule.claimsExtracted : [],
       needsHumanReview: hasClaims,
       noContext: true,
+      verified: null,
       pipelineLog,
       latencyMs: Date.now() - startTime
     };
   }
   
-  if (verification.passed) {
-    pipelineLog.push(`S3: Deliver - No corrections needed`);
+  if (capsule.verified === true) {
+    pipelineLog.push(`S3: Deliver - All claims verified, no corrections needed`);
+    destroyCapsule(capsuleId);
     return {
       text: initialResponse,
       corrected: false,
       corrections: [],
+      verified: true,
       pipelineLog,
       latencyMs: Date.now() - startTime
     };
   }
   
-  if (verification.unverifiable && verification.unverifiable.length > 0 && verification.mismatches.length === 0) {
-    pipelineLog.push(`S3: Deliver - ${verification.unverifiable.length} claims cannot be verified (entities not in context)`);
+  if (capsule.unverifiable.length > 0 && capsule.corrections.length === 0) {
+    pipelineLog.push(`S3: Deliver - ${capsule.unverifiable.length} claims cannot be verified (entities not in context)`);
+    destroyCapsule(capsuleId);
     return {
       text: initialResponse,
       corrected: false,
       corrections: [],
-      unverifiable: verification.unverifiable,
+      unverifiable: capsule.unverifiable,
       needsHumanReview: true,
+      verified: false,
       pipelineLog,
       latencyMs: Date.now() - startTime
     };
   }
   
-  if (llmCallFn && maxRetries > 0) {
+  if (llmCallFn && maxRetries > 0 && capsule.corrections.length > 0) {
     pipelineLog.push(`S2: Retry - Attempting correction with hints`);
     
+    const retryHints = capsule.getRetryHints();
     const retryResponse = await retryWithHints(
       query,
       initialResponse,
-      verification.mismatches,
+      capsule.corrections.map(c => ({ entity: c.entity, claimed: c.claimedCount, actual: c.actual })),
       llmCallFn,
       { engine }
     );
     
     if (retryResponse) {
-      const retryVerification = verifyResponse(retryResponse, contextMessages);
+      const retryCapsule = createCapsule(`${capsuleId}-retry`, engine);
+      retryCapsule.hydrate({ contextMessages, aggregates: flatAggregates });
+      retryCapsule.extractClaimsFromResponse(retryResponse);
+      retryCapsule.verify();
       
-      if (retryVerification.passed || retryVerification.mismatches.length < verification.mismatches.length) {
-        pipelineLog.push(`S3: Deliver - Retry successful, ${retryVerification.mismatches.length} remaining mismatches`);
+      if (retryCapsule.verified === true || retryCapsule.corrections.length < capsule.corrections.length) {
+        pipelineLog.push(`S3: Deliver - Retry successful, ${retryCapsule.corrections.length} remaining mismatches`);
         
-        if (retryVerification.passed) {
+        if (retryCapsule.verified === true) {
+          destroyCapsule(`${capsuleId}-retry`);
+          destroyCapsule(capsuleId);
           return {
             text: retryResponse,
             corrected: true,
             correctionMethod: 'retry',
-            corrections: verification.mismatches.map(m => ({
+            corrections: capsule.corrections.map(m => ({
               entity: m.entity,
-              from: m.claimed,
+              from: m.claimedCount,
               to: m.actual
             })),
+            verified: true,
             pipelineLog,
             latencyMs: Date.now() - startTime
           };
         }
         
-        const { correctedText, corrections } = applyDeterministicCorrections(
-          retryResponse, 
-          retryVerification.mismatches
-        );
+        const correctedRetryText = retryCapsule.applyCorrections(retryResponse);
+        const retryCorrections = retryCapsule.corrections;
         
-        pipelineLog.push(`S3: Deliver - Applied ${corrections.length} deterministic corrections to retry`);
+        pipelineLog.push(`S3: Deliver - Applied ${retryCorrections.length} deterministic corrections to retry`);
+        destroyCapsule(`${capsuleId}-retry`);
+        destroyCapsule(capsuleId);
         
         return {
-          text: correctedText,
+          text: correctedRetryText,
           corrected: true,
           correctionMethod: 'retry+patch',
-          corrections,
+          corrections: retryCorrections,
+          verified: retryCapsule.verified,
           pipelineLog,
           latencyMs: Date.now() - startTime
         };
       }
+      destroyCapsule(`${capsuleId}-retry`);
     }
     
     pipelineLog.push(`S2: Retry - Failed or no improvement, falling back to deterministic patch`);
   }
   
-  const correctableMismatches = verification.mismatches.filter(m => m.actual > 0);
+  const correctedText = capsule.applyCorrections(initialResponse);
+  const finalStatus = capsule.getStatus();
   
-  if (correctableMismatches.length === 0) {
+  if (!finalStatus.corrected && capsule.unverifiable.length > 0) {
     pipelineLog.push(`S3: Deliver - No correctable mismatches (all require human review)`);
+    destroyCapsule(capsuleId);
     return {
       text: initialResponse,
       corrected: false,
       corrections: [],
-      unverifiable: verification.unverifiable || [],
-      needsHumanReview: (verification.unverifiable?.length || 0) > 0,
+      unverifiable: capsule.unverifiable,
+      needsHumanReview: true,
+      verified: false,
       pipelineLog,
       latencyMs: Date.now() - startTime
     };
   }
   
-  const { correctedText, corrections } = applyDeterministicCorrections(
-    initialResponse, 
-    correctableMismatches
-  );
-  
-  pipelineLog.push(`S3: Deliver - Applied ${corrections.length} deterministic corrections`);
+  pipelineLog.push(`S3: Deliver - Applied ${finalStatus.corrections.length} deterministic corrections`);
+  destroyCapsule(capsuleId);
   
   return {
     text: correctedText,
-    corrected: corrections.length > 0,
+    corrected: finalStatus.corrected,
     correctionMethod: 'patch',
-    corrections,
-    unverifiable: verification.unverifiable || [],
-    needsHumanReview: (verification.unverifiable?.length || 0) > 0,
+    corrections: finalStatus.corrections,
+    unverifiable: capsule.unverifiable,
+    needsHumanReview: capsule.unverifiable.length > 0,
+    verified: finalStatus.corrected && capsule.unverifiable.length === 0,
     pipelineLog,
     latencyMs: Date.now() - startTime
   };

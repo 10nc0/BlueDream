@@ -9,6 +9,46 @@ const STOP_WORDS = new Set(['what', 'when', 'where', 'which', 'yang', 'dalam', '
                             'many', 'much', 'book', 'buku', 'message', 'pesan', 'about',
                             'the', 'and', 'atau', 'adalah', 'ada', 'pada', 'untuk']);
 
+const PLATE_REGEX = /\b([A-Z]{1,2})\s*(\d{1,4})\s*([A-Z]{1,3})\b/gi;
+
+function computeEntityAggregates(messages) {
+    const tallies = new Map();
+    const entityMessages = new Map();
+    
+    for (const msg of messages) {
+        const content = msg.content || '';
+        const plates = [];
+        let match;
+        const regex = new RegExp(PLATE_REGEX.source, 'gi');
+        while ((match = regex.exec(content)) !== null) {
+            const normalized = match[0].replace(/\s+/g, ' ').toUpperCase().trim();
+            plates.push(normalized);
+        }
+        
+        for (const plate of plates) {
+            tallies.set(plate, (tallies.get(plate) || 0) + 1);
+            if (!entityMessages.has(plate)) {
+                entityMessages.set(plate, []);
+            }
+            entityMessages.get(plate).push({
+                id: msg.id,
+                timestamp: msg.timestamp,
+                preview: content.substring(0, 80)
+            });
+        }
+    }
+    
+    const aggregates = {};
+    for (const [entity, count] of tallies) {
+        aggregates[entity] = {
+            count,
+            messages: entityMessages.get(entity) || []
+        };
+    }
+    
+    return aggregates;
+}
+
 function extractDatePatterns(query) {
     const queryLower = query.toLowerCase();
     const patterns = [];
@@ -269,6 +309,8 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
         .sort((a, b) => b.createdAt - a.createdAt);
 
     const filterResult = applyQueryAwareFilter(allMessages, query, { maxMessages });
+    
+    const entityAggregates = computeEntityAggregates(filterResult.sampledMessages);
 
     return {
         isMultiBook: true,
@@ -286,6 +328,7 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
         sampleStrategy: filterResult.strategy,
         contextNote: filterResult.contextNote,
         overflowWarning: filterResult.overflowWarning,
+        entityAggregates: entityAggregates,
         dateRange: allMessages.length > 0 
             ? `${allMessages[allMessages.length-1].timestamp.split('T')[0]} to ${allMessages[0].timestamp.split('T')[0]}`
             : 'No messages'
@@ -298,5 +341,6 @@ module.exports = {
     serializeCompact,
     applyQueryAwareFilter,
     buildAuditContext,
-    parseTenantFromBookId
+    parseTenantFromBookId,
+    computeEntityAggregates
 };

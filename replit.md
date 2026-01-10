@@ -29,6 +29,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Search**: Enhanced search across messages and metadata.
 - **Real-time Updates**: Smart polling and auto-scroll.
 - **AI Audit System (Prometheus)**: AI-powered message verification using Groq API, with a 4-stage dashboard audit pipeline to detect and correct hallucinations. Includes general intelligence, zero-hallucination guard rails, bilingual support, and prompt-directed behavior.
+- **AuditCapsule**: Session-scoped temporal cache (`utils/audit-capsule.js`) that captures entity extraction and tallies, shares pre-computed counts between pipeline stages, and burns after delivery. Integrated with `buildAuditContext` which now returns `entityAggregates` alongside `recentMessages`.
 - **AI Playground**: Public, unauthenticated multimodal AI playground featuring multi-file upload, dynamic capacity sharing, abuse prevention, query classification, smart retry, document parsing, and real-time knowledge search. It uses a 7-stage state machine for AI processing and a sliding window memory.
 - **Nyan Protocol**: A system prompt framework utilizing a Seed Metric for historical comparison and socio-economic analysis to prevent LLM hallucinations.
 - **Specialized AI Systems**: Includes a Financial Physics System, Legal Document Analysis System, and Ψ-EMA System for time series analysis.

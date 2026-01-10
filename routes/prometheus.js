@@ -98,14 +98,22 @@ function registerPrometheusRoutes(app, deps) {
             
             // S0-S3: Dashboard Audit Pipeline - verify and correct count mismatches
             const resultObj = Array.isArray(result) ? result[0] : result;
+            let pipelineStatus = { verified: null, corrected: false, needsHumanReview: false };
             if (resultObj?.answer) {
                 const pipelineResult = await runDashboardAuditPipeline({
                     query: userQuery,
                     initialResponse: resultObj.answer,
                     contextMessages: hasBookContext ? (multiBookContext?.recentMessages || []) : [],
+                    entityAggregates: hasBookContext ? (multiBookContext?.entityAggregates || {}) : {},
                     engine: 'prometheus',
-                    maxRetries: 0  // No LLM retry for Prometheus (deterministic patch only)
+                    maxRetries: 0
                 });
+                
+                pipelineStatus = {
+                    verified: pipelineResult.verified,
+                    corrected: pipelineResult.corrected,
+                    needsHumanReview: pipelineResult.needsHumanReview || false
+                };
                 
                 if (pipelineResult.corrected) {
                     resultObj.answer = pipelineResult.text;
@@ -119,6 +127,8 @@ function registerPrometheusRoutes(app, deps) {
                     resultObj.unverifiable = pipelineResult.unverifiable;
                     console.log(`⚠️ Prometheus: ${pipelineResult.unverifiable?.length || 0} claims need human review`);
                 }
+                
+                resultObj.verified = pipelineResult.verified;
             }
             
             const userId = req.user?.id || req.session?.userId;
@@ -193,6 +203,11 @@ function registerPrometheusRoutes(app, deps) {
                 result,
                 rule_type: ruleType,
                 has_book_context: hasBookContext,
+                pipeline_status: {
+                    verified: pipelineStatus.verified,
+                    corrected: pipelineStatus.corrected,
+                    needs_human_review: pipelineStatus.needsHumanReview
+                },
                 audit_corrected: resultObj?.auditCorrected || false,
                 corrections: resultObj?.corrections?.length > 0 ? resultObj.corrections : undefined,
                 needs_human_review: resultObj?.needsHumanReview || false,

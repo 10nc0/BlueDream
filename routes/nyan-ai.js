@@ -541,6 +541,7 @@ Respond in ${language || 'the same language as the user query'}.`
             let corrections = [];
             let needsHumanReview = false;
             let unverifiable = [];
+            let pipelineVerified = null;
             if (bookContext && bookContext.totalMessages > 0) {
                 const retryFn = async (retryPrompt, options) => {
                     const retryResp = await groqWithRetry({
@@ -571,10 +572,13 @@ Respond in ${language || 'the same language as the user query'}.`
                     query: query,
                     initialResponse: answer,
                     contextMessages: bookContext.recentMessages || [],
+                    entityAggregates: bookContext.entityAggregates || {},
                     llmCallFn: retryFn,
                     engine: 'nyan-ai',
                     maxRetries: 1
                 });
+                
+                pipelineVerified = pipelineResult.verified;
                 
                 if (pipelineResult.corrected) {
                     answer = pipelineResult.text;
@@ -643,6 +647,11 @@ Respond in ${language || 'the same language as the user query'}.`
                 engine: 'nyan-ai',
                 model: 'llama-3.3-70b-versatile',
                 processingTime: processingTime,
+                pipelineStatus: {
+                    verified: pipelineVerified,
+                    corrected: auditCorrected,
+                    needsHumanReview: needsHumanReview
+                },
                 auditCorrected: auditCorrected,
                 corrections: corrections.length > 0 ? corrections : undefined,
                 needsHumanReview: needsHumanReview || undefined,
