@@ -1,6 +1,6 @@
 const logger = require('../lib/logger');
 const Prometheus = require('../prometheus');
-const { applyQueryAwareFilter } = require('../utils/audit-context');
+const { buildAuditContext } = require('../utils/audit-context');
 
 function registerPrometheusRoutes(app, deps) {
     const { pool, middleware, tenantMiddleware, helpers, bots } = deps;
@@ -33,221 +33,11 @@ function registerPrometheusRoutes(app, deps) {
                 }
             }
             
-            if (detectedFractalIds.length > 1) {
-                console.log(`📖 Detected ${detectedFractalIds.length} books in query: ${detectedFractalIds.join(', ')}`);
-            }
-            
             return detectedFractalIds;
         } catch (error) {
             console.warn(`⚠️ Failed to detect book names:`, error.message);
             return [];
         }
-    }
-
-    async function fetchBookContextForPrometheus(fractalId, tenantSchema, client = pool) {
-        if (!fractalId || !tenantSchema) return null;
-        
-        try {
-            const bookResult = await client.query(
-                `SELECT id, name, output_credentials, created_at FROM ${tenantSchema}.books WHERE fractal_id = $1`,
-                [fractalId]
-            );
-            
-            if (bookResult.rows.length === 0) return null;
-            
-            const book = bookResult.rows[0];
-            const bookCreatedAt = new Date(book.created_at);
-            
-            let outputCredentials = book.output_credentials;
-            if (typeof outputCredentials === 'string') {
-                outputCredentials = JSON.parse(outputCredentials);
-            }
-            
-            const outputData = outputCredentials?.output_01;
-            if (!outputData?.thread_id) {
-                return {
-                    name: book.name,
-                    fractalId: fractalId,
-                    createdAt: bookCreatedAt.toISOString(),
-                    totalMessages: 0,
-                    messagesThisMonth: 0,
-                    dateRange: 'No messages yet',
-                    recentMessages: []
-                };
-            }
-            
-            if (!thothBot || !thothBot.client || !thothBot.ready) {
-                return {
-                    name: book.name,
-                    fractalId: fractalId,
-                    createdAt: bookCreatedAt.toISOString(),
-                    totalMessages: 0,
-                    messagesThisMonth: 0,
-                    dateRange: 'Discord bot not ready',
-                    recentMessages: []
-                };
-            }
-            
-            const thread = await thothBot.client.channels.fetch(outputData.thread_id);
-            if (!thread) return null;
-            
-            // PAGINATION: Fetch all messages from the thread
-            let allDiscordMessages = [];
-            let lastId = null;
-            
-            while (true) {
-                const options = { limit: 100 };
-                if (lastId) options.before = lastId;
-                
-                const fetched = await thread.messages.fetch(options);
-                if (fetched.size === 0) break;
-                
-                allDiscordMessages = allDiscordMessages.concat(Array.from(fetched.values()));
-                lastId = fetched.last().id;
-                
-                // Safety break for extremely large threads (> 5000 msgs)
-                if (allDiscordMessages.length >= 5000) break;
-            }
-            
-            const now = new Date();
-            const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-            
-            const messages = allDiscordMessages
-                .filter(msg => msg.createdAt >= bookCreatedAt)
-                .map(msg => {
-                    let content = msg.content;
-                    if (!content && msg.embeds.length > 0) {
-                        const embed = msg.embeds[0];
-                        content = embed.description || '';
-                        const bodyField = embed.fields?.find(f => f.name === '📝 Body');
-                        if (bodyField) content = bodyField.value;
-                    }
-                    
-                    return {
-                        id: msg.id,
-                        content: content,
-                        timestamp: msg.createdAt.toISOString(),
-                        createdAt: msg.createdAt
-                    };
-                })
-                .sort((a, b) => b.createdAt - a.createdAt);
-            
-            const messagesByMonth = {};
-            messages.forEach(msg => {
-                const monthKey = `${msg.createdAt.getFullYear()}-${String(msg.createdAt.getMonth() + 1).padStart(2, '0')}`;
-                messagesByMonth[monthKey] = (messagesByMonth[monthKey] || 0) + 1;
-            });
-            
-            const messagesThisMonth = messages.filter(m => m.createdAt >= thisMonth).length;
-            
-            const dateRange = messages.length > 0
-                ? `${messages[messages.length - 1].timestamp.split('T')[0]} to ${messages[0].timestamp.split('T')[0]}`
-                : 'No messages';
-            
-            console.log(`📚 Prometheus context: Book "${book.name}" has ${messages.length} messages`);
-            
-            return {
-                name: book.name,
-                fractalId: fractalId,
-                createdAt: bookCreatedAt.toISOString(),
-                totalMessages: messages.length,
-                messagesThisMonth: messagesThisMonth,
-                dateRange: dateRange,
-                messageStats: messagesByMonth,
-                recentMessages: messages.map(m => ({ // ALL messages for complete audit
-                    timestamp: m.timestamp,
-                    content: m.content
-                }))
-            };
-        } catch (error) {
-            console.error(`❌ Failed to fetch book context: ${error.message}`);
-            return null;
-        }
-    }
-
-    async function fetchMultiBookContextForPrometheus(bookIds, tenantSchema, userRole, client = pool) {
-        if (!bookIds || !Array.isArray(bookIds) || bookIds.length === 0 || !tenantSchema) {
-            return null;
-        }
-        
-        console.log(`📚 Prometheus multi-book: Fetching ${bookIds.length} books for ${tenantSchema}...`);
-        
-        const books = [];
-        const accessibleSchemas = new Set();
-        
-        const hasExtendedAccess = userRole === 'dev';
-        
-        if (hasExtendedAccess) {
-            const allSchemas = await getAllTenantSchemas(client, userRole);
-            allSchemas.forEach(s => accessibleSchemas.add(s.tenant_schema));
-        } else {
-            accessibleSchemas.add(tenantSchema);
-        }
-        
-        for (const bookId of bookIds) {
-            let bookContext = null;
-            
-            bookContext = await fetchBookContextForPrometheus(bookId, tenantSchema, client);
-            
-            if (!bookContext && hasExtendedAccess) {
-                for (const schema of accessibleSchemas) {
-                    if (schema === tenantSchema) continue;
-                    bookContext = await fetchBookContextForPrometheus(bookId, schema, client);
-                    if (bookContext) {
-                        bookContext.sourceSchema = schema;
-                        break;
-                    }
-                }
-            }
-            
-            if (bookContext && bookContext.totalMessages > 0) {
-                bookContext.sourceSchema = bookContext.sourceSchema || tenantSchema;
-                books.push(bookContext);
-            } else {
-                console.warn(`⚠️ Book ${bookId} not accessible or has no messages`);
-            }
-        }
-        
-        if (books.length === 0) {
-            return null;
-        }
-        
-        const allMessages = [];
-        const bookSummaries = [];
-        
-        for (const book of books) {
-            bookSummaries.push({
-                name: book.name,
-                fractalId: book.fractalId,
-                totalMessages: book.totalMessages,
-                dateRange: book.dateRange
-            });
-            
-            for (const msg of book.recentMessages) {
-                allMessages.push({
-                    ...msg,
-                    bookName: book.name,
-                    bookFractalId: book.fractalId
-                });
-            }
-        }
-        
-        allMessages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        
-        const totalMessages = books.reduce((sum, b) => sum + b.totalMessages, 0);
-        
-        console.log(`📚 Prometheus multi-book: Aggregated ${totalMessages} messages from ${books.length} books`);
-        
-        return {
-            isMultiBook: true,
-            bookCount: books.length,
-            books: bookSummaries,
-            totalMessages: totalMessages,
-            allMessages: allMessages,
-            dateRange: allMessages.length > 0
-                ? `${allMessages[allMessages.length - 1].timestamp.split('T')[0]} to ${allMessages[0].timestamp.split('T')[0]}`
-                : 'No messages'
-        };
     }
 
     app.post('/api/prometheus/check', requireAuth, async (req, res) => {
@@ -271,65 +61,37 @@ function registerPrometheusRoutes(app, deps) {
             
             const userQuery = Array.isArray(messages) ? messages.join('\n') : messages;
             
-            let detectedBookIds = null;
-            
+            let targetBookIds = null;
             if (bookIds && Array.isArray(bookIds) && bookIds.length > 0) {
-                detectedBookIds = bookIds;
-                console.log(`📖 Using client-provided bookIds (singularity): ${detectedBookIds.length} book(s)`);
+                targetBookIds = bookIds;
+            } else if (fractalId) {
+                targetBookIds = [fractalId];
             } else {
-                const autoDetectedFractalIds = await detectAndLookupBookNames(userQuery, tenantSchema);
-                if (autoDetectedFractalIds && autoDetectedFractalIds.length > 0) {
-                    detectedBookIds = autoDetectedFractalIds;
-                    console.log(`📖 Server auto-detected ${detectedBookIds.length} book(s) from query text`);
-                }
+                targetBookIds = await detectAndLookupBookNames(userQuery, tenantSchema);
             }
             
-            if (detectedBookIds && Array.isArray(detectedBookIds) && detectedBookIds.length > 0 && tenantSchema) {
-                console.log(`🔮 Prometheus API: Multi-book query for ${detectedBookIds.length} books`);
-                
-                multiBookContext = await fetchMultiBookContextForPrometheus(detectedBookIds, tenantSchema, userRole);
+            if (targetBookIds && targetBookIds.length > 0 && tenantSchema) {
+                console.log(`🔮 Prometheus API: Fetching context for ${targetBookIds.length} books`);
+                multiBookContext = await buildAuditContext(targetBookIds, tenantSchema, userQuery, {
+                    pool,
+                    thothBot,
+                    userRole,
+                    maxMessages: 2000
+                });
                 
                 if (multiBookContext && multiBookContext.totalMessages > 0) {
-                    const filterResult = applyQueryAwareFilter(multiBookContext.allMessages, userQuery, { maxMessages: 300 });
-                    console.log(`🔮 Prometheus filter: ${filterResult.sampledCount}/${filterResult.totalMessages} msgs (${filterResult.strategy})`);
-                    
-                    const filteredContext = {
-                        ...multiBookContext,
-                        recentMessages: filterResult.sampledMessages,
-                        sampledCount: filterResult.sampledCount,
-                        sampleStrategy: filterResult.strategy,
-                        contextNote: filterResult.contextNote,
-                        overflowWarning: filterResult.overflowWarning
-                    };
-                    
-                    result = await Prometheus.checkWithMultiBookContext(userQuery, filteredContext, { language });
+                    result = await Prometheus.checkWithMultiBookContext(userQuery, multiBookContext, { language });
                     hasBookContext = true;
                 } else {
-                    console.log(`⚠️ No multi-book context available, using regular check`);
+                    console.log(`⚠️ No context available, using regular check`);
                     result = await Prometheus.check(messages, ruleType, { language });
                 }
-            }
-            else if (fractalId && fractalId !== 'null' && fractalId !== 'undefined' && tenantSchema) {
-                console.log(`🔮 Prometheus API: Context query for book ${fractalId}`);
-                
-                const bookContext = await fetchBookContextForPrometheus(fractalId, tenantSchema);
-                
-                if (bookContext && bookContext.totalMessages > 0) {
-                    const userQuery = Array.isArray(messages) ? messages.join('\n') : messages;
-                    result = await Prometheus.checkWithContext(userQuery, bookContext, { language });
-                    hasBookContext = true;
-                } else {
-                    console.log(`⚠️ No book context available, using regular check`);
-                    result = await Prometheus.check(messages, ruleType, { language });
-                }
-            } 
-            else {
+            } else {
                 console.log(`🔮 Prometheus API: Checking ${Array.isArray(messages) ? messages.length : 1} message(s) with rule: ${ruleType}`);
                 result = await Prometheus.check(messages, ruleType, { language });
             }
             
             const processingTime = Date.now() - startTime;
-            
             const userId = req.user?.id || req.session?.userId;
             
             if (tenantSchema && userId) {
@@ -353,9 +115,8 @@ function registerPrometheusRoutes(app, deps) {
                         resultObj?.raw_response || null,
                         processingTime
                     ]);
-                    console.log(`✅ Prometheus audit saved to ${tenantSchema}.audit_queries`);
                 } catch (dbError) {
-                    console.error('⚠️ Failed to save audit query (table may not exist):', dbError.message);
+                    console.error('⚠️ Failed to save audit query:', dbError.message);
                 }
             }
             
@@ -367,50 +128,25 @@ function registerPrometheusRoutes(app, deps) {
             
             if (idrisBot && idrisBot.isReady() && tenantSchema) {
                 try {
-                    console.log(`🧿 Prometheus Discord: Looking up AI log thread for ${tenantSchema}...`);
-                    
-                    const tenantInfo = await pool.query(`
-                        SELECT id, ai_log_thread_id, ai_log_channel_id 
-                        FROM core.tenant_catalog 
-                        WHERE tenant_schema = $1
-                    `, [tenantSchema]);
-                    
-                    if (tenantInfo.rows.length === 0) {
-                        console.warn(`⚠️ Prometheus Discord: ${tenantSchema} not found in tenant_catalog - skipping Discord logging`);
-                    } else {
+                    const tenantInfo = await pool.query(`SELECT id, ai_log_thread_id FROM core.tenant_catalog WHERE tenant_schema = $1`, [tenantSchema]);
+                    if (tenantInfo.rows.length > 0) {
                         const catalogId = tenantInfo.rows[0].id;
                         let threadId = tenantInfo.rows[0]?.ai_log_thread_id;
                         
                         if (!threadId) {
                             const tenantId = parseInt(tenantSchema.replace('tenant_', ''));
-                            console.log(`🧿 Creating AI log thread for ${tenantSchema}...`);
                             const threadInfo = await idrisBot.createAILogThread(tenantId, tenantSchema);
                             threadId = threadInfo.threadId;
-                            
-                            await pool.query(`
-                                UPDATE core.tenant_catalog 
-                                SET ai_log_thread_id = $1, ai_log_channel_id = $2 
-                                WHERE id = $3
-                            `, [threadInfo.threadId, threadInfo.channelId, catalogId]);
-                            console.log(`✅ AI log thread created: ${threadId}`);
-                        } else {
-                            console.log(`🧿 Using existing AI log thread: ${threadId}`);
+                            await pool.query(`UPDATE core.tenant_catalog SET ai_log_thread_id = $1, ai_log_channel_id = $2 WHERE id = $3`, [threadInfo.threadId, threadInfo.channelId, catalogId]);
                         }
                         
                         const resultObj = Array.isArray(result) ? result[0] : result;
-                        const userQuery = Array.isArray(messages) ? messages.join('\n') : messages;
-                        const bookName = hasBookContext ? resultObj.bookName : null;
-                        
+                        const bookName = hasBookContext ? (resultObj.bookName || (multiBookContext?.books?.[0]?.name)) : null;
                         await idrisBot.postAuditResult(threadId, resultObj, userQuery, bookName);
-                        console.log(`📜 Prometheus audit posted to Discord thread ${threadId}`);
                     }
                 } catch (discordError) {
                     console.error('⚠️ Failed to post audit to Discord:', discordError.message);
                 }
-            } else {
-                if (!idrisBot) console.log('⚠️ Prometheus Discord: Idris bot not available');
-                else if (!idrisBot.isReady()) console.log('⚠️ Prometheus Discord: Idris bot not ready');
-                else if (!tenantSchema) console.log('⚠️ Prometheus Discord: No tenant schema available');
             }
             
             res.json({ 
@@ -423,10 +159,7 @@ function registerPrometheusRoutes(app, deps) {
             });
         } catch (error) {
             console.error('❌ Prometheus API error:', error);
-            res.status(500).json({ 
-                error: error.message,
-                needs_human_review: true
-            });
+            res.status(500).json({ error: error.message, needs_human_review: true });
         }
     });
 

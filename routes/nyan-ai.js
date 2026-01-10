@@ -447,157 +447,12 @@ function registerNyanAIRoutes(app, deps) {
     const requireAuth = middleware?.requireAuth;
     const thothBot = bots?.thoth;
 
-    async function fetchBookContextForNyanAI(fractalId, tenantSchema, client = pool) {
-        if (!fractalId || !tenantSchema) {
-            console.log(`🌈 Nyan AI: Missing fractalId (${fractalId}) or tenantSchema (${tenantSchema})`);
-            return null;
-        }
-        
-        try {
-            console.log(`🌈 Nyan AI: Fetching book context for ${fractalId} in ${tenantSchema}`);
-            const bookResult = await client.query(
-                `SELECT id, name, output_credentials, created_at FROM ${tenantSchema}.books WHERE fractal_id = $1`,
-                [fractalId]
-            );
-            
-            if (bookResult.rows.length === 0) {
-                console.log(`🌈 Nyan AI: Book not found for fractalId ${fractalId}`);
-                return null;
-            }
-            
-            console.log(`🌈 Nyan AI: Found book "${bookResult.rows[0].name}"`);
-            
-            const book = bookResult.rows[0];
-            const bookCreatedAt = new Date(book.created_at);
-            
-            let outputCredentials = book.output_credentials;
-            if (typeof outputCredentials === 'string') {
-                outputCredentials = JSON.parse(outputCredentials);
-            }
-            
-            const outputData = outputCredentials?.output_01;
-            if (!outputData?.thread_id) {
-                console.log(`🌈 Nyan AI: No thread_id found for book "${book.name}"`);
-                return {
-                    name: book.name,
-                    fractalId: fractalId,
-                    createdAt: bookCreatedAt.toISOString(),
-                    totalMessages: 0,
-                    recentMessages: []
-                };
-            }
-            
-            console.log(`🌈 Nyan AI: Book "${book.name}" has thread_id ${outputData.thread_id}`);
-            
-            if (!thothBot || !thothBot.client || !thothBot.ready) {
-                console.log(`🌈 Nyan AI: Thoth bot not ready - thothBot:${!!thothBot}, client:${!!thothBot?.client}, ready:${thothBot?.ready}`);
-                return {
-                    name: book.name,
-                    fractalId: fractalId,
-                    createdAt: bookCreatedAt.toISOString(),
-                    totalMessages: 0,
-                    recentMessages: [],
-                    error: 'Discord bot not ready'
-                };
-            }
-            
-            console.log(`🌈 Nyan AI: Fetching thread ${outputData.thread_id}`);
-            const thread = await thothBot.client.channels.fetch(outputData.thread_id);
-            if (!thread) {
-                console.log(`🌈 Nyan AI: Thread not found`);
-                return null;
-            }
-            
-            // PAGINATION: Fetch all messages from the thread
-            let allDiscordMessages = [];
-            let lastId = null;
-            
-            while (true) {
-                const options = { limit: 100 };
-                if (lastId) options.before = lastId;
-                
-                const fetched = await thread.messages.fetch(options);
-                if (fetched.size === 0) break;
-                
-                allDiscordMessages = allDiscordMessages.concat(Array.from(fetched.values()));
-                lastId = fetched.last().id;
-                
-                // Safety break for extremely large threads (> 2000 msgs) during dev
-                if (allDiscordMessages.length >= 2000) break;
-            }
-            
-            console.log(`🌈 Nyan AI: Fetched ${allDiscordMessages.length} Discord messages`);
-            
-            const messages = allDiscordMessages
-                .filter(msg => msg.createdAt >= bookCreatedAt)
-                .map(msg => {
-                    let content = msg.content;
-                    if (!content && msg.embeds.length > 0) {
-                        const embed = msg.embeds[0];
-                        content = embed.description || '';
-                        const bodyField = embed.fields?.find(f => f.name === '📝 Body');
-                        if (bodyField) content = bodyField.value;
-                    }
-                    return {
-                        content: content,
-                        timestamp: msg.createdAt.toISOString(),
-                        author: msg.author?.username || 'Unknown'
-                    };
-                })
-                .filter(msg => msg.content && msg.content.trim().length > 0);
-            
-            console.log(`🌈 Nyan AI: Book "${book.name}" has ${messages.length} messages`);
-            
-            return {
-                name: book.name,
-                fractalId: fractalId,
-                createdAt: bookCreatedAt.toISOString(),
-                totalMessages: messages.length,
-                recentMessages: messages // Use ALL messages for complete context
-            };
-        } catch (error) {
-            console.error(`⚠️ Nyan AI failed to fetch book context:`, error.message, error.stack);
-            return null;
-        }
-    }
-
-    async function fetchMultiBookContextForNyanAI(bookIds, tenantSchema, client = pool) {
-        if (!bookIds || bookIds.length === 0) return null;
-        
-        const books = [];
-        for (const bookId of bookIds) {
-            const bookContext = await fetchBookContextForNyanAI(bookId, tenantSchema, client);
-            if (bookContext && bookContext.totalMessages > 0) {
-                books.push(bookContext);
-            }
-        }
-        
-        if (books.length === 0) return null;
-        
-        const allMessages = [];
-        for (const book of books) {
-            for (const msg of book.recentMessages) {
-                allMessages.push({
-                    ...msg,
-                    bookName: book.name
-                });
-            }
-        }
-        
-        allMessages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        
-        return {
-            isMultiBook: true,
-            bookCount: books.length,
-            books: books.map(b => ({ name: b.name, fractalId: b.fractalId, totalMessages: b.totalMessages })),
-            totalMessages: books.reduce((sum, b) => sum + b.totalMessages, 0),
-            recentMessages: allMessages // Use ALL messages for complete audit
-        };
-    }
+    const { buildAuditContext } = require('../utils/audit-context');
 
     app.post('/api/nyan-ai/audit', requireAuth, async (req, res) => {
         const { query, bookIds, language } = req.body;
         const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+        const userRole = req.userRole;
         const startTime = Date.now();
         
         if (!query || typeof query !== 'string' || query.trim().length === 0) {
@@ -610,97 +465,21 @@ function registerNyanAIRoutes(app, deps) {
             let bookContext = null;
             let contextPrompt = '';
             
-            // Fetch context from book
+            // Fetch context from books
             if (bookIds && Array.isArray(bookIds) && bookIds.length > 0 && tenantSchema) {
-                bookContext = await fetchMultiBookContextForNyanAI(bookIds, tenantSchema);
+                bookContext = await buildAuditContext(bookIds, tenantSchema, query, {
+                    pool,
+                    thothBot,
+                    userRole,
+                    maxMessages: 300 // Nyan AI uses smaller context than Prometheus for audit
+                });
                 
                 if (bookContext && bookContext.totalMessages > 0) {
                     const bookSummary = bookContext.books.map(b => `- ${b.name}: ${b.totalMessages} messages`).join('\n');
+                    const contextNote = bookContext.contextNote || '';
+                    const overflowWarning = bookContext.overflowWarning ? `\n\n⚠️ IMPORTANT: ${bookContext.overflowWarning}` : '';
                     
-                    // Query-aware filtering: search for relevant messages
-                    const allMsgs = bookContext.recentMessages;
-                    const MAX_MESSAGES = 300;
-                    const queryLower = query.toLowerCase();
-                    
-                    // Extract date patterns from query (e.g., "december 2025", "12/2025", "2025-12")
-                    const datePatterns = [];
-                    const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
-                                       'july', 'august', 'september', 'october', 'november', 'december'];
-                    const monthNamesID = ['januari', 'februari', 'maret', 'april', 'mei', 'juni',
-                                         'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
-                    
-                    // Match "month year" patterns
-                    for (let i = 0; i < monthNames.length; i++) {
-                        const yearMatch = queryLower.match(new RegExp(`(${monthNames[i]}|${monthNamesID[i]})\\s*(\\d{4})`));
-                        if (yearMatch) {
-                            const monthNum = String(i + 1).padStart(2, '0');
-                            datePatterns.push(`${yearMatch[2]}-${monthNum}`);
-                        }
-                    }
-                    
-                    // Extract keywords from query (words > 3 chars, excluding common words)
-                    const stopWords = new Set(['what', 'when', 'where', 'which', 'yang', 'dalam', 'dengan', 
-                                               'untuk', 'from', 'this', 'that', 'have', 'berapa', 'banyak',
-                                               'many', 'much', 'book', 'buku', 'message', 'pesan']);
-                    const keywords = queryLower.split(/\s+/)
-                        .filter(w => w.length > 3 && !stopWords.has(w))
-                        .slice(0, 5); // Limit keywords
-                    
-                    // Filter messages by relevance
-                    let relevantMsgs = allMsgs.filter(m => {
-                        const content = (m.content || '').toLowerCase();
-                        const date = m.timestamp?.split('T')[0] || '';
-                        
-                        // Check date match
-                        for (const pattern of datePatterns) {
-                            if (date.startsWith(pattern)) return true;
-                        }
-                        
-                        // Check keyword match
-                        for (const kw of keywords) {
-                            if (content.includes(kw)) return true;
-                        }
-                        
-                        return false;
-                    });
-                    
-                    // If no relevant messages found, fall back to sampling across time span
-                    let contextNote = '';
-                    let sampledMessages;
-                    
-                    let overflowWarning = '';
-                    
-                    if (relevantMsgs.length > 0) {
-                        // Sort by timestamp (oldest first) to ensure historical queries get older records
-                        relevantMsgs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-                        
-                        if (relevantMsgs.length <= MAX_MESSAGES) {
-                            sampledMessages = relevantMsgs;
-                            contextNote = `\n(Found ALL ${relevantMsgs.length} messages matching query criteria)`;
-                        } else {
-                            // Take oldest matches first (for historical queries like "December 2025")
-                            sampledMessages = relevantMsgs.slice(0, MAX_MESSAGES);
-                            contextNote = `\n(Showing oldest ${MAX_MESSAGES} of ${relevantMsgs.length} matching messages - ${relevantMsgs.length - MAX_MESSAGES} additional matches not shown)`;
-                            overflowWarning = `\n\n⚠️ IMPORTANT: ${relevantMsgs.length - MAX_MESSAGES} additional matching messages were not included due to size limits. The count you provide may be incomplete.`;
-                        }
-                    } else {
-                        // Fallback: sample evenly across the FULL time span
-                        // Sort oldest first and sample at regular intervals
-                        const sortedMsgs = [...allMsgs].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-                        
-                        if (sortedMsgs.length <= MAX_MESSAGES) {
-                            sampledMessages = sortedMsgs;
-                        } else {
-                            const step = Math.floor(sortedMsgs.length / MAX_MESSAGES);
-                            sampledMessages = [];
-                            for (let i = 0; i < sortedMsgs.length && sampledMessages.length < MAX_MESSAGES; i += step) {
-                                sampledMessages.push(sortedMsgs[i]);
-                            }
-                        }
-                        contextNote = `\n(Sampled ${sampledMessages.length} of ${allMsgs.length} total messages, evenly across time)`;
-                    }
-                    
-                    const messagesText = sampledMessages
+                    const messagesText = bookContext.recentMessages
                         .map(m => `[${m.bookName}] ${m.timestamp.split('T')[0]}: ${m.content}`)
                         .join('\n');
                     
@@ -708,7 +487,8 @@ function registerNyanAIRoutes(app, deps) {
 You have access to the user's book data from their Nyanbook ledger.
 
 BOOKS IN CONTEXT (${bookContext.bookCount} book(s), ${bookContext.totalMessages} total messages):
-${bookSummary}${contextNote}
+${bookSummary}
+(${contextNote})
 
 MESSAGES FROM THESE BOOKS:
 ${messagesText}

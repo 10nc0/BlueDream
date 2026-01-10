@@ -132,9 +132,128 @@ function applyQueryAwareFilter(messages, query, options = {}) {
     };
 }
 
+async function buildAuditContext(bookIds, tenantSchema, query, options = {}) {
+    const { pool, thothBot, userRole } = options;
+    const { maxMessages = 2000 } = options;
+
+    if (!bookIds || !Array.isArray(bookIds) || bookIds.length === 0 || !tenantSchema) {
+        return null;
+    }
+
+    // Reuse detection logic if needed (optional, depends on use case)
+    // For simplicity, we assume bookIds are already provided correctly by the caller
+
+    const books = [];
+    for (const bookId of bookIds) {
+        // Fetch book details
+        const bookResult = await pool.query(
+            `SELECT id, name, output_credentials, created_at FROM ${tenantSchema}.books WHERE fractal_id = $1 OR id::text = $1`,
+            [bookId]
+        );
+
+        if (bookResult.rows.length === 0) {
+            console.warn(`🌈 Audit: Book ${bookId} not found in ${tenantSchema}`);
+            continue;
+        }
+
+        const book = bookResult.rows[0];
+        const bookCreatedAt = new Date(book.created_at);
+        let outputCredentials = book.output_credentials;
+        if (typeof outputCredentials === 'string') outputCredentials = JSON.parse(outputCredentials);
+        
+        const threadId = outputCredentials?.output_01?.thread_id;
+        if (!threadId) {
+            console.warn(`🌈 Audit: No thread_id for book ${book.name}`);
+            continue;
+        }
+
+        if (!thothBot || !thothBot.client || !thothBot.ready) {
+            console.warn(`🌈 Audit: Thoth bot not ready`);
+            continue;
+        }
+
+        try {
+            const thread = await thothBot.client.channels.fetch(threadId);
+            if (!thread) continue;
+
+            let allDiscordMessages = [];
+            let lastId = null;
+            while (true) {
+                const fetchOptions = { limit: 100 };
+                if (lastId) fetchOptions.before = lastId;
+                const fetched = await thread.messages.fetch(fetchOptions);
+                if (fetched.size === 0) break;
+                allDiscordMessages = allDiscordMessages.concat(Array.from(fetched.values()));
+                lastId = fetched.last().id;
+                if (allDiscordMessages.length >= 5000) break;
+            }
+
+            const messages = allDiscordMessages
+                .filter(msg => msg.createdAt >= bookCreatedAt)
+                .map(msg => {
+                    let content = msg.content;
+                    if (!content && msg.embeds.length > 0) {
+                        const embed = msg.embeds[0];
+                        content = embed.description || '';
+                        const bodyField = embed.fields?.find(f => f.name === '📝 Body');
+                        if (bodyField) content = bodyField.value;
+                    }
+                    return {
+                        id: msg.id,
+                        content: content,
+                        timestamp: msg.createdAt.toISOString(),
+                        createdAt: msg.createdAt,
+                        bookName: book.name
+                    };
+                });
+
+            books.push({
+                name: book.name,
+                fractalId: book.fractal_id || book.id.toString(),
+                totalMessages: messages.length,
+                messages,
+                dateRange: messages.length > 0 
+                    ? `${messages[messages.length-1].timestamp.split('T')[0]} to ${messages[0].timestamp.split('T')[0]}`
+                    : 'No messages'
+            });
+        } catch (err) {
+            console.error(`🌈 Audit: Failed to fetch thread ${threadId}:`, err.message);
+        }
+    }
+
+    if (books.length === 0) return null;
+
+    const allMessages = books.flatMap(b => b.messages)
+        .sort((a, b) => b.createdAt - a.createdAt);
+
+    const filterResult = applyQueryAwareFilter(allMessages, query, { maxMessages });
+
+    return {
+        isMultiBook: true,
+        bookCount: books.length,
+        books: books.map(b => ({
+            name: b.name,
+            fractalId: b.fractalId,
+            totalMessages: b.totalMessages,
+            dateRange: b.dateRange
+        })),
+        totalMessages: allMessages.length,
+        allMessages: allMessages,
+        recentMessages: filterResult.sampledMessages,
+        sampledCount: filterResult.sampledCount,
+        sampleStrategy: filterResult.strategy,
+        contextNote: filterResult.contextNote,
+        overflowWarning: filterResult.overflowWarning,
+        dateRange: allMessages.length > 0 
+            ? `${allMessages[allMessages.length-1].timestamp.split('T')[0]} to ${allMessages[0].timestamp.split('T')[0]}`
+            : 'No messages'
+    };
+}
+
 module.exports = {
     extractDatePatterns,
     extractKeywords,
     serializeCompact,
-    applyQueryAwareFilter
+    applyQueryAwareFilter,
+    buildAuditContext
 };
