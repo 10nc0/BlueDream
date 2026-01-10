@@ -595,15 +595,23 @@ function registerNyanAIRoutes(app, deps) {
                 
                 if (bookContext && bookContext.totalMessages > 0) {
                     const bookSummary = bookContext.books.map(b => `- ${b.name}: ${b.totalMessages} messages`).join('\n');
-                    const messagesText = bookContext.recentMessages
+                    
+                    // Smart windowing: limit messages sent to LLM to avoid token overflow
+                    // Keep 150 most recent messages to fit within token limits
+                    const limitedMessages = bookContext.recentMessages.slice(0, 150);
+                    const messagesText = limitedMessages
                         .map(m => `[${m.bookName}] ${m.timestamp.split('T')[0]}: ${m.content}`)
                         .join('\n');
+                    
+                    const windowNote = bookContext.totalMessages > 150 
+                        ? `\n(Showing 150 most recent of ${bookContext.totalMessages} total messages)`
+                        : '';
                     
                     contextPrompt = `
 You have access to the user's book data from their Nyanbook ledger.
 
 BOOKS IN CONTEXT (${bookContext.bookCount} book(s), ${bookContext.totalMessages} total messages):
-${bookSummary}
+${bookSummary}${windowNote}
 
 MESSAGES FROM THESE BOOKS:
 ${messagesText}
@@ -645,7 +653,7 @@ Respond in ${language || 'the same language as the user query'}.`
                 }
             });
             
-            const answer = response.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
+            const answer = response.data?.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
             const processingTime = Date.now() - startTime;
             
             console.log(`✅ Nyan AI Audit complete in ${processingTime}ms for user ${req.userId}`);
