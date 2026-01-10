@@ -52,18 +52,24 @@ function applyQueryAwareFilter(messages, query, options = {}) {
     const datePatterns = extractDatePatterns(query);
     const keywords = extractKeywords(query);
     
+    const hasDateFilter = datePatterns.length > 0;
+    const hasKeywordFilter = keywords.length > 0;
+    const useAndLogic = hasDateFilter && hasKeywordFilter;
+    
     let relevantMsgs = messages.filter(m => {
         const content = (m.content || '').toLowerCase();
         const date = m.timestamp?.split('T')[0] || '';
         
-        for (const pattern of datePatterns) {
-            if (date.startsWith(pattern)) return true;
-        }
+        const matchesDate = datePatterns.some(pattern => date.startsWith(pattern));
+        const matchesKeyword = keywords.some(kw => content.includes(kw));
         
-        for (const kw of keywords) {
-            if (content.includes(kw)) return true;
+        if (useAndLogic) {
+            return matchesDate && matchesKeyword;
+        } else if (hasDateFilter) {
+            return matchesDate;
+        } else if (hasKeywordFilter) {
+            return matchesKeyword;
         }
-        
         return false;
     });
     
@@ -75,12 +81,17 @@ function applyQueryAwareFilter(messages, query, options = {}) {
     if (relevantMsgs.length > 0) {
         relevantMsgs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
         
+        const filterDesc = useAndLogic 
+            ? `date ${datePatterns.join('/')} AND keywords [${keywords.join(', ')}]`
+            : hasDateFilter ? `date ${datePatterns.join('/')}`
+            : `keywords [${keywords.join(', ')}]`;
+        
         if (relevantMsgs.length <= maxMessages) {
             sampledMessages = relevantMsgs;
-            contextNote = `Found ALL ${relevantMsgs.length} messages matching query criteria`;
+            contextNote = `Found ALL ${relevantMsgs.length} messages matching ${filterDesc}`;
         } else {
             sampledMessages = relevantMsgs.slice(0, maxMessages);
-            contextNote = `Showing oldest ${maxMessages} of ${relevantMsgs.length} matching messages`;
+            contextNote = `Showing oldest ${maxMessages} of ${relevantMsgs.length} matching ${filterDesc}`;
             overflowWarning = `${relevantMsgs.length - maxMessages} additional matching messages were not included due to size limits. The count you provide may be incomplete.`;
         }
     } else {
