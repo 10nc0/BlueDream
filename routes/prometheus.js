@@ -2,6 +2,7 @@ const logger = require('../lib/logger');
 const Prometheus = require('../prometheus');
 const { buildAuditContext } = require('../utils/audit-context');
 const { AUDIT } = require('../config/constants');
+const { runDashboardAuditPipeline } = require('../utils/dashboard-audit-pipeline');
 
 function registerPrometheusRoutes(app, deps) {
     const { pool, middleware, tenantMiddleware, helpers, bots } = deps;
@@ -94,11 +95,47 @@ function registerPrometheusRoutes(app, deps) {
             }
             
             const processingTime = Date.now() - startTime;
+            
+            // S0-S3: Dashboard Audit Pipeline - verify and correct count mismatches
+            const resultObj = Array.isArray(result) ? result[0] : result;
+            if (resultObj?.answer) {
+                const pipelineResult = await runDashboardAuditPipeline({
+                    query: userQuery,
+                    initialResponse: resultObj.answer,
+                    contextMessages: hasBookContext ? (multiBookContext?.recentMessages || []) : [],
+                    engine: 'prometheus',
+                    maxRetries: 0  // No LLM retry for Prometheus (deterministic patch only)
+                });
+                
+                if (pipelineResult.corrected) {
+                    resultObj.answer = pipelineResult.text;
+                    resultObj.auditCorrected = true;
+                    resultObj.corrections = pipelineResult.corrections;
+                    console.log(`🔧 Prometheus: ${pipelineResult.corrections.length} count corrections applied`);
+                }
+                
+                if (pipelineResult.needsHumanReview) {
+                    resultObj.needsHumanReview = true;
+                    resultObj.unverifiable = pipelineResult.unverifiable;
+                    console.log(`⚠️ Prometheus: ${pipelineResult.unverifiable?.length || 0} claims need human review`);
+                }
+            }
+            
             const userId = req.user?.id || req.session?.userId;
             
             if (tenantSchema && userId) {
                 try {
-                    const resultObj = Array.isArray(result) ? result[0] : result;
+                    const dataExtracted = {
+                        ...(resultObj?.data_extracted || {}),
+                        auditPipeline: {
+                            corrected: resultObj?.auditCorrected || false,
+                            corrections: resultObj?.corrections || [],
+                            needsHumanReview: resultObj?.needsHumanReview || false,
+                            unverifiable: resultObj?.unverifiable || [],
+                            originalAnswer: resultObj?.auditCorrected ? resultObj?.raw_response : undefined
+                        }
+                    };
+                    
                     await pool.query(`
                         INSERT INTO ${tenantSchema}.audit_queries 
                         (user_id, book_id, rule_type, language, input_messages, result_status, 
@@ -113,8 +150,8 @@ function registerPrometheusRoutes(app, deps) {
                         resultObj?.status || 'UNKNOWN',
                         resultObj?.confidence || 0,
                         resultObj?.reason || null,
-                        resultObj?.data_extracted ? JSON.stringify(resultObj.data_extracted) : null,
-                        resultObj?.raw_response || null,
+                        JSON.stringify(dataExtracted),
+                        resultObj?.answer || resultObj?.raw_response || null,
                         processingTime
                     ]);
                 } catch (dbError) {
@@ -156,6 +193,10 @@ function registerPrometheusRoutes(app, deps) {
                 result,
                 rule_type: ruleType,
                 has_book_context: hasBookContext,
+                audit_corrected: resultObj?.auditCorrected || false,
+                corrections: resultObj?.corrections?.length > 0 ? resultObj.corrections : undefined,
+                needs_human_review: resultObj?.needsHumanReview || false,
+                unverifiable: resultObj?.unverifiable?.length > 0 ? resultObj.unverifiable : undefined,
                 processing_time_ms: processingTime,
                 timestamp: new Date().toISOString()
             });

@@ -444,6 +444,7 @@ const orchestrator = createPipelineOrchestrator({
 
 const { AUDIT } = require('../config/constants');
 const { buildAuditContext } = require('../utils/audit-context');
+const { runDashboardAuditPipeline } = require('../utils/dashboard-audit-pipeline');
 
 function registerNyanAIRoutes(app, deps) {
     const { pool, middleware, bots } = deps;
@@ -532,8 +533,62 @@ Respond in ${language || 'the same language as the user query'}.`
                 }
             });
             
-            const answer = response.data?.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
+            let answer = response.data?.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
             const processingTime = Date.now() - startTime;
+            
+            // S0-S3: Dashboard Audit Pipeline - verify and correct count mismatches
+            let auditCorrected = false;
+            let corrections = [];
+            let needsHumanReview = false;
+            let unverifiable = [];
+            if (bookContext && bookContext.totalMessages > 0) {
+                const retryFn = async (retryPrompt, options) => {
+                    const retryResp = await groqWithRetry({
+                        url: 'https://api.groq.com/openai/v1/chat/completions',
+                        data: {
+                            model: 'llama-3.3-70b-versatile',
+                            messages: [
+                                {
+                                    role: 'system',
+                                    content: `You are Nyan AI. Correct your previous response based on the audit feedback. Be accurate with counts.`
+                                },
+                                { role: 'user', content: retryPrompt }
+                            ],
+                            temperature: options.temperature || 0.1,
+                            max_tokens: 4096
+                        },
+                        config: {
+                            headers: {
+                                'Authorization': `Bearer ${process.env.PLAYGROUND_GROQ_TOKEN}`,
+                                'Content-Type': 'application/json'
+                            }
+                        }
+                    });
+                    return retryResp.data?.choices?.[0]?.message?.content || null;
+                };
+                
+                const pipelineResult = await runDashboardAuditPipeline({
+                    query: query,
+                    initialResponse: answer,
+                    contextMessages: bookContext.recentMessages || [],
+                    llmCallFn: retryFn,
+                    engine: 'nyan-ai',
+                    maxRetries: 1
+                });
+                
+                if (pipelineResult.corrected) {
+                    answer = pipelineResult.text;
+                    auditCorrected = true;
+                    corrections = pipelineResult.corrections;
+                    console.log(`🔧 Nyan AI: ${corrections.length} count corrections (${pipelineResult.correctionMethod}), +${pipelineResult.latencyMs}ms`);
+                }
+                
+                if (pipelineResult.needsHumanReview) {
+                    needsHumanReview = true;
+                    unverifiable = pipelineResult.unverifiable || [];
+                    console.log(`⚠️ Nyan AI: ${unverifiable.length} claims need human review`);
+                }
+            }
             
             console.log(`✅ Nyan AI Audit complete in ${processingTime}ms for user ${req.userId}`);
             
@@ -588,6 +643,10 @@ Respond in ${language || 'the same language as the user query'}.`
                 engine: 'nyan-ai',
                 model: 'llama-3.3-70b-versatile',
                 processingTime: processingTime,
+                auditCorrected: auditCorrected,
+                corrections: corrections.length > 0 ? corrections : undefined,
+                needsHumanReview: needsHumanReview || undefined,
+                unverifiable: unverifiable.length > 0 ? unverifiable : undefined,
                 bookContext: bookContext ? {
                     bookCount: bookContext.bookCount,
                     totalMessages: bookContext.totalMessages,
