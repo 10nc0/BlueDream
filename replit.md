@@ -141,6 +141,28 @@ const maxMessages = AUDIT.MAX_MESSAGES;  // Centralized
 const chunkSize = 100;  // Inline - algorithmic invariant
 ```
 
+**External API Annotation Format:**
+When a constant is derived from an external API limit, annotate with:
+```javascript
+// @source: Service/API name and tier
+// @ref: Documentation URL
+// @verified: YYYY-MM-DD (date last checked)
+// @bottleneck: true (if this is the limiting factor for throughput)
+BRAVE_REQUESTS_PER_HOUR: 360,
+```
+
+To find all external dependencies: `grep "@source" config/constants.js`
+To find values needing refresh: `grep "@verified" config/constants.js`
+
+**Currently Annotated Sources:**
+| API | Constants Affected | Bottleneck |
+|-----|-------------------|------------|
+| Groq API | TEXT/VISION_REQUESTS_PER_HOUR, AI_MODELS.*, GROQ_RETRY.*, TIMEOUTS.GROQ_* | Yes |
+| Brave Search | BRAVE_REQUESTS_PER_HOUR | Yes |
+| Discord API | DISCORD.*, TIMEOUTS.DISCORD_* | No |
+| Twilio API | TIMEOUTS.TWILIO_WEBHOOK, FILE_UPLOAD.MAX_TOTAL_SIZE_MB | No |
+| ip-api.com | IP_GEO.* | No |
+
 ## Architectural Philosophy: Axiom of Choice
 
 **Date:** January 2, 2026  

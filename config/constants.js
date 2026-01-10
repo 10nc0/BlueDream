@@ -1,27 +1,67 @@
 /**
  * Centralized Constants & Configuration
  * Magic numbers extracted from index.js for easier tuning and maintenance
+ * 
+ * ANNOTATION FORMAT for externally-derived values:
+ *   @source: Service/API name and tier
+ *   @ref: Documentation URL
+ *   @verified: Date last checked (YYYY-MM-DD)
+ *   @bottleneck: true if this is the limiting factor for throughput
+ * 
+ * grep "@source" to find all external API dependencies
+ * grep "@verified" to find values needing spec refresh
  */
 
 // ==================== Timeouts (milliseconds) ====================
 const TIMEOUTS = {
   DATABASE_CONNECTION: 30000,      // PostgreSQL connection timeout (cold start buffer)
   DATABASE_STATEMENT: 30000,       // Statement execution timeout
+  
+  // @source: Discord API
+  // @ref: https://discord.com/developers/docs/topics/rate-limits
+  // @verified: 2026-01-10
   DISCORD_CALL: 5000,              // Per Discord API call
   DISCORD_FETCH_BATCH: 30000,      // Batch message fetch from Discord
+  
+  // @source: Groq API
+  // @ref: https://console.groq.com/docs/rate-limits
+  // @verified: 2026-01-10
   GROQ_REQUEST: 15000,             // Groq API calls (text)
+  
   SEARCH_REQUEST: 5000,            // DuckDuckGo / Brave search timeout
-  WHISPER_AUDIO: 30000,            // Groq Whisper audio transcription
+  
+  // @source: Groq Whisper API
+  // @ref: https://console.groq.com/docs/speech-text
+  // @verified: 2026-01-10
+  WHISPER_AUDIO: 30000,            // Groq Whisper audio transcription (large files)
+  
   COMPRESSION_TASK: 3000,          // Image/file compression
-  TWILIO_WEBHOOK: 3000,            // Twilio API calls
+  
+  // @source: Twilio API
+  // @ref: https://www.twilio.com/docs/usage/webhooks/webhooks-connection-overrides
+  // @verified: 2026-01-10
+  TWILIO_WEBHOOK: 3000,            // Twilio webhook timeout (their default is 15s, we use 3s)
+  
   SESSION_IDLE: 30000              // Session idle timeout
 };
 
 // ==================== Capacity & Rate Limits ====================
 const CAPACITY = {
-  TEXT_REQUESTS_PER_HOUR: 240,     // Global text query capacity
-  VISION_REQUESTS_PER_HOUR: 120,   // Global vision/photo capacity
-  BRAVE_REQUESTS_PER_HOUR: 360,    // Global Brave search capacity
+  // @source: Groq API (Free tier - shared across all playground users)
+  // @ref: https://console.groq.com/docs/rate-limits
+  // @verified: 2026-01-10
+  // @bottleneck: true - primary throughput limiter
+  // NOTE: These are internal soft caps for fair sharing, not Groq's limits
+  TEXT_REQUESTS_PER_HOUR: 240,     // Internal cap for shared playground (conservative)
+  VISION_REQUESTS_PER_HOUR: 120,   // Internal cap for vision (more compute-intensive)
+  
+  // @source: Brave Search API (Free tier)
+  // @ref: https://brave.com/search/api/#pricing
+  // @verified: 2026-01-10
+  // @bottleneck: true - search augmentation limiter
+  // NOTE: Internal cap; actual API limit varies by plan tier
+  BRAVE_REQUESTS_PER_HOUR: 360,    // Internal cap for shared playground
+  
   ACTIVE_USER_WINDOW_MS: 180 * 60 * 1000, // 180 minutes for active user tracking
   
   // Burst throttling
@@ -53,30 +93,41 @@ const SESSION = {
 
 // ==================== Discord ====================
 const DISCORD = {
+  // @source: Discord API
+  // @ref: https://discord.com/developers/docs/resources/channel#get-channel-messages
+  // @verified: 2026-01-10
   MAX_MESSAGE_FETCHES: 10,         // Fetch up to 10 batches (1000+ messages)
-  THREAD_PAGINATION_LIMIT: 100     // Messages per fetch
+  THREAD_PAGINATION_LIMIT: 100     // Messages per fetch (Discord max: 100)
 };
 
 // ==================== AI Models ====================
+// @source: Groq API - Model availability changes with releases
+// @ref: https://console.groq.com/docs/models
+// @verified: 2026-01-10
 const AI_MODELS = {
-  TEXT_MODEL: 'llama-3.3-70b-versatile',
+  TEXT_MODEL: 'llama-3.3-70b-versatile',                     // Groq text model
   VISION_MODEL: 'meta-llama/llama-4-scout-17b-16e-instruct', // Groq Vision model (2025)
   VISION: 'meta-llama/llama-4-scout-17b-16e-instruct',       // Alias for backward compatibility
-  AUDIO_MODEL: 'whisper-large-v3-turbo',
+  AUDIO_MODEL: 'whisper-large-v3-turbo',                     // Groq Whisper model
   
   // Temperature settings (H₀ protocol: 0.15 for reasoning, avoids hallucination)
   TEMPERATURE_REASONING: 0.15,     // For deterministic, fact-based responses
   TEMPERATURE_CREATIVE: 0.7,       // For creative responses (if used)
   
+  // @source: Groq API token limits per model
+  // @ref: https://console.groq.com/docs/models (context window varies by model)
   MAX_TOKENS: 1500,
   TOP_P: 0.95
 };
 
 // ==================== Groq Retry Strategy ====================
+// @source: Groq API 429 behavior (rate limit response includes retry-after header)
+// @ref: https://console.groq.com/docs/rate-limits
+// @verified: 2026-01-10
 const GROQ_RETRY = {
   TEXT_MAX_RETRIES: 3,             // Text queries: 3 retry attempts
-  VISION_MAX_RETRIES: 2,           // Vision queries: 2 retry attempts
-  BASE_DELAY_MS: 1000,             // Initial 1s delay
+  VISION_MAX_RETRIES: 2,           // Vision queries: 2 retry attempts (more expensive)
+  BASE_DELAY_MS: 1000,             // Initial 1s delay (Groq retry-after typically 1-5s)
   MAX_DELAY_MS: 4000               // Cap at 4s (1s → 2s → 4s)
 };
 
@@ -90,8 +141,15 @@ const REPUTATION = {
 
 // ==================== File Uploads ====================
 const FILE_UPLOAD = {
-  MAX_TOTAL_SIZE_MB: 50,           // 50MB total attachment limit
-  MAX_DIMENSIONS_PX: 2048,         // Resize images to max 2048px
+  // @source: Twilio WhatsApp media limits
+  // @ref: https://www.twilio.com/docs/whatsapp/guidance-whatsapp-media-messages
+  // @verified: 2026-01-10
+  MAX_TOTAL_SIZE_MB: 50,           // 50MB total (Twilio limit: 16MB per message, we batch)
+  
+  // @source: Groq Vision API image requirements
+  // @ref: https://console.groq.com/docs/vision
+  // @verified: 2026-01-10
+  MAX_DIMENSIONS_PX: 2048,         // Resize images to max 2048px (vision model optimal)
   JPEG_QUALITY: 0.85               // 85% JPEG quality for compression
 };
 
@@ -140,8 +198,11 @@ const PHI_BREATHE = {
 };
 
 // ==================== IP Geolocation Cache ====================
+// @source: ip-api.com (free tier: 45 req/min)
+// @ref: https://ip-api.com/docs/api:json
+// @verified: 2026-01-10
 const IP_GEO = {
-  SUCCESS_TTL_MS: 60 * 60 * 1000,  // 1 hour for successful lookups
+  SUCCESS_TTL_MS: 60 * 60 * 1000,  // 1 hour for successful lookups (reduce API calls)
   FAILURE_TTL_MS: 5 * 60 * 1000,   // 5 minutes for failed lookups
   REQUEST_TIMEOUT_MS: 3000         // 3 second timeout for API calls
 };
