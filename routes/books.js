@@ -135,6 +135,42 @@ function registerBooksRoutes(app, deps) {
                     
                     logger.debug({ count: books.length }, 'Books retrieved');
                 }
+                
+                // Fetch books shared with this user via email
+                const sharedBooksResult = await pool.query(`
+                    SELECT DISTINCT book_fractal_id
+                    FROM core.book_shares
+                    WHERE shared_with_email = $1 AND revoked_at IS NULL
+                `, [user.email.toLowerCase()]);
+                
+                for (const shared of sharedBooksResult.rows) {
+                    // Skip if already in list
+                    if (books.some(b => b.fractal_id === shared.book_fractal_id)) continue;
+                    
+                    try {
+                        // Look up the book via book_registry
+                        const regResult = await pool.query(`
+                            SELECT tenant_schema FROM core.book_registry
+                            WHERE fractal_id = $1 AND status = 'active'
+                        `, [shared.book_fractal_id]);
+                        
+                        if (regResult.rows.length > 0) {
+                            const sharedSchema = regResult.rows[0].tenant_schema;
+                            const bookResult = await pool.query(`
+                                SELECT b.*, '${sharedSchema}'::text as tenant_schema,
+                                       true as is_shared
+                                FROM ${sharedSchema}.books b
+                                WHERE b.fractal_id = $1 AND b.archived = false
+                            `, [shared.book_fractal_id]);
+                            
+                            if (bookResult.rows.length > 0) {
+                                books.push(bookResult.rows[0]);
+                            }
+                        }
+                    } catch (error) {
+                        logger.warn({ fractalId: shared.book_fractal_id, err: error }, 'Could not fetch shared book');
+                    }
+                }
             }
             
             const booksWithFractalIds = books.map(book => {
@@ -1563,6 +1599,213 @@ YYYY_MM_DD - HH_MM_SS - GMTXX - {message_id}.{extension}
     const exportMiddleware = setTenantContext ? [requireAuth, setTenantContext] : [requireAuth];
     app.get('/api/books/:book_id/export', ...exportMiddleware, exportBookHandler);
     app.post('/api/books/:book_id/export', ...exportMiddleware, exportBookHandler);
+
+    // ==================== BOOK SHARING ENDPOINTS ====================
+    
+    // Helper: Verify book ownership via book_registry (cross-tenant secure)
+    const verifyBookOwnership = async (bookFractalId, userEmail, tenantSchema) => {
+        const normalizedOwnerEmail = userEmail.toLowerCase().trim();
+        
+        // Join book_registry to verify the book belongs to this tenant AND user
+        const result = await pool.query(`
+            SELECT br.fractal_id, br.book_name, br.tenant_schema
+            FROM core.book_registry br
+            WHERE br.fractal_id = $1 
+              AND br.tenant_schema = $2
+              AND br.status = 'active'
+              AND LOWER(br.tenant_email) = $3
+        `, [bookFractalId, tenantSchema, normalizedOwnerEmail]);
+        
+        if (result.rows.length === 0) {
+            return null;
+        }
+        return result.rows[0];
+    };
+    
+    // Get shares for a book
+    app.get('/api/books/:book_id/shares', requireAuth, async (req, res) => {
+        try {
+            const { book_id } = req.params;
+            const normalizedOwnerEmail = req.userEmail.toLowerCase().trim();
+            
+            // Verify user owns this book via book_registry (cross-tenant secure)
+            const book = await verifyBookOwnership(book_id, req.userEmail, req.tenantSchema);
+            
+            if (!book) {
+                return res.status(404).json({ error: 'Book not found or access denied' });
+            }
+            
+            // Get active shares (not revoked) - filter by normalized owner email
+            const sharesResult = await pool.query(`
+                SELECT shared_with_email, permission_level, invited_at
+                FROM core.book_shares
+                WHERE book_fractal_id = $1 AND LOWER(owner_email) = $2 AND revoked_at IS NULL
+                ORDER BY invited_at DESC
+            `, [book_id, normalizedOwnerEmail]);
+            
+            res.json({ shares: sharesResult.rows });
+        } catch (error) {
+            logger.error({ err: error }, 'Error fetching book shares');
+            res.status(500).json({ error: 'Failed to fetch shares' });
+        }
+    });
+    
+    // Share a book with an email
+    app.post('/api/books/:book_id/share', requireAuth, async (req, res) => {
+        try {
+            const { book_id } = req.params;
+            const { email } = req.body;
+            
+            if (!email || !email.includes('@')) {
+                return res.status(400).json({ error: 'Valid email required' });
+            }
+            
+            const normalizedEmail = email.toLowerCase().trim();
+            const normalizedOwnerEmail = req.userEmail.toLowerCase().trim();
+            
+            // Can't share with self
+            if (normalizedEmail === normalizedOwnerEmail) {
+                return res.status(400).json({ error: 'Cannot share with yourself' });
+            }
+            
+            // Verify user owns this book via book_registry (cross-tenant secure)
+            const book = await verifyBookOwnership(book_id, req.userEmail, req.tenantSchema);
+            
+            if (!book) {
+                return res.status(404).json({ error: 'Book not found or access denied' });
+            }
+            
+            // Idempotent upsert: check for any existing share (active or revoked) by this owner
+            const existingShare = await pool.query(`
+                SELECT id, revoked_at FROM core.book_shares
+                WHERE book_fractal_id = $1 
+                  AND LOWER(owner_email) = $2 
+                  AND LOWER(shared_with_email) = $3
+            `, [book_id, normalizedOwnerEmail, normalizedEmail]);
+            
+            let shouldSendEmail = false;
+            
+            if (existingShare.rows.length > 0) {
+                const share = existingShare.rows[0];
+                if (share.revoked_at) {
+                    // Re-share after revoke - reactivate, resend email
+                    await pool.query(`
+                        UPDATE core.book_shares 
+                        SET revoked_at = NULL, invited_at = NOW()
+                        WHERE id = $1
+                    `, [share.id]);
+                    shouldSendEmail = true;
+                } else {
+                    // Already shared and active - don't resend
+                    return res.json({ success: true, message: 'Already shared with this email', alreadyShared: true });
+                }
+            } else {
+                // New share - store normalized emails
+                await pool.query(`
+                    INSERT INTO core.book_shares (book_fractal_id, owner_email, shared_with_email, permission_level)
+                    VALUES ($1, $2, $3, 'viewer')
+                `, [book_id, normalizedOwnerEmail, normalizedEmail]);
+                shouldSendEmail = true;
+            }
+            
+            // Send invite email via Resend
+            if (shouldSendEmail) {
+                try {
+                    const { Resend } = require('resend');
+                    const resend = new Resend(process.env.RESEND_API_KEY);
+                    
+                    const domain = process.env.REPLIT_DOMAINS?.split(',')[0] || 'nyanbook.io';
+                    const dashboardLink = `https://${domain}/`;
+                    
+                    await resend.emails.send({
+                        from: 'Nyan <nyan@nyanbook.io>',
+                        to: normalizedEmail,
+                        subject: `${normalizedOwnerEmail} shared a book with you on Nyanbook`,
+                        html: `
+                            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                                <h2 style="color: #333;">You've been invited to view a book!</h2>
+                                <p style="color: #666; font-size: 16px;">
+                                    <strong>${normalizedOwnerEmail}</strong> has shared the book <strong>"${book.book_name}"</strong> with you on Nyanbook.
+                                </p>
+                                <div style="background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px; padding: 1rem; margin: 20px 0;">
+                                    <p style="color: #666; margin: 0;">
+                                        📚 <strong>Book:</strong> ${book.book_name}<br>
+                                        👤 <strong>Shared by:</strong> ${normalizedOwnerEmail}<br>
+                                        🔐 <strong>Access:</strong> View only
+                                    </p>
+                                </div>
+                                <p style="color: #666; font-size: 16px;">
+                                    To access this book, register or log in with this email address:
+                                </p>
+                                <div style="text-align: center; margin: 30px 0;">
+                                    <a href="${dashboardLink}" style="background-color: #7c3aed; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">
+                                        Open Nyanbook
+                                    </a>
+                                </div>
+                                <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+                                <p style="color: #999; font-size: 12px;">
+                                    If you don't want to receive these emails, you can ignore this message.
+                                </p>
+                            </div>
+                        `
+                    });
+                    logger.info({ email: normalizedEmail, book: book.book_name }, 'Book share invite email sent');
+                } catch (emailError) {
+                    logger.error({ err: emailError }, 'Failed to send share invite email');
+                    // Don't fail the share if email fails
+                }
+            }
+            
+            if (logAudit) {
+                await logAudit(pool, req.tenantSchema, req.userId, 'book_share', `Shared book ${book.book_name} with ${normalizedEmail}`);
+            }
+            
+            res.json({ success: true, message: `Invited ${normalizedEmail} to view this book` });
+        } catch (error) {
+            logger.error({ err: error }, 'Error sharing book');
+            res.status(500).json({ error: 'Failed to share book' });
+        }
+    });
+    
+    // Revoke share access
+    app.delete('/api/books/:book_id/share/:email', requireAuth, async (req, res) => {
+        try {
+            const { book_id, email } = req.params;
+            const normalizedEmail = decodeURIComponent(email).toLowerCase().trim();
+            const normalizedOwnerEmail = req.userEmail.toLowerCase().trim();
+            
+            // Verify user owns this book via book_registry (cross-tenant secure)
+            const book = await verifyBookOwnership(book_id, req.userEmail, req.tenantSchema);
+            
+            if (!book) {
+                return res.status(404).json({ error: 'Book not found or access denied' });
+            }
+            
+            // Revoke by setting revoked_at - must match owner email
+            const result = await pool.query(`
+                UPDATE core.book_shares 
+                SET revoked_at = NOW()
+                WHERE book_fractal_id = $1 
+                  AND LOWER(owner_email) = $2 
+                  AND LOWER(shared_with_email) = $3 
+                  AND revoked_at IS NULL
+                RETURNING id
+            `, [book_id, normalizedOwnerEmail, normalizedEmail]);
+            
+            if (result.rows.length === 0) {
+                return res.status(404).json({ error: 'Share not found' });
+            }
+            
+            if (logAudit) {
+                await logAudit(pool, req.tenantSchema, req.userId, 'book_unshare', `Revoked access for ${normalizedEmail} to book ${book.book_name}`);
+            }
+            
+            res.json({ success: true, message: `Revoked access for ${normalizedEmail}` });
+        } catch (error) {
+            logger.error({ err: error }, 'Error revoking book share');
+            res.status(500).json({ error: 'Failed to revoke access' });
+        }
+    });
 
     return {};
 }

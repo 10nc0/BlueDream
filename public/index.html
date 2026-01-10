@@ -338,6 +338,22 @@
                         <option value="telegram">Telegram</option>
                     </select>
                 </div>
+                <!-- Share Book Section (only visible when editing) -->
+                <div class="form-group" id="shareBookSection" style="display: none;">
+                    <label class="form-label">
+                        Share Book
+                        <span class="optional-badge">Optional</span>
+                    </label>
+                    <small class="form-help" style="display: block; margin-bottom: 0.5rem;">Invite others to view this book (read-only access)</small>
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <input type="email" class="form-input" id="shareEmailInput" placeholder="email@example.com" style="flex: 1;">
+                        <button type="button" class="btn" id="shareBookBtn" style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981; white-space: nowrap; padding: 0.5rem 1rem;">Share</button>
+                    </div>
+                    <div id="sharedEmailsList" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                        <!-- Shared emails will be rendered here -->
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label class="form-label">
                         Personal Webhook URL

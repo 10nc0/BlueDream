@@ -177,6 +177,34 @@ class TenantManager {
                 // Ignore duplicate table errors on restart
                 if (err.code !== '23505') throw err;
             });
+            
+            // Book sharing table - cross-tenant read access via email
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS core.book_shares (
+                    id SERIAL PRIMARY KEY,
+                    book_fractal_id TEXT NOT NULL,
+                    owner_email TEXT NOT NULL,
+                    shared_with_email TEXT NOT NULL,
+                    permission_level TEXT NOT NULL DEFAULT 'viewer',
+                    invited_at TIMESTAMPTZ DEFAULT NOW(),
+                    revoked_at TIMESTAMPTZ,
+                    UNIQUE(book_fractal_id, shared_with_email)
+                )
+            `).catch(err => {
+                if (err.code !== '23505') throw err;
+            });
+            
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_book_shares_shared_email 
+                ON core.book_shares (shared_with_email) WHERE revoked_at IS NULL
+            `).catch(() => {});
+            
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_book_shares_book_id 
+                ON core.book_shares (book_fractal_id) WHERE revoked_at IS NULL
+            `).catch(() => {});
+            
+            console.log('✅ Book shares table initialized');
         } finally {
             client.release();
         }

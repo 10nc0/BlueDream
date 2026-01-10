@@ -1467,9 +1467,15 @@
                 headerRight.appendChild(waBtn);
             }
             if (!isDevPanelView) {
-                headerRight.appendChild(createIconBtn('editBook', book.fractal_id, 'Edit', 'rgba(251, 191, 36, 0.15)', '#fbbf24', '✏️'));
+                // Only show edit/delete buttons for owned books (not shared or contributed)
+                const isViewOnly = book.is_shared || book.is_contributed;
+                if (!isViewOnly) {
+                    headerRight.appendChild(createIconBtn('editBook', book.fractal_id, 'Edit', 'rgba(251, 191, 36, 0.15)', '#fbbf24', '✏️'));
+                }
                 headerRight.appendChild(createIconBtn('downloadEntireBook', book.fractal_id, 'Download Entire Book', 'rgba(34, 197, 94, 0.15)', '#22c55e', '⬇️'));
-                headerRight.appendChild(createIconBtn('deleteBook', book.fractal_id, 'Delete', 'rgba(239, 68, 68, 0.15)', '#ef4444', '🗑️'));
+                if (!isViewOnly) {
+                    headerRight.appendChild(createIconBtn('deleteBook', book.fractal_id, 'Delete', 'rgba(239, 68, 68, 0.15)', '#ef4444', '🗑️'));
+                }
             }
             headerBar.appendChild(headerRight);
             fragment.appendChild(headerBar);
@@ -4181,7 +4187,119 @@
             
             renderTags();
             renderWebhooks();
+            
+            // Show share section when editing
+            const shareSection = document.getElementById('shareBookSection');
+            if (shareSection) {
+                shareSection.style.display = 'block';
+                loadBookShares(fractalId);
+            }
+            
             document.getElementById('botModal').classList.add('active');
+        }
+        
+        // Book sharing functions
+        async function loadBookShares(fractalId) {
+            const container = document.getElementById('sharedEmailsList');
+            if (!container) return;
+            
+            container.innerHTML = '<span style="color: #94a3b8; font-size: 0.75rem;">Loading...</span>';
+            
+            try {
+                const response = await window.authFetch(`/api/books/${fractalId}/shares`);
+                if (!response.ok) throw new Error('Failed to load shares');
+                
+                const data = await response.json();
+                renderSharedEmails(data.shares || [], fractalId);
+            } catch (err) {
+                console.error('Error loading shares:', err);
+                container.innerHTML = '<span style="color: #ef4444; font-size: 0.75rem;">Failed to load shares</span>';
+            }
+        }
+        
+        function renderSharedEmails(shares, fractalId) {
+            const container = document.getElementById('sharedEmailsList');
+            if (!container) return;
+            
+            if (shares.length === 0) {
+                container.innerHTML = '<span style="color: #64748b; font-size: 0.75rem;">No shares yet</span>';
+                return;
+            }
+            
+            container.innerHTML = '';
+            shares.forEach(share => {
+                const chip = document.createElement('div');
+                chip.style.cssText = 'display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 9999px; padding: 0.25rem 0.5rem 0.25rem 0.75rem; font-size: 0.75rem; color: #a78bfa;';
+                
+                const emailSpan = document.createElement('span');
+                emailSpan.textContent = share.shared_with_email;
+                chip.appendChild(emailSpan);
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.textContent = '×';
+                removeBtn.style.cssText = 'background: rgba(239, 68, 68, 0.2); border: none; color: #ef4444; width: 18px; height: 18px; border-radius: 50%; cursor: pointer; font-size: 0.875rem; line-height: 1; display: flex; align-items: center; justify-content: center;';
+                removeBtn.onclick = () => revokeBookShare(fractalId, share.shared_with_email);
+                chip.appendChild(removeBtn);
+                
+                container.appendChild(chip);
+            });
+        }
+        
+        async function shareBook(fractalId, email) {
+            if (!email || !email.includes('@')) {
+                showToast('Please enter a valid email address', 'error');
+                return;
+            }
+            
+            try {
+                const response = await window.authFetch(`/api/books/${fractalId}/share`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    showToast(data.error || 'Failed to share', 'error');
+                    return;
+                }
+                
+                if (data.alreadyShared) {
+                    showToast('Already shared with this email', 'info');
+                } else {
+                    showToast(`Invited ${email} to view this book`, 'success');
+                }
+                
+                document.getElementById('shareEmailInput').value = '';
+                loadBookShares(fractalId);
+            } catch (err) {
+                console.error('Error sharing book:', err);
+                showToast('Failed to share book', 'error');
+            }
+        }
+        
+        async function revokeBookShare(fractalId, email) {
+            if (!confirm(`Revoke access for ${email}?`)) return;
+            
+            try {
+                const response = await window.authFetch(`/api/books/${fractalId}/share/${encodeURIComponent(email)}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) {
+                    const data = await response.json();
+                    showToast(data.error || 'Failed to revoke', 'error');
+                    return;
+                }
+                
+                showToast(`Revoked access for ${email}`, 'success');
+                loadBookShares(fractalId);
+            } catch (err) {
+                console.error('Error revoking share:', err);
+                showToast('Failed to revoke access', 'error');
+            }
         }
 
         function closeBotModal() {
@@ -4190,6 +4308,16 @@
             editingBookId = null;
             botTags = [];
             botWebhooks = [];
+            
+            // Hide share section and clear
+            const shareSection = document.getElementById('shareBookSection');
+            if (shareSection) {
+                shareSection.style.display = 'none';
+            }
+            const shareInput = document.getElementById('shareEmailInput');
+            if (shareInput) shareInput.value = '';
+            const sharedList = document.getElementById('sharedEmailsList');
+            if (sharedList) sharedList.innerHTML = '';
         }
 
         // Quick Start Wizard Functions
@@ -7916,6 +8044,31 @@ document.addEventListener('DOMContentLoaded', function() {
     const addWebhookBtn = document.getElementById('addWebhookBtn');
     if (addWebhookBtn) {
         addWebhookBtn.addEventListener('click', addWebhookInput);
+    }
+    
+    // Share book button handler
+    const shareBookBtn = document.getElementById('shareBookBtn');
+    if (shareBookBtn) {
+        shareBookBtn.addEventListener('click', () => {
+            const email = document.getElementById('shareEmailInput')?.value?.trim();
+            if (editingBookId && email) {
+                shareBook(editingBookId, email);
+            }
+        });
+    }
+    
+    // Share email input - enter key handler
+    const shareEmailInput = document.getElementById('shareEmailInput');
+    if (shareEmailInput) {
+        shareEmailInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const email = shareEmailInput.value?.trim();
+                if (editingBookId && email) {
+                    shareBook(editingBookId, email);
+                }
+            }
+        });
     }
     
     const copyFractalIdBtn = document.querySelector('[onclick*="copyBookFractalId"]');
