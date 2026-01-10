@@ -177,7 +177,9 @@ class IdrisBot {
             'PASS': '✅',
             'FAIL': '❌',
             'WARNING': '⚠️',
-            'REVIEW': '🔍'
+            'REVIEW': '🔍',
+            'NYAN': '🌈',
+            'UNKNOWN': '❓'
         };
 
         const emoji = statusEmoji[auditResult.status] || '❓';

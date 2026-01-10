@@ -446,6 +446,7 @@ function registerNyanAIRoutes(app, deps) {
     const { pool, middleware, bots } = deps;
     const requireAuth = middleware?.requireAuth;
     const thothBot = bots?.thoth;
+    const idrisBot = bots?.idris;
 
     const { buildAuditContext } = require('../utils/audit-context');
 
@@ -471,7 +472,7 @@ function registerNyanAIRoutes(app, deps) {
                     pool,
                     thothBot,
                     userRole,
-                    maxMessages: 300 // Nyan AI uses smaller context than Prometheus for audit
+                    maxMessages: 2000 // Match Prometheus for consistent results
                 });
                 
                 if (bookContext && bookContext.totalMessages > 0) {
@@ -534,6 +535,51 @@ Respond in ${language || 'the same language as the user query'}.`
             const processingTime = Date.now() - startTime;
             
             console.log(`✅ Nyan AI Audit complete in ${processingTime}ms for user ${req.userId}`);
+            
+            // Discord logging via Idris (mirror Prometheus pattern)
+            if (idrisBot && idrisBot.isReady() && tenantSchema && bookContext) {
+                try {
+                    const tenantInfo = await pool.query(
+                        `SELECT id, ai_log_thread_id FROM core.tenant_catalog WHERE tenant_schema = $1`, 
+                        [tenantSchema]
+                    );
+                    if (tenantInfo.rows.length > 0) {
+                        const catalogId = tenantInfo.rows[0].id;
+                        let threadId = tenantInfo.rows[0]?.ai_log_thread_id;
+                        
+                        if (!threadId) {
+                            const tenantId = parseInt(tenantSchema.replace('tenant_', ''));
+                            const threadInfo = await idrisBot.createAILogThread(tenantId, tenantSchema);
+                            threadId = threadInfo.threadId;
+                            await pool.query(
+                                `UPDATE core.tenant_catalog SET ai_log_thread_id = $1, ai_log_channel_id = $2 WHERE id = $3`, 
+                                [threadInfo.threadId, threadInfo.channelId, catalogId]
+                            );
+                        }
+                        
+                        const primaryBookName = bookContext.books[0]?.name || 'Unknown';
+                        const bookNames = bookContext.books.map(b => b.name).join(', ');
+                        await idrisBot.postAuditResult(threadId, {
+                            status: 'NYAN',
+                            confidence: null,
+                            answer: answer,
+                            reason: `Nyan AI response (${bookContext.totalMessages} messages analyzed)`,
+                            data_extracted: { 
+                                engine: 'nyan-ai',
+                                model: 'llama-3.3-70b-versatile',
+                                books: bookNames, 
+                                query: query.substring(0, 100),
+                                processingTime: processingTime
+                            },
+                            bookName: primaryBookName
+                        }, query, primaryBookName);
+                        
+                        console.log(`📜 Nyan AI Audit logged to Discord thread ${threadId}`);
+                    }
+                } catch (discordError) {
+                    console.error('⚠️ Failed to post Nyan AI audit to Discord:', discordError.message);
+                }
+            }
             
             res.json({
                 success: true,
