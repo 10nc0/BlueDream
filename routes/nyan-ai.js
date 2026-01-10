@@ -445,6 +445,7 @@ const orchestrator = createPipelineOrchestrator({
 const { AUDIT } = require('../config/constants');
 const { buildAuditContext } = require('../utils/audit-context');
 const { runDashboardAuditPipeline } = require('../utils/dashboard-audit-pipeline');
+const { formatExecutiveResponse } = require('../utils/executive-formatter');
 
 function registerNyanAIRoutes(app, deps) {
     const { pool, middleware, bots } = deps;
@@ -515,9 +516,16 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     messages: [
                         {
                             role: 'system',
-                            content: `You are Nyan AI, a helpful assistant with access to the user's Nyanbook data. 
-You analyze their archived messages and provide insights. Be concise, accurate, and helpful.
-If asked about specific data, reference the actual messages provided.
+                            content: `You are Nyan AI, an executive data analyst for Nyanbook archives.
+
+RESPONSE STYLE:
+- Be direct and brief - this is an audit report, not a conversation
+- Lead with the answer, then supporting data
+- Use bullet points or numbered lists for multiple items
+- No apologies, no pleasantries, no self-references
+- Count carefully when asked about quantities
+- Reference actual data from the messages provided
+
 Respond in ${language || 'the same language as the user query'}.`
                         },
                         { role: 'user', content: contextPrompt }
@@ -551,7 +559,7 @@ Respond in ${language || 'the same language as the user query'}.`
                             messages: [
                                 {
                                     role: 'system',
-                                    content: `You are Nyan AI. Correct your previous response based on the audit feedback. Be accurate with counts.`
+                                    content: `You are Nyan AI. Correct your previous response based on the audit feedback. Be direct and accurate with counts. No apologies or filler.`
                                 },
                                 { role: 'user', content: retryPrompt }
                             ],
@@ -593,6 +601,9 @@ Respond in ${language || 'the same language as the user query'}.`
                     console.log(`⚠️ Nyan AI: ${unverifiable.length} claims need human review`);
                 }
             }
+            
+            // S4: Executive Formatter - strip conversational filler for audit brevity
+            answer = formatExecutiveResponse(answer);
             
             console.log(`✅ Nyan AI Audit complete in ${processingTime}ms for user ${req.userId}`);
             
