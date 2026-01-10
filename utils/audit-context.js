@@ -152,6 +152,9 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
         return null;
     }
 
+    // Cache for tenant existence checks to avoid redundant queries in multi-book scenarios
+    const tenantExistenceCache = new Map();
+
     const books = [];
     for (const bookId of bookIds) {
         // Parse tenant from bookId, fallback to provided schema
@@ -159,6 +162,26 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
         
         if (!targetSchema) {
             console.warn(`🌈 Audit: Cannot determine tenant for book ${bookId}`);
+            continue;
+        }
+
+        // Hardening: Verify tenant schema exists in core catalog before querying
+        // This prevents probing non-existent schemas via manipulated bookIds
+        if (!tenantExistenceCache.has(targetSchema)) {
+            try {
+                const schemaCheck = await pool.query(
+                    'SELECT 1 FROM information_schema.schemata WHERE schema_name = $1',
+                    [targetSchema]
+                );
+                tenantExistenceCache.set(targetSchema, schemaCheck.rows.length > 0);
+            } catch (err) {
+                console.error(`🌈 Audit: Schema check failed for ${targetSchema}:`, err.message);
+                tenantExistenceCache.set(targetSchema, false);
+            }
+        }
+
+        if (!tenantExistenceCache.get(targetSchema)) {
+            console.warn(`🌈 Audit: Security check failed - tenant ${targetSchema} does not exist`);
             continue;
         }
         
