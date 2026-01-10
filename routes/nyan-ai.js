@@ -448,9 +448,13 @@ function registerNyanAIRoutes(app, deps) {
     const thothBot = bots?.thoth;
 
     async function fetchBookContextForNyanAI(fractalId, tenantSchema, client = pool) {
-        if (!fractalId || !tenantSchema) return null;
+        if (!fractalId || !tenantSchema) {
+            console.log(`🌈 Nyan AI: Missing fractalId (${fractalId}) or tenantSchema (${tenantSchema})`);
+            return null;
+        }
         
         try {
+            console.log(`🌈 Nyan AI: Fetching book context for ${fractalId} in ${tenantSchema}`);
             const bookResult = await client.query(
                 `SELECT id, name, output_credentials, created_at FROM ${tenantSchema}.books WHERE fractal_id = $1`,
                 [fractalId]
@@ -478,6 +482,7 @@ function registerNyanAIRoutes(app, deps) {
             }
             
             if (!thothBot || !thothBot.client || !thothBot.ready) {
+                console.log(`🌈 Nyan AI: Thoth bot not ready - thothBot:${!!thothBot}, client:${!!thothBot?.client}, ready:${thothBot?.ready}`);
                 return {
                     name: book.name,
                     fractalId: fractalId,
@@ -488,8 +493,12 @@ function registerNyanAIRoutes(app, deps) {
                 };
             }
             
+            console.log(`🌈 Nyan AI: Fetching thread ${outputData.thread_id}`);
             const thread = await thothBot.client.channels.fetch(outputData.thread_id);
-            if (!thread) return null;
+            if (!thread) {
+                console.log(`🌈 Nyan AI: Thread not found`);
+                return null;
+            }
             
             // PAGINATION: Fetch all messages from the thread
             let allDiscordMessages = [];
@@ -509,6 +518,8 @@ function registerNyanAIRoutes(app, deps) {
                 if (allDiscordMessages.length >= 2000) break;
             }
             
+            console.log(`🌈 Nyan AI: Fetched ${allDiscordMessages.length} Discord messages`);
+            
             const messages = allDiscordMessages
                 .filter(msg => msg.createdAt >= bookCreatedAt)
                 .map(msg => {
@@ -526,6 +537,8 @@ function registerNyanAIRoutes(app, deps) {
                     };
                 })
                 .filter(msg => msg.content && msg.content.trim().length > 0);
+            
+            console.log(`🌈 Nyan AI: Book "${book.name}" has ${messages.length} messages`);
             
             return {
                 name: book.name,
