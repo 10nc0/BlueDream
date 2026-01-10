@@ -446,6 +446,7 @@ const { AUDIT } = require('../config/constants');
 const { buildAuditContext } = require('../utils/audit-context');
 const { runDashboardAuditPipeline } = require('../utils/dashboard-audit-pipeline');
 const { formatExecutiveResponse } = require('../utils/executive-formatter');
+const { buildExecutiveAuditPrompt, buildRetryPrompt } = require('../prompts/executive-audit');
 
 function registerNyanAIRoutes(app, deps) {
     const { pool, middleware, bots } = deps;
@@ -516,17 +517,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     messages: [
                         {
                             role: 'system',
-                            content: `You are Nyan AI, an executive data analyst for Nyanbook archives.
-
-RESPONSE STYLE:
-- Be direct and brief - this is an audit report, not a conversation
-- Lead with the answer, then supporting data
-- Use bullet points or numbered lists for multiple items
-- No apologies, no pleasantries, no self-references
-- Count carefully when asked about quantities
-- Reference actual data from the messages provided
-
-Respond in ${language || 'the same language as the user query'}.`
+                            content: buildExecutiveAuditPrompt(language)
                         },
                         { role: 'user', content: contextPrompt }
                     ],
@@ -559,7 +550,7 @@ Respond in ${language || 'the same language as the user query'}.`
                             messages: [
                                 {
                                     role: 'system',
-                                    content: `You are Nyan AI. Correct your previous response based on the audit feedback. Be direct and accurate with counts. No apologies or filler.`
+                                    content: buildRetryPrompt()
                                 },
                                 { role: 'user', content: retryPrompt }
                             ],

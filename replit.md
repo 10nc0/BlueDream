@@ -46,7 +46,9 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Security (10/10 Hardened)**: Includes Sybil attack prevention, JWT security, session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, and CSP compliance.
 - **Discord Bot Trinity Architecture**: Specialized bots (Hermes, Thoth, Idris, Horus) for different read/write and AI functions.
 - **Vegapunk Kernel Architecture**: Factory pattern with dependency injection orchestrating modular routes (auth, books, inpipe, nyan-ai).
-- **Unified AI Architecture**: Single Nyan AI engine handles both public playground and authenticated dashboard audit with 2-key security isolation (`PLAYGROUND_GROQ_TOKEN` for public, `GROQ_API_KEY` for dashboard).
+- **Unified AI Architecture**: Single Nyan AI engine handles both public playground and authenticated dashboard audit with 2-key security isolation (`PLAYGROUND_GROQ_TOKEN` for public, `GROQ_API_KEY` for dashboard). Core inference is shared; persona/formatting layers are channel-specific:
+  - **Playground** → Uses `PipelineOrchestrator` with S5 personality layer (`fastStreamPersonality`, `applyPersonalityFormat`) for casual, conversational tone
+  - **Dashboard Audit** → Uses `prompts/executive-audit.js` + `utils/executive-formatter.js` for direct, executive-style responses
 - **Phi Breathe Orchestrator**: Unified background task scheduler for continuous logs, heartbeats, memory cleanup, and media purging.
 - **Inpipe Architecture**: Multi-channel input with an abstract channel interface for extensibility.
 - **Architectural Philosophy: Axiom of Choice**: This philosophy guides the system's design, asserting the existence of ideal configurations for infinite components, making the system self-governing and scalable through dependency injection, even without explicit construction of every case.
