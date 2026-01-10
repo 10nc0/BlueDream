@@ -596,30 +596,106 @@ function registerNyanAIRoutes(app, deps) {
                 if (bookContext && bookContext.totalMessages > 0) {
                     const bookSummary = bookContext.books.map(b => `- ${b.name}: ${b.totalMessages} messages`).join('\n');
                     
-                    // Smart windowing: limit messages sent to LLM to avoid token overflow
-                    // Keep 150 most recent messages to fit within token limits
-                    const limitedMessages = bookContext.recentMessages.slice(0, 150);
-                    const messagesText = limitedMessages
+                    // Query-aware filtering: search for relevant messages
+                    const allMsgs = bookContext.recentMessages;
+                    const MAX_MESSAGES = 300;
+                    const queryLower = query.toLowerCase();
+                    
+                    // Extract date patterns from query (e.g., "december 2025", "12/2025", "2025-12")
+                    const datePatterns = [];
+                    const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
+                                       'july', 'august', 'september', 'october', 'november', 'december'];
+                    const monthNamesID = ['januari', 'februari', 'maret', 'april', 'mei', 'juni',
+                                         'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
+                    
+                    // Match "month year" patterns
+                    for (let i = 0; i < monthNames.length; i++) {
+                        const yearMatch = queryLower.match(new RegExp(`(${monthNames[i]}|${monthNamesID[i]})\\s*(\\d{4})`));
+                        if (yearMatch) {
+                            const monthNum = String(i + 1).padStart(2, '0');
+                            datePatterns.push(`${yearMatch[2]}-${monthNum}`);
+                        }
+                    }
+                    
+                    // Extract keywords from query (words > 3 chars, excluding common words)
+                    const stopWords = new Set(['what', 'when', 'where', 'which', 'yang', 'dalam', 'dengan', 
+                                               'untuk', 'from', 'this', 'that', 'have', 'berapa', 'banyak',
+                                               'many', 'much', 'book', 'buku', 'message', 'pesan']);
+                    const keywords = queryLower.split(/\s+/)
+                        .filter(w => w.length > 3 && !stopWords.has(w))
+                        .slice(0, 5); // Limit keywords
+                    
+                    // Filter messages by relevance
+                    let relevantMsgs = allMsgs.filter(m => {
+                        const content = (m.content || '').toLowerCase();
+                        const date = m.timestamp?.split('T')[0] || '';
+                        
+                        // Check date match
+                        for (const pattern of datePatterns) {
+                            if (date.startsWith(pattern)) return true;
+                        }
+                        
+                        // Check keyword match
+                        for (const kw of keywords) {
+                            if (content.includes(kw)) return true;
+                        }
+                        
+                        return false;
+                    });
+                    
+                    // If no relevant messages found, fall back to sampling across time span
+                    let contextNote = '';
+                    let sampledMessages;
+                    
+                    let overflowWarning = '';
+                    
+                    if (relevantMsgs.length > 0) {
+                        // Sort by timestamp (oldest first) to ensure historical queries get older records
+                        relevantMsgs.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                        
+                        if (relevantMsgs.length <= MAX_MESSAGES) {
+                            sampledMessages = relevantMsgs;
+                            contextNote = `\n(Found ALL ${relevantMsgs.length} messages matching query criteria)`;
+                        } else {
+                            // Take oldest matches first (for historical queries like "December 2025")
+                            sampledMessages = relevantMsgs.slice(0, MAX_MESSAGES);
+                            contextNote = `\n(Showing oldest ${MAX_MESSAGES} of ${relevantMsgs.length} matching messages - ${relevantMsgs.length - MAX_MESSAGES} additional matches not shown)`;
+                            overflowWarning = `\n\n⚠️ IMPORTANT: ${relevantMsgs.length - MAX_MESSAGES} additional matching messages were not included due to size limits. The count you provide may be incomplete.`;
+                        }
+                    } else {
+                        // Fallback: sample evenly across the FULL time span
+                        // Sort oldest first and sample at regular intervals
+                        const sortedMsgs = [...allMsgs].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                        
+                        if (sortedMsgs.length <= MAX_MESSAGES) {
+                            sampledMessages = sortedMsgs;
+                        } else {
+                            const step = Math.floor(sortedMsgs.length / MAX_MESSAGES);
+                            sampledMessages = [];
+                            for (let i = 0; i < sortedMsgs.length && sampledMessages.length < MAX_MESSAGES; i += step) {
+                                sampledMessages.push(sortedMsgs[i]);
+                            }
+                        }
+                        contextNote = `\n(Sampled ${sampledMessages.length} of ${allMsgs.length} total messages, evenly across time)`;
+                    }
+                    
+                    const messagesText = sampledMessages
                         .map(m => `[${m.bookName}] ${m.timestamp.split('T')[0]}: ${m.content}`)
                         .join('\n');
-                    
-                    const windowNote = bookContext.totalMessages > 150 
-                        ? `\n(Showing 150 most recent of ${bookContext.totalMessages} total messages)`
-                        : '';
                     
                     contextPrompt = `
 You have access to the user's book data from their Nyanbook ledger.
 
 BOOKS IN CONTEXT (${bookContext.bookCount} book(s), ${bookContext.totalMessages} total messages):
-${bookSummary}${windowNote}
+${bookSummary}${contextNote}
 
 MESSAGES FROM THESE BOOKS:
 ${messagesText}
 
 USER QUERY:
-${query}
+${query}${overflowWarning}
 
-Please analyze the data and answer the user's question. Be specific and reference actual data from the messages when relevant.`;
+Analyze the data and answer the user's question. Count carefully when asked about quantities. Reference actual messages.`;
                 } else {
                     contextPrompt = `The user asked about their books but no messages were found. Please let them know their selected books have no messages yet.\n\nUSER QUERY: ${query}`;
                 }
