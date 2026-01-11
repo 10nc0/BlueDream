@@ -4737,29 +4737,6 @@
             document.getElementById('qrModal').style.display = 'none';
         }
 
-        // WhatsApp session functions - delegate to BooksModule
-        async function startWhatsApp(bookId) {
-            const result = await _B.startWhatsApp(bookId);
-            if (result.success) {
-                alert('✅ WhatsApp Starting!\n\n📱 QR code is being generated automatically...\n\n⏳ Next Steps:\n1. Wait 5-10 seconds\n2. Click the 📱 QR button\n3. Scan with your phone\n4. Done!');
-                setTimeout(() => renderBooks(), 3000);
-            } else {
-                alert(`Failed to start WhatsApp: ${result.error || 'Unknown error'}`);
-            }
-        }
-
-        async function stopWhatsApp(bookId) {
-            if (!confirm('Stop WhatsApp session? You can restart it later without scanning a new QR code.')) return;
-            
-            const result = await _B.stopWhatsApp(bookId);
-            if (result.success) {
-                alert('✅ WhatsApp session stopped (session preserved)');
-                renderBooks();
-            } else {
-                alert(`Failed to stop WhatsApp: ${result.error || 'Unknown error'}`);
-            }
-        }
-
         async function relinkWhatsApp(bookId) {
             if (!confirm('Relink WhatsApp? This will generate a new QR code and you\'ll need to scan it again.')) return;
             

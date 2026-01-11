@@ -189,47 +189,6 @@ window.Nyan.BooksModule = (function() {
         }
     }
 
-    async function getBookStatus(fractalId) {
-        try {
-            const response = await window.authFetch(`/api/books/${fractalId}/status`);
-            if (!response.ok) throw new Error('Failed to get status');
-            return await response.json();
-        } catch (error) {
-            console.error('Error getting book status:', error);
-            return null;
-        }
-    }
-
-    async function startWhatsApp(bookId) {
-        try {
-            const response = await window.authFetch(`/api/books/${bookId}/start`, {
-                method: 'POST'
-            });
-            if (!response.ok) {
-                const error = await response.json();
-                return { success: false, error: error.error || 'Failed to start' };
-            }
-            return { success: true };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-
-    async function stopWhatsApp(bookId) {
-        try {
-            const response = await window.authFetch(`/api/books/${bookId}/stop`, {
-                method: 'DELETE'
-            });
-            if (!response.ok) {
-                const error = await response.json();
-                return { success: false, error: error.error || 'Failed to stop' };
-            }
-            return { success: true };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-
     async function relinkWhatsApp(bookId) {
         try {
             const response = await window.authFetch(`/api/books/${bookId}/relink`, {
@@ -238,20 +197,6 @@ window.Nyan.BooksModule = (function() {
             if (!response.ok) {
                 const error = await response.json();
                 return { success: false, error: error.error || 'Failed to relink' };
-            }
-            const data = await response.json();
-            return { success: true, data };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-
-    async function getQRCode(bookId) {
-        try {
-            const response = await window.authFetch(`/api/books/${bookId}/qr`);
-            if (!response.ok) {
-                const error = await response.json();
-                return { success: false, error: error.error || 'Failed to get QR' };
             }
             const data = await response.json();
             return { success: true, data };
@@ -289,11 +234,7 @@ window.Nyan.BooksModule = (function() {
         loadBookShares,
         shareBook,
         revokeBookShare,
-        getBookStatus,
-        startWhatsApp,
-        stopWhatsApp,
         relinkWhatsApp,
-        getQRCode,
         searchBooks,
         getBook,
         selectBook,
