@@ -1288,7 +1288,7 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
             client.release();
             
             console.log(`✅ [Webhook] Forwarded message from ${senderName} to book ${fractalIdParam}`);
-            res.json({ success: true, message: 'Message forwarded to Discord' });
+            res.json({ success: true, message: 'Message forwarded to Webhook' });
             
         } catch (error) {
             // DEFENSIVE: try/finally ensures connection release even if ROLLBACK fails
@@ -1396,9 +1396,9 @@ app.listen(PORT, '0.0.0.0', async () => {
     // === SATELLITE REGISTRATION (inlined from route-registry) ===
     const SATELLITE_META = {
         'auth': { emoji: '🔐', desc: 'lifecycle, sessions, JWT, audit trail', endpoints: 19 },
-        'books': { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export', endpoints: 22 },
+        'books': { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export', endpoints: 26 },
         'inpipe': { emoji: '📥', desc: 'Twilio webhook, media relay', endpoints: 1 },
-        'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit, discord history', endpoints: 7 }
+        'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit, book history', endpoints: 7 }
     };
     
     const formatPulseLog = (satellites, phiStatus = 'online') => {
