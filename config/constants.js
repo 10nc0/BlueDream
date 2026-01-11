@@ -174,7 +174,7 @@ const PLAYGROUND = {
                         'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
 };
 
-// ==================== AI Audit (Prometheus & Nyan AI) ====================
+// ==================== AI Audit (Nyan AI) ====================
 const AUDIT = {
   MAX_MESSAGES: 2000,              // Maximum messages to sample for context (unified for both engines)
   MAX_PROMPT_CHARS: 100000,        // Maximum characters in prompt to LLM

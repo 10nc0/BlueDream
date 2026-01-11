@@ -170,7 +170,7 @@
                 showInMobile: true,
                 showInDesktop: true,
                 requireAuth: true,
-                handler: () => showPrometheusAuditModal()
+                handler: () => showNyanAuditModal()
             },
             history: {
                 id: 'history',
@@ -183,7 +183,7 @@
                 showInMobile: true,
                 showInDesktop: true,
                 requireAuth: true,
-                handler: () => showPrometheusHistoryModal()
+                handler: () => showNyanAuditHistoryModal()
             },
             search: {
                 id: 'search',
@@ -2633,15 +2633,15 @@
         }
         
         // AI Audit Modal - AI-powered message checking (Two-pane layout)
-        function showPrometheusAuditModal() {
-            let auditModal = document.getElementById('prometheusAuditModal');
+        function showNyanAuditModal() {
+            let auditModal = document.getElementById('nyanAuditModal');
             if (!auditModal) {
                 const modalHtml = `
-                    <div id="prometheusAuditModal" class="book-fan-modal" style="z-index: 10000;">
+                    <div id="nyanAuditModal" class="book-fan-modal" style="z-index: 10000;">
                         <div class="book-fan-content" style="max-width: 960px; width: 95vw; padding: 1.5rem; max-height: 90vh; display: flex; flex-direction: column;">
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-shrink: 0;">
                                 <h3 style="margin: 0; font-size: 1.25rem; background: linear-gradient(135deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧿 AI Audit</h3>
-                                <button class="book-fan-close" id="prometheusAuditClose" style="position: static; margin: 0;">×</button>
+                                <button class="book-fan-close" id="nyanAuditClose" style="position: static; margin: 0;">×</button>
                             </div>
                             
                             <!-- Book Selection Controls -->
@@ -2676,17 +2676,17 @@
                                 </div>
                             </div>
                             
-                            <div id="prometheusAuditGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; flex: 1; min-height: 0; overflow: hidden;">
+                            <div id="nyanAuditGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; flex: 1; min-height: 0; overflow: hidden;">
                                 <!-- Left Pane: Input -->
                                 <div style="display: flex; flex-direction: column; min-height: 0;">
                                     <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.5rem; font-weight: 600;">📝 Your Query</div>
-                                    <textarea id="prometheusMessage" class="form-input" placeholder="Ask anything about your data..." style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; width: 100%; flex: 1; min-height: 150px; resize: none; font-family: inherit; box-sizing: border-box;"></textarea>
+                                    <textarea id="nyanAuditMessage" class="form-input" placeholder="Ask anything about your data..." style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; width: 100%; flex: 1; min-height: 150px; resize: none; font-family: inherit; box-sizing: border-box;"></textarea>
                                     
-                                    <div id="prometheusBookContext" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(34, 211, 238, 0.1); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 6px; color: #22d3ee; font-size: 0.75rem; flex-shrink: 0;">
+                                    <div id="nyanAuditBookContext" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(34, 211, 238, 0.1); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 6px; color: #22d3ee; font-size: 0.75rem; flex-shrink: 0;">
                                         📚 Searching all authorized books
                                     </div>
                                     
-                                    <button id="prometheusCheckBtn" class="form-button" style="width: 100%; margin-top: 0.75rem; padding: 0.75rem; background: linear-gradient(135deg, #a855f7, #ec4899); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: opacity 0.2s; flex-shrink: 0;">
+                                    <button id="nyanAuditCheckBtn" class="form-button" style="width: 100%; margin-top: 0.75rem; padding: 0.75rem; background: linear-gradient(135deg, #a855f7, #ec4899); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: opacity 0.2s; flex-shrink: 0;">
                                         🔮 Run AI Check
                                     </button>
                                 </div>
@@ -2694,8 +2694,8 @@
                                 <!-- Right Pane: Result -->
                                 <div style="display: flex; flex-direction: column; min-height: 0;">
                                     <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.5rem; font-weight: 600;">💬 AI Response</div>
-                                    <div id="prometheusResult" style="flex: 1; overflow-y: auto; padding: 1rem; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; min-height: 150px;">
-                                        <div id="prometheusResultContent" style="color: #64748b; font-size: 0.875rem;">
+                                    <div id="nyanAuditResult" style="flex: 1; overflow-y: auto; padding: 1rem; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; min-height: 150px;">
+                                        <div id="nyanAuditResultContent" style="color: #64748b; font-size: 0.875rem;">
                                             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;">
                                                 <div style="font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.6;">🔮</div>
                                                 <p style="margin: 0; color: #64748b;">Enter your query and click "Run AI Check" to get an answer</p>
@@ -2707,11 +2707,11 @@
                             
                             <style>
                                 @media (max-width: 768px) {
-                                    #prometheusAuditGrid {
+                                    #nyanAuditGrid {
                                         grid-template-columns: 1fr !important;
                                         gap: 1rem !important;
                                     }
-                                    #prometheusAuditModal .book-fan-content {
+                                    #nyanAuditModal .book-fan-content {
                                         max-width: 100% !important;
                                         width: 100% !important;
                                         height: 100vh !important;
@@ -2724,19 +2724,19 @@
                     </div>
                 `;
                 document.body.insertAdjacentHTML('beforeend', modalHtml);
-                auditModal = document.getElementById('prometheusAuditModal');
+                auditModal = document.getElementById('nyanAuditModal');
                 
                 // Event listeners
                 auditModal.addEventListener('click', function(e) {
-                    if (e.target === this) closePrometheusAuditModal();
+                    if (e.target === this) closeNyanAuditModal();
                 });
-                document.getElementById('prometheusAuditClose').addEventListener('click', closePrometheusAuditModal);
-                document.getElementById('prometheusCheckBtn').addEventListener('click', runPrometheusCheck);
+                document.getElementById('nyanAuditClose').addEventListener('click', closeNyanAuditModal);
+                document.getElementById('nyanAuditCheckBtn').addEventListener('click', runNyanAuditCheck);
             }
             
-            document.getElementById('prometheusMessage').value = '';
+            document.getElementById('nyanAuditMessage').value = '';
             
-            const resultContent = document.getElementById('prometheusResultContent');
+            const resultContent = document.getElementById('nyanAuditResultContent');
             const emptyState = document.createElement('div');
             emptyState.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;';
             const emptyIcon = document.createElement('div');
@@ -2749,8 +2749,8 @@
             emptyState.appendChild(emptyText);
             resultContent.replaceChildren(emptyState);
             
-            document.getElementById('prometheusCheckBtn').disabled = false;
-            document.getElementById('prometheusCheckBtn').textContent = '🔮 Run AI Check';
+            document.getElementById('nyanAuditCheckBtn').disabled = false;
+            document.getElementById('nyanAuditCheckBtn').textContent = '🔮 Run AI Check';
             
             // Initialize book selector with dropdown + search + bubbles
             window.auditSelectedBooks = new Set(books && books.length > 0 ? books.map(b => b.fractal_id) : []);
@@ -2900,7 +2900,7 @@
         }
         
         function updateBookContextDisplay() {
-            const contextDiv = document.getElementById('prometheusBookContext');
+            const contextDiv = document.getElementById('nyanAuditBookContext');
             const selectedCount = window.auditSelectedBooks?.size || 0;
             const totalCount = books?.length || 0;
             
@@ -2924,8 +2924,8 @@
             }
         }
         
-        function closePrometheusAuditModal() {
-            const modal = document.getElementById('prometheusAuditModal');
+        function closeNyanAuditModal() {
+            const modal = document.getElementById('nyanAuditModal');
             if (modal) modal.style.display = 'none';
         }
         
@@ -2952,10 +2952,10 @@
             return matchedBooks;
         }
         
-        async function runPrometheusCheck() {
-            const message = document.getElementById('prometheusMessage').value.trim();
-            const btn = document.getElementById('prometheusCheckBtn');
-            const resultContent = document.getElementById('prometheusResultContent');
+        async function runNyanAuditCheck() {
+            const message = document.getElementById('nyanAuditMessage').value.trim();
+            const btn = document.getElementById('nyanAuditCheckBtn');
+            const resultContent = document.getElementById('nyanAuditResultContent');
             const selectedBookIds = window.auditSelectedBooks ? Array.from(window.auditSelectedBooks) : [];
             
             if (!message) {
@@ -3066,46 +3066,46 @@
         }
         
         // AI Audit History Modal - View past audit queries
-        function showPrometheusHistoryModal() {
-            let historyModal = document.getElementById('prometheusHistoryModal');
+        function showNyanAuditHistoryModal() {
+            let historyModal = document.getElementById('nyanAuditHistoryModal');
             if (!historyModal) {
                 const modalHtml = `
-                    <div id="prometheusHistoryModal" class="book-fan-modal" style="z-index: 10000;">
+                    <div id="nyanAuditHistoryModal" class="book-fan-modal" style="z-index: 10000;">
                         <div class="book-fan-content" style="max-width: 700px; padding: 2rem; max-height: 80vh; overflow-y: auto;">
-                            <button class="book-fan-close" id="prometheusHistoryClose">×</button>
+                            <button class="book-fan-close" id="nyanAuditHistoryClose">×</button>
                             <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #22d3ee, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧠 Audit History</h3>
                             
-                            <div id="prometheusHistoryContent" style="min-height: 200px;">
+                            <div id="nyanAuditHistoryContent" style="min-height: 200px;">
                                 <div style="text-align: center; padding: 2rem; color: #94a3b8;">
                                     Loading history...
                                 </div>
                             </div>
                             
-                            <div id="prometheusHistoryPagination" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1rem;"></div>
+                            <div id="nyanAuditHistoryPagination" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1rem;"></div>
                         </div>
                     </div>
                 `;
                 document.body.insertAdjacentHTML('beforeend', modalHtml);
-                historyModal = document.getElementById('prometheusHistoryModal');
+                historyModal = document.getElementById('nyanAuditHistoryModal');
                 
                 historyModal.addEventListener('click', function(e) {
-                    if (e.target === this) closePrometheusHistoryModal();
+                    if (e.target === this) closeNyanAuditHistoryModal();
                 });
-                document.getElementById('prometheusHistoryClose').addEventListener('click', closePrometheusHistoryModal);
+                document.getElementById('nyanAuditHistoryClose').addEventListener('click', closeNyanAuditHistoryModal);
             }
             
             historyModal.style.display = 'flex';
-            loadPrometheusHistory(50);
+            loadNyanAuditHistory(50);
         }
         
-        function closePrometheusHistoryModal() {
-            const modal = document.getElementById('prometheusHistoryModal');
+        function closeNyanAuditHistoryModal() {
+            const modal = document.getElementById('nyanAuditHistoryModal');
             if (modal) modal.style.display = 'none';
         }
         
-        async function loadPrometheusHistory(limit = 50) {
-            const contentDiv = document.getElementById('prometheusHistoryContent');
-            const paginationDiv = document.getElementById('prometheusHistoryPagination');
+        async function loadNyanAuditHistory(limit = 50) {
+            const contentDiv = document.getElementById('nyanAuditHistoryContent');
+            const paginationDiv = document.getElementById('nyanAuditHistoryPagination');
             
             try {
                 const response = await window.authFetch(`/api/nyan-ai/discord-history?limit=${limit}`);
@@ -3246,7 +3246,7 @@
                 paginationDiv.replaceChildren(paginationSpan);
                 
             } catch (error) {
-                console.error('Failed to load Prometheus history:', error);
+                console.error('Failed to load Nyan AI audit history:', error);
                 const errDiv = document.createElement('div');
                 errDiv.style.cssText = 'text-align: center; padding: 2rem; color: #ef4444;';
                 const errIcon = document.createElement('div');
@@ -7883,10 +7883,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (createBotBtn) createBotBtn.addEventListener('click', openCreatePopup);
     
     const auditTypeBtn = document.querySelector('.audit-type-btn');
-    if (auditTypeBtn) auditTypeBtn.addEventListener('click', showPrometheusAuditModal);
+    if (auditTypeBtn) auditTypeBtn.addEventListener('click', showNyanAuditModal);
     
     const auditHistoryBtn = document.querySelector('.audit-history-btn');
-    if (auditHistoryBtn) auditHistoryBtn.addEventListener('click', showPrometheusHistoryModal);
+    if (auditHistoryBtn) auditHistoryBtn.addEventListener('click', showNyanAuditHistoryModal);
     
     const revokeAllBtn = document.querySelector('[onclick*="revokeAllSessions"]');
     if (revokeAllBtn) {

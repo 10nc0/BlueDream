@@ -422,7 +422,7 @@ class TenantManager {
                 ON ${schemaName}.phone_to_book (join_code)
             `);
             
-            // Create audit_queries table for Prometheus AI audit history
+            // Create audit_queries table for Nyan AI audit history
             await client.query(`
                 CREATE TABLE IF NOT EXISTS ${schemaName}.audit_queries (
                     id SERIAL PRIMARY KEY,

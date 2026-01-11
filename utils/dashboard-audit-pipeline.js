@@ -1,7 +1,7 @@
 /**
  * DASHBOARD AUDIT PIPELINE
  * 
- * 4-stage self-auditing pipeline for dashboard AI responses (Prometheus & Nyan AI)
+ * 4-stage self-auditing pipeline for dashboard AI responses (Nyan AI)
  * Reduces hallucination by verifying counts before output
  * 
  * ┌────────────────────────────────────────────────────────────────────┐

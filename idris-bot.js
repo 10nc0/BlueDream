@@ -2,7 +2,7 @@
 // IDRIS (ι) - THE SCRIBE
 // Permissions: MANAGE_THREADS only (NO READ)
 // Security: Can only create threads and post via webhook, cannot read messages
-// Purpose: Write-only bot for AI audit log posting (Prometheus Trinity)
+// Purpose: Write-only bot for Nyan AI audit log posting
 
 const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
 const axios = require('axios');
@@ -22,7 +22,8 @@ class IdrisBot {
         }
 
         const idrisToken = process.env.IDRIS_AI_LOG_TOKEN;
-        this.webhookUrl = process.env.PROMETHEUS_WEBHOOK_URL;
+        // Backward compat: support both new and legacy env var names
+        this.webhookUrl = process.env.NYAN_AUDIT_WEBHOOK_URL || process.env.PROMETHEUS_WEBHOOK_URL;
         
         if (!idrisToken) {
             console.log('⚠️  IDRIS_AI_LOG_TOKEN not set - AI audit logging disabled');
@@ -30,7 +31,7 @@ class IdrisBot {
         }
 
         if (!this.webhookUrl) {
-            console.log('⚠️  PROMETHEUS_WEBHOOK_URL not set - AI audit posting disabled');
+            console.log('⚠️  NYAN_AUDIT_WEBHOOK_URL not set - AI audit posting disabled');
         }
 
         try {
@@ -109,7 +110,7 @@ class IdrisBot {
         }
 
         if (!this.webhookUrl) {
-            throw new Error('PROMETHEUS_WEBHOOK_URL not configured');
+            throw new Error('NYAN_AUDIT_WEBHOOK_URL not configured');
         }
 
         try {
@@ -140,7 +141,7 @@ class IdrisBot {
             
             // Post initial message to thread
             await this.postToThread(thread.id, {
-                content: `🧿 **AI Audit Log Initialized**\n📅 Created: ${new Date().toISOString()}\n🏢 Tenant: ${displayName}\n\n_All Prometheus AI checks will be logged here._`
+                content: `🧿 **AI Audit Log Initialized**\n📅 Created: ${new Date().toISOString()}\n🏢 Tenant: ${displayName}\n\n_All Nyan AI audit checks will be logged here._`
             });
             
             return {
@@ -156,7 +157,7 @@ class IdrisBot {
 
     async postToThread(threadId, messageData) {
         if (!this.webhookUrl) {
-            throw new Error('PROMETHEUS_WEBHOOK_URL not configured');
+            throw new Error('NYAN_AUDIT_WEBHOOK_URL not configured');
         }
 
         try {

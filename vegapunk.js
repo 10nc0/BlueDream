@@ -1,7 +1,7 @@
 // Vegapunk.js - The Kernel (previously index.js 8000+ lines)
 // Named after Dr. Vegapunk (One Piece) - the genius scientist who splits
 // his consciousness into satellite bodies while maintaining a pure core.
-// This kernel orchestrates 6 modular routes (satellites) via dependency injection.
+// This kernel orchestrates 4 modular routes (satellites) via dependency injection.
 
 const { execSync } = require('child_process');
 const path = require('path');
@@ -572,7 +572,7 @@ let hermesBot = null;
 // Trinity: Thoth bot for read-only message fetching
 let thothBot = null;
 
-// Prometheus Trinity: Idris (write-only) + Horus (read-only) for AI audit logs
+// Nyan AI Audit: Idris (write-only) + Horus (read-only) for AI audit logs
 let idrisBot = null;
 let horusBot = null;
 
@@ -1332,13 +1332,13 @@ app.listen(PORT, '0.0.0.0', async () => {
         console.error('   Book thread creation/reading may be unavailable');
     }
     
-    console.log('🧿 Initializing Prometheus Trinity...');
+    console.log('🧿 Initializing Nyan AI Audit bots...');
     try {
         await idrisBot.initialize();
         await horusBot.initialize();
-        console.log('✨ Prometheus Trinity ready: Idris (ι) + Horus (Ω)');
+        console.log('✨ Nyan AI Audit ready: Idris (ι) + Horus (Ω)');
     } catch (error) {
-        console.error('❌ Prometheus Trinity initialization failed:', error.message);
+        console.error('❌ Nyan AI Audit initialization failed:', error.message);
         console.error('   AI audit logging may be unavailable');
     }
     

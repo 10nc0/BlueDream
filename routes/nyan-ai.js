@@ -598,7 +598,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             
             console.log(`✅ Nyan AI Audit complete in ${processingTime}ms for user ${req.userId}`);
             
-            // Discord logging via Idris (mirror Prometheus pattern)
+            // Discord logging via Idris
             if (idrisBot && idrisBot.isReady() && tenantSchema && bookContext) {
                 try {
                     const tenantInfo = await pool.query(
@@ -674,7 +674,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         }
     });
 
-    // Discord audit history endpoint (migrated from prometheus)
+    // Discord audit history endpoint
     app.get('/api/nyan-ai/discord-history', requireAuth, async (req, res) => {
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;

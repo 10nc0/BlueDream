@@ -44,8 +44,12 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Zero-Friction Onboarding**: WhatsApp deep link activation.
 - **Scalability & Recovery**: Designed for Replit Autoscale, with PostgreSQL for state recovery.
 - **Security (10/10 Hardened)**: Includes Sybil attack prevention, JWT security, session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, and CSP compliance.
-- **Discord Bot Trinity Architecture**: Specialized bots (Hermes, Thoth, Idris, Horus) for different read/write and AI functions.
-- **Vegapunk Kernel Architecture**: Factory pattern with dependency injection orchestrating modular routes (auth, books, inpipe, nyan-ai).
+- **Discord Bot Architecture**: 4 specialized bots for separation of concerns:
+  - **Hermes (φ)** - Thread creator (MANAGE_THREADS only)
+  - **Thoth (0)** - Message reader (READ_MESSAGE_HISTORY only)
+  - **Idris (ι)** - Nyan AI audit scribe (write-only, posts via webhook)
+  - **Horus (Ω)** - Nyan AI audit watcher (read-only, fetches audit logs)
+- **Vegapunk Kernel Architecture**: Factory pattern with dependency injection orchestrating 4 modular routes/satellites (auth, books, inpipe, nyan-ai).
 - **Unified AI Architecture**: Single Nyan AI engine handles both public playground and authenticated dashboard audit with 2-key security isolation (`PLAYGROUND_GROQ_TOKEN` for public, `GROQ_API_KEY` for dashboard). Core inference is shared; persona/formatting layers are channel-specific:
   - **Playground** → Uses `PipelineOrchestrator` with S5 personality layer (`fastStreamPersonality`, `applyPersonalityFormat`) for casual, conversational tone
   - **Dashboard Audit** → Uses `prompts/executive-audit.js` + `utils/executive-formatter.js` for direct, executive-style responses

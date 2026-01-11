@@ -2,7 +2,7 @@
 // HORUS (Ω) - THE WATCHER
 // Permissions: READ_MESSAGE_HISTORY only (NO WRITE)
 // Security: Can only read messages, cannot create/modify/delete
-// Purpose: Read-only bot for fetching AI audit logs (Prometheus Trinity)
+// Purpose: Read-only bot for fetching Nyan AI audit logs
 
 const { Client, GatewayIntentBits } = require('discord.js');
 
