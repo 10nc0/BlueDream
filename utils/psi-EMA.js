@@ -286,7 +286,7 @@ function deriveReading({ R, z, theta }) {
       };
     } else {
       return {
-        reading: 'Fatalism',
+        reading: 'Oversold',
         emoji: '🟠',
         description: 'R∈[0.382,0.618), z≤0 — moderate momentum but negative deviation'
       };
