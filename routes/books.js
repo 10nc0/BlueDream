@@ -1515,11 +1515,13 @@ function registerBooksRoutes(app, deps) {
                 };
             });
             
+            const exportTimestamp = new Date().toISOString();
+            
             const exportData = {
                 book: {
                     id: book_id,
                     name: book.name,
-                    exported_at: new Date().toISOString()
+                    exported_at: exportTimestamp
                 },
                 messages: enrichedMessages,
                 drops: dropsResult.rows,
@@ -1530,13 +1532,19 @@ function registerBooksRoutes(app, deps) {
                 }
             };
             
+            const sha256 = (data) => crypto.createHash('sha256').update(data).digest('hex');
+            const fileHashes = [];
+            
             const archive = archiver('zip', { zlib: { level: 9 } });
             
             res.attachment(`${book.name.replace(/[^a-z0-9]/gi, '_')}_export.zip`);
             res.setHeader('Content-Type', 'application/zip');
             
             archive.pipe(res);
-            archive.append(JSON.stringify(exportData, null, 2), { name: 'messages.json' });
+            
+            const messagesJson = JSON.stringify(exportData, null, 2);
+            fileHashes.push({ path: 'messages.json', sha256: sha256(messagesJson), size: Buffer.byteLength(messagesJson) });
+            archive.append(messagesJson, { name: 'messages.json' });
             
             let attachmentStats = { total: 0, downloaded: 0, failed: 0 };
             
@@ -1572,7 +1580,9 @@ function registerBooksRoutes(app, deps) {
                             const renamedFile = `${formattedTime} - ${tzString} - ${msg.id}.${ext}`;
                             const folderPath = `attachments/${renamedFile}`;
                             
-                            archive.append(response.data, { name: folderPath });
+                            const attachmentBuffer = Buffer.from(response.data);
+                            fileHashes.push({ path: folderPath, sha256: sha256(attachmentBuffer), size: attachmentBuffer.length });
+                            archive.append(attachmentBuffer, { name: folderPath });
                             attachmentStats.downloaded++;
                         } catch (err) {
                             attachmentStats.failed++;
@@ -1583,9 +1593,9 @@ function registerBooksRoutes(app, deps) {
             }
             
             const readme = `# Your Nyanbook Export
-        
+
 Book: ${book.name}
-Exported: ${new Date().toISOString()}
+Exported: ${exportTimestamp}
 
 This archive contains:
 - messages.json: All messages with drops metadata
@@ -1598,10 +1608,45 @@ This archive contains:
   - ${attachmentStats.failed} files failed to download
   - Total attempted: ${attachmentStats.total}
 
+- manifest.json: Cryptographic integrity manifest
+  - SHA256 hashes for all files
+  - Export provenance and timestamp
+
 Naming Convention:
 YYYY_MM_DD - HH_MM_SS - GMTXX - {message_id}.{extension}
+
+## Verification
+To verify file integrity, compare SHA256 hashes in manifest.json:
+  sha256sum messages.json
+  sha256sum attachments/*
 `;
+            fileHashes.push({ path: 'README.txt', sha256: sha256(readme), size: Buffer.byteLength(readme) });
             archive.append(readme, { name: 'README.txt' });
+            
+            const manifest = {
+                version: '1.0',
+                format: 'nyanbook-export',
+                provenance: {
+                    source: 'nyanbook.io',
+                    exported_at: exportTimestamp,
+                    book_id: book_id,
+                    book_name: book.name
+                },
+                statistics: {
+                    total_files: fileHashes.length + 1,
+                    total_messages: messages.length,
+                    total_drops: dropsResult.rows.length,
+                    attachments_downloaded: attachmentStats.downloaded,
+                    attachments_failed: attachmentStats.failed
+                },
+                files: fileHashes,
+                integrity: {
+                    algorithm: 'SHA256',
+                    note: 'Each file hash can be verified independently using sha256sum or similar tools'
+                }
+            };
+            
+            archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
             
             await archive.finalize();
             

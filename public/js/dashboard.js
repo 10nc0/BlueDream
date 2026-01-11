@@ -1,70 +1,10 @@
         console.log('🚀 Main script loading...');
         
         // ===================================================================
-        // UNIFIED AUTH FETCH - Global authenticated fetch with token refresh
-        // Defined at top-level so all functions can use it immediately
+        // MODULAR ARCHITECTURE
+        // Auth module (NyanAuth) is loaded before dashboard.js
+        // window.authFetch is defined by NyanAuth for backward compatibility
         // ===================================================================
-        window.authFetch = async function(url, options = {}) {
-            let accessToken = localStorage.getItem('accessToken');
-            
-            // Always set Content-Type for JSON requests
-            options.headers = {
-                'Content-Type': 'application/json',
-                ...options.headers
-            };
-            
-            // Add Authorization header if token exists
-            if (accessToken) {
-                options.headers['Authorization'] = `Bearer ${accessToken}`;
-            }
-            
-            let response = await fetch(url, options);
-            
-            // If token expired (401), try to refresh
-            if (response.status === 401 && accessToken) {
-                const refreshToken = localStorage.getItem('refreshToken');
-                
-                if (refreshToken) {
-                    try {
-                        const refreshResponse = await fetch('/api/auth/refresh', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ refreshToken })
-                        });
-                        
-                        if (refreshResponse.ok) {
-                            const refreshData = await refreshResponse.json();
-                            localStorage.setItem('accessToken', refreshData.accessToken);
-                            if (refreshData.refreshToken) {
-                                localStorage.setItem('refreshToken', refreshData.refreshToken);
-                            }
-                            
-                            // Retry original request with new token
-                            options.headers['Authorization'] = `Bearer ${refreshData.accessToken}`;
-                            response = await fetch(url, options);
-                        } else {
-                            // Refresh failed, redirect to login
-                            localStorage.removeItem('accessToken');
-                            localStorage.removeItem('refreshToken');
-                            window.location.href = '/login.html';
-                            return response;
-                        }
-                    } catch (refreshError) {
-                        console.error('Token refresh failed:', refreshError);
-                        localStorage.removeItem('accessToken');
-                        localStorage.removeItem('refreshToken');
-                        window.location.href = '/login.html';
-                        return response;
-                    }
-                } else {
-                    // No refresh token, redirect to login
-                    window.location.href = '/login.html';
-                    return response;
-                }
-            }
-            
-            return response;
-        };
         
         let books = [];
         let filteredBooks = [];
@@ -76,35 +16,30 @@
         // This ensures zero cross-tenant data leakage in multi-tenant SaaS
         let messageCache = {}; 
         
-        let allMessages = {}; // Store all messages by ID for media viewing
+        let allMessages = {};
         let currentUser = null;
         
         // SEAMLESS SEARCH: Store book search query for auto-filtering messages
-        // When user searches in book library and clicks a 💬 book, 
-        // this context auto-filters messages without double search
         let bookSearchContext = {
             query: '',
             bookId: null
         };
-        let botTags = []; // Store tags as array
-        let botWebhooks = []; // Store webhook outputs for 1-to-many feature
+        let botTags = [];
+        let botWebhooks = [];
         let users = [];
         let sessions = [];
         
         // Per-message export: Track selected message IDs per book
-        let selectedMessages = {}; // { bookId: Set([msgId1, msgId2, ...]) }
+        let selectedMessages = {};
         
         // INFINITE SCROLL: Track pagination state per book
-        // Pagination state for infinite scroll (load older messages on scroll down)
-        // After jump, use "Return to latest" button to go back to fresh view
-        let messagePageState = {}; // { bookId: { isLoading, hasOlder, oldestId, seenIds } }
+        let messagePageState = {};
         
         // Track scroll listeners per book (JS-based to survive DOM rebuilds)
-        let scrollListenerAttached = {}; // { bookId: true/false }
+        let scrollListenerAttached = {};
         
         // LENS MODE: Filter state per book (filter-before-render architecture)
-        // Stores active search text per book for efficient re-rendering from cache
-        let lensFilterState = {}; // { bookId: { searchText: '', statusFilter: 'all' } }
+        let lensFilterState = {};
         
         // Platform roadmap for future features
         const roadmapGlossary = {
