@@ -2514,23 +2514,6 @@
             if (menu) menu.style.display = 'none';
         }
         
-        // Regenerate QR Code (UI endpoint to close hanging loop)
-        async function regenerateQRCode(book) {
-            if (!book) {
-                showToast('⚠️ No book selected', 'error');
-                return;
-            }
-            
-            // Only applicable for WhatsApp books
-            if (book.input_platform !== 'whatsapp') {
-                showToast('⚠️ QR codes are only for WhatsApp books', 'error');
-                return;
-            }
-            
-            // Call existing QR generation logic
-            await generateNewQR(book.fractal_id);
-        }
-        
         // AI Audit Modal - AI-powered message checking (Two-pane layout)
         function showNyanAuditModal() {
             let auditModal = document.getElementById('nyanAuditModal');
@@ -4023,10 +4006,6 @@
                             // Use dedicated function for consistent behavior
                             showWhatsAppActivationModal(book.fractal_id);
                             showToast('✅ Book created! Follow the 2 steps to activate.', 'success');
-                        } else {
-                            // For non-WhatsApp books, generate QR as before
-                            console.log('🚀 Generating QR for new book...');
-                            await generateNewQR(book.fractal_id);
                         }
                         
                     } catch (err) {
@@ -4383,367 +4362,13 @@
         }
 
 
-        // UNIFIED QR DISPLAY: Single function for both create & relink flows
-        async function showQRAndWaitForConnection(bookId, bookName) {
-            console.log(`🔄 Showing QR for book: ${bookName} (${bookId})`);
-            
-            // Open modal immediately with loading state
-            const modal = document.getElementById('qrModal');
-            const qrImage = document.getElementById('qrCodeImage');
-            const loadingMsg = document.getElementById('qrLoadingMessage');
-            const errorMsg = document.getElementById('qrErrorMessage');
-            const instructions = document.getElementById('qrInstructions');
-            const modalTitle = document.getElementById('qrModalTitle');
-            
-            // Reset modal state
-            qrImage.style.display = 'none';
-            loadingMsg.style.display = 'flex';
-            errorMsg.style.display = 'none';
-            instructions.style.display = 'none';
-            modalTitle.textContent = '📱 Generating QR Code...';
-            modal.style.display = 'flex';
-            
-            try {
-                // Poll for QR code (max 15 seconds)
-                let attempts = 0;
-                const maxAttempts = 30; // 30 attempts * 500ms = 15 seconds
-                
-                const pollQR = async () => {
-                    attempts++;
-                    
-                    const qrResponse = await window.authFetch(`/api/books/${bookId}/qr`);
-                    if (!qrResponse.ok) {
-                        showQRError('Server Error', 'Failed to fetch QR code. Please try again.');
-                        return;
-                    }
-                    
-                    const data = await qrResponse.json();
-                    console.log(`QR Poll attempt ${attempts}:`, data);
-                    
-                    if (data.qr) {
-                        // QR code is ready!
-                        loadingMsg.style.display = 'none';
-                        qrImage.src = data.qr;
-                        qrImage.style.display = 'block';
-                        instructions.style.display = 'block';
-                        modalTitle.textContent = `📱 Scan QR Code: ${bookName}`;
-                        
-                        // Start watching for connection (unified watcher for all states)
-                        startQRWatcher(bookId);
-                    } else if (data.status === 'connected' || data.status === 'ready' || data.status === 'active') {
-                        showQRError('✅ Already Connected!', 'Your WhatsApp is already connected.', true);
-                        setTimeout(() => {
-                            closeQRModal();
-                            renderBooks();
-                        }, 2000);
-                    } else if (attempts < maxAttempts) {
-                        // Keep polling
-                        setTimeout(pollQR, 500);
-                    } else {
-                        // Timeout
-                        showQRError('⏱️ Timeout', 'QR code generation took too long. Please refresh and try again.');
-                    }
-                };
-                
-                // Start polling after brief delay
-                setTimeout(pollQR, 1000);
-                
-            } catch (error) {
-                console.error('Error showing QR:', error);
-                showQRError('❌ Connection Error', error.message || 'Unknown error occurred.');
-            }
-        }
-        
-        // Show relink confirmation modal
-        function showRelinkConfirmation(bookName) {
-            return new Promise((resolve) => {
-                const modal = document.createElement('div');
-                modal.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0, 0, 0, 0.7);
-                    backdrop-filter: blur(8px);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 10000;
-                    padding: 1rem;
-                `;
-                
-                // Build modal content using safe DOM methods
-                const contentDiv = document.createElement('div');
-                contentDiv.style.cssText = 'background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95)); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 16px; padding: 2rem; max-width: 500px; width: 100%; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);';
-                
-                // Header section
-                const headerDiv = document.createElement('div');
-                headerDiv.style.cssText = 'text-align: center; margin-bottom: 1.5rem;';
-                const iconDiv = document.createElement('div');
-                iconDiv.style.cssText = 'font-size: 3rem; margin-bottom: 1rem;';
-                iconDiv.textContent = '⚠️';
-                headerDiv.appendChild(iconDiv);
-                const h2 = document.createElement('h2');
-                h2.style.cssText = 'margin: 0; color: #e2e8f0; font-size: 1.5rem; font-weight: 600;';
-                h2.textContent = 'Reconnect WhatsApp?';
-                headerDiv.appendChild(h2);
-                contentDiv.appendChild(headerDiv);
-                
-                // Warning section
-                const warningDiv = document.createElement('div');
-                warningDiv.style.cssText = 'background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem;';
-                
-                const p1 = document.createElement('p');
-                p1.style.cssText = 'margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;';
-                const strong1 = document.createElement('strong');
-                strong1.style.color = '#fca5a5';
-                strong1.textContent = 'Book:';
-                p1.appendChild(strong1);
-                p1.appendChild(document.createTextNode(' ' + bookName));
-                warningDiv.appendChild(p1);
-                
-                const p2 = document.createElement('p');
-                p2.style.cssText = 'margin: 0 0 0.75rem 0; color: #fca5a5; font-size: 0.95rem; line-height: 1.6;';
-                p2.textContent = '⚠️ ';
-                const strong2 = document.createElement('strong');
-                strong2.textContent = 'Your book will be temporarily disconnected';
-                p2.appendChild(strong2);
-                warningDiv.appendChild(p2);
-                
-                const p3 = document.createElement('p');
-                p3.style.cssText = 'margin: 0 0 0.75rem 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;';
-                p3.textContent = '📉 ';
-                const strong3 = document.createElement('strong');
-                strong3.textContent = 'Messages sent during reconnection may be lost';
-                p3.appendChild(strong3);
-                warningDiv.appendChild(p3);
-                
-                const p4 = document.createElement('p');
-                p4.style.cssText = 'margin: 0; color: #cbd5e1; font-size: 0.95rem; line-height: 1.6;';
-                p4.textContent = '⏱️ Brief downtime (~30 seconds) while you scan the new QR code';
-                warningDiv.appendChild(p4);
-                
-                contentDiv.appendChild(warningDiv);
-                
-                // Button section
-                const buttonDiv = document.createElement('div');
-                buttonDiv.style.cssText = 'display: flex; gap: 0.75rem;';
-                
-                const cancelBtn = document.createElement('button');
-                cancelBtn.id = 'cancelRelink';
-                cancelBtn.className = 'modal-btn-cancel';
-                cancelBtn.style.cssText = 'flex: 1; padding: 0.875rem 1.5rem; background: rgba(71, 85, 105, 0.3); border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 8px; color: #94a3b8; font-weight: 600; cursor: pointer; font-size: 1rem; transition: all 0.2s;';
-                cancelBtn.textContent = 'Cancel';
-                buttonDiv.appendChild(cancelBtn);
-                
-                const confirmBtn = document.createElement('button');
-                confirmBtn.id = 'confirmRelink';
-                confirmBtn.className = 'modal-btn-confirm';
-                confirmBtn.style.cssText = 'flex: 1; padding: 0.875rem 1.5rem; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); border-radius: 8px; color: #60a5fa; font-weight: 600; cursor: pointer; font-size: 1rem; transition: all 0.2s;';
-                confirmBtn.textContent = '🔗 Generate QR';
-                buttonDiv.appendChild(confirmBtn);
-                
-                contentDiv.appendChild(buttonDiv);
-                modal.appendChild(contentDiv);
-                
-                document.body.appendChild(modal);
-                
-                const closeModal = (confirmed) => {
-                    modal.remove();
-                    resolve(confirmed);
-                };
-                
-                confirmBtn.addEventListener('click', () => closeModal(true));
-                cancelBtn.addEventListener('click', () => closeModal(false));
-                modal.addEventListener('click', (e) => {
-                    if (e.target === modal) closeModal(false);
-                });
-            });
-        }
-        
-        // Generate new QR - wrapper for unified function
-        async function generateNewQR(bookId) {
-            // Get book name from books list
-            const book = books.find(b => b.fractal_id === bookId);
-            const bookName = book?.name || 'Book';
-            
-            // UNIFIED FLOW: Only show warning when REPLACING an active inpipe connection
-            // Warning logic:
-            // ✅ Show warning: Book is currently CONNECTED (replacing active WhatsApp session)
-            // ❌ Skip warning: New book or never-connected book (no active inpipe to replace)
-            const isConnected = book?.status === 'connected' || book?.status === 'active';
-            
-            // Show confirmation modal ONLY if replacing an active connection
-            if (isConnected) {
-                const confirmed = await showRelinkConfirmation(bookName);
-                if (!confirmed) {
-                    console.log('User cancelled QR regeneration (active connection preserved)');
-                    return;
-                }
-            } else {
-                console.log(`🚀 Skipping warning - book not yet connected (no active inpipe to replace)`);
-            }
-            
-            // Relink first to get fresh QR
-            try {
-                const relinkResponse = await window.authFetch(`/api/books/${bookId}/relink`, {
-                    method: 'POST'
-                });
-                
-                if (!relinkResponse.ok) {
-                    const error = await relinkResponse.json();
-                    alert(`Failed to relink: ${error.error}`);
-                    return;
-                }
-                
-                // Poll for client readiness after relink (wait for re-initialization)
-                console.log('⏳ Waiting for WhatsApp client to initialize after relink...');
-                
-                let attempts = 0;
-                const maxAttempts = 15; // 15 attempts * 500ms = 7.5 seconds max
-                
-                while (attempts < maxAttempts) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    attempts++;
-                    
-                    const statusCheck = await window.authFetch(`/api/books/${bookId}/qr`);
-                    if (statusCheck.ok) {
-                        const data = await statusCheck.json();
-                        
-                        // Client is ready if it has a QR or is already connected
-                        if (data.qr || data.status === 'qr_ready' || data.status === 'connected' || data.status === 'active') {
-                            console.log(`✅ WhatsApp client ready after ${attempts * 500}ms`);
-                            break;
-                        }
-                    }
-                    
-                    // Continue polling...
-                    console.log(`⏳ Client not ready yet (attempt ${attempts}/${maxAttempts})...`);
-                }
-                
-                if (attempts >= maxAttempts) {
-                    alert('⏱️ Timeout: WhatsApp client took too long to initialize. Please try again.');
-                    return;
-                }
-                
-                // Show unified QR modal
-                showQRAndWaitForConnection(bookId, bookName);
-            } catch (error) {
-                console.error('Error relinking:', error);
-                alert(`Error: ${error.message}`);
-            }
-        }
-        
-        function showQRError(title, message, isSuccess = false) {
-            const loadingMsg = document.getElementById('qrLoadingMessage');
-            const errorMsg = document.getElementById('qrErrorMessage');
-            const modalTitle = document.getElementById('qrModalTitle');
-            
-            loadingMsg.style.display = 'none';
-            errorMsg.style.display = 'block';
-            modalTitle.textContent = title;
-            
-            const bgColor = isSuccess ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
-            const borderColor = isSuccess ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
-            
-            const container = document.createElement('div');
-            container.style.cssText = `background: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 12px; padding: 1.5rem;`;
-            
-            const p = document.createElement('p');
-            p.style.cssText = 'margin: 0; color: rgba(255, 255, 255, 0.9); font-size: 1rem; line-height: 1.6;';
-            p.textContent = message;
-            container.appendChild(p);
-            
-            errorMsg.replaceChildren(container);
-        }
-
-        // Global QR watcher interval tracker
-        let qrWatcherInterval = null;
-        
-        // Watch for QR code disappearance (means user successfully scanned)
-        function startQRWatcher(bookId) {
-            // Clear any existing watcher
-            if (qrWatcherInterval) {
-                clearInterval(qrWatcherInterval);
-            }
-            
-            let attempts = 0;
-            const maxAttempts = 120; // Watch for up to 2 minutes
-            
-            qrWatcherInterval = setInterval(async () => {
-                attempts++;
-                
-                try {
-                    // Check if QR still exists
-                    const qrResponse = await window.authFetch(`/api/books/${bookId}/qr`);
-                    if (!qrResponse.ok) {
-                        console.log('Failed to fetch QR during watch');
-                        return;
-                    }
-                    
-                    const data = await qrResponse.json();
-                    console.log(`QR watch attempt ${attempts}:`, data.qr ? 'QR exists' : 'No QR (scanned!)', `status: ${data.status}`);
-                    
-                    // UNIFIED: Check for all success states (authenticated, connected, ready, active)
-                    if (!data.qr && (data.status === 'authenticated' || data.status === 'connected' || data.status === 'ready' || data.status === 'active')) {
-                        console.log(`✅ WhatsApp ${data.status}! Auto-closing modal...`);
-                        clearInterval(qrWatcherInterval);
-                        qrWatcherInterval = null;
-                        
-                        const qrContainer = document.getElementById('qrCodeContainer');
-                        const successDiv = document.createElement('div');
-                        successDiv.style.textAlign = 'center';
-                        
-                        const emojiDiv = document.createElement('div');
-                        emojiDiv.style.cssText = 'font-size: 5rem; margin-bottom: 1rem;';
-                        emojiDiv.textContent = '🎉';
-                        successDiv.appendChild(emojiDiv);
-                        
-                        const successP = document.createElement('p');
-                        successP.style.cssText = 'color: rgba(16, 185, 129, 1); font-size: 1.5rem; font-weight: bold; margin: 0;';
-                        successP.textContent = 'Connected Successfully!';
-                        successDiv.appendChild(successP);
-                        
-                        const closingP = document.createElement('p');
-                        closingP.style.cssText = 'color: rgba(255, 255, 255, 0.8); font-size: 1rem; margin-top: 0.5rem;';
-                        closingP.textContent = 'Closing in 1.5 seconds...';
-                        successDiv.appendChild(closingP);
-                        
-                        qrContainer.replaceChildren(successDiv);
-                        
-                        setTimeout(() => {
-                            closeQRModal();
-                            renderBooks();
-                        }, 1500);
-                    } else if (attempts >= maxAttempts) {
-                        // Timeout
-                        clearInterval(qrWatcherInterval);
-                        qrWatcherInterval = null;
-                        console.log('QR watcher timeout - stopped after 2 minutes');
-                    }
-                } catch (error) {
-                    console.error('Error during QR watch:', error);
-                }
-            }, 1000); // Check every 1 second
-        }
-        
-        function closeQRModal() {
-            // Stop watcher when modal closes
-            if (qrWatcherInterval) {
-                clearInterval(qrWatcherInterval);
-                qrWatcherInterval = null;
-            }
-            document.getElementById('qrModal').style.display = 'none';
-        }
-
         async function relinkWhatsApp(bookId) {
-            if (!confirm('Relink WhatsApp? This will generate a new QR code and you\'ll need to scan it again.')) return;
+            if (!confirm('Show WhatsApp activation instructions?\n\nYour user will need to:\n1. Text "join baby-ability" to the Twilio number\n2. Send their book code')) return;
             
             const result = await _B.relinkWhatsApp(bookId);
             if (result.success) {
-                alert('✅ Relink initiated! Refresh the page in a moment to see the new QR code.');
-                setTimeout(() => renderBooks(), 2000);
+                // Show the activation modal with the actual join code
+                showWhatsAppActivationModal(bookId);
             } else {
                 alert(`Failed to relink WhatsApp: ${result.error || 'Unknown error'}`);
             }
@@ -5031,13 +4656,6 @@
                 if (badge) {
                     badge.textContent = books.length;
                 }
-            }
-        }
-
-        window.onclick = function(event) {
-            const qrModal = document.getElementById('qrModal');
-            if (event.target === qrModal) {
-                closeQRModal();
             }
         }
 
@@ -7579,12 +7197,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (bookModalClose) bookModalClose.addEventListener('click', closeCreateBookModal);
     }
     
-    const qrModal = document.getElementById('qrModal');
-    if (qrModal) {
-        const qrModalClose = qrModal.querySelector('.close-btn');
-        if (qrModalClose) qrModalClose.addEventListener('click', closeQRModal);
-    }
-    
     const botModal = document.getElementById('botModal');
     if (botModal) {
         const botModalClose = botModal.querySelector('.close-btn');
@@ -8405,14 +8017,6 @@ document.addEventListener('click', function(e) {
         e.preventDefault();
         const fractalId = target.getAttribute('data-show-whatsapp-activation');
         if (fractalId) showWhatsAppActivationModal(fractalId);
-        return;
-    }
-    
-    // Generate QR button
-    if (target.hasAttribute('data-generate-qr')) {
-        e.preventDefault();
-        const fractalId = target.getAttribute('data-generate-qr');
-        if (fractalId) generateNewQR(fractalId);
         return;
     }
     
