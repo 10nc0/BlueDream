@@ -2,11 +2,12 @@
         
         // ===================================================================
         // MODULAR ARCHITECTURE
-        // StateService and AuthService are loaded before dashboard.js
+        // StateService, AuthService, DataSync, BooksModule loaded before dashboard.js
         // All state is managed via Nyan.StateService for PWA readiness
         // ===================================================================
         const _S = window.Nyan.StateService;
         const _A = window.Nyan.AuthService;
+        const _B = window.Nyan.BooksModule;
         
         // State accessors - read from StateService, mutations update StateService
         // Objects/arrays are passed by reference, so mutations (push, splice, etc.) work
@@ -1146,36 +1147,15 @@
             container.replaceChildren(fragment);
         }
 
-        // Book CRUD Functions
+        // Book CRUD Functions - delegates to BooksModule for data operations
         async function loadBooks() {
-            try {
-                const response = await window.authFetch('/api/books');
-                if (!response.ok) {
-                    console.error('❌ Book fetch failed:', response.status, response.statusText);
-                    return;
-                }
-                const data = await response.json();
-                console.log('📦 Books response:', data);
-                const rawBooks = data.books || data || [];
-                
-                // DEDUPLICATION: Use fractal_id as unique key (handles multi-tenant dev admin view)
-                const uniqueBooksMap = new Map();
-                rawBooks.forEach(book => {
-                    if (book.fractal_id && !uniqueBooksMap.has(book.fractal_id)) {
-                        uniqueBooksMap.set(book.fractal_id, book);
-                    }
-                });
-                setBooks(Array.from(uniqueBooksMap.values()));
-                
-                console.log(`✅ Loaded ${books.length} unique books (${rawBooks.length} total from API)`);
-                setFilteredBooks(books);
+            const result = await _B.loadBooks();
+            if (result.success) {
+                books = _S.getBooks();
+                filteredBooks = _S.getFilteredBooks();
                 renderBooks();
                 updatePlatformFilter();
-                // Update thumbs zone if in mobile mode
                 if (isMobile()) renderThumbsZone();
-            } catch (error) {
-                console.error('❌ Error loading books:', error.message || error);
-                console.error('Stack:', error.stack);
             }
         }
 
@@ -1190,23 +1170,11 @@
         
         // Quiet refresh that updates book counts without re-rendering detail panel
         async function loadBooksQuietly() {
-            try {
-                const response = await window.authFetch('/api/books');
-                const data = await response.json();
-                const rawBooks = data.books || data || [];
-                
-                // DEDUPLICATION: Use fractal_id as unique key (handles multi-tenant dev admin view)
-                const uniqueBooksMap = new Map();
-                rawBooks.forEach(book => {
-                    if (book.fractal_id && !uniqueBooksMap.has(book.fractal_id)) {
-                        uniqueBooksMap.set(book.fractal_id, book);
-                    }
-                });
-                setBooks(Array.from(uniqueBooksMap.values()));
-                setFilteredBooks(books);
-                renderBooks(true); // Skip detail render to preserve loaded media
-            } catch (error) {
-                console.error('Error loading books:', error);
+            const result = await _B.loadBooksQuietly();
+            if (result.success) {
+                books = _S.getBooks();
+                filteredBooks = _S.getFilteredBooks();
+                renderBooks(true);
             }
         }
 
@@ -4127,21 +4095,17 @@
             document.getElementById('botModal').classList.add('active');
         }
         
-        // Book sharing functions
+        // Book sharing functions - delegate to BooksModule
         async function loadBookShares(fractalId) {
             const container = document.getElementById('sharedEmailsList');
             if (!container) return;
             
             container.innerHTML = '<span style="color: #94a3b8; font-size: 0.75rem;">Loading...</span>';
             
-            try {
-                const response = await window.authFetch(`/api/books/${fractalId}/shares`);
-                if (!response.ok) throw new Error('Failed to load shares');
-                
-                const data = await response.json();
-                renderSharedEmails(data.shares || [], fractalId);
-            } catch (err) {
-                console.error('Error loading shares:', err);
+            const result = await _B.loadBookShares(fractalId);
+            if (result.success) {
+                renderSharedEmails(result.shares, fractalId);
+            } else {
                 container.innerHTML = '<span style="color: #ef4444; font-size: 0.75rem;">Failed to load shares</span>';
             }
         }
@@ -4176,59 +4140,33 @@
         }
         
         async function shareBook(fractalId, email) {
-            if (!email || !email.includes('@')) {
-                showToast('Please enter a valid email address', 'error');
+            const result = await _B.shareBook(fractalId, email);
+            if (!result.success) {
+                showToast(result.error || 'Failed to share', 'error');
                 return;
             }
             
-            try {
-                const response = await window.authFetch(`/api/books/${fractalId}/share`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
-                });
-                
-                const data = await response.json();
-                
-                if (!response.ok) {
-                    showToast(data.error || 'Failed to share', 'error');
-                    return;
-                }
-                
-                if (data.alreadyShared) {
-                    showToast('Already shared with this email', 'info');
-                } else {
-                    showToast(`Invited ${email} to view this book`, 'success');
-                }
-                
-                document.getElementById('shareEmailInput').value = '';
-                loadBookShares(fractalId);
-            } catch (err) {
-                console.error('Error sharing book:', err);
-                showToast('Failed to share book', 'error');
+            if (result.alreadyShared) {
+                showToast('Already shared with this email', 'info');
+            } else {
+                showToast(`Invited ${email} to view this book`, 'success');
             }
+            
+            document.getElementById('shareEmailInput').value = '';
+            loadBookShares(fractalId);
         }
         
         async function revokeBookShare(fractalId, email) {
             if (!confirm(`Revoke access for ${email}?`)) return;
             
-            try {
-                const response = await window.authFetch(`/api/books/${fractalId}/share/${encodeURIComponent(email)}`, {
-                    method: 'DELETE'
-                });
-                
-                if (!response.ok) {
-                    const data = await response.json();
-                    showToast(data.error || 'Failed to revoke', 'error');
-                    return;
-                }
-                
-                showToast(`Revoked access for ${email}`, 'success');
-                loadBookShares(fractalId);
-            } catch (err) {
-                console.error('Error revoking share:', err);
-                showToast('Failed to revoke access', 'error');
+            const result = await _B.revokeBookShare(fractalId, email);
+            if (!result.success) {
+                showToast(result.error || 'Failed to revoke', 'error');
+                return;
             }
+            
+            showToast(`Revoked access for ${email}`, 'success');
+            loadBookShares(fractalId);
         }
 
         function closeBotModal() {
@@ -4798,84 +4736,38 @@
             document.getElementById('qrModal').style.display = 'none';
         }
 
-        // Start WhatsApp session for a bot
+        // WhatsApp session functions - delegate to BooksModule
         async function startWhatsApp(bookId) {
-            try {
-                console.log('Starting WhatsApp for book:', bookId);
-                const response = await window.authFetch(`/api/books/${bookId}/start`, {
-                    method: 'POST'
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    alert('✅ WhatsApp Starting!\n\n📱 QR code is being generated automatically...\n\n⏳ Next Steps:\n1. Wait 5-10 seconds\n2. Click the 📱 QR button\n3. Scan with your phone\n4. Done!');
-                    
-                    // Auto-refresh after 3 seconds to update status
-                    setTimeout(() => {
-                        renderBooks();
-                    }, 3000);
-                } else {
-                    const error = await response.json();
-                    alert(`Failed to start WhatsApp: ${error.error || 'Unknown error'}`);
-                }
-            } catch (error) {
-                console.error('Error starting WhatsApp:', error);
-                alert(`Error starting WhatsApp: ${error.message}`);
+            const result = await _B.startWhatsApp(bookId);
+            if (result.success) {
+                alert('✅ WhatsApp Starting!\n\n📱 QR code is being generated automatically...\n\n⏳ Next Steps:\n1. Wait 5-10 seconds\n2. Click the 📱 QR button\n3. Scan with your phone\n4. Done!');
+                setTimeout(() => renderBooks(), 3000);
+            } else {
+                alert(`Failed to start WhatsApp: ${result.error || 'Unknown error'}`);
             }
         }
 
-        // Stop WhatsApp session for a book (preserves session)
         async function stopWhatsApp(bookId) {
-            if (!confirm('Stop WhatsApp session? You can restart it later without scanning a new QR code.')) {
-                return;
-            }
+            if (!confirm('Stop WhatsApp session? You can restart it later without scanning a new QR code.')) return;
             
-            try {
-                console.log('Stopping WhatsApp for book:', bookId);
-                const response = await window.authFetch(`/api/books/${bookId}/stop`, {
-                    method: 'DELETE'
-                });
-                
-                if (response.ok) {
-                    alert('✅ WhatsApp session stopped (session preserved)');
-                    renderBooks();
-                } else {
-                    const error = await response.json();
-                    alert(`Failed to stop WhatsApp: ${error.error || 'Unknown error'}`);
-                }
-            } catch (error) {
-                console.error('Error stopping WhatsApp:', error);
-                alert(`Error stopping WhatsApp: ${error.message}`);
+            const result = await _B.stopWhatsApp(bookId);
+            if (result.success) {
+                alert('✅ WhatsApp session stopped (session preserved)');
+                renderBooks();
+            } else {
+                alert(`Failed to stop WhatsApp: ${result.error || 'Unknown error'}`);
             }
         }
 
-        // Relink WhatsApp (get fresh QR code)
         async function relinkWhatsApp(bookId) {
-            if (!confirm('Relink WhatsApp? This will generate a new QR code and you\'ll need to scan it again.')) {
-                return;
-            }
+            if (!confirm('Relink WhatsApp? This will generate a new QR code and you\'ll need to scan it again.')) return;
             
-            try {
-                console.log('Relinking WhatsApp for book:', bookId);
-                const response = await window.authFetch(`/api/books/${bookId}/relink`, {
-                    method: 'POST'
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    alert('✅ Relink initiated! Refresh the page in a moment to see the new QR code.');
-                    
-                    // Auto-refresh after 2 seconds
-                    setTimeout(() => {
-                        renderBooks();
-                    }, 2000);
-                } else {
-                    const error = await response.json();
-                    alert(`Failed to relink WhatsApp: ${error.error || 'Unknown error'}`);
-                }
-            } catch (error) {
-                console.error('Error relinking WhatsApp:', error);
-                alert(`Error relinking WhatsApp: ${error.message}`);
+            const result = await _B.relinkWhatsApp(bookId);
+            if (result.success) {
+                alert('✅ Relink initiated! Refresh the page in a moment to see the new QR code.');
+                setTimeout(() => renderBooks(), 2000);
+            } else {
+                alert(`Failed to relink WhatsApp: ${result.error || 'Unknown error'}`);
             }
         }
 
