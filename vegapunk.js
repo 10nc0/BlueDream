@@ -1316,7 +1316,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     hermesBot = new HermesBot();
     thothBot = new ThothBot();
     
-    // PROMETHEUS TRINITY: Idris (ι - Scribe) + Horus (Ω - Watcher)
+    // NYAN AI TRINITY: Idris (ι - Scribe) + Horus (Ω - Watcher)
     // Separate channel/bots for AI audit logging (data silo)
     idrisBot = new IdrisBot();
     horusBot = new HorusBot();

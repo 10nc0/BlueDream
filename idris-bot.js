@@ -22,7 +22,7 @@ class IdrisBot {
         }
 
         const idrisToken = process.env.IDRIS_AI_LOG_TOKEN;
-        // Backward compat: support both new and legacy env var names
+        // Legacy: PROMETHEUS_WEBHOOK_URL still in use - migrate to NYAN_AUDIT_WEBHOOK_URL
         this.webhookUrl = process.env.NYAN_AUDIT_WEBHOOK_URL || process.env.PROMETHEUS_WEBHOOK_URL;
         
         if (!idrisToken) {
