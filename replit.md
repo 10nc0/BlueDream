@@ -39,7 +39,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Code Audit Mode**: Professional security auditor for uploaded code files across multiple languages.
 - **Harmonized Document Processing**: Unified architecture for document extraction using a shared tenant-scoped `DocumentExtractionCache`.
 - **Verifiable Export**: Book exports include `manifest.json` with SHA256 hashes for all files, export timestamp, provenance info (source, book ID, book name), and statistics. Users can verify integrity using `sha256sum` or similar tools.
-- **Modular Frontend Architecture**: Dashboard uses `Nyan.StateService` and `Nyan.AuthService` patterns (`public/js/modules/`) for gradual migration toward maintainable, testable code. AuthService provides `window.authFetch` for authenticated requests with automatic token refresh.
+- **Modular Frontend Architecture**: Dashboard uses `Nyan.StateService` and `Nyan.AuthService` patterns (`public/js/modules/`) for gradual migration toward maintainable, testable code. AuthService provides `window.authFetch` for authenticated requests with automatic token refresh. StateService manages 17 state slices (books, filteredBooks, editingBookId, selectedBookId, expandedBots, messageCache, allMessages, currentUser, bookSearchContext, botTags, botWebhooks, users, sessions, selectedMessages, messagePageState, scrollListenerAttached, lensFilterState) with getter/setter pattern - all dashboard.js mutations now flow through setters that sync local variables with centralized state for PWA readiness.
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via PostgreSQL schemas.

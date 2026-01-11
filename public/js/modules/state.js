@@ -5,6 +5,7 @@ window.Nyan.StateService = (function() {
         books: [],
         filteredBooks: [],
         editingBookId: null,
+        selectedBookId: null,
         expandedBots: new Set(),
         messageCache: {},
         allMessages: {},
@@ -38,6 +39,9 @@ window.Nyan.StateService = (function() {
         
         getEditingBookId: () => _state.editingBookId,
         setEditingBookId: (id) => { _state.editingBookId = id; },
+        
+        getSelectedBookId: () => _state.selectedBookId,
+        setSelectedBookId: (id) => { _state.selectedBookId = id; },
         
         getExpandedBots: () => _state.expandedBots,
         addExpandedBot: (id) => { _state.expandedBots.add(id); },
@@ -97,6 +101,7 @@ window.Nyan.StateService = (function() {
             _state.books = [];
             _state.filteredBooks = [];
             _state.editingBookId = null;
+            _state.selectedBookId = null;
             _state.expandedBots = new Set();
             _state.messageCache = {};
             _state.allMessages = {};

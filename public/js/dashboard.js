@@ -2,51 +2,46 @@
         
         // ===================================================================
         // MODULAR ARCHITECTURE
-        // Auth module (NyanAuth) is loaded before dashboard.js
-        // window.authFetch is defined by NyanAuth for backward compatibility
+        // StateService and AuthService are loaded before dashboard.js
+        // All state is managed via Nyan.StateService for PWA readiness
         // ===================================================================
+        const _S = window.Nyan.StateService;
+        const _A = window.Nyan.AuthService;
         
-        let books = [];
-        let filteredBooks = [];
-        let editingBookId = null;
-        let expandedBots = new Set();
+        // State accessors - read from StateService, mutations update StateService
+        // Objects/arrays are passed by reference, so mutations (push, splice, etc.) work
+        // For reassignments, use the setter functions below
+        let books = _S.getBooks();
+        let filteredBooks = _S.getFilteredBooks();
+        let editingBookId = _S.getEditingBookId();
+        let expandedBots = _S.getExpandedBots();
+        let messageCache = _S.getMessageCache();
+        let allMessages = _S.getAllMessages();
+        let currentUser = _S.getCurrentUser();
+        let bookSearchContext = _S.getBookSearchContext();
+        let botTags = _S.getBotTags();
+        let botWebhooks = _S.getBotWebhooks();
+        let users = _S.getUsers();
+        let sessions = _S.getSessions();
+        let selectedMessages = _S.getSelectedMessages();
+        let messagePageState = _S.getMessagePageState();
+        let scrollListenerAttached = _S.getScrollListenerAttached();
+        let lensFilterState = _S.getLensFilterState();
+        let selectedBookId = _S.getSelectedBookId();
+        const roadmapGlossary = _S.getRoadmapGlossary();
         
-        // SECURITY: Message cache is TENANT-ISOLATED via fractalized book IDs
-        // Keys MUST be fractal_id (dev_book_tX_HASH or prod_book_tX_HASH)
-        // This ensures zero cross-tenant data leakage in multi-tenant SaaS
-        let messageCache = {}; 
-        
-        let allMessages = {};
-        let currentUser = null;
-        
-        // SEAMLESS SEARCH: Store book search query for auto-filtering messages
-        let bookSearchContext = {
-            query: '',
-            bookId: null
-        };
-        let botTags = [];
-        let botWebhooks = [];
-        let users = [];
-        let sessions = [];
-        
-        // Per-message export: Track selected message IDs per book
-        let selectedMessages = {};
-        
-        // INFINITE SCROLL: Track pagination state per book
-        let messagePageState = {};
-        
-        // Track scroll listeners per book (JS-based to survive DOM rebuilds)
-        let scrollListenerAttached = {};
-        
-        // LENS MODE: Filter state per book (filter-before-render architecture)
-        let lensFilterState = {};
-        
-        // Platform roadmap for future features
-        const roadmapGlossary = {
-            platforms: {
-                coming_soon: ['Telegram', 'Line', 'Signal', 'WeChat']
-            }
-        };
+        // State mutation helpers - for reassignments, update both local and StateService
+        function setBooks(newBooks) { books = newBooks; _S.setBooks(newBooks); }
+        function setFilteredBooks(newBooks) { filteredBooks = newBooks; _S.setFilteredBooks(newBooks); }
+        function setCurrentUser(user) { currentUser = user; _S.setCurrentUser(user); }
+        function setMessageCache(cache) { messageCache = cache; _S.setMessageCache(cache); }
+        function setAllMessages(msgs) { allMessages = msgs; _S.setAllMessages(msgs); }
+        function setBotTags(tags) { botTags = tags; _S.setBotTags(tags); }
+        function setBotWebhooks(webhooks) { botWebhooks = webhooks; _S.setBotWebhooks(webhooks); }
+        function setUsers(u) { users = u; _S.setUsers(u); }
+        function setSessions(s) { sessions = s; _S.setSessions(s); }
+        function setEditingBookId(id) { editingBookId = id; _S.setEditingBookId(id); }
+        function setSelectedBookId(id) { selectedBookId = id; _S.setSelectedBookId(id); }
 
         // ===================================================================
         // UNIFIED ACTION REGISTRY
@@ -953,7 +948,7 @@
                     return false;
                 }
                 
-                currentUser = data.user;
+                setCurrentUser(data.user);
                 const userInfo = document.getElementById('userInfo');
                 const roleColors = {
                     'dev': '#ffffff',
@@ -1015,10 +1010,10 @@
             }
             
             // SECURITY: Clear all cached data to prevent cross-session data leakage
-            messageCache = {};
-            allMessages = {};
-            books = [];
-            filteredBooks = [];
+            setMessageCache({});
+            setAllMessages({});
+            setBooks([]);
+            setFilteredBooks([]);
             
             // Clear JWT tokens from localStorage (Safari-safe)
             try {
@@ -1060,7 +1055,7 @@
         }
 
         function removeTag(tag) {
-            botTags = botTags.filter(t => t !== tag);
+            setBotTags(botTags.filter(t => t !== tag));
             renderTags();
         }
 
@@ -1098,7 +1093,7 @@
         }
 
         function removeWebhook(webhookId) {
-            botWebhooks = botWebhooks.filter(w => w.id !== webhookId);
+            setBotWebhooks(botWebhooks.filter(w => w.id !== webhookId));
             renderWebhooks();
         }
 
@@ -1170,10 +1165,10 @@
                         uniqueBooksMap.set(book.fractal_id, book);
                     }
                 });
-                books = Array.from(uniqueBooksMap.values());
+                setBooks(Array.from(uniqueBooksMap.values()));
                 
                 console.log(`✅ Loaded ${books.length} unique books (${rawBooks.length} total from API)`);
-                filteredBooks = books;
+                setFilteredBooks(books);
                 renderBooks();
                 updatePlatformFilter();
                 // Update thumbs zone if in mobile mode
@@ -1207,8 +1202,8 @@
                         uniqueBooksMap.set(book.fractal_id, book);
                     }
                 });
-                books = Array.from(uniqueBooksMap.values());
-                filteredBooks = books;
+                setBooks(Array.from(uniqueBooksMap.values()));
+                setFilteredBooks(books);
                 renderBooks(true); // Skip detail render to preserve loaded media
             } catch (error) {
                 console.error('Error loading books:', error);
@@ -3713,7 +3708,7 @@
             // Server search runs for ALL books to ensure no matches are missed
             const booksToSearch = [];
             
-            filteredBooks = books.filter(book => {
+            setFilteredBooks(books.filter(book => {
                 // EXHAUSTIVE SEARCH: Check ALL sources independently (no short-circuiting)
                 // This ensures we find matches everywhere like AI query logic
                 const matchSources = []; // Accumulate all match sources
@@ -3779,7 +3774,7 @@
                 
                 const matchesPlatform = !platformFilter || book.input_platform === platformFilter;
                 return matchesPlatform;
-            });
+            }));
             
             renderBooks();
             // Update thumbs zone if in mobile mode
@@ -4083,11 +4078,11 @@
                 return;
             }
             
-            editingBookId = null;
+            setEditingBookId(null);
             document.getElementById('modalTitle').textContent = 'Create New Book';
             document.getElementById('botForm').reset();
-            botTags = [];
-            botWebhooks = [];
+            setBotTags([]);
+            setBotWebhooks([]);
             renderTags();
             renderWebhooks();
             document.getElementById('botModal').classList.add('active');
@@ -4101,16 +4096,16 @@
                 return;
             }
             
-            editingBookId = fractalId;
+            setEditingBookId(fractalId);
             document.getElementById('modalTitle').textContent = 'Edit Book';
             document.getElementById('botName').value = book.name || '';
             document.getElementById('botPlatform').value = book.input_platform;
             document.getElementById('botDestinationPlatform').value = book.output_platform;
             document.getElementById('botContact').value = book.contact_info || '';
-            botTags = book.tags || [];
+            setBotTags(book.tags || []);
             
             // Load webhooks from output_01_url and output_0n_url
-            botWebhooks = [];
+            setBotWebhooks([]);
             if (book.output_0n_url) {
                 botWebhooks.push({
                     id: Date.now(),
@@ -4239,9 +4234,9 @@
         function closeBotModal() {
             document.getElementById('botModal').classList.remove('active');
             document.getElementById('botName').value = '';
-            editingBookId = null;
-            botTags = [];
-            botWebhooks = [];
+            setEditingBookId(null);
+            setBotTags([]);
+            setBotWebhooks([]);
             
             // Hide share section and clear
             const shareSection = document.getElementById('shareBookSection');
@@ -4267,11 +4262,11 @@
             localStorage.setItem('skipQuickStart', 'true');
             closeQuickStartWizard();
             // Open regular create modal
-            editingBookId = null;
+            setEditingBookId(null);
             document.getElementById('modalTitle').textContent = 'Create New Book';
             document.getElementById('botForm').reset();
-            botTags = [];
-            botWebhooks = [];
+            setBotTags([]);
+            setBotWebhooks([]);
             renderTags();
             renderWebhooks();
             document.getElementById('botModal').classList.add('active');
@@ -4280,11 +4275,11 @@
         function startBookSetup() {
             closeQuickStartWizard();
             // Open regular create modal with a hint banner
-            editingBookId = null;
+            setEditingBookId(null);
             document.getElementById('modalTitle').textContent = 'Create New Book';
             document.getElementById('botForm').reset();
-            botTags = [];
-            botWebhooks = [];
+            setBotTags([]);
+            setBotWebhooks([]);
             renderTags();
             renderWebhooks();
             document.getElementById('botModal').classList.add('active');
@@ -4421,7 +4416,7 @@
                         const index = books.findIndex(b => b.fractal_id === editingBookId);
                         if (index !== -1) {
                             books[index] = updatedBook;
-                            filteredBooks = books;
+                            setFilteredBooks(books);
                             renderBooks(true); // Skip detail re-render to preserve state
                         }
                         alert('✅ Book updated successfully!');
@@ -4910,8 +4905,8 @@
                 
                 if (response.ok) {
                     // Immediately remove from arrays to sync state
-                    books = books.filter(b => b.fractal_id !== fractalId);
-                    filteredBooks = filteredBooks.filter(b => b.fractal_id !== fractalId);
+                    setBooks(books.filter(b => b.fractal_id !== fractalId));
+                    setFilteredBooks(filteredBooks.filter(b => b.fractal_id !== fractalId));
                     
                     // Animate book card deletion with liquid glass effect
                     const bookCard = document.querySelector(`.book-list-item[data-fractal-id="${fractalId}"]`);
@@ -4941,7 +4936,7 @@
                             
                             // Clear selection and detail view if deleted book was selected
                             if (selectedBookId === fractalId) {
-                                selectedBookId = null;
+                                setSelectedBookId(null);
                                 const detail = document.getElementById('bookDetail');
                                 if (detail) {
                                     const p = document.createElement('p');
@@ -4974,7 +4969,7 @@
                     } else {
                         console.log('🗑️ Card not found, full refresh...');
                         // Fallback: full refresh if card not found
-                        selectedBookId = null;
+                        setSelectedBookId(null);
                         showToast('✅ Book deleted successfully', 'success');
                         renderBooks();
                     }
@@ -7085,7 +7080,7 @@
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
-                users = await response.json();
+                setUsers(await response.json());
                 renderDevPanelUsers();
             } catch (error) {
                 console.error('Error loading dev panel users:', error);
