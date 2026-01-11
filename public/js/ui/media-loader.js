@@ -175,6 +175,68 @@ function createMediaErrorDiv(message) {
     return errorDiv;
 }
 
+// Helper to create file preview card (for PDFs, Office docs, etc)
+function createFilePreviewCard(icon, label, downloadUrl, fileType) {
+    const card = document.createElement('a');
+    card.href = downloadUrl;
+    card.target = '_blank';
+    card.rel = 'noopener noreferrer';
+    card.className = 'file-preview-card';
+    card.style.cssText = `
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        text-decoration: none;
+        color: inherit;
+        transition: all 0.2s ease;
+        max-width: 320px;
+        cursor: pointer;
+    `;
+    
+    // Hover effects
+    card.onmouseenter = () => {
+        card.style.background = 'rgba(124, 58, 237, 0.15)';
+        card.style.borderColor = 'rgba(124, 58, 237, 0.3)';
+        card.style.transform = 'translateY(-1px)';
+    };
+    card.onmouseleave = () => {
+        card.style.background = 'rgba(255, 255, 255, 0.05)';
+        card.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+        card.style.transform = 'translateY(0)';
+    };
+    
+    // Icon
+    const iconEl = document.createElement('span');
+    iconEl.style.cssText = 'font-size: 2rem; flex-shrink: 0;';
+    iconEl.textContent = icon;
+    
+    // Text container
+    const textContainer = document.createElement('div');
+    textContainer.style.cssText = 'display: flex; flex-direction: column; gap: 2px; overflow: hidden;';
+    
+    // Label
+    const labelEl = document.createElement('span');
+    labelEl.style.cssText = 'font-size: 0.9rem; font-weight: 500; color: #e2e8f0;';
+    labelEl.textContent = label;
+    
+    // Action hint
+    const hintEl = document.createElement('span');
+    hintEl.style.cssText = 'font-size: 0.75rem; color: #94a3b8;';
+    hintEl.textContent = 'Click to open';
+    
+    textContainer.appendChild(labelEl);
+    textContainer.appendChild(hintEl);
+    
+    card.appendChild(iconEl);
+    card.appendChild(textContainer);
+    
+    return card;
+}
+
 // Load and render media for a message
 async function loadMedia(messageId) {
     const previewEl = document.getElementById(`media-preview-${messageId}`);
@@ -318,28 +380,25 @@ function renderMediaFromUrl(containerEl, messageId, mediaUrl, mediaType) {
         containerEl.replaceChildren(audio);
         
     } else if (isPDF) {
-        // Inline PDF viewer using embed
-        const pdfContainer = document.createElement('div');
-        pdfContainer.style.cssText = 'width: 100%; max-width: 700px; margin: 0.5rem 0;';
-        
-        const embed = document.createElement('embed');
-        embed.src = mediaUrl;
-        embed.type = 'application/pdf';
-        embed.style.cssText = 'width: 100%; height: 600px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);';
-        
-        pdfContainer.appendChild(embed);
-        
-        containerEl.replaceChildren(pdfContainer);
+        // PDF preview card (Discord CDN blocks embed, so show clickable card)
+        const card = createFilePreviewCard('📄', 'PDF Document', mediaUrl, 'pdf');
+        containerEl.replaceChildren(card);
         
     } else if (isOfficeDoc) {
-        // Office documents - no preview needed (📎 download button provides access)
-        containerEl.replaceChildren();
-        containerEl.style.display = 'none'; // Hide preview area entirely
+        // Office document preview card
+        let icon = '📄';
+        let label = 'Document';
+        if (normalizedType.includes('word')) { icon = '📝'; label = 'Word Document'; }
+        else if (normalizedType.includes('excel') || normalizedType.includes('spreadsheet')) { icon = '📊'; label = 'Excel Spreadsheet'; }
+        else if (normalizedType.includes('powerpoint') || normalizedType.includes('presentation')) { icon = '📽️'; label = 'PowerPoint Presentation'; }
+        
+        const card = createFilePreviewCard(icon, label, mediaUrl, 'office');
+        containerEl.replaceChildren(card);
         
     } else {
-        // Other files - no preview needed (📎 download button provides access)
-        containerEl.replaceChildren();
-        containerEl.style.display = 'none'; // Hide preview area entirely
+        // Generic file preview card
+        const card = createFilePreviewCard('📁', 'File Attachment', mediaUrl, 'file');
+        containerEl.replaceChildren(card);
     }
 }
 
@@ -491,8 +550,28 @@ function renderMedia(containerEl, messageId, mediaData) {
         containerEl.replaceChildren(audio);
         
     } else {
-        const errorDiv = createMediaErrorDiv(`Unsupported media type: ${media_type}`);
-        containerEl.replaceChildren(errorDiv);
+        // For PDFs, Office docs, and other files - show preview card with data URL
+        const isPDF = normalizedType.includes('pdf');
+        const isOfficeDoc = normalizedType.includes('word') || normalizedType.includes('document') || 
+                            normalizedType.includes('excel') || normalizedType.includes('spreadsheet') ||
+                            normalizedType.includes('powerpoint') || normalizedType.includes('presentation');
+        
+        if (isPDF) {
+            const card = createFilePreviewCard('📄', 'PDF Document', dataUrl, 'pdf');
+            containerEl.replaceChildren(card);
+        } else if (isOfficeDoc) {
+            let icon = '📄';
+            let label = 'Document';
+            if (normalizedType.includes('word')) { icon = '📝'; label = 'Word Document'; }
+            else if (normalizedType.includes('excel') || normalizedType.includes('spreadsheet')) { icon = '📊'; label = 'Excel Spreadsheet'; }
+            else if (normalizedType.includes('powerpoint') || normalizedType.includes('presentation')) { icon = '📽️'; label = 'PowerPoint Presentation'; }
+            
+            const card = createFilePreviewCard(icon, label, dataUrl, 'office');
+            containerEl.replaceChildren(card);
+        } else {
+            const card = createFilePreviewCard('📁', 'File Attachment', dataUrl, 'file');
+            containerEl.replaceChildren(card);
+        }
     }
     
     console.log(`✅ Media elements inserted for message ${messageId}`);
