@@ -23,7 +23,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - A `LayoutController` acts as a unified state machine for managing UI modes, device detection, expansion states, and animations.
 
 **Technical Implementations:**
-- **Authentication**: Email/password with JWT, role-based access, and isolated user data.
+- **Authentication**: Email/password with JWT, role-based access, and isolated user data. Auth module (`public/js/modules/auth.js`) provides `window.authFetch` with automatic token refresh.
 - **Database**: Multi-tenant PostgreSQL architecture with isolated schemas.
 - **Messaging Integration**: Twilio-based WhatsApp Business API for messaging, with media handling for Discord uploads.
 - **Search**: Enhanced search across messages and metadata.
@@ -38,6 +38,8 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Mode Registry**: Plug-and-play configuration for the 7-stage pipeline, supporting modes like `psi-ema`, `forex`, `seed-metric`, `legal`, and `code-audit`.
 - **Code Audit Mode**: Professional security auditor for uploaded code files across multiple languages.
 - **Harmonized Document Processing**: Unified architecture for document extraction using a shared tenant-scoped `DocumentExtractionCache`.
+- **Verifiable Export**: Book exports include `manifest.json` with SHA256 hashes for all files, export timestamp, provenance info (source, book ID, book name), and statistics. Users can verify integrity using `sha256sum` or similar tools.
+- **Modular Frontend Architecture**: Dashboard uses `Nyan.StateService` and `Nyan.AuthService` patterns (`public/js/modules/`) for gradual migration toward maintainable, testable code. AuthService provides `window.authFetch` for authenticated requests with automatic token refresh.
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via PostgreSQL schemas.
