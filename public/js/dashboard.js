@@ -2,12 +2,13 @@
         
         // ===================================================================
         // MODULAR ARCHITECTURE
-        // StateService, AuthService, DataSync, BooksModule loaded before dashboard.js
+        // StateService, AuthService, DataSync, BooksModule, MessagesModule loaded before dashboard.js
         // All state is managed via Nyan.StateService for PWA readiness
         // ===================================================================
         const _S = window.Nyan.StateService;
         const _A = window.Nyan.AuthService;
         const _B = window.Nyan.BooksModule;
+        const _M = window.Nyan.MessagesModule;
         
         // State accessors - read from StateService, mutations update StateService
         // Objects/arrays are passed by reference, so mutations (push, splice, etc.) work
@@ -5125,13 +5126,6 @@
         // Bidirectional scrolling removed for simplicity - use "Return to latest" after jump
         async function loadBookMessages(bookId, append = false) {
             try {
-                // SECURITY: Validate bookId is a fractal_id (tenant-scoped, non-enumerable)
-                // Format: [dev_](bridge|book|msg)_t{N}_{HASH} or twilio_book_{PHONE}_{TIMESTAMP}
-                if (!bookId || !/^(?:dev_)?(bridge|book|msg)_t\d+_[a-f0-9]+$|^twilio_book_\d+_\d+$/.test(bookId)) {
-                    console.error('🚨 SECURITY: Invalid book ID format:', bookId);
-                    throw new Error('Invalid book ID');
-                }
-                
                 // Initialize page state if needed
                 if (!messagePageState[bookId]) {
                     messagePageState[bookId] = { isLoading: false, hasOlder: false, seenIds: new Set(), oldestId: null };
@@ -5141,25 +5135,22 @@
                 if (messagePageState[bookId].isLoading) return;
                 messagePageState[bookId].isLoading = true;
                 
-                // Build URL with cursor for pagination
-                let url = `/api/books/${bookId}/messages?limit=50&source=${currentViewSource}`;
-                
                 // SAFEGUARD: Append mode requires valid cursor, otherwise fall back to fresh load
                 const effectiveAppend = append && messagePageState[bookId].oldestId;
-                if (effectiveAppend) {
-                    url += `&before=${messagePageState[bookId].oldestId}`;
+                
+                // Delegate API call to MessagesModule
+                const result = await _M.fetchMessages(bookId, {
+                    before: effectiveAppend ? messagePageState[bookId].oldestId : null,
+                    limit: 50,
+                    source: currentViewSource
+                });
+                
+                if (!result.success) {
+                    throw new Error(result.error || 'Failed to fetch messages');
                 }
                 
-                console.log(`Loading messages for book ${bookId} (source: ${currentViewSource}, mode: ${effectiveAppend ? 'append' : 'fresh'}, cursor: ${messagePageState[bookId].oldestId || 'none'})...`);
-                const response = await window.authFetch(url);
-                
-                if (!response.ok) {
-                    console.error(`API returned ${response.status}: ${response.statusText}`);
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const data = await response.json();
-                console.log(`Received ${data.messages?.length || 0} messages:`, data);
+                const data = { messages: result.messages, hasMore: result.hasMore, oldestMessageId: result.oldestMessageId };
+                console.log(`Received ${data.messages?.length || 0} messages`);
                 
                 // SECURITY: Cache ONLY with tenant-scoped fractal_id
                 // This ensures complete tenant isolation in message cache
@@ -5316,11 +5307,8 @@
                     console.error(`❌ Container NOT FOUND: discord-messages-${bookId}`);
                 }
                 
-                // Mark load complete
-                messagePageState[bookId].isLoading = false;
             } catch (error) {
                 console.error('Error loading messages:', error);
-                messagePageState[bookId].isLoading = false;
                 const container = document.getElementById(`discord-messages-${bookId}`);
                 if (container) {
                     container.replaceChildren();
@@ -5330,6 +5318,11 @@
                     errorDiv.textContent = 'Error loading messages. Please try refreshing.';
                     container.appendChild(errorDiv);
                 }
+            } finally {
+                // ALWAYS reset loading state to prevent pagination deadlock
+                if (messagePageState[bookId]) {
+                    messagePageState[bookId].isLoading = false;
+                }
             }
         }
 
@@ -5338,37 +5331,22 @@
         // ====================================
 
         // Jump to specific message with context window
-        // CONTEXT-FIRST: Always fetch target + context (both older AND newer)
-        // This ensures full bidirectional context is loaded around the target
         async function jumpToMessage(targetId, bookId) {
             if (!targetId || !bookId) return;
             
             try {
                 console.log(`🎯 Jumping to message ${targetId}...`);
-                
-                // Clear search state and UI (no re-render, just clear state)
                 clearSearchState(bookId);
                 
-                // ALWAYS fetch context - ensures full bidirectional view (older + newer)
-                // No fast path - we want the complete horizon around the target
-                console.log(`📡 Fetching context for ${targetId}...`);
-                const contextResponse = await window.authFetch(`/api/messages/${targetId}/context?bookId=${bookId}`);
+                // Delegate context fetch to MessagesModule
+                const result = await _M.fetchMessageContext(targetId, bookId);
                 
-                if (!contextResponse.ok) {
-                    console.warn(`⚠️ Context API returned ${contextResponse.status}`);
+                if (!result.success || result.messages.length === 0) {
                     showToast(`⚠️ Message not found`, 'error');
                     return;
                 }
                 
-                const contextData = await contextResponse.json();
-                const contextMessages = contextData.messages || [];
-                
-                if (contextMessages.length === 0) {
-                    console.warn(`⚠️ No context messages returned for ${targetId}`);
-                    showToast(`⚠️ Message not found`, 'error');
-                    return;
-                }
-                
+                const contextMessages = result.messages;
                 console.log(`📦 Got ${contextMessages.length} context messages, rendering view...`);
                 
                 // ANCHOR APPROACH: Replace container with context messages (centered on target)
@@ -5799,85 +5777,75 @@
             });
         }
 
-        // Load and display inline media preview
+        // Load and display inline media preview - delegates API to MessagesModule
         async function loadMediaPreview(messageId) {
             const previewContainer = document.getElementById(`media-preview-${messageId}`);
             if (!previewContainer) return;
             
-            try {
-                const response = await window.authFetch(`/api/messages/${messageId}/media`);
-                if (!response.ok) {
-                    previewContainer.replaceChildren();
-                    const errorDiv = document.createElement('div');
-                    errorDiv.className = 'media-error';
-                    errorDiv.textContent = 'Media unavailable';
-                    previewContainer.appendChild(errorDiv);
-                    return;
-                }
-                
-                const data = await response.json();
-                const mediaType = (data.media_type || '').toLowerCase();
-                
-                previewContainer.replaceChildren();
-                
-                if (mediaType.includes('image')) {
-                    const img = document.createElement('img');
-                    img.src = data.media_data;
-                    img.alt = 'Image attachment';
-                    img.className = 'discord-media-image';
-                    img.dataset.messageId = messageId;
-                    img.loading = 'lazy';
-                    img.style.cursor = 'pointer';
-                    previewContainer.appendChild(img);
-                } else if (mediaType.includes('video')) {
-                    const video = document.createElement('video');
-                    video.controls = true;
-                    video.className = 'discord-media-video';
-                    const source = document.createElement('source');
-                    source.src = data.media_data;
-                    source.type = data.media_type;
-                    video.appendChild(source);
-                    video.appendChild(document.createTextNode("Your browser doesn't support video playback."));
-                    previewContainer.appendChild(video);
-                    
-                    const hint = document.createElement('div');
-                    hint.className = 'media-expand-hint';
-                    hint.dataset.messageId = messageId;
-                    hint.style.cursor = 'pointer';
-                    hint.textContent = 'Click to view fullscreen';
-                    previewContainer.appendChild(hint);
-                } else if (mediaType.includes('audio')) {
-                    const audio = document.createElement('audio');
-                    audio.controls = true;
-                    audio.className = 'discord-media-audio';
-                    const source = document.createElement('source');
-                    source.src = data.media_data;
-                    source.type = data.media_type;
-                    audio.appendChild(source);
-                    audio.appendChild(document.createTextNode("Your browser doesn't support audio playback."));
-                    previewContainer.appendChild(audio);
-                } else {
-                    const attachDiv = document.createElement('div');
-                    attachDiv.className = 'discord-attachment';
-                    attachDiv.dataset.messageId = messageId;
-                    attachDiv.style.cursor = 'pointer';
-                    const iconSpan = document.createElement('span');
-                    iconSpan.className = 'attachment-icon';
-                    iconSpan.textContent = '📎';
-                    const typeSpan = document.createElement('span');
-                    typeSpan.className = 'attachment-type';
-                    typeSpan.textContent = data.media_type || 'Attachment';
-                    attachDiv.appendChild(iconSpan);
-                    attachDiv.appendChild(typeSpan);
-                    previewContainer.appendChild(attachDiv);
-                }
-            } catch (error) {
-                console.error('Error loading media preview:', error);
-                previewContainer.replaceChildren();
+            const result = await _M.fetchMedia(messageId);
+            previewContainer.replaceChildren();
+            
+            if (!result.success) {
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'media-error';
-                errorDiv.textContent = 'Failed to load media';
+                errorDiv.textContent = 'Media unavailable';
                 previewContainer.appendChild(errorDiv);
+                return;
+            }
+            
+            const mediaType = (result.mediaType || '').toLowerCase();
+            const mediaData = result.mediaData;
+            
+            if (mediaType.includes('image')) {
+                const img = document.createElement('img');
+                img.src = mediaData;
+                img.alt = 'Image attachment';
+                img.className = 'discord-media-image';
+                img.dataset.messageId = messageId;
+                img.loading = 'lazy';
+                img.style.cursor = 'pointer';
+                previewContainer.appendChild(img);
+            } else if (mediaType.includes('video')) {
+                const video = document.createElement('video');
+                video.controls = true;
+                video.className = 'discord-media-video';
+                const source = document.createElement('source');
+                source.src = mediaData;
+                source.type = result.mediaType;
+                video.appendChild(source);
+                video.appendChild(document.createTextNode("Your browser doesn't support video playback."));
+                previewContainer.appendChild(video);
+                
+                const hint = document.createElement('div');
+                hint.className = 'media-expand-hint';
+                hint.dataset.messageId = messageId;
+                hint.style.cursor = 'pointer';
+                hint.textContent = 'Click to view fullscreen';
+                previewContainer.appendChild(hint);
+            } else if (mediaType.includes('audio')) {
+                const audio = document.createElement('audio');
+                audio.controls = true;
+                audio.className = 'discord-media-audio';
+                const source = document.createElement('source');
+                source.src = mediaData;
+                source.type = result.mediaType;
+                audio.appendChild(source);
+                audio.appendChild(document.createTextNode("Your browser doesn't support audio playback."));
+                previewContainer.appendChild(audio);
+            } else {
+                const attachDiv = document.createElement('div');
+                attachDiv.className = 'discord-attachment';
+                attachDiv.dataset.messageId = messageId;
+                attachDiv.style.cursor = 'pointer';
+                const iconSpan = document.createElement('span');
+                iconSpan.className = 'attachment-icon';
+                iconSpan.textContent = '📎';
+                const typeSpan = document.createElement('span');
+                typeSpan.className = 'attachment-type';
+                typeSpan.textContent = result.mediaType || 'Attachment';
+                attachDiv.appendChild(iconSpan);
+                attachDiv.appendChild(typeSpan);
+                previewContainer.appendChild(attachDiv);
             }
         }
 
