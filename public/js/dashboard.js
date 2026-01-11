@@ -1399,45 +1399,82 @@
                 textDiv.appendChild(title);
                 
                 const desc = document.createElement('div');
-                desc.style.cssText = 'color: #cbd5e1; font-size: 0.8125rem; line-height: 1.5; margin-bottom: 0.75rem;';
-                desc.textContent = 'Send this message from WhatsApp to activate your book. Each code works only once for security.';
+                desc.style.cssText = 'color: #cbd5e1; font-size: 0.8125rem; line-height: 1.5; margin-bottom: 0.5rem;';
+                desc.textContent = 'Follow 2 steps to activate. Each code works only once for security.';
                 textDiv.appendChild(desc);
                 
-                if (platform === 'whatsapp') {
-                    const btnsRow = document.createElement('div');
-                    btnsRow.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.75rem;';
-                    
-                    const waLink = document.createElement('a');
-                    waLink.href = `https://wa.me/14155238886?text=${encodeURIComponent(book.contact_info || 'join baby-ability')}`;
-                    waLink.target = '_blank';
-                    waLink.rel = 'noopener noreferrer';
-                    waLink.style.cssText = 'background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;';
-                    waLink.textContent = '📱 Open WhatsApp';
-                    btnsRow.appendChild(waLink);
-                    
-                    const copyBtn = document.createElement('button');
-                    copyBtn.className = 'copy-code-btn';
-                    copyBtn.dataset.copyText = book.contact_info || 'join baby-ability';
-                    copyBtn.style.cssText = 'background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #cbd5e1; padding: 0.625rem 1.25rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; font-weight: 600; white-space: nowrap;';
-                    copyBtn.textContent = '📋 Copy Code';
-                    btnsRow.appendChild(copyBtn);
-                    
-                    textDiv.appendChild(btnsRow);
-                }
+                const warningNote = document.createElement('div');
+                warningNote.style.cssText = 'color: #fbbf24; font-size: 0.75rem; margin-bottom: 0.75rem; font-weight: 600;';
+                warningNote.textContent = '⚠️ Send as 2 separate messages!';
+                textDiv.appendChild(warningNote);
+                
                 contentRow.appendChild(textDiv);
                 warningBox.appendChild(contentRow);
                 
-                const codeBox = document.createElement('div');
-                codeBox.style.cssText = 'background: rgba(15, 23, 42, 0.6); padding: 0.625rem; border-radius: 4px;';
-                const codeText = document.createElement('div');
-                codeText.style.cssText = 'color: #94a3b8; font-size: 0.75rem; font-family: monospace;';
-                codeText.appendChild(document.createTextNode('Message: '));
-                const codeSpan = document.createElement('span');
-                codeSpan.style.cssText = 'color: #22c55e; user-select: all;';
-                codeSpan.textContent = book.contact_info || 'join baby-ability';
-                codeText.appendChild(codeSpan);
-                codeBox.appendChild(codeText);
-                warningBox.appendChild(codeBox);
+                const joinCode = (book.contact_info || '').replace(/^join baby-ability\s+/i, '').trim() || book.fractal_id?.slice(0, 12);
+                
+                if (platform === 'whatsapp') {
+                    const step1Box = document.createElement('div');
+                    step1Box.style.cssText = 'background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem;';
+                    
+                    const step1Label = document.createElement('div');
+                    step1Label.style.cssText = 'color: #60a5fa; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;';
+                    step1Label.textContent = '📝 Message 1: Join sandbox';
+                    step1Box.appendChild(step1Label);
+                    
+                    const step1Row = document.createElement('div');
+                    step1Row.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+                    
+                    const step1Code = document.createElement('code');
+                    step1Code.style.cssText = 'flex: 1; font-family: monospace; color: #60a5fa; font-size: 0.875rem; font-weight: 600; user-select: all;';
+                    step1Code.textContent = 'join baby-ability';
+                    step1Row.appendChild(step1Code);
+                    
+                    const copy1Btn = document.createElement('button');
+                    copy1Btn.className = 'copy-code-btn';
+                    copy1Btn.dataset.copyText = 'join baby-ability';
+                    copy1Btn.style.cssText = 'background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; padding: 0.375rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 600;';
+                    copy1Btn.textContent = 'Copy';
+                    step1Row.appendChild(copy1Btn);
+                    
+                    step1Box.appendChild(step1Row);
+                    
+                    const waLink = document.createElement('a');
+                    waLink.href = 'https://wa.me/14155238886?text=join%20baby-ability';
+                    waLink.target = '_blank';
+                    waLink.rel = 'noopener noreferrer';
+                    waLink.style.cssText = 'display: inline-flex; align-items: center; gap: 0.375rem; margin-top: 0.5rem; background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.8125rem; font-weight: 600; text-decoration: none;';
+                    waLink.textContent = '📱 Open WhatsApp';
+                    step1Box.appendChild(waLink);
+                    
+                    warningBox.appendChild(step1Box);
+                    
+                    const step2Box = document.createElement('div');
+                    step2Box.style.cssText = 'background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 6px; padding: 0.75rem;';
+                    
+                    const step2Label = document.createElement('div');
+                    step2Label.style.cssText = 'color: #c084fc; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;';
+                    step2Label.textContent = '🔐 Message 2: Your book code';
+                    step2Box.appendChild(step2Label);
+                    
+                    const step2Row = document.createElement('div');
+                    step2Row.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+                    
+                    const step2Code = document.createElement('code');
+                    step2Code.style.cssText = 'flex: 1; font-family: monospace; color: #a78bfa; font-size: 0.875rem; font-weight: 600; user-select: all;';
+                    step2Code.textContent = joinCode;
+                    step2Row.appendChild(step2Code);
+                    
+                    const copy2Btn = document.createElement('button');
+                    copy2Btn.className = 'copy-code-btn';
+                    copy2Btn.dataset.copyText = joinCode;
+                    copy2Btn.style.cssText = 'background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.4); color: #c084fc; padding: 0.375rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 600;';
+                    copy2Btn.textContent = 'Copy';
+                    step2Row.appendChild(copy2Btn);
+                    
+                    step2Box.appendChild(step2Row);
+                    warningBox.appendChild(step2Box);
+                }
                 
                 fragment.appendChild(warningBox);
             }
