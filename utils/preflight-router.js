@@ -453,16 +453,14 @@ function buildStockContext(preflight) {
   
   const ageFlag = dataAge?.flag || '⚠️';
   
-  // Correctly map PsiEMADashboard output structure:
-  // - summary: aggregated signals (phaseSignal, anomalyLevel, regime, compositeSignal)
+  // Correctly map PsiEMADashboard output structure (vφ⁴: no composite signal):
+  // - summary: aggregated signals (phaseSignal, anomalyLevel, regime)
   // - dimensions: detailed analysis (phase.current, anomaly.currentZ, convergence.currentR)
-  // - compositeSignal: action, confidence, emoji
   // - fidelity: grade, percent
   const summary = psiEmaAnalysis.summary || {};
   const phase = psiEmaAnalysis.dimensions?.phase || {};
   const anomaly = psiEmaAnalysis.dimensions?.anomaly || {};
   const convergence = psiEmaAnalysis.dimensions?.convergence || {};
-  const composite = psiEmaAnalysis.compositeSignal || {};
   const fidelity = psiEmaAnalysis.fidelity || {};
   const fundamentals = stockData.fundamentals || {};
   
@@ -476,9 +474,9 @@ function buildStockContext(preflight) {
     ? convergence.regime 
     : (convergence.regime?.label || summary.regime || 'N/A');
   
-  // Composite signal
-  const action = composite.action || summary.compositeSignal || 'HOLD';
-  const confidence = composite.confidence ?? summary.compositeConfidence ?? 'N/A';
+  // Phase signal (vφ⁴: no arbitrary composite - pure phase + z-score)
+  const action = summary.phaseSignal || 'HOLD';
+  const zScoreLevel = summary.anomalyLevel || 'N/A';
   
   // Build tetralemma alert if φ² crossed
   const tetralemmaAlert = psiEmaAnalysis.renewal?.tetralemma 
@@ -553,7 +551,7 @@ ${fundParts.map(p => `- ${p}`).join('\n')}`;
 | z (Price Deviation) | (Price - Median) / MAD | ${safeFixed(anomalyZ)}σ | ${anomalyLevel} |
 | R (Momentum Ratio) | z(t) / z(t-1) | ${convergenceR != null ? safeFixed(convergenceR) : 'N/A'} | ${regimeLabel} |
 
-**Composite**: ${action}
+**Phase Signal**: ${action} | **Anomaly Level**: ${zScoreLevel}
 ${tetralemmaAlert}
 ${fundamentalsSection}
 

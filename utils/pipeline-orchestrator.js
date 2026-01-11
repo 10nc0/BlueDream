@@ -660,18 +660,16 @@ MANDATORY INSTRUCTIONS:
       const stockData = state.preflight.stockData || {};
       const ticker = state.preflight.ticker;
       
-      // Daily timeframe data
+      // Daily timeframe data (vφ⁴: no composite signal - pure phase + z-score)
       const phase = analysis.dimensions?.phase || {};
       const anomaly = analysis.dimensions?.anomaly || {};
       const convergence = analysis.dimensions?.convergence || {};
-      const composite = analysis.compositeSignal || {};
       const fidelity = analysis.fidelity || {};
       
       // Weekly timeframe data (if available)
       const phaseW = analysisWeekly?.dimensions?.phase || {};
       const anomalyW = analysisWeekly?.dimensions?.anomaly || {};
       const convergenceW = analysisWeekly?.dimensions?.convergence || {};
-      const compositeW = analysisWeekly?.compositeSignal || {};
       const fidelityW = analysisWeekly?.fidelity || {};
       
       // Extract EDGAR fundamentals
@@ -750,7 +748,7 @@ STATUS: Patient shows healthy φ-convergence. Conservation laws intact.
       // Helper to format number or N/A
       const fmt = (v, decimals = 2) => (v != null && !isNaN(v)) ? v.toFixed(decimals) : 'N/A';
       
-      // Build weekly section with math
+      // Build weekly section with math (vφ⁴: phase + z-score only)
       let weeklySection = '';
       if (analysisWeekly) {
         weeklySection = `
@@ -758,7 +756,7 @@ STATUS: Patient shows healthy φ-convergence. Conservation laws intact.
 ├─ θ (Phase) = **${fmt(phaseW.current)}°** → ${phaseW.signal || 'N/A'}
 ├─ z (Anomaly) = **${fmt(anomalyW.current)}σ** → ${anomalyW.alert?.level || 'N/A'}
 └─ R (Convergence) = **${fmt(convergenceW.current)}** → ${convergenceW.regime?.label || convergenceW.regime || 'N/A'}
-   Composite: ${compositeW.action || 'HOLD'} (${compositeW.confidence || 'N/A'}% confidence)`;
+   **Decision**: ${phaseW.signal || 'HOLD'} @ ${anomalyW.alert?.level || 'N/A'} anomaly`;
       } else {
         weeklySection = `
 **WEEKLY (7d):** ⚠️ Unavailable (${weeklyUnavailableReason || 'Insufficient data <13 bars'})`;
@@ -786,7 +784,7 @@ caution is warranted.
 ├─ θ (Phase) = **${fmt(phase.current)}°** → ${phase.signal || 'N/A'}
 ├─ z (Anomaly) = **${fmt(anomaly.current)}σ** → ${anomaly.alert?.level || 'N/A'}
 └─ R (Convergence) = **${fmt(convergence.current)}** → ${convergence.regime?.label || convergence.regime || 'N/A'}
-   Composite: ${composite.action || 'HOLD'} (${composite.confidence || 'N/A'}% confidence)
+   **Decision**: ${phase.signal || 'HOLD'} @ ${anomaly.alert?.level || 'N/A'} anomaly
 ${weeklySection}
 
 ${clinicalSection}

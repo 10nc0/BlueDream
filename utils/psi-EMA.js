@@ -2145,7 +2145,7 @@ function generateClinicalReport(analysis, patientName = 'UNKNOWN', fetchedPrice 
   return {
     patient: patientName,
     admission: new Date().toISOString().split('T')[0],
-    complaint: analysis.summary?.compositeSignal || 'Routine Examination',
+    complaint: analysis.summary?.phaseSignal || 'Routine Examination',
     
     // Fetched price and timestamp for temporal anchoring
     fetchedPrice: fetchedPrice ? `$${fetchedPrice.toFixed(2)}` : 'N/A',
@@ -2257,23 +2257,14 @@ class PsiEMADashboard {
     const convergenceR = convergenceAnalysis.current;
     const renewal = detectPhiSquaredRenewal(stocks, convergenceR);
     
-    // Generate composite signal
-    const compositeSignal = this._generateCompositeSignal(
-      phaseAnalysis, 
-      anomalyAnalysis, 
-      convergenceAnalysis
-    );
-    
     return {
       summary: {
         periods: stocks.length,
         phaseSignal: phaseAnalysis.signal,
         anomalyLevel: anomalyAnalysis.alert?.level,
         regime: convergenceAnalysis.regime?.regime || 'UNKNOWN',
-        compositeSignal: compositeSignal.action,
-        compositeConfidence: compositeSignal.confidence,
         fidelity: fidelity.breakdown,
-        version: 'vφ³'  // Second Life
+        version: 'vφ⁴'  // Falsifiable refactor - composite removed
       },
       dimensions: {
         phase: phaseAnalysis,
@@ -2284,18 +2275,16 @@ class PsiEMADashboard {
       derivatives,
       correction,
       renewal,
-      compositeSignal,
-      interpretation: this._generateInterpretation(phaseAnalysis, anomalyAnalysis, convergenceAnalysis, compositeSignal),
+      interpretation: this._generateInterpretation(phaseAnalysis, anomalyAnalysis, convergenceAnalysis),
       
-      // vφ³: Epistemic status - honest labels distinguishing technical from symbolic
+      // vφ⁴: Epistemic status - honest labels distinguishing technical from symbolic
       epistemicStatus: {
         phase: 'normalized_cycle_position_indicator',
         anomaly: 'robust_statistical_heuristic (MAD-scaled)',
-        convergence: 'symbolic_momentum_proxy',
+        convergence: 'symbolic_momentum_proxy (R² diagnostic only)',
         phi_correction: 'illustrative_damping_heuristic',
         phi_elements: 'symbolic_overlay — not empirical law',
-        composite: 'weighted_multi_factor_signal',
-        overall: 'composite_technical_framework'
+        overall: 'phase + z-score falsifiable framework'
       }
     };
   }
@@ -2338,71 +2327,7 @@ class PsiEMADashboard {
     return flows;
   }
   
-  _generateCompositeSignal(phase, anomaly, convergence) {
-    let bullishScore = 0;
-    let bearishScore = 0;
-    let confidence = 0;
-    
-    // Phase contribution (weight: 40%)
-    if (phase.signal === 'BUY' || phase.signal === 'HOLD_LONG') {
-      bullishScore += 40;
-    } else if (phase.signal === 'SELL' || phase.signal === 'HOLD_SHORT') {
-      bearishScore += 40;
-    }
-    
-    // Anomaly contribution (weight: 30%)
-    if (anomaly.alert) {
-      if (anomaly.alert.level === 'NORMAL') {
-        confidence += 10;
-      } else if (anomaly.alert.level === 'EXTREME') {
-        bearishScore += 20;  // Extreme = mean reversion expected
-      }
-    }
-    
-    // Convergence contribution (weight: 30%)
-    if (convergence.regime) {
-      if (convergence.regime.regime === 'CRITICAL') {
-        bullishScore += 20;
-        confidence += 20;
-      } else if (convergence.regime.regime === 'SUPER_CRITICAL') {
-        bearishScore += 30;
-      } else if (convergence.regime.regime === 'SUB_CRITICAL') {
-        bearishScore += 15;
-      }
-    }
-    
-    const netScore = bullishScore - bearishScore;
-    confidence = Math.min(95, confidence + Math.abs(netScore));
-    
-    let action, emoji;
-    if (netScore > 20) {
-      action = 'ACCUMULATE';
-      emoji = '🟢';
-    } else if (netScore > 0) {
-      action = 'HOLD_LONG';
-      emoji = '🟡';
-    } else if (netScore > -20) {
-      action = 'NEUTRAL';
-      emoji = '⚪';
-    } else if (netScore > -40) {
-      action = 'REDUCE';
-      emoji = '🟠';
-    } else {
-      action = 'EXIT';
-      emoji = '🔴';
-    }
-    
-    return {
-      action,
-      emoji,
-      bullishScore,
-      bearishScore,
-      netScore,
-      confidence
-    };
-  }
-  
-  _generateInterpretation(phase, anomaly, convergence, composite) {
+  _generateInterpretation(phase, anomaly, convergence) {
     const lines = [];
     
     lines.push(`## Ψ-EMA DASHBOARD ANALYSIS`);
@@ -2431,10 +2356,12 @@ class PsiEMADashboard {
       lines.push('');
     }
     
-    // Composite
-    lines.push(`### Composite Signal`);
-    lines.push(`${composite.emoji} **${composite.action}** (Confidence: ${composite.confidence}%)`);
-    lines.push(`Net Score: ${composite.netScore} (Bullish: ${composite.bullishScore}, Bearish: ${composite.bearishScore})`);
+    // Summary (phase + z-score only - no arbitrary weighting)
+    lines.push(`### Signal Summary`);
+    const phaseEmoji = phase.interpretation?.emoji || '⚪';
+    const anomalyEmoji = anomaly.alert?.emoji || '⚪';
+    lines.push(`${phaseEmoji} Phase: **${phase.signal}** | ${anomalyEmoji} Anomaly: **${anomaly.alert?.level || 'N/A'}**`);
+    lines.push(`Regime: ${convergence.regime?.regime || 'UNKNOWN'} (R² diagnostic)`);
     
     return lines.join('\n');
   }
@@ -2451,7 +2378,8 @@ class PsiEMADashboard {
       regime: analysis.summary.regime,
       phase: analysis.dimensions.phase.interpretation?.phase,
       anomaly: `${analysis.dimensions.anomaly.current?.toFixed(1)}σ`,
-      signal: analysis.summary.compositeSignal
+      phaseSignal: analysis.summary.phaseSignal,
+      anomalyLevel: analysis.summary.anomalyLevel
     };
   }
 }

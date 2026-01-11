@@ -33,7 +33,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Executive Formatter**: Post-processing layer (`utils/executive-formatter.js`) that strips conversational filler from audit responses for executive-style brevity. Supports bilingual ID/EN patterns for apologies, pleasantries, and self-references while preserving data integrity.
 - **AI Playground**: Public, unauthenticated multimodal AI playground featuring multi-file upload, dynamic capacity sharing, abuse prevention, query classification, smart retry, document parsing, and real-time knowledge search. It uses a 7-stage state machine for AI processing and a sliding window memory.
 - **Nyan Protocol**: A system prompt framework utilizing a Seed Metric for historical comparison and socio-economic analysis to prevent LLM hallucinations.
-- **Specialized AI Systems**: Includes a Financial Physics System, Legal Document Analysis System, and Ψ-EMA System for time series analysis.
+- **Specialized AI Systems**: Includes a Financial Physics System, Legal Document Analysis System, and Ψ-EMA System (vφ⁴) for time series analysis. Ψ-EMA uses pure phase + z-score framework (no arbitrary composite weighting) for falsifiable signal detection.
 - **Unified Personality Layer**: Enforces formatting and maintains epistemic transparency.
 - **Mode Registry**: Plug-and-play configuration for the 7-stage pipeline, supporting modes like `psi-ema`, `forex`, `seed-metric`, `legal`, and `code-audit`.
 - **Code Audit Mode**: Professional security auditor for uploaded code files across multiple languages.
