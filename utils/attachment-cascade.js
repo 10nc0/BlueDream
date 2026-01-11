@@ -811,6 +811,15 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         
         // Add structured harm-reduction template for chemistry queries (DDG fallback)
         contextText += createChemistryEnrichmentTemplate(results.compoundContext.name);
+    } else if (knownCompoundName || formula) {
+        // Fallback: DDG/Wikipedia failed but Vision identified a compound
+        // Still inject template so AI can use its knowledge to fill it out
+        const fallbackName = knownCompoundName || formula;
+        console.log(`🧪 Chemistry Enrichment: DDG/Wikipedia failed, using template fallback for "${fallbackName}"`);
+        contextText += `\n### 🔬 Compound Analysis (${fallbackName}):\n`;
+        contextText += `Vision identified this compound but external verification was unavailable.\n`;
+        contextText += `Use your chemistry knowledge to describe this compound.\n`;
+        contextText += createChemistryEnrichmentTemplate(fallbackName);
     }
     
     // Add formula context only if different from main compound
