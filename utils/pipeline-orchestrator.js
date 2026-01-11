@@ -748,15 +748,15 @@ STATUS: Patient shows healthy φ-convergence. Conservation laws intact.
       // Helper to format number or N/A
       const fmt = (v, decimals = 2) => (v != null && !isNaN(v)) ? v.toFixed(decimals) : 'N/A';
       
-      // Build weekly section with math (vφ⁴: phase + z-score only)
+      // Build weekly section with math (vφ⁴: φ-orbital reading)
       let weeklySection = '';
       if (analysisWeekly) {
         weeklySection = `
 **WEEKLY (7d candles, 13-month window)** [${weeklyGradeEmoji} ${fidelityW.grade || '?'} grade, ${fidelityW.percent || 'N/A'}% fidelity]
-├─ θ (Phase) = **${fmt(phaseW.current)}°** → ${phaseW.signal || 'N/A'}
-├─ z (Anomaly) = **${fmt(anomalyW.current)}σ** → ${anomalyW.alert?.level || 'N/A'}
-└─ R (Convergence) = **${fmt(convergenceW.current)}** → ${convergenceW.regime?.label || convergenceW.regime || 'N/A'}
-   **Decision**: ${phaseW.signal || 'HOLD'} @ ${anomalyW.alert?.level || 'N/A'} anomaly`;
+├─ θ (Phase) = **${fmt(phaseW.current)}°**
+├─ z (Anomaly) = **${fmt(anomalyW.current)}σ**
+├─ R (Convergence) = **${fmt(convergenceW.current)}**
+└─ **Reading**: ${analysisWeekly.reading?.emoji || '⚪'} ${analysisWeekly.reading?.reading || analysisWeekly.summary?.reading || 'N/A'}`;
       } else {
         weeklySection = `
 **WEEKLY (7d):** ⚠️ Unavailable (${weeklyUnavailableReason || 'Insufficient data <13 bars'})`;
@@ -781,10 +781,10 @@ and **whether the trend can sustain** (R convergence). When all three align,
 caution is warranted.
 
 **DAILY (1d candles, 3-month window)** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade, ${fidelity.percent || 'N/A'}% fidelity]
-├─ θ (Phase) = **${fmt(phase.current)}°** → ${phase.signal || 'N/A'}
-├─ z (Anomaly) = **${fmt(anomaly.current)}σ** → ${anomaly.alert?.level || 'N/A'}
-└─ R (Convergence) = **${fmt(convergence.current)}** → ${convergence.regime?.label || convergence.regime || 'N/A'}
-   **Decision**: ${phase.signal || 'HOLD'} @ ${anomaly.alert?.level || 'N/A'} anomaly
+├─ θ (Phase) = **${fmt(phase.current)}°**
+├─ z (Anomaly) = **${fmt(anomaly.current)}σ**
+├─ R (Convergence) = **${fmt(convergence.current)}**
+└─ **Reading**: ${analysis.reading?.emoji || '⚪'} ${analysis.reading?.reading || analysis.summary?.reading || 'N/A'}
 ${weeklySection}
 
 ${clinicalSection}

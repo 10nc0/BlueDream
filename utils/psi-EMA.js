@@ -204,6 +204,138 @@ function stdDev(arr) {
 }
 
 /**
+ * Derive market reading from R, z, and theta using φ-orbital decision tree
+ * 
+ * vφ⁴: Falsifiable reading based on φ-thresholds only (no arbitrary weighting)
+ * 
+ * Decision tree:
+ * - R undefined/null → Consolidation
+ * - R < 0 → Local Bottom (z<0) or Local Top (z>0)
+ * - R < φ⁻² (0.382) → Reversal (z>0) or Continuation (z≤0)
+ * - R < φ⁻¹ (0.618) → Optimism (z>0) or Fatalism (z≤0)
+ * - R < φ (1.618) → Breathing (z>0 and z<φ²) or False Breakout
+ * - R ≥ φ → Bull Trend Signal (|z|≤φ² and θ>0) or False Positive Bull Signal
+ * 
+ * @param {Object} params - Analysis parameters
+ * @param {number|null} params.R - Convergence ratio (z(t)/z(t-1))
+ * @param {number} params.z - Current z-score (anomaly)
+ * @param {number} params.theta - Current phase angle in degrees
+ * @returns {Object} { reading, emoji, description }
+ */
+function deriveReading({ R, z, theta }) {
+  // φ-derived thresholds (no arbitrary numbers)
+  const PHI_INV_SQ = PHI_INV_SQUARED;  // 0.382
+  const PHI_INV = PHI_INVERSE;          // 0.618
+  const PHI_VAL = PHI;                  // 1.618
+  const PHI_SQ = PHI_SQUARED;           // 2.618
+  
+  // Null-safe z and theta
+  const zVal = z ?? 0;
+  const thetaVal = theta ?? 0;
+  
+  // R undefined/null/NaN → Consolidation
+  if (R == null || isNaN(R)) {
+    return {
+      reading: 'Consolidation',
+      emoji: '⚪',
+      description: 'R undefined — no momentum signal, market in consolidation'
+    };
+  }
+  
+  // R < 0 → Local extremes (momentum reversal)
+  if (R < 0) {
+    if (zVal < 0) {
+      return {
+        reading: 'Local Bottom',
+        emoji: '🟢',
+        description: 'R<0, z<0 — technical reversal expected (local bottom)'
+      };
+    } else {
+      return {
+        reading: 'Local Top',
+        emoji: '🔴',
+        description: 'R<0, z>0 — technical reversal expected (local top)'
+      };
+    }
+  }
+  
+  // R < φ⁻² (0.382) → Weak momentum zone
+  if (R < PHI_INV_SQ) {
+    if (zVal > 0) {
+      return {
+        reading: 'Reversal',
+        emoji: '🟡',
+        description: 'R<0.382, z>0 — weak momentum with positive deviation, potential reversal'
+      };
+    } else {
+      return {
+        reading: 'Continuation',
+        emoji: '🔵',
+        description: 'R<0.382, z≤0 — weak momentum continuing current trend'
+      };
+    }
+  }
+  
+  // R < φ⁻¹ (0.618) → Moderate momentum zone
+  if (R < PHI_INV) {
+    if (zVal > 0) {
+      return {
+        reading: 'Optimism',
+        emoji: '🟢',
+        description: 'R∈[0.382,0.618), z>0 — moderate sustainable momentum with positive outlook'
+      };
+    } else {
+      return {
+        reading: 'Fatalism',
+        emoji: '🟠',
+        description: 'R∈[0.382,0.618), z≤0 — moderate momentum but negative deviation'
+      };
+    }
+  }
+  
+  // R < φ (1.618) → Strong momentum zone
+  if (R < PHI_VAL) {
+    if (zVal > 0 && zVal < PHI_SQ) {
+      return {
+        reading: 'Breathing',
+        emoji: '🟢',
+        description: 'R∈[0.618,1.618), z∈(0,φ²) — healthy oscillation within φ-band'
+      };
+    } else {
+      return {
+        reading: 'False Breakout',
+        emoji: '🟠',
+        description: 'R∈[0.618,1.618), z≤0 or z≥φ² — breakout signal lacks confirmation'
+      };
+    }
+  }
+  
+  // R ≥ φ (1.618) → Extreme momentum zone
+  if (Math.abs(zVal) > PHI_SQ) {
+    return {
+      reading: 'False Positive Bull Signal',
+      emoji: '🔴',
+      description: 'R≥φ, |z|>φ² — extreme deviation suggests unsustainable momentum'
+    };
+  }
+  
+  // R ≥ φ, |z| ≤ φ² → Check theta for trend confirmation
+  if (thetaVal > 0) {
+    return {
+      reading: 'Bull Trend Signal',
+      emoji: '🟢',
+      description: 'R≥φ, |z|≤φ², θ>0 — strong sustainable bull trend confirmed'
+    };
+  } else {
+    return {
+      reading: 'False Positive Bull Signal',
+      emoji: '🟠',
+      description: 'R≥φ, |z|≤φ², θ≤0 — strong R but phase not confirming bull trend'
+    };
+  }
+}
+
+/**
  * Calculate Median Absolute Deviation (MAD) - robust dispersion measure
  * Less sensitive to outliers than standard deviation
  * @param {number[]} arr - Array of values
@@ -2145,7 +2277,7 @@ function generateClinicalReport(analysis, patientName = 'UNKNOWN', fetchedPrice 
   return {
     patient: patientName,
     admission: new Date().toISOString().split('T')[0],
-    complaint: analysis.summary?.phaseSignal || 'Routine Examination',
+    complaint: analysis.summary?.reading || 'Routine Examination',
     
     // Fetched price and timestamp for temporal anchoring
     fetchedPrice: fetchedPrice ? `$${fetchedPrice.toFixed(2)}` : 'N/A',
@@ -2257,34 +2389,44 @@ class PsiEMADashboard {
     const convergenceR = convergenceAnalysis.current;
     const renewal = detectPhiSquaredRenewal(stocks, convergenceR);
     
+    // vφ⁴: Derive reading from R, z, theta using φ-orbital decision tree
+    const reading = deriveReading({
+      R: convergenceR,
+      z: currentZ,
+      theta: phaseAnalysis.current
+    });
+    
     return {
       summary: {
         periods: stocks.length,
         phaseSignal: phaseAnalysis.signal,
         anomalyLevel: anomalyAnalysis.alert?.level,
         regime: convergenceAnalysis.regime?.regime || 'UNKNOWN',
+        reading: reading.reading,
+        readingEmoji: reading.emoji,
         fidelity: fidelity.breakdown,
-        version: 'vφ⁴'  // Falsifiable refactor - composite removed
+        version: 'vφ⁴'  // Falsifiable refactor - φ-orbital reading
       },
       dimensions: {
         phase: phaseAnalysis,
         anomaly: anomalyAnalysis,
         convergence: convergenceAnalysis
       },
+      reading,
       fidelity,
       derivatives,
       correction,
       renewal,
-      interpretation: this._generateInterpretation(phaseAnalysis, anomalyAnalysis, convergenceAnalysis),
+      interpretation: this._generateInterpretation(phaseAnalysis, anomalyAnalysis, convergenceAnalysis, reading),
       
       // vφ⁴: Epistemic status - honest labels distinguishing technical from symbolic
       epistemicStatus: {
         phase: 'normalized_cycle_position_indicator',
         anomaly: 'robust_statistical_heuristic (MAD-scaled)',
-        convergence: 'symbolic_momentum_proxy (R² diagnostic only)',
-        phi_correction: 'illustrative_damping_heuristic',
+        convergence: 'momentum_ratio_for_reading_derivation',
+        reading: 'φ-orbital_decision_tree (falsifiable)',
         phi_elements: 'symbolic_overlay — not empirical law',
-        overall: 'phase + z-score falsifiable framework'
+        overall: 'R + z + θ → reading (no arbitrary weighting)'
       }
     };
   }
@@ -2327,7 +2469,7 @@ class PsiEMADashboard {
     return flows;
   }
   
-  _generateInterpretation(phase, anomaly, convergence) {
+  _generateInterpretation(phase, anomaly, convergence, reading) {
     const lines = [];
     
     lines.push(`## Ψ-EMA DASHBOARD ANALYSIS`);
@@ -2337,31 +2479,25 @@ class PsiEMADashboard {
     lines.push(`### Phase θ (Cycle Position)`);
     lines.push(`Current: ${phase.current?.toFixed(1)}° ${phase.interpretation?.emoji || ''}`);
     lines.push(`EMA-34: ${phase.ema34?.toFixed(1)}° | EMA-55: ${phase.ema55?.toFixed(1)}°`);
-    lines.push(`Signal: **${phase.crossover?.description || phase.signal}**`);
     lines.push('');
     
     // Anomaly
     lines.push(`### Anomaly z (Deviation Strength)`);
     lines.push(`Current: ${anomaly.current?.toFixed(2)}σ ${anomaly.alert?.emoji || ''}`);
-    lines.push(`Level: **${anomaly.alert?.level}** - ${anomaly.alert?.description}`);
-    lines.push(`Action: ${anomaly.alert?.action}`);
+    lines.push(`Level: **${anomaly.alert?.level}**`);
     lines.push('');
     
     // Convergence
     if (convergence.regime) {
-      lines.push(`### Convergence R (Sustainability)`);
+      lines.push(`### Convergence R (Momentum Ratio)`);
       lines.push(`Current R: ${convergence.current?.toFixed(3)} | φ = ${PHI.toFixed(3)}`);
-      lines.push(`Regime: **${convergence.regime.label}** ${convergence.regime.emoji}`);
-      lines.push(`φ-Deviation: ${convergence.phiAlert?.deviation} (${convergence.phiAlert?.level})`);
       lines.push('');
     }
     
-    // Summary (phase + z-score only - no arbitrary weighting)
-    lines.push(`### Signal Summary`);
-    const phaseEmoji = phase.interpretation?.emoji || '⚪';
-    const anomalyEmoji = anomaly.alert?.emoji || '⚪';
-    lines.push(`${phaseEmoji} Phase: **${phase.signal}** | ${anomalyEmoji} Anomaly: **${anomaly.alert?.level || 'N/A'}**`);
-    lines.push(`Regime: ${convergence.regime?.regime || 'UNKNOWN'} (R² diagnostic)`);
+    // Reading (vφ⁴: single clear output from φ-orbital decision tree)
+    lines.push(`### Reading`);
+    lines.push(`${reading?.emoji || '⚪'} **${reading?.reading || 'Unknown'}**`);
+    lines.push(`${reading?.description || ''}`);
     
     return lines.join('\n');
   }
@@ -2378,8 +2514,8 @@ class PsiEMADashboard {
       regime: analysis.summary.regime,
       phase: analysis.dimensions.phase.interpretation?.phase,
       anomaly: `${analysis.dimensions.anomaly.current?.toFixed(1)}σ`,
-      phaseSignal: analysis.summary.phaseSignal,
-      anomalyLevel: analysis.summary.anomalyLevel
+      reading: analysis.summary.reading,
+      readingEmoji: analysis.summary.readingEmoji
     };
   }
 }

@@ -474,9 +474,10 @@ function buildStockContext(preflight) {
     ? convergence.regime 
     : (convergence.regime?.label || summary.regime || 'N/A');
   
-  // Phase signal (vφ⁴: no arbitrary composite - pure phase + z-score)
-  const action = summary.phaseSignal || 'HOLD';
-  const zScoreLevel = summary.anomalyLevel || 'N/A';
+  // vφ⁴: φ-orbital reading from decision tree
+  const reading = psiEmaAnalysis.reading || {};
+  const readingText = reading.reading || summary.reading || 'N/A';
+  const readingEmoji = reading.emoji || summary.readingEmoji || '⚪';
   
   // Build tetralemma alert if φ² crossed
   const tetralemmaAlert = psiEmaAnalysis.renewal?.tetralemma 
@@ -551,7 +552,7 @@ ${fundParts.map(p => `- ${p}`).join('\n')}`;
 | z (Price Deviation) | (Price - Median) / MAD | ${safeFixed(anomalyZ)}σ | ${anomalyLevel} |
 | R (Momentum Ratio) | z(t) / z(t-1) | ${convergenceR != null ? safeFixed(convergenceR) : 'N/A'} | ${regimeLabel} |
 
-**Phase Signal**: ${action} | **Anomaly Level**: ${zScoreLevel}
+**Reading**: ${readingEmoji} ${readingText}
 ${tetralemmaAlert}
 ${fundamentalsSection}
 
