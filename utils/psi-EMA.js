@@ -1888,7 +1888,8 @@ function analyzeConvergence(absRatios, options = {}) {
   
   return {
     dimension: 'CONVERGENCE_R',
-    current: currentR,  // Always return computed R; hasLowSignal is informational only
+    current: hasLowSignal ? null : currentR,  // Gated for regime classification
+    currentDisplay: currentR,  // Always available for display regardless of signal quality
     ema13: currentEMA13,
     ema21: currentEMA21,
     crossover,
@@ -2398,7 +2399,8 @@ class PsiEMADashboard {
     const correction = predictPhiCorrection(zFlowResult.currentZ || 0);
     
     // φ² renewal detection (pass convergence R for tetralemma check)
-    const convergenceR = convergenceAnalysis.current;
+    // Use currentDisplay for deriveReading (always shows R), current for regime logic (gated)
+    const convergenceR = convergenceAnalysis.currentDisplay ?? convergenceAnalysis.current;
     const renewal = detectPhiSquaredRenewal(stocks, convergenceR);
     
     // vφ⁴: Derive reading from R, z, theta using φ-orbital decision tree
