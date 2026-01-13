@@ -749,13 +749,15 @@ STATUS: Patient shows healthy φ-convergence. Conservation laws intact.
       const fmt = (v, decimals = 2) => (v != null && !isNaN(v)) ? v.toFixed(decimals) : 'N/A';
       
       // Build weekly section with math (vφ⁴: φ-orbital reading)
+      // Use currentDisplay for R (always available) instead of gated current
       let weeklySection = '';
       if (analysisWeekly) {
+        const rWeekly = convergenceW.currentDisplay ?? convergenceW.current;
         weeklySection = `
 **WEEKLY (7d candles, 13-month window)** [${weeklyGradeEmoji} ${fidelityW.grade || '?'} grade, ${fidelityW.percent || 'N/A'}% fidelity]
 ├─ θ (Phase) = **${fmt(phaseW.current)}°**
 ├─ z (Anomaly) = **${fmt(anomalyW.current)}σ**
-├─ R (Convergence) = **${fmt(convergenceW.current)}**
+├─ R (Convergence) = **${fmt(rWeekly)}**
 └─ **Reading**: ${analysisWeekly.reading?.emoji || '⚪'} ${analysisWeekly.reading?.reading || analysisWeekly.summary?.reading || 'N/A'}`;
       } else {
         weeklySection = `
@@ -783,7 +785,7 @@ caution is warranted.
 **DAILY (1d candles, 3-month window)** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade, ${fidelity.percent || 'N/A'}% fidelity]
 ├─ θ (Phase) = **${fmt(phase.current)}°**
 ├─ z (Anomaly) = **${fmt(anomaly.current)}σ**
-├─ R (Convergence) = **${fmt(convergence.current)}**
+├─ R (Convergence) = **${fmt(convergence.currentDisplay ?? convergence.current)}**
 └─ **Reading**: ${analysis.reading?.emoji || '⚪'} ${analysis.reading?.reading || analysis.summary?.reading || 'N/A'}
 ${weeklySection}
 

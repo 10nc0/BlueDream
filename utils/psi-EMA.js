@@ -2137,23 +2137,22 @@ function detectPathogens(analysis) {
   }
   
   const currentZ = anomaly.current || 0;
-  const currentR = convergence.current;
+  // Use currentDisplay (always available) for pathogen detection
+  const currentR = convergence.currentDisplay ?? convergence.current;
   const regime = convergence.regime?.regime || 'UNKNOWN';
-  const hasLowSignal = convergence.hasLowSignal || false;
   const warning = convergence.warning || null;
   
-  // CRITICAL FIX (Dec 23, 2025): If R is undefined (low z-score), no pathogen detection
-  // Low z at high price = consolidation at highs, NOT decay
-  if (regime === 'UNDEFINED' || hasLowSignal || currentR === null || currentR === undefined) {
+  // Only return consolidation if R is truly unavailable (null/undefined)
+  if (currentR === null || currentR === undefined) {
     return {
       detected: [],
       healthy: true,
       consolidating: true,
       diagnosis: '⚪ R Undefined (Consolidation Zone)',
       pathogens: [],
-      warning: warning || 'R ratio unstable due to z-scores near zero. Price may be consolidating at highs.',
+      warning: warning || 'R ratio unavailable - insufficient z-score pairs.',
       vitalSigns: {
-        R_ratio: currentR ?? 'undefined',
+        R_ratio: 'undefined',
         z_score: currentZ,
         regime: 'UNDEFINED'
       }

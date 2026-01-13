@@ -470,9 +470,21 @@ function buildStockContext(preflight) {
   const anomalyZ = anomaly.current;  // z-score (e.g., -0.44)
   const anomalyLevel = anomaly.alert?.level || summary.anomalyLevel || 'N/A';
   const convergenceR = convergence.currentDisplay ?? convergence.current;  // R ratio - use currentDisplay (always available)
-  const regimeLabel = typeof convergence.regime === 'string' 
-    ? convergence.regime 
-    : (convergence.regime?.label || summary.regime || 'N/A');
+  // Derive regime label from actual R value when available (not from gated regime)
+  let regimeLabel;
+  if (convergenceR != null && !isNaN(convergenceR)) {
+    // Derive meaningful signal from R value using φ-thresholds
+    if (convergenceR < 0) regimeLabel = 'Reversal';
+    else if (convergenceR < 0.382) regimeLabel = 'Weak';
+    else if (convergenceR < 0.618) regimeLabel = 'Moderate';
+    else if (convergenceR < 1.618) regimeLabel = 'Healthy';
+    else if (convergenceR < 2.618) regimeLabel = 'Strong';
+    else regimeLabel = 'Extreme';
+  } else {
+    regimeLabel = typeof convergence.regime === 'string' 
+      ? convergence.regime 
+      : (convergence.regime?.label || summary.regime || 'N/A');
+  }
   
   // vφ⁴: φ-orbital reading from decision tree
   const reading = psiEmaAnalysis.reading || {};
