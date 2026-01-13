@@ -1388,17 +1388,18 @@ function calculatePhiConvergence(zFlows) {
     }
   }
   
-  // Count LOW_SIGNAL cases from ALL results (not just valid ones)
+  // Count LOW_SIGNAL cases from ALL results (for warnings/diagnostics)
   const lowSignalCount = allResults.filter(r => r.status === 'LOW_SIGNAL' || r.status === 'INSUFFICIENT_DATA').length;
-  const lowSignalRatio = lowSignalCount / allResults.length;
+  const lowSignalRatio = allResults.length > 0 ? lowSignalCount / allResults.length : 0;
   
-  // CRITICAL: Check if MOST RECENT result is LOW_SIGNAL (current z near zero)
+  // Check if MOST RECENT result is LOW_SIGNAL (current z near zero)
   const mostRecentResult = allResults[allResults.length - 1];
   const currentIsLowSignal = mostRecentResult && 
     (mostRecentResult.status === 'LOW_SIGNAL' || mostRecentResult.status === 'INSUFFICIENT_DATA');
   
-  // hasLowSignal is true if current is low signal OR >30% of all results are low signal
-  const hasLowSignal = currentIsLowSignal || lowSignalRatio > 0.3;
+  // hasLowSignal for warnings/trend classification, but NOT a gate for R computation
+  // R is always computed if we have valid pairs; hasLowSignal is informational only
+  const hasLowSignal = currentIsLowSignal || lowSignalRatio > 0.5;  // Raised from 30% to 50%
   
   if (ratios.length === 0) {
     return { 
@@ -1887,7 +1888,7 @@ function analyzeConvergence(absRatios, options = {}) {
   
   return {
     dimension: 'CONVERGENCE_R',
-    current: hasLowSignal ? null : currentR,
+    current: currentR,  // Always return computed R; hasLowSignal is informational only
     ema13: currentEMA13,
     ema21: currentEMA21,
     crossover,
