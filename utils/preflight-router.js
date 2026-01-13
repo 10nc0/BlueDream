@@ -496,79 +496,50 @@ function buildStockContext(preflight) {
     ? `\n${psiEmaAnalysis.renewal.tetralemma.warning}\nTetralemma: (10)Bubble (01)Breakthrough (11)Both (00)Neither - Investigate fundamentals.`
     : '';
   
-  // Build Robinhood-style company header
+  // Build compact company header (no duplication)
   let companyHeader = '';
-  const sectorIndustry = [fundamentals.sector, fundamentals.industry].filter(Boolean).join(' · ');
-  const companySummary = fundamentals.summary || '';
+  const sectorIndustry = [fundamentals.sector, fundamentals.industry].filter(Boolean).join(' / ');
   const atomicUnits = fundamentals.atomicUnits || [];
   
-  if (sectorIndustry || companySummary || atomicUnits.length > 0) {
-    // Format atomic units with state/flow/guard distinction
-    let atomicUnitsFormatted = '';
-    if (atomicUnits.length > 0) {
-      const stateUnits = atomicUnits.filter(u => u.includes('(state)')).map(u => u.replace(' (state)', ''));
-      const flowUnits = atomicUnits.filter(u => u.includes('(flow)')).map(u => u.replace(' (flow)', ''));
-      const guardUnits = atomicUnits.filter(u => u.includes('(guard)')).map(u => u.replace(' (guard)', ''));
-      
-      const parts = [];
-      if (stateUnits.length > 0) parts.push(`**State**: ${stateUnits.join(', ')}`);
-      if (flowUnits.length > 0) parts.push(`**Flow**: ${flowUnits.join(', ')}`);
-      if (guardUnits.length > 0) parts.push(`**Guard**: ${guardUnits.join(', ')}`);
-      
-      if (parts.length > 0) {
-        atomicUnitsFormatted = `\n**Atomic Units**:\n${parts.join('\n')}`;
-      }
-    }
-    
-    companyHeader = `
-### ${stockData.name || ticker} (${ticker})
-${sectorIndustry ? `**${sectorIndustry}**` : ''}
-${companySummary ? `\n${companySummary}.` : ''}
-${atomicUnitsFormatted}
+  // Format atomic units inline
+  let atomicUnitsLine = '';
+  if (atomicUnits.length > 0) {
+    const stateUnits = atomicUnits.filter(u => u.includes('(state)')).map(u => u.replace(' (state)', ''));
+    const flowUnits = atomicUnits.filter(u => u.includes('(flow)')).map(u => u.replace(' (flow)', ''));
+    const guardUnits = atomicUnits.filter(u => u.includes('(guard)')).map(u => u.replace(' (guard)', ''));
+    const parts = [];
+    if (stateUnits.length > 0) parts.push(`State: ${stateUnits.join(', ')}`);
+    if (flowUnits.length > 0) parts.push(`Flow: ${flowUnits.join(', ')}`);
+    if (guardUnits.length > 0) parts.push(`Guard: ${guardUnits.join(', ')}`);
+    if (parts.length > 0) atomicUnitsLine = `\nAtomic: ${parts.join(' | ')}`;
+  }
+  
+  companyHeader = `### ${stockData.name || ticker} (${ticker})${sectorIndustry ? ` — ${sectorIndustry}` : ''}${atomicUnitsLine}
 `;
+  
+  // Format compact fundamentals (inline)
+  const fundParts = [];
+  if (fundamentals.peRatio) fundParts.push(`P/E: ${safeFixed(fundamentals.peRatio)}`);
+  if (fundamentals.forwardPE) fundParts.push(`Fwd P/E: ${safeFixed(fundamentals.forwardPE)}`);
+  if (fundamentals.marketCap) fundParts.push(`MCap: ${formatMarketCap(fundamentals.marketCap)}`);
+  if (fundamentals.fiftyTwoWeekHigh && fundamentals.fiftyTwoWeekLow) {
+    fundParts.push(`52W: $${safeFixed(fundamentals.fiftyTwoWeekLow)}-$${safeFixed(fundamentals.fiftyTwoWeekHigh)}`);
   }
+  const fundamentalsLine = fundParts.length > 0 ? fundParts.join(' | ') : '';
   
-  // Format fundamentals section if available
-  let fundamentalsSection = '';
-  if (Object.keys(fundamentals).length > 0) {
-    const peRatio = fundamentals.peRatio ? `**P/E Ratio**: ${safeFixed(fundamentals.peRatio)}` : '';
-    const forwardPE = fundamentals.forwardPE ? `**Forward P/E**: ${safeFixed(fundamentals.forwardPE)}` : '';
-    const divYield = fundamentals.dividendYield != null ? `**Dividend Yield**: ${safeFixed(fundamentals.dividendYield)}%` : '';
-    const nextEarnings = fundamentals.nextEarningsDate ? `**Next Earnings**: ${fundamentals.nextEarningsDate}` : '';
-    const marketCap = fundamentals.marketCap ? `**Market Cap**: ${formatMarketCap(fundamentals.marketCap)}` : '';
-    const fiftyTwoWeekHigh = fundamentals.fiftyTwoWeekHigh ? `**52W High**: ${safeFixed(fundamentals.fiftyTwoWeekHigh)}` : '';
-    const fiftyTwoWeekLow = fundamentals.fiftyTwoWeekLow ? `**52W Low**: ${safeFixed(fundamentals.fiftyTwoWeekLow)}` : '';
-    
-    const fundParts = [peRatio, forwardPE, divYield, nextEarnings, marketCap, fiftyTwoWeekHigh, fiftyTwoWeekLow].filter(Boolean);
-    if (fundParts.length > 0) {
-      fundamentalsSection = `
-### FUNDAMENTALS (SEC EDGAR):
-${fundParts.map(p => `- ${p}`).join('\n')}`;
-    }
-  }
-  
-  // Build fidelity line (per-dimension, no aggregate)
-  const fidelityBreakdown = fidelity.breakdown || 'N/A';
-  const confidenceLine = `[${fidelityBreakdown}] → yfinance prices + SEC EDGAR fundamentals`;
-  
-  // Return ONLY the data - instructions are handled separately in getPsiEMAContext()
+  // Return compact data
   return `${companyHeader}
-**Ψ-EMA**: θ = cycle position, z = price deviation, R = momentum sustainability. Alignment = conviction; conflict = caution.
-
 **Price**: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} (${ageFlag} ${dataAge?.timestamp})
+${fundamentalsLine}
 
-### Ψ-EMA (3D State)
-| Dimension | Formula | Value | Signal |
-|-----------|---------|-------|--------|
-| θ (Cycle Position) | arctan(ΔEMA-55/ΔEMA-34) | ${safeFixed(phaseTheta)}° | ${phaseSignal} |
-| z (Price Deviation) | (Price - Median) / MAD | ${safeFixed(anomalyZ)}σ | ${anomalyLevel} |
-| R (Momentum Ratio) | z(t) / z(t-1) | ${convergenceR != null ? safeFixed(convergenceR) : 'N/A'} | ${regimeLabel} |
+**Ψ-EMA** (θ=cycle, z=deviation, R=momentum): alignment → conviction; conflict → caution.
+| Dim | Value | Signal |
+|-----|-------|--------|
+| θ | ${safeFixed(phaseTheta)}° | ${phaseSignal} |
+| z | ${safeFixed(anomalyZ)}σ | ${anomalyLevel} |
+| R | ${convergenceR != null ? safeFixed(convergenceR) : 'N/A'} | ${regimeLabel} |
 
-**Reading**: ${readingEmoji} ${readingText}
-${tetralemmaAlert}
-${fundamentalsSection}
-
-**Confidence**: ${confidenceLine}
+**Reading**: ${readingEmoji} ${readingText}${tetralemmaAlert}
 `;
 }
 

@@ -787,60 +787,35 @@ MANDATORY INSTRUCTIONS:
       // Helper to format number or N/A
       const fmt = (v, decimals = 2) => (v != null && !isNaN(v)) ? v.toFixed(decimals) : 'N/A';
       
-      // Build weekly section with math (vφ⁴: φ-orbital reading)
-      // Use currentDisplay for R (always available) instead of gated current
+      // Build weekly section (compact format)
       let weeklySection = '';
       if (analysisWeekly) {
         const rWeekly = convergenceW.currentDisplay ?? convergenceW.current;
         weeklySection = `
-**WEEKLY (7d candles, 13-month window)** [${weeklyGradeEmoji} ${fidelityW.grade || '?'} grade, ${fidelityW.percent || 'N/A'}% fidelity]
-├─ θ (Phase) = **${fmt(phaseW.current)}°**
-├─ z (Anomaly) = **${fmt(anomalyW.current)}σ**
-├─ R (Convergence) = **${fmt(rWeekly)}**
-└─ **Reading**: ${analysisWeekly.reading?.emoji || '⚪'} ${analysisWeekly.reading?.reading || analysisWeekly.summary?.reading || 'N/A'}`;
+**WEEKLY** [${weeklyGradeEmoji} ${fidelityW.percent || '?'}%]
+├─ θ=${fmt(phaseW.current)}° | z=${fmt(anomalyW.current)}σ | R=${fmt(rWeekly)}
+└─ ${analysisWeekly.reading?.emoji || '⚪'} ${analysisWeekly.reading?.reading || 'N/A'}`;
       } else {
         weeklySection = `
-**WEEKLY (7d):** ⚠️ Unavailable (${weeklyUnavailableReason || 'Insufficient data <13 bars'})`;
+**WEEKLY:** ⚠️ ${weeklyUnavailableReason || 'Insufficient data'}`;
       }
       
+      // Note: Fundamentals already in preflight context - don't duplicate here
+      
       psiEmaInstruction = `
-═══════════════════════════════════════════════════════════════════════════════
-STANDARD MARKET SNAPSHOT (Data: yfinance + SEC EDGAR)
-═══════════════════════════════════════════════════════════════════════════════
-**${ticker}** — ${stockData.currency || 'USD'} ${stockData.currentPrice?.toFixed(2) || 'N/A'} (as of ${priceTimestamp})
-${fundamentals.fiftyTwoWeekHigh ? `52-Week Range: $${fundamentals.fiftyTwoWeekLow?.toFixed(2) || 'N/A'} – $${fundamentals.fiftyTwoWeekHigh?.toFixed(2) || 'N/A'}` : ''}
-${fundamentals.peRatio ? `P/E Ratio: ${fundamentals.peRatio.toFixed(2)}` : ''}${fundamentals.forwardPE ? ` | Forward P/E: ${fundamentals.forwardPE.toFixed(2)}` : ''}
-${fundamentals.marketCap ? `Market Cap: $${(fundamentals.marketCap / 1e9).toFixed(2)}B` : ''}
-${fundamentals.sector ? `Sector: ${fundamentals.sector}${fundamentals.industry ? ` / ${fundamentals.industry}` : ''}` : ''}
+**Ψ-EMA** (θ=cycle, z=deviation, R=momentum): alignment → conviction; conflict → caution.
 
-═══════════════════════════════════════════════════════════════════════════════
-Ψ-EMA TREND ANALYSIS
-═══════════════════════════════════════════════════════════════════════════════
-Ψ-EMA measures three things: **where** a stock is in its price cycle (θ phase), 
-**how unusual** the current price is compared to recent history (z anomaly), 
-and **whether the trend can sustain** (R convergence). When all three align, 
-caution is warranted.
-
-**DAILY (1d candles, 3-month window)** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade, ${fidelity.percent || 'N/A'}% fidelity]
-├─ θ (Phase) = **${fmt(phase.current)}°**
-├─ z (Anomaly) = **${fmt(anomaly.current)}σ**
-├─ R (Convergence) = **${fmt(convergence.currentDisplay ?? convergence.current)}**
-└─ **Reading**: ${analysis.reading?.emoji || '⚪'} ${analysis.reading?.reading || analysis.summary?.reading || 'N/A'}
+**DAILY** [${dailyGradeEmoji} ${fidelity.percent || '?'}%]
+├─ θ=${fmt(phase.current)}° | z=${fmt(anomaly.current)}σ | R=${fmt(convergence.currentDisplay ?? convergence.current)}
+└─ ${analysis.reading?.emoji || '⚪'} ${analysis.reading?.reading || 'N/A'}
 ${weeklySection}
 
 ${clinicalSection}
 ${physicalAuditDisclaimer}
 
-═══════════════════════════════════════════════════════════════════════════════
-CONFIDENCE GRADING (NYAN Protocol Analysis Hierarchy)
-═══════════════════════════════════════════════════════════════════════════════
-• 95% = EXACT DATA (yfinance prices, SEC EDGAR fundamentals verified)
-• 80% = PROXY AVAILABLE (interpolated/estimated, flagged with *)
-• <50% = INSUFFICIENT DATA (honest refusal)
+📊 Confidence: 95% (yfinance + SEC EDGAR verified)
 
-INSTRUCTION: Present BOTH Standard Market Snapshot AND Ψ-EMA Diagnostics 
-(clearly separating conventional metrics from experimental analysis). 
-Include all computation math. End with 🔥 ~nyan.
+🔥 ~nyan
 `;
       console.log(`📊 Ψ-EMA dual-timeframe instruction injected for ${ticker} (daily + ${analysisWeekly ? 'weekly' : 'weekly unavailable'})`);
     }
