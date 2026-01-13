@@ -367,6 +367,7 @@ def fetch_stock_data(ticker: str, custom_period: str | None = None) -> dict:
         forward_pe = safe_float(info.get('forwardPE'))
         dividend_yield = safe_float(info.get('dividendYield'))
         market_cap = safe_float(info.get('marketCap'))
+        debt_to_equity = safe_float(info.get('debtToEquity'))
         sector = info.get('sector')
         industry = info.get('industry')
         
@@ -404,6 +405,7 @@ def fetch_stock_data(ticker: str, custom_period: str | None = None) -> dict:
             "forwardPE": forward_pe,
             "dividendYield": dividend_yield,
             "marketCap": market_cap,
+            "debtToEquity": debt_to_equity,
             "sector": sector,
             "industry": industry,
             "summary": business_summary,

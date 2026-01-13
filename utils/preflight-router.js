@@ -496,39 +496,43 @@ function buildStockContext(preflight) {
     ? `\n${psiEmaAnalysis.renewal.tetralemma.warning}\nTetralemma: (10)Bubble (01)Breakthrough (11)Both (00)Neither - Investigate fundamentals.`
     : '';
   
-  // Build compact company header (no duplication)
+  // Build company header
   let companyHeader = '';
   const sectorIndustry = [fundamentals.sector, fundamentals.industry].filter(Boolean).join(' / ');
   const atomicUnits = fundamentals.atomicUnits || [];
   
-  // Format atomic units inline
-  let atomicUnitsLine = '';
+  // Format atomic units (multi-line block)
+  let atomicSection = '';
   if (atomicUnits.length > 0) {
     const stateUnits = atomicUnits.filter(u => u.includes('(state)')).map(u => u.replace(' (state)', ''));
     const flowUnits = atomicUnits.filter(u => u.includes('(flow)')).map(u => u.replace(' (flow)', ''));
     const guardUnits = atomicUnits.filter(u => u.includes('(guard)')).map(u => u.replace(' (guard)', ''));
-    const parts = [];
-    if (stateUnits.length > 0) parts.push(`State: ${stateUnits.join(', ')}`);
-    if (flowUnits.length > 0) parts.push(`Flow: ${flowUnits.join(', ')}`);
-    if (guardUnits.length > 0) parts.push(`Guard: ${guardUnits.join(', ')}`);
-    if (parts.length > 0) atomicUnitsLine = `\nAtomic: ${parts.join(' | ')}`;
+    const lines = [];
+    if (stateUnits.length > 0) lines.push(`**State**: ${stateUnits.join(', ')}`);
+    if (flowUnits.length > 0) lines.push(`**Flow**: ${flowUnits.join(', ')}`);
+    if (guardUnits.length > 0) lines.push(`**Guard**: ${guardUnits.join(', ')}`);
+    if (lines.length > 0) {
+      atomicSection = `\n**Atomic Units**:\n${lines.join('\n')}`;
+    }
   }
   
-  companyHeader = `### ${stockData.name || ticker} (${ticker})${sectorIndustry ? ` — ${sectorIndustry}` : ''}${atomicUnitsLine}
-`;
+  companyHeader = `### ${stockData.name || ticker} (${ticker})${sectorIndustry ? ` — ${sectorIndustry}` : ''}`;
   
-  // Format compact fundamentals (inline)
+  // Format fundamentals (inline with D/E ratio)
   const fundParts = [];
   if (fundamentals.peRatio) fundParts.push(`P/E: ${safeFixed(fundamentals.peRatio)}`);
   if (fundamentals.forwardPE) fundParts.push(`Fwd P/E: ${safeFixed(fundamentals.forwardPE)}`);
   if (fundamentals.marketCap) fundParts.push(`MCap: ${formatMarketCap(fundamentals.marketCap)}`);
+  if (fundamentals.debtToEquity != null) fundParts.push(`D/E: ${safeFixed(fundamentals.debtToEquity)}`);
   if (fundamentals.fiftyTwoWeekHigh && fundamentals.fiftyTwoWeekLow) {
     fundParts.push(`52W: $${safeFixed(fundamentals.fiftyTwoWeekLow)}-$${safeFixed(fundamentals.fiftyTwoWeekHigh)}`);
   }
   const fundamentalsLine = fundParts.length > 0 ? fundParts.join(' | ') : '';
   
-  // Return compact data
+  // Return structured data
   return `${companyHeader}
+${atomicSection}
+
 **Price**: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} (${ageFlag} ${dataAge?.timestamp})
 ${fundamentalsLine}
 

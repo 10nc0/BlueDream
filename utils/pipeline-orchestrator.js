@@ -787,35 +787,44 @@ MANDATORY INSTRUCTIONS:
       // Helper to format number or N/A
       const fmt = (v, decimals = 2) => (v != null && !isNaN(v)) ? v.toFixed(decimals) : 'N/A';
       
-      // Build weekly section (compact format)
+      // Helper to get fidelity percentage (handles undefined, NaN, string 'N/A')
+      const getFidelityPct = (f) => {
+        if (f?.percent != null && !isNaN(Number(f.percent))) return Number(f.percent);
+        if (f?.pctUsable != null && !isNaN(Number(f.pctUsable))) return Math.round(Number(f.pctUsable) * 100);
+        return 0;
+      };
+      
+      // Build weekly section (full tree format)
       let weeklySection = '';
       if (analysisWeekly) {
         const rWeekly = convergenceW.currentDisplay ?? convergenceW.current;
+        const weeklyFidelityPct = getFidelityPct(fidelityW);
         weeklySection = `
-**WEEKLY** [${weeklyGradeEmoji} ${fidelityW.percent || '?'}%]
-├─ θ=${fmt(phaseW.current)}° | z=${fmt(anomalyW.current)}σ | R=${fmt(rWeekly)}
-└─ ${analysisWeekly.reading?.emoji || '⚪'} ${analysisWeekly.reading?.reading || 'N/A'}`;
+**WEEKLY (7d candles, 13-month window)** [${weeklyGradeEmoji} ${fidelityW.grade || '?'} grade, ${weeklyFidelityPct}% fidelity]
+├─ θ (Phase) = **${fmt(phaseW.current)}°**
+├─ z (Anomaly) = **${fmt(anomalyW.current)}σ**
+├─ R (Convergence) = **${fmt(rWeekly)}**
+└─ **Reading**: ${analysisWeekly.reading?.emoji || '⚪'} ${analysisWeekly.reading?.reading || 'N/A'}`;
       } else {
         weeklySection = `
-**WEEKLY:** ⚠️ ${weeklyUnavailableReason || 'Insufficient data'}`;
+**WEEKLY (7d candles, 13-month window)**: ⚠️ ${weeklyUnavailableReason || 'Insufficient data'}`;
       }
       
       // Note: Fundamentals already in preflight context - don't duplicate here
+      const dailyFidelityPct = getFidelityPct(fidelity);
       
       psiEmaInstruction = `
 **Ψ-EMA** (θ=cycle, z=deviation, R=momentum): alignment → conviction; conflict → caution.
 
-**DAILY** [${dailyGradeEmoji} ${fidelity.percent || '?'}%]
-├─ θ=${fmt(phase.current)}° | z=${fmt(anomaly.current)}σ | R=${fmt(convergence.currentDisplay ?? convergence.current)}
-└─ ${analysis.reading?.emoji || '⚪'} ${analysis.reading?.reading || 'N/A'}
+**DAILY (1d candles, 3-month window)** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade, ${dailyFidelityPct}% fidelity]
+├─ θ (Phase) = **${fmt(phase.current)}°**
+├─ z (Anomaly) = **${fmt(anomaly.current)}σ**
+├─ R (Convergence) = **${fmt(convergence.currentDisplay ?? convergence.current)}**
+└─ **Reading**: ${analysis.reading?.emoji || '⚪'} ${analysis.reading?.reading || 'N/A'}
 ${weeklySection}
 
 ${clinicalSection}
 ${physicalAuditDisclaimer}
-
-📊 Confidence: 95% (yfinance + SEC EDGAR verified)
-
-🔥 ~nyan
 `;
       console.log(`📊 Ψ-EMA dual-timeframe instruction injected for ${ticker} (daily + ${analysisWeekly ? 'weekly' : 'weekly unavailable'})`);
     }
