@@ -469,7 +469,7 @@ function buildStockContext(preflight) {
   const phaseSignal = phase.signal || summary.phaseSignal || 'N/A';
   const anomalyZ = anomaly.current;  // z-score (e.g., -0.44)
   const anomalyLevel = anomaly.alert?.level || summary.anomalyLevel || 'N/A';
-  const convergenceR = convergence.current;  // R ratio (e.g., 1.2)
+  const convergenceR = convergence.currentDisplay ?? convergence.current;  // R ratio - use currentDisplay (always available)
   const regimeLabel = typeof convergence.regime === 'string' 
     ? convergence.regime 
     : (convergence.regime?.label || summary.regime || 'N/A');

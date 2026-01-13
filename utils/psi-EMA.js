@@ -2236,10 +2236,11 @@ function generateClinicalReport(analysis, patientName = 'UNKNOWN', fetchedPrice 
   const pathogenResult = detectPathogens(analysis);
   const { anomaly, convergence, phase } = analysis.dimensions || {};
   
-  // Vital Signs
+  // Vital Signs - use currentDisplay for R (always available)
+  const rDisplay = convergence?.currentDisplay ?? convergence?.current;
   const vitalSigns = {
     R_ratio: {
-      value: convergence?.current?.toFixed(3) || 'N/A',
+      value: rDisplay?.toFixed(3) || 'N/A',
       reference: '1.3-2.0 (φ-zone)',
       status: convergence?.regime?.regime || 'UNKNOWN'
     },
@@ -2306,7 +2307,7 @@ function generateClinicalReport(analysis, patientName = 'UNKNOWN', fetchedPrice 
     },
     
     pathology: {
-      microscopy: `z = ${anomaly?.current?.toFixed(2) || 'N/A'}σ, R = ${convergence?.current?.toFixed(3) || 'N/A'}`,
+      microscopy: `z = ${anomaly?.current?.toFixed(2) || 'N/A'}σ, R = ${rDisplay?.toFixed(3) || 'N/A'}`,
       phase: `θ = ${phase?.currentPhase?.toFixed(3) || 'N/A'} (${phase?.crossover?.type || 'N/A'})`,
       conservation: convergence?.regime?.regime === 'CRITICAL' ? 'Intact' : 'Under stress'
     },
@@ -2501,10 +2502,11 @@ class PsiEMADashboard {
     lines.push(`Level: **${anomaly.alert?.level}**`);
     lines.push('');
     
-    // Convergence
+    // Convergence - use currentDisplay for always-available R
     if (convergence.regime) {
+      const rVal = convergence.currentDisplay ?? convergence.current;
       lines.push(`### Convergence R (Momentum Ratio)`);
-      lines.push(`Current R: ${convergence.current?.toFixed(3)} | φ = ${PHI.toFixed(3)}`);
+      lines.push(`Current R: ${rVal?.toFixed(3) ?? 'N/A'} | φ = ${PHI.toFixed(3)}`);
       lines.push('');
     }
     
