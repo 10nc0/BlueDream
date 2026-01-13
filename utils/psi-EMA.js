@@ -884,21 +884,21 @@ function interpretPhase(theta) {
       phase: 'SURVIVAL', 
       emoji: '🟢',
       description: 'Price rising.',
-      signal: 'HOLD_LONG'
+      signal: 'UP'
     };
   } else if (theta >= -1 && theta <= 1) {
     return { 
       phase: 'WAIT', 
       emoji: '⏸️',
       description: 'Price stable / equilibrium.',
-      signal: 'WAIT'
+      signal: 'NEUTRAL'
     };
   } else {
     return { 
       phase: 'DECAY', 
       emoji: '🔴',
       description: 'Price falling.',
-      signal: 'CAUTION'
+      signal: 'DOWN'
     };
   }
 }
