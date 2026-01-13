@@ -536,7 +536,7 @@ ${atomicSection}
 **Price**: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} (${ageFlag} ${dataAge?.timestamp})
 ${fundamentalsLine}
 
-**Ψ-EMA** (θ=cycle, z=deviation, R=momentum): alignment → conviction; conflict → caution.
+**Ψ-EMA** (θ=Cycle Position, z=Price Deviation, R=Momentum Ratio): alignment → conviction; conflict → caution.
 | Dim | Value | Signal |
 |-----|-------|--------|
 | θ | ${safeFixed(phaseTheta)}° | ${phaseSignal} |

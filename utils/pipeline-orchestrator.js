@@ -814,7 +814,7 @@ MANDATORY INSTRUCTIONS:
       const dailyFidelityPct = getFidelityPct(fidelity);
       
       psiEmaInstruction = `
-**Ψ-EMA** (θ=cycle, z=deviation, R=momentum): alignment → conviction; conflict → caution.
+**Ψ-EMA** (θ=Cycle Position, z=Price Deviation, R=Momentum Ratio): alignment → conviction; conflict → caution.
 
 **DAILY (1d candles, 3-month window)** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade, ${dailyFidelityPct}% fidelity]
 ├─ θ (Phase) = **${fmt(phase.current)}°**
