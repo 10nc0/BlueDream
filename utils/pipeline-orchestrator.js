@@ -913,8 +913,18 @@ User query: ${query}`;
     }
     // else: plain query (no memory, no attachments, no search)
     
-    // Append Ψ-EMA instruction to ensure wave analysis is output
-    // This goes at the END so it's the last thing the LLM sees before responding
+    // For Ψ-EMA queries: Direct structured output (bypass LLM reformatting)
+    // The preflight stockContext + psiEmaInstruction IS the response - no LLM reinterpretation needed
+    // Set draftAnswer directly but DON'T return - let stepAudit/stepOutput run for signature
+    if (psiEmaInstruction && isPsiEma && state.preflight?.stockContext) {
+      console.log(`📊 Ψ-EMA: Direct structured output (bypassing LLM reformatting)`);
+      state.draftAnswer = `${state.preflight.stockContext}\n${psiEmaInstruction}`;
+      state.psiEmaDirectOutput = true; // Flag to skip audit but let output stage run
+      console.log(`🧠 Direct output: ${state.draftAnswer.length} chars (no LLM call)`);
+      return; // Exit stepReasoning - run() will continue to stepAudit/stepOutput
+    }
+    
+    // Append Ψ-EMA instruction to ensure wave analysis is output (fallback if no direct output)
     if (psiEmaInstruction) {
       finalPrompt = `${finalPrompt}\n\n${psiEmaInstruction}`;
     }
@@ -959,6 +969,13 @@ User query: ${query}`;
     state.transition(PIPELINE_STEPS.AUDIT);
     
     const { query, extractedContent } = input;
+    
+    // Ψ-EMA direct output: bypass audit (data already pre-verified from yfinance + SEC EDGAR)
+    if (state.psiEmaDirectOutput) {
+      console.log(`📊 Ψ-EMA direct output - bypassing audit (pre-verified data)`);
+      state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Pre-verified yfinance + SEC EDGAR data' };
+      return;
+    }
     
     // Log attachment preservation for debugging
     const attachmentCount = extractedContent?.length || 0;
