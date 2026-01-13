@@ -501,14 +501,14 @@ function buildStockContext(preflight) {
   const sectorIndustry = [fundamentals.sector, fundamentals.industry].filter(Boolean).join(' / ');
   const atomicUnits = fundamentals.atomicUnits || [];
   
-  // Format atomic units (multi-line block)
+  // Format atomic units (multi-line block) - Stock, Flow, Guard taxonomy
   let atomicSection = '';
   if (atomicUnits.length > 0) {
-    const stateUnits = atomicUnits.filter(u => u.includes('(state)')).map(u => u.replace(' (state)', ''));
+    const stockUnits = atomicUnits.filter(u => u.includes('(state)')).map(u => u.replace(' (state)', ''));
     const flowUnits = atomicUnits.filter(u => u.includes('(flow)')).map(u => u.replace(' (flow)', ''));
     const guardUnits = atomicUnits.filter(u => u.includes('(guard)')).map(u => u.replace(' (guard)', ''));
     const lines = [];
-    if (stateUnits.length > 0) lines.push(`**State**: ${stateUnits.join(', ')}`);
+    if (stockUnits.length > 0) lines.push(`**Stock**: ${stockUnits.join(', ')}`);
     if (flowUnits.length > 0) lines.push(`**Flow**: ${flowUnits.join(', ')}`);
     if (guardUnits.length > 0) lines.push(`**Guard**: ${guardUnits.join(', ')}`);
     if (lines.length > 0) {
