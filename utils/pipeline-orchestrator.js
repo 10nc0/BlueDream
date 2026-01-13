@@ -719,25 +719,64 @@ MANDATORY INSTRUCTIONS:
       // Physical Audit Disclaimer: "See to believe" infrastructure verification (Dec 23, 2025)
       const physicalAuditDisclaimer = generatePhysicalAuditDisclaimer(analysis, ticker);
       
-      // Build clinical section if pathogens detected or unhealthy
-      let clinicalSection = '';
+      // Build assessment one-liner (pragmatic, no medical metaphor)
+      const readingText = analysis.reading?.reading || analysis.summary?.reading || 'Unknown';
+      const readingEmoji = analysis.reading?.emoji || '⚪';
+      const rVal = convergence.currentDisplay ?? convergence.current;
+      const zVal = anomaly.current;
+      
+      // Derive R label from value
+      let rLabel = 'N/A';
+      if (rVal != null && !isNaN(rVal)) {
+        if (rVal < 0) rLabel = 'Reversal';
+        else if (rVal < 0.382) rLabel = 'Weak';
+        else if (rVal < 0.618) rLabel = 'Moderate';
+        else if (rVal < 1.618) rLabel = 'Healthy';
+        else if (rVal < 2.618) rLabel = 'Strong';
+        else rLabel = 'Extreme';
+      }
+      
+      // Derive z label from value
+      let zLabel = 'Normal';
+      if (zVal != null) {
+        const absZ = Math.abs(zVal);
+        if (absZ > 3) zLabel = 'Extreme';
+        else if (absZ > 2) zLabel = 'High';
+        else if (absZ > 1) zLabel = 'Elevated';
+      }
+      
+      // Dynamic outlook based on reading type
+      const outlookMap = {
+        'False Breakout': 'Watch for mean reversion.',
+        'Breathing': 'Trend continuing, momentum sustainable.',
+        'Consolidation': 'Sideways movement, wait for breakout.',
+        'Local Bottom': 'Potential reversal upward.',
+        'Local Top': 'Potential reversal downward.',
+        'Reversal': 'Momentum shifting, trend change likely.',
+        'Continuation': 'Current trend persisting.',
+        'Optimism': 'Positive momentum building.',
+        'Fatalism': 'Negative momentum building.',
+        'Bull Trend Signal': 'Strong upward momentum confirmed.',
+        'Oversold': 'Price below fair value, bounce possible.'
+      };
+      const outlook = outlookMap[readingText] || 'Monitor for trend development.';
+      
+      // Format values for display
+      const fmtR = (rVal != null && !isNaN(rVal)) ? rVal.toFixed(2) : 'N/A';
+      const fmtZ = (zVal != null && !isNaN(zVal)) ? zVal.toFixed(2) : 'N/A';
+      
+      let clinicalSection;
       if (!pathogenResult.healthy) {
+        // Pathogen detected - still flag it but less medical
         clinicalSection = `
-[FINANCIAL MICROBIOLOGY - PATHOLOGY REPORT]
-PATIENT: ${ticker}
-DIAGNOSIS: ${clinicalReport.diagnosis.emoji} ${clinicalReport.diagnosis.primary}
-VITAL SIGNS: R=${clinicalReport.vitalSigns.R_ratio.value}, z=${clinicalReport.vitalSigns.z_score.value}σ
-MICROSCOPY: ${clinicalReport.pathology.microscopy}
-PROGNOSIS: ${clinicalReport.prognosis}
-TREATMENT: ${clinicalReport.treatment}
-
-INSTRUCTION: Present this as a CLINICAL PATHOLOGY REPORT. Use medical/pharmaceutical language (pathogen, treatment, prognosis).
+⚠️ **Risk Alert**: ${clinicalReport.diagnosis.emoji} ${clinicalReport.diagnosis.primary}
+📊 R=${fmtR} (${rLabel}), z=${fmtZ}σ (${zLabel})
+💡 ${clinicalReport.prognosis}
 `;
       } else {
+        // Healthy - one-liner assessment
         clinicalSection = `
-[FINANCIAL HEALTH STATUS]
-DIAGNOSIS: ${clinicalReport.diagnosis.emoji} ${clinicalReport.diagnosis.primary}
-STATUS: Patient shows healthy φ-convergence. Conservation laws intact.
+📊 **Assessment**: ${readingEmoji} ${readingText} — R=${fmtR} (${rLabel}), z=${fmtZ}σ (${zLabel}). ${outlook}
 `;
       }
       
