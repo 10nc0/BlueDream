@@ -1282,7 +1282,7 @@ function analyzeAnomaly(zFlows) {
  * @param {number} epsilon - Minimum z threshold for valid ratio (default: 0.15)
  * @returns {Object} Safe ratio result
  */
-function safeConvergenceRatio(currentZ, previousZ, epsilon = 0.15) {
+function safeConvergenceRatio(currentZ, previousZ, epsilon = 0.01) {
   // Guard: NaN or non-finite values → R is undefined (warm-up period)
   if (!Number.isFinite(currentZ) || !Number.isFinite(previousZ)) {
     return {
@@ -1295,7 +1295,7 @@ function safeConvergenceRatio(currentZ, previousZ, epsilon = 0.15) {
   }
   
   // Guard: EITHER z near zero → R is undefined (not decay!)
-  // This prevents false "decay" signals when price consolidates at highs
+  // User Formula: IF(OR(ABS(z(n))<0.01,ABS(z(n-1))<0.01),"Consolidation"...)
   if (Math.abs(previousZ) < epsilon) {
     return {
       ratio: null,
@@ -1314,6 +1314,17 @@ function safeConvergenceRatio(currentZ, previousZ, epsilon = 0.15) {
       interpretation: 'Current anomaly near zero — R undefined (price at median)',
       status: 'LOW_SIGNAL',
       warning: 'Low z-score may indicate consolidation, not decay'
+    };
+  }
+
+  // Final Guard: Division-by-zero protection (0.000001)
+  if (Math.abs(previousZ) < 0.000001) {
+    return {
+      ratio: null,
+      absRatio: null,
+      direction: null,
+      interpretation: 'Extreme consolidation — R undefined',
+      status: 'INSUFFICIENT_DATA'
     };
   }
   
