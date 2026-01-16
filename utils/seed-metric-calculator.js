@@ -314,11 +314,13 @@ function buildSeedMetricTable(parsedData, historicalDecade = '1970s') {
     const currCurrency = data.current?.pricePerSqm?.currency || data.current?.income?.currency || 'USD';
     const currMetric = calculateSeedMetric(currPrice, currIncome);
     
-    // Add historical row
-    rows.push(`| ${cityTitle} | ${historicalDecade} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histMetric.pi_ratio?.toFixed(1) || 'N/A'} | ${histMetric.years?.toFixed(0) || 'N/A'}yr | ${histMetric.emoji} |`);
+    // Add historical row (emoji + text label)
+    const histRegimeLabel = histMetric.years ? `${histMetric.emoji} ${histMetric.regime}` : 'N/A';
+    rows.push(`| ${cityTitle} | ${historicalDecade} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histMetric.pi_ratio?.toFixed(1) || 'N/A'} | ${histMetric.years?.toFixed(0) || 'N/A'}yr | ${histRegimeLabel} |`);
     
-    // Add current row
-    rows.push(`| ${cityTitle} | 2024 | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currMetric.pi_ratio?.toFixed(1) || 'N/A'} | ${currMetric.years?.toFixed(0) || 'N/A'}yr | ${currMetric.emoji} |`);
+    // Add current row (emoji + text label)
+    const currRegimeLabel = currMetric.years ? `${currMetric.emoji} ${currMetric.regime}` : 'N/A';
+    rows.push(`| ${cityTitle} | 2024 | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currMetric.pi_ratio?.toFixed(1) || 'N/A'} | ${currMetric.years?.toFixed(0) || 'N/A'}yr | ${currRegimeLabel} |`);
     
     // Build summary line
     const histYears = histMetric.years?.toFixed(0) || 'N/A';
@@ -329,11 +331,19 @@ function buildSeedMetricTable(parsedData, historicalDecade = '1970s') {
     summaries.push(`**${cityTitle}**: ${histYears}yr → ${currYears}yr = ${currMetric.emoji} ${currMetric.regime} (${direction})`);
   }
   
-  // Combine table + summaries
+  // Combine table + summaries + legend
   const table = rows.join('\n');
   const summaryBlock = summaries.join('\n');
   
-  return `${table}\n\n${summaryBlock}`;
+  // Legend explaining regime buckets (φ-derived from 25yr fertility window)
+  const legend = `
+---
+**Regime Legend** (P/I = Years to Afford 700sqm on Single Income):
+- 🟢 **OPTIMISM**: <10 years — Housing accessible within early career
+- 🟡 **EXTRACTION**: 10-25 years — Affordable but requires sustained effort
+- 🔴 **FATALISM**: >25 years — Exceeds fertility window; systemic barrier`;
+  
+  return `${table}\n\n${summaryBlock}\n${legend}`;
 }
 
 /**
@@ -355,10 +365,14 @@ function validateSeedMetricOutput(output) {
     issues.push('Missing table header');
   }
   
-  // Check for emoji regime readings
+  // Check for emoji regime readings with labels
   const hasRegimeEmoji = /[🟢🟡🔴]/.test(output);
+  const hasRegimeLabel = /(?:OPTIMISM|EXTRACTION|FATALISM|Optimism|Extraction|Fatalism)/i.test(output);
   if (!hasRegimeEmoji) {
     issues.push('Missing regime emoji (🟢/🟡/🔴)');
+  }
+  if (!hasRegimeLabel) {
+    issues.push('Missing regime label (Optimism/Extraction/Fatalism)');
   }
   
   // Check for 700sqm mention (not just "sqm" or wrong size)
