@@ -102,6 +102,33 @@ class PipelineOrchestrator {
     this.isIdentityQuery = config.isIdentityQuery;
     this.groqWithRetry = config.groqWithRetry;
   }
+  
+  /**
+   * Sequential search with rate limiting for Brave API
+   * Brave free tier has per-second burst limits, so we space out requests
+   * @param {string[]} queries - Array of search queries
+   * @param {string} clientIp - Client IP for Brave API
+   * @param {number} delayMs - Delay between requests (default 350ms)
+   * @returns {Promise<string[]>} Array of search results
+   */
+  async searchWithRateLimit(queries, clientIp, delayMs = 350) {
+    const results = [];
+    for (let i = 0; i < queries.length; i++) {
+      const sq = queries[i];
+      let result = await this.searchBrave(sq, clientIp);
+      if (!result) {
+        result = await this.searchDuckDuckGo(sq);
+      }
+      if (result) {
+        results.push(`[${sq}]\n${result}`);
+      }
+      // Add delay between requests (except after last one)
+      if (i < queries.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+    return results;
+  }
 
   // Mandatory execute method for the orchestrator
   async execute(input) {
@@ -328,33 +355,20 @@ class PipelineOrchestrator {
         console.log(`🌱 Seed Metric (pre-computed): MANDATORY web search for grounded data`);
         
         const searchQueries = state.preflight.seedMetricSearchQueries || [];
-        const searchResults = [];
+        let searchResults = [];
         
         if (searchQueries.length > 0) {
-          const searchPromises = searchQueries.slice(0, 4).map(async (sq) => {
-            let result = await this.searchBrave(sq, normalizedInput.clientIp);
-            if (!result) {
-              result = await this.searchDuckDuckGo(sq);
-            }
-            return result ? `[${sq}]\n${result}` : null;
-          });
-
-          const results = await Promise.allSettled(searchPromises);
-          for (const res of results) {
-            if (res.status === 'fulfilled' && res.value) {
-              searchResults.push(res.value);
-            }
-          }
+          // Sequential search with rate limiting (350ms delay) to avoid Brave 429 errors
+          searchResults = await this.searchWithRateLimit(searchQueries.slice(0, 6), normalizedInput.clientIp, 350);
           console.log(`🔍 Seed Metric: ${searchResults.length}/${searchQueries.length} searches returned data`);
         } else {
-            const searchQuery = await this.extractCoreQuestion(normalizedInput.query);
-            const result = await this.searchBrave(searchQuery, normalizedInput.clientIp);
-            if (result) searchResults.push(result);
-            else {
-              const ddgResult = await this.searchDuckDuckGo(searchQuery);
-              if (ddgResult) searchResults.push(ddgResult);
-            }
+          const searchQuery = await this.extractCoreQuestion(normalizedInput.query);
+          let result = await this.searchBrave(searchQuery, normalizedInput.clientIp);
+          if (!result) {
+            result = await this.searchDuckDuckGo(searchQuery);
           }
+          if (result) searchResults.push(result);
+        }
           
           if (searchResults.length > 0) {
             state.searchContext = `[REAL ESTATE & INCOME DATA FROM WEB SEARCH - USE THESE EXACT FIGURES]
@@ -498,34 +512,20 @@ MANDATORY INSTRUCTIONS:
       
       // Use specific search queries from preflight (e.g., "tokyo residential price per square meter 2024")
       const searchQueries = state.preflight.seedMetricSearchQueries || [];
-      const searchResults = [];
+      let searchResults = [];
       
       if (searchQueries.length > 0) {
-      // Run targeted searches for $/m² + income data (limit to 4 searches max)
-      const searchPromises = searchQueries.slice(0, 4).map(async (sq) => {
-        let result = await this.searchBrave(sq, clientIp);
-        if (!result) {
-          result = await this.searchDuckDuckGo(sq);
-        }
-        return result ? `[${sq}]\n${result}` : null;
-      });
-
-      const results = await Promise.allSettled(searchPromises);
-      for (const res of results) {
-        if (res.status === 'fulfilled' && res.value) {
-          searchResults.push(res.value);
-        }
-      }
-      console.log(`🔍 Seed Metric: ${searchResults.length}/${searchQueries.length} searches returned data`);
+        // Sequential search with rate limiting (350ms delay) to avoid Brave 429 errors
+        searchResults = await this.searchWithRateLimit(searchQueries.slice(0, 6), clientIp, 350);
+        console.log(`🔍 Seed Metric: ${searchResults.length}/${searchQueries.length} searches returned data`);
       } else {
         // Fallback to generic search
         const searchQuery = await this.extractCoreQuestion(query);
-        const result = await this.searchBrave(searchQuery, clientIp);
-        if (result) searchResults.push(result);
-        else {
-          const ddgResult = await this.searchDuckDuckGo(searchQuery);
-          if (ddgResult) searchResults.push(ddgResult);
+        let result = await this.searchBrave(searchQuery, clientIp);
+        if (!result) {
+          result = await this.searchDuckDuckGo(searchQuery);
         }
+        if (result) searchResults.push(result);
       }
       
       if (searchResults.length > 0) {
