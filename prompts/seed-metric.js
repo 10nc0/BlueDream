@@ -96,19 +96,33 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
 - DO NOT USE GDP, Gini, national averages
 - DECADE LABELING: When using decade-range data (e.g., 1960-1979 for "1970"), label the Period column as "1970s" or "~1970", NOT the exact year "1970" unless you have exact year data
 
-MANDATORY OUTPUT FORMAT (preserve structure, no prose conversion):
-| City | Period | 700sqm Price | Income | P/I Ratio | Years | Regime |
-|------|--------|--------------|--------|-----------|-------|--------|
-[Fill table with data]
+═══════════════════════════════════════════════════════════════
+MANDATORY OUTPUT FORMAT - DO NOT REFORMAT - THIS IS EMPIRIC DATA
+═══════════════════════════════════════════════════════════════
 
-**Regime Reading**: 
-- <10yr = 🟢 Optimism
-- 10-25yr = 🟡 Extraction  
-- >25yr = 🔴 Fatalism
+You MUST output this exact table structure. This is non-negotiable:
 
-**Directional Change**: [City] P/I ratio ↑increased/↓decreased from [old] to [new] years
+| City | Period | 700sqm Price | Income | P/I | Years | Regime |
+|------|--------|--------------|--------|-----|-------|--------|
+| [city] | [then] | [price] | [income] | [ratio] | [yr] | [emoji] |
+| [city] | [now]  | [price] | [income] | [ratio] | [yr] | [emoji] |
 
-Do NOT convert this structured output to conversational prose.
+REGIME READINGS (φ-derived from 25yr fertility window constraint):
+• 🟢 OPTIMISM: <10 years (sustainable, enables family formation)
+• 🟡 EXTRACTION: 10-25 years (stressed, delayed family formation)  
+• 🔴 FATALISM: >25 years (beyond fertility window, demographic collapse)
+
+After table, add ONE line per city:
+**[City]**: [old]yr → [new]yr = [emoji] [Regime] ([↑worsened/↓improved])
+
+═══════════════════════════════════════════════════════════════
+STRICT RULES:
+1. DO NOT convert table to prose paragraphs
+2. DO NOT add conversational filler before/after table
+3. DO NOT soften regime readings - they are empiric thresholds
+4. Regime emoji MUST appear in table AND summary line
+5. Data quality notes go AFTER the structured output, not before
+═══════════════════════════════════════════════════════════════
 `;
 }
 
