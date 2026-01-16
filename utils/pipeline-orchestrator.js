@@ -929,6 +929,39 @@ User query: ${query}`;
       finalPrompt = `${finalPrompt}\n\n${psiEmaInstruction}`;
     }
     
+    // Append Seed Metric instruction to enforce table format (prevents LLM reformatting)
+    const isSeedMetric = state.mode === 'seed-metric';
+    if (isSeedMetric) {
+      const seedMetricInstruction = `
+═══════════════════════════════════════════════════════════════
+SEED METRIC OUTPUT FORMAT - MANDATORY (DO NOT REFORMAT TO PROSE)
+═══════════════════════════════════════════════════════════════
+
+You MUST output this exact table. This is non-negotiable empiric data:
+
+| City | Period | 700sqm Price | Income | P/I | Years | Regime |
+|------|--------|--------------|--------|-----|-------|--------|
+[Fill each city with THEN and NOW rows]
+
+CRITICAL:
+• ALWAYS convert price/m² to 700sqm (multiply by 700)
+• Use SINGLE-EARNER income (not household/dual)
+• Calculate: Years = Price ÷ Income
+
+REGIME (φ-derived from 25yr fertility window):
+• 🟢 OPTIMISM: <10 years
+• 🟡 EXTRACTION: 10-25 years  
+• 🔴 FATALISM: >25 years
+
+After table, ONE summary line per city:
+**[City]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
+
+DO NOT write prose paragraphs. Table + summary lines ONLY.
+═══════════════════════════════════════════════════════════════`;
+      finalPrompt = `${finalPrompt}\n\n${seedMetricInstruction}`;
+      console.log(`🏠 Seed Metric instruction appended (enforcing table format)`);
+    }
+    
     const messages = [
       ...state.systemMessages,
       ...sanitizedHistory,
