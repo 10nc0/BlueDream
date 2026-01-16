@@ -1,0 +1,396 @@
+/**
+ * SEED METRIC CALCULATOR
+ * 
+ * Direct calculation bypass for Seed Metric analysis.
+ * Parses search results, applies proxy rules, builds table deterministically.
+ * 
+ * Proxy Rules (from seed-metric.js):
+ * - PROXY: Published $/m² → MULTIPLY BY 700 (non-negotiable)
+ * - INCOME: Single-earner (not household/dual)
+ * - P/I Ratio: Price / Income = Years to afford
+ * - Regime: <10yr 🟢 Optimism | 10-25yr 🟡 Extraction | >25yr 🔴 Fatalism
+ */
+
+/**
+ * Parse price per square meter from text
+ * Handles: "$5,000/sqm", "5000 USD/m²", "¥50,000 per sqm", etc.
+ * @param {string} text - Search result text
+ * @param {string} city - City name for context
+ * @returns {object|null} { value: number, currency: string, raw: string }
+ */
+function parsePricePerSqm(text, city = '') {
+  if (!text) return null;
+  
+  const cityLower = city.toLowerCase();
+  
+  // Patterns for price per square meter (various formats)
+  const patterns = [
+    // $X,XXX/sqm or $X,XXX per sqm
+    /\$\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²|square\s*met)/gi,
+    // X,XXX USD/sqm
+    /([\d,]+(?:\.\d+)?)\s*(?:USD|usd|\$)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
+    // ¥X,XXX/sqm (JPY)
+    /[¥￥]\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
+    // X,XXX JPY/sqm
+    /([\d,]+(?:\.\d+)?)\s*(?:JPY|jpy|yen)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
+    // SGD X,XXX/sqm
+    /(?:SGD|S\$)\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
+    // X,XXX SGD/sqm
+    /([\d,]+(?:\.\d+)?)\s*SGD\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
+    // Generic: X,XXX per square meter
+    /([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²|square\s*met)/gi,
+    // psf to sqm conversion hint: $X,XXX psf (1 sqm ≈ 10.764 sqft)
+    /\$\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:psf|sq\s*ft|sqft)/gi,
+  ];
+  
+  // Detect currency from city context
+  let currency = 'USD';
+  if (cityLower.includes('tokyo') || cityLower.includes('osaka')) currency = 'JPY';
+  else if (cityLower.includes('singapore')) currency = 'SGD';
+  else if (cityLower.includes('hong kong')) currency = 'HKD';
+  else if (cityLower.includes('london')) currency = 'GBP';
+  else if (cityLower.includes('paris') || cityLower.includes('berlin')) currency = 'EUR';
+  
+  for (const pattern of patterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const valueStr = match[1].replace(/,/g, '');
+      const value = parseFloat(valueStr);
+      if (value > 0 && value < 1000000) { // Sanity check
+        // Check if this is psf (per sq ft) - convert to sqm
+        const isPsf = /psf|sq\s*ft|sqft/i.test(match[0]);
+        const finalValue = isPsf ? value * 10.764 : value;
+        
+        return {
+          value: finalValue,
+          currency,
+          raw: match[0],
+          isPsf
+        };
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Parse median income from text
+ * Handles: "$50,000 per year", "median income of $85,000", "¥6.5 million", etc.
+ * @param {string} text - Search result text
+ * @param {string} city - City name for context
+ * @param {boolean} preferSingleEarner - If true, prefer "individual" over "household"
+ * @returns {object|null} { value: number, currency: string, type: string, raw: string }
+ */
+function parseIncome(text, city = '', preferSingleEarner = true) {
+  if (!text) return null;
+  
+  const cityLower = city.toLowerCase();
+  
+  // Detect currency from city context
+  let currency = 'USD';
+  if (cityLower.includes('tokyo') || cityLower.includes('osaka')) currency = 'JPY';
+  else if (cityLower.includes('singapore')) currency = 'SGD';
+  else if (cityLower.includes('hong kong')) currency = 'HKD';
+  else if (cityLower.includes('london')) currency = 'GBP';
+  else if (cityLower.includes('paris') || cityLower.includes('berlin')) currency = 'EUR';
+  
+  // Check for income type context
+  const hasIndividual = /individual|personal|single[\s-]?earner|per\s*capita/i.test(text);
+  const hasHousehold = /household|family|dual[\s-]?earner/i.test(text);
+  const incomeType = hasIndividual ? 'single' : (hasHousehold ? 'household' : 'unknown');
+  
+  // Patterns for income (various formats)
+  const patterns = [
+    // $X,XXX or $X.X million
+    /(?:median|average|mean)?\s*(?:individual|personal|household)?\s*income[^$]*\$\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M)?/gi,
+    // Standalone: $XX,XXX per year/annually
+    /\$\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M)?\s*(?:per\s*year|annually|\/year|\/yr|p\.a\.)/gi,
+    // ¥X.X million (Japanese)
+    /[¥￥]\s*([\d,]+(?:\.\d+)?)\s*(?:million|万|億)?/gi,
+    // X.X million yen
+    /([\d,]+(?:\.\d+)?)\s*million\s*(?:yen|JPY)/gi,
+    // SGD X,XXX
+    /(?:SGD|S\$)\s*([\d,]+(?:\.\d+)?)\s*(?:k|thousand|million)?/gi,
+    // Generic: median income X,XXX
+    /median\s*(?:individual|household)?\s*income[^\d]*([\d,]+(?:\.\d+)?)/gi,
+  ];
+  
+  for (const pattern of patterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      let valueStr = match[1].replace(/,/g, '');
+      let value = parseFloat(valueStr);
+      
+      // Handle "million" suffix
+      if (/million|mil|M|億/i.test(match[0])) {
+        value *= 1000000;
+      } else if (/万/i.test(match[0])) {
+        value *= 10000;
+      } else if (/k|thousand/i.test(match[0])) {
+        value *= 1000;
+      }
+      
+      // Sanity check: income should be reasonable
+      if (value > 0 && value < 100000000) {
+        return {
+          value,
+          currency,
+          type: incomeType,
+          raw: match[0]
+        };
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Parse search results for Seed Metric data
+ * Extracts price/sqm and income for each city/period
+ * @param {string} searchContext - Combined search results text
+ * @param {string[]} cities - City names to look for
+ * @param {string} historicalDecade - e.g., "1970s"
+ * @returns {object} { cities: { [city]: { current: {...}, historical: {...} } } }
+ */
+function parseSeedMetricData(searchContext, cities = [], historicalDecade = '1970s') {
+  const result = { cities: {}, parseLog: [] };
+  
+  if (!searchContext) {
+    result.parseLog.push('No search context provided');
+    return result;
+  }
+  
+  // Normalize city names
+  const normalizedCities = cities.map(c => c.toLowerCase().trim());
+  
+  for (const city of normalizedCities) {
+    result.cities[city] = {
+      current: { pricePerSqm: null, income: null },
+      historical: { pricePerSqm: null, income: null, decade: historicalDecade }
+    };
+    
+    // Split search context by city mentions for better targeting
+    const cityPatterns = [
+      new RegExp(`${city}[^.]*(?:2023|2024|current|today|now)[^.]*`, 'gi'),
+      new RegExp(`(?:2023|2024|current|today|now)[^.]*${city}[^.]*`, 'gi'),
+    ];
+    
+    const historicalPatterns = [
+      new RegExp(`${city}[^.]*(?:${historicalDecade}|1970|1980|historical|50\\s*years?\\s*ago)[^.]*`, 'gi'),
+      new RegExp(`(?:${historicalDecade}|1970|1980|historical|50\\s*years?\\s*ago)[^.]*${city}[^.]*`, 'gi'),
+    ];
+    
+    // Try to find current data
+    for (const pattern of cityPatterns) {
+      const matches = searchContext.match(pattern);
+      if (matches) {
+        const segment = matches.join(' ');
+        if (!result.cities[city].current.pricePerSqm) {
+          result.cities[city].current.pricePerSqm = parsePricePerSqm(segment, city);
+        }
+        if (!result.cities[city].current.income) {
+          result.cities[city].current.income = parseIncome(segment, city);
+        }
+      }
+    }
+    
+    // Try to find historical data
+    for (const pattern of historicalPatterns) {
+      const matches = searchContext.match(pattern);
+      if (matches) {
+        const segment = matches.join(' ');
+        if (!result.cities[city].historical.pricePerSqm) {
+          result.cities[city].historical.pricePerSqm = parsePricePerSqm(segment, city);
+        }
+        if (!result.cities[city].historical.income) {
+          result.cities[city].historical.income = parseIncome(segment, city);
+        }
+      }
+    }
+    
+    // Fallback: search entire context for this city
+    if (!result.cities[city].current.pricePerSqm || !result.cities[city].current.income) {
+      const cityMentions = searchContext.match(new RegExp(`[^.]*${city}[^.]*`, 'gi'));
+      if (cityMentions) {
+        const allCityText = cityMentions.join(' ');
+        if (!result.cities[city].current.pricePerSqm) {
+          result.cities[city].current.pricePerSqm = parsePricePerSqm(allCityText, city);
+        }
+        if (!result.cities[city].current.income) {
+          result.cities[city].current.income = parseIncome(allCityText, city);
+        }
+      }
+    }
+    
+    result.parseLog.push(`${city}: current price=${result.cities[city].current.pricePerSqm?.value || 'N/A'}, income=${result.cities[city].current.income?.value || 'N/A'}`);
+  }
+  
+  return result;
+}
+
+/**
+ * Calculate Seed Metric values and assign regime
+ * @param {number} pricePerSqm - Price per square meter
+ * @param {number} income - Annual income (single-earner)
+ * @returns {object} { price700sqm, pi_ratio, years, regime, emoji }
+ */
+function calculateSeedMetric(pricePerSqm, income) {
+  if (!pricePerSqm || !income || income === 0) {
+    return { price700sqm: null, pi_ratio: null, years: null, regime: 'N/A', emoji: '⚪' };
+  }
+  
+  const price700sqm = pricePerSqm * 700;
+  const pi_ratio = price700sqm / income;
+  const years = pi_ratio; // P/I ratio = years to afford
+  
+  // Regime assignment (φ-derived from 25yr fertility window)
+  let regime, emoji;
+  if (years < 10) {
+    regime = 'Optimism';
+    emoji = '🟢';
+  } else if (years <= 25) {
+    regime = 'Extraction';
+    emoji = '🟡';
+  } else {
+    regime = 'Fatalism';
+    emoji = '🔴';
+  }
+  
+  return { price700sqm, pi_ratio, years, regime, emoji };
+}
+
+/**
+ * Format currency value with appropriate symbol and scale
+ * @param {number} value - Numeric value
+ * @param {string} currency - Currency code
+ * @returns {string} Formatted string
+ */
+function formatCurrency(value, currency = 'USD') {
+  if (value == null || isNaN(value)) return 'N/A';
+  
+  const symbols = {
+    USD: '$', JPY: '¥', SGD: 'S$', HKD: 'HK$', GBP: '£', EUR: '€'
+  };
+  const symbol = symbols[currency] || currency + ' ';
+  
+  // Format large numbers
+  if (value >= 1000000) {
+    return `${symbol}${(value / 1000000).toFixed(1)}M`;
+  } else if (value >= 1000) {
+    return `${symbol}${(value / 1000).toFixed(0)}K`;
+  } else {
+    return `${symbol}${value.toFixed(0)}`;
+  }
+}
+
+/**
+ * Build Seed Metric table from parsed data
+ * @param {object} parsedData - Output from parseSeedMetricData()
+ * @param {string} historicalDecade - e.g., "1970s"
+ * @returns {string} Markdown table with regime readings
+ */
+function buildSeedMetricTable(parsedData, historicalDecade = '1970s') {
+  const rows = [];
+  const summaries = [];
+  
+  // Table header
+  rows.push('| City | Period | 700sqm Price | Income | P/I | Years | Regime |');
+  rows.push('|------|--------|--------------|--------|-----|-------|--------|');
+  
+  for (const [city, data] of Object.entries(parsedData.cities || {})) {
+    const cityTitle = city.charAt(0).toUpperCase() + city.slice(1);
+    
+    // Historical row
+    const histPrice = data.historical?.pricePerSqm?.value;
+    const histIncome = data.historical?.income?.value;
+    const histCurrency = data.historical?.pricePerSqm?.currency || data.historical?.income?.currency || 'USD';
+    const histMetric = calculateSeedMetric(histPrice, histIncome);
+    
+    // Current row
+    const currPrice = data.current?.pricePerSqm?.value;
+    const currIncome = data.current?.income?.value;
+    const currCurrency = data.current?.pricePerSqm?.currency || data.current?.income?.currency || 'USD';
+    const currMetric = calculateSeedMetric(currPrice, currIncome);
+    
+    // Add historical row
+    rows.push(`| ${cityTitle} | ${historicalDecade} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histMetric.pi_ratio?.toFixed(1) || 'N/A'} | ${histMetric.years?.toFixed(0) || 'N/A'}yr | ${histMetric.emoji} |`);
+    
+    // Add current row
+    rows.push(`| ${cityTitle} | 2024 | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currMetric.pi_ratio?.toFixed(1) || 'N/A'} | ${currMetric.years?.toFixed(0) || 'N/A'}yr | ${currMetric.emoji} |`);
+    
+    // Build summary line
+    const histYears = histMetric.years?.toFixed(0) || 'N/A';
+    const currYears = currMetric.years?.toFixed(0) || 'N/A';
+    const direction = (currMetric.years && histMetric.years) 
+      ? (currMetric.years > histMetric.years ? '↑worsened' : '↓improved')
+      : '';
+    summaries.push(`**${cityTitle}**: ${histYears}yr → ${currYears}yr = ${currMetric.emoji} ${currMetric.regime} (${direction})`);
+  }
+  
+  // Combine table + summaries
+  const table = rows.join('\n');
+  const summaryBlock = summaries.join('\n');
+  
+  return `${table}\n\n${summaryBlock}`;
+}
+
+/**
+ * Validate Seed Metric output format
+ * @param {string} output - LLM-generated output
+ * @returns {object} { valid: boolean, issues: string[] }
+ */
+function validateSeedMetricOutput(output) {
+  const issues = [];
+  
+  if (!output) {
+    issues.push('Empty output');
+    return { valid: false, issues };
+  }
+  
+  // Check for table header
+  const hasTableHeader = /\|\s*City\s*\|\s*Period\s*\|.*\|\s*Regime\s*\|/i.test(output);
+  if (!hasTableHeader) {
+    issues.push('Missing table header');
+  }
+  
+  // Check for emoji regime readings
+  const hasRegimeEmoji = /[🟢🟡🔴]/.test(output);
+  if (!hasRegimeEmoji) {
+    issues.push('Missing regime emoji (🟢/🟡/🔴)');
+  }
+  
+  // Check for 700sqm mention (not just "sqm" or wrong size)
+  const has700sqm = /700\s*(?:sqm|sq\s*m|m²)/i.test(output);
+  if (!has700sqm) {
+    issues.push('Missing 700sqm reference');
+  }
+  
+  // Check for prose paragraphs (bad sign)
+  const proseIndicators = output.match(/(?:Fast forward|Using the Seed Metric|we can calculate|However,|it's essential)/gi);
+  if (proseIndicators && proseIndicators.length >= 2) {
+    issues.push('Contains prose paragraphs instead of table');
+  }
+  
+  // Check for wrong 700sqm interpretation (e.g., "3-room = 700sqm")
+  const wrong700sqm = /(?:3-room|HDB|apartment|flat)[^.]*(?:approximately|about|around)?\s*700\s*(?:sqm|sq\s*m|m²)/i.test(output);
+  if (wrong700sqm) {
+    issues.push('Wrong 700sqm interpretation (apartment ≠ 700sqm)');
+  }
+  
+  return {
+    valid: issues.length === 0,
+    issues
+  };
+}
+
+module.exports = {
+  parsePricePerSqm,
+  parseIncome,
+  parseSeedMetricData,
+  calculateSeedMetric,
+  formatCurrency,
+  buildSeedMetricTable,
+  validateSeedMetricOutput
+};

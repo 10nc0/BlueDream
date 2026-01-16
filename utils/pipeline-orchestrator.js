@@ -54,6 +54,7 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
+const { parseSeedMetricData, buildSeedMetricTable, validateSeedMetricOutput } = require('./seed-metric-calculator');
 
 class PipelineState {
   constructor(tenantId = null) {
@@ -924,13 +925,50 @@ User query: ${query}`;
       return; // Exit stepReasoning - run() will continue to stepAudit/stepOutput
     }
     
+    // For Seed Metric queries: Attempt direct calculation bypass if we have search data
+    // Parse price/sqm and income from search results, apply proxy rules deterministically
+    const isSeedMetric = state.mode === 'seed-metric';
+    if (isSeedMetric && state.searchContext) {
+      const cities = state.preflight?.seedMetricSearchQueries?.length > 0
+        ? [...new Set(state.preflight.seedMetricSearchQueries.map(q => {
+            const match = q.match(/^([a-z\s]+)\s+(?:residential|median|housing)/i);
+            return match ? match[1].trim().toLowerCase() : null;
+          }).filter(Boolean))]
+        : [];
+      
+      const historicalDecade = state.preflight?.historicalDecade || '1970s';
+      
+      if (cities.length > 0) {
+        console.log(`🏠 Seed Metric: Attempting direct calculation for cities: ${cities.join(', ')}`);
+        const parsedData = parseSeedMetricData(state.searchContext, cities, historicalDecade);
+        
+        // Check if we got usable data (at least one city with current price/income)
+        const hasUsableData = Object.values(parsedData.cities).some(c => 
+          c.current?.pricePerSqm?.value && c.current?.income?.value
+        );
+        
+        if (hasUsableData) {
+          const directTable = buildSeedMetricTable(parsedData, historicalDecade);
+          console.log(`🏠 Seed Metric: Direct calculation successful, bypassing LLM`);
+          state.draftAnswer = directTable;
+          state.seedMetricDirectOutput = true;
+          console.log(`🧠 Direct output: ${state.draftAnswer.length} chars (no LLM formatting)`);
+          console.log(`📊 Parse log: ${parsedData.parseLog.join(' | ')}`);
+          return; // Exit stepReasoning - let stepAudit/stepOutput run
+        } else {
+          console.log(`⚠️ Seed Metric: Could not parse usable data, falling back to LLM`);
+          console.log(`📊 Parse log: ${parsedData.parseLog.join(' | ')}`);
+        }
+      }
+    }
+    
     // Append Ψ-EMA instruction to ensure wave analysis is output (fallback if no direct output)
     if (psiEmaInstruction) {
       finalPrompt = `${finalPrompt}\n\n${psiEmaInstruction}`;
     }
     
     // Append Seed Metric instruction to enforce table format (prevents LLM reformatting)
-    const isSeedMetric = state.mode === 'seed-metric';
+    // isSeedMetric already defined above
     if (isSeedMetric) {
       const seedMetricInstruction = `
 ═══════════════════════════════════════════════════════════════
@@ -1010,6 +1048,100 @@ DO NOT write prose paragraphs. Table + summary lines ONLY.
       return;
     }
     
+    // Seed Metric direct output: bypass audit (data calculated with deterministic proxy rules)
+    if (state.seedMetricDirectOutput) {
+      console.log(`🏠 Seed Metric direct output - bypassing audit (proxy math applied)`);
+      state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Deterministic $/sqm × 700 proxy calculation' };
+      return;
+    }
+    
+    // Seed Metric LLM output: validate format before audit
+    // If format is wrong (prose instead of table), try to fix it
+    if (state.mode === 'seed-metric' && state.draftAnswer) {
+      const validation = validateSeedMetricOutput(state.draftAnswer);
+      if (!validation.valid) {
+        console.log(`⚠️ Seed Metric format validation FAILED: ${validation.issues.join(', ')}`);
+        
+        // Try to fix with a format-only prompt
+        if (!state.seedMetricFormatRetried) {
+          state.seedMetricFormatRetried = true;
+          console.log(`🔧 Attempting Seed Metric format fix...`);
+          
+          try {
+            const fixPrompt = `The following response has incorrect format. Fix it to use the EXACT table format shown below.
+
+WRONG RESPONSE:
+${state.draftAnswer.slice(0, 2000)}
+
+REQUIRED FORMAT:
+| City | Period | 700sqm Price | Income | P/I | Years | Regime |
+|------|--------|--------------|--------|-----|-------|--------|
+[rows with data]
+
+**[City]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
+
+RULES:
+- Convert price/m² to 700sqm (multiply by 700)
+- Use 🟢 for <10yr, 🟡 for 10-25yr, 🔴 for >25yr
+- NO prose paragraphs
+
+Output ONLY the corrected table and summary lines:`;
+
+            const response = await this.groqWithRetry({
+              url: 'https://api.groq.com/openai/v1/chat/completions',
+              data: {
+                model: 'llama-3.3-70b-versatile',
+                messages: [{ role: 'user', content: fixPrompt }],
+                temperature: 0.1,
+                max_tokens: 800
+              },
+              config: {
+                headers: {
+                  'Authorization': `Bearer ${this.groqToken}`,
+                  'Content-Type': 'application/json'
+                },
+                timeout: 10000
+              }
+            }, 2, 'text');
+            
+            const fixedAnswer = response.data.choices[0]?.message?.content;
+            if (fixedAnswer) {
+              const reValidation = validateSeedMetricOutput(fixedAnswer);
+              if (reValidation.valid) {
+                console.log(`✅ Seed Metric format fix successful`);
+                state.draftAnswer = fixedAnswer;
+              } else {
+                console.log(`❌ Seed Metric format fix still invalid: ${reValidation.issues.join(', ')}`);
+                // FALLBACK: Try direct calculation as last resort
+                if (state.searchContext && state.preflight?.seedMetricSearchQueries) {
+                  console.log(`🔧 Attempting fallback to direct calculation...`);
+                  const cities = [...new Set(state.preflight.seedMetricSearchQueries.map(q => {
+                    const match = q.match(/^([a-z\s]+)\s+(?:residential|median|housing)/i);
+                    return match ? match[1].trim().toLowerCase() : null;
+                  }).filter(Boolean))];
+                  
+                  if (cities.length > 0) {
+                    const parsedData = parseSeedMetricData(state.searchContext, cities, state.preflight.historicalDecade || '1970s');
+                    const hasUsableData = Object.values(parsedData.cities).some(c => 
+                      c.current?.pricePerSqm?.value || c.current?.income?.value
+                    );
+                    if (hasUsableData) {
+                      state.draftAnswer = buildSeedMetricTable(parsedData, state.preflight.historicalDecade || '1970s');
+                      console.log(`✅ Seed Metric fallback direct calculation successful`);
+                    }
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.log(`⚠️ Seed Metric format fix failed: ${err.message}`);
+          }
+        }
+      } else {
+        console.log(`✅ Seed Metric format validation passed`);
+      }
+    }
+    
     // Log attachment preservation for debugging
     const attachmentCount = extractedContent?.length || 0;
     if (attachmentCount > 0) {
@@ -1023,7 +1155,7 @@ DO NOT write prose paragraphs. Table + summary lines ONLY.
     }
     
     const hasNoDocuments = attachmentCount === 0;
-    const isSeedMetric = state.draftAnswer.includes('~nyan');
+    const isSeedMetricMode = state.mode === 'seed-metric'; // Use mode, not ~nyan signature
     const isTetralemma = isFalseDichotomy(query);
     const auditMode = hasNoDocuments ? 'RESEARCH' : 'STRICT';
     
