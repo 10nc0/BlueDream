@@ -244,6 +244,51 @@ async function preflightRouter(options) {
       const contextFallbackApplies = hasContextTicker && hasExplicitStockKeyword && hasVerbOrAdjective;
       
       // ========================================
+      // GEO-INTENT VETO: Check for geography context BEFORE AI-PUSH
+      // Prevents "LA vs NY price" from triggering ticker extraction
+      // ========================================
+      const cityAbbreviations = /\b(la|ny|sf|dc|hk|kl)\b/i;
+      const geoComparisonPattern = /\bvs\b.*\b(price|land|housing|property|cost|rent|income|salary)\b|\b(price|land|housing|property|cost|rent|income|salary)\b.*\bvs\b/i;
+      const hasCityAbbreviation = cityAbbreviations.test(query);
+      const hasGeoComparison = geoComparisonPattern.test(query);
+      const hasGeoIntent = hasCityAbbreviation && (hasGeoComparison || /\bvs\b/i.test(query));
+      
+      // STOCK-CONTEXT OVERRIDE: Explicit stock keywords disable geo-veto
+      // e.g., "$LA", "LA stock", "LA ticker", "LA shares" → genuine ticker query
+      const hasExplicitStockCue = /\$[A-Z]{1,5}\b|\b(stock|stocks|ticker|tickers|share|shares)\b/i.test(query);
+      
+      // If geo-intent detected AND no explicit stock cues AND no ticker already detected, force Seed Metric
+      if (hasGeoIntent && !hasExplicitStockCue && !psiEmaDetection.ticker) {
+        console.log(`🌍 GEO-VETO: City abbreviations + comparison detected → forcing Seed Metric mode`);
+        result.mode = 'seed-metric';
+        result.routingFlags.isSeedMetric = true;
+        result.routingFlags.geoVetoApplied = true;
+        result.searchStrategy = 'brave';
+        
+        // Extract cities from abbreviations for search (use global flag to get ALL matches)
+        const cityMap = { 'la': 'los angeles', 'ny': 'new york', 'sf': 'san francisco', 'dc': 'washington dc', 'hk': 'hong kong', 'kl': 'kuala lumpur' };
+        const detectedAbbrevs = query.toLowerCase().match(/\b(la|ny|sf|dc|hk|kl)\b/gi) || [];
+        const cities = [...new Set(detectedAbbrevs.map(abbr => cityMap[abbr.toLowerCase()] || abbr.toLowerCase()))];
+        
+        // Detect historical period
+        const yearMatch = query.match(/\b(19[5-9]\d|20[0-2]\d)\b/);
+        const historicalDecade = yearMatch ? `${yearMatch[1].slice(0, 3)}0s` : '1970s';
+        
+        if (cities.length > 0) {
+          result.seedMetricSearchQueries = cities.flatMap(city => [
+            `${city} residential property price per square meter 2024`,
+            `${city} median individual income salary 2024`,
+            `${city} housing price ${historicalDecade} historical per sqm`,
+            `${city} median income ${historicalDecade} historical`
+          ]);
+          result.historicalDecade = historicalDecade;
+          console.log(`🏠 GEO-VETO: Seed Metric for cities: ${cities.join(', ')}, historical: ${historicalDecade}`);
+        }
+        
+        // Skip rest of Ψ-EMA processing - return early handled by mode check below
+      }
+      
+      // ========================================
       // BIDIRECTIONAL 2/3 KEY RESCUE (AI-PUSH)
       // Read → Interpret → Push → Retry
       // ========================================
@@ -252,6 +297,11 @@ async function preflightRouter(options) {
       // Scenario 3: ticker + adjective, no verb → infer verb (implied "analyze")
       // Scenario 4: ticker only + stock context → infer both
       
+      // SKIP AI-PUSH if geo-intent already triggered Seed Metric
+      if (result.mode === 'seed-metric') {
+        console.log(`🌍 GEO-VETO: Skipping AI-PUSH (Seed Metric mode active)`);
+      }
+      
       let aiRescuedTicker = null;
       let aiInferredVerb = false;
       let aiInferredAdjective = false;
@@ -259,7 +309,8 @@ async function preflightRouter(options) {
       const keyCount = psiEmaDetection.keys.length;
       
       // Scenario 1: Has verb + adjective but no ticker → try AI ticker extraction
-      if (!psiEmaDetection.shouldTrigger && hasVerb && hasAdjective && !hasTicker) {
+      // BLOCKED if geo-intent detected
+      if (!psiEmaDetection.shouldTrigger && hasVerb && hasAdjective && !hasTicker && result.mode !== 'seed-metric') {
         console.log(`🔧 AI-PUSH: verb + adjective detected, missing ticker → extracting...`);
         aiRescuedTicker = await smartDetectTicker(query);
         if (aiRescuedTicker) {
@@ -292,7 +343,10 @@ async function preflightRouter(options) {
       const effectiveHasVerb = hasVerb || aiInferredVerb;
       const effectiveHasAdjective = hasAdjective || aiInferredAdjective;
       const effectiveKeyCount = (effectiveHasTicker ? 1 : 0) + (effectiveHasVerb ? 1 : 0) + (effectiveHasAdjective ? 1 : 0);
-      const shouldUnlock = (effectiveKeyCount >= 2 && effectiveHasTicker) || psiEmaDetection.shouldTrigger || hasExplicitModeKeyword;
+      
+      // GEO-VETO GUARD: Skip Ψ-EMA unlock entirely if Seed Metric mode was forced
+      const shouldUnlock = result.mode !== 'seed-metric' && 
+        ((effectiveKeyCount >= 2 && effectiveHasTicker) || psiEmaDetection.shouldTrigger || hasExplicitModeKeyword);
       
       if (shouldUnlock) {
         console.log(`🔑 AI-PUSH: ${effectiveKeyCount}/3 keys [ticker=${effectiveHasTicker}, verb=${effectiveHasVerb}, adj=${effectiveHasAdjective}] OR keyword=${hasExplicitModeKeyword} → ✅ UNLOCK`);
@@ -300,9 +354,10 @@ async function preflightRouter(options) {
     
       // DEFERRED MODE: Only commit to psi-ema AFTER verifying ticker is valid
       // This prevents false positives like "NY" (city) being treated as ticker
+      // SKIP entirely if Seed Metric mode was forced by geo-veto
       let tickerVerified = false;
       
-      if (shouldUnlock || contextFallbackApplies) {
+      if ((shouldUnlock || contextFallbackApplies) && result.mode !== 'seed-metric') {
         // Use ticker from key detection, AI rescue, or context
         result.ticker = psiEmaDetection.ticker || aiRescuedTicker || await smartDetectTicker(query);
         
@@ -402,7 +457,8 @@ async function preflightRouter(options) {
         }
       }
       // 3. Default: Groq-first (no search until audit rejects)
-      else {
+      // GUARD: Don't override seed-metric mode set by geo-veto
+      else if (result.mode !== 'seed-metric') {
         result.mode = 'general';
       }
     }
