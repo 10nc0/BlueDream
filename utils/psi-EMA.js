@@ -444,12 +444,31 @@ function calculateFidelity(dimensions = {}) {
   // Safe concat with null guards
   const safeConcat = (a, b) => (a || []).concat(b || []);
 
+  // Aggregate fidelity: average of θ, z, R fidelity ratios
+  const avgFidelity = (thetaFidelity + zFidelity + rFidelity) / 3;
+  const percent = Math.round(avgFidelity * 100);
+  
+  // φ-derived grade thresholds using PHI constants (pure φ-derivation):
+  // A: avgFidelity ≥ φ⁻¹ (0.618) AND all dimensions valid (strict)
+  // B: avgFidelity ≥ φ⁻¹ (0.618) - high quality
+  // C: avgFidelity ≥ φ⁻² (0.382) - acceptable
+  // D: avgFidelity < φ⁻² (0.382) - low fidelity
+  const allValid = theta.isValid && z.isValid && r.isValid;
+  let grade;
+  if (avgFidelity >= PHI_INVERSE && allValid) grade = 'A';
+  else if (avgFidelity >= PHI_INVERSE) grade = 'B';
+  else if (avgFidelity >= PHI_INV_SQUARED) grade = 'C';
+  else grade = 'D';
+
   return {
     theta,
     z,
     r,
     isValid: theta.isValid && z.isValid && r.isValid,
     hasSignal: theta.hasSignal || z.hasSignal || r.hasSignal,
+    // Aggregate grade and percent for display
+    grade,
+    percent,
     // Human-readable breakdown string
     breakdown: `θ: ${theta.real}/${theta.total} (${(theta.fidelity * 100).toFixed(0)}%) | z: ${z.real}/${z.total} (${(z.fidelity * 100).toFixed(0)}%) | R: ${r.real}/${r.total} (${(r.fidelity * 100).toFixed(0)}%)`,
     lowSignal: {

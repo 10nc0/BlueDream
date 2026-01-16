@@ -91,6 +91,20 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
 - 50yr ago (40-60yr ok) AND most recent available data
 - 2 cities if possible
 - DO NOT USE GDP, Gini, national averages
+
+MANDATORY OUTPUT FORMAT (preserve structure, no prose conversion):
+| City | Period | 700sqm Price | Income | P/I Ratio | Years | Regime |
+|------|--------|--------------|--------|-----------|-------|--------|
+[Fill table with data]
+
+**Regime Reading**: 
+- <10yr = 🟢 Optimism
+- 10-25yr = 🟡 Extraction  
+- >25yr = 🔴 Fatalism
+
+**Directional Change**: [City] P/I ratio ↑increased/↓decreased from [old] to [new] years
+
+Do NOT convert this structured output to conversational prose.
 `;
 }
 
