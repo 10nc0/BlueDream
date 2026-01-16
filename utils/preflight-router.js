@@ -289,10 +289,11 @@ async function preflightRouter(options) {
         console.log(`🔑 AI-PUSH: ${effectiveKeyCount}/3 keys [ticker=${effectiveHasTicker}, verb=${effectiveHasVerb}, adj=${effectiveHasAdjective}] OR keyword=${hasExplicitModeKeyword} → ✅ UNLOCK`);
       }
     
+      // DEFERRED MODE: Only commit to psi-ema AFTER verifying ticker is valid
+      // This prevents false positives like "NY" (city) being treated as ticker
+      let tickerVerified = false;
+      
       if (shouldUnlock || contextFallbackApplies) {
-        result.mode = 'psi-ema';
-        result.routingFlags.usesPsiEMA = true;
-        
         // Use ticker from key detection, AI rescue, or context
         result.ticker = psiEmaDetection.ticker || aiRescuedTicker || await smartDetectTicker(query);
         
@@ -303,7 +304,7 @@ async function preflightRouter(options) {
         }
         
         if (result.ticker) {
-          console.log(`🎯 Preflight: Detected ticker ${result.ticker} for Ψ-EMA`);
+          console.log(`🎯 Preflight: Attempting ticker verification for ${result.ticker}`);
           
           // Fetch stock data (exact periods: 3mo daily, 15mo weekly)
           try {
@@ -316,6 +317,9 @@ async function preflightRouter(options) {
             const weeklyUnavailableReason = result.stockData?.weekly?.unavailableReason;
             
             console.log(`📈 Preflight: Fetched ${dailyBars} daily bars + ${weeklyBars} weekly bars for ${result.ticker}`);
+            
+            // TICKER VERIFIED: Any bars > 0 means valid stock ticker (even if insufficient for full analysis)
+            tickerVerified = dailyBars > 0;
             
             // Run Ψ-EMA analysis on BOTH timeframes if enough data
             // Daily: need 55 bars for EMA-55, Weekly: need 55 bars for EMA-55
@@ -367,8 +371,25 @@ async function preflightRouter(options) {
           } catch (fetchErr) {
             console.log(`⚠️ Preflight: Stock fetch failed for ${result.ticker}: ${fetchErr.message}`);
             result.error = `Stock fetch failed: ${fetchErr.message}`;
-            result.stockContext = buildFallbackStockContext(result.ticker);
+            // Don't set tickerVerified - fetch failed, ticker is invalid
           }
+        }
+        
+        // COMMIT MODE: Only set psi-ema if ticker was verified with real data
+        if (tickerVerified) {
+          result.mode = 'psi-ema';
+          result.routingFlags.usesPsiEMA = true;
+          console.log(`✅ Preflight: Ticker ${result.ticker} verified → mode=psi-ema`);
+        } else if (result.ticker) {
+          // Ticker pattern matched but no data (like "NY" for city) - clear and fall through
+          console.log(`❌ Preflight: Ticker ${result.ticker} invalid (no data) → mode=general`);
+          result.ticker = null;
+          result.stockData = null;
+          result.stockContext = null;
+          result.mode = 'general';
+        } else {
+          // No ticker at all
+          result.mode = 'general';
         }
       }
       // 3. Default: Groq-first (no search until audit rejects)

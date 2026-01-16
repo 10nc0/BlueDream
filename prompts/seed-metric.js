@@ -20,6 +20,8 @@ const SEED_METRIC_TRIGGER_PATTERNS = [
   /price[\s-]*(?:to|vs?)[\s-]*income/i,
   /housing\s*affordability/i,
   /land\s*affordability/i,
+  /\bland\s*price/i,              // "land price" direct match
+  /\bproperty\s*price/i,          // "property price" direct match
   /real\s*estate.*(?:income|salary|wage)/i,
   /(?:income|salary|wage).*real\s*estate/i,
   /700\s*(?:sq\s*m|sqm|m²)/i,
@@ -30,6 +32,7 @@ const SEED_METRIC_TRIGGER_PATTERNS = [
   /extinction.*(?:human|species|civilization)/i,
   /city\s*comparison.*(?:price|income|housing)/i,
   /(?:price|income|housing).*city\s*comparison/i,
+  /\b\w+\s+vs\.?\s+\w+.*(?:land|housing|property)/i,  // "X vs Y land/housing/property"
   /(?:50|fifty)\s*years?\s*ago/i,
   /historical.*(?:housing|land|price)/i
 ];
