@@ -94,6 +94,7 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
 - 50yr ago (40-60yr ok) AND most recent available data
 - 2 cities if possible
 - DO NOT USE GDP, Gini, national averages
+- DECADE LABELING: When using decade-range data (e.g., 1960-1979 for "1970"), label the Period column as "1970s" or "~1970", NOT the exact year "1970" unless you have exact year data
 
 MANDATORY OUTPUT FORMAT (preserve structure, no prose conversion):
 | City | Period | 700sqm Price | Income | P/I Ratio | Years | Regime |

@@ -189,20 +189,29 @@ async function preflightRouter(options) {
       const cityPattern = /\b(tokyo|singapore|hong kong|hongkong|london|new york|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
       const cities = [...new Set((query.match(cityPattern) || []).map(c => c.toLowerCase()))];
       
+      // Detect historical period from query (1970, 1980, 1990, etc.) → convert to decade
+      const yearMatch = query.match(/\b(19[5-9]\d|20[0-2]\d)\b/);
+      const historicalDecade = yearMatch ? `${yearMatch[1].slice(0, 3)}0s` : '1970s';
+      
       if (cities.length > 0) {
         result.seedMetricSearchQueries = cities.flatMap(city => [
           `${city} residential property price per square meter 2024`,
           `${city} median individual income salary 2024`,
-          `${city} housing price 1970s historical per sqm`
+          `${city} housing price ${historicalDecade} historical per sqm`,
+          `${city} median income ${historicalDecade} historical`
         ]);
-        console.log(`🏠 Preflight: SEED_METRIC detected for cities: ${cities.join(', ')}`);
+        result.historicalDecade = historicalDecade;
+        console.log(`🏠 Preflight: SEED_METRIC detected for cities: ${cities.join(', ')}, historical: ${historicalDecade}`);
         console.log(`🔍 Preflight: Will search for: ${result.seedMetricSearchQueries.slice(0, 3).join(' | ')}...`);
       } else {
         result.seedMetricSearchQueries = [
           'residential property price per square meter comparison major cities 2024',
-          'median income by country 2024'
+          'median income by country 2024',
+          `housing price ${historicalDecade} historical major cities`,
+          `median income ${historicalDecade} historical`
         ];
-        console.log(`🏠 Preflight: SEED_METRIC detected (no specific city)`);
+        result.historicalDecade = historicalDecade;
+        console.log(`🏠 Preflight: SEED_METRIC detected (no specific city), historical: ${historicalDecade}`);
       }
     }
     // 2. Ψ-EMA: Push-based 2/3 key detection (Lego-style Turing test)
