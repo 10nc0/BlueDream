@@ -107,10 +107,19 @@ You MUST output this exact table structure. This is non-negotiable:
 | [city] | [then] | [price] | [income] | [ratio] | [yr] | [emoji] |
 | [city] | [now]  | [price] | [income] | [ratio] | [yr] | [emoji] |
 
-REGIME READINGS (φ-derived from 25yr fertility window constraint):
-• 🟢 OPTIMISM: <10 years (sustainable, enables family formation)
-• 🟡 EXTRACTION: 10-25 years (stressed, delayed family formation)  
-• 🔴 FATALISM: >25 years (beyond fertility window, demographic collapse)
+DUAL-THRESHOLD SYSTEM:
+┌─────────────────────────────────────────────────────────────────┐
+│ PRIMARY MODE ($/sqm available): 700sqm × $/sqm                  │
+│   • 🟢 OPTIMISM: <10 years                                      │
+│   • 🟡 EXTRACTION: 10-25 years                                  │
+│   • 🔴 FATALISM: >25 years                                      │
+├─────────────────────────────────────────────────────────────────┤
+│ FALLBACK MODE (no $/sqm, raw price only): P/I ratio             │
+│   • 🟢 OPTIMISM: P/I ≤3.5 (≈10yr @ 35% housing spend)           │
+│   • 🔴 FATALISM: P/I >3.5                                       │
+│   • Show "P/I X.X" in Years column when in fallback mode        │
+└─────────────────────────────────────────────────────────────────┘
+Priority: ALWAYS try $/sqm × 700 first. Only use raw P/I when $/sqm unavailable.
 
 After table, add ONE line per city:
 **[City]**: [old]yr → [new]yr = [emoji] [Regime] ([↑worsened/↓improved])
