@@ -382,15 +382,42 @@ function validateSeedMetricOutput(output) {
   }
   
   // Check for prose paragraphs (bad sign)
-  const proseIndicators = output.match(/(?:Fast forward|Using the Seed Metric|we can calculate|However,|it's essential)/gi);
+  const proseIndicators = output.match(/(?:Fast forward|Using the Seed Metric|we can calculate|However,|it's essential|In conclusion|assuming a)/gi);
   if (proseIndicators && proseIndicators.length >= 2) {
     issues.push('Contains prose paragraphs instead of table');
+  }
+  
+  // Check paragraph count - if >3 paragraphs and no table header, reject
+  const paragraphs = output.split(/\n\n+/).filter(p => p.trim().length > 50);
+  if (paragraphs.length > 3 && !hasTableHeader) {
+    issues.push('Too many paragraphs without table format');
   }
   
   // Check for wrong 700sqm interpretation (e.g., "3-room = 700sqm")
   const wrong700sqm = /(?:3-room|HDB|apartment|flat)[^.]*(?:approximately|about|around)?\s*700\s*(?:sqm|sq\s*m|m²)/i.test(output);
   if (wrong700sqm) {
     issues.push('Wrong 700sqm interpretation (apartment ≠ 700sqm)');
+  }
+  
+  // HALLUCINATION DETECTION - specific wrong patterns
+  // 1. 700 sqft confusion (should be 700 m², not sqft)
+  if (/700\s*(?:sqft|sq\s*ft|square\s*feet)/i.test(output)) {
+    issues.push('Wrong unit: 700 sqft instead of 700 m² (10x error)');
+  }
+  
+  // 2. Mortgage duration confusion (P/I years ≠ mortgage term)
+  if (/(?:time to pay off|pay off the mortgage|mortgage.*(?:5-7|10-12|8-10)\s*years)/i.test(output)) {
+    issues.push('Confusing P/I years with mortgage duration');
+  }
+  
+  // 3. Wrong threshold (3.5 instead of 10/25)
+  if (/threshold\s*(?:of|is)?\s*3\.5/i.test(output)) {
+    issues.push('Wrong threshold: 3.5 instead of 10/25 years');
+  }
+  
+  // 4. Generic sqft mention without 700m² (likely wrong unit)
+  if (/\d+\s*sqft/i.test(output) && !has700sqm) {
+    issues.push('Uses sqft without proper 700m² reference');
   }
   
   return {

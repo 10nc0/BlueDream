@@ -981,10 +981,17 @@ You MUST output this exact table. This is non-negotiable empiric data:
 |------|--------|--------------|--------|-----|-------|--------|
 [Fill each city with THEN and NOW rows]
 
-CRITICAL:
-• ALWAYS convert price/m² to 700sqm (multiply by 700)
+CRITICAL PROXY RULES:
+• 700 m² = family home lot (NOT 700 sqft - that's 10x smaller!)
+• Convert price/m² × 700 to get 700sqm price
 • Use SINGLE-EARNER income (not household/dual)
-• Calculate: Years = Price ÷ Income
+• Years = 700sqm Price ÷ Income (income years to afford, NOT mortgage term)
+
+⚠️ HALLUCINATION GUARDS - DO NOT:
+• Confuse 700 m² with 700 sqft (65 m²) - order of magnitude error
+• Use "time to pay off mortgage" - that's mortgage TERM, not affordability
+• Use threshold of "3.5" - the thresholds are 10/25 YEARS
+• Write prose paragraphs - TABLE ONLY
 
 REGIME (φ-derived from 25yr fertility window):
 • 🟢 OPTIMISM: <10 years
@@ -994,7 +1001,7 @@ REGIME (φ-derived from 25yr fertility window):
 After table, ONE summary line per city:
 **[City]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
 
-DO NOT write prose paragraphs. Table + summary lines ONLY.
+OUTPUT: Table + summary lines + legend. NO PROSE.
 ═══════════════════════════════════════════════════════════════`;
       finalPrompt = `${finalPrompt}\n\n${seedMetricInstruction}`;
       console.log(`🏠 Seed Metric instruction appended (enforcing table format)`);
