@@ -147,64 +147,9 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
 }
 
 /**
- * Parse raw home/property price (not per sqm) for P/I fallback mode
- * @param {string} text - Text to search
- * @param {string} city - City name for context
- * @returns {object|null} { value: number, currency: string, raw: string }
- */
-function parseRawPrice(text, city = '') {
-  if (!text) return null;
-  
-  // Detect currency from context
-  let currency = 'USD';
-  if (/€|EUR|euro/i.test(text)) currency = 'EUR';
-  else if (/£|GBP|pound/i.test(text)) currency = 'GBP';
-  else if (/¥|JPY|yen/i.test(text)) currency = 'JPY';
-  else if (/SGD|S\$/i.test(text)) currency = 'SGD';
-  else if (/HKD|HK\$/i.test(text)) currency = 'HKD';
-  
-  const patterns = [
-    // "median home price $500,000" or "average house price €350,000"
-    /(?:median|average|mean)\s*(?:home|house|property|housing)\s*price[^\d]*([€$£¥]?[\d,]+(?:\.\d+)?)\s*(?:k|thousand|million|M)?/gi,
-    // "$500,000 median home price"
-    /([€$£¥]?[\d,]+(?:\.\d+)?)\s*(?:k|thousand|million|M)?\s*(?:median|average)\s*(?:home|house|property)/gi,
-    // "homes cost $X" or "house prices are $X"
-    /(?:home|house)s?\s*(?:cost|price)[^\d]*([€$£¥]?[\d,]+(?:\.\d+)?)\s*(?:k|thousand|million|M)?/gi,
-    // "priced at $X" in housing context
-    /(?:housing|residential|property)[^.]*priced\s*(?:at|around)?\s*([€$£¥]?[\d,]+(?:\.\d+)?)\s*(?:k|thousand|million|M)?/gi,
-  ];
-  
-  for (const pattern of patterns) {
-    const matches = [...text.matchAll(pattern)];
-    for (const match of matches) {
-      let valueStr = match[1].replace(/[€$£¥,]/g, '');
-      let value = parseFloat(valueStr);
-      
-      // Handle multipliers
-      if (/million|M/i.test(match[0])) {
-        value *= 1000000;
-      } else if (/k|thousand/i.test(match[0])) {
-        value *= 1000;
-      }
-      
-      // Sanity check: home price should be reasonable (10K - 100M)
-      if (value >= 10000 && value <= 100000000) {
-        return {
-          value,
-          currency,
-          raw: match[0]
-        };
-      }
-    }
-  }
-  
-  return null;
-}
-
-/**
  * Parse search results for Seed Metric data
  * Extracts price/sqm and income for each city/period
- * Falls back to raw price when $/sqm unavailable
+ * Uses ONLY $/sqm × 700 formula - NO raw price fallback
  * @param {string} searchContext - Combined search results text
  * @param {string[]} cities - City names to look for
  * @param {string} historicalDecade - e.g., "1970s"
@@ -223,8 +168,8 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = '197
   
   for (const city of normalizedCities) {
     result.cities[city] = {
-      current: { pricePerSqm: null, income: null, rawPrice: null },
-      historical: { pricePerSqm: null, income: null, rawPrice: null, decade: historicalDecade }
+      current: { pricePerSqm: null, income: null },
+      historical: { pricePerSqm: null, income: null, decade: historicalDecade }
     };
     
     // Split search context by city mentions for better targeting
@@ -249,10 +194,6 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = '197
         if (!result.cities[city].current.income) {
           result.cities[city].current.income = parseIncome(segment, city);
         }
-        // P/I fallback: try raw price if no $/sqm found
-        if (!result.cities[city].current.pricePerSqm && !result.cities[city].current.rawPrice) {
-          result.cities[city].current.rawPrice = parseRawPrice(segment, city);
-        }
       }
     }
     
@@ -267,63 +208,25 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = '197
         if (!result.cities[city].historical.income) {
           result.cities[city].historical.income = parseIncome(segment, city);
         }
-        // P/I fallback: try raw price if no $/sqm found
-        if (!result.cities[city].historical.pricePerSqm && !result.cities[city].historical.rawPrice) {
-          result.cities[city].historical.rawPrice = parseRawPrice(segment, city);
-        }
       }
     }
     
-    // Fallback for current data: search entire context for this city
-    const needsCurrentFallback = !result.cities[city].current.pricePerSqm || !result.cities[city].current.income;
-    const needsHistoricalFallback = !result.cities[city].historical.pricePerSqm || !result.cities[city].historical.income;
-    
-    if (needsCurrentFallback || needsHistoricalFallback) {
+    // Fallback: search entire context for this city
+    if (!result.cities[city].current.pricePerSqm || !result.cities[city].current.income) {
       const cityMentions = searchContext.match(new RegExp(`[^.]*${city}[^.]*`, 'gi'));
       if (cityMentions) {
         const allCityText = cityMentions.join(' ');
-        
-        // Current data fallback
-        if (needsCurrentFallback) {
-          if (!result.cities[city].current.pricePerSqm) {
-            result.cities[city].current.pricePerSqm = parsePricePerSqm(allCityText, city);
-          }
-          if (!result.cities[city].current.income) {
-            result.cities[city].current.income = parseIncome(allCityText, city);
-          }
-          // P/I fallback: if still no $/sqm, try raw home price
-          if (!result.cities[city].current.pricePerSqm && !result.cities[city].current.rawPrice) {
-            result.cities[city].current.rawPrice = parseRawPrice(allCityText, city);
-          }
+        if (!result.cities[city].current.pricePerSqm) {
+          result.cities[city].current.pricePerSqm = parsePricePerSqm(allCityText, city);
         }
-        
-        // Historical data fallback (independent of current)
-        if (needsHistoricalFallback) {
-          if (!result.cities[city].historical.pricePerSqm) {
-            result.cities[city].historical.pricePerSqm = parsePricePerSqm(allCityText, city);
-          }
-          if (!result.cities[city].historical.income) {
-            result.cities[city].historical.income = parseIncome(allCityText, city);
-          }
-          // P/I fallback: if still no $/sqm, try raw home price
-          if (!result.cities[city].historical.pricePerSqm && !result.cities[city].historical.rawPrice) {
-            result.cities[city].historical.rawPrice = parseRawPrice(allCityText, city);
-          }
+        if (!result.cities[city].current.income) {
+          result.cities[city].current.income = parseIncome(allCityText, city);
         }
       }
     }
     
-    // Determine which mode was used for each period
-    const currHasSqm = !!result.cities[city].current.pricePerSqm?.value;
-    const currHasRaw = !!result.cities[city].current.rawPrice?.value;
-    const currMode = currHasSqm ? '700sqm' : (currHasRaw ? 'P/I' : 'N/A');
-    
-    const histHasSqm = !!result.cities[city].historical.pricePerSqm?.value;
-    const histHasRaw = !!result.cities[city].historical.rawPrice?.value;
-    const histMode = histHasSqm ? '700sqm' : (histHasRaw ? 'P/I' : 'N/A');
-    
-    result.parseLog.push(`${city} CURRENT: price/sqm=${result.cities[city].current.pricePerSqm?.value || 'N/A'}, rawPrice=${result.cities[city].current.rawPrice?.value || 'N/A'}, income=${result.cities[city].current.income?.value || 'N/A'}, mode=${currMode}`);
-    result.parseLog.push(`${city} HISTORICAL: price/sqm=${result.cities[city].historical.pricePerSqm?.value || 'N/A'}, rawPrice=${result.cities[city].historical.rawPrice?.value || 'N/A'}, income=${result.cities[city].historical.income?.value || 'N/A'}, mode=${histMode}`);
+    result.parseLog.push(`${city} CURRENT: price/sqm=${result.cities[city].current.pricePerSqm?.value || 'N/A'}, income=${result.cities[city].current.income?.value || 'N/A'}`);
+    result.parseLog.push(`${city} HISTORICAL: price/sqm=${result.cities[city].historical.pricePerSqm?.value || 'N/A'}, income=${result.cities[city].historical.income?.value || 'N/A'}`);
   }
   
   return result;
@@ -331,42 +234,23 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = '197
 
 /**
  * Calculate Seed Metric values and assign regime
- * Two modes:
- * - Primary (700sqm): Uses $/sqm × 700, thresholds 10/25 years (3-tier)
- * - Fallback (P/I): Uses raw price/income ratio, threshold 3.5 (2-tier binary)
+ * ONLY uses: 700sqm Price / Single-Earner Income = Years
+ * Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism
  * 
- * @param {number} pricePerSqm - Price per square meter (null for P/I fallback mode)
- * @param {number} income - Annual income (single-earner)
- * @param {object} options - { rawPrice: number } for P/I fallback mode
- * @returns {object} { price700sqm, pi_ratio, years, regime, emoji, mode }
+ * NO mortgage calculations, NO interest rates, NO down payments
+ * 
+ * @param {number} pricePerSqm - Price per square meter
+ * @param {number} income - Annual income (SINGLE-EARNER, not household)
+ * @returns {object} { price700sqm, pi_ratio, years, regime, emoji }
  */
-function calculateSeedMetric(pricePerSqm, income, options = {}) {
-  const { rawPrice } = options;
-  
-  // P/I fallback mode: when we have raw price but not $/sqm
-  if (!pricePerSqm && rawPrice && income && income > 0) {
-    const pi_ratio = rawPrice / income;
-    // Binary threshold: P/I 3.5
-    const regime = pi_ratio <= 3.5 ? 'Optimism' : 'Fatalism';
-    const emoji = pi_ratio <= 3.5 ? '🟢' : '🔴';
-    return { 
-      price700sqm: null, 
-      pi_ratio, 
-      years: null, 
-      regime, 
-      emoji, 
-      mode: 'P/I fallback (3.5 threshold)' 
-    };
-  }
-  
-  // Primary mode: 700sqm calculation
+function calculateSeedMetric(pricePerSqm, income) {
   if (!pricePerSqm || !income || income === 0) {
-    return { price700sqm: null, pi_ratio: null, years: null, regime: 'N/A', emoji: '⚪', mode: 'N/A' };
+    return { price700sqm: null, pi_ratio: null, years: null, regime: 'N/A', emoji: '⚪' };
   }
   
   const price700sqm = pricePerSqm * 700;
   const pi_ratio = price700sqm / income;
-  const years = pi_ratio; // P/I ratio = years to afford
+  const years = pi_ratio; // P/I ratio = years to afford (simple division, NO mortgage)
   
   // Regime assignment (φ-derived from 25yr fertility window) - 3-tier
   let regime, emoji;
@@ -381,7 +265,7 @@ function calculateSeedMetric(pricePerSqm, income, options = {}) {
     emoji = '🔴';
   }
   
-  return { price700sqm, pi_ratio, years, regime, emoji, mode: '700sqm (10/25yr thresholds)' };
+  return { price700sqm, pi_ratio, years, regime, emoji };
 }
 
 /**
@@ -425,29 +309,25 @@ function buildSeedMetricTable(parsedData, historicalDecade = '1970s') {
   for (const [city, data] of Object.entries(parsedData.cities || {})) {
     const cityTitle = city.charAt(0).toUpperCase() + city.slice(1);
     
-    // Historical row - try 700sqm mode first, fallback to P/I mode
+    // Historical row
     const histPriceSqm = data.historical?.pricePerSqm?.value;
-    const histRawPrice = data.historical?.rawPrice?.value; // For P/I fallback
     const histIncome = data.historical?.income?.value;
     const histCurrency = data.historical?.pricePerSqm?.currency || data.historical?.income?.currency || 'USD';
-    const histMetric = calculateSeedMetric(histPriceSqm, histIncome, { rawPrice: histRawPrice });
+    const histMetric = calculateSeedMetric(histPriceSqm, histIncome);
     
-    // Current row - try 700sqm mode first, fallback to P/I mode
+    // Current row
     const currPriceSqm = data.current?.pricePerSqm?.value;
-    const currRawPrice = data.current?.rawPrice?.value; // For P/I fallback
     const currIncome = data.current?.income?.value;
     const currCurrency = data.current?.pricePerSqm?.currency || data.current?.income?.currency || 'USD';
-    const currMetric = calculateSeedMetric(currPriceSqm, currIncome, { rawPrice: currRawPrice });
+    const currMetric = calculateSeedMetric(currPriceSqm, currIncome);
     
-    // Regime label: use emoji+regime even in P/I mode (years may be null)
+    // Regime label with emoji
     const histRegimeLabel = histMetric.regime !== 'N/A' ? `${histMetric.emoji} ${histMetric.regime}` : 'N/A';
     const currRegimeLabel = currMetric.regime !== 'N/A' ? `${currMetric.emoji} ${currMetric.regime}` : 'N/A';
     
-    // Years display: show actual years or P/I indicator
-    const histYearsDisplay = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 
-                             (histMetric.pi_ratio ? `P/I ${histMetric.pi_ratio.toFixed(1)}` : 'N/A');
-    const currYearsDisplay = currMetric.years ? `${currMetric.years.toFixed(0)}yr` : 
-                             (currMetric.pi_ratio ? `P/I ${currMetric.pi_ratio.toFixed(1)}` : 'N/A');
+    // Years display (simple division, no mortgage)
+    const histYearsDisplay = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
+    const currYearsDisplay = currMetric.years ? `${currMetric.years.toFixed(0)}yr` : 'N/A';
     
     // Add historical row
     rows.push(`| ${cityTitle} | ${historicalDecade} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histMetric.pi_ratio?.toFixed(1) || 'N/A'} | ${histYearsDisplay} | ${histRegimeLabel} |`);
@@ -455,11 +335,9 @@ function buildSeedMetricTable(parsedData, historicalDecade = '1970s') {
     // Add current row
     rows.push(`| ${cityTitle} | 2024 | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currMetric.pi_ratio?.toFixed(1) || 'N/A'} | ${currYearsDisplay} | ${currRegimeLabel} |`);
     
-    // Build summary line - handle both modes
-    const histSummary = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 
-                        (histMetric.pi_ratio ? `P/I ${histMetric.pi_ratio.toFixed(1)}` : 'N/A');
-    const currSummary = currMetric.years ? `${currMetric.years.toFixed(0)}yr` : 
-                        (currMetric.pi_ratio ? `P/I ${currMetric.pi_ratio.toFixed(1)}` : 'N/A');
+    // Build summary line
+    const histSummary = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
+    const currSummary = currMetric.years ? `${currMetric.years.toFixed(0)}yr` : 'N/A';
     const direction = (currMetric.pi_ratio && histMetric.pi_ratio) 
       ? (currMetric.pi_ratio > histMetric.pi_ratio ? '↑worsened' : '↓improved')
       : '';
@@ -470,21 +348,17 @@ function buildSeedMetricTable(parsedData, historicalDecade = '1970s') {
   const table = rows.join('\n');
   const summaryBlock = summaries.join('\n');
   
-  // Legend explaining both threshold systems with 35% spend ratio derivation
+  // Legend: simple thresholds, NO mortgage complexity
   const legend = `
 ---
-**Regime Thresholds** (φ-derived from 25yr fertility window):
+**Seed Metric Regime** (φ-derived from 25yr fertility window):
 
-**Primary (700sqm × $/m²)** — 3-tier when $/sqm data available:
+Formula: **Years = (700sqm Price) ÷ (Single-Earner Income)**
+*(Simple division. NO mortgage. NO interest rates. NO down payments.)*
+
 - 🟢 **OPTIMISM**: <10 years — Housing accessible within early career
 - 🟡 **EXTRACTION**: 10-25 years — Affordable but requires sustained effort  
-- 🔴 **FATALISM**: >25 years — Exceeds fertility window; systemic barrier
-
-**Fallback (raw P/I)** — 2-tier when only price/income available:
-- 🟢 **OPTIMISM**: P/I ≤ 3.5
-- 🔴 **FATALISM**: P/I > 3.5
-
-*Note: P/I 3.5 ≈ 10 years at 35% housing spend (Years = P/I ÷ 0.35)*`;
+- 🔴 **FATALISM**: >25 years — Exceeds fertility window; systemic barrier`;
   
   return `${table}\n\n${summaryBlock}\n${legend}`;
 }
@@ -548,13 +422,15 @@ function validateSeedMetricOutput(output) {
     issues.push('Wrong unit: 700 sqft instead of 700 m² (10x error)');
   }
   
-  // 2. Mortgage duration confusion (P/I years ≠ mortgage term)
-  if (/(?:time to pay off|pay off the mortgage|mortgage.*(?:5-7|10-12|8-10)\s*years)/i.test(output)) {
-    issues.push('Confusing P/I years with mortgage duration');
+  // 2. Mortgage/interest rate calculations (FORBIDDEN - Years = Price/Income only)
+  if (/(?:down\s*payment|interest\s*rate|mortgage|pay\s*off|amortiz|loan\s*term|\d+%\s*interest)/i.test(output)) {
+    issues.push('FORBIDDEN: Contains mortgage/interest calculations. Years = Price ÷ Income (simple division)');
   }
   
-  // 3. P/I 3.5 threshold is VALID for fallback mode - do not reject
-  // (Previously rejected, but 3.5 ≈ 10yr when accounting for housing spend ratio)
+  // 3. P/I 3.5 threshold (FORBIDDEN - removed fallback mode)
+  if (/(?:P\/I|price[\s-]*to[\s-]*income).*3\.5|threshold.*3\.5/i.test(output)) {
+    issues.push('FORBIDDEN: P/I 3.5 threshold. Use 10/25yr only.');
+  }
   
   // 4. Generic sqft mention without 700m² (likely wrong unit)
   if (/\d+\s*sqft/i.test(output) && !has700sqm) {
