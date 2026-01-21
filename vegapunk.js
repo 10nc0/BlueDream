@@ -15,6 +15,7 @@ const { Pool } = require('pg');
 const session = require('express-session');
 const connectPg = require('connect-pg-simple');
 const rateLimit = require('express-rate-limit');
+const logger = require('./lib/logger');
 const twilio = require('twilio');
 const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
@@ -473,14 +474,14 @@ app.use((req, res, next) => {
 
 // Serve AI Playground (public, no auth - sovereign gift to the world)
 app.get('/AI', (req, res) => {
-    console.log(`[${getTimestamp()}] 🎮 AI Playground accessed - IP: ${req.ip}`);
+    logger.info({ ip: req.ip }, '🎮 AI Playground accessed');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(__dirname + '/public/playground.html');
 });
 
 // Serve login page without authentication (must come before requireAuth check)
 app.get('/login.html', (req, res) => {
-    console.log(`[${getTimestamp()}] 📱 Login page accessed - IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
+    logger.info({ ip: req.ip, ua: req.get('user-agent') }, '📱 Login page accessed');
     // Prevent browser caching to ensure latest JavaScript is always loaded
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -490,7 +491,7 @@ app.get('/login.html', (req, res) => {
 
 // Serve signup page without authentication
 app.get('/signup.html', (req, res) => {
-    console.log(`[${getTimestamp()}] 📝 Signup page accessed - IP: ${req.ip}, User-Agent: ${req.get('user-agent')}`);
+    logger.info({ ip: req.ip, ua: req.get('user-agent') }, '📝 Signup page accessed');
     // Prevent browser caching to ensure latest JavaScript is always loaded
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -500,7 +501,7 @@ app.get('/signup.html', (req, res) => {
 
 // Serve dev panel (auth happens client-side via JWT)
 app.get('/dev', (req, res) => {
-    console.log(`[${getTimestamp()}] 🛠️  Dev panel accessed - IP: ${req.ip}`);
+    logger.info({ ip: req.ip }, '🛠️  Dev panel accessed');
     res.sendFile(__dirname + '/public/dev.html');
 });
 
