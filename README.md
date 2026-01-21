@@ -47,7 +47,7 @@ A notebook app with tags and Regex search (no more folder & filings) with a beau
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DISCORD_WEBHOOK_URL` | **Yes** | Discord webhook for message forwarding |
+| `NYANBOOK_WEBHOOK_URL` | **Yes** | Discord Ledger webhook for message forwarding |
 | `DATABASE_URL` | Auto | Created when you set up PostgreSQL |
 | `SESSION_SECRET` | Auto | Session encryption key (auto-generated) |
 
