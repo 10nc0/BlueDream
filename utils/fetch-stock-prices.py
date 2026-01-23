@@ -283,7 +283,7 @@ def fetch_stock_data(ticker: str, custom_period: str | None = None) -> dict:
     
     Optimized minimal-fetch strategy (Dec 28, 2025):
     - Daily: '6mo' = ~130 trading days (covers 98-row warm-up + 30+ usable rows)
-    - Weekly: '2y' = ~104 weeks (covers 98-row warm-up + usable rows)
+    - Weekly: '4y' = ~208 weeks (covers 98-row warm-up + high-fidelity EMA)
     
     z-score warm-up requirement (vφ⁷ 2-pass MAD):
     - Pass 1: 50-period rolling median = 49 warm-up rows
@@ -318,9 +318,9 @@ def fetch_stock_data(ticker: str, custom_period: str | None = None) -> dict:
         stock = yf.Ticker(ticker.upper())
         
         # Scale periods with null guards and cushion
-        # Default: 98 rows + cushion -> 6mo daily (~130 bars), 2y weekly (~104 bars)
+        # Default: 98 rows + cushion -> 6mo daily (~130 bars), 4y weekly (~208 bars)
         daily_period = custom_period if custom_period else '6mo'
-        weekly_period = '2y' if not custom_period else (custom_period if 'y' in custom_period else '2y')
+        weekly_period = '4y' if not custom_period else (custom_period if 'y' in custom_period else '4y')
 
         # Fetch DAILY data
         hist_daily = stock.history(period=daily_period, interval='1d')
