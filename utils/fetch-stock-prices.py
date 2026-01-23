@@ -282,7 +282,7 @@ def fetch_stock_data(ticker: str, custom_period: str | None = None) -> dict:
     Returns BOTH daily and weekly timeframes for dual Ψ-EMA analysis.
     
     Optimized minimal-fetch strategy (Dec 28, 2025):
-    - Daily: '6mo' = ~130 trading days (covers 98-row warm-up + 30+ usable rows)
+    - Daily: '1y' = ~260 trading days (covers 98-row warm-up + high-fidelity EMA)
     - Weekly: '4y' = ~208 weeks (covers 98-row warm-up + high-fidelity EMA)
     
     z-score warm-up requirement (vφ⁷ 2-pass MAD):
@@ -318,8 +318,8 @@ def fetch_stock_data(ticker: str, custom_period: str | None = None) -> dict:
         stock = yf.Ticker(ticker.upper())
         
         # Scale periods with null guards and cushion
-        # Default: 98 rows + cushion -> 6mo daily (~130 bars), 4y weekly (~208 bars)
-        daily_period = custom_period if custom_period else '6mo'
+        # Default: 98 rows + cushion -> 1y daily (~260 bars), 4y weekly (~208 bars)
+        daily_period = custom_period if custom_period else '1y'
         weekly_period = '4y' if not custom_period else (custom_period if 'y' in custom_period else '4y')
 
         # Fetch DAILY data
