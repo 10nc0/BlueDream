@@ -65,6 +65,48 @@ function detectRealtimeIntent(query) {
 }
 
 /**
+ * BLOB DETECTION: Extract main query from large text blobs
+ * 
+ * When users paste large text (explanations, code, articles), the actual query
+ * is usually in the first or last 2-3 sentences. This prevents false positives
+ * like "Step 1:" being detected as ticker "STEP".
+ * 
+ * Threshold: 500 chars or 10+ sentences → treat as blob
+ * 
+ * @param {string} text - Full user input
+ * @returns {Object} { mainQuery, isBlob, fullText }
+ */
+function extractMainQuery(text) {
+  if (!text || typeof text !== 'string') {
+    return { mainQuery: '', isBlob: false, fullText: '' };
+  }
+  
+  const BLOB_CHAR_THRESHOLD = 500;
+  const BLOB_SENTENCE_THRESHOLD = 10;
+  
+  // Split into sentences (handle common patterns)
+  const sentences = text.split(/(?<=[.!?])\s+|(?<=\n)\s*/g).filter(s => s.trim().length > 0);
+  
+  const isBlob = text.length > BLOB_CHAR_THRESHOLD || sentences.length >= BLOB_SENTENCE_THRESHOLD;
+  
+  if (!isBlob) {
+    return { mainQuery: text, isBlob: false, fullText: text };
+  }
+  
+  // Extract first 3 sentences + last 2 sentences as "main query"
+  const firstN = sentences.slice(0, 3);
+  const lastN = sentences.slice(-2);
+  
+  // Dedupe if overlap
+  const mainSentences = [...new Set([...firstN, ...lastN])];
+  const mainQuery = mainSentences.join(' ');
+  
+  console.log(`📦 BLOB DETECTED: ${text.length} chars, ${sentences.length} sentences → extracted ${mainSentences.length} main sentences for classification`);
+  
+  return { mainQuery, isBlob: true, fullText: text };
+}
+
+/**
  * @typedef {Object} PreflightResult
  * @property {string} mode - Query mode: 'psi-ema' | 'seed-metric' | 'financial' | 'legal' | 'general'
  * @property {string|null} ticker - Extracted stock ticker (e.g., 'META')
@@ -114,6 +156,14 @@ function formatMarketCap(marketCap) {
 async function preflightRouter(options) {
   const { query = '', attachments = [], docContext = {}, contextResult = null } = options;
   
+  // ========================================
+  // BLOB DETECTION: Extract main query from large text
+  // Prevents false positives like "Step 1:" → "STEP" ticker
+  // ========================================
+  const blobResult = extractMainQuery(query);
+  const classificationQuery = blobResult.mainQuery; // Use for mode/ticker detection
+  const fullQuery = blobResult.fullText || query;   // Use for LLM processing
+  
   const result = {
     mode: 'general',
     ticker: null,
@@ -131,7 +181,8 @@ async function preflightRouter(options) {
       usesForex: false,
       needsRealtimeSearch: false,
       hasAttachments: attachments.length > 0,
-      hasDocContext: Object.keys(docContext).length > 0
+      hasDocContext: Object.keys(docContext).length > 0,
+      isBlob: blobResult.isBlob
     },
     stockContext: null,
     forexData: null,
@@ -142,11 +193,12 @@ async function preflightRouter(options) {
   try {
     // ========================================
     // MODE DETECTION (Priority Order)
+    // Uses classificationQuery for detection (extracted main query for blobs)
     // ========================================
     
     // -1. Ψ-EMA IDENTITY: "What is Ψ-EMA?" queries → inject actual documentation (H0 ground truth)
-    const hasTicker = /\$[A-Z]{1,5}\b/.test(query);
-    const isPsiEmaIdentity = !hasTicker && PSI_EMA_IDENTITY_PATTERNS.some(p => p.test(query.trim()));
+    const hasTicker = /\$[A-Z]{1,5}\b/.test(classificationQuery);
+    const isPsiEmaIdentity = !hasTicker && PSI_EMA_IDENTITY_PATTERNS.some(p => p.test(classificationQuery.trim()));
     
     if (isPsiEmaIdentity) {
       console.log(`📚 Preflight: Ψ-EMA identity query detected → injecting documentation`);
@@ -158,8 +210,8 @@ async function preflightRouter(options) {
     
     // 0. FOREX: Detect currency pair queries FIRST (before stock detection)
     // USD/JPY, EUR/USD, "yen rate", "dollar to euro", etc.
-    const forexPair = detectForexPair(query);
-    if (forexPair || isForexQuery(query)) {
+    const forexPair = detectForexPair(classificationQuery);
+    if (forexPair || isForexQuery(classificationQuery)) {
       result.mode = 'forex';
       result.routingFlags.usesForex = true;
       
@@ -180,17 +232,17 @@ async function preflightRouter(options) {
     }
     // 1. SEED METRIC: Check FIRST before Ψ-EMA (city names like LA/NY shouldn't be tickers)
     // Web-first search for grounded real estate data - LLM training data is stale
-    else if (detectSeedMetricIntent(query)) {
+    else if (detectSeedMetricIntent(classificationQuery)) {
       result.mode = 'seed-metric';
       result.routingFlags.isSeedMetric = true;
       result.searchStrategy = 'brave';
       
       // Extract city names for targeted search (major world cities + common variants)
       const cityPattern = /\b(tokyo|singapore|hong kong|hongkong|london|new york|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
-      const cities = [...new Set((query.match(cityPattern) || []).map(c => c.toLowerCase()))];
+      const cities = [...new Set((classificationQuery.match(cityPattern) || []).map(c => c.toLowerCase()))];
       
       // Detect historical period from query (1970, 1980, 1990, etc.) → convert to decade
-      const yearMatch = query.match(/\b(19[5-9]\d|20[0-2]\d)\b/);
+      const yearMatch = classificationQuery.match(/\b(19[5-9]\d|20[0-2]\d)\b/);
       const historicalDecade = yearMatch ? `${yearMatch[1].slice(0, 3)}0s` : '1970s';
       
       if (cities.length > 0) {
@@ -220,13 +272,13 @@ async function preflightRouter(options) {
     // OR trigger if keyword "psi-ema" or "ψ-ema" is present (quantum compass scavenge hunt)
     // SKIP if forex mode already triggered
     else if (result.mode !== 'forex') {
-      const psiEmaDetection = detectPsiEMAKeys(query);
-      const hasExplicitModeKeyword = /\b(psi|ψ)[\s\-]?ema\b/i.test(query);
+      const psiEmaDetection = detectPsiEMAKeys(classificationQuery);
+      const hasExplicitModeKeyword = /\b(psi|ψ)[\s\-]?ema\b/i.test(classificationQuery);
 
       // Extract dynamic data period if specified: "1y daily", "5y weekly", "nd psi ema"
       // Default: null (fetcher uses 6mo/2y defaults)
       let customPeriod = null;
-      const ndMatch = query.match(/\b(\d+)([dwmy])\b/i);
+      const ndMatch = classificationQuery.match(/\b(\d+)([dwmy])\b/i);
       if (ndMatch) {
         customPeriod = ndMatch[1] + ndMatch[2].toLowerCase();
         console.log(`📊 Preflight: Detected custom data period: ${customPeriod}`);
@@ -237,7 +289,7 @@ async function preflightRouter(options) {
       // 2. Current query has EXPLICIT stock keyword (stock/share/ticker/price), AND
       // 3. Current query has at least a verb OR adjective
       const hasContextTicker = contextResult?.inferredTicker;
-      const hasExplicitStockKeyword = /\b(stock|stocks|ticker|share|shares|price|prices)\b/i.test(query);
+      const hasExplicitStockKeyword = /\b(stock|stocks|ticker|share|shares|price|prices)\b/i.test(classificationQuery);
       const hasVerbOrAdjective = psiEmaDetection.keys.some(k => k.type === 'verb' || k.type === 'adjective');
       const hasVerb = psiEmaDetection.keys.some(k => k.type === 'verb');
       const hasAdjective = psiEmaDetection.keys.some(k => k.type === 'adjective');
@@ -249,13 +301,13 @@ async function preflightRouter(options) {
       // ========================================
       const cityAbbreviations = /\b(la|ny|sf|dc|hk|kl)\b/i;
       const geoComparisonPattern = /\bvs\b.*\b(price|land|housing|property|cost|rent|income|salary)\b|\b(price|land|housing|property|cost|rent|income|salary)\b.*\bvs\b/i;
-      const hasCityAbbreviation = cityAbbreviations.test(query);
-      const hasGeoComparison = geoComparisonPattern.test(query);
-      const hasGeoIntent = hasCityAbbreviation && (hasGeoComparison || /\bvs\b/i.test(query));
+      const hasCityAbbreviation = cityAbbreviations.test(classificationQuery);
+      const hasGeoComparison = geoComparisonPattern.test(classificationQuery);
+      const hasGeoIntent = hasCityAbbreviation && (hasGeoComparison || /\bvs\b/i.test(classificationQuery));
       
       // STOCK-CONTEXT OVERRIDE: Explicit stock keywords disable geo-veto
       // e.g., "$LA", "LA stock", "LA ticker", "LA shares" → genuine ticker query
-      const hasExplicitStockCue = /\$[A-Z]{1,5}\b|\b(stock|stocks|ticker|tickers|share|shares)\b/i.test(query);
+      const hasExplicitStockCue = /\$[A-Z]{1,5}\b|\b(stock|stocks|ticker|tickers|share|shares)\b/i.test(classificationQuery);
       
       // If geo-intent detected AND no explicit stock cues AND no ticker already detected, force Seed Metric
       if (hasGeoIntent && !hasExplicitStockCue && !psiEmaDetection.ticker) {
@@ -267,11 +319,11 @@ async function preflightRouter(options) {
         
         // Extract cities from abbreviations for search (use global flag to get ALL matches)
         const cityMap = { 'la': 'los angeles', 'ny': 'new york', 'sf': 'san francisco', 'dc': 'washington dc', 'hk': 'hong kong', 'kl': 'kuala lumpur' };
-        const detectedAbbrevs = query.toLowerCase().match(/\b(la|ny|sf|dc|hk|kl)\b/gi) || [];
+        const detectedAbbrevs = classificationQuery.toLowerCase().match(/\b(la|ny|sf|dc|hk|kl)\b/gi) || [];
         const cities = [...new Set(detectedAbbrevs.map(abbr => cityMap[abbr.toLowerCase()] || abbr.toLowerCase()))];
         
         // Detect historical period
-        const yearMatch = query.match(/\b(19[5-9]\d|20[0-2]\d)\b/);
+        const yearMatch = classificationQuery.match(/\b(19[5-9]\d|20[0-2]\d)\b/);
         const historicalDecade = yearMatch ? `${yearMatch[1].slice(0, 3)}0s` : '1970s';
         
         if (cities.length > 0) {
@@ -312,7 +364,7 @@ async function preflightRouter(options) {
       // BLOCKED if geo-intent detected
       if (!psiEmaDetection.shouldTrigger && hasVerb && hasAdjective && !hasTicker && result.mode !== 'seed-metric') {
         console.log(`🔧 AI-PUSH: verb + adjective detected, missing ticker → extracting...`);
-        aiRescuedTicker = await smartDetectTicker(query);
+        aiRescuedTicker = await smartDetectTicker(classificationQuery);
         if (aiRescuedTicker) {
           console.log(`✅ AI-PUSH: Rescued ticker: ${aiRescuedTicker}`);
         }
@@ -359,7 +411,7 @@ async function preflightRouter(options) {
       
       if ((shouldUnlock || contextFallbackApplies) && result.mode !== 'seed-metric') {
         // Use ticker from key detection, AI rescue, or context
-        result.ticker = psiEmaDetection.ticker || aiRescuedTicker || await smartDetectTicker(query);
+        result.ticker = psiEmaDetection.ticker || aiRescuedTicker || await smartDetectTicker(classificationQuery);
         
         // If no ticker from current query, use context-inferred ticker
         if (!result.ticker && contextResult?.inferredTicker) {
@@ -517,7 +569,7 @@ async function preflightRouter(options) {
   // Triggers DDG → Brave cascade for sports, news, weather, etc.
   // searchStrategy stays 'duckduckgo' (primary), cascade tracked via routingFlags
   // ========================================
-  if (result.mode === 'general' && detectRealtimeIntent(query)) {
+  if (result.mode === 'general' && detectRealtimeIntent(classificationQuery)) {
     result.routingFlags.needsRealtimeSearch = true;
     result.searchStrategy = 'duckduckgo';
     console.log(`🔍 Preflight: Real-time intent detected → DDG→Brave cascade enabled`);
