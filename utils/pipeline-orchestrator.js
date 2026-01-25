@@ -1233,7 +1233,7 @@ Output ONLY the corrected table and summary lines:`;
           usesChemistry: false,
           usesLegalAnalysis: state.preflight.routingFlags?.usesLegalAnalysis,
           usesPsiEMA: state.mode === 'psi-ema',
-          isSeedMetric,
+          isSeedMetric: isSeedMetricMode,
           isTetralemma,
           auditMode,
           useDialectical: true,
