@@ -60,6 +60,13 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Inpipe Architecture**: Multi-channel input with an abstract channel interface for extensibility.
 - **Architectural Philosophy: Axiom of Choice**: This philosophy guides the system's design, asserting the existence of ideal configurations for infinite components, making the system self-governing and scalable through dependency injection, even without explicit construction of every case.
 
+## Progressive Web App (PWA)
+- **Manifest**: `public/manifest.json` with app metadata, standalone display mode, purple theme (#8b5cf6)
+- **Icons**: Generated in `public/icons/` (48, 72, 96, 144, 192, 512px + Apple touch icons)
+- **Service Worker**: `public/sw.js` with network-first caching strategy, API exclusion
+- **Apple PWA**: Full iOS support with apple-mobile-web-app-capable, status-bar-style, touch icons
+- **Installation**: Users can "Add to Home Screen" on iOS Safari or install on Android Chrome
+
 ## External Dependencies
 - **Database**: PostgreSQL (Supabase)
 - **WhatsApp**: Twilio WhatsApp Business API
