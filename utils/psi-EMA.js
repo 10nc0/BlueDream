@@ -2718,8 +2718,8 @@ When stock data is provided below, you MUST:
  * 
  * H₀ PHYSICAL AUDIT DISCLAIMER: Grounds financial analysis in physical reality verification.
  * Reported numbers are vulnerable to human error and financial acrobatics. This disclaimer
- * recommends combining spreadsheet analysis with real-world physical audits: inventory counts,
- * receivables verification, customer site visits, shipment verification, bank reconciliation.
+ * recommends combining spreadsheet analysis with real-world physical audits appropriate to
+ * the asset class being analyzed.
  * 
  * The "seeing is believing" H₀ approach verifies that P (price/claim) corresponds to Q (quantity).
  * 
@@ -2728,15 +2728,111 @@ When stock data is provided below, you MUST:
  * @returns {string} Physical audit disclaimer text
  */
 function generatePhysicalAuditDisclaimer(analysis, ticker) {
-  return `⚠️ **H₀ PHYSICAL AUDIT ADVISORY**: Reported numbers are vulnerable to human error and financial acrobatics. Verify ${ticker}'s financials by combining this analysis with real physical audits:
+  const assetClass = detectAssetClass(ticker);
+  const suggestions = getPhysicalAuditSuggestions(assetClass, ticker);
+  
+  return `⚠️ **H₀ PHYSICAL AUDIT ADVISORY**: Reported numbers are vulnerable to human error and financial acrobatics. Verify ${ticker}'s reality by combining this analysis with real physical audits:
 
-• **Warehouse visit** (stock taking) to verify inventory claims
+${suggestions}
+
+This "seeing is believing" H₀ approach grounds spreadsheet claims in physical reality. Numbers without physical substrate are hallucinations. 🔬`;
+}
+
+/**
+ * Detect asset class from ticker symbol
+ * Prioritizes more specific patterns before general ones
+ */
+function detectAssetClass(ticker) {
+  if (!ticker) return 'general';
+  const t = ticker.toUpperCase().trim();
+  
+  // Crypto: Handle various formats (BTC, BTC-USD, BTCUSD, BTC/USD)
+  const cryptoBase = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'DOT', 'AVAX', 'MATIC', 'LINK', 
+    'UNI', 'ATOM', 'LTC', 'BCH', 'XLM', 'ALGO', 'VET', 'FIL', 'THETA', 'SAND', 'MANA', 'AXS', 
+    'APE', 'SHIB', 'NEAR', 'FTM', 'CRO', 'EGLD', 'HBAR', 'ICP', 'EOS', 'XTZ', 'AAVE', 'MKR', 
+    'SNX', 'COMP', 'YFI', 'SUSHI', 'CRV', '1INCH', 'ENJ', 'CHZ', 'GALA', 'IMX', 'LRC', 'BAT', 
+    'ZRX', 'REN', 'BNB', 'WBTC', 'WETH', 'USDT', 'USDC', 'DAI', 'BUSD', 'PEPE', 'ARB', 'OP'];
+  const cryptoNormalized = t.replace(/[-\/](USD|USDT|USDC|EUR|GBP|BTC|ETH)$/, '');
+  if (cryptoBase.includes(cryptoNormalized)) return 'crypto';
+  
+  // Commodities futures (=F suffix) - check before forex to avoid =X confusion
+  if (/=F$/.test(t)) return 'commodity';
+  
+  // Commodity ETFs (physical-backed or commodity-focused)
+  const commodityETFs = ['GLD', 'SLV', 'IAU', 'SGOL', 'SIVR', 'PPLT', 'PALL', 'USO', 'UNG', 
+    'DBA', 'DBC', 'PDBC', 'CORN', 'WEAT', 'SOYB', 'CPER', 'JJC', 'JJN', 'JJG', 'COW', 'NIB'];
+  if (commodityETFs.includes(t)) return 'commodity';
+  
+  // Forex pairs (=X suffix or currency pair patterns)
+  if (/=X$/.test(t)) return 'forex';
+  const forexPairs = /^(EUR|GBP|JPY|AUD|CAD|CHF|NZD|CNY|HKD|SGD|KRW|INR|MXN|BRL|ZAR)(USD|EUR|GBP|JPY|CHF|AUD|CAD|NZD)$/;
+  if (forexPairs.test(t)) return 'forex';
+  
+  // REIT / Real Estate (major REITs)
+  const reits = ['VNQ', 'XLRE', 'IYR', 'SCHH', 'RWR', 'USRT', 'REET', 'VNQI', 'REM', 'MORT', 
+    'O', 'AMT', 'PLD', 'CCI', 'EQIX', 'PSA', 'DLR', 'WELL', 'AVB', 'EQR', 'SPG', 'VICI', 
+    'ARE', 'MAA', 'UDR', 'ESS', 'PEAK', 'HST', 'SLG', 'BXP', 'VTR', 'KIM', 'REG', 'FRT', 
+    'NNN', 'WPC', 'STOR', 'ADC', 'EPRT', 'STAG', 'TRNO', 'COLD', 'EXR', 'CUBE', 'LSI', 'NSA', 'REXR'];
+  if (reits.includes(t)) return 'realestate';
+  
+  // Broad market ETFs (not commodity-focused)
+  const etfs = ['SPY', 'QQQ', 'DIA', 'IWM', 'VTI', 'VOO', 'IVV', 'VEA', 'VWO', 'EFA', 'EEM', 
+    'AGG', 'BND', 'TLT', 'LQD', 'HYG', 'XLF', 'XLK', 'XLE', 'XLV', 'XLI', 'XLP', 'XLY', 
+    'XLB', 'XLU', 'VIG', 'VYM', 'SCHD', 'ARKK', 'ARKG', 'ARKW', 'ARKF', 'ARKQ', 'KWEB', 'FXI'];
+  if (etfs.includes(t)) return 'etf';
+  
+  // Default: stocks
+  return 'stock';
+}
+
+/**
+ * Get physical audit suggestions based on asset class
+ */
+function getPhysicalAuditSuggestions(assetClass, ticker) {
+  switch (assetClass) {
+    case 'crypto':
+      return `• **On-chain verification** (node runs, UTXO sets) to confirm supply and transaction claims
+• **Exchange wallet sampling** to validate reserves and inflow/outflow accuracy
+• **Miner site visits / hashrate observation** to ground production reality
+• **OTC desk / large holder confirmations** as proxy for true demand magnitude (P × Q)
+• **Blockchain explorer reconciliation** for liquidity and flow verification`;
+    
+    case 'forex':
+      return `• **Central bank reserve reports** to verify currency backing and intervention capacity
+• **Trade balance data verification** to confirm import/export flow reality
+• **Foreign reserve audits** from IMF/BIS to validate sovereign holdings
+• **Cross-border flow sampling** via SWIFT/correspondent banking data
+• **Physical currency circulation data** as proxy for monetary base reality`;
+    
+    case 'commodity':
+      return `• **Warehouse receipts verification** to confirm physical stockpile existence
+• **Shipping manifest sampling** to validate transport and delivery flows
+• **Refinery/processing site visits** to ground production capacity claims
+• **Port inventory audits** as proxy for supply magnitude (P × Q correlation)
+• **Futures delivery records** to verify physical settlement vs paper claims`;
+    
+    case 'realestate':
+      return `• **Property site inspections** to verify physical condition and occupancy
+• **Title search / deed verification** to confirm ownership and encumbrances
+• **Rent roll audits** with tenant verification to validate income claims
+• **Zoning / permit verification** to ground development potential claims
+• **Comparable sales sampling** to verify market value assertions`;
+    
+    case 'etf':
+      return `• **Holdings transparency verification** via daily NAV reconciliation
+• **Authorized participant activity** to confirm creation/redemption flows
+• **Underlying asset sampling** to validate index tracking accuracy
+• **Custodian audit reports** to verify asset segregation and custody
+• **Securities lending disclosure** to understand collateral and counterparty exposure`;
+    
+    case 'stock':
+    default:
+      return `• **Warehouse visit** (stock taking) to verify inventory claims
 • **Sample PO / AR / vendor verification** to confirm receivables accuracy
 • **Customer site visits** to validate revenue relationships and demand reality
 • **Counting trucks/shipments** as proxy to verify financial magnitude (P × Q correlation)
-• **Bank statement reconciliation** for cash flow and liquidity verification
-
-This "seeing is believing" H₀ approach grounds spreadsheet claims in physical reality. Numbers without physical substrate are hallucinations. 🔬`;
+• **Bank statement reconciliation** for cash flow and liquidity verification`;
+  }
 }
 
 // ============================================================================
