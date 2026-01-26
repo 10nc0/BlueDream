@@ -2805,11 +2805,11 @@ function getPhysicalAuditSuggestions(assetClass, ticker) {
 • **Physical currency circulation data** as proxy for monetary base reality`;
     
     case 'commodity':
-      return `• **Warehouse receipts verification** to confirm physical stockpile existence
-• **Shipping manifest sampling** to validate transport and delivery flows
-• **Refinery/processing site visits** to ground production capacity claims
-• **Port inventory audits** as proxy for supply magnitude (P × Q correlation)
-• **Futures delivery records** to verify physical settlement vs paper claims`;
+      return `• **Rig/site visits** (stock taking) to verify production and inventory claims
+• **Port/tanker verification** (count loadings, satellite tracking) to confirm shipment flows
+• **Refinery/consumer site visits** (e.g., US Gulf, Asia demand hubs) to validate consumption reality
+• **Producer proxy** (output reports, satellite imagery of fields/mines) to verify supply magnitude (P × Q correlation)
+• **Futures/spot reconciliation** for flow and liquidity verification`;
     
     case 'realestate':
       return `• **Property site inspections** to verify physical condition and occupancy
