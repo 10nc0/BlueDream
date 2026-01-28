@@ -13,6 +13,42 @@ function assertValidSchemaName(schema) {
     return schema;
 }
 
+// In-memory rate limiter for book sharing (10 shares/hour per user)
+const shareRateLimiter = new Map();
+const SHARE_RATE_LIMIT = 10;
+const SHARE_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+function checkShareRateLimit(userId) {
+    const now = Date.now();
+    const userShares = shareRateLimiter.get(userId) || [];
+    
+    // Filter to only shares within the window
+    const recentShares = userShares.filter(ts => now - ts < SHARE_RATE_WINDOW_MS);
+    shareRateLimiter.set(userId, recentShares);
+    
+    if (recentShares.length >= SHARE_RATE_LIMIT) {
+        return false; // Rate limited
+    }
+    
+    // Record this share
+    recentShares.push(now);
+    shareRateLimiter.set(userId, recentShares);
+    return true;
+}
+
+// Cleanup stale entries every 10 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [userId, shares] of shareRateLimiter.entries()) {
+        const recent = shares.filter(ts => now - ts < SHARE_RATE_WINDOW_MS);
+        if (recent.length === 0) {
+            shareRateLimiter.delete(userId);
+        } else {
+            shareRateLimiter.set(userId, recent);
+        }
+    }
+}, 10 * 60 * 1000);
+
 function registerBooksRoutes(app, deps) {
     const { pool, bots, helpers, middleware, tenantMiddleware, logger, fractalId, constants } = deps;
     
@@ -385,7 +421,7 @@ function registerBooksRoutes(app, deps) {
             
             let joinCode = null;
             if (inputPlatform === 'whatsapp') {
-                const randomCode = crypto.randomBytes(3).toString('hex');
+                const randomCode = crypto.randomBytes(4).toString('hex');
                 const bookNameSlug = name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
                 joinCode = `${bookNameSlug}-${randomCode}`;
                 
@@ -1551,22 +1587,14 @@ function registerBooksRoutes(app, deps) {
             for (const msg of messages) {
                 if (msg.attachments && msg.attachments.length > 0) {
                     const timestamp = new Date(msg._timestamp);
-                    const offset = -timestamp.getTimezoneOffset();
-                    const sign = offset >= 0 ? '+' : '-';
-                    const absOffset = Math.abs(offset);
-                    const tzHours = Math.floor(absOffset / 60);
-                    const tzMinutes = absOffset % 60;
-                    const tzString = `GMT${sign}${tzHours.toString().padStart(2, '0')}${tzMinutes > 0 ? ':' + tzMinutes.toString().padStart(2, '0') : ''}`;
-
-                    const formattedTime = timestamp.toLocaleString('en-US', {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: false
-                    }).replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3/$1/$2').replace(/[/:]/g, '_').replace(/, /g, ' - ');
+                    // Use UTC consistently for cross-user portability
+                    const utcYear = timestamp.getUTCFullYear();
+                    const utcMonth = String(timestamp.getUTCMonth() + 1).padStart(2, '0');
+                    const utcDay = String(timestamp.getUTCDate()).padStart(2, '0');
+                    const utcHour = String(timestamp.getUTCHours()).padStart(2, '0');
+                    const utcMinute = String(timestamp.getUTCMinutes()).padStart(2, '0');
+                    const utcSecond = String(timestamp.getUTCSeconds()).padStart(2, '0');
+                    const formattedTime = `${utcYear}_${utcMonth}_${utcDay} - ${utcHour}_${utcMinute}_${utcSecond} - UTC`;
                     
                     for (const attachment of msg.attachments) {
                         attachmentStats.total++;
@@ -1613,7 +1641,7 @@ This archive contains:
   - Export provenance and timestamp
 
 Naming Convention:
-YYYY_MM_DD - HH_MM_SS - GMTXX - {message_id}.{extension}
+YYYY_MM_DD - HH_MM_SS - UTC - {message_id}.{extension}
 
 ## Verification
 To verify file integrity, compare SHA256 hashes in manifest.json:
@@ -1649,6 +1677,13 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
             archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
             
             await archive.finalize();
+            
+            // Audit log for export (data egress tracking) - don't block on failure
+            if (logAudit) {
+                logAudit(pool, tenantSchema, req.userId, 'book_export', 
+                    `Exported book "${book.name}" (${messages.length} messages, ${attachmentStats.downloaded} attachments)`)
+                    .catch(err => logger.warn({ err }, 'Failed to log export audit'));
+            }
             
             logger.info({ bookId: book_id, messages: messages.length, drops: dropsResult.rows.length }, 'Export created');
             
@@ -1737,6 +1772,13 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
             
             if (!book) {
                 return res.status(404).json({ error: 'Book not found or access denied' });
+            }
+            
+            // Rate limit AFTER ownership verification (10 shares/hour per user)
+            // This prevents attackers from triggering rate limits on others
+            if (!checkShareRateLimit(req.userId)) {
+                logger.warn({ userId: req.userId }, 'Share rate limit exceeded');
+                return res.status(429).json({ error: 'Too many shares. Please try again later (limit: 10/hour)' });
             }
             
             // Idempotent upsert: check for any existing share (active or revoked) by this owner
