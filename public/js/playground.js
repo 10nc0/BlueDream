@@ -711,7 +711,27 @@ function addMessage(role, content, messageAttachments = [], auditData = null) {
     return msgEl;
 }
 
+// Animated cat status messages for loading state
+const catStatusMessages = [
+    { emoji: '🐾', text: 'Purring..' },
+    { emoji: '🐱', text: 'Jumping..' },
+    { emoji: '😺', text: 'Peeking..' },
+    { emoji: '🙀', text: 'Stretching..' },
+    { emoji: '😸', text: 'Sniffing..' },
+    { emoji: '🐈', text: 'Prowling..' },
+    { emoji: '🐈‍⬛', text: 'Thinking..' },
+    { emoji: '✨', text: 'Conjuring..' }
+];
+let loadingAnimationInterval = null;
+let loadingMessageIndex = 0;
+
 function addLoadingMessage() {
+    // Guard: clear any existing interval before starting new one
+    if (loadingAnimationInterval) {
+        clearInterval(loadingAnimationInterval);
+        loadingAnimationInterval = null;
+    }
+    
     const msgEl = document.createElement('div');
     msgEl.className = 'message assistant';
     msgEl.id = 'loadingMessage';
@@ -725,11 +745,13 @@ function addLoadingMessage() {
     
     const catThinkingDiv = document.createElement('div');
     catThinkingDiv.className = 'cat-thinking';
+    catThinkingDiv.id = 'loadingEmoji';
     catThinkingDiv.textContent = '🐾';
     
     const statusSpan = document.createElement('span');
+    statusSpan.id = 'loadingStatus';
     statusSpan.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
-    statusSpan.textContent = 'Purring over your query...';
+    statusSpan.textContent = 'Purring..';
     
     loadingDiv.appendChild(catThinkingDiv);
     loadingDiv.appendChild(statusSpan);
@@ -739,9 +761,27 @@ function addLoadingMessage() {
     
     messagesEl.appendChild(msgEl);
     messagesEl.scrollTop = messagesEl.scrollHeight;
+    
+    // Start animation cycle
+    loadingMessageIndex = 0;
+    loadingAnimationInterval = setInterval(() => {
+        loadingMessageIndex = (loadingMessageIndex + 1) % catStatusMessages.length;
+        const current = catStatusMessages[loadingMessageIndex];
+        const emojiEl = document.getElementById('loadingEmoji');
+        const statusEl = document.getElementById('loadingStatus');
+        if (emojiEl && statusEl) {
+            emojiEl.textContent = current.emoji;
+            statusEl.textContent = current.text;
+        }
+    }, 800);
 }
 
 function removeLoadingMessage() {
+    // Clear animation interval
+    if (loadingAnimationInterval) {
+        clearInterval(loadingAnimationInterval);
+        loadingAnimationInterval = null;
+    }
     const loading = document.getElementById('loadingMessage');
     if (loading) loading.remove();
 }
