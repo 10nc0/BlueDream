@@ -794,6 +794,12 @@ function addStreamingMessage() {
     
     streamingTextBuffer = '';
     
+    // Guard: clear any existing animation interval
+    if (loadingAnimationInterval) {
+        clearInterval(loadingAnimationInterval);
+        loadingAnimationInterval = null;
+    }
+    
     const msgEl = document.createElement('div');
     msgEl.className = 'message assistant streaming';
     msgEl.id = 'streamingMessage';
@@ -812,9 +818,26 @@ function addStreamingMessage() {
     
     const contentDiv = document.createElement('div');
     contentDiv.className = 'content streaming-content';
-    const cursor = document.createElement('span');
-    cursor.className = 'typing-cursor';
-    contentDiv.appendChild(cursor);
+    
+    // Show animated cat loading initially (before first token arrives)
+    const loadingContainer = document.createElement('div');
+    loadingContainer.id = 'streamingLoadingState';
+    loadingContainer.className = 'loading';
+    loadingContainer.style.cssText = 'display: flex; align-items: center; gap: 0.75rem;';
+    
+    const catEmoji = document.createElement('span');
+    catEmoji.id = 'streamingCatEmoji';
+    catEmoji.className = 'cat-thinking';
+    catEmoji.textContent = '🐾';
+    
+    const statusText = document.createElement('span');
+    statusText.id = 'streamingCatStatus';
+    statusText.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
+    statusText.textContent = 'Purring..';
+    
+    loadingContainer.appendChild(catEmoji);
+    loadingContainer.appendChild(statusText);
+    contentDiv.appendChild(loadingContainer);
     
     msgEl.appendChild(labelDiv);
     msgEl.appendChild(badgePlaceholder);
@@ -823,6 +846,20 @@ function addStreamingMessage() {
     
     messagesEl.appendChild(msgEl);
     messagesEl.scrollTop = messagesEl.scrollHeight;
+    
+    // Start animation cycle for cat status messages
+    loadingMessageIndex = 0;
+    loadingAnimationInterval = setInterval(() => {
+        loadingMessageIndex = (loadingMessageIndex + 1) % catStatusMessages.length;
+        const current = catStatusMessages[loadingMessageIndex];
+        const emojiEl = document.getElementById('streamingCatEmoji');
+        const statusEl = document.getElementById('streamingCatStatus');
+        if (emojiEl && statusEl) {
+            emojiEl.textContent = current.emoji;
+            statusEl.textContent = current.text;
+        }
+    }, 800);
+    
     return msgEl;
 }
 
@@ -832,6 +869,12 @@ function updateStreamingContent(token) {
     
     const contentEl = streamingEl.querySelector('.streaming-content');
     if (!contentEl) return;
+    
+    // On first token, clear the cat animation
+    if (loadingAnimationInterval) {
+        clearInterval(loadingAnimationInterval);
+        loadingAnimationInterval = null;
+    }
     
     streamingTextBuffer += token;
     
@@ -847,6 +890,12 @@ function updateStreamingContent(token) {
 }
 
 function finalizeStreamingMessage(fullContent, auditData) {
+    // Ensure animation is stopped
+    if (loadingAnimationInterval) {
+        clearInterval(loadingAnimationInterval);
+        loadingAnimationInterval = null;
+    }
+    
     const streamingEl = document.getElementById('streamingMessage');
     if (!streamingEl) return;
     
