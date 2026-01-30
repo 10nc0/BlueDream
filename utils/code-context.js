@@ -9,6 +9,10 @@
 const fs = require('fs');
 const path = require('path');
 
+const REPO_ROOT = process.cwd();
+const ALLOWED_DIRS = ['utils', 'prompts', 'lib', 'routes', 'config'];
+const MAX_TOTAL_CHARS = 20000;
+
 const CODE_CONTEXT_REGISTRY = {
   'psi-ema': {
     description: 'Ψ-EMA three-dimensional time series oscillator',
@@ -185,9 +189,28 @@ function findRelevantTopics(query) {
   return matches.slice(0, 2);
 }
 
+function isPathSafe(filePath) {
+  const normalized = path.normalize(filePath);
+  if (normalized.includes('..') || path.isAbsolute(normalized)) {
+    return false;
+  }
+  const firstDir = normalized.split(path.sep)[0];
+  return ALLOWED_DIRS.includes(firstDir);
+}
+
 function readFileSection(filePath, startLine, endLine) {
   try {
-    const fullPath = path.resolve(process.cwd(), filePath);
+    if (!isPathSafe(filePath)) {
+      console.warn(`⚠️ CodeContext: Blocked unsafe path: ${filePath}`);
+      return `[Access denied: ${filePath}]`;
+    }
+    
+    const fullPath = path.resolve(REPO_ROOT, filePath);
+    if (!fullPath.startsWith(REPO_ROOT)) {
+      console.warn(`⚠️ CodeContext: Path traversal blocked: ${filePath}`);
+      return `[Access denied: path traversal detected]`;
+    }
+    
     if (!fs.existsSync(fullPath)) {
       return `[File not found: ${filePath}]`;
     }
@@ -201,48 +224,51 @@ function readFileSection(filePath, startLine, endLine) {
   }
 }
 
-function buildCodeContext(query, maxTokens = 4000) {
+function buildCodeContext(query, maxChars = MAX_TOTAL_CHARS) {
   const topics = findRelevantTopics(query);
   if (topics.length === 0) {
     return null;
   }
   
+  const INSTRUCTION_PREFIX = `IMPORTANT: You are answering a question about Nyanbook's internal architecture. Below is the ACTUAL SOURCE CODE. Use ONLY this code to answer. Do NOT hallucinate or guess implementation details. Quote the code directly when relevant.`;
+  
   const contextParts = [];
-  let estimatedTokens = 0;
-  const tokensPerChar = 0.25;
+  let totalChars = INSTRUCTION_PREFIX.length + 100;
   
   for (const { topicId, topic } of topics) {
-    if (estimatedTokens > maxTokens) break;
+    if (totalChars >= maxChars) break;
     
-    contextParts.push(`\n=== ${topic.description.toUpperCase()} ===`);
-    contextParts.push(`Topic: ${topicId}`);
-    contextParts.push(`Files: ${topic.files.join(', ')}`);
+    const headerText = `\n=== ${topic.description.toUpperCase()} ===\nTopic: ${topicId}\nFiles: ${topic.files.join(', ')}`;
+    contextParts.push(headerText);
+    totalChars += headerText.length;
     
     for (const file of topic.files) {
-      if (estimatedTokens > maxTokens) break;
+      if (totalChars >= maxChars) break;
       
       const sections = topic.sections || [{ start: 1, end: 150, label: 'Main' }];
       
       for (const section of sections) {
-        if (estimatedTokens > maxTokens) break;
+        if (totalChars >= maxChars) break;
         
         const code = readFileSection(file, section.start, section.end);
-        const codeTokens = code.length * tokensPerChar;
+        const headerLen = 50 + file.length + section.label.length;
+        const wrapperLen = 30;
+        const codeChars = code.length + headerLen + wrapperLen;
         
-        if (estimatedTokens + codeTokens > maxTokens) {
-          const remainingChars = (maxTokens - estimatedTokens) / tokensPerChar;
-          const truncated = code.slice(0, Math.max(500, remainingChars));
+        if (totalChars + codeChars > maxChars) {
+          const remainingChars = Math.max(500, maxChars - totalChars - headerLen - wrapperLen - 50);
+          const truncated = code.slice(0, remainingChars);
           contextParts.push(`\n--- ${file} (${section.label}, truncated) ---`);
           contextParts.push('```javascript');
           contextParts.push(truncated + '\n... [truncated for brevity]');
           contextParts.push('```');
-          estimatedTokens = maxTokens;
+          totalChars = maxChars;
         } else {
           contextParts.push(`\n--- ${file} (${section.label}) ---`);
           contextParts.push('```javascript');
           contextParts.push(code);
           contextParts.push('```');
-          estimatedTokens += codeTokens;
+          totalChars += codeChars;
         }
       }
     }
@@ -252,10 +278,15 @@ function buildCodeContext(query, maxTokens = 4000) {
     return null;
   }
   
+  let finalContext = contextParts.join('\n');
+  if (finalContext.length > maxChars) {
+    finalContext = finalContext.slice(0, maxChars - 50) + '\n... [context truncated]';
+  }
+  
   return {
-    context: contextParts.join('\n'),
+    context: finalContext,
     topics: topics.map(t => t.topicId),
-    instruction: `IMPORTANT: You are answering a question about Nyanbook's internal architecture. Below is the ACTUAL SOURCE CODE. Use ONLY this code to answer. Do NOT hallucinate or guess implementation details. Quote the code directly when relevant.`
+    instruction: INSTRUCTION_PREFIX
   };
 }
 
