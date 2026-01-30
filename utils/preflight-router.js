@@ -18,6 +18,7 @@ const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal
 const { detectForexPair, isForexQuery, fetchForexRate, buildForexContext } = require('./forex-fetcher');
 const { getSeedMetricProxy, detectSeedMetricIntent } = require('../prompts/seed-metric');
 const { detectCodeMode, getLanguageFromExtension } = require('../lib/mode-registry');
+const { isDesignQuestion, getSystemContextForDesign } = require('./code-context');
 
 const PSI_EMA_IDENTITY_PATTERNS = [
   /^what\s+is\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
@@ -187,6 +188,7 @@ async function preflightRouter(options) {
     stockContext: null,
     forexData: null,
     forexContext: null,
+    codeContext: null,
     error: null
   };
   
@@ -195,6 +197,18 @@ async function preflightRouter(options) {
     // MODE DETECTION (Priority Order)
     // Uses classificationQuery for detection (extracted main query for blobs)
     // ========================================
+    
+    // -2. DESIGN/CODE QUESTION: Questions about Nyanbook's internal architecture/implementation
+    // Inject actual source code to prevent hallucination (H0 ground truth)
+    const designContext = getSystemContextForDesign(classificationQuery);
+    if (designContext) {
+      console.log(`🔧 Preflight: Design question detected → injecting source code for: ${designContext.topics.join(', ')}`);
+      result.mode = 'design';
+      result.routingFlags.isDesignQuestion = true;
+      result.codeContext = designContext.systemMessage;
+      result.codeTopics = designContext.topics;
+      return result;
+    }
     
     // -1. Ψ-EMA IDENTITY: "What is Ψ-EMA?" queries → inject actual documentation (H0 ground truth)
     const hasTicker = /\$[A-Z]{1,5}\b/.test(classificationQuery);
@@ -789,6 +803,12 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
   if (preflight.routingFlags.isPsiEmaIdentity && preflight.psiEmaIdentityContext) {
     messages.push({ role: 'system', content: preflight.psiEmaIdentityContext });
     console.log('📚 Ψ-EMA identity documentation injected (H0 ground truth)');
+  }
+  
+  // Design/Architecture question context (H0 ground truth - actual source code)
+  if (preflight.routingFlags.isDesignQuestion && preflight.codeContext) {
+    messages.push({ role: 'system', content: preflight.codeContext });
+    console.log(`🔧 Code context injected for topics: ${preflight.codeTopics?.join(', ') || 'unknown'}`);
   }
   
   // Ψ-EMA context
