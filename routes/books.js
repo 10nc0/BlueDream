@@ -240,7 +240,7 @@ function registerBooksRoutes(app, deps) {
             res.json({ books: sanitized });
         } catch (error) {
             logger.error({ err: error, userId: req.userId }, 'Error in /api/books');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -261,7 +261,7 @@ function registerBooksRoutes(app, deps) {
             res.json({ books: result.rows });
         } catch (error) {
             logger.error({ err: error }, 'Error fetching archived books');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -290,7 +290,7 @@ function registerBooksRoutes(app, deps) {
             });
         } catch (error) {
             logger.error({ err: error }, 'Error fetching book stats');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -312,7 +312,7 @@ function registerBooksRoutes(app, deps) {
             res.json({ success: true });
         } catch (error) {
             logger.error({ err: error }, 'Error archiving book');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -334,7 +334,7 @@ function registerBooksRoutes(app, deps) {
             res.json({ success: true });
         } catch (error) {
             logger.error({ err: error }, 'Error unarchiving book');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -346,7 +346,7 @@ function registerBooksRoutes(app, deps) {
             });
         } catch (error) {
             logger.error({ err: error }, 'Error in /api/messages');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -361,7 +361,7 @@ function registerBooksRoutes(app, deps) {
             });
         } catch (error) {
             logger.error({ err: error }, 'Error in /api/stats');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -757,7 +757,7 @@ function registerBooksRoutes(app, deps) {
             res.json({ success: true, drop: dropResult.rows[0] });
         } catch (error) {
             logger.error({ err: error }, 'Error removing tag');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -798,7 +798,7 @@ function registerBooksRoutes(app, deps) {
             res.json({ success: true, drop: dropResult.rows[0] });
         } catch (error) {
             logger.error({ err: error }, 'Error removing date');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -833,7 +833,7 @@ function registerBooksRoutes(app, deps) {
             res.json({ query, results: searchResult.rows, count: searchResult.rows.length });
         } catch (error) {
             logger.error({ err: error }, 'Error searching drops');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -992,7 +992,7 @@ function registerBooksRoutes(app, deps) {
             }
         } catch (error) {
             logger.error({ err: error }, 'Error in /api/messages/:id/context');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -1162,7 +1162,7 @@ function registerBooksRoutes(app, deps) {
             }
         } catch (error) {
             logger.error({ err: error }, 'Error in /api/books/:id/messages');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -1364,7 +1364,7 @@ function registerBooksRoutes(app, deps) {
             res.json({ matchingBooks: allMatches, partial: false });
         } catch (error) {
             logger.error({ err: error }, 'Server search error');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -1437,7 +1437,7 @@ function registerBooksRoutes(app, deps) {
             });
         } catch (error) {
             logger.error({ err: error }, 'Error creating thread');
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -1690,7 +1690,7 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
         } catch (error) {
             logger.error({ err: error }, 'Error creating export');
             if (!res.headersSent) {
-                res.status(500).json({ error: error.message });
+                res.status(500).json({ error: 'An internal error occurred. Please try again.' });
             }
         }
     };

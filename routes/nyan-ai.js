@@ -2,6 +2,7 @@ const axios = require('axios');
 const querystring = require('querystring');
 const crypto = require('crypto');
 const JSZip = require('jszip');
+const rateLimit = require('express-rate-limit');
 const logger = require('../lib/logger');
 const { createPipelineOrchestrator, fastStreamPersonality, applyPersonalityFormat } = require('../utils/pipeline-orchestrator');
 const { AttachmentIngestion } = require('../utils/attachment-ingestion');
@@ -729,7 +730,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             });
         } catch (error) {
             console.error('❌ Discord history error:', error);
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
 
@@ -920,7 +921,19 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         }
     });
 
-    app.post('/api/playground/stream', async (req, res) => {
+    const playgroundLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        max: 15,
+        validate: { xForwardedForHeader: false },
+        handler: (req, res) => {
+            console.warn(`⚠️ Playground rate limit exceeded - IP: ${req.ip}`);
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.write(`data: ${JSON.stringify({ type: 'error', message: 'Too many requests. Please wait a moment before trying again.' })}\n\n`);
+            res.end();
+        }
+    });
+
+    app.post('/api/playground/stream', playgroundLimiter, async (req, res) => {
         const clientIp = req.ip || req.connection.remoteAddress;
         
         capacityManager.recordActivity(clientIp);
