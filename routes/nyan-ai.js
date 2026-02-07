@@ -240,8 +240,13 @@ setInterval(() => {
 }, 10 * 60 * 1000);
 
 async function searchDuckDuckGo(query) {
+    if (!query || typeof query !== 'string' || query.trim().length === 0) {
+        return null;
+    }
+    const sanitizedQuery = query.trim().substring(0, 500);
+    
     const params = {
-        q: query,
+        q: sanitizedQuery,
         format: 'json',
         no_html: 1,
         skip_disambig: 1,
@@ -250,16 +255,21 @@ async function searchDuckDuckGo(query) {
     const url = `https://api.duckduckgo.com/?${querystring.stringify(params)}`;
     
     try {
-        const response = await axios.get(url, { timeout: 5000 });
+        const response = await axios.get(url, { timeout: 5000, responseType: 'json' });
         const data = response.data;
+        
+        if (!data || typeof data !== 'object') {
+            console.log(`🔍 DDG: Non-JSON response for "${sanitizedQuery.substring(0, 40)}..." - skipping`);
+            return null;
+        }
         
         const context = [];
         if (data.AbstractText) {
             context.push(`📚 ${data.AbstractText}`);
-            console.log(`🔍 DDG: Found instant answer for "${query.substring(0, 40)}..."`);
+            console.log(`🔍 DDG: Found instant answer for "${sanitizedQuery.substring(0, 40)}..."`);
         }
-        if (data.RelatedTopics && data.RelatedTopics.length > 0) {
-            const relevantTopics = data.RelatedTopics.filter(t => t.Text && !t.FirstURL).slice(0, 3);
+        if (data.RelatedTopics && Array.isArray(data.RelatedTopics) && data.RelatedTopics.length > 0) {
+            const relevantTopics = data.RelatedTopics.filter(t => t && t.Text && !t.FirstURL).slice(0, 3);
             if (relevantTopics.length > 0) {
                 context.push('Related information:');
                 relevantTopics.forEach(topic => {
@@ -272,7 +282,7 @@ async function searchDuckDuckGo(query) {
             console.log(`🔍 DDG: Injecting ${context.length} search results into prompt`);
             return context.join('\n');
         } else {
-            console.log(`🔍 DDG: No results found for "${query.substring(0, 40)}..." - using base knowledge only`);
+            console.log(`🔍 DDG: No results found for "${sanitizedQuery.substring(0, 40)}..." - using base knowledge only`);
             return null;
         }
     } catch (err) {
@@ -282,14 +292,18 @@ async function searchDuckDuckGo(query) {
 }
 
 async function extractCoreQuestion(message) {
-    // Guard against undefined/null message
     if (!message || typeof message !== 'string') {
-        return message || 'general query';
+        return 'general query';
+    }
+    
+    const trimmed = message.trim();
+    if (trimmed.length === 0) {
+        return 'general query';
     }
     
     const GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
-    if (!GROQ_TOKEN || message.length < 100) {
-        return message.substring(0, 200);
+    if (!GROQ_TOKEN || trimmed.length < 100) {
+        return trimmed.substring(0, 200);
     }
     
     const isNyanProtocol = /\{money|city|land price|empire|collapse|extinction|inequality|φ|cycle|breath\}/i.test(message) ||
@@ -339,6 +353,11 @@ async function extractCoreQuestion(message) {
 }
 
 async function searchBrave(query, clientIp = null) {
+    if (!query || typeof query !== 'string' || query.trim().length === 0) {
+        return null;
+    }
+    const sanitizedQuery = query.trim().substring(0, 500);
+    
     const BRAVE_API_KEY = process.env.PLAYGROUND_BRAVE_API;
     if (!BRAVE_API_KEY) {
         console.log('🦁 Brave: API key not configured, skipping');
@@ -354,14 +373,14 @@ async function searchBrave(query, clientIp = null) {
     }
     
     try {
-        console.log(`🦁 Brave: Searching for real-time context: "${query.substring(0, 40)}..."`);
+        console.log(`🦁 Brave: Searching for real-time context: "${sanitizedQuery.substring(0, 40)}..."`);
         const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
             headers: {
                 'Accept': 'application/json',
                 'X-Subscription-Token': BRAVE_API_KEY
             },
             params: {
-                q: query,
+                q: sanitizedQuery,
                 count: 5,
                 text_decorations: false,
                 safesearch: 'moderate'
@@ -371,12 +390,12 @@ async function searchBrave(query, clientIp = null) {
         
         const results = response.data?.web?.results || [];
         if (results.length === 0) {
-            console.log(`🦁 Brave: No results found for "${query.substring(0, 40)}..."`);
+            console.log(`🦁 Brave: No results found for "${sanitizedQuery.substring(0, 40)}..."`);
             return null;
         }
         
         const context = results.slice(0, 5).map((r, i) => 
-            `${i + 1}. ${r.title}\n   ${r.description || ''}`
+            `${i + 1}. ${r.title || 'Untitled'}\n   ${r.description || ''}`
         ).join('\n\n');
         
         console.log(`🦁 Brave: Found ${results.length} results, injecting top 5 into prompt`);
@@ -1040,7 +1059,19 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             
             if (isClientDisconnected()) return;
             
-            const verifiedAnswer = pipelineResult.answer || '';
+            if (!pipelineResult.success || !pipelineResult.answer) {
+                const failStep = pipelineResult.step || 'unknown';
+                const failReason = pipelineResult.error || 'Processing failed';
+                console.error(`❌ Pipeline failed at ${failStep}: ${failReason}`);
+                const userMessage = failReason.includes('Groq API')
+                    ? 'The AI service is temporarily busy. Please try again in a moment.'
+                    : 'Something went wrong processing your request. Please try again.';
+                res.write(`data: ${JSON.stringify({ type: 'error', message: userMessage })}\n\n`);
+                res.end();
+                return;
+            }
+            
+            const verifiedAnswer = pipelineResult.answer;
             const badge = pipelineResult.badge || 'unverified';
             const didSearchRetry = pipelineResult.didSearchRetry || false;
             

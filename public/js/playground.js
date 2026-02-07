@@ -1173,7 +1173,11 @@ async function sendMessage() {
         console.error('Streaming error:', err);
         const streamingEl = document.getElementById('streamingMessage');
         if (streamingEl) streamingEl.remove();
-        addMessage('assistant', 'Connection error. Please check your internet and try again.');
+        const isNetworkError = !navigator.onLine || err.name === 'TypeError' || err.message?.includes('Failed to fetch');
+        const errorMsg = isNetworkError
+            ? 'Connection lost. Please check your internet and try again.'
+            : 'The server encountered an issue. Please try again in a moment.';
+        addMessage('assistant', errorMsg);
     }
     
     setTimeout(() => {
