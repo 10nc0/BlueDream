@@ -324,7 +324,7 @@ class PipelineOrchestrator {
               if (chemistryResult.compoundInfo && chemistryResult.compoundInfo.name) {
                 const ci = chemistryResult.compoundInfo;
                 const confidence = ci.confidence || 0.5;
-                const isGenericName = /^(unknown|unverified|unidentified|puzzle|grid|geometric|figure|pattern)/i.test(ci.name);
+                const isGenericName = /^(unknown|unverified|unidentified|puzzle|grid|geometric|figure|pattern|n\/?a|not\s+applicable|none|no\s+data|scientific\s+data|image|diagram)/i.test(ci.name);
                 
                 if (confidence >= 0.7 && !isGenericName) {
                   let header = `### 🔬 Compound Identification\n**Name:** ${ci.name}`;

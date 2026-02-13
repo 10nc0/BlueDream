@@ -266,6 +266,14 @@ function extractFormulaAndKnownName(text) {
         }
     }
     
+    // Sanity check: reject garbage compound names that aren't real chemistry
+    if (knownName) {
+        const garbageNames = /^(not\s+applicable|n\/?a|unknown|none|unidentified|not\s+available|not\s+specified|no\s+name|no\s+data|image|photo|picture|diagram|figure|scientific\s+data|general|visual|text|document|file)$/i;
+        if (garbageNames.test(knownName.trim())) {
+            knownName = null;
+        }
+    }
+    
     // Strategy 3: Extract from verbose Vision patterns like "appears to represent X" or "appears to be X"
     // This catches cases where Vision output is structured as sentences
     if (!knownName) {
@@ -286,6 +294,15 @@ function extractFormulaAndKnownName(text) {
                     break;
                 }
             }
+        }
+    }
+    
+    // Final sanity check on knownName after all strategies
+    if (knownName) {
+        const garbageNames = /^(not\s+applicable|n\/?a|unknown|none|unidentified|not\s+available|not\s+specified|no\s+name|no\s+data|image|photo|picture|diagram|figure|scientific\s+data|general|visual|text|document|file)$/i;
+        if (garbageNames.test(knownName.trim())) {
+            console.log(`🧪 extractFormulaAndKnownName: Rejected garbage name "${knownName}"`);
+            knownName = null;
         }
     }
     
