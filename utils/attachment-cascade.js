@@ -522,19 +522,21 @@ const SCHOLASTIC_DOMAINS = {
     },
     'chemistry': {
         subject: [
-            'molecule', 'molecular', 'compound', 'benzene', 'organic', 'inorganic',
-            'reagent', 'solvent', 'atom', 'ion', 'cation', 'anion',
+            'molecule', 'molecular', 'benzene', 'inorganic',
+            'reagent', 'solvent', 'cation', 'anion',
             'hydroxyl', 'methyl', 'ethyl', 'phenyl', 'amino', 'carboxyl',
-            'polymer', 'monomer', 'catalyst', 'oxidation', 'reduction',
-            'synthesis', 'distill', 'titrat', 'chromatograph', 'spectro',
+            'polymer', 'monomer', 'catalyst',
+            'distill', 'titrat', 'chromatograph', 'spectro',
             'crystallin', 'isomer', 'enantiomer', 'racemic', 'stereochem',
             'pharmacolog', 'metabol', 'chemical structure', 'chemical bond',
-            'covalent', 'ionic bond', 'valence', 'orbital', 'electron shell',
+            'covalent', 'ionic bond', 'valence', 'electron shell',
             'periodic table', 'molar', 'stoichiometr', 'chemical reaction',
-            'acid', 'base', 'ph ', 'buffer solution', 'precipitat'
+            'buffer solution', 'precipitat'
         ],
         tool: [
-            'chemical', 'formula', 'bond', 'element', 'reaction'
+            'chemical', 'formula', 'bond', 'element', 'reaction',
+            'compound', 'organic', 'atom', 'ion', 'acid', 'base',
+            'oxidation', 'reduction', 'synthesis', 'orbital', 'ph '
         ],
         subjectWeight: 3.0,
         toolWeight: 0.5
@@ -610,11 +612,14 @@ function classifyScholasticDomain(description) {
         let score = 0;
         let subjectHits = 0;
         let toolHits = 0;
+        const matchedSubjects = [];
+        const matchedTools = [];
         
         for (const term of config.subject) {
             if (matchTerm(term, descNorm)) {
                 score += config.subjectWeight;
                 subjectHits++;
+                matchedSubjects.push(term);
             }
         }
         
@@ -622,15 +627,21 @@ function classifyScholasticDomain(description) {
             if (matchTerm(term, descNorm)) {
                 score += config.toolWeight;
                 toolHits++;
+                matchedTools.push(term);
             }
         }
         
-        scores[domain] = { score, subjectHits, toolHits };
+        scores[domain] = { score, subjectHits, toolHits, matchedSubjects, matchedTools };
     }
     
     const sorted = Object.entries(scores).sort((a, b) => b[1].score - a[1].score);
     const top = sorted[0];
     const runner = sorted[1];
+    
+    const activeDomains = sorted.filter(([, s]) => s.score > 0);
+    if (activeDomains.length > 1) {
+        console.log(`📚 Scholastic signals: ${activeDomains.map(([d, s]) => `${d}(S:${s.subjectHits}[${s.matchedSubjects.join(',')}] T:${s.toolHits}[${s.matchedTools.join(',')}] =${s.score.toFixed(1)})`).join(' | ')}`);
+    }
     
     if (top[1].score === 0) {
         return { domain: 'general', confidence: 0, scores };
@@ -638,6 +649,27 @@ function classifyScholasticDomain(description) {
     
     if (top[1].subjectHits === 0) {
         return { domain: 'general', confidence: 0.2, scores, note: 'tool-only signals, no subject match' };
+    }
+    
+    // Cross-domain conflict: pure-math overrides chemistry when math has clear subject presence
+    // and chemistry is NOT strongly dominant (i.e., chemistry lacks strong unique subject hits)
+    if (top[0] === 'chemistry' && scores['pure-math']?.subjectHits > 0) {
+        const mathScore = scores['pure-math'];
+        const chemScore = top[1];
+        // Override only when: math has subject hits AND chemistry subject hits are weak (<=2)
+        // This protects legitimate chemistry (molecular, benzene, reagent etc. = high subject hits)
+        if (mathScore.subjectHits > 0 && chemScore.subjectHits <= 2) {
+            console.log(`📚 Scholastic OVERRIDE: chemistry → pure-math (math subjects=${mathScore.subjectHits}, chem subjects=${chemScore.subjectHits} — chemistry too weak to dominate)`);
+            const confidence = Math.min(0.99, 0.5 + mathScore.subjectHits * 0.1);
+            return {
+                domain: 'pure-math',
+                confidence: Math.round(confidence * 100) / 100,
+                subjectHits: mathScore.subjectHits,
+                toolHits: mathScore.toolHits,
+                scores,
+                override: `chemistry → pure-math`
+            };
+        }
     }
     
     const dominance = runner[1].score > 0 ? top[1].score / runner[1].score : 10;

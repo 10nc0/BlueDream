@@ -289,7 +289,30 @@ class PipelineOrchestrator {
           }
         }
         
-        // If chemical structures detected, run chemistry enrichment pipeline
+        // Gate chemistry: re-check scholastic domain on all vision descriptions
+        // If non-chemistry domain dominates (e.g., pure-math), skip chemistry pipeline entirely
+        let chemistryGated = false;
+        let gatedVisionDescriptions = [];
+        if (chemicalVisionResults.length > 0) {
+          const allVisionText = chemicalVisionResults.map(r => r.description || '').join(' ');
+          const scholasticCheck = classifyScholasticDomain(allVisionText);
+          if (scholasticCheck.domain !== 'chemistry' && scholasticCheck.domain !== 'general') {
+            console.log(`🚫 S-1: Chemistry pipeline GATED — scholastic domain is "${scholasticCheck.domain}" (override: ${scholasticCheck.override || 'none'}), not chemistry`);
+            gatedVisionDescriptions = chemicalVisionResults.map(r => r.description || '').filter(d => d.length > 0);
+            chemicalVisionResults.length = 0; // Clear to skip chemistry and trigger vision search fallback
+            chemistryGated = true;
+            // Relabel extractedContent: replace wrong 🧪 Chemical Structure label with correct domain label
+            const domainLabel = scholasticCheck.domain === 'pure-math' ? '📐 Mathematical Diagram' : '📐 Diagram';
+            for (let i = 0; i < normalizedInput.extractedContent.length; i++) {
+              if (typeof normalizedInput.extractedContent[i] === 'string' && normalizedInput.extractedContent[i].includes('🧪 Chemical Structure')) {
+                normalizedInput.extractedContent[i] = normalizedInput.extractedContent[i].replace('🧪 Chemical Structure', domainLabel);
+                console.log(`📝 S-1: Relabeled vision content from "🧪 Chemical Structure" to "${domainLabel}"`);
+              }
+            }
+          }
+        }
+        
+        // If chemical structures detected (and passed scholastic gate), run chemistry enrichment pipeline
         if (chemicalVisionResults.length > 0) {
           try {
             console.log(`🧪 S-1: Running chemistry enrichment for ${chemicalVisionResults.length} chemical structure(s)...`);
@@ -329,13 +352,16 @@ class PipelineOrchestrator {
             (text.includes('📐 Diagram') || text.includes('🖼️ Visual') || text.includes('📊 Chart')) &&
             !text.includes('🧪 Chemical Structure'));
         
-        const needsVisionSearch = nonChemVisionDescs.length > 0 || chemEnrichmentFailed;
+        const needsVisionSearch = nonChemVisionDescs.length > 0 || chemEnrichmentFailed || chemistryGated;
         
         if (needsVisionSearch) {
           try {
             let visionDesc;
             let trigger;
-            if (chemEnrichmentFailed && nonChemVisionDescs.length === 0) {
+            if (chemistryGated && gatedVisionDescriptions.length > 0) {
+              trigger = 'chem-gated';
+              visionDesc = gatedVisionDescriptions.join(' ');
+            } else if (chemEnrichmentFailed && nonChemVisionDescs.length === 0) {
               trigger = 'chem-fallback';
               visionDesc = chemicalVisionResults
                 .map(r => r.description || '')
