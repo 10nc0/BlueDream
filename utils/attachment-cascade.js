@@ -715,29 +715,14 @@ function scholasticToContentType(classification) {
 // Chemistry harm-reduction enrichment template (for structured answers)
 function createChemistryEnrichmentTemplate(compoundName) {
     return `
-### 🧪 HARM-REDUCTION ENRICHMENT TEMPLATE: ${compoundName || 'Compound'}
-
-Please structure your response using these sections (if data unavailable, note "Not enough data"):
-
-**Uses & Applications:**
-(Medical, recreational, research, or other uses)
-
-**Metabolism & Pharmacology:**
-(How the compound is broken down and affects the body)
-
-**Side Effects:**
-(Common adverse effects, contraindications)
-
-**Abuse Potential:**
-(Addictiveness, psychological/physical dependence risk, overdose susceptibility)
-
-**Toxicity & Lethal Doses:**
-(LD50 if available, lethal dose ranges, toxic thresholds)
-
-**Reversal Agents & Treatment:**
-(Naloxone for opioids, flumazenil for benzodiazepines, specific antidotes or supportive care)
-
----
+[INSTRUCTION: Using the reference data below, write a concise harm-reduction summary about ${compoundName || 'this compound'}. Do NOT describe this instruction or the reference data — directly provide the information. Cover these topics:]
+- What it is and what it's used for
+- How the body processes it (metabolism)
+- Known side effects
+- Abuse/dependence risk
+- Toxicity thresholds (LD50 if known)
+- Antidotes or reversal agents (if applicable)
+[If any topic lacks data, write "Insufficient data" for that topic. Be direct and factual.]
 `;
 }
 
@@ -1011,33 +996,31 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
     // Priority: Wikipedia full context > compound context > formula context > structure context
     // Wikipedia provides comprehensive info including uses and metabolism
     if (wikipediaContext && wikipediaContext.extract) {
-        contextText += `\n### 📚 Wikipedia Knowledge (${wikipediaContext.title}):\n`;
+        if (!options.suppressTemplate) {
+            contextText += createChemistryEnrichmentTemplate(wikipediaContext.title);
+        }
+        contextText += `\n### 📚 Reference Data (${wikipediaContext.title}):\n`;
         if (wikipediaContext.description) {
             contextText += `**${wikipediaContext.description}**\n\n`;
         }
         contextText += `${wikipediaContext.extract}\n`;
         contextText += `Source: ${wikipediaContext.source}\n`;
-        
-        if (!options.suppressTemplate) {
-            contextText += createChemistryEnrichmentTemplate(wikipediaContext.title);
-        }
     } else if (results.compoundContext) {
-        contextText += `\n### 🔬 External Knowledge (${results.compoundContext.name}):\n`;
-        contextText += `${results.compoundContext.description}\n`;
-        contextText += `Source: ${results.compoundContext.source}\n`;
-        
         if (!options.suppressTemplate) {
             contextText += createChemistryEnrichmentTemplate(results.compoundContext.name);
         }
+        contextText += `\n### 🔬 Reference Data (${results.compoundContext.name}):\n`;
+        contextText += `${results.compoundContext.description}\n`;
+        contextText += `Source: ${results.compoundContext.source}\n`;
     } else if (knownCompoundName || formula) {
         const fallbackName = knownCompoundName || formula;
         const isGenericFallback = /^(unknown|unverified|unidentified|puzzle|grid|geometric|figure|pattern|more related)/i.test(fallbackName);
         if (!isGenericFallback && !options.suppressTemplate) {
             console.log(`🧪 Chemistry Enrichment: DDG/Wikipedia failed, using template fallback for "${fallbackName}"`);
+            contextText += createChemistryEnrichmentTemplate(fallbackName);
             contextText += `\n### 🔬 Compound Analysis (${fallbackName}):\n`;
             contextText += `Vision identified this compound but external verification was unavailable.\n`;
-            contextText += `Use your chemistry knowledge to describe this compound.\n`;
-            contextText += createChemistryEnrichmentTemplate(fallbackName);
+            contextText += `Use your chemistry knowledge to provide the information requested above.\n`;
         } else {
             console.log(`🧪 Chemistry Enrichment: Skipping template for generic/suppressed name "${fallbackName}"`);
         }
