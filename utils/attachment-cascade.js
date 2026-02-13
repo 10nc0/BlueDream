@@ -495,6 +495,174 @@ async function identifyCompoundByFormula(formula, structureDescription = '', kno
     return null;
 }
 
+// ===== SCHOLASTIC DOMAIN CLASSIFIER =====
+// Multi-signal scoring: determines what an image is ABOUT (subject) vs what tools it uses
+// Hierarchy: pure-math → applied-math → domain sciences (chemistry, engineering, etc.)
+// Key insight: "contains math" ≠ "is about math" — equations in a chemistry paper = chemistry
+const SCHOLASTIC_DOMAINS = {
+    'pure-math': {
+        subject: [
+            'theorem', 'proof', 'lemma', 'corollary', 'axiom', 'postulate', 'qed',
+            'pythagor', 'gougu', 'euclid', 'fermat', 'riemann', 'gauss',
+            'number theory', 'set theory', 'topology', 'abstract algebra',
+            'geometric proof', 'geometric construction', 'mathematical proof',
+            'congruence', 'similarity', 'bisect', 'perpendicular',
+            'hypotenuse', 'right triangle', 'square root', 'irrational',
+            'fibonacci', 'prime number', 'factorial', 'combinatori',
+            'integral calculus', 'differential calculus', 'mathematical induction',
+            'grid.based', 'grid.pattern', 'puzzle', 'sudoku', 'magic square'
+        ],
+        tool: [
+            'equation', 'formula', 'variable', 'function', 'graph',
+            'algebra', 'calculus', 'trigonometr', 'geometry', 'geometric',
+            'mathematical', 'triangle', 'circle', 'angle', 'matrix'
+        ],
+        subjectWeight: 3.0,
+        toolWeight: 0.3
+    },
+    'chemistry': {
+        subject: [
+            'molecule', 'molecular', 'compound', 'benzene', 'organic', 'inorganic',
+            'reagent', 'solvent', 'atom', 'ion', 'cation', 'anion',
+            'hydroxyl', 'methyl', 'ethyl', 'phenyl', 'amino', 'carboxyl',
+            'polymer', 'monomer', 'catalyst', 'oxidation', 'reduction',
+            'synthesis', 'distill', 'titrat', 'chromatograph', 'spectro',
+            'crystallin', 'isomer', 'enantiomer', 'racemic', 'stereochem',
+            'pharmacolog', 'metabol', 'chemical structure', 'chemical bond',
+            'covalent', 'ionic bond', 'valence', 'orbital', 'electron shell',
+            'periodic table', 'molar', 'stoichiometr', 'chemical reaction',
+            'acid', 'base', 'ph ', 'buffer solution', 'precipitat'
+        ],
+        tool: [
+            'chemical', 'formula', 'bond', 'element', 'reaction'
+        ],
+        subjectWeight: 3.0,
+        toolWeight: 0.5
+    },
+    'engineering': {
+        subject: [
+            'circuit', 'resistor', 'capacitor', 'inductor', 'transistor',
+            'voltage', 'current', 'ohm', 'watt', 'amplifier',
+            'load.bearing', 'stress.strain', 'tensile', 'shear force',
+            'beam', 'truss', 'structural', 'material science',
+            'thermodynamic', 'heat transfer', 'fluid mechanic',
+            'hydraulic', 'pneumatic', 'gear', 'torque', 'rpm',
+            'blueprint', 'cad', 'technical drawing', 'cross.section',
+            'wiring', 'pcb', 'microcontroller', 'plc', 'signal processing'
+        ],
+        tool: [
+            'diagram', 'schematic', 'system', 'design', 'component'
+        ],
+        subjectWeight: 3.0,
+        toolWeight: 0.3
+    },
+    'biology': {
+        subject: [
+            'cell', 'mitosis', 'meiosis', 'dna', 'rna', 'protein',
+            'enzyme', 'photosynthesis', 'respiration', 'chromosome',
+            'gene', 'allele', 'phenotype', 'genotype', 'organism',
+            'taxonomy', 'species', 'ecosystem', 'ecology',
+            'anatomy', 'physiology', 'tissue', 'organ', 'neuron',
+            'bacteria', 'virus', 'pathogen', 'antibody', 'antigen',
+            'microscop', 'botanical', 'zoologic', 'marine biology'
+        ],
+        tool: [
+            'biological', 'living', 'growth', 'reproduction'
+        ],
+        subjectWeight: 3.0,
+        toolWeight: 0.3
+    },
+    'finance': {
+        subject: [
+            'stock', 'bond', 'equity', 'dividend', 'portfolio',
+            'balance sheet', 'income statement', 'cash flow',
+            'depreciation', 'amortization', 'revenue', 'profit margin',
+            'interest rate', 'inflation', 'gdp', 'fiscal',
+            'derivative', 'option', 'futures', 'hedge', 'swap',
+            'yield curve', 'credit risk', 'market cap', 'ipo'
+        ],
+        tool: [
+            'financial', 'economic', 'market', 'investment', 'accounting'
+        ],
+        subjectWeight: 3.0,
+        toolWeight: 0.3
+    }
+};
+
+function classifyScholasticDomain(description) {
+    if (!description) return { domain: 'general', confidence: 0, scores: {} };
+    
+    const descLow = description.toLowerCase();
+    const scores = {};
+    
+    const descNorm = descLow.replace(/[.\-_]/g, ' ');
+    
+    function matchTerm(term, text) {
+        const hasSpace = term.includes(' ');
+        if (hasSpace) {
+            return text.includes(term.toLowerCase());
+        }
+        const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`\\b${escaped}`, 'i').test(text);
+    }
+    
+    for (const [domain, config] of Object.entries(SCHOLASTIC_DOMAINS)) {
+        let score = 0;
+        let subjectHits = 0;
+        let toolHits = 0;
+        
+        for (const term of config.subject) {
+            if (matchTerm(term, descNorm)) {
+                score += config.subjectWeight;
+                subjectHits++;
+            }
+        }
+        
+        for (const term of config.tool) {
+            if (matchTerm(term, descNorm)) {
+                score += config.toolWeight;
+                toolHits++;
+            }
+        }
+        
+        scores[domain] = { score, subjectHits, toolHits };
+    }
+    
+    const sorted = Object.entries(scores).sort((a, b) => b[1].score - a[1].score);
+    const top = sorted[0];
+    const runner = sorted[1];
+    
+    if (top[1].score === 0) {
+        return { domain: 'general', confidence: 0, scores };
+    }
+    
+    if (top[1].subjectHits === 0) {
+        return { domain: 'general', confidence: 0.2, scores, note: 'tool-only signals, no subject match' };
+    }
+    
+    const dominance = runner[1].score > 0 ? top[1].score / runner[1].score : 10;
+    const confidence = Math.min(0.99, 0.5 + (dominance - 1) * 0.15 + top[1].subjectHits * 0.08);
+    
+    return {
+        domain: top[0],
+        confidence: Math.round(confidence * 100) / 100,
+        subjectHits: top[1].subjectHits,
+        toolHits: top[1].toolHits,
+        scores
+    };
+}
+
+function scholasticToContentType(classification) {
+    switch (classification.domain) {
+        case 'chemistry': return 'chemical';
+        case 'pure-math': return 'diagram';
+        case 'engineering': return 'diagram';
+        case 'biology': return 'diagram';
+        case 'finance': return 'chart';
+        default: return 'visual';
+    }
+}
+
 // Chemistry harm-reduction enrichment template (for structured answers)
 function createChemistryEnrichmentTemplate(compoundName) {
     return `
@@ -901,9 +1069,12 @@ async function processChemistryContent(visionObservations) {
     
     const chemicalObservations = visionObservations.filter(obs => {
         if (obs.contentType !== 'chemical') return false;
-        const desc = (obs.description || '').toLowerCase();
-        const isMathGeo = /\b(geometric|geometry|mathematical|theorem|pythagor|gougu|triangle|square root|proof|equation|algebra|calculus|trigonometr|grid.based|grid.pattern|puzzle|philosophical)\b/i.test(desc);
-        return !isMathGeo;
+        const scholastic = classifyScholasticDomain(obs.description);
+        if (scholastic.domain !== 'chemistry' && scholastic.domain !== 'general') {
+            console.log(`🧪 Chemistry Pipeline: Rejected observation — scholastic domain is "${scholastic.domain}" not chemistry`);
+            return false;
+        }
+        return true;
     });
     
     if (chemicalObservations.length === 0) {
@@ -1729,14 +1900,14 @@ Be specific and technical. This is for scientific document analysis.`
             
             const description = response.data.choices?.[0]?.message?.content || 'Unable to analyze image';
             
-            const descLow = description.toLowerCase();
-            const isMathGeometric = /\b(geometric|geometry|mathematical|theorem|pythagor|gougu|triangle|square root|proof|equation|algebra|calculus|trigonometr|grid.based|grid.pattern)\b/i.test(descLow);
-            const isChemical = !isMathGeometric && (
-                /\b(chemical|molecule|molecular|compound|formula|bond|benzene|organic|inorganic|reagent|solvent|atom|ion|cation|anion|hydroxyl|methyl|ethyl|phenyl|amino|carboxyl|polymer|monomer|catalyst|oxidation|reduction|synthesis|distill|titrat|chromatograph|spectro|crystallin|isomer|enantiomer|racemic|stereochem|pharmacolog|metabol)\b/i.test(descLow)
-            );
-            const contentType = isChemical ? 'chemical' :
-                               /\b(chart|graph|plot|histogram)\b/i.test(descLow) ? 'chart' :
-                               /\b(diagram|schematic|flowchart)\b/i.test(descLow) ? 'diagram' : 'visual';
+            const scholastic = classifyScholasticDomain(description);
+            let contentType = scholasticToContentType(scholastic);
+            if (contentType === 'visual') {
+                const descLow = description.toLowerCase();
+                if (/\b(chart|graph|plot|histogram)\b/i.test(descLow)) contentType = 'chart';
+                else if (/\b(diagram|schematic|flowchart)\b/i.test(descLow)) contentType = 'diagram';
+            }
+            console.log(`📚 Scholastic: ${scholastic.domain} (confidence: ${scholastic.confidence}, subject: ${scholastic.subjectHits || 0}, tool: ${scholastic.toolHits || 0})`);
             
             visualDescriptions.push({
                 index: i + 1,
@@ -1996,21 +2167,20 @@ Respond with a clear description of what you observe.`;
         
         const description = response.data.choices?.[0]?.message?.content || '';
         
-        // Classify content type
-        const descLower = description.toLowerCase();
-        let contentType_result = 'general';
-        const isMathGeo = /\b(geometric|geometry|mathematical|theorem|pythagor|gougu|triangle|square root|proof|equation|algebra|calculus|trigonometr|grid.based|grid.pattern)\b/i.test(descLower);
-        if (isMathGeo) {
-            contentType_result = 'diagram';
-        } else if (/\b(chemical|molecule|molecular|compound|formula|bond|benzene|organic|inorganic|reagent|solvent|atom|ion|cation|anion|hydroxyl|methyl|ethyl|phenyl|amino|carboxyl|polymer|monomer|catalyst|oxidation|reduction|synthesis|distill|titrat|chromatograph|spectro|crystallin|isomer|enantiomer|racemic|stereochem|pharmacolog|metabol)\b/i.test(descLower)) {
-            contentType_result = 'chemical';
-        } else if (/\b(chart|graph|plot|axis|data|trend|bar|line|pie)\b/i.test(descLower)) {
-            contentType_result = 'chart';
-        } else if (/\b(diagram|flow|schematic|process|step|arrow|box)\b/i.test(descLower)) {
-            contentType_result = 'diagram';
+        const scholastic = classifyScholasticDomain(description);
+        let contentType_result = scholasticToContentType(scholastic);
+        if (contentType_result === 'visual') {
+            const descLower = description.toLowerCase();
+            if (/\b(chart|graph|plot|axis|data|trend|bar|line|pie)\b/i.test(descLower)) {
+                contentType_result = 'chart';
+            } else if (/\b(diagram|flow|schematic|process|step|arrow|box)\b/i.test(descLower)) {
+                contentType_result = 'diagram';
+            } else {
+                contentType_result = 'general';
+            }
         }
         
-        console.log(`🖼️ Image Visual: Classified as ${contentType_result}`);
+        console.log(`📚 Scholastic: ${scholastic.domain} (confidence: ${scholastic.confidence}, subject: ${scholastic.subjectHits || 0}, tool: ${scholastic.toolHits || 0}) → ${contentType_result}`);
         
         return {
             description,
@@ -2291,5 +2461,8 @@ module.exports = {
     // Vision analysis for direct image processing
     analyzeImageWithGroqVision,
     // Chemistry enrichment for chemical structure analysis
-    processChemistryContent
+    processChemistryContent,
+    // Scholastic domain classifier
+    classifyScholasticDomain,
+    scholasticToContentType
 };
