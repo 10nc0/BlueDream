@@ -1293,8 +1293,139 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         const startTime = Date.now();
         const clientIp = req.ip || '127.0.0.1';
 
+        function extractPsiEma(preflight) {
+            if (!preflight?.psiEmaAnalysis) return null;
+            const daily = preflight.psiEmaAnalysis;
+            const weekly = preflight.psiEmaAnalysisWeekly;
+            const result = {
+                daily: {
+                    reading: daily.reading,
+                    emoji: daily.emoji,
+                    theta: daily.theta,
+                    z: daily.z,
+                    R: daily.R,
+                    fidelity: daily.fidelity
+                }
+            };
+            if (weekly) {
+                result.weekly = {
+                    reading: weekly.reading,
+                    emoji: weekly.emoji,
+                    theta: weekly.theta,
+                    z: weekly.z,
+                    R: weekly.R,
+                    fidelity: weekly.fidelity
+                };
+            }
+            return result;
+        }
+
         try {
             console.log(`🔌 Nyan API v1: "${message.slice(0, 80)}..." [mode=${mode || 'auto'}]`);
+
+            let compoundParts = detectCompoundQuery(message.trim(), false, false);
+
+            if (!compoundParts || compoundParts.length <= 1) {
+                const trimmedMsg = message.trim();
+                const tickerMatches = trimmedMsg.match(/\$[A-Z]{1,5}\b/g);
+                const isComparison = /\b(compare|vs\.?|versus|correlation|relative|against|ratio|between)\b/i.test(trimmedMsg);
+                if (tickerMatches && tickerMatches.length > 1 && !isComparison) {
+                    const uniqueTickers = [...new Set(tickerMatches)];
+                    if (uniqueTickers.length > 1) {
+                        const baseQuery = trimmedMsg
+                            .replace(/\$[A-Z]{1,5}\b/g, '')
+                            .replace(/\b(and|,|&|also|plus)\b/gi, '')
+                            .replace(/\s+/g, ' ')
+                            .trim();
+                        if (baseQuery.length > 0) {
+                            compoundParts = uniqueTickers.slice(0, 5).map(ticker => ({
+                                query: `${ticker} ${baseQuery}`,
+                                label: ticker
+                            }));
+                        } else {
+                            const { detectPsiEMAKeys } = require('../utils/stock-fetcher');
+                            const hasPsiEmaIntent = detectPsiEMAKeys(trimmedMsg).shouldTrigger;
+                            const suffix = hasPsiEmaIntent ? 'psi-ema' : 'analysis';
+                            compoundParts = uniqueTickers.slice(0, 5).map(ticker => ({
+                                query: `${ticker} ${suffix}`,
+                                label: ticker
+                            }));
+                        }
+                        console.log(`🔌 Nyan API v1: Multi-ticker split — ${uniqueTickers.join(', ')} × "${compoundParts[0].query.replace(compoundParts[0].label + ' ', '')}"`);
+                    }
+                }
+            }
+
+            if (compoundParts && compoundParts.length > 1) {
+                console.log(`🔌 Nyan API v1: Compound query — ${compoundParts.length} sub-queries`);
+
+                const sections = [];
+                let worstBadge = 'verified';
+                let totalConfidence = 0;
+
+                for (let i = 0; i < compoundParts.length; i++) {
+                    const part = compoundParts[i];
+                    const subInput = {
+                        message: part.query,
+                        photos: [],
+                        documents: [],
+                        extractedContent: [],
+                        history: [],
+                        clientIp,
+                        isVisionRequest: false
+                    };
+
+                    const subResult = await orchestrator.execute(subInput);
+
+                    if (subResult.success && subResult.answer) {
+                        const section = {
+                            label: part.label,
+                            response: subResult.answer,
+                            mode: subResult.mode || 'general',
+                            badge: subResult.badge || 'unverified',
+                            confidence: subResult.audit?.confidence || 0
+                        };
+                        if (subResult.preflight?.ticker) section.ticker = subResult.preflight.ticker;
+                        const psiEma = extractPsiEma(subResult.preflight);
+                        if (psiEma) section.psiEma = psiEma;
+                        sections.push(section);
+
+                        if (subResult.badge === 'unverified') worstBadge = 'unverified';
+                        totalConfidence += (subResult.audit?.confidence || 0);
+                    } else {
+                        sections.push({
+                            label: part.label,
+                            response: 'Could not process this part. Please try asking separately.',
+                            mode: 'error',
+                            badge: 'unverified',
+                            confidence: 0
+                        });
+                        worstBadge = 'unverified';
+                    }
+                }
+
+                const mergedResponse = sections.map((s, i) => {
+                    const header = `## ${i + 1}. ${s.label}`;
+                    const separator = i < sections.length - 1 ? '\n\n---\n\n' : '';
+                    return `${header}\n\n${s.response}${separator}`;
+                }).join('');
+
+                const avgConfidence = sections.length > 0
+                    ? Math.round(totalConfidence / sections.length)
+                    : 0;
+
+                console.log(`🔌 Nyan API v1: Compound complete [${sections.length} sections] ${Date.now() - startTime}ms`);
+                return res.json({
+                    success: true,
+                    response: mergedResponse,
+                    mode: 'compound',
+                    badge: worstBadge,
+                    confidence: avgConfidence,
+                    processingMs: Date.now() - startTime,
+                    compound: true,
+                    sections
+                });
+            }
 
             const pipelineInput = {
                 message: message.trim(),
@@ -1325,30 +1456,10 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 processingMs: Date.now() - startTime
             };
 
-            if (pipelineResult.preflight?.psiEmaAnalysis) {
-                const daily = pipelineResult.preflight.psiEmaAnalysis;
-                const weekly = pipelineResult.preflight.psiEmaAnalysisWeekly;
+            const psiEma = extractPsiEma(pipelineResult.preflight);
+            if (psiEma) {
                 response.ticker = pipelineResult.preflight.ticker;
-                response.psiEma = {
-                    daily: {
-                        reading: daily.reading,
-                        emoji: daily.emoji,
-                        theta: daily.theta,
-                        z: daily.z,
-                        R: daily.R,
-                        fidelity: daily.fidelity
-                    }
-                };
-                if (weekly) {
-                    response.psiEma.weekly = {
-                        reading: weekly.reading,
-                        emoji: weekly.emoji,
-                        theta: weekly.theta,
-                        z: weekly.z,
-                        R: weekly.R,
-                        fidelity: weekly.fidelity
-                    };
-                }
+                response.psiEma = psiEma;
             }
 
             if (pipelineResult.preflight?.ticker && !response.ticker) {
