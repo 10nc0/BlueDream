@@ -462,6 +462,7 @@ const orchestrator = createPipelineOrchestrator({
     groqWithRetry
 });
 
+const { detectCompoundQuery } = require('../utils/preflight-router');
 const { AUDIT } = require('../config/constants');
 const { buildAuditContext } = require('../utils/audit-context');
 const { runDashboardAuditPipeline } = require('../utils/dashboard-audit-pipeline');
@@ -1056,69 +1057,104 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             // L1 Perception Ingestion
             const perception = await AttachmentIngestion.ingest(docList, clientIp);
             
-            const pipelineInput = {
-                message: message || '',
-                photos: photoList,
-                documents: docList,
-                extractedContent: extractedContent, // Use locally populated array from document processing
-                history: history || [],
-                clientIp,
-                isVisionRequest: photoList.length > 0,
-                contextAttachments,
-                streaming: true
-            };
+            // ========================================
+            // COMPOUND QUERY DETECTION
+            // Split multi-intent messages into separate pipeline runs
+            // e.g., "$SPY price? also what does this image say?" → 2 runs
+            // ========================================
+            const compoundParts = detectCompoundQuery(
+                message || '',
+                photoList.length > 0,
+                docList.length > 0
+            );
             
-            const pipelineResult = await orchestrator.execute(pipelineInput);
-            
-            if (isClientDisconnected()) return;
-            
-            if (!pipelineResult.success || !pipelineResult.answer) {
-                const failStep = pipelineResult.step || 'unknown';
-                const failReason = pipelineResult.error || 'Processing failed';
-                console.error(`❌ Pipeline failed at ${failStep}: ${failReason}`);
-                const userMessage = failReason.includes('Groq API')
-                    ? 'The AI service is temporarily busy. Please try again in a moment.'
-                    : 'Something went wrong processing your request. Please try again.';
-                res.write(`data: ${JSON.stringify({ type: 'error', message: userMessage })}\n\n`);
-                res.end();
-                return;
-            }
-            
-            const verifiedAnswer = pipelineResult.answer;
-            const badge = pipelineResult.badge || 'unverified';
-            const didSearchRetry = pipelineResult.didSearchRetry || false;
-            
-            const auditMetadata = {
-                badge,
-                confidence: pipelineResult.audit?.confidence || 0,
-                reason: pipelineResult.audit?.reason || '',
-                didSearchRetry,
-                passCount: pipelineResult.passCount || 1
-            };
-            
-            if (pipelineResult.fastPath) {
-                console.log(`⚡ Fast-path: Skipping personality pass (pre-crafted message)`);
-                auditMetadata.passCount = 0;
-                res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
-                res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
-                res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
-                res.end();
-            } else if (badge === 'verified' || badge === 'unverified') {
+            if (compoundParts && compoundParts.length > 1) {
+                console.log(`🔀 Compound query: ${compoundParts.length} sub-queries detected`);
+                res.write(`data: ${JSON.stringify({ type: 'status', message: `Analyzing ${compoundParts.length} parts...` })}\n\n`);
+                
+                const sectionResults = [];
+                let worstBadge = 'verified';
+                let totalConfidence = 0;
+                let anySearchRetry = false;
+                
+                for (let i = 0; i < compoundParts.length; i++) {
+                    const part = compoundParts[i];
+                    if (isClientDisconnected()) return;
+                    
+                    res.write(`data: ${JSON.stringify({ type: 'status', message: `Processing part ${i + 1}/${compoundParts.length}: ${part.label}...` })}\n\n`);
+                    
+                    const subInput = {
+                        message: part.query,
+                        photos: part.includePhotos ? photoList : [],
+                        documents: part.includeDocuments ? docList : [],
+                        extractedContent: part.includeDocuments ? extractedContent : 
+                                          part.includePhotos ? [] : [],
+                        history: history || [],
+                        clientIp,
+                        isVisionRequest: part.includePhotos && photoList.length > 0,
+                        contextAttachments: part.includePhotos || part.includeDocuments ? contextAttachments : undefined,
+                        streaming: true
+                    };
+                    
+                    const subResult = await orchestrator.execute(subInput);
+                    
+                    if (subResult.success && subResult.answer) {
+                        sectionResults.push({
+                            label: part.label,
+                            answer: subResult.answer,
+                            badge: subResult.badge || 'unverified',
+                            confidence: subResult.audit?.confidence || 0,
+                            didSearchRetry: subResult.didSearchRetry || false,
+                            passCount: subResult.passCount || 1,
+                            fastPath: subResult.fastPath || false
+                        });
+                        
+                        if (subResult.badge === 'unverified') worstBadge = 'unverified';
+                        totalConfidence += (subResult.audit?.confidence || 0);
+                        if (subResult.didSearchRetry) anySearchRetry = true;
+                    } else {
+                        sectionResults.push({
+                            label: part.label,
+                            answer: `*Could not process this part. Please try asking separately.*`,
+                            badge: 'unverified',
+                            confidence: 0,
+                            didSearchRetry: false,
+                            passCount: 0,
+                            fastPath: false
+                        });
+                        worstBadge = 'unverified';
+                    }
+                }
+                
                 if (isClientDisconnected()) return;
                 
-                await fastStreamPersonality(res, verifiedAnswer, auditMetadata);
-            } else {
-                res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
-                res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
-                res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
-                res.end();
-            }
-            
-            if (pipelineResult.success) {
+                const mergedSections = sectionResults.map((section, i) => {
+                    const num = i + 1;
+                    const header = `## ${num}. ${section.label}`;
+                    const separator = i < sectionResults.length - 1 ? '\n\n---\n\n' : '';
+                    return `${header}\n\n${section.answer}${separator}`;
+                }).join('');
+                
+                const avgConfidence = sectionResults.length > 0 
+                    ? Math.round(totalConfidence / sectionResults.length) 
+                    : 0;
+                
+                const mergedAudit = {
+                    badge: worstBadge,
+                    confidence: avgConfidence,
+                    reason: `Compound query: ${sectionResults.length} sections processed`,
+                    didSearchRetry: anySearchRetry,
+                    passCount: sectionResults.reduce((sum, s) => sum + s.passCount, 0),
+                    isCompound: true,
+                    sectionCount: sectionResults.length
+                };
+                
+                await fastStreamPersonality(res, mergedSections, mergedAudit);
+                
                 recordInMemory(
                     clientIp,
                     message || '',
-                    verifiedAnswer || '',
+                    mergedSections || '',
                     docList.length > 0 ? {
                         name: docList[0].name,
                         type: docList[0].type || 'document',
@@ -1126,9 +1162,86 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         shortSummary: `${docList.length} document(s): ${docList.map(d => d.name).join(', ')}`
                     } : null
                 );
+                
+                console.log(`🌊 Compound streaming complete for ${clientIp} [${worstBadge}] (${sectionResults.length} sections)`);
+            } else {
+                // ========================================
+                // SINGLE QUERY PATH (original behavior)
+                // ========================================
+                const pipelineInput = {
+                    message: message || '',
+                    photos: photoList,
+                    documents: docList,
+                    extractedContent: extractedContent,
+                    history: history || [],
+                    clientIp,
+                    isVisionRequest: photoList.length > 0,
+                    contextAttachments,
+                    streaming: true
+                };
+                
+                const pipelineResult = await orchestrator.execute(pipelineInput);
+                
+                if (isClientDisconnected()) return;
+                
+                if (!pipelineResult.success || !pipelineResult.answer) {
+                    const failStep = pipelineResult.step || 'unknown';
+                    const failReason = pipelineResult.error || 'Processing failed';
+                    console.error(`❌ Pipeline failed at ${failStep}: ${failReason}`);
+                    const userMessage = failReason.includes('Groq API')
+                        ? 'The AI service is temporarily busy. Please try again in a moment.'
+                        : 'Something went wrong processing your request. Please try again.';
+                    res.write(`data: ${JSON.stringify({ type: 'error', message: userMessage })}\n\n`);
+                    res.end();
+                    return;
+                }
+                
+                const verifiedAnswer = pipelineResult.answer;
+                const badge = pipelineResult.badge || 'unverified';
+                const didSearchRetry = pipelineResult.didSearchRetry || false;
+                
+                const auditMetadata = {
+                    badge,
+                    confidence: pipelineResult.audit?.confidence || 0,
+                    reason: pipelineResult.audit?.reason || '',
+                    didSearchRetry,
+                    passCount: pipelineResult.passCount || 1
+                };
+                
+                if (pipelineResult.fastPath) {
+                    console.log(`⚡ Fast-path: Skipping personality pass (pre-crafted message)`);
+                    auditMetadata.passCount = 0;
+                    res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
+                    res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
+                    res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
+                    res.end();
+                } else if (badge === 'verified' || badge === 'unverified') {
+                    if (isClientDisconnected()) return;
+                    
+                    await fastStreamPersonality(res, verifiedAnswer, auditMetadata);
+                } else {
+                    res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
+                    res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
+                    res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
+                    res.end();
+                }
+                
+                if (pipelineResult.success) {
+                    recordInMemory(
+                        clientIp,
+                        message || '',
+                        verifiedAnswer || '',
+                        docList.length > 0 ? {
+                            name: docList[0].name,
+                            type: docList[0].type || 'document',
+                            processedText: extractedContent.join('\n\n').slice(0, 2000),
+                            shortSummary: `${docList.length} document(s): ${docList.map(d => d.name).join(', ')}`
+                        } : null
+                    );
+                }
+                
+                console.log(`🌊 Streaming complete for ${clientIp} [${badge}]${didSearchRetry ? ' [+search retry]' : ''}`);
             }
-            
-            console.log(`🌊 Streaming complete for ${clientIp} [${badge}]${didSearchRetry ? ' [+search retry]' : ''}`);
             
         } catch (error) {
             console.error('❌ Streaming error:', error.message);

@@ -836,8 +836,120 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
   return messages;
 }
 
+/**
+ * Compound Query Detector
+ * 
+ * Detects multi-intent messages that should be split into separate pipeline runs.
+ * e.g., "$SPY price trend? also what does this image say?" → 2 sub-queries
+ * 
+ * Returns null if query is single-intent.
+ * Returns array of { query, label, hasAttachments } if compound.
+ */
+function detectCompoundQuery(query, hasPhotos = false, hasDocuments = false) {
+  if (!query || typeof query !== 'string') return null;
+  const trimmed = query.trim();
+  if (trimmed.length < 15) return null;
+
+  const SPLIT_PATTERNS = [
+    /\.\s*(?:also|and also|additionally|plus|another thing|on another note|separately|by the way|btw)\s*[,:]?\s*/i,
+    /[?!]\s*(?:also|and also|additionally|plus|another thing|on another note|separately|by the way|btw)\s*[,:]?\s*/i,
+    /[?!]\s+(?:and\s+)?(?=(?:what|how|can|could|do|does|is|are|tell|show|explain|describe)\s)/i,
+  ];
+
+  let splitIndex = -1;
+  let splitLength = 0;
+
+  for (const pattern of SPLIT_PATTERNS) {
+    const match = trimmed.match(pattern);
+    if (match && match.index > 10 && match.index < trimmed.length - 10) {
+      splitIndex = match.index;
+      splitLength = match[0].length;
+      break;
+    }
+  }
+
+  if (splitIndex === -1) {
+    const hasTickerSignal = /\$[A-Z]{1,5}\b/.test(trimmed) || 
+      detectPsiEMAKeys(trimmed).shouldTrigger;
+    const hasImageSignal = hasPhotos && 
+      /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(trimmed);
+
+    if (hasTickerSignal && hasImageSignal) {
+      const imageRefPatterns = [
+        /[?.]?\s*(?:also\s+)?(?:and\s+)?(?:what|how|can|could|tell|show|explain|describe|analyze|look)\s.*\b(?:image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i,
+        /\b(?:image|photo|picture|pic|screenshot|this|attached|uploaded)\b.*[?]/i,
+      ];
+
+      for (const pattern of imageRefPatterns) {
+        const match = trimmed.match(pattern);
+        if (match && match.index > 5) {
+          splitIndex = match.index;
+          splitLength = 0;
+          if (/^[?.\s]/.test(match[0])) {
+            splitIndex += 1;
+            splitLength = 0;
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  if (splitIndex === -1) return null;
+
+  const part1Text = trimmed.slice(0, splitIndex).replace(/[?.!,\s]+$/, '').trim();
+  const part2Text = trimmed.slice(splitIndex + splitLength).trim();
+
+  if (part1Text.length < 5 || part2Text.length < 5) return null;
+
+  const part1HasTicker = /\$[A-Z]{1,5}\b/.test(part1Text) || detectPsiEMAKeys(part1Text).shouldTrigger;
+  const part2HasTicker = /\$[A-Z]{1,5}\b/.test(part2Text) || detectPsiEMAKeys(part2Text).shouldTrigger;
+  const part1HasImageRef = /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(part1Text);
+  const part2HasImageRef = /\b(image|photo|picture|pic|screenshot|this|attached|uploaded)\b/i.test(part2Text);
+
+  function labelPart(text, hasTicker, hasImageRef) {
+    if (hasTicker) return 'Price & Trend Analysis';
+    if (hasImageRef && hasPhotos) return 'Image Analysis';
+    if (/\b(document|pdf|file|excel|spreadsheet)\b/i.test(text) && hasDocuments) return 'Document Analysis';
+    if (isForexQuery(text) || detectForexPair(text)) return 'Forex Analysis';
+    if (detectSeedMetricIntent(text)) return 'Real Estate Analysis';
+    if (LEGAL_KEYWORDS_REGEX && LEGAL_KEYWORDS_REGEX.test(text)) return 'Legal Analysis';
+    return 'General Query';
+  }
+
+  const subQueries = [
+    {
+      query: part1Text,
+      label: labelPart(part1Text, part1HasTicker, part1HasImageRef),
+      includePhotos: part1HasImageRef && hasPhotos,
+      includeDocuments: /\b(document|pdf|file|excel|spreadsheet)\b/i.test(part1Text) && hasDocuments,
+    },
+    {
+      query: part2Text,
+      label: labelPart(part2Text, part2HasTicker, part2HasImageRef),
+      includePhotos: part2HasImageRef && hasPhotos,
+      includeDocuments: /\b(document|pdf|file|excel|spreadsheet)\b/i.test(part2Text) && hasDocuments,
+    },
+  ];
+
+  if (!subQueries[0].includePhotos && !subQueries[1].includePhotos && hasPhotos) {
+    subQueries[1].includePhotos = true;
+    if (subQueries[1].label === 'General Query') {
+      subQueries[1].label = 'Image Analysis';
+    }
+  }
+
+  console.log(`🔀 COMPOUND QUERY DETECTED: Split into ${subQueries.length} sub-queries`);
+  subQueries.forEach((sq, i) => {
+    console.log(`   ${i + 1}. [${sq.label}] "${sq.query.slice(0, 60)}..." photos=${sq.includePhotos}`);
+  });
+
+  return subQueries;
+}
+
 module.exports = {
   preflightRouter,
   buildSystemContext,
+  detectCompoundQuery,
   safeFixed
 };
