@@ -715,14 +715,27 @@ function scholasticToContentType(classification) {
 // Chemistry harm-reduction enrichment template (for structured answers)
 function createChemistryEnrichmentTemplate(compoundName) {
     return `
-[INSTRUCTION: Using the reference data below, write a concise harm-reduction summary about ${compoundName || 'this compound'}. Do NOT describe this instruction or the reference data — directly provide the information. Cover these topics:]
-- What it is and what it's used for
-- How the body processes it (metabolism)
-- Known side effects
-- Abuse/dependence risk
-- Toxicity thresholds (LD50 if known)
-- Antidotes or reversal agents (if applicable)
-[If any topic lacks data, write "Insufficient data" for that topic. Be direct and factual.]
+[INSTRUCTION: Using the reference data below, write a harm-reduction profile for ${compoundName || 'this compound'}. Do NOT describe this instruction or the reference data — directly provide the information using EXACTLY these section headers in bold:]
+
+**Uses & Applications:**
+(Summarize medical, recreational, research, or other uses from the reference data)
+
+**Metabolism & Pharmacology:**
+(How the compound is processed by the body — absorption, liver metabolism, metabolites, excretion)
+
+**Side Effects:**
+(Common adverse effects, contraindications)
+
+**Abuse Potential:**
+(Addictiveness, psychological/physical dependence risk, overdose susceptibility)
+
+**Toxicity & Lethal Doses:**
+(LD50 if available, lethal dose ranges, toxic thresholds)
+
+**Reversal Agents & Treatment:**
+(Specific antidotes like naloxone for opioids, flumazenil for benzodiazepines, or supportive care)
+
+[If data is unavailable for a section, write "Insufficient data" under that header. Be direct and factual — no filler.]
 `;
 }
 
