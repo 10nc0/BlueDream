@@ -1250,6 +1250,133 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         }
     });
 
+    // ========================================================================
+    // Nyan API v1 — Internal JSON endpoint for agent-to-agent communication
+    // Usage: POST /api/v1/nyan { message, mode? }
+    // Auth: Bearer token (NYAN_API_TOKEN secret)
+    // ========================================================================
+    const NYAN_API_TOKEN = process.env.NYAN_API_TOKEN;
+
+    const nyanApiLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        max: 30,
+        message: { error: 'Rate limit exceeded. Max 30 requests/minute.' },
+        standardHeaders: true,
+        legacyHeaders: false
+    });
+
+    app.post('/api/v1/nyan', nyanApiLimiter, async (req, res) => {
+        if (!NYAN_API_TOKEN) {
+            return res.status(503).json({ error: 'Nyan API not configured. Set NYAN_API_TOKEN secret.' });
+        }
+
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
+        }
+        const providedToken = authHeader.slice(7);
+        const tokenBuf = Buffer.from(NYAN_API_TOKEN);
+        const providedBuf = Buffer.from(providedToken);
+        if (tokenBuf.length !== providedBuf.length || !crypto.timingSafeEqual(tokenBuf, providedBuf)) {
+            return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
+        }
+
+        const { message, mode } = req.body || {};
+        if (!message || typeof message !== 'string' || message.trim().length === 0) {
+            return res.status(400).json({ error: 'Missing or empty "message" field.' });
+        }
+
+        if (message.length > 4000) {
+            return res.status(400).json({ error: 'Message too long. Max 4000 characters.' });
+        }
+
+        const startTime = Date.now();
+        const clientIp = req.ip || '127.0.0.1';
+
+        try {
+            console.log(`🔌 Nyan API v1: "${message.slice(0, 80)}..." [mode=${mode || 'auto'}]`);
+
+            const pipelineInput = {
+                message: message.trim(),
+                photos: [],
+                documents: [],
+                extractedContent: [],
+                history: [],
+                clientIp,
+                isVisionRequest: false
+            };
+
+            const pipelineResult = await orchestrator.execute(pipelineInput);
+
+            if (!pipelineResult.success) {
+                return res.status(500).json({
+                    success: false,
+                    error: pipelineResult.error || 'Pipeline processing failed',
+                    step: pipelineResult.step
+                });
+            }
+
+            const response = {
+                success: true,
+                response: pipelineResult.answer,
+                mode: pipelineResult.mode || 'general',
+                badge: pipelineResult.badge || 'unverified',
+                confidence: pipelineResult.audit?.confidence || 0,
+                processingMs: Date.now() - startTime
+            };
+
+            if (pipelineResult.preflight?.psiEmaAnalysis) {
+                const daily = pipelineResult.preflight.psiEmaAnalysis;
+                const weekly = pipelineResult.preflight.psiEmaAnalysisWeekly;
+                response.ticker = pipelineResult.preflight.ticker;
+                response.psiEma = {
+                    daily: {
+                        reading: daily.reading,
+                        emoji: daily.emoji,
+                        theta: daily.theta,
+                        z: daily.z,
+                        R: daily.R,
+                        fidelity: daily.fidelity
+                    }
+                };
+                if (weekly) {
+                    response.psiEma.weekly = {
+                        reading: weekly.reading,
+                        emoji: weekly.emoji,
+                        theta: weekly.theta,
+                        z: weekly.z,
+                        R: weekly.R,
+                        fidelity: weekly.fidelity
+                    };
+                }
+            }
+
+            if (pipelineResult.preflight?.ticker && !response.ticker) {
+                response.ticker = pipelineResult.preflight.ticker;
+            }
+
+            console.log(`🔌 Nyan API v1: Complete [${response.mode}] ${response.processingMs}ms`);
+            res.json(response);
+
+        } catch (error) {
+            console.error('❌ Nyan API v1 error:', error.message);
+            res.status(500).json({
+                success: false,
+                error: 'Internal processing error',
+                processingMs: Date.now() - startTime
+            });
+        }
+    });
+
+    app.get('/api/v1/nyan/health', (req, res) => {
+        res.json({
+            status: 'ok',
+            version: 'v1',
+            modes: ['general', 'psi-ema', 'seed-metric', 'chemistry', 'legal', 'code-audit', 'forex'],
+            timestamp: new Date().toISOString()
+        });
+    });
+
 }
 
 module.exports = { 
