@@ -52,9 +52,65 @@ const PIPELINE_STEPS = {
 };
 
 const { AttachmentIngestion } = require('./attachment-ingestion');
-const { analyzeImageWithGroqVision, processChemistryContent } = require('./attachment-cascade');
+const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
 const { parseSeedMetricData, buildSeedMetricTable, validateSeedMetricOutput } = require('./seed-metric-calculator');
+
+function extractVisionSearchTerms(visionDescription) {
+  if (!visionDescription || visionDescription.length < 20) return null;
+  
+  const desc = visionDescription.toLowerCase();
+  
+  const stopWords = new Set([
+    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+    'should', 'may', 'might', 'can', 'shall', 'to', 'of', 'in', 'for',
+    'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during',
+    'before', 'after', 'above', 'below', 'between', 'out', 'off', 'over',
+    'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when',
+    'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more',
+    'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own',
+    'same', 'so', 'than', 'too', 'very', 'just', 'because', 'but', 'and',
+    'or', 'if', 'while', 'this', 'that', 'these', 'those', 'it', 'its',
+    'image', 'appears', 'shows', 'display', 'displayed', 'depicting',
+    'contains', 'features', 'includes', 'also', 'which', 'what',
+    'photo', 'picture', 'visual', 'seem', 'seems', 'likely', 'possibly',
+    'appear', 'see', 'seen', 'look', 'looks', 'like'
+  ]);
+  
+  const culturalCues = [];
+  if (/chinese|中|汉|勾股/i.test(desc)) culturalCues.push('Chinese');
+  if (/japanese|日本|和/i.test(desc)) culturalCues.push('Japanese');
+  if (/arabic|arab|islam/i.test(desc)) culturalCues.push('Arabic');
+  if (/indian|hindu|sanskrit/i.test(desc)) culturalCues.push('Indian');
+  if (/greek|ancient greece/i.test(desc)) culturalCues.push('Greek');
+  
+  const domainCues = [];
+  if (/theorem|proof|mathematical|geometry|geometric|pythagor|gougu/i.test(desc)) domainCues.push('mathematical proof');
+  if (/diagram|schematic|blueprint/i.test(desc)) domainCues.push('diagram');
+  if (/historical|ancient|traditional|classic/i.test(desc)) domainCues.push('historical');
+  if (/grid|square|rectangle|triangle/i.test(desc)) domainCues.push('geometric');
+  if (/character|text|writing|script|label/i.test(desc)) domainCues.push('annotated');
+  
+  const cleaned = desc
+    .replace(/\*\*[^*]+\*\*/g, '')
+    .replace(/^(the image|this image|the picture|this picture|the diagram|this diagram|it|the photo|this photo)\s+(shows?|displays?|depicts?|contains?|features?|presents?|illustrates?|represents?)\s+/i, '')
+    .replace(/^(a|an|the)\s+(diagram|image|picture|photo|figure|illustration)\s+(of|showing|depicting|with)\s+/i, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  const words = cleaned.split(' ')
+    .filter(w => w.length > 2 && !stopWords.has(w))
+    .slice(0, 20);
+  
+  const meaningful = [...new Set([...culturalCues, ...domainCues, ...words.slice(0, 6)])];
+  
+  if (meaningful.length < 2) return null;
+  
+  const query = meaningful.slice(0, 8).join(' ');
+  return query.length > 10 ? query : null;
+}
 
 class PipelineState {
   constructor(tenantId = null) {
@@ -263,6 +319,57 @@ class PipelineOrchestrator {
             }
           } catch (chemError) {
             console.error(`❌ S-1: Chemistry enrichment error: ${chemError.message}`);
+          }
+        }
+        
+        // Vision Search Enrichment: search to identify non-chemistry images or failed-chemistry images
+        const chemEnrichmentFailed = chemicalVisionResults.length > 0 && !state.chemistryHeader;
+        const nonChemVisionDescs = normalizedInput.extractedContent
+          .filter(text => typeof text === 'string' && 
+            (text.includes('📐 Diagram') || text.includes('🖼️ Visual') || text.includes('📊 Chart')) &&
+            !text.includes('🧪 Chemical Structure'));
+        
+        const needsVisionSearch = nonChemVisionDescs.length > 0 || chemEnrichmentFailed;
+        
+        if (needsVisionSearch) {
+          try {
+            let visionDesc;
+            let trigger;
+            if (chemEnrichmentFailed && nonChemVisionDescs.length === 0) {
+              trigger = 'chem-fallback';
+              visionDesc = chemicalVisionResults
+                .map(r => r.description || '')
+                .filter(d => d.length > 0)
+                .join(' ');
+            } else {
+              trigger = 'vision-identify';
+              visionDesc = nonChemVisionDescs.join(' ');
+            }
+            
+            if (visionDesc && visionDesc.length > 20) {
+              const scholastic = classifyScholasticDomain(visionDesc);
+              const keyTerms = extractVisionSearchTerms(visionDesc);
+              
+              if (keyTerms) {
+                console.log(`🔎 S-1: Vision search enrichment [${trigger}] — querying "${keyTerms}" (scholastic: ${scholastic.domain})`);
+                let searchResult = await this.searchBrave(keyTerms, normalizedInput.clientIp);
+                if (!searchResult) {
+                  searchResult = await this.searchDuckDuckGo(keyTerms);
+                }
+                
+                if (searchResult) {
+                  normalizedInput.extractedContent.push(
+                    `\n### 🔍 Image Identification (Web Search):\n${searchResult}`
+                  );
+                  state.didSearch = true;
+                  console.log(`✅ S-1: Vision search enrichment complete (${searchResult.length} chars)`);
+                } else {
+                  console.log(`⚠️ S-1: Vision search returned no results for "${keyTerms}"`);
+                }
+              }
+            }
+          } catch (searchErr) {
+            console.error(`❌ S-1: Vision search enrichment error: ${searchErr.message}`);
           }
         }
       } else {
