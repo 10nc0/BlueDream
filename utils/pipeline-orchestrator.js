@@ -242,17 +242,23 @@ class PipelineOrchestrator {
               normalizedInput.extractedContent.push(chemistryResult.enrichedText);
               console.log(`✅ S-1: Chemistry enrichment complete - ${chemistryResult.stage || 'unknown stage'}`);
               
-              // Store compound header for S6 output prepending (source/confidence visible to user)
               if (chemistryResult.compoundInfo && chemistryResult.compoundInfo.name) {
                 const ci = chemistryResult.compoundInfo;
-                let header = `### 🔬 Compound Identification\n**Name:** ${ci.name}`;
-                if (ci.canonicalFormula) header += `\n**Formula:** ${ci.canonicalFormula}`;
-                else if (chemistryResult.formula) header += `\n**Formula:** ${chemistryResult.formula}`;
-                header += `\n**Confidence:** ${Math.round((ci.confidence || 0.5) * 100)}%`;
-                header += `\n**Source:** ${ci.source || 'DDG/Wikipedia'}`;
-                if (ci.note) header += `\n**Note:** ${ci.note}`;
-                state.chemistryHeader = header;
-                console.log(`📋 S-1: Chemistry header saved for S6 output`);
+                const confidence = ci.confidence || 0.5;
+                const isGenericName = /^(unknown|unverified|unidentified|puzzle|grid|geometric|figure|pattern)/i.test(ci.name);
+                
+                if (confidence >= 0.7 && !isGenericName) {
+                  let header = `### 🔬 Compound Identification\n**Name:** ${ci.name}`;
+                  if (ci.canonicalFormula) header += `\n**Formula:** ${ci.canonicalFormula}`;
+                  else if (chemistryResult.formula) header += `\n**Formula:** ${chemistryResult.formula}`;
+                  header += `\n**Confidence:** ${Math.round(confidence * 100)}%`;
+                  header += `\n**Source:** ${ci.source || 'DDG/Wikipedia'}`;
+                  if (ci.note) header += `\n**Note:** ${ci.note}`;
+                  state.chemistryHeader = header;
+                  console.log(`📋 S-1: Chemistry header saved for S6 output (${Math.round(confidence * 100)}%)`);
+                } else {
+                  console.log(`📋 S-1: Chemistry header SUPPRESSED (confidence=${Math.round(confidence * 100)}%, name="${ci.name}" generic=${isGenericName})`);
+                }
               }
             }
           } catch (chemError) {

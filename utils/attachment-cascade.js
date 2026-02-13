@@ -525,7 +525,7 @@ Please structure your response using these sections (if data unavailable, note "
 }
 
 // Enrich chemistry context with parallel DDG queries before final Groq response
-async function enrichChemistryContext(formula, structureDescription = '', knownCompoundName = null) {
+async function enrichChemistryContext(formula, structureDescription = '', knownCompoundName = null, options = {}) {
     const results = { formulaContext: null, structureContext: null, compoundContext: null };
     
     // Extract compound name from structure description if not provided
@@ -801,25 +801,29 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         contextText += `${wikipediaContext.extract}\n`;
         contextText += `Source: ${wikipediaContext.source}\n`;
         
-        // Add structured harm-reduction template for chemistry queries
-        contextText += createChemistryEnrichmentTemplate(wikipediaContext.title);
+        if (!options.suppressTemplate) {
+            contextText += createChemistryEnrichmentTemplate(wikipediaContext.title);
+        }
     } else if (results.compoundContext) {
-        // Fallback to DDG compound context if Wikipedia failed
         contextText += `\n### 🔬 External Knowledge (${results.compoundContext.name}):\n`;
         contextText += `${results.compoundContext.description}\n`;
         contextText += `Source: ${results.compoundContext.source}\n`;
         
-        // Add structured harm-reduction template for chemistry queries (DDG fallback)
-        contextText += createChemistryEnrichmentTemplate(results.compoundContext.name);
+        if (!options.suppressTemplate) {
+            contextText += createChemistryEnrichmentTemplate(results.compoundContext.name);
+        }
     } else if (knownCompoundName || formula) {
-        // Fallback: DDG/Wikipedia failed but Vision identified a compound
-        // Still inject template so AI can use its knowledge to fill it out
         const fallbackName = knownCompoundName || formula;
-        console.log(`🧪 Chemistry Enrichment: DDG/Wikipedia failed, using template fallback for "${fallbackName}"`);
-        contextText += `\n### 🔬 Compound Analysis (${fallbackName}):\n`;
-        contextText += `Vision identified this compound but external verification was unavailable.\n`;
-        contextText += `Use your chemistry knowledge to describe this compound.\n`;
-        contextText += createChemistryEnrichmentTemplate(fallbackName);
+        const isGenericFallback = /^(unknown|unverified|unidentified|puzzle|grid|geometric|figure|pattern|more related)/i.test(fallbackName);
+        if (!isGenericFallback && !options.suppressTemplate) {
+            console.log(`🧪 Chemistry Enrichment: DDG/Wikipedia failed, using template fallback for "${fallbackName}"`);
+            contextText += `\n### 🔬 Compound Analysis (${fallbackName}):\n`;
+            contextText += `Vision identified this compound but external verification was unavailable.\n`;
+            contextText += `Use your chemistry knowledge to describe this compound.\n`;
+            contextText += createChemistryEnrichmentTemplate(fallbackName);
+        } else {
+            console.log(`🧪 Chemistry Enrichment: Skipping template for generic/suppressed name "${fallbackName}"`);
+        }
     }
     
     // Add formula context only if different from main compound
@@ -895,11 +899,12 @@ async function processChemistryContent(visionObservations) {
         return null;
     }
     
-    // Filter to only chemical content
-    const chemicalObservations = visionObservations.filter(obs => 
-        obs.contentType === 'chemical' || 
-        /chemical|molecule|compound|formula|structure/i.test(obs.description || '')
-    );
+    const chemicalObservations = visionObservations.filter(obs => {
+        if (obs.contentType !== 'chemical') return false;
+        const desc = (obs.description || '').toLowerCase();
+        const isMathGeo = /\b(geometric|geometry|mathematical|theorem|pythagor|gougu|triangle|square root|proof|equation|algebra|calculus|trigonometr|grid.based|grid.pattern|puzzle|philosophical)\b/i.test(desc);
+        return !isMathGeo;
+    });
     
     if (chemicalObservations.length === 0) {
         return null;
@@ -1724,12 +1729,14 @@ Be specific and technical. This is for scientific document analysis.`
             
             const description = response.data.choices?.[0]?.message?.content || 'Unable to analyze image';
             
-            const contentType = description.toLowerCase().includes('chemical') || 
-                               description.toLowerCase().includes('molecule') ||
-                               description.toLowerCase().includes('structure') ? 'chemical' :
-                               description.toLowerCase().includes('chart') ||
-                               description.toLowerCase().includes('graph') ? 'chart' :
-                               description.toLowerCase().includes('diagram') ? 'diagram' : 'visual';
+            const descLow = description.toLowerCase();
+            const isMathGeometric = /\b(geometric|geometry|mathematical|theorem|pythagor|gougu|triangle|square root|proof|equation|algebra|calculus|trigonometr|grid.based|grid.pattern)\b/i.test(descLow);
+            const isChemical = !isMathGeometric && (
+                /\b(chemical|molecule|molecular|compound|formula|bond|benzene|organic|inorganic|reagent|solvent|atom|ion|cation|anion|hydroxyl|methyl|ethyl|phenyl|amino|carboxyl|polymer|monomer|catalyst|oxidation|reduction|synthesis|distill|titrat|chromatograph|spectro|crystallin|isomer|enantiomer|racemic|stereochem|pharmacolog|metabol)\b/i.test(descLow)
+            );
+            const contentType = isChemical ? 'chemical' :
+                               /\b(chart|graph|plot|histogram)\b/i.test(descLow) ? 'chart' :
+                               /\b(diagram|schematic|flowchart)\b/i.test(descLow) ? 'diagram' : 'visual';
             
             visualDescriptions.push({
                 index: i + 1,
@@ -1992,11 +1999,14 @@ Respond with a clear description of what you observe.`;
         // Classify content type
         const descLower = description.toLowerCase();
         let contentType_result = 'general';
-        if (/chemical|molecule|compound|formula|bond|ring|carbon|hydrogen|oxygen|nitrogen|structure/i.test(descLower)) {
+        const isMathGeo = /\b(geometric|geometry|mathematical|theorem|pythagor|gougu|triangle|square root|proof|equation|algebra|calculus|trigonometr|grid.based|grid.pattern)\b/i.test(descLower);
+        if (isMathGeo) {
+            contentType_result = 'diagram';
+        } else if (/\b(chemical|molecule|molecular|compound|formula|bond|benzene|organic|inorganic|reagent|solvent|atom|ion|cation|anion|hydroxyl|methyl|ethyl|phenyl|amino|carboxyl|polymer|monomer|catalyst|oxidation|reduction|synthesis|distill|titrat|chromatograph|spectro|crystallin|isomer|enantiomer|racemic|stereochem|pharmacolog|metabol)\b/i.test(descLower)) {
             contentType_result = 'chemical';
-        } else if (/chart|graph|plot|axis|data|trend|bar|line|pie/i.test(descLower)) {
+        } else if (/\b(chart|graph|plot|axis|data|trend|bar|line|pie)\b/i.test(descLower)) {
             contentType_result = 'chart';
-        } else if (/diagram|flow|schematic|process|step|arrow|box/i.test(descLower)) {
+        } else if (/\b(diagram|flow|schematic|process|step|arrow|box)\b/i.test(descLower)) {
             contentType_result = 'diagram';
         }
         
