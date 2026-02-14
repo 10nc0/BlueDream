@@ -1253,9 +1253,19 @@ Analyze the data and answer the user's question. Count carefully when asked abou
     // ========================================================================
     // Nyan API v1 — Internal JSON endpoint for agent-to-agent communication
     // Usage: POST /api/v1/nyan { message, mode? }
-    // Auth: Bearer token (NYAN_API_TOKEN secret)
+    // Auth: Bearer token (multi-key: NYAN_API_TOKEN, NYAN_API_TOKEN_DEV, NYAN_API_TOKEN_3)
     // ========================================================================
-    const NYAN_API_TOKEN = process.env.NYAN_API_TOKEN;
+    const NYAN_API_KEYS = [
+        { env: 'NYAN_API_TOKEN', label: 'prod' },
+        { env: 'NYAN_API_TOKEN_DEV', label: 'dev' },
+        { env: 'NYAN_API_TOKEN_3', label: 'key3' }
+    ].filter(k => process.env[k.env]).map(k => ({
+        hash: crypto.createHash('sha256').update(process.env[k.env]).digest(),
+        label: k.label
+    }));
+    if (NYAN_API_KEYS.length > 0) {
+        console.log(`🔌 Nyan API v1: ${NYAN_API_KEYS.length} key(s) loaded [${NYAN_API_KEYS.map(k => k.label).join(', ')}]`);
+    }
 
     const nyanApiLimiter = rateLimit({
         windowMs: 60 * 1000,
@@ -1266,7 +1276,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
     });
 
     app.post('/api/v1/nyan', nyanApiLimiter, async (req, res) => {
-        if (!NYAN_API_TOKEN) {
+        if (NYAN_API_KEYS.length === 0) {
             return res.status(503).json({ error: 'Nyan API not configured. Set NYAN_API_TOKEN secret.' });
         }
 
@@ -1275,9 +1285,15 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
         }
         const providedToken = authHeader.slice(7);
-        const tokenBuf = Buffer.from(NYAN_API_TOKEN);
-        const providedBuf = Buffer.from(providedToken);
-        if (tokenBuf.length !== providedBuf.length || !crypto.timingSafeEqual(tokenBuf, providedBuf)) {
+        const providedHash = crypto.createHash('sha256').update(providedToken).digest();
+
+        let matchedLabel = null;
+        for (const key of NYAN_API_KEYS) {
+            if (crypto.timingSafeEqual(key.hash, providedHash)) {
+                matchedLabel = matchedLabel || key.label;
+            }
+        }
+        if (!matchedLabel) {
             return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
         }
 
@@ -1321,7 +1337,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         }
 
         try {
-            console.log(`🔌 Nyan API v1: "${message.slice(0, 80)}..." [mode=${mode || 'auto'}]`);
+            console.log(`🔌 Nyan API v1: "${message.slice(0, 80)}..." [mode=${mode || 'auto'}] [key=${matchedLabel}]`);
 
             let compoundParts = detectCompoundQuery(message.trim(), false, false);
 
