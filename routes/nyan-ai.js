@@ -14,6 +14,37 @@ const { AI_MODELS } = require('../config/constants');
 const { PsiEMADashboard, deriveReading } = require('../utils/psi-EMA');
 const { fetchStockPrices, calculateDataAge, sanitizeTicker } = require('../utils/stock-fetcher');
 
+const API_UNITS = {
+    'psi-ema': {
+        theta: '°',
+        z: 'σ',
+        R: 'ratio',
+        currentPrice: 'currency',
+        pe: 'ratio',
+        forwardPE: 'ratio',
+        marketCap: 'currency',
+        bars: 'count',
+        processingMs: 'ms'
+    },
+    'seed-metric': {
+        pricePerSqm: 'currency/m²',
+        price700sqm: 'currency',
+        income: 'currency/year',
+        priceToIncome: 'ratio',
+        yearsToOwn: 'years',
+        processingMs: 'ms'
+    },
+    'forex': {
+        rate: 'ratio',
+        amount: 'currency',
+        processingMs: 'ms'
+    },
+    common: {
+        confidence: '%',
+        processingMs: 'ms'
+    }
+};
+
 const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
 const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_GROQ_TOKEN;
 const H0_TEMPERATURE = AI_MODELS.TEMPERATURE_REASONING;
@@ -1529,14 +1560,16 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 });
             }
 
+            const responseMode = pipelineResult.mode || 'general';
             const response = {
                 success: true,
                 response: pipelineResult.answer,
-                mode: pipelineResult.mode || 'general',
+                mode: responseMode,
                 source: pipelineResult.source || 'llm',
                 badge: pipelineResult.badge || 'unverified',
                 confidence: pipelineResult.audit?.confidence || 0,
                 processingMs: Date.now() - startTime,
+                units: API_UNITS[responseMode] || API_UNITS.common,
                 audit: {
                     confidence: pipelineResult.audit?.confidence || 0,
                     verdict: pipelineResult.auditResult?.verdict || 'unknown',
@@ -1751,17 +1784,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             mode: 'psi-ema',
             source: 'atomic:psi-ema',
             version: 'vφ⁴',
-            units: {
-                theta: '°',
-                z: 'σ',
-                R: 'ratio',
-                currentPrice: 'currency',
-                pe: 'ratio',
-                forwardPE: 'ratio',
-                marketCap: 'currency',
-                bars: 'count',
-                processingMs: 'ms'
-            },
+            units: API_UNITS['psi-ema'],
             ...(isSingle ? singleResult : { results }),
             processingMs: Date.now() - startTime,
             timestamp: new Date().toISOString()
