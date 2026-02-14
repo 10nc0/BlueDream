@@ -1399,7 +1399,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         'auth': { emoji: '🔐', desc: 'lifecycle, sessions, JWT, audit trail', endpoints: 19 },
         'books': { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export', endpoints: 26 },
         'inpipe': { emoji: '📥', desc: 'Twilio webhook, media relay', endpoints: 1 },
-        'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit, book history', endpoints: 7 }
+        'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit, book history, psi-ema data, diagnostics', endpoints: 9 }
     };
     
     const formatPulseLog = (satellites, phiStatus = 'online') => {

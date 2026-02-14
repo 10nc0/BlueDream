@@ -11,6 +11,8 @@ const { getMemoryManager, cleanupOldSessions } = require('../utils/memory-manage
 const capacityManager = require('../utils/playground-capacity');
 const usageTracker = require('../utils/playground-usage');
 const { AI_MODELS } = require('../config/constants');
+const { PsiEMADashboard, deriveReading } = require('../utils/psi-EMA');
+const { fetchStockPrices, calculateDataAge, sanitizeTicker } = require('../utils/stock-fetcher');
 
 const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
 const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_GROQ_TOKEN;
@@ -1571,12 +1573,327 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 photos: { maxCount: 5, maxSizeMB: 10, formats: ['base64 jpeg/png/webp'] },
                 documents: { maxCount: 5, maxSizeMB: 20, formats: ['pdf', 'xlsx', 'docx', 'csv', 'txt'] }
             },
+            endpoints: {
+                'POST /api/v1/nyan': 'LLM-powered query (general, psi-ema, legal, etc.)',
+                'POST /api/v1/nyan/psi-ema': 'Data-only Psi-EMA (no LLM, pure calculation)',
+                'GET /api/v1/nyan/health': 'This endpoint',
+                'GET /api/v1/nyan/diagnostics': 'System diagnostics (DB, Groq, Discord, uptime)'
+            },
             maxMessageChars: 4000,
             maxBodyMB: 50,
             timestamp: new Date().toISOString()
         });
     });
 
+    // ========================================================================
+    // POST /api/v1/nyan/psi-ema — Structured data-only endpoint (NO LLM)
+    // Pure Ψ-EMA calculation: fetch stock → analyze → return numbers
+    // Compatible with OpenClaw's formatPsiEMA() (dual format: psiEma.daily + psi_ema_daily)
+    // ========================================================================
+    const psiEmaLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        max: 20,
+        message: { error: 'Rate limit exceeded. Max 20 psi-ema requests/minute.' },
+        standardHeaders: true,
+        legacyHeaders: false
+    });
+
+    app.post('/api/v1/nyan/psi-ema', express.json(), psiEmaLimiter, async (req, res) => {
+        if (NYAN_API_KEYS.length === 0) {
+            return res.status(503).json({ error: 'Nyan API not configured. Set NYAN_API_TOKEN secret.' });
+        }
+
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
+        }
+        const providedToken = authHeader.slice(7);
+        const providedHash = crypto.createHash('sha256').update(providedToken).digest();
+
+        let matchedLabel = null;
+        for (const key of NYAN_API_KEYS) {
+            if (crypto.timingSafeEqual(key.hash, providedHash)) {
+                matchedLabel = matchedLabel || key.label;
+            }
+        }
+        if (!matchedLabel) {
+            return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
+        }
+
+        const { ticker, tickers } = req.body || {};
+        const tickerList = tickers || (ticker ? [ticker] : []);
+
+        if (!tickerList.length || tickerList.length === 0) {
+            return res.status(400).json({ error: 'Missing "ticker" (string) or "tickers" (array) field.' });
+        }
+        if (tickerList.length > 5) {
+            return res.status(400).json({ error: 'Max 5 tickers per request.' });
+        }
+
+        for (const t of tickerList) {
+            if (typeof t !== 'string' || !sanitizeTicker(t)) {
+                return res.status(400).json({ error: `Invalid ticker: "${t}". Use 1-5 uppercase letters.` });
+            }
+        }
+
+        const startTime = Date.now();
+        console.log(`📊 Psi-EMA data endpoint: [${tickerList.join(', ')}] [key=${matchedLabel}]`);
+
+        const results = {};
+
+        for (const rawTicker of tickerList) {
+            const safeTicker = sanitizeTicker(rawTicker);
+            const tickerStart = Date.now();
+
+            try {
+                const stockData = await fetchStockPrices(safeTicker);
+
+                const dailyClosesRaw = stockData?.daily?.closes || stockData?.closes || [];
+                const dailyCloses = dailyClosesRaw.filter(v => v != null && !isNaN(v));
+
+                if (dailyCloses.length < 3) {
+                    results[safeTicker] = { error: 'Insufficient price data', bars: dailyCloses.length };
+                    continue;
+                }
+
+                const dailyDashboard = new PsiEMADashboard();
+                const dailyAnalysis = dailyDashboard.analyze({ stocks: dailyCloses });
+
+                const dailyReading = dailyAnalysis.reading || {};
+                const dailyPhase = dailyAnalysis.dimensions?.phase || {};
+                const dailyAnomaly = dailyAnalysis.dimensions?.anomaly || {};
+                const dailyConvergence = dailyAnalysis.dimensions?.convergence || {};
+                const dailyFidelity = dailyAnalysis.fidelity || {};
+
+                const daily = {
+                    theta: dailyPhase.current ?? null,
+                    z: dailyAnomaly.current ?? null,
+                    R: dailyConvergence.currentDisplay ?? dailyConvergence.current ?? null,
+                    reading: dailyReading.reading || dailyAnalysis.summary?.reading || null,
+                    emoji: dailyReading.emoji || dailyAnalysis.summary?.readingEmoji || null,
+                    description: dailyReading.description || null,
+                    fidelity: dailyFidelity.breakdown || null,
+                    regime: dailyAnalysis.summary?.regime || null,
+                    bars: dailyCloses.length
+                };
+
+                let weekly = null;
+                const weeklyClosesRaw = stockData?.weekly?.closes || [];
+                const weeklyCloses = weeklyClosesRaw.filter(v => v != null && !isNaN(v));
+
+                if (weeklyCloses.length >= 13) {
+                    const weeklyDashboard = new PsiEMADashboard();
+                    const weeklyAnalysis = weeklyDashboard.analyze({ stocks: weeklyCloses });
+
+                    const weeklyReading = weeklyAnalysis.reading || {};
+                    const weeklyPhase = weeklyAnalysis.dimensions?.phase || {};
+                    const weeklyAnomaly = weeklyAnalysis.dimensions?.anomaly || {};
+                    const weeklyConvergence = weeklyAnalysis.dimensions?.convergence || {};
+                    const weeklyFidelity = weeklyAnalysis.fidelity || {};
+
+                    weekly = {
+                        theta: weeklyPhase.current ?? null,
+                        z: weeklyAnomaly.current ?? null,
+                        R: weeklyConvergence.currentDisplay ?? weeklyConvergence.current ?? null,
+                        reading: weeklyReading.reading || weeklyAnalysis.summary?.reading || null,
+                        emoji: weeklyReading.emoji || weeklyAnalysis.summary?.readingEmoji || null,
+                        description: weeklyReading.description || null,
+                        fidelity: weeklyFidelity.breakdown || null,
+                        regime: weeklyAnalysis.summary?.regime || null,
+                        bars: weeklyCloses.length
+                    };
+                }
+
+                const fundamentals = stockData.fundamentals || {};
+                const dataAge = calculateDataAge(stockData.daily?.endDate || stockData.endDate);
+
+                results[safeTicker] = {
+                    ticker: safeTicker,
+                    name: stockData.name || safeTicker,
+                    currentPrice: stockData.currentPrice || null,
+                    currency: stockData.currency || 'USD',
+                    sector: fundamentals.sector || null,
+                    industry: fundamentals.industry || null,
+                    pe: fundamentals.peRatio || null,
+                    forwardPE: fundamentals.forwardPE || null,
+                    marketCap: fundamentals.marketCap || null,
+                    dataAge: dataAge,
+                    psiEma: { daily, weekly },
+                    psi_ema_daily: daily,
+                    psi_ema_weekly: weekly,
+                    processingMs: Date.now() - tickerStart
+                };
+
+                console.log(`📊 Psi-EMA: ${safeTicker} → ${daily.reading} (${daily.emoji}) [${Date.now() - tickerStart}ms]`);
+
+            } catch (fetchError) {
+                console.error(`📊 Psi-EMA error for ${safeTicker}:`, fetchError.message);
+                results[safeTicker] = {
+                    ticker: safeTicker,
+                    error: fetchError.message,
+                    processingMs: Date.now() - tickerStart
+                };
+            }
+        }
+
+        const isSingle = tickerList.length === 1;
+        const singleResult = isSingle ? results[tickerList[0].toUpperCase()] || results[sanitizeTicker(tickerList[0])] : null;
+
+        res.json({
+            success: true,
+            mode: 'psi-ema',
+            version: 'vφ⁴',
+            ...(isSingle ? singleResult : { results }),
+            processingMs: Date.now() - startTime,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    // ========================================================================
+    // GET /api/v1/nyan/diagnostics — System health diagnostics
+    // DB, Groq, Discord bots, uptime, memory, API key count
+    // ========================================================================
+    const hermesBot = bots?.hermes;
+    const horusBot = bots?.horus;
+
+    app.get('/api/v1/nyan/diagnostics', async (req, res) => {
+        if (NYAN_API_KEYS.length === 0) {
+            return res.status(503).json({ error: 'Nyan API not configured. Set NYAN_API_TOKEN secret.' });
+        }
+
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
+        }
+        const providedToken = authHeader.slice(7);
+        const providedHash = crypto.createHash('sha256').update(providedToken).digest();
+
+        let matchedLabel = null;
+        for (const key of NYAN_API_KEYS) {
+            if (crypto.timingSafeEqual(key.hash, providedHash)) {
+                matchedLabel = matchedLabel || key.label;
+            }
+        }
+        if (!matchedLabel) {
+            return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
+        }
+
+        const startTime = Date.now();
+        const diagnostics = {
+            status: 'ok',
+            version: 'v1',
+            uptime: {
+                seconds: Math.floor(process.uptime()),
+                human: formatUptime(process.uptime())
+            },
+            memory: {
+                rss: formatBytes(process.memoryUsage().rss),
+                heapUsed: formatBytes(process.memoryUsage().heapUsed),
+                heapTotal: formatBytes(process.memoryUsage().heapTotal),
+                external: formatBytes(process.memoryUsage().external)
+            },
+            apiKeys: {
+                loaded: NYAN_API_KEYS.length,
+                labels: NYAN_API_KEYS.map(k => k.label)
+            },
+            database: {
+                healthy: false,
+                latency: null,
+                pool: null,
+                error: null
+            },
+            groq: {
+                configured: false,
+                keys: {
+                    dashboard: !!process.env.GROQ_API_KEY,
+                    playground: !!process.env.PLAYGROUND_GROQ_TOKEN,
+                    vision: !!process.env.PLAYGROUND_GROQ_VISION_TOKEN
+                }
+            },
+            discord: {
+                hermes: { role: 'Thread Creator (φ)', status: 'not_initialized', healthy: false },
+                thoth: { role: 'Message Reader (0)', status: 'not_initialized', healthy: false },
+                idris: { role: 'AI Audit Scribe (ι)', status: 'not_initialized', healthy: false },
+                horus: { role: 'AI Audit Watcher (Ω)', status: 'not_initialized', healthy: false }
+            },
+            twilio: {
+                configured: !!process.env.TWILIO_AUTH_TOKEN && !!process.env.TWILIO_ACCOUNT_SID
+            },
+            playground: {
+                capacity: capacityManager ? {
+                    currentSlots: capacityManager.getCurrentSlotCount?.() ?? null,
+                    maxSlots: capacityManager.maxSlots ?? null
+                } : null
+            }
+        };
+
+        try {
+            const dbStart = Date.now();
+            await pool.query('SELECT 1 as health');
+            diagnostics.database.healthy = true;
+            diagnostics.database.latency = `${Date.now() - dbStart}ms`;
+            diagnostics.database.pool = {
+                total: pool.totalCount || 0,
+                idle: pool.idleCount || 0,
+                waiting: pool.waitingCount || 0
+            };
+        } catch (dbErr) {
+            diagnostics.database.error = dbErr.message;
+        }
+
+        diagnostics.groq.configured = !!(process.env.GROQ_API_KEY || process.env.PLAYGROUND_GROQ_TOKEN);
+
+        if (hermesBot) {
+            diagnostics.discord.hermes.healthy = hermesBot.isReady?.() || false;
+            diagnostics.discord.hermes.status = diagnostics.discord.hermes.healthy ? 'ready' : 'disconnected';
+        }
+        if (thothBot) {
+            diagnostics.discord.thoth.healthy = thothBot.ready || false;
+            diagnostics.discord.thoth.status = diagnostics.discord.thoth.healthy ? 'ready' : 'disconnected';
+        }
+        if (idrisBot) {
+            diagnostics.discord.idris.healthy = idrisBot.isReady?.() || false;
+            diagnostics.discord.idris.status = diagnostics.discord.idris.healthy ? 'ready' : 'disconnected';
+        }
+        if (horusBot) {
+            diagnostics.discord.horus.healthy = horusBot.isReady?.() || false;
+            diagnostics.discord.horus.status = diagnostics.discord.horus.healthy ? 'ready' : 'disconnected';
+        }
+
+        const allDiscordHealthy = ['hermes', 'thoth', 'idris', 'horus'].every(
+            b => diagnostics.discord[b].healthy || diagnostics.discord[b].status === 'not_initialized'
+        );
+
+        diagnostics.status = diagnostics.database.healthy && diagnostics.groq.configured
+            ? (allDiscordHealthy ? 'healthy' : 'degraded')
+            : 'unhealthy';
+
+        diagnostics.processingMs = Date.now() - startTime;
+        diagnostics.timestamp = new Date().toISOString();
+
+        const statusCode = diagnostics.status === 'healthy' ? 200 : (diagnostics.status === 'degraded' ? 200 : 503);
+        res.status(statusCode).json(diagnostics);
+    });
+
+}
+
+function formatUptime(seconds) {
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    const parts = [];
+    if (d > 0) parts.push(`${d}d`);
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0) parts.push(`${m}m`);
+    parts.push(`${s}s`);
+    return parts.join(' ');
+}
+
+function formatBytes(bytes) {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
 module.exports = { 
