@@ -1751,6 +1751,17 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             mode: 'psi-ema',
             source: 'atomic:psi-ema',
             version: 'vφ⁴',
+            units: {
+                theta: '°',
+                z: 'σ',
+                R: 'ratio',
+                currentPrice: 'currency',
+                pe: 'ratio',
+                forwardPE: 'ratio',
+                marketCap: 'currency',
+                bars: 'count',
+                processingMs: 'ms'
+            },
             ...(isSingle ? singleResult : { results }),
             processingMs: Date.now() - startTime,
             timestamp: new Date().toISOString()
