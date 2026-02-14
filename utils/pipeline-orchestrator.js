@@ -558,6 +558,7 @@ MANDATORY INSTRUCTIONS:
           success: true,
           answer: state.finalAnswer,
           mode: state.mode,
+          source: 'shortcut',
           preflight: state.preflight,
           auditResult: state.auditResult,
           audit: { confidence: 100, reason: 'No ticker - fast path' },
@@ -591,11 +592,13 @@ MANDATORY INSTRUCTIONS:
       // Derive badge from audit verdict
       // APPROVED/ACCEPTED/BYPASS → verified, FIXABLE → corrected, REJECTED → unverified
       const badge = this.deriveBadge(state.auditResult);
+      const source = this.deriveSource(state);
       
       return {
         success: true,
         answer: state.finalAnswer,
         mode: state.mode,
+        source,
         preflight: state.preflight,
         auditResult: state.auditResult,
         audit: { confidence: state.auditResult?.confidence || 0, reason: state.auditResult?.reason || '' },
@@ -613,6 +616,7 @@ MANDATORY INSTRUCTIONS:
         success: false,
         error: err.message,
         step: state.step,
+        source: 'none',
         badge: 'unverified',
         audit: { confidence: 0, reason: err.message },
         didSearch: false,
@@ -1594,6 +1598,14 @@ Output ONLY the corrected table and summary lines:`;
     }
 
     return cleaned.trim();
+  }
+
+  deriveSource(state) {
+    if (state.psiEmaDirectOutput) return 'atomic:psi-ema';
+    if (state.seedMetricDirectOutput) return 'atomic:seed-metric';
+    if (state.mode === 'forex') return 'atomic:forex';
+    if (state.fastPath) return 'shortcut';
+    return 'llm';
   }
 
   deriveBadge(auditResult) {

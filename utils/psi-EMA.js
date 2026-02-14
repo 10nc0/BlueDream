@@ -229,9 +229,9 @@ function deriveReading({ R, z, theta }) {
   const PHI_VAL = PHI;                  // 1.618
   const PHI_SQ = PHI_SQUARED;           // 2.618
   
-  // Null-safe z and theta
-  const zVal = z ?? 0;
-  const thetaVal = theta ?? 0;
+  // NaN-safe z and theta (NaN ?? 0 returns NaN, so explicit isNaN guard needed)
+  const zVal = (z == null || isNaN(z)) ? 0 : z;
+  const thetaVal = (theta == null || isNaN(theta)) ? 0 : theta;
   
   // R undefined/null/NaN → Consolidation
   if (R == null || isNaN(R)) {

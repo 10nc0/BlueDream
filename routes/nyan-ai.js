@@ -1533,9 +1533,16 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 success: true,
                 response: pipelineResult.answer,
                 mode: pipelineResult.mode || 'general',
+                source: pipelineResult.source || 'llm',
                 badge: pipelineResult.badge || 'unverified',
                 confidence: pipelineResult.audit?.confidence || 0,
-                processingMs: Date.now() - startTime
+                processingMs: Date.now() - startTime,
+                audit: {
+                    confidence: pipelineResult.audit?.confidence || 0,
+                    verdict: pipelineResult.auditResult?.verdict || 'unknown',
+                    passCount: pipelineResult.passCount || 0,
+                    didSearchRetry: pipelineResult.didSearchRetry || false
+                }
             };
 
             if (photoList.length > 0) response.vision = true;
@@ -1551,7 +1558,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 response.ticker = pipelineResult.preflight.ticker;
             }
 
-            console.log(`🔌 Nyan API v1: Complete [${response.mode}]${response.vision ? ' [vision]' : ''}${response.documentsProcessed ? ` [${response.documentsProcessed} doc(s)]` : ''} ${response.processingMs}ms`);
+            console.log(`🔌 Nyan API v1: Complete [${response.mode}] [${response.source}]${response.vision ? ' [vision]' : ''}${response.documentsProcessed ? ` [${response.documentsProcessed} doc(s)]` : ''} ${response.processingMs}ms`);
             res.json(response);
 
         } catch (error) {
@@ -1742,6 +1749,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         res.json({
             success: true,
             mode: 'psi-ema',
+            source: 'atomic:psi-ema',
             version: 'vφ⁴',
             ...(isSingle ? singleResult : { results }),
             processingMs: Date.now() - startTime,
