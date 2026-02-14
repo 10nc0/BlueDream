@@ -1275,7 +1275,10 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         legacyHeaders: false
     });
 
-    app.post('/api/v1/nyan', nyanApiLimiter, async (req, res) => {
+    const express = require('express');
+    const nyanApiBodyParser = express.json({ limit: '50mb' });
+
+    app.post('/api/v1/nyan', nyanApiBodyParser, nyanApiLimiter, async (req, res) => {
         if (NYAN_API_KEYS.length === 0) {
             return res.status(503).json({ error: 'Nyan API not configured. Set NYAN_API_TOKEN secret.' });
         }
@@ -1297,13 +1300,46 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
         }
 
-        const { message, mode } = req.body || {};
+        const { message, mode, photos, documents } = req.body || {};
         if (!message || typeof message !== 'string' || message.trim().length === 0) {
             return res.status(400).json({ error: 'Missing or empty "message" field.' });
         }
 
         if (message.length > 4000) {
             return res.status(400).json({ error: 'Message too long. Max 4000 characters.' });
+        }
+
+        const photoList = [];
+        if (photos && Array.isArray(photos)) {
+            for (let i = 0; i < Math.min(photos.length, 5); i++) {
+                const p = photos[i];
+                const b64Data = typeof p === 'string' ? p : (p && p.data ? p.data : null);
+                if (!b64Data) continue;
+                const byteSize = Math.ceil(b64Data.length * 3 / 4);
+                if (byteSize > 10 * 1024 * 1024) {
+                    return res.status(413).json({ error: `Photo ${typeof p === 'string' ? i : (p.name || i)} exceeds 10MB limit (${(byteSize / 1024 / 1024).toFixed(1)}MB).` });
+                }
+                if (typeof p === 'string') {
+                    photoList.push({ name: `photo-${i}`, data: p, type: 'photo' });
+                } else {
+                    photoList.push({ name: p.name || `photo-${i}`, data: p.data, type: p.type || 'photo' });
+                }
+            }
+        }
+
+        const docList = [];
+        const extractedContent = [];
+        if (documents && Array.isArray(documents)) {
+            for (let i = 0; i < Math.min(documents.length, 5); i++) {
+                const d = documents[i];
+                if (d && d.data && d.name) {
+                    const byteSize = Math.ceil(d.data.length * 3 / 4);
+                    if (byteSize > 20 * 1024 * 1024) {
+                        return res.status(413).json({ error: `Document "${d.name}" exceeds 20MB limit (${(byteSize / 1024 / 1024).toFixed(1)}MB).` });
+                    }
+                    docList.push({ name: d.name, data: d.data, type: d.type || 'document' });
+                }
+            }
         }
 
         const startTime = Date.now();
@@ -1337,7 +1373,35 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         }
 
         try {
-            console.log(`🔌 Nyan API v1: "${message.slice(0, 80)}..." [mode=${mode || 'auto'}] [key=${matchedLabel}]`);
+            const mediaInfo = [];
+            if (photoList.length > 0) mediaInfo.push(`${photoList.length} photo(s)`);
+            if (docList.length > 0) mediaInfo.push(`${docList.length} doc(s)`);
+            const mediaTag = mediaInfo.length > 0 ? ` [media=${mediaInfo.join(', ')}]` : '';
+            console.log(`🔌 Nyan API v1: "${message.slice(0, 80)}..." [mode=${mode || 'auto'}] [key=${matchedLabel}]${mediaTag}`);
+
+            for (const doc of docList) {
+                try {
+                    const fileHash = getDocumentHash(doc.data, doc.name);
+                    incrementDocumentUpload(fileHash);
+                    const cached = getCachedDocumentContext(fileHash, clientIp);
+                    if (cached && cached.extractedText) {
+                        extractedContent.push(cached.extractedText);
+                        continue;
+                    }
+                    const { processDocumentForAI } = require('../utils/attachment-cascade');
+                    const result = await processDocumentForAI(doc.data, doc.name, doc.type, { tenantId: clientIp });
+                    if (result && result.text) {
+                        extractedContent.push(result.text);
+                        setCachedDocumentContext(fileHash, { extractedText: result.text }, clientIp);
+                    }
+                } catch (docError) {
+                    console.error(`❌ Nyan API v1: Document processing error for ${doc.name}:`, docError.message);
+                }
+            }
+
+            if (docList.length > 0) {
+                await AttachmentIngestion.ingest(docList, clientIp);
+            }
 
             let compoundParts = detectCompoundQuery(message.trim(), false, false);
 
@@ -1445,12 +1509,12 @@ Analyze the data and answer the user's question. Count carefully when asked abou
 
             const pipelineInput = {
                 message: message.trim(),
-                photos: [],
-                documents: [],
-                extractedContent: [],
+                photos: photoList,
+                documents: docList,
+                extractedContent,
                 history: [],
                 clientIp,
-                isVisionRequest: false
+                isVisionRequest: photoList.length > 0
             };
 
             const pipelineResult = await orchestrator.execute(pipelineInput);
@@ -1472,6 +1536,9 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 processingMs: Date.now() - startTime
             };
 
+            if (photoList.length > 0) response.vision = true;
+            if (docList.length > 0) response.documentsProcessed = docList.length;
+
             const psiEma = extractPsiEma(pipelineResult.preflight);
             if (psiEma) {
                 response.ticker = pipelineResult.preflight.ticker;
@@ -1482,7 +1549,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 response.ticker = pipelineResult.preflight.ticker;
             }
 
-            console.log(`🔌 Nyan API v1: Complete [${response.mode}] ${response.processingMs}ms`);
+            console.log(`🔌 Nyan API v1: Complete [${response.mode}]${response.vision ? ' [vision]' : ''}${response.documentsProcessed ? ` [${response.documentsProcessed} doc(s)]` : ''} ${response.processingMs}ms`);
             res.json(response);
 
         } catch (error) {
@@ -1500,6 +1567,12 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             status: 'ok',
             version: 'v1',
             modes: ['general', 'psi-ema', 'seed-metric', 'chemistry', 'legal', 'code-audit', 'forex'],
+            media: {
+                photos: { maxCount: 5, maxSizeMB: 10, formats: ['base64 jpeg/png/webp'] },
+                documents: { maxCount: 5, maxSizeMB: 20, formats: ['pdf', 'xlsx', 'docx', 'csv', 'txt'] }
+            },
+            maxMessageChars: 4000,
+            maxBodyMB: 50,
             timestamp: new Date().toISOString()
         });
     });
