@@ -1271,8 +1271,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
 
     const nyanApiLimiter = rateLimit({
         windowMs: 60 * 1000,
-        max: 30,
-        message: { error: 'Rate limit exceeded. Max 30 requests/minute.' },
+        max: 60,
+        message: { error: 'Rate limit exceeded. Max 60 requests/minute.' },
         standardHeaders: true,
         legacyHeaders: false
     });
@@ -1592,8 +1592,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
     // ========================================================================
     const psiEmaLimiter = rateLimit({
         windowMs: 60 * 1000,
-        max: 20,
-        message: { error: 'Rate limit exceeded. Max 20 psi-ema requests/minute.' },
+        max: 60,
+        message: { error: 'Rate limit exceeded. Max 60 psi-ema requests/minute.' },
         standardHeaders: true,
         legacyHeaders: false
     });
