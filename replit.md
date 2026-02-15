@@ -1,7 +1,7 @@
 # Your Nyanbook~ 🌈
 
 ## Overview
-"Your Nyanbook" is a post-folder and post-filing structure archiving architecture that aims to provide a zero-friction, highly customizable, secure, and efficient way to archive documents, photos, and drive links. It supports record archiving via WhatsApp, Twilio, and Discord channel flows, promoting data sovereignty. The project envisions a future with sovereign, secure, and efficient remote storage infrastructure and remote inference (AI as compression and acceleration) for individuals, businesses, and public organizations.
+"Your Nyanbook" is a post-folder and post-filing structure archiving architecture designed for zero-friction, highly customizable, secure, and efficient archiving of documents, photos, and drive links. It supports record archiving via WhatsApp, Twilio, and Discord channel flows, promoting data sovereignty. The project envisions a future with sovereign, secure, and efficient remote storage infrastructure and remote inference (AI as compression and acceleration) for individuals, businesses, and public organizations.
 
 ## User Preferences
 - **Design**: Apple glassmorphism aesthetic with Discord-style message layout
@@ -15,7 +15,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 
 **Core Architectural Models:**
 - **3-Layer Perception-Substrate-Cognition Model:** Orchestrates file classification, extraction, caching (Perception), immutable state and shared constants (Substrate), and a 7-stage state machine for reasoning and auditing (Cognition).
-- **7-Layer AI Processing Pipeline:** Manages AI interactions from identity and system prompts (Layer 1) to AI interface (Layer 7), including perception, measurement, memory, verification, and orchestration.
+- **7-Layer AI Processing Pipeline:** Manages AI interactions from identity and system prompts (Layer 1) to AI interface (Layer 7).
 
 **UI/UX Decisions:**
 - Adaptive and responsive design with enhanced touch interactions.
@@ -23,57 +23,46 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - A `LayoutController` acts as a unified state machine for managing UI modes, device detection, expansion states, and animations.
 
 **Technical Implementations:**
-- **Authentication**: Email/password with JWT, role-based access, and isolated user data. Auth module (`public/js/modules/auth.js`) provides `window.authFetch` with automatic token refresh.
+- **Authentication**: Email/password with JWT, role-based access, and isolated user data.
 - **Database**: Multi-tenant PostgreSQL architecture with isolated schemas.
 - **Messaging Integration**: Twilio-based WhatsApp Business API for messaging, with media handling for Discord uploads.
-- **Search**: Enhanced search across messages and metadata.
-- **Real-time Updates**: Smart polling and auto-scroll.
-- **Unified AI Engine (Nyan AI)**: Single AI engine for both public playground and authenticated dashboard audit. Uses 2-key security model: `PLAYGROUND_GROQ_TOKEN` for public access, `GROQ_API_KEY` for authenticated dashboard users. Features a 4-stage dashboard audit pipeline (S0-S3) to detect and correct count hallucinations.
-- **AuditCapsule**: Session-scoped temporal cache (`utils/audit-capsule.js`) that captures entity extraction and tallies, shares pre-computed counts between pipeline stages, and burns after delivery. Integrated with `buildAuditContext` which now returns `entityAggregates` alongside `recentMessages`.
-- **Executive Formatter**: Post-processing layer (`utils/executive-formatter.js`) that strips conversational filler from audit responses for executive-style brevity. Supports bilingual ID/EN patterns for apologies, pleasantries, and self-references while preserving data integrity.
-- **AI Playground**: Public, unauthenticated multimodal AI playground featuring multi-file upload, dynamic capacity sharing, abuse prevention, query classification, smart retry, document parsing, and real-time knowledge search. It uses a 7-stage state machine for AI processing and a sliding window memory. **Compound Query Detection**: Automatically splits multi-intent messages (e.g., "$SPY trend? also what does this image say?") into separate pipeline runs, each with its own preflight routing, then merges results with numbered headings (`## 1. Label`) and horizontal rules (`---`) for visual separation.
-- **Nyan Protocol**: A system prompt framework utilizing a Seed Metric for historical comparison and socio-economic analysis to prevent LLM hallucinations.
-- **Specialized AI Systems**: Includes a Financial Physics System, Legal Document Analysis System, and Ψ-EMA System (vφ⁴) for time series analysis. Ψ-EMA uses φ-orbital decision tree: deriveReading(R, z, θ) maps momentum ratio, z-score, and phase angle to readings (Consolidation, Local Bottom/Top, Reversal, Continuation, Optimism, Oversold, Breathing, False Breakout, Bull Trend Signal) using only φ-derived thresholds (0.382, 0.618, 1.618, 2.618) - no arbitrary weighting.
+- **Unified AI Engine (Nyan AI)**: Single AI engine for both public playground and authenticated dashboard audit. Uses a 2-key security model and a 4-stage dashboard audit pipeline (S0-S3) to detect and correct count hallucinations.
+- **AuditCapsule**: Session-scoped temporal cache for entity extraction and tallies.
+- **Executive Formatter**: Post-processing layer that strips conversational filler from audit responses.
+- **AI Playground**: Public, unauthenticated multimodal AI playground with multi-file upload, dynamic capacity sharing, abuse prevention, query classification, smart retry, document parsing, real-time knowledge search, and compound query detection.
+- **Nyan Protocol**: System prompt framework utilizing a Seed Metric to prevent LLM hallucinations.
+- **Specialized AI Systems**: Includes a Financial Physics System, Legal Document Analysis System, and Ψ-EMA System (vφ⁴) for time series analysis using φ-derived thresholds.
 - **Unified Personality Layer**: Enforces formatting and maintains epistemic transparency.
-- **Mode Registry**: Plug-and-play configuration for the 7-stage pipeline, supporting modes like `psi-ema`, `forex`, `seed-metric`, `legal`, and `code-audit`.
-- **Code Audit Mode**: Professional security auditor for uploaded code files across multiple languages.
-- **Scholastic Domain Classifier**: Multi-signal scoring system (`classifyScholasticDomain()` in `utils/attachment-cascade.js`) that determines what an image is ABOUT (subject) vs what tools it uses. Scores 5 academic domains (pure-math, chemistry, engineering, biology, finance) with subject signals (high weight: 3.0) and tool signals (low weight: 0.3-0.5). Prevents false positives like math diagrams being classified as chemistry. Maps to contentTypes via `scholasticToContentType()`.
-- **Harmonized Document Processing**: Unified architecture for document extraction using a shared tenant-scoped `DocumentExtractionCache`.
-- **Verifiable Export**: Book exports include `manifest.json` with SHA256 hashes for all files, export timestamp, provenance info (source, book ID, book name), and statistics. Users can verify integrity using `sha256sum` or similar tools.
-- **Modular Frontend Architecture**: Dashboard uses `Nyan.StateService` and `Nyan.AuthService` patterns (`public/js/modules/`) for gradual migration toward maintainable, testable code. AuthService provides `window.authFetch` for authenticated requests with automatic token refresh. StateService manages 17 state slices (books, filteredBooks, editingBookId, selectedBookId, expandedBots, messageCache, allMessages, currentUser, bookSearchContext, botTags, botWebhooks, users, sessions, selectedMessages, messagePageState, scrollListenerAttached, lensFilterState) with getter/setter pattern - all dashboard.js mutations now flow through setters that sync local variables with centralized state for PWA readiness. Phase 2 modularization complete: DataSync module (fetch wrapper for PWA bridge), BooksModule (CRUD, sharing, WhatsApp operations), and MessagesModule (fetch messages, context, media) extracted - dashboard.js reduced from 9118 to 8975 lines (143 lines saved, pattern established for future extraction).
+- **Mode Registry**: Plug-and-play configuration for the 7-stage AI pipeline, supporting modes like `psi-ema`, `forex`, `seed-metric`, `legal`, and `code-audit`.
+- **Code Audit Mode**: Professional security auditor for uploaded code files.
+- **Scholastic Domain Classifier**: Multi-signal scoring system for classifying image content.
+- **Harmonized Document Processing**: Unified architecture for document extraction using a shared `DocumentExtractionCache`.
+- **Verifiable Export**: Book exports include `manifest.json` with SHA256 hashes and provenance info.
+- **Modular Frontend Architecture**: Dashboard uses `Nyan.StateService` and `Nyan.AuthService` patterns for maintainable, testable code and PWA readiness.
 
 **System Design Choices:**
 - **Multi-Tenant Isolation**: Complete data separation via PostgreSQL schemas.
 - **Zero-Friction Onboarding**: WhatsApp deep link activation.
 - **Scalability & Recovery**: Designed for Replit Autoscale, with PostgreSQL for state recovery.
 - **Security (10/10 Hardened)**: Includes Sybil attack prevention, JWT security, session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, and CSP compliance.
-- **Discord Bot Architecture**: 4 specialized bots for separation of concerns:
-  - **Hermes (φ)** - Thread creator (MANAGE_THREADS only)
-  - **Thoth (0)** - Message reader (READ_MESSAGE_HISTORY only)
-  - **Idris (ι)** - Nyan AI audit scribe (write-only, posts via webhook)
-  - **Horus (Ω)** - Nyan AI audit watcher (read-only, fetches audit logs)
+- **Discord Bot Architecture**: 4 specialized bots (Hermes, Thoth, Idris, Horus) for separation of concerns.
 - **Vegapunk Kernel Architecture**: Factory pattern with dependency injection orchestrating 4 modular routes/satellites (auth, books, inpipe, nyan-ai).
-- **Unified AI Architecture**: Single Nyan AI engine handles both public playground and authenticated dashboard audit with 2-key security isolation (`PLAYGROUND_GROQ_TOKEN` for public, `GROQ_API_KEY` for dashboard). Core inference is shared; persona/formatting layers are channel-specific:
-  - **Playground** → Uses `PipelineOrchestrator` with S5 personality layer (`fastStreamPersonality`, `applyPersonalityFormat`) for casual, conversational tone
-  - **Dashboard Audit** → Uses `prompts/executive-audit.js` + `utils/executive-formatter.js` for direct, executive-style responses
-- **Code Context System**: Self-documenting architecture via `utils/code-context.js`. When users ask about internal design/implementation (e.g., "How does Ψ-EMA work?", "Explain the pipeline"), the system detects these queries and injects actual source code as context to prevent LLM hallucination. Covers: psi-ema, pipeline, nyan-protocol, preflight, audit, seed-metric, data-package, context-extractor, attachment, personality, financial-physics, code-audit, legal, forex, stock.
-- **Book Sharing**: Email-based book sharing with cross-tenant security. Owners can invite viewers via email, with Resend email notifications. Features include: idempotent share/revoke, 7-day invite timeout for unregistered users (auto-cleaned via phi breathe), and LOWER() normalized email matching. Shared books appear view-only (no edit/delete buttons) for invitees.
+- **Unified AI Architecture**: Single Nyan AI engine for both public playground and authenticated dashboard audit, with shared core inference and channel-specific persona/formatting layers.
+- **Code Context System**: Self-documenting architecture that injects source code as context to prevent LLM hallucination when users ask about internal design.
+- **Book Sharing**: Email-based book sharing with cross-tenant security and features like idempotent share/revoke and invite timeouts.
 - **Phi Breathe Orchestrator**: Unified background task scheduler for continuous logs, heartbeats, memory cleanup, media purging, and share invite expiration.
-- **Nyan API v1**: Internal JSON API (`POST /api/v1/nyan`) for agent-to-agent communication (e.g., OpenClaw integration). Multi-key bearer token auth (3 keys: `NYAN_API_TOKEN` prod, `NYAN_API_TOKEN_DEV` dev, `NYAN_API_TOKEN_3` future) with SHA-256 hashed timing-safe comparison and per-request key label logging. Supports multimodal input: text `message` (max 4000 chars), `photos` (up to 5, max 10MB each, base64), and `documents` (up to 5, max 20MB each, base64 PDF/XLSX/DOCX/CSV/TXT). Documents processed through same pipeline as playground (extraction, caching, ingestion). Vision queries flagged with `isVisionRequest`. Returns structured JSON with AI response, mode, source tag (`atomic:psi-ema`, `atomic:forex`, `atomic:seed-metric`, `llm`, `shortcut`, `none`), badge, confidence, processing time, audit metrics (verdict, passCount, didSearchRetry), and optional `vision`/`documentsProcessed` flags. For Psi-EMA queries, includes structured `psiEma` object with daily/weekly readings (θ, z, R, fidelity). Multi-ticker compound queries auto-split with comparison guard. Health check at `GET /api/v1/nyan/health` (includes media capabilities, endpoint catalog). Rate limited to 60 req/min. Route-specific 50MB body parser.
-  - **Psi-EMA Data Endpoint** (`POST /api/v1/nyan/psi-ema`): LLM-free, pure-calculation endpoint for Ψ-EMA analysis. Accepts `{ ticker }` (single) or `{ tickers }` (up to 5). Returns raw numbers (θ, z, R, reading, emoji, description, fidelity, regime, bars) for daily + weekly timeframes, plus market metadata (name, currentPrice, currency, sector, industry, P/E, forwardPE, marketCap, dataAge). Dual format output compatible with OpenClaw's `formatPsiEMA()`: both `psiEma.daily`/`psiEma.weekly` and flat `psi_ema_daily`/`psi_ema_weekly`. Single ticker returns flat response; multi-ticker wraps in `results` object. Rate limited to 60 req/min.
-  - **Diagnostics Endpoint** (`GET /api/v1/nyan/diagnostics`): Authenticated system health check returning DB connectivity + latency + pool stats, Groq key availability (dashboard/playground/vision), Discord bot status for all 4 bots (Hermes φ/Thoth 0/Idris ι/Horus Ω) with ready/disconnected/not_initialized states, Twilio config status, uptime (seconds + human-readable), memory usage (RSS/heap/external), API key count + labels, playground capacity. Returns overall status: healthy/degraded/unhealthy.
-- **Inpipe Architecture**: Multi-channel input with an abstract channel interface for extensibility.
-- **Architectural Philosophy: Axiom of Choice**: This philosophy guides the system's design, asserting the existence of ideal configurations for infinite components, making the system self-governing and scalable through dependency injection, even without explicit construction of every case.
+- **Nyan API v1**: Internal JSON API for agent-to-agent communication, supporting multimodal input and structured JSON responses. Includes dedicated endpoints for Psi-EMA data and system diagnostics.
+- **Inpipe Architecture**: Multi-channel input with an abstract channel interface.
+- **Architectural Philosophy: Axiom of Choice**: Guides system design for self-governing and scalable components through dependency injection.
 
-## Progressive Web App (PWA)
-- **Manifest**: `public/manifest.json` with app metadata, standalone display mode, purple theme (#8b5cf6)
-- **Icons**: Generated in `public/icons/` (48, 72, 96, 144, 192, 512px + Apple touch icons)
-- **Service Worker**: `public/sw.js` with network-first caching strategy, API exclusion
-- **Apple PWA**: Full iOS support with apple-mobile-web-app-capable, status-bar-style, touch icons
-- **Installation**: Users can "Add to Home Screen" on iOS Safari or install on Android Chrome
+**Progressive Web App (PWA)**
+- **Manifest**: `public/manifest.json` with app metadata, standalone display mode, purple theme.
+- **Icons**: Generated in `public/icons/`.
+- **Service Worker**: `public/sw.js` with network-first caching strategy.
+- **Apple PWA**: Full iOS support.
 
 ## External Dependencies
-- **Database**: PostgreSQL (Supabase)
+- **Database**: PostgreSQL
 - **WhatsApp**: Twilio WhatsApp Business API
 - **Email**: Resend API
 - **AI**: Groq API
