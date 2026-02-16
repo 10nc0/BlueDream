@@ -7,10 +7,10 @@
    DESIGN TOKENS (CSS Custom Properties)
    =================================================================== */
 :root {
-  /* Colors - White to Red Gradient */
-  --color-bg-primary: #ffffff;   /* White */
-  --color-bg-secondary: #ffcccc; /* Light rose */
-  --color-bg-tertiary: #ef4444;  /* Red */
+  /* Colors - Calm Cyber Gradient */
+  --color-bg-primary: #0f172a;   /* Deep slate */
+  --color-bg-secondary: #1e293b; /* Soft navy */
+  --color-bg-tertiary: #334155;  /* Muted steel */
   --color-surface: rgba(30, 41, 59, 0.6);
   --color-surface-hover: rgba(30, 41, 59, 0.8);
   --color-overlay: rgba(0, 0, 0, 0.7);
