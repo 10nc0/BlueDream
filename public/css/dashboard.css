@@ -525,6 +525,18 @@ body::before {
     flex-direction: row;
     gap: 0.25rem;
   }
+
+  .sidebar-resizer {
+    display: block;
+  }
+
+  .hide-mobile {
+    display: block;
+  }
+
+  .show-mobile {
+    display: none;
+  }
 }
 
 .book-sidebar {
@@ -538,34 +550,82 @@ body::before {
   height: 100%;
 }
 
-/* Mobile (iPhone X): Full width on small screens (column layout) */
+/* Mobile (<768px) */
 @media (max-width: 767px) {
   .book-sidebar {
     width: 100%;
   }
+
+  #dateTimeDefault {
+    opacity: 0;
+    visibility: hidden;
+    display: none;
+  }
 }
 
-/* Tablet (iPad): 768-1023px viewport - Adjustable sidebar width (row layout starts here) */
+/* Tablet (iPad): 768-1023px viewport */
 @media (min-width: 768px) and (max-width: 1023px) {
   :root {
-    --sidebar-width: 220px; /* Reduced default for more message space */
+    --sidebar-width: 220px;
   }
-  
+
   .book-sidebar {
     width: var(--sidebar-width);
-    max-width: 30%; /* Prevent book list from dominating (esp. Z Fold 7 unfolded) */
+    max-width: 30%;
+  }
+
+  .header {
+    padding: 0.75rem 1.5rem;
+  }
+
+  .status-indicators-vertical {
+    gap: 0.5rem;
+  }
+
+  .animated-character {
+    width: var(--cat-size);
+    height: var(--cat-size);
+  }
+
+  .logo {
+    font-size: 2.25rem;
+  }
+
+  .tagline {
+    font-size: 0.8rem;
+    max-width: 350px;
+  }
+
+  .container {
+    padding: var(--space-2xl);
   }
 }
 
-/* Desktop (Mac): ≥1024px viewport - Adjustable sidebar width (row layout) */
+/* Desktop (Mac): ≥1024px viewport */
 @media (min-width: 1024px) {
   :root {
-    --sidebar-width: 240px; /* Reduced from 280px for more message space */
+    --sidebar-width: 240px;
   }
-  
+
   .book-sidebar {
     width: var(--sidebar-width);
-    max-width: 30%; /* Prevent book list from dominating (esp. Z Fold 7 unfolded) */
+    max-width: 30%;
+  }
+
+  .header {
+    padding: 0.75rem 2rem;
+  }
+
+  .status-indicators-vertical {
+    gap: 0.5rem;
+  }
+
+  #userInfo {
+    max-width: var(--content-max-width);
+  }
+
+  .tagline {
+    max-width: 500px;
   }
 }
 
@@ -595,12 +655,6 @@ body::before {
   left: -4px;
   right: -4px;
   cursor: col-resize;
-}
-
-@media (min-width: 768px) {
-  .sidebar-resizer {
-    display: block;
-  }
 }
 
 /* Draggable Header Resizer (horizontal) - positioned at bottom of header */
@@ -2004,53 +2058,7 @@ body::before {
   }
 }
 
-/* iPad and Tablets (768px - 1023px) */
-@media (min-width: 768px) and (max-width: 1023px) {
-  .header {
-    padding: 0.75rem 1.5rem;
-  }
-  
-  .status-indicators-vertical {
-    gap: 0.5rem;
-  }
-  
-  .animated-character {
-    width: var(--cat-size);
-    height: var(--cat-size);
-  }
-  
-  .logo {
-    font-size: 2.25rem;
-  }
-  
-  .tagline {
-    font-size: 0.8rem;
-    max-width: 350px;
-  }
-  
-  .container {
-    padding: var(--space-2xl);
-  }
-}
 
-/* Desktop (1024px+) */
-@media (min-width: 1024px) {
-  .header {
-    padding: 0.75rem 2rem;
-  }
-  
-  .status-indicators-vertical {
-    gap: 0.5rem;
-  }
-  
-  #userInfo {
-    max-width: var(--content-max-width);
-  }
-  
-  .tagline {
-    max-width: 500px;
-  }
-}
 
 /* ===================================================================
    UTILITY CLASSES
@@ -2059,20 +2067,8 @@ body::before {
   display: none;
 }
 
-@media (min-width: 768px) {
-  .hide-mobile {
-    display: block;
-  }
-}
-
 .show-mobile {
   display: block;
-}
-
-@media (min-width: 768px) {
-  .show-mobile {
-    display: none;
-  }
 }
 
 /* ===================================================================
@@ -3641,14 +3637,6 @@ body.desktop-mode .thumbs-zone {
     }
 }
 
-/* Desktop-to-Compact: Fade out date/time BEFORE mobile mode (768px → 767px) */
-@media (max-width: 767px) {
-    #dateTimeDefault {
-        opacity: 0;
-        visibility: hidden;
-        display: none;
-    }
-}
 
 /* Smooth transition coordination: Mobile mode at <768px overrides with grid layout */
 /* Ensure 🧠 AI button stays visible on mobile */
