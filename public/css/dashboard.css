@@ -3695,11 +3695,12 @@ body.mobile-mode #aiPlaygroundBtn {
 /* ===================================================================
    ACCESSIBILITY: prefers-reduced-motion
    Respects user system preference to minimize animations.
-   - Disables all keyframe animations (singularity breathe/spin/pulse,
-     cat animation, loading spinners, fade/slide transitions)
    - Reduces transitions to instant (0.01s) to preserve state changes
      without visible motion
    - Keeps opacity-based visibility changes functional
+   EXEMPTIONS (transcendental by design):
+   - Singularity button ☯️ (core spin, aura pulse, glass effects)
+   - Void Nyan cat animation
    =================================================================== */
 @media (prefers-reduced-motion: reduce) {
     *,
@@ -3711,34 +3712,31 @@ body.mobile-mode #aiPlaygroundBtn {
         scroll-behavior: auto !important;
     }
 
-    .singularity-btn .core {
-        animation: none !important;
-        transform: none !important;
+    /* TRANSCENDENTAL EXEMPTIONS — these elements are eternal by design */
+
+    .singularity-btn,
+    .singularity-btn *,
+    .singularity-btn *::before,
+    .singularity-btn *::after {
+        animation-duration: revert !important;
+        animation-iteration-count: revert !important;
+        transition-duration: revert !important;
     }
 
-    .singularity-btn .core .symbol {
-        animation: none !important;
-        transform: none !important;
+    .animated-character,
+    .animated-character *,
+    #hopCanvas {
+        animation-duration: revert !important;
+        animation-iteration-count: revert !important;
+        transition-duration: revert !important;
     }
 
-    .singularity-btn .core::before {
-        animation: none !important;
-    }
-
-    .singularity-btn .aura {
-        animation: none !important;
-        opacity: 0.3;
-    }
+    /* Non-exempt overrides */
 
     #dateTimeDefault,
     #dateTimeMobile {
         animation: none !important;
         opacity: 1 !important;
-    }
-
-    .animated-character,
-    #hopCanvas {
-        animation: none !important;
     }
 
     .loading-spinner {
