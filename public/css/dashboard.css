@@ -72,11 +72,33 @@
   --radius-xl: 1rem;
   --radius-full: 9999px;
   
-  /* Z-index Scale */
+  /* Z-index Scale
+     Layer hierarchy (lowest → highest):
+     -3  aura-bg          Singularity aura background
+     -2  glass-bg         Singularity glass layer
+     -1  behind           Behind-parent elements (status dots, aura)
+      1  z-base           Default stacking context
+      2  z-inner          Inner element layering (core breathe behind symbol)
+     10  z-elevated        Elevated UI elements (sidebar actions, core symbol)
+    100  z-sticky          Sticky/fixed positioned headers
+   1000  z-modal           Modal overlays, thumbs zone, singularity container
+   1001  z-modal-above     Elements above modal (singularity button, share overlay)
+   1100  z-toast           Toast notifications (above everything)
+   9999  z-critical        Critical overlays (loading spinners)
+  */
   --z-base: 1;
+  --z-inner: 2;
   --z-elevated: 10;
   --z-sticky: 100;
   --z-modal: 1000;
+  --z-modal-above: 1001;
+  --z-toast: 1100;
+  --z-critical: 9999;
+
+  /* Component Dimensions */
+  --cat-size: 125px;
+  --cat-size-sm: 60px;
+  --content-max-width: 300px;
   
   /* Transitions */
   --transition-fast: 0.15s ease;
@@ -248,7 +270,7 @@ body::before {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 300px;
+  max-width: var(--content-max-width);
 }
 
 .header-right {
@@ -259,13 +281,13 @@ body::before {
   flex-shrink: 0;
 }
 
-/* Vertical Status Indicators - Scaled to match cat height (125px total) */
+/* Vertical Status Indicators - Scaled to match cat height (var(--cat-size)) */
 .status-indicators-vertical {
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
   margin-right: 1rem;
-  height: 125px;
+  height: var(--cat-size);
   justify-content: space-between;
 }
 
@@ -376,23 +398,23 @@ body::before {
   color: white;
 }
 
-/* Admin Panel Tab - White styling */
-.admin-only-tab {
-  background: white !important;
-  color: #1a1a2e !important;
+/* Admin Panel Tab - White styling (doubled selector for specificity over .tab-btn) */
+.tab-btn.admin-only-tab {
+  background: white;
+  color: #1a1a2e;
   font-weight: 700;
   box-shadow: 0 2px 8px rgba(255, 255, 255, 0.2);
 }
 
-.admin-only-tab:hover {
-  background: rgba(255, 255, 255, 0.95) !important;
+.tab-btn.admin-only-tab:hover {
+  background: rgba(255, 255, 255, 0.95);
   box-shadow: 0 4px 12px rgba(255, 255, 255, 0.3);
   transform: translateY(-1px);
 }
 
-.admin-only-tab.active {
-  background: white !important;
-  color: #1a1a2e !important;
+.tab-btn.admin-only-tab.active {
+  background: white;
+  color: #1a1a2e;
   box-shadow: 0 4px 16px rgba(255, 255, 255, 0.4);
 }
 
@@ -592,7 +614,7 @@ body::before {
   left: 0;
   transition: background 0.2s ease;
   user-select: none;
-  z-index: 10;
+  z-index: var(--z-elevated);
 }
 
 .header-resizer:hover,
@@ -780,12 +802,12 @@ body::before {
   flex-wrap: wrap;
 }
 
-.btn-delete {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+.detail-actions .btn-delete {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
 }
 
-.btn-delete:hover {
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) !important;
+.detail-actions .btn-delete:hover {
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
 
 .detail-messages {
@@ -962,7 +984,7 @@ body::before {
   width: 18px !important;
   height: 18px !important;
   cursor: pointer !important;
-  z-index: 100 !important;
+  z-index: var(--z-sticky) !important;
   accent-color: #a855f7 !important;
   pointer-events: auto !important;
   opacity: 1 !important;
@@ -1420,14 +1442,14 @@ body::before {
 }
 
 .optional-field {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(37, 99, 235, 0.05) 100%) !important;
-  border: 2px dashed rgba(59, 130, 246, 0.3) !important;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(37, 99, 235, 0.05) 100%);
+  border: 2px dashed rgba(59, 130, 246, 0.3);
   transition: all var(--transition-base);
 }
 
 .optional-field:focus {
-  background: rgba(15, 23, 42, 0.8) !important;
-  border: 2px solid var(--color-blue-500) !important;
+  background: rgba(15, 23, 42, 0.8);
+  border: 2px solid var(--color-blue-500);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
@@ -1821,8 +1843,8 @@ body::before {
   }
   
   .animated-character {
-    width: 125px;
-    height: 125px;
+    width: var(--cat-size);
+    height: var(--cat-size);
   }
   
   .header-clock {
@@ -1955,8 +1977,8 @@ body::before {
   }
   
   .animated-character {
-    width: 125px;
-    height: 125px;
+    width: var(--cat-size);
+    height: var(--cat-size);
   }
   
   .header-branding {
@@ -1969,7 +1991,7 @@ body::before {
   
   .tagline {
     font-size: 0.7rem;
-    max-width: 300px;
+    max-width: var(--content-max-width);
   }
   
   .header-user-info {
@@ -1993,8 +2015,8 @@ body::before {
   }
   
   .animated-character {
-    width: 125px;
-    height: 125px;
+    width: var(--cat-size);
+    height: var(--cat-size);
   }
   
   .logo {
@@ -2022,7 +2044,7 @@ body::before {
   }
   
   #userInfo {
-    max-width: 300px;
+    max-width: var(--content-max-width);
   }
   
   .tagline {
@@ -2123,8 +2145,8 @@ body::before {
 }
 
 /* Jump highlight class (yellow glow for jump targets) */
-.discord-message.jump-highlight {
-  border-left: 4px solid rgba(251, 192, 45, 0.8) !important;
+.discord-messages .discord-message.jump-highlight {
+  border-left: 4px solid rgba(251, 192, 45, 0.8);
   animation: jump-pulse 2s ease-out;
 }
 
@@ -2478,7 +2500,7 @@ body::before {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 9999;
+    z-index: var(--z-critical);
     animation: fadeIn 0.2s ease;
 }
 
@@ -2577,7 +2599,7 @@ body::before {
 .time-bucket-header {
     position: sticky;
     top: 0;
-    z-index: 1100; /* Highest layer - above thumbs zone (1000) and singularity button (1001) */
+    z-index: var(--z-toast); /* Highest layer - above thumbs zone (modal) and singularity button (modal-above) */
     background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
     backdrop-filter: blur(8px);
     border-bottom: 1px solid rgba(167, 139, 250, 0.2);
@@ -2616,9 +2638,9 @@ body::before {
 }
 
 /* ============ ATTACHMENT DOWNLOAD BUTTON ============ */
-.attachment-download-btn:hover {
-    background: rgba(168, 85, 247, 0.25) !important;
-    border-color: rgba(168, 85, 247, 0.5) !important;
+.discord-message .attachment-download-btn:hover {
+    background: rgba(168, 85, 247, 0.25);
+    border-color: rgba(168, 85, 247, 0.5);
     transform: translateY(-1px);
     box-shadow: 0 2px 6px rgba(168, 85, 247, 0.2);
 }
@@ -2632,9 +2654,9 @@ body::before {
     padding: 0.125rem 0.375rem !important;
 }
 
-.tag-add-btn:hover {
-    background: rgba(168, 85, 247, 0.25) !important;
-    border-color: rgba(168, 85, 247, 0.5) !important;
+.discord-message .tag-add-btn:hover {
+    background: rgba(168, 85, 247, 0.25);
+    border-color: rgba(168, 85, 247, 0.5);
     transform: translateY(-1px);
     box-shadow: 0 2px 6px rgba(168, 85, 247, 0.2);
 }
@@ -2669,10 +2691,10 @@ body::before {
     border-color: rgba(59, 130, 246, 0.5);
 }
 
-.jump-to-msg-btn:hover {
-    background: rgba(59, 130, 246, 0.3) !important;
-    border-color: rgba(59, 130, 246, 0.5) !important;
-    transform: translateY(-1px) !important;
+.discord-message .jump-to-msg-btn:hover {
+    background: rgba(59, 130, 246, 0.3);
+    border-color: rgba(59, 130, 246, 0.5);
+    transform: translateY(-1px);
     box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
 }
 
@@ -2756,7 +2778,7 @@ body::before {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: var(--z-modal);
 }
 
 .tag-input-dialog {
@@ -2840,7 +2862,7 @@ body::before {
     align-items: center;
     gap: 12px;
     max-width: calc(100vw - 32px); /* Prevent overflow beyond screen edges */
-    z-index: 1000;
+    z-index: var(--z-modal);
     pointer-events: none; /* Allow clicks through container */
 }
 
@@ -2900,7 +2922,7 @@ body::before {
     justify-content: center;
     cursor: pointer;
     overflow: visible;
-    z-index: 1001;
+    z-index: var(--z-modal-above);
     flex-shrink: 0;
     border: none;
     background: transparent;
@@ -2931,7 +2953,7 @@ body::before {
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    z-index: 2; /* Behind symbol (not-1A breathe) */
+    z-index: var(--z-inner); /* Behind symbol (not-1A breathe) */
     transform-origin: center center;
     /* BREATHING ONLY (scale) - no rotation conflicts */
     animation: core-breathe var(--breath-duration, 4000ms) ease-in-out infinite;
@@ -2944,7 +2966,7 @@ body::before {
     text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
     transform-origin: center center;
     position: relative;
-    z-index: 10; /* ALWAYS on top (1A spin - front) */
+    z-index: var(--z-elevated); /* ALWAYS on top (1A spin - front) */
     /* TIME-BASED ROTATION - NO CSS ANIMATION (prevents rollback) */
     /* Updated via RAF at 60 FPS from CAT_BREATHE_CLOCK */
     animation: none !important;
@@ -3163,13 +3185,13 @@ body.mobile-mode #catContainer {
     justify-content: flex-start !important;
     margin: 0 !important;
     padding: 0 !important;
-    width: 60px !important;
-    height: 60px !important;
+    width: var(--cat-size-sm) !important;
+    height: var(--cat-size-sm) !important;
 }
 
 body.mobile-mode #hopCanvas {
-    width: 60px !important;
-    height: 60px !important;
+    width: var(--cat-size-sm) !important;
+    height: var(--cat-size-sm) !important;
     margin: 0 !important;
     padding: 0 !important;
     display: block !important;
@@ -3303,7 +3325,7 @@ body.desktop-mode .thumbs-zone {
     bottom: 0;
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(8px);
-    z-index: 1001;
+    z-index: var(--z-modal-above);
     display: none;
     align-items: center;
     justify-content: center;
@@ -3497,7 +3519,7 @@ body.desktop-mode .thumbs-zone {
     .message img {
         border-radius: 8px;
         margin: 6px 0;
-        max-width: min(100%, 300px);
+        max-width: min(100%, var(--content-max-width));
         max-height: min(80cqh, 280px);
         width: auto;
         height: auto;
@@ -3508,12 +3530,12 @@ body.desktop-mode .thumbs-zone {
     
     /* Mobile-specific media constraints (container-relative) */
     .discord-media-image {
-        max-width: min(100%, 300px) !important;
+        max-width: min(100%, var(--content-max-width)) !important;
         max-height: min(80cqh, 280px) !important;
     }
     
     .discord-media-video {
-        max-width: min(100%, 300px) !important;
+        max-width: min(100%, var(--content-max-width)) !important;
         max-height: min(80cqh, 250px) !important;
     }
     
@@ -3680,4 +3702,72 @@ body.mobile-mode #aiPlaygroundBtn {
 }
 .modal-btn-danger:hover {
     background: rgba(239, 68, 68, 0.3) !important;
+}
+
+/* ===================================================================
+   ACCESSIBILITY: prefers-reduced-motion
+   Respects user system preference to minimize animations.
+   - Disables all keyframe animations (singularity breathe/spin/pulse,
+     cat animation, loading spinners, fade/slide transitions)
+   - Reduces transitions to instant (0.01s) to preserve state changes
+     without visible motion
+   - Keeps opacity-based visibility changes functional
+   =================================================================== */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .singularity-btn .core {
+        animation: none !important;
+        transform: none !important;
+    }
+
+    .singularity-btn .core .symbol {
+        animation: none !important;
+        transform: none !important;
+    }
+
+    .singularity-btn .core::before {
+        animation: none !important;
+    }
+
+    .singularity-btn .aura {
+        animation: none !important;
+        opacity: 0.3;
+    }
+
+    #dateTimeDefault,
+    #dateTimeMobile {
+        animation: none !important;
+        opacity: 1 !important;
+    }
+
+    .animated-character,
+    #hopCanvas {
+        animation: none !important;
+    }
+
+    .loading-spinner {
+        animation: none !important;
+        opacity: 0.5;
+    }
+
+    .thumb-btn,
+    .book-action-btn,
+    .sidebar-book,
+    .message {
+        transition: none !important;
+    }
+
+    .tag-overlay,
+    .tag-input-dialog,
+    .book-fan-modal {
+        animation: none !important;
+    }
 }
