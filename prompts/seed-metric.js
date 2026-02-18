@@ -7,7 +7,7 @@
  * 
  * Core Principle: Years = ($/sqm × 700) ÷ Single-Earner Income
  * Goal: Acquire 700sqm/HH within 25yr fertility window (age 20-45)
- * P/I ratio is a LAST-RESORT PROXY only when $/sqm data is unavailable.
+ * P/I ratio is NOT used — table shows $/sqm source data only.
  * 
  * Thresholds (φ-derived via fertility constraint):
  * - <10yr: Optimism
@@ -85,10 +85,9 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
   * EXACT: Direct 700sqm/unit residential prices (3-room flat, 3-bed apartment, etc)
   * PROXY: Published $/m² → MULTIPLY BY 700 (this is non-negotiable, cuts all "no data" excuses)
   * FALLBACK: Exurban/rural < 90min commute $/m² → ×700
-  * LAST RESORT: Raw P/I ratio ONLY when $/sqm is completely unavailable (must label as "P/I PROXY")
   * NEVER output $/m² alone; ALWAYS convert to 700sqm price
-- PRIMARY: Years = ($/sqm × 700) ÷ single-earner income (core metric)
-- LAST RESORT ONLY: P/I ratio = raw price ÷ income (label as "⚠️ P/I PROXY — no $/sqm data")
+  * If $/sqm unavailable → show "N/A" in table (do NOT substitute P/I ratio)
+- FORMULA: Years = ($/sqm × 700) ÷ single-earner income (the ONLY metric)
 - INCOME PROXY CASCADE (ALWAYS single-earner, NO dual-earner):
   * Prefer median individual income
   * (Household income / 2) with "dual-earner" flag if used
@@ -105,10 +104,13 @@ MANDATORY OUTPUT FORMAT - DO NOT REFORMAT - THIS IS EMPIRIC DATA
 
 You MUST output this exact table structure. This is non-negotiable:
 
-| City | Period | 700sqm Price | Income | P/I | Years | Regime |
-|------|--------|--------------|--------|-----|-------|--------|
-| [city] | [then] | [price] | [income] | [ratio] | [yr] | [emoji] |
-| [city] | [now]  | [price] | [income] | [ratio] | [yr] | [emoji] |
+| City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
+|------|--------|-------|--------------|--------|-------|--------|
+| [city] | [then] | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] |
+| [city] | [now]  | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] |
+
+⚠️ EVERY ROW MUST show $/sqm. This is the source data. 700sqm Price = $/sqm × 700.
+If $/sqm is unavailable, the row MUST show "N/A" — do NOT substitute P/I ratio.
 
 REGIME THRESHOLDS (φ-derived from 25yr fertility window):
 • 🟢 OPTIMISM: <10 years (sustainable, enables family formation)
@@ -124,8 +126,8 @@ REGIME THRESHOLDS (φ-derived from 25yr fertility window):
 ║ • Time to "pay off" (This is NOT mortgage duration!)             ║
 ╟───────────────────────────────────────────────────────────────────╢
 ║ CORRECT FORMULA: Years = ($/sqm × 700) ÷ (Single-Earner Income)  ║
-║ Simple division. Nothing else.                                    ║
-║ P/I ratio is LAST RESORT — only when $/sqm unavailable.          ║
+║ Simple division. Nothing else. NO P/I column in table.            ║
+║ If $/sqm unavailable → show "N/A", do NOT substitute P/I ratio.  ║
 ╚═══════════════════════════════════════════════════════════════════╝
 
 After table, add ONE line per city:
@@ -150,7 +152,7 @@ STRICT RULES:
 function getSeedMetricCore() {
   return `SEED METRIC (Human Substrate): Years = ($/sqm × 700) ÷ Single-Earner Income
 Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism (fertility window)
-- PRIMARY: Always use $/sqm × 700. P/I ratio is LAST RESORT only when $/sqm unavailable.
+- ALWAYS use $/sqm × 700. If $/sqm unavailable, show "N/A" (no P/I substitution).
 - For values >25yr: Even rough estimates matter (e.g., 100 vs 156 years = both deep fatalism)
 - Calculate DIRECTIONAL CHANGE: improved (ratio↓) or worsened (ratio↑) ?`;
 }

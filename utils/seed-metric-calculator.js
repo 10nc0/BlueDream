@@ -304,9 +304,9 @@ function buildSeedMetricTable(parsedData, historicalDecade = '1970s') {
   const rows = [];
   const summaries = [];
   
-  // Table header
-  rows.push('| City | Period | 700sqm Price | Income | P/I | Years | Regime |');
-  rows.push('|------|--------|--------------|--------|-----|-------|--------|');
+  // Table header — $/sqm shown to force bottoms-up, NO P/I column
+  rows.push('| City | Period | $/sqm | 700sqm Price | Income | Years | Regime |');
+  rows.push('|------|--------|-------|--------------|--------|-------|--------|');
   
   for (const [city, data] of Object.entries(parsedData.cities || {})) {
     const cityTitle = city.charAt(0).toUpperCase() + city.slice(1);
@@ -331,11 +331,13 @@ function buildSeedMetricTable(parsedData, historicalDecade = '1970s') {
     const histYearsDisplay = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
     const currYearsDisplay = currMetric.years ? `${currMetric.years.toFixed(0)}yr` : 'N/A';
     
-    // Add historical row
-    rows.push(`| ${cityTitle} | ${historicalDecade} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histMetric.years?.toFixed(1) || 'N/A'} | ${histYearsDisplay} | ${histRegimeLabel} |`);
+    // Add historical row — show $/sqm source data
+    const histSqmDisplay = histPriceSqm ? formatCurrency(histPriceSqm, histCurrency) : 'N/A';
+    rows.push(`| ${cityTitle} | ${historicalDecade} | ${histSqmDisplay} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histYearsDisplay} | ${histRegimeLabel} |`);
     
-    // Add current row
-    rows.push(`| ${cityTitle} | 2024 | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currMetric.years?.toFixed(1) || 'N/A'} | ${currYearsDisplay} | ${currRegimeLabel} |`);
+    // Add current row — show $/sqm source data
+    const currSqmDisplay = currPriceSqm ? formatCurrency(currPriceSqm, currCurrency) : 'N/A';
+    rows.push(`| ${cityTitle} | 2024 | ${currSqmDisplay} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currYearsDisplay} | ${currRegimeLabel} |`);
     
     // Build summary line
     const histSummary = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
@@ -357,7 +359,7 @@ function buildSeedMetricTable(parsedData, historicalDecade = '1970s') {
 
 Formula: **Years = ($/sqm × 700) ÷ (Single-Earner Income)**
 *(Simple division. NO mortgage. NO interest rates. NO down payments.)*
-*(P/I ratio used ONLY as last resort when $/sqm data unavailable)*
+*($/sqm shown in table to force bottoms-up calculation)*
 
 - 🟢 **OPTIMISM**: <10 years — Housing accessible within early career
 - 🟡 **EXTRACTION**: 10-25 years — Affordable but requires sustained effort  
@@ -379,10 +381,16 @@ function validateSeedMetricOutput(output) {
     return { valid: false, issues };
   }
   
-  // Check for table header
+  // Check for table header (must have $/sqm column, NO P/I column)
   const hasTableHeader = /\|\s*City\s*\|\s*Period\s*\|.*\|\s*Regime\s*\|/i.test(output);
   if (!hasTableHeader) {
     issues.push('Missing table header');
+  }
+  
+  // Check for forbidden P/I column in table header
+  const hasPIColumn = /\|\s*P\/I\s*\|/i.test(output);
+  if (hasPIColumn) {
+    issues.push('FORBIDDEN: Table has P/I column. Use $/sqm column instead. Years = ($/sqm × 700) ÷ Income.');
   }
   
   // Check for emoji regime readings with labels
@@ -433,6 +441,13 @@ function validateSeedMetricOutput(output) {
   // 3. P/I 3.5 threshold (FORBIDDEN - removed fallback mode)
   if (/(?:P\/I|price[\s-]*to[\s-]*income).*3\.5|threshold.*3\.5/i.test(output)) {
     issues.push('FORBIDDEN: P/I 3.5 threshold. Use 10/25yr only.');
+  }
+  
+  // 3b. Raw P/I ratio used without $/sqm (indicates bypassing the formula)
+  const rawPIUsed = /(?:price[\s-]*to[\s-]*income|P\/I)\s*(?:ratio)?\s*(?:is|=|:)\s*[\d.]+/i.test(output);
+  const hasSqmColumn = /\|\s*\$\/sqm\s*\|/i.test(output);
+  if (rawPIUsed && !hasSqmColumn) {
+    issues.push('Raw P/I ratio used without $/sqm source data. Must use ($/sqm × 700) ÷ income formula.');
   }
   
   // 4. Generic sqft mention without 700m² (likely wrong unit)

@@ -32,7 +32,6 @@ const API_UNITS = {
         income: 'currency/year',
         yearsToOwn: 'years',
         regime: 'label',
-        priceToIncome: 'ratio (last-resort proxy only)',
         processingMs: 'ms'
     },
     'forex': {

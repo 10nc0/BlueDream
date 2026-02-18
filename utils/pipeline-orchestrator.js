@@ -1120,9 +1120,9 @@ SEED METRIC OUTPUT FORMAT - MANDATORY (DO NOT REFORMAT TO PROSE)
 
 You MUST output this exact table. This is non-negotiable empiric data:
 
-| City | Period | 700sqm Price | Income | P/I | Years | Regime |
-|------|--------|--------------|--------|-----|-------|--------|
-[Fill each city with THEN and NOW rows]
+| City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
+|------|--------|-------|--------------|--------|-------|--------|
+[Fill each city with THEN and NOW rows — EVERY row must show $/sqm source data]
 
 FORMULA (non-negotiable):
 Years = ($/sqm × 700) ÷ Single-Earner Income
@@ -1132,13 +1132,14 @@ CRITICAL PROXY RULES:
 • Convert price/m² × 700 to get 700sqm price
 • Use SINGLE-EARNER income (not household/dual)
 • Years = 700sqm Price ÷ Income (income years to afford, NOT mortgage term)
-• P/I ratio is LAST RESORT ONLY — when $/sqm is completely unavailable, label as "⚠️ P/I PROXY"
+• Table has NO P/I column — if $/sqm unavailable, show "N/A" (do not invent P/I substitutes)
 
 ⚠️ HALLUCINATION GUARDS - DO NOT:
 • Confuse 700 m² with 700 sqft (65 m²) - order of magnitude error
 • Use "time to pay off mortgage" - that's mortgage TERM, not affordability
 • Write prose paragraphs - TABLE ONLY
-• Default to P/I when $/sqm data exists — always prefer $/sqm × 700
+• Add a P/I column — the table format has $/sqm, 700sqm Price, Income, Years, Regime only
+• Default to P/I ratio when $/sqm data exists — always prefer $/sqm × 700
 
 REGIME THRESHOLDS ($/sqm × 700 ÷ income = years):
 • 🟢 OPTIMISM: <10 years
@@ -1228,16 +1229,18 @@ WRONG RESPONSE:
 ${state.draftAnswer.slice(0, 2000)}
 
 REQUIRED FORMAT:
-| City | Period | 700sqm Price | Income | P/I | Years | Regime |
-|------|--------|--------------|--------|-----|-------|--------|
-[rows with data]
+| City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
+|------|--------|-------|--------------|--------|-------|--------|
+[rows with data — MUST show $/sqm source in every row]
 
 **[City]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
 
 RULES:
-- Convert price/m² to 700sqm (multiply by 700)
+- MUST show $/sqm in every row (this is the source data)
+- 700sqm Price = $/sqm × 700 (show your work)
+- Years = 700sqm Price ÷ Income
 - Use 🟢 for <10yr, 🟡 for 10-25yr, 🔴 for >25yr
-- NO prose paragraphs
+- NO P/I column, NO prose paragraphs
 
 Output ONLY the corrected table and summary lines:`;
 
