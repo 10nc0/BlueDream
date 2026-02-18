@@ -5,7 +5,7 @@
  * Parses search results, applies proxy rules, builds table deterministically.
  * 
  * Formula: Years = ($/sqm × 700) ÷ Single-Earner Income
- * P/I ratio is LAST RESORT only when $/sqm data unavailable.
+ * NO P/I ratio — if $/sqm unavailable, show "N/A".
  * 
  * Proxy Rules (from seed-metric.js):
  * - PRIMARY: Published $/m² → MULTIPLY BY 700 (non-negotiable)
@@ -240,7 +240,7 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = '197
  * Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism
  * 
  * NO mortgage calculations, NO interest rates, NO down payments
- * P/I ratio kept for backward compat but Years is the primary output.
+ * NO P/I ratio — Years is the only output metric.
  * 
  * @param {number} pricePerSqm - Price per square meter
  * @param {number} income - Annual income (SINGLE-EARNER, not household)
@@ -433,7 +433,7 @@ function validateSeedMetricOutput(output) {
     issues.push('Wrong unit: 700 sqft instead of 700 m² (10x error)');
   }
   
-  // 2. Mortgage/interest rate calculations (FORBIDDEN - Years = Price/Income only)
+  // 2. Mortgage/interest rate calculations (FORBIDDEN - Years = ($/sqm × 700) ÷ Income)
   if (/(?:down\s*payment|interest\s*rate|mortgage|pay\s*off|amortiz|loan\s*term|\d+%\s*interest)/i.test(output)) {
     issues.push('FORBIDDEN: Contains mortgage/interest calculations. Years = Price ÷ Income (simple division)');
   }
