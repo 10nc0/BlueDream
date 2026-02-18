@@ -1228,19 +1228,22 @@ OUTPUT: Table + summary lines + legend. NO PROSE.
 WRONG RESPONSE:
 ${state.draftAnswer.slice(0, 2000)}
 
-REQUIRED FORMAT:
+REQUIRED FORMAT (markdown table — NO prose paragraphs):
 | City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
 |------|--------|-------|--------------|--------|-------|--------|
-[rows with data — MUST show $/sqm source in every row]
+| [city] | ~1976 | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] |
+| [city] | 2026 | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] |
 
 **[City]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
 
-RULES:
-- MUST show $/sqm in every row (this is the source data)
+CRITICAL RULES:
+- MUST have rows for BOTH ~50yr ago AND now (4 rows minimum for 2 cities)
+- MUST show $/sqm in every row (this is the source data) — ESTIMATE if needed
 - 700sqm Price = $/sqm × 700 (show your work)
-- Years = 700sqm Price ÷ Income
+- Years = 700sqm Price ÷ Income (simple division, NO mortgage math)
 - Use 🟢 for <10yr, 🟡 for 10-25yr, 🔴 for >25yr
-- NO P/I column, NO prose paragraphs
+- NO P/I column, NO prose paragraphs, NO "no data" excuses
+- If historical $/sqm unknown, ESTIMATE from available economic records
 
 Output ONLY the corrected table and summary lines:`;
 

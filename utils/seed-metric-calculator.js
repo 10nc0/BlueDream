@@ -384,7 +384,27 @@ function validateSeedMetricOutput(output) {
   // Check for table header (must have $/sqm column, NO P/I column)
   const hasTableHeader = /\|\s*City\s*\|\s*Period\s*\|.*\|\s*Regime\s*\|/i.test(output);
   if (!hasTableHeader) {
-    issues.push('Missing table header');
+    issues.push('FORBIDDEN: Missing table header. Output MUST use | City | Period | $/sqm | 700sqm Price | Income | Years | Regime | format.');
+  }
+  
+  // Check table row count — need at least 2 rows per city (historical + current)
+  const tableRows = output.match(/^\|[^-][^|]*\|/gm);
+  const dataRows = tableRows ? tableRows.filter(r => !/City|Period|Regime/i.test(r)).length : 0;
+  if (hasTableHeader && dataRows < 2) {
+    issues.push('FORBIDDEN: Table needs at least 2 data rows (historical + current). Must show ~50yr ago AND now.');
+  }
+  
+  // Check that table rows contain historical period references
+  if (hasTableHeader && dataRows >= 2) {
+    const rowText = tableRows ? tableRows.join(' ') : '';
+    const hasHistRow = /(?:197\d|198\d|~197|1970s|1980s)/i.test(rowText);
+    const hasCurrRow = /(?:202\d|2025|2026|now|today|present)/i.test(rowText);
+    if (!hasHistRow) {
+      issues.push('Table missing historical period row (~1976/1970s). Must show ~50yr ago data.');
+    }
+    if (!hasCurrRow) {
+      issues.push('Table missing current period row (2025/2026). Must show current data.');
+    }
   }
   
   // Check for forbidden P/I column in table header
@@ -409,16 +429,28 @@ function validateSeedMetricOutput(output) {
     issues.push('Missing 700sqm reference');
   }
   
-  // Check for prose paragraphs (bad sign)
-  const proseIndicators = output.match(/(?:Fast forward|Using the Seed Metric|we can calculate|However,|it's essential|In conclusion|assuming a)/gi);
+  // Check for prose paragraphs (bad sign — output MUST be table, not prose)
+  const proseIndicators = output.match(/(?:Fast forward|Using the Seed Metric|we can calculate|we can estimate|However,|it's essential|In conclusion|assuming a|Comparing the two|Assuming an|The median|approximately \d|50 years ago)/gi);
   if (proseIndicators && proseIndicators.length >= 2) {
-    issues.push('Contains prose paragraphs instead of table');
+    issues.push('FORBIDDEN: Contains prose paragraphs instead of table. Must use | City | Period | $/sqm | ... | Regime | format.');
   }
   
   // Check paragraph count - if >3 paragraphs and no table header, reject
   const paragraphs = output.split(/\n\n+/).filter(p => p.trim().length > 50);
   if (paragraphs.length > 3 && !hasTableHeader) {
-    issues.push('Too many paragraphs without table format');
+    issues.push('FORBIDDEN: Too many paragraphs without table format. Output must be a markdown table.');
+  }
+  
+  // Check for missing historical data (must have BOTH ~50yr ago AND now)
+  const hasHistorical = /(?:197\d|198\d|~?\d{4}s?|50\s*(?:yr|year)s?\s*ago)/i.test(output);
+  const hasCurrentData = /(?:202\d|today|now|current|present)/i.test(output);
+  if (!hasHistorical && hasCurrentData) {
+    issues.push('Missing historical (~50yr ago) data. Must show BOTH historical AND current periods.');
+  }
+  
+  // Check for "no data" cop-out on historical $/sqm
+  if (/(?:no data|no precise|unavailable|cannot find|don't have).*(?:\$\/sqm|historical|197\d)/i.test(output)) {
+    issues.push('FORBIDDEN: "No data" cop-out. Must ESTIMATE historical $/sqm from proxy sources.');
   }
   
   // Check for wrong 700sqm interpretation (e.g., "3-room = 700sqm")

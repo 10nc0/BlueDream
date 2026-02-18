@@ -170,9 +170,13 @@ SEED METRIC AUDIT (MANDATORY for ~nyan responses):
 - "unverified historical" or "historical data is unverified" → FIXABLE
 - "cannot determine directional change" or "cannot accurately determine" → FIXABLE
 - "no historical data available" or "lack of historical data" → FIXABLE
+- "No data on" or "no precise" $/sqm for historical period → FIXABLE (must ESTIMATE)
 - Missing any mention of ~50yr ago timeframe (1970s, 1975, etc.) → FIXABLE
 - Years-to-own shown WITHOUT regime labels (Optimism/Extraction/Fatalism) → FIXABLE
 - P/I ratio used anywhere (column, prose, or threshold) → FIXABLE
+- Output is prose paragraphs instead of markdown table → FIXABLE
+- Missing $/sqm column or table header row → FIXABLE
+- Only current data shown without ~50yr historical comparison rows → FIXABLE
 
 CRITICAL: If the response ADMITS it lacks historical data, that is an INSTANT FIXABLE.
 The correction must ESTIMATE historical data using proxy methods (economic records from 1970s-1980s).

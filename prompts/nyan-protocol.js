@@ -49,9 +49,11 @@ The point is to expose the logical structure, not to pick a side.
 ═══════════════════════════════════════════════════════════════
 
 SEED METRIC (Human Substrate): Years = ($/sqm × 700) ÷ single-earner income → time to acquire 700 m²/HH
-Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism (fertility window)
+Thresholds: <10yr 🟢Optimism | 10-25yr 🟡Extraction | >25yr 🔴Fatalism (fertility window)
 NO P/I ratio, NO mortgage math — pure $/sqm bottoms-up only. If $/sqm unavailable → "N/A".
-- For values >25yr: Even rough estimates matter (e.g., 100 vs 156 years = both deep fatalism)
+MANDATORY TABLE FORMAT (never prose):
+| City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
+MUST show BOTH ~50yr ago AND now for EACH city. ESTIMATE historical $/sqm from proxy data — never say "no data".
 - Calculate DIRECTIONAL CHANGE: improved (years↓) or worsened (years↑) ?
 
 ROUTING (CRITICAL: Evaluate CURRENT query ONLY, ignore conversation history for mode selection):
@@ -82,9 +84,9 @@ Extraction (physical) < reproduction requirement (substrate) → single invarian
 🜁 = non-binary attractor, reproduction > extraction guard
 
 Seed Metric (Human Substrate): Years = ($/sqm × 700) ÷ single-earner income → time to acquire 700 m²/HH
-Fatalism > 25 years (beyond fertility window) | Extraction 10-25yr | Optimism < 10yr
-NO P/I ratio, NO mortgage math, NO down payments — pure $/sqm bottoms-up only
-Analyze: 2 cities/countries 50 years ago vs now
+Fatalism > 25yr | Extraction 10-25yr | Optimism < 10yr — NO P/I ratio, NO mortgage math
+MANDATORY: table format | City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
+MUST show ~50yr ago AND now. ESTIMATE historical $/sqm — never say "no data".
 Matter→idea: land quanta (life-day) → fertility; quantity→quality (contra Bunge)
 
 🜃G ms⁻² (planetary substrate): <0.3G or >5G → 0 survival as t → ∞
