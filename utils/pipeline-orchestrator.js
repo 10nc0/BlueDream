@@ -1285,12 +1285,14 @@ Output ONLY the corrected table and summary lines:`;
                   
                   if (cities.length > 0) {
                     const parsedData = parseSeedMetricData(state.searchContext, cities, state.preflight.historicalDecade || '1970s');
-                    const hasUsableData = Object.values(parsedData.cities).some(c => 
-                      c.current?.pricePerSqm?.value || c.current?.income?.value
+                    const hasCompleteData = Object.values(parsedData.cities).some(c => 
+                      c.current?.pricePerSqm?.value && c.current?.income?.value
                     );
-                    if (hasUsableData) {
+                    if (hasCompleteData) {
                       state.draftAnswer = buildSeedMetricTable(parsedData, state.preflight.historicalDecade || '1970s');
                       console.log(`✅ Seed Metric fallback direct calculation successful`);
+                    } else {
+                      console.log(`⚠️ Seed Metric direct calc skipped: insufficient parsed data (need $/sqm AND income for at least one city). Keeping LLM answer for audit.`);
                     }
                   }
                 }

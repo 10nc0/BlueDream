@@ -31,6 +31,16 @@ function parsePricePerSqm(text, city = '') {
     /\$\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²|square\s*met)/gi,
     // X,XXX USD/sqm
     /([\d,]+(?:\.\d+)?)\s*(?:USD|usd|\$)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
+    // €X,XXX/sqm or €X,XXX per sqm (EUR)
+    /€\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²|square\s*met)/gi,
+    // X,XXX EUR/sqm or X,XXX €/sqm
+    /([\d,]+(?:\.\d+)?)\s*(?:EUR|€)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
+    // EUR X,XXX per sqm
+    /EUR\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
+    // £X,XXX/sqm (GBP)
+    /£\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²|square\s*met)/gi,
+    // X,XXX GBP/sqm
+    /([\d,]+(?:\.\d+)?)\s*(?:GBP|£)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
     // ¥X,XXX/sqm (JPY)
     /[¥￥]\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
     // X,XXX JPY/sqm
@@ -39,19 +49,21 @@ function parsePricePerSqm(text, city = '') {
     /(?:SGD|S\$)\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
     // X,XXX SGD/sqm
     /([\d,]+(?:\.\d+)?)\s*SGD\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
-    // Generic: X,XXX per square meter
+    // Generic: X,XXX per square meter (any currency or none)
     /([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²|square\s*met)/gi,
+    // "price per sqm" or "cost per m²" followed by number
+    /(?:price|cost|average|median)\s*(?:per|\/)\s*(?:sq\s*m|sqm|m²)[^0-9€$£¥]*([€$£¥]?\s*[\d,]+(?:\.\d+)?)/gi,
     // psf to sqm conversion hint: $X,XXX psf (1 sqm ≈ 10.764 sqft)
     /\$\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:psf|sq\s*ft|sqft)/gi,
   ];
   
   // Detect currency from city context
   let currency = 'USD';
-  if (cityLower.includes('tokyo') || cityLower.includes('osaka')) currency = 'JPY';
+  if (cityLower.includes('tokyo') || cityLower.includes('osaka') || cityLower.includes('japan')) currency = 'JPY';
   else if (cityLower.includes('singapore')) currency = 'SGD';
   else if (cityLower.includes('hong kong')) currency = 'HKD';
-  else if (cityLower.includes('london')) currency = 'GBP';
-  else if (cityLower.includes('paris') || cityLower.includes('berlin')) currency = 'EUR';
+  else if (cityLower.includes('london') || cityLower.includes('uk') || cityLower.includes('manchester') || cityLower.includes('birmingham')) currency = 'GBP';
+  else if (cityLower.includes('paris') || cityLower.includes('berlin') || cityLower.includes('vienna') || cityLower.includes('amsterdam') || cityLower.includes('munich') || cityLower.includes('rome') || cityLower.includes('madrid') || cityLower.includes('milan') || cityLower.includes('brussels') || cityLower.includes('lisbon') || cityLower.includes('dublin') || cityLower.includes('hamburg') || cityLower.includes('frankfurt') || cityLower.includes('europe')) currency = 'EUR';
   
   for (const pattern of patterns) {
     const matches = [...text.matchAll(pattern)];
@@ -91,11 +103,11 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
   
   // Detect currency from city context
   let currency = 'USD';
-  if (cityLower.includes('tokyo') || cityLower.includes('osaka')) currency = 'JPY';
+  if (cityLower.includes('tokyo') || cityLower.includes('osaka') || cityLower.includes('japan')) currency = 'JPY';
   else if (cityLower.includes('singapore')) currency = 'SGD';
   else if (cityLower.includes('hong kong')) currency = 'HKD';
-  else if (cityLower.includes('london')) currency = 'GBP';
-  else if (cityLower.includes('paris') || cityLower.includes('berlin')) currency = 'EUR';
+  else if (cityLower.includes('london') || cityLower.includes('uk') || cityLower.includes('manchester') || cityLower.includes('birmingham')) currency = 'GBP';
+  else if (cityLower.includes('paris') || cityLower.includes('berlin') || cityLower.includes('vienna') || cityLower.includes('amsterdam') || cityLower.includes('munich') || cityLower.includes('rome') || cityLower.includes('madrid') || cityLower.includes('milan') || cityLower.includes('brussels') || cityLower.includes('lisbon') || cityLower.includes('dublin') || cityLower.includes('hamburg') || cityLower.includes('frankfurt') || cityLower.includes('europe')) currency = 'EUR';
   
   // Check for income type context
   const hasIndividual = /individual|personal|single[\s-]?earner|per\s*capita/i.test(text);
@@ -105,17 +117,29 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
   // Patterns for income (various formats)
   const patterns = [
     // $X,XXX or $X.X million
-    /(?:median|average|mean)?\s*(?:individual|personal|household)?\s*income[^$]*\$\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M)?/gi,
+    /(?:median|average|mean)?\s*(?:individual|personal|household)?\s*income[^$€£]*\$\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M)?/gi,
     // Standalone: $XX,XXX per year/annually
     /\$\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M)?\s*(?:per\s*year|annually|\/year|\/yr|p\.a\.)/gi,
+    // €X,XXX (EUR income)
+    /(?:median|average|mean)?\s*(?:individual|personal|household)?\s*(?:income|salary|wage|earnings)[^€$]*€\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M|k|thousand)?/gi,
+    // Standalone: €XX,XXX per year/annually
+    /€\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M|k|thousand)?\s*(?:per\s*year|annually|\/year|\/yr|p\.a\.|per\s*annum)/gi,
+    // X,XXX EUR per year
+    /([\d,]+(?:\.\d+)?)\s*(?:EUR|€)\s*(?:per\s*year|annually|\/year|\/yr|p\.a\.)/gi,
+    // £X,XXX (GBP income)
+    /(?:median|average|mean)?\s*(?:individual|personal|household)?\s*(?:income|salary|wage|earnings)[^£$]*£\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M|k|thousand)?/gi,
+    // Standalone: £XX,XXX per year/annually
+    /£\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M|k|thousand)?\s*(?:per\s*year|annually|\/year|\/yr|p\.a\.)/gi,
     // ¥X.X million (Japanese)
     /[¥￥]\s*([\d,]+(?:\.\d+)?)\s*(?:million|万|億)?/gi,
     // X.X million yen
     /([\d,]+(?:\.\d+)?)\s*million\s*(?:yen|JPY)/gi,
     // SGD X,XXX
     /(?:SGD|S\$)\s*([\d,]+(?:\.\d+)?)\s*(?:k|thousand|million)?/gi,
-    // Generic: median income X,XXX
-    /median\s*(?:individual|household)?\s*income[^\d]*([\d,]+(?:\.\d+)?)/gi,
+    // Generic: median income X,XXX (any currency)
+    /median\s*(?:individual|household)?\s*(?:income|salary|wage)[^\d]*[€$£¥]?\s*([\d,]+(?:\.\d+)?)/gi,
+    // Generic: salary/income of X,XXX
+    /(?:income|salary|wage|earnings)\s*(?:of|is|was|:)\s*[€$£¥]?\s*([\d,]+(?:\.\d+)?)\s*(?:k|thousand|million)?/gi,
   ];
   
   for (const pattern of patterns) {
@@ -176,8 +200,8 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = '197
     
     // Split search context by city mentions for better targeting
     const cityPatterns = [
-      new RegExp(`${city}[^.]*(?:2023|2024|current|today|now)[^.]*`, 'gi'),
-      new RegExp(`(?:2023|2024|current|today|now)[^.]*${city}[^.]*`, 'gi'),
+      new RegExp(`${city}[^.]*(?:2023|2024|2025|2026|current|today|now|latest|recent)[^.]*`, 'gi'),
+      new RegExp(`(?:2023|2024|2025|2026|current|today|now|latest|recent)[^.]*${city}[^.]*`, 'gi'),
     ];
     
     const historicalPatterns = [
