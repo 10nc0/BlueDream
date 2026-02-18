@@ -413,14 +413,57 @@ function validateSeedMetricOutput(output) {
     issues.push('FORBIDDEN: Table has P/I column. Use $/sqm column instead. Years = ($/sqm × 700) ÷ Income.');
   }
   
+  // Check for City column in table header (must be unified table, not split per city)
+  const hasCityColumn = /\|\s*City\s*\|/i.test(output);
+  if (hasTableHeader && !hasCityColumn) {
+    issues.push('Missing City column in table header. Must use unified | City | Period | ... | format (not separate tables per city).');
+  }
+  
+  // Check for split tables (separate table per city = wrong format)
+  const tableHeaderCount = (output.match(/\|\s*(?:City\s*\|)?\s*Period\s*\|/gi) || []).length;
+  if (tableHeaderCount > 1) {
+    issues.push('FORBIDDEN: Multiple tables detected. Must use ONE unified table with City column, not separate tables per city.');
+  }
+  
   // Check for emoji regime readings with labels
   const hasRegimeEmoji = /[🟢🟡🔴]/.test(output);
   const hasRegimeLabel = /(?:OPTIMISM|EXTRACTION|FATALISM|Optimism|Extraction|Fatalism)/i.test(output);
   if (!hasRegimeEmoji) {
-    issues.push('Missing regime emoji (🟢/🟡/🔴)');
+    issues.push('Missing regime emoji (🟢/🟡/🔴) — must appear in Regime column');
   }
   if (!hasRegimeLabel) {
     issues.push('Missing regime label (Optimism/Extraction/Fatalism)');
+  }
+  
+  // Check for summary lines after table (e.g., **London**: 13.1yr → 101.2yr = 🔴 Fatalism)
+  const hasSummaryLine = /\*\*[^*]+\*\*\s*:\s*[\d.]+\s*yr\s*→\s*[\d.]+\s*yr/i.test(output);
+  if (hasTableHeader && !hasSummaryLine) {
+    issues.push('Missing summary lines after table. Need: **[City]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)');
+  }
+  
+  // REGIME MISMATCH DETECTION — parse table rows by column index
+  // Table format: | City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
+  // Column indices: 0=City, 1=Period, 2=$/sqm, 3=700sqm, 4=Income, 5=Years, 6=Regime
+  const allTableLines = output.split('\n').filter(line => /^\|/.test(line.trim()) && !/^[\s|:-]+$/.test(line.trim()));
+  const dataLines = allTableLines.filter(line => !/City|Period|Regime.*\|.*\|.*\|/i.test(line) && !/^[\s|:-]+$/.test(line));
+  for (const line of dataLines) {
+    const cols = line.split('|').map(c => c.trim()).filter(c => c.length > 0);
+    if (cols.length >= 6) {
+      const yearsCol = cols.length >= 7 ? cols[5] : cols[cols.length - 2];
+      const regimeCol = cols.length >= 7 ? cols[6] : cols[cols.length - 1];
+      const yearsNum = parseFloat(yearsCol.replace(/[,yr\s]/gi, ''));
+      const regimeMatch = regimeCol.match(/(Optimism|Extraction|Fatalism)/i);
+      if (!isNaN(yearsNum) && regimeMatch) {
+        const regime = regimeMatch[1].toLowerCase();
+        if (yearsNum < 10 && regime !== 'optimism') {
+          issues.push(`REGIME MISMATCH: ${yearsNum}yr should be 🟢 Optimism (<10yr), not ${regimeMatch[1]}`);
+        } else if (yearsNum >= 10 && yearsNum <= 25 && regime !== 'extraction') {
+          issues.push(`REGIME MISMATCH: ${yearsNum}yr should be 🟡 Extraction (10-25yr), not ${regimeMatch[1]}`);
+        } else if (yearsNum > 25 && regime !== 'fatalism') {
+          issues.push(`REGIME MISMATCH: ${yearsNum}yr should be 🔴 Fatalism (>25yr), not ${regimeMatch[1]}`);
+        }
+      }
+    }
   }
   
   // Check for 700sqm mention (not just "sqm" or wrong size)

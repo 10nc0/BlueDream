@@ -177,6 +177,10 @@ SEED METRIC AUDIT (MANDATORY for ~nyan responses):
 - Output is prose paragraphs instead of markdown table → FIXABLE
 - Missing $/sqm column or table header row → FIXABLE
 - Only current data shown without ~50yr historical comparison rows → FIXABLE
+- Separate tables per city instead of ONE unified table with City column → FIXABLE
+- Regime label does NOT match Years value (e.g., 13yr labeled "Optimism" instead of "Extraction") → FIXABLE
+- Missing regime emojis (🟢/🟡/🔴) in Regime column → FIXABLE
+- Missing summary lines after table (e.g., **City**: Xyr → Yyr = emoji Regime) → FIXABLE
 
 CRITICAL: If the response ADMITS it lacks historical data, that is an INSTANT FIXABLE.
 The correction must ESTIMATE historical data using proxy methods (economic records from 1970s-1980s).

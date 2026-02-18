@@ -1228,22 +1228,25 @@ OUTPUT: Table + summary lines + legend. NO PROSE.
 WRONG RESPONSE:
 ${state.draftAnswer.slice(0, 2000)}
 
-REQUIRED FORMAT (markdown table — NO prose paragraphs):
+REQUIRED FORMAT — ONE unified markdown table (NOT separate tables per city):
 | City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
 |------|--------|-------|--------------|--------|-------|--------|
-| [city] | ~1976 | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] |
-| [city] | 2026 | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] |
+| [CityA] | ~1976 | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityA] | 2025 | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityB] | ~1976 | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityB] | 2025 | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
 
-**[City]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
+**[CityA]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
+**[CityB]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
 
 CRITICAL RULES:
+- ONE table with City column — NOT separate tables per city
 - MUST have rows for BOTH ~50yr ago AND now (4 rows minimum for 2 cities)
-- MUST show $/sqm in every row (this is the source data) — ESTIMATE if needed
-- 700sqm Price = $/sqm × 700 (show your work)
-- Years = 700sqm Price ÷ Income (simple division, NO mortgage math)
-- Use 🟢 for <10yr, 🟡 for 10-25yr, 🔴 for >25yr
+- Regime column MUST have emoji + label: 🟢 Optimism (<10yr) | 🟡 Extraction (10-25yr) | 🔴 Fatalism (>25yr)
+- REGIME MUST MATCH YEARS: e.g., 13.1yr = 🟡 Extraction (NOT Optimism!)
+- 700sqm Price = $/sqm × 700 | Years = 700sqm Price ÷ Income
+- After table: summary line per city with directional change
 - NO P/I column, NO prose paragraphs, NO "no data" excuses
-- If historical $/sqm unknown, ESTIMATE from available economic records
 
 Output ONLY the corrected table and summary lines:`;
 
