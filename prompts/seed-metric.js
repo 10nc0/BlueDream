@@ -5,8 +5,9 @@
  * Only injected when Seed Metric topics detected in S0 (Preflight).
  * Saves ~300 tokens when not triggered.
  * 
- * Core Principle: P/I ratio = Real Estate Price / Single-Earner Income
+ * Core Principle: Years = ($/sqm × 700) ÷ Single-Earner Income
  * Goal: Acquire 700sqm/HH within 25yr fertility window (age 20-45)
+ * P/I ratio is a LAST-RESORT PROXY only when $/sqm data is unavailable.
  * 
  * Thresholds (φ-derived via fertility constraint):
  * - <10yr: Optimism
@@ -84,8 +85,10 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
   * EXACT: Direct 700sqm/unit residential prices (3-room flat, 3-bed apartment, etc)
   * PROXY: Published $/m² → MULTIPLY BY 700 (this is non-negotiable, cuts all "no data" excuses)
   * FALLBACK: Exurban/rural < 90min commute $/m² → ×700
+  * LAST RESORT: Raw P/I ratio ONLY when $/sqm is completely unavailable (must label as "P/I PROXY")
   * NEVER output $/m² alone; ALWAYS convert to 700sqm price
-- P/I ratio = (Real Estate Price ÷ single-earner income) = ratio (core metric)
+- PRIMARY: Years = ($/sqm × 700) ÷ single-earner income (core metric)
+- LAST RESORT ONLY: P/I ratio = raw price ÷ income (label as "⚠️ P/I PROXY — no $/sqm data")
 - INCOME PROXY CASCADE (ALWAYS single-earner, NO dual-earner):
   * Prefer median individual income
   * (Household income / 2) with "dual-earner" flag if used
@@ -120,8 +123,9 @@ REGIME THRESHOLDS (φ-derived from 25yr fertility window):
 ║ • Loan terms or amortization                                     ║
 ║ • Time to "pay off" (This is NOT mortgage duration!)             ║
 ╟───────────────────────────────────────────────────────────────────╢
-║ CORRECT FORMULA: Years = (700sqm Price) ÷ (Single-Earner Income) ║
+║ CORRECT FORMULA: Years = ($/sqm × 700) ÷ (Single-Earner Income)  ║
 ║ Simple division. Nothing else.                                    ║
+║ P/I ratio is LAST RESORT — only when $/sqm unavailable.          ║
 ╚═══════════════════════════════════════════════════════════════════╝
 
 After table, add ONE line per city:
@@ -144,8 +148,9 @@ STRICT RULES:
  * @returns {string} Seed Metric core block
  */
 function getSeedMetricCore() {
-  return `SEED METRIC (Human Substrate): years to 700 m²/HH residential = Real Estate Price / Income (single-earner)
+  return `SEED METRIC (Human Substrate): Years = ($/sqm × 700) ÷ Single-Earner Income
 Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism (fertility window)
+- PRIMARY: Always use $/sqm × 700. P/I ratio is LAST RESORT only when $/sqm unavailable.
 - For values >25yr: Even rough estimates matter (e.g., 100 vs 156 years = both deep fatalism)
 - Calculate DIRECTIONAL CHANGE: improved (ratio↓) or worsened (ratio↑) ?`;
 }

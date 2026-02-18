@@ -30,8 +30,9 @@ const API_UNITS = {
         pricePerSqm: 'currency/m²',
         price700sqm: 'currency',
         income: 'currency/year',
-        priceToIncome: 'ratio',
         yearsToOwn: 'years',
+        regime: 'label',
+        priceToIncome: 'ratio (last-resort proxy only)',
         processingMs: 'ms'
     },
     'forex': {

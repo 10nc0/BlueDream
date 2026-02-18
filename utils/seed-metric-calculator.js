@@ -4,10 +4,12 @@
  * Direct calculation bypass for Seed Metric analysis.
  * Parses search results, applies proxy rules, builds table deterministically.
  * 
+ * Formula: Years = ($/sqm × 700) ÷ Single-Earner Income
+ * P/I ratio is LAST RESORT only when $/sqm data unavailable.
+ * 
  * Proxy Rules (from seed-metric.js):
- * - PROXY: Published $/m² → MULTIPLY BY 700 (non-negotiable)
+ * - PRIMARY: Published $/m² → MULTIPLY BY 700 (non-negotiable)
  * - INCOME: Single-earner (not household/dual)
- * - P/I Ratio: Price / Income = Years to afford
  * - Regime: <10yr 🟢 Optimism | 10-25yr 🟡 Extraction | >25yr 🔴 Fatalism
  */
 
@@ -234,23 +236,23 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = '197
 
 /**
  * Calculate Seed Metric values and assign regime
- * ONLY uses: 700sqm Price / Single-Earner Income = Years
+ * PRIMARY: ($/sqm × 700) ÷ Single-Earner Income = Years
  * Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism
  * 
  * NO mortgage calculations, NO interest rates, NO down payments
+ * P/I ratio kept for backward compat but Years is the primary output.
  * 
  * @param {number} pricePerSqm - Price per square meter
  * @param {number} income - Annual income (SINGLE-EARNER, not household)
- * @returns {object} { price700sqm, pi_ratio, years, regime, emoji }
+ * @returns {object} { price700sqm, years, regime, emoji, isProxy }
  */
 function calculateSeedMetric(pricePerSqm, income) {
   if (!pricePerSqm || !income || income === 0) {
-    return { price700sqm: null, pi_ratio: null, years: null, regime: 'N/A', emoji: '⚪' };
+    return { price700sqm: null, years: null, regime: 'N/A', emoji: '⚪', isProxy: false };
   }
   
   const price700sqm = pricePerSqm * 700;
-  const pi_ratio = price700sqm / income;
-  const years = pi_ratio; // P/I ratio = years to afford (simple division, NO mortgage)
+  const years = price700sqm / income;
   
   // Regime assignment (φ-derived from 25yr fertility window) - 3-tier
   let regime, emoji;
@@ -265,7 +267,7 @@ function calculateSeedMetric(pricePerSqm, income) {
     emoji = '🔴';
   }
   
-  return { price700sqm, pi_ratio, years, regime, emoji };
+  return { price700sqm, years, regime, emoji, isProxy: false };
 }
 
 /**
@@ -330,16 +332,16 @@ function buildSeedMetricTable(parsedData, historicalDecade = '1970s') {
     const currYearsDisplay = currMetric.years ? `${currMetric.years.toFixed(0)}yr` : 'N/A';
     
     // Add historical row
-    rows.push(`| ${cityTitle} | ${historicalDecade} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histMetric.pi_ratio?.toFixed(1) || 'N/A'} | ${histYearsDisplay} | ${histRegimeLabel} |`);
+    rows.push(`| ${cityTitle} | ${historicalDecade} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histMetric.years?.toFixed(1) || 'N/A'} | ${histYearsDisplay} | ${histRegimeLabel} |`);
     
     // Add current row
-    rows.push(`| ${cityTitle} | 2024 | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currMetric.pi_ratio?.toFixed(1) || 'N/A'} | ${currYearsDisplay} | ${currRegimeLabel} |`);
+    rows.push(`| ${cityTitle} | 2024 | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currMetric.years?.toFixed(1) || 'N/A'} | ${currYearsDisplay} | ${currRegimeLabel} |`);
     
     // Build summary line
     const histSummary = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
     const currSummary = currMetric.years ? `${currMetric.years.toFixed(0)}yr` : 'N/A';
-    const direction = (currMetric.pi_ratio && histMetric.pi_ratio) 
-      ? (currMetric.pi_ratio > histMetric.pi_ratio ? '↑worsened' : '↓improved')
+    const direction = (currMetric.years && histMetric.years) 
+      ? (currMetric.years > histMetric.years ? '↑worsened' : '↓improved')
       : '';
     summaries.push(`**${cityTitle}**: ${histSummary} → ${currSummary} = ${currMetric.emoji} ${currMetric.regime} (${direction})`);
   }
@@ -353,8 +355,9 @@ function buildSeedMetricTable(parsedData, historicalDecade = '1970s') {
 ---
 **Seed Metric Regime** (φ-derived from 25yr fertility window):
 
-Formula: **Years = (700sqm Price) ÷ (Single-Earner Income)**
+Formula: **Years = ($/sqm × 700) ÷ (Single-Earner Income)**
 *(Simple division. NO mortgage. NO interest rates. NO down payments.)*
+*(P/I ratio used ONLY as last resort when $/sqm data unavailable)*
 
 - 🟢 **OPTIMISM**: <10 years — Housing accessible within early career
 - 🟡 **EXTRACTION**: 10-25 years — Affordable but requires sustained effort  

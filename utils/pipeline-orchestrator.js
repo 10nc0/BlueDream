@@ -1124,30 +1124,26 @@ You MUST output this exact table. This is non-negotiable empiric data:
 |------|--------|--------------|--------|-----|-------|--------|
 [Fill each city with THEN and NOW rows]
 
-PRIORITY ORDER:
-1. PRIMARY: If $/m² available → use 700sqm price ($/m² × 700)
-2. FALLBACK: If only raw price/income → use P/I ratio directly
+FORMULA (non-negotiable):
+Years = ($/sqm × 700) ÷ Single-Earner Income
 
 CRITICAL PROXY RULES:
 • 700 m² = family home lot (NOT 700 sqft - that's 10x smaller!)
 • Convert price/m² × 700 to get 700sqm price
 • Use SINGLE-EARNER income (not household/dual)
 • Years = 700sqm Price ÷ Income (income years to afford, NOT mortgage term)
+• P/I ratio is LAST RESORT ONLY — when $/sqm is completely unavailable, label as "⚠️ P/I PROXY"
 
 ⚠️ HALLUCINATION GUARDS - DO NOT:
 • Confuse 700 m² with 700 sqft (65 m²) - order of magnitude error
 • Use "time to pay off mortgage" - that's mortgage TERM, not affordability
 • Write prose paragraphs - TABLE ONLY
+• Default to P/I when $/sqm data exists — always prefer $/sqm × 700
 
-REGIME THRESHOLDS:
-**Primary (700sqm)** — when $/sqm available:
+REGIME THRESHOLDS ($/sqm × 700 ÷ income = years):
 • 🟢 OPTIMISM: <10 years
 • 🟡 EXTRACTION: 10-25 years  
 • 🔴 FATALISM: >25 years
-
-**Fallback (raw P/I)** — when only price/income:
-• 🟢 OPTIMISM: P/I ≤ 3.5
-• 🔴 FATALISM: P/I > 3.5
 
 After table, ONE summary line per city:
 **[City]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
