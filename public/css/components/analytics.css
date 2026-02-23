@@ -21,7 +21,7 @@
 
 .analytics-card:hover {
     background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(59, 130, 246, 0.4);
+    border-color: rgba(239, 68, 68, 0.4);
     transform: translateY(-2px);
 }
 
@@ -57,17 +57,17 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.3rem 0.7rem;
-    background: rgba(59, 130, 246, 0.15);
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
     border-radius: 16px;
     font-size: 0.8rem;
-    color: #93c5fd;
+    color: #fca5a5;
 }
 
 .search-chip button {
     background: none;
     border: none;
-    color: #93c5fd;
+    color: #fca5a5;
     font-size: 1.2rem;
     cursor: pointer;
     padding: 0;
@@ -75,20 +75,20 @@
 }
 
 .search-chip button:hover {
-    color: #3b82f6;
+    color: #ef4444;
 }
 
 /* Onboarding Platform Selection */
 .platform-option.selected {
-    background: rgba(59, 130, 246, 0.25) !important;
-    border-color: rgba(59, 130, 246, 0.6) !important;
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+    background: rgba(239, 68, 68, 0.25) !important;
+    border-color: rgba(239, 68, 68, 0.6) !important;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
 }
 
 .onboarding-progress-step.active {
-    background: rgba(59, 130, 246, 0.3) !important;
-    border-color: rgba(59, 130, 246, 0.5) !important;
-    box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+    background: rgba(239, 68, 68, 0.3) !important;
+    border-color: rgba(239, 68, 68, 0.5) !important;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
 }
 
 .onboarding-progress-step.completed {
