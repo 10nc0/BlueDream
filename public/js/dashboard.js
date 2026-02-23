@@ -407,7 +407,7 @@
                 
                 // 5. LOG GENESIS (with correct old → new)
                 console.log(`%c✨ GENESIS #${this.genesisCounter}: ${oldSpeed} → ${newSpeed} | progress=${(currentProgress * 100).toFixed(1)}%`, 
-                    'color: #f87171; font-weight: bold;');
+                    'color: #ec4899; font-weight: bold;');
                 
                 // Unlock after purge + sync completes
                 setTimeout(() => { this.locked = false; }, 100);
@@ -955,9 +955,9 @@
                 const roleColors = {
                     'dev': '#ffffff',
                     'admin': '#10b981',
-                    'user': '#fca5a5',
+                    'user': '#60a5fa',
                     'read-only': '#f59e0b',
-                    'write-only': '#ef4444'
+                    'write-only': '#3b82f6'
                 };
                 
                 function renderUserInfo(isGenesis = false) {
@@ -1415,10 +1415,10 @@
                 
                 if (platform === 'whatsapp') {
                     const step1Box = document.createElement('div');
-                    step1Box.style.cssText = 'background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem;';
+                    step1Box.style.cssText = 'background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem;';
                     
                     const step1Label = document.createElement('div');
-                    step1Label.style.cssText = 'color: #fca5a5; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;';
+                    step1Label.style.cssText = 'color: #60a5fa; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;';
                     step1Label.textContent = '📝 Message 1: Join sandbox';
                     step1Box.appendChild(step1Label);
                     
@@ -1426,14 +1426,14 @@
                     step1Row.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
                     
                     const step1Code = document.createElement('code');
-                    step1Code.style.cssText = 'flex: 1; font-family: monospace; color: #fca5a5; font-size: 0.875rem; font-weight: 600; user-select: all;';
+                    step1Code.style.cssText = 'flex: 1; font-family: monospace; color: #60a5fa; font-size: 0.875rem; font-weight: 600; user-select: all;';
                     step1Code.textContent = 'join baby-ability';
                     step1Row.appendChild(step1Code);
                     
                     const copy1Btn = document.createElement('button');
                     copy1Btn.className = 'copy-code-btn';
                     copy1Btn.dataset.copyText = 'join baby-ability';
-                    copy1Btn.style.cssText = 'background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5; padding: 0.375rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 600;';
+                    copy1Btn.style.cssText = 'background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; padding: 0.375rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 600;';
                     copy1Btn.textContent = 'Copy';
                     step1Row.appendChild(copy1Btn);
                     
@@ -1450,7 +1450,7 @@
                     warningBox.appendChild(step1Box);
                     
                     const step2Box = document.createElement('div');
-                    step2Box.style.cssText = 'background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 0.75rem;';
+                    step2Box.style.cssText = 'background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 6px; padding: 0.75rem;';
                     
                     const step2Label = document.createElement('div');
                     step2Label.style.cssText = 'color: #c084fc; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;';
@@ -1468,7 +1468,7 @@
                     const copy2Btn = document.createElement('button');
                     copy2Btn.className = 'copy-code-btn';
                     copy2Btn.dataset.copyText = joinCode;
-                    copy2Btn.style.cssText = 'background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #c084fc; padding: 0.375rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 600;';
+                    copy2Btn.style.cssText = 'background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.4); color: #c084fc; padding: 0.375rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 600;';
                     copy2Btn.textContent = 'Copy';
                     step2Row.appendChild(copy2Btn);
                     
@@ -1529,7 +1529,7 @@
                 tagBtn.id = `tag-selected-${book.fractal_id}`;
                 tagBtn.dataset.tagBook = book.fractal_id;
                 tagBtn.disabled = true;
-                tagBtn.style.cssText = 'padding: 0.375rem 0.75rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 0.375rem; color: #ef4444; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;';
+                tagBtn.style.cssText = 'padding: 0.375rem 0.75rem; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 0.375rem; color: #a855f7; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;';
                 tagBtn.textContent = '🏷️ Tag';
                 toolbar.appendChild(tagBtn);
                 
@@ -1849,7 +1849,7 @@
                 <div class="discord-message" data-msg-id="${escapeHtml(msg.id)}" data-search-text="${escapeHtml(searchableText)}" data-status="${escapeHtml(msg.discord_status)}" style="position: relative;">
                     <div style="position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 6px; z-index: 10;">
                         ${msg.media_url ? `
-                            <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px; color: #fca5a5; text-decoration: none; font-size: 0.9rem; transition: all 0.2s; flex-shrink: 0; line-height: 1;">
+                            <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 4px; color: #60a5fa; text-decoration: none; font-size: 0.9rem; transition: all 0.2s; flex-shrink: 0; line-height: 1;">
                                 📎
                             </a>
                         ` : ''}
@@ -1870,7 +1870,7 @@
                     </div>
                     <div class="discord-content">
                         <div class="discord-header-row">
-                            <span class="discord-username" style="color: ${msg.sender_contact ? (msg.is_creator ? '#22c55e' : '#fca5a5') : '#ffffff'};">${msg.sender_contact ? formatPhoneNumber(msg.sender_contact) : escapeHtml(msg.sender_name || 'Unknown')}</span>
+                            <span class="discord-username" style="color: ${msg.sender_contact ? (msg.is_creator ? '#22c55e' : '#60a5fa') : '#ffffff'};">${msg.sender_contact ? formatPhoneNumber(msg.sender_contact) : escapeHtml(msg.sender_name || 'Unknown')}</span>
                             <span class="discord-timestamp discord-timestamp-desktop">${formatDiscordTime(msg.timestamp)}</span>
                             <span class="discord-status-badge status-${escapeHtml(msg.discord_status)}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
                             <button class="jump-to-msg-btn" data-msg-id="${escapeHtml(msg.id)}" data-book-id="${escapeHtml(bookId)}">Jump</button>
@@ -1991,7 +1991,7 @@
                 
                 // Flash highlight effect
                 const originalBg = targetBucket.style.background;
-                targetBucket.style.background = 'rgba(239, 68, 68, 0.2)';
+                targetBucket.style.background = 'rgba(59, 130, 246, 0.2)';
                 targetBucket.style.transition = 'background 0.3s ease';
                 
                 setTimeout(() => {
@@ -2026,14 +2026,14 @@
                     position: fixed;
                     top: 80px;
                     right: 20px;
-                    background: rgba(239, 68, 68, 0.9);
+                    background: rgba(59, 130, 246, 0.9);
                     color: white;
                     padding: 8px 16px;
                     border-radius: 6px;
                     font-size: 12px;
                     z-index: 9999;
                     backdrop-filter: blur(10px);
-                    border: 1px solid rgba(239, 68, 68, 0.3);
+                    border: 1px solid rgba(59, 130, 246, 0.3);
                 `;
                 contextEl.textContent = `📅 Showing: ${dateRange.context}`;
                 
@@ -2109,8 +2109,8 @@
                     const countEl = header.querySelector('.bucket-count');
                     if (countEl && matchCount > 0) {
                         countEl.textContent = `${matchCount} match${matchCount !== 1 ? 'es' : ''}`;
-                        countEl.style.background = 'rgba(239, 68, 68, 0.2)';
-                        countEl.style.color = '#fca5a5';
+                        countEl.style.background = 'rgba(59, 130, 246, 0.2)';
+                        countEl.style.color = '#60a5fa';
                         header.style.display = 'flex';
                     } else if (countEl) {
                         header.style.display = matchCount > 0 ? 'flex' : 'none';
@@ -2465,7 +2465,7 @@
                     <div id="bookActionsMenu" class="book-fan-modal" style="z-index: 10000;">
                         <div class="book-fan-content" style="max-width: 350px; padding: 1.5rem;">
                             <button class="book-fan-close" id="actionsMenuClose">×</button>
-                            <h3 style="margin-bottom: 1rem; font-size: 1.25rem; background: linear-gradient(135deg, #ef4444, #f87171, #f59e0b, #10b981, #ef4444, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Book Actions</h3>
+                            <h3 style="margin-bottom: 1rem; font-size: 1.25rem; background: linear-gradient(135deg, #a855f7, #ec4899, #f59e0b, #10b981, #3b82f6, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Book Actions</h3>
                             <div id="bookActionsContent"></div>
                         </div>
                     </div>
@@ -2481,9 +2481,9 @@
             }
             
             const actions = [
-                { icon: 'ℹ️', label: 'Book Info', action: 'info', color: '#ef4444' },
+                { icon: 'ℹ️', label: 'Book Info', action: 'info', color: '#3b82f6' },
                 { icon: '📚', label: 'View All Books', action: 'fan', color: '#10b981' },
-                { icon: '📱', label: 'Display Code', action: 'regenerate-qr', color: '#ef4444' },
+                { icon: '📱', label: 'Display Code', action: 'regenerate-qr', color: '#a855f7' },
                 { icon: '✏️', label: 'Edit Book', action: 'edit', color: '#f59e0b' },
                 { icon: '🗑️', label: 'Delete Book', action: 'delete', color: '#ef4444' }
             ];
@@ -2559,7 +2559,7 @@
                     <div id="nyanAuditModal" class="book-fan-modal" style="z-index: 10000;">
                         <div class="book-fan-content" style="max-width: 960px; width: 95vw; padding: 1.5rem; max-height: 90vh; display: flex; flex-direction: column;">
                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-shrink: 0;">
-                                <h3 style="margin: 0; font-size: 1.25rem; background: linear-gradient(135deg, #ef4444, #f87171); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧿 AI Audit</h3>
+                                <h3 style="margin: 0; font-size: 1.25rem; background: linear-gradient(135deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧿 AI Audit</h3>
                                 <button class="book-fan-close" id="nyanAuditClose" style="position: static; margin: 0;">×</button>
                             </div>
                             
@@ -2570,7 +2570,7 @@
                                     <div style="font-size: 0.7rem; color: #94a3b8; margin-bottom: 0.35rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center;">
                                         <span>📚 Books</span>
                                         <div style="font-size: 0.65rem; gap: 0.25rem; display: flex;">
-                                            <button id="bookSelectAll" style="padding: 0.15rem 0.5rem; background: rgba(251, 146, 60, 0.2); border: 1px solid rgba(251, 146, 60, 0.3); border-radius: 3px; color: #fb923c; cursor: pointer; font-size: 0.65rem;">All</button>
+                                            <button id="bookSelectAll" style="padding: 0.15rem 0.5rem; background: rgba(34, 211, 238, 0.2); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 3px; color: #22d3ee; cursor: pointer; font-size: 0.65rem;">All</button>
                                             <button id="bookSelectNone" style="padding: 0.15rem 0.5rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 3px; color: #ef4444; cursor: pointer; font-size: 0.65rem;">None</button>
                                         </div>
                                     </div>
@@ -2601,7 +2601,7 @@
                                     <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.5rem; font-weight: 600;">📝 Your Query</div>
                                     <textarea id="nyanAuditMessage" class="form-input" placeholder="Ask anything about your data..." style="padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; width: 100%; flex: 1; min-height: 150px; resize: none; font-family: inherit; box-sizing: border-box;"></textarea>
                                     
-                                    <div id="nyanAuditBookContext" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(251, 146, 60, 0.1); border: 1px solid rgba(251, 146, 60, 0.3); border-radius: 6px; color: #fb923c; font-size: 0.75rem; flex-shrink: 0;">
+                                    <div id="nyanAuditBookContext" style="margin-top: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(34, 211, 238, 0.1); border: 1px solid rgba(34, 211, 238, 0.3); border-radius: 6px; color: #22d3ee; font-size: 0.75rem; flex-shrink: 0;">
                                         📚 Searching all authorized books
                                     </div>
                                     
@@ -2613,7 +2613,7 @@
                                         <button class="audit-suggestion-btn" data-query="Count all messages by tag" style="font-size: 0.7rem; padding: 0.25rem 0.5rem; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 4px; color: #94a3b8; cursor: pointer; transition: all 0.2s;">🏷️ Count by tag</button>
                                     </div>
                                     
-                                    <button id="nyanAuditCheckBtn" class="form-button" style="width: 100%; margin-top: 0.75rem; padding: 0.75rem; background: linear-gradient(135deg, #ef4444, #f87171); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: opacity 0.2s; flex-shrink: 0;">
+                                    <button id="nyanAuditCheckBtn" class="form-button" style="width: 100%; margin-top: 0.75rem; padding: 0.75rem; background: linear-gradient(135deg, #a855f7, #ec4899); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: opacity 0.2s; flex-shrink: 0;">
                                         🔮 Run AI Check
                                     </button>
                                 </div>
@@ -2668,9 +2668,9 @@
                         document.getElementById('nyanAuditMessage').focus();
                     });
                     btn.addEventListener('mouseenter', function() {
-                        this.style.background = 'rgba(239, 68, 68, 0.2)';
-                        this.style.borderColor = 'rgba(239, 68, 68, 0.4)';
-                        this.style.color = '#ef4444';
+                        this.style.background = 'rgba(168, 85, 247, 0.2)';
+                        this.style.borderColor = 'rgba(168, 85, 247, 0.4)';
+                        this.style.color = '#a855f7';
                     });
                     btn.addEventListener('mouseleave', function() {
                         this.style.background = 'rgba(148, 163, 184, 0.1)';
@@ -2721,12 +2721,12 @@
                         const bubble = document.createElement('span');
                         bubble.className = 'audit-selected-bubble';
                         bubble.dataset.fractalId = fractalId;
-                        bubble.style.cssText = 'display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(251, 146, 60, 0.25); border: 1px solid rgba(251, 146, 60, 0.4); border-radius: 12px; color: #fb923c; font-size: 0.7rem; white-space: nowrap;';
+                        bubble.style.cssText = 'display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(34, 211, 238, 0.25); border: 1px solid rgba(34, 211, 238, 0.4); border-radius: 12px; color: #22d3ee; font-size: 0.7rem; white-space: nowrap;';
                         bubble.appendChild(document.createTextNode(`📚 ${displayName}`));
                         
                         const removeBtn = document.createElement('button');
                         removeBtn.className = 'bubble-remove';
-                        removeBtn.style.cssText = 'background: none; border: none; color: #fb923c; cursor: pointer; font-size: 0.8rem; padding: 0; line-height: 1;';
+                        removeBtn.style.cssText = 'background: none; border: none; color: #22d3ee; cursor: pointer; font-size: 0.8rem; padding: 0; line-height: 1;';
                         removeBtn.textContent = '×';
                         removeBtn.addEventListener('click', function(e) {
                             e.stopPropagation();
@@ -2858,14 +2858,14 @@
                     contextDiv.style.color = '#f59e0b';
                 } else if (selectedCount === totalCount) {
                     contextDiv.textContent = `📚 Nyan AI: Searching ALL ${totalCount} book${totalCount !== 1 ? 's' : ''}`;
-                    contextDiv.style.background = 'rgba(251, 146, 60, 0.1)';
-                    contextDiv.style.borderColor = 'rgba(251, 146, 60, 0.3)';
-                    contextDiv.style.color = '#fb923c';
+                    contextDiv.style.background = 'rgba(34, 211, 238, 0.1)';
+                    contextDiv.style.borderColor = 'rgba(34, 211, 238, 0.3)';
+                    contextDiv.style.color = '#22d3ee';
                 } else {
                     contextDiv.textContent = `📚 Nyan AI: Searching ${selectedCount} of ${totalCount} book${totalCount !== 1 ? 's' : ''}`;
-                    contextDiv.style.background = 'rgba(239, 68, 68, 0.1)';
-                    contextDiv.style.borderColor = 'rgba(239, 68, 68, 0.3)';
-                    contextDiv.style.color = '#ef4444';
+                    contextDiv.style.background = 'rgba(168, 85, 247, 0.1)';
+                    contextDiv.style.borderColor = 'rgba(168, 85, 247, 0.3)';
+                    contextDiv.style.color = '#a855f7';
                 }
             }
         }
@@ -2919,7 +2919,7 @@
             loadingIcon.textContent = '🌈';
             loadingDiv.appendChild(loadingIcon);
             const loadingText = document.createElement('p');
-            loadingText.style.cssText = 'margin: 0; color: #ef4444;';
+            loadingText.style.cssText = 'margin: 0; color: #a855f7;';
             loadingText.textContent = 'Nyan AI analyzing your query...';
             loadingDiv.appendChild(loadingText);
             const loadingSubtext = document.createElement('p');
@@ -2956,7 +2956,7 @@
                 headerRow.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;';
                 
                 const nyanBadge = document.createElement('span');
-                nyanBadge.style.cssText = 'font-size: 0.8rem; padding: 0.25rem 0.5rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 4px; color: #ef4444; font-weight: 600;';
+                nyanBadge.style.cssText = 'font-size: 0.8rem; padding: 0.25rem 0.5rem; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 4px; color: #a855f7; font-weight: 600;';
                 nyanBadge.textContent = '🌈 Nyan AI';
                 headerRow.appendChild(nyanBadge);
                 
@@ -2966,13 +2966,13 @@
                 headerRow.appendChild(timeSpan);
                 
                 const bookSpan = document.createElement('span');
-                bookSpan.style.cssText = 'color: #fb923c; font-size: 0.75rem;';
+                bookSpan.style.cssText = 'color: #22d3ee; font-size: 0.75rem;';
                 bookSpan.textContent = `📚 ${bookInfo}`;
                 headerRow.appendChild(bookSpan);
                 fragment.appendChild(headerRow);
                 
                 const answerBox = document.createElement('div');
-                answerBox.style.cssText = 'padding: 0.75rem; background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; margin-bottom: 0.75rem;';
+                answerBox.style.cssText = 'padding: 0.75rem; background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(236, 72, 153, 0.08)); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; margin-bottom: 0.75rem;';
                 const answerP = document.createElement('p');
                 answerP.style.cssText = 'color: #e2e8f0; margin: 0; line-height: 1.6; font-size: 0.9rem; white-space: pre-wrap;';
                 answerP.textContent = data.answer;
@@ -3019,7 +3019,7 @@
                     <div id="nyanAuditHistoryModal" class="book-fan-modal" style="z-index: 10000;">
                         <div class="book-fan-content" style="max-width: 700px; padding: 2rem; max-height: 80vh; overflow-y: auto;">
                             <button class="book-fan-close" id="nyanAuditHistoryClose">×</button>
-                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #fb923c, #ef4444); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧠 Audit History</h3>
+                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #22d3ee, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧠 Audit History</h3>
                             
                             <div id="nyanAuditHistoryContent" style="min-height: 200px;">
                                 <div style="text-align: center; padding: 2rem; color: #94a3b8;">
@@ -3143,7 +3143,7 @@
                     
                     if (bookContext) {
                         const bookSpan = document.createElement('span');
-                        bookSpan.style.cssText = 'color: #fca5a5; font-size: 0.75rem;';
+                        bookSpan.style.cssText = 'color: #60a5fa; font-size: 0.75rem;';
                         bookSpan.textContent = `📚 ${bookContext}`;
                         leftGroup.appendChild(bookSpan);
                     }
@@ -3232,7 +3232,7 @@
                     <div id="bookInfoModal" class="book-fan-modal" style="z-index: 10000;">
                         <div class="book-fan-content" style="max-width: 500px; padding: 2rem;">
                             <button class="book-fan-close" id="bookInfoClose">×</button>
-                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #ef4444, #f87171, #f59e0b, #10b981, #ef4444, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">ℹ️ Book Information</h3>
+                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #a855f7, #ec4899, #f59e0b, #10b981, #3b82f6, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">ℹ️ Book Information</h3>
                             <div id="bookInfoContent"></div>
                         </div>
                     </div>
@@ -3331,7 +3331,7 @@
                 tagsValueDiv.style.cssText = 'padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; display: flex; flex-wrap: wrap; gap: 0.5rem;';
                 tags.forEach(tag => {
                     const tagSpan = document.createElement('span');
-                    tagSpan.style.cssText = 'padding: 0.25rem 0.75rem; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; color: #c084fc; font-size: 0.875rem;';
+                    tagSpan.style.cssText = 'padding: 0.25rem 0.75rem; background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 12px; color: #c084fc; font-size: 0.875rem;';
                     tagSpan.textContent = tag;
                     tagsValueDiv.appendChild(tagSpan);
                 });
@@ -4680,12 +4680,12 @@
                 bottom: 2rem;
                 right: 2rem;
                 padding: 1rem 1.5rem;
-                background: ${type === 'success' ? 'rgba(16, 185, 129, 0.15)' : type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.15)'};
+                background: ${type === 'success' ? 'rgba(16, 185, 129, 0.15)' : type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)'};
                 backdrop-filter: blur(20px);
                 -webkit-backdrop-filter: blur(20px);
-                border: 1px solid ${type === 'success' ? 'rgba(16, 185, 129, 0.3)' : type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(239, 68, 68, 0.3)'};
+                border: 1px solid ${type === 'success' ? 'rgba(16, 185, 129, 0.3)' : type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'};
                 border-radius: 12px;
-                color: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#ef4444'};
+                color: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
                 font-weight: 500;
                 font-size: 0.95rem;
                 box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
@@ -5115,8 +5115,8 @@
                 transform: translateX(-50%);
                 z-index: 100;
                 padding: 8px 16px;
-                background: rgba(239, 68, 68, 0.9);
-                border: 1px solid rgba(239, 68, 68, 0.5);
+                background: rgba(59, 130, 246, 0.9);
+                border: 1px solid rgba(59, 130, 246, 0.5);
                 border-radius: 20px;
                 color: white;
                 font-size: 0.875rem;
@@ -5181,7 +5181,7 @@
                     <div class="discord-message" data-msg-id="${escapeHtml(msg.id)}" data-search-text="${escapeHtml(searchableText)}" data-status="${escapeHtml(msg.discord_status || 'success')}" style="position: relative;">
                         <div style="position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 8px; z-index: 10;">
                             ${msg.media_url ? `
-                                <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px; color: #fca5a5; text-decoration: none; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; line-height: 1;">
+                                <a href="${escapeHtml(msg.media_url)}" download title="Download attachment" style="display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 4px; color: #60a5fa; text-decoration: none; font-size: 0.875rem; transition: all 0.2s; flex-shrink: 0; line-height: 1;">
                                     📎
                                 </a>
                             ` : ''}
@@ -5206,7 +5206,7 @@
                         <div class="discord-content">
                             <div class="discord-header-row">
                                 <span class="discord-username">${escapeHtml(msg.sender_name || 'Unknown')}</span>
-                                ${msg.sender_contact ? `<span class="sender-role" title="${msg.is_creator ? 'Book Creator' : 'Contributor'}" style="color: ${msg.is_creator ? '#22c55e' : '#fca5a5'};">${msg.is_creator ? '🌟' : '👥'}</span>` : ''}
+                                ${msg.sender_contact ? `<span class="sender-role" title="${msg.is_creator ? 'Book Creator' : 'Contributor'}" style="color: ${msg.is_creator ? '#22c55e' : '#60a5fa'};">${msg.is_creator ? '🌟' : '👥'}</span>` : ''}
                                 <span class="discord-timestamp">${formatDiscordTime(msg.timestamp)}</span>
                                 <span class="discord-status-badge status-${escapeHtml(msg.discord_status || 'success')}">${msg.discord_status === 'success' ? '✓' : msg.discord_status === 'failed' ? '✗' : '⏳'}</span>
                             </div>
@@ -6096,7 +6096,7 @@
             const roleColors = {
                 'admin': '#10b981',
                 'read-only': '#f59e0b',
-                'write-only': '#ef4444'
+                'write-only': '#3b82f6'
             };
 
             users.forEach(user => {
@@ -6221,7 +6221,7 @@
                 actorDiv.style.cssText = 'color: #94a3b8; margin-top: 0.25rem; margin-left: 2rem;';
                 actorDiv.appendChild(document.createTextNode('Actor: '));
                 const actorSpan = document.createElement('span');
-                actorSpan.style.color = '#fca5a5';
+                actorSpan.style.color = '#60a5fa';
                 actorSpan.textContent = log.actor_email || 'System';
                 actorDiv.appendChild(actorSpan);
                 
@@ -6398,7 +6398,7 @@
                 header.style.cssText = 'display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;';
                 
                 const avatar = document.createElement('div');
-                avatar.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: 700; flex-shrink: 0;';
+                avatar.style.cssText = 'width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: 700; flex-shrink: 0;';
                 avatar.textContent = adminNumber;
                 
                 const info = document.createElement('div');
@@ -6422,9 +6422,9 @@
                 stats.style.cssText = 'display: flex; gap: 1rem; margin-top: 1rem;';
                 
                 const botStat = document.createElement('div');
-                botStat.style.cssText = 'flex: 1; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 0.5rem; padding: 0.75rem; text-align: center;';
+                botStat.style.cssText = 'flex: 1; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 0.5rem; padding: 0.75rem; text-align: center;';
                 const botNum = document.createElement('div');
-                botNum.style.cssText = 'color: #ef4444; font-size: 1.5rem; font-weight: 700;';
+                botNum.style.cssText = 'color: #3b82f6; font-size: 1.5rem; font-weight: 700;';
                 botNum.textContent = botCount;
                 const botLabel = document.createElement('div');
                 botLabel.style.cssText = 'color: #94a3b8; font-size: 0.75rem; margin-top: 0.25rem;';
@@ -6552,7 +6552,7 @@
                     
                     const roleBadge = document.createElement('span');
                     roleBadge.className = 'stat-badge';
-                    roleBadge.style.cssText = 'background: rgba(239, 68, 68, 0.2); color: #ef4444; font-size: 0.75rem; padding: 0.25rem 0.5rem;';
+                    roleBadge.style.cssText = 'background: rgba(59, 130, 246, 0.2); color: #3b82f6; font-size: 0.75rem; padding: 0.25rem 0.5rem;';
                     roleBadge.textContent = user.role;
                     nameRow.appendChild(roleBadge);
                     
@@ -6928,7 +6928,7 @@
                 
                 const roleBadge = document.createElement('span');
                 roleBadge.className = 'stat-badge';
-                roleBadge.style.cssText = 'background: rgba(239, 68, 68, 0.2); color: #ef4444; font-size: 0.75rem; padding: 0.25rem 0.5rem;';
+                roleBadge.style.cssText = 'background: rgba(59, 130, 246, 0.2); color: #3b82f6; font-size: 0.75rem; padding: 0.25rem 0.5rem;';
                 roleBadge.textContent = user.role;
                 
                 const schemaBadge = document.createElement('span');

@@ -26,7 +26,7 @@ const CAT_CONFIG = Object.freeze({
     COLORS: {
         BODY: '#1a1a1a',
         EYES: '#22c55e',
-        NOSE: '#f87171',
+        NOSE: '#ec4899',
         WHISKERS: '#ffffff',
         TIME_ACTIVE: '#1a1a1a',
         TIME_IDLE: '#ffffff'

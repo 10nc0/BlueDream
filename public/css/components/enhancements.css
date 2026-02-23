@@ -32,8 +32,8 @@ input::placeholder {
 }
 
 .btn-icon:hover {
-    background: rgba(239, 68, 68, 0.25) !important;
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.5),
+    background: rgba(59, 130, 246, 0.25) !important;
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5),
                 inset 0 1px 0 rgba(255, 255, 255, 0.2);
     transform: translateY(-2px) scale(1.05);
 }
@@ -75,7 +75,7 @@ input::placeholder {
     padding: 0.5rem 0.75rem;
     background: rgba(15, 23, 42, 0.95);
     backdrop-filter: blur(20px);
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    border: 1px solid rgba(59, 130, 246, 0.3);
     border-radius: 8px;
     color: #e2e8f0;
     font-size: 0.75rem;
@@ -96,7 +96,7 @@ input::placeholder {
     left: 50%;
     transform: translateX(-50%);
     border: 6px solid transparent;
-    border-bottom-color: rgba(239, 68, 68, 0.3);
+    border-bottom-color: rgba(59, 130, 246, 0.3);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s;
@@ -129,20 +129,20 @@ input::placeholder {
 }
 
 .channel-item:hover {
-    border-color: rgba(239, 68, 68, 0.4) !important;
+    border-color: rgba(59, 130, 246, 0.4) !important;
     box-shadow: 
-        0 8px 24px rgba(239, 68, 68, 0.3),
+        0 8px 24px rgba(59, 130, 246, 0.3),
         inset 0 1px 0 rgba(255, 255, 255, 0.2),
-        0 0 20px rgba(239, 68, 68, 0.2);
+        0 0 20px rgba(59, 130, 246, 0.2);
     transform: translateX(4px);
 }
 
 .channel-item.active {
-    border-color: rgba(239, 68, 68, 0.6) !important;
+    border-color: rgba(59, 130, 246, 0.6) !important;
     box-shadow: 
-        0 8px 32px rgba(239, 68, 68, 0.4),
+        0 8px 32px rgba(59, 130, 246, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.3),
-        0 0 24px rgba(239, 68, 68, 0.3);
+        0 0 24px rgba(59, 130, 246, 0.3);
 }
 
 /* ===== 5. ACCESSIBILITY - KEYBOARD FOCUS & COLOR-BLIND ===== */
@@ -151,9 +151,9 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 .channel-item:focus-visible {
-    outline: 2px solid #ef4444 !important;
+    outline: 2px solid #3b82f6 !important;
     outline-offset: 2px;
-    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.3) !important;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3) !important;
 }
 
 /* Color-blind friendly indicators */
@@ -280,7 +280,7 @@ select:focus-visible,
 /* ===== 7. ONBOARDING HINTS ===== */
 .onboarding-hint {
     position: absolute;
-    background: rgba(239, 68, 68, 0.95);
+    background: rgba(59, 130, 246, 0.95);
     backdrop-filter: blur(20px);
     color: white;
     padding: 0.75rem 1rem;
@@ -288,7 +288,7 @@ select:focus-visible,
     font-size: 0.85rem;
     max-width: 260px;
     box-shadow: 
-        0 8px 32px rgba(239, 68, 68, 0.5),
+        0 8px 32px rgba(59, 130, 246, 0.5),
         inset 0 1px 0 rgba(255, 255, 255, 0.2);
     z-index: 1001;
     animation: hint-bounce 0.5s ease-out;
@@ -325,7 +325,7 @@ select:focus-visible,
     position: fixed;
     bottom: 1.5rem;
     right: 1.5rem;
-    background: rgba(239, 68, 68, 0.9);
+    background: rgba(59, 130, 246, 0.9);
     backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 12px;
@@ -335,7 +335,7 @@ select:focus-visible,
     font-size: 0.85rem;
     font-weight: 600;
     box-shadow: 
-        0 8px 24px rgba(239, 68, 68, 0.4),
+        0 8px 24px rgba(59, 130, 246, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.2);
     transition: all 0.3s;
     z-index: 999;
@@ -344,7 +344,7 @@ select:focus-visible,
 .compact-mode-toggle:hover {
     transform: translateY(-2px);
     box-shadow: 
-        0 12px 32px rgba(239, 68, 68, 0.6),
+        0 12px 32px rgba(59, 130, 246, 0.6),
         inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
@@ -395,17 +395,17 @@ body.compact-mode .channel-name {
 /* Button liquid glass effect */
 button:not(.close-btn):not(.btn-icon) {
     background: linear-gradient(135deg, 
-        rgba(239, 68, 68, 0.9) 0%, 
-        rgba(220, 38, 38, 0.9) 100%) !important;
+        rgba(59, 130, 246, 0.9) 0%, 
+        rgba(37, 99, 235, 0.9) 100%) !important;
     backdrop-filter: blur(10px) !important;
     box-shadow: 
-        0 4px 16px rgba(239, 68, 68, 0.4),
+        0 4px 16px rgba(59, 130, 246, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
 }
 
 button:hover:not(.close-btn):not(.btn-icon) {
     box-shadow: 
-        0 8px 24px rgba(239, 68, 68, 0.6),
+        0 8px 24px rgba(59, 130, 246, 0.6),
         inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
     transform: translateY(-1px) !important;
 }
@@ -424,9 +424,9 @@ input:focus,
 select:focus,
 textarea:focus {
     background: rgba(15, 23, 42, 0.7) !important;
-    border-color: rgba(239, 68, 68, 0.5) !important;
+    border-color: rgba(59, 130, 246, 0.5) !important;
     box-shadow: 
-        0 0 0 3px rgba(239, 68, 68, 0.2),
+        0 0 0 3px rgba(59, 130, 246, 0.2),
         inset 0 1px 3px rgba(0, 0, 0, 0.2) !important;
 }
 

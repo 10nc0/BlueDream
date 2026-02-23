@@ -6,7 +6,7 @@ window.Nyan.AuthService = (function() {
         'admin': '#10b981',
         'user': '#60a5fa',
         'read-only': '#f59e0b',
-        'write-only': '#ef4444'
+        'write-only': '#3b82f6'
     };
 
     async function authFetch(url, options = {}) {

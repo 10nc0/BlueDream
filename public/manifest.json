@@ -5,7 +5,7 @@
   "start_url": "/playground.html",
   "display": "standalone",
   "background_color": "#0a0a1a",
-  "theme_color": "#dc2626",
+  "theme_color": "#8b5cf6",
   "orientation": "any",
   "categories": ["productivity", "finance", "utilities"],
   "icons": [
