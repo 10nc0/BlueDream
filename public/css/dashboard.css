@@ -546,7 +546,7 @@ body::before {
   border-radius: 0;
   padding: 0.3125rem;
   flex-shrink: 0;
-  overflow-y: auto;
+  overflow: hidden;
   height: 100%;
 }
 
