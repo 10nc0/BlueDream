@@ -8453,6 +8453,13 @@ document.addEventListener('input', function(e) {
         document.body.style.userSelect = 'none';
         
         e.preventDefault();
+        
+        // Add dynamic touch listeners only during active resize
+        // (non-passive so e.preventDefault() works; removed in stopResize)
+        if (e.type.includes('touch')) {
+            document.addEventListener('touchmove', resize, { passive: false });
+            document.addEventListener('touchend', stopResize);
+        }
     }
     
     function resize(e) {
@@ -8479,20 +8486,22 @@ document.addEventListener('input', function(e) {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         
+        // Remove dynamic touch listeners now that resize is done
+        document.removeEventListener('touchmove', resize);
+        document.removeEventListener('touchend', stopResize);
+        
         // Save to localStorage
         const currentWidth = sidebar.offsetWidth;
         localStorage.setItem(STORAGE_KEY, currentWidth.toString());
     }
     
-    // Mouse events
+    // Mouse events (permanent — mousemove doesn't block scroll)
     resizer.addEventListener('mousedown', startResize);
     document.addEventListener('mousemove', resize);
     document.addEventListener('mouseup', stopResize);
     
-    // Touch events for iPad
-    resizer.addEventListener('touchstart', startResize);
-    document.addEventListener('touchmove', resize);
-    document.addEventListener('touchend', stopResize);
+    // Touch: only touchstart is permanent; touchmove/touchend added dynamically in startResize
+    resizer.addEventListener('touchstart', startResize, { passive: false });
 })();
 
 // ============================================================================
@@ -8532,6 +8541,13 @@ document.addEventListener('input', function(e) {
         document.body.style.userSelect = 'none';
         
         e.preventDefault();
+        
+        // Add dynamic touch listeners only during active resize
+        // (non-passive so e.preventDefault() works; removed in stopResize)
+        if (e.type.includes('touch')) {
+            document.addEventListener('touchmove', resize, { passive: false });
+            document.addEventListener('touchend', stopResize);
+        }
     }
     
     function resize(e) {
@@ -8558,20 +8574,22 @@ document.addEventListener('input', function(e) {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         
+        // Remove dynamic touch listeners now that resize is done
+        document.removeEventListener('touchmove', resize);
+        document.removeEventListener('touchend', stopResize);
+        
         // Save to localStorage
         const currentHeight = header.offsetHeight;
         localStorage.setItem(STORAGE_KEY, currentHeight.toString());
     }
     
-    // Mouse events
+    // Mouse events (permanent — mousemove doesn't block scroll)
     resizer.addEventListener('mousedown', startResize);
     document.addEventListener('mousemove', resize);
     document.addEventListener('mouseup', stopResize);
     
-    // Touch events for iPad
-    resizer.addEventListener('touchstart', startResize);
-    document.addEventListener('touchmove', resize);
-    document.addEventListener('touchend', stopResize);
+    // Touch: only touchstart is permanent; touchmove/touchend added dynamically in startResize
+    resizer.addEventListener('touchstart', startResize, { passive: false });
 })();
 
 // ============================================================================
