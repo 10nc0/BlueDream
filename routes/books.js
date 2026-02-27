@@ -105,6 +105,7 @@ function registerBooksRoutes(app, deps) {
                             SELECT b.*, '${schemaName}'::text as tenant_schema
                             FROM ${schemaName}.books b
                             WHERE b.archived = false
+                              AND b.status != 'expired'
                             ORDER BY b.created_at DESC
                         `);
                         books.push(...schemaResult.rows);
@@ -119,6 +120,7 @@ function registerBooksRoutes(app, deps) {
                     SELECT b.*
                     FROM ${tenantSchema}.books b
                     WHERE b.archived = false
+                      AND b.status != 'expired'
                     ${limboFilter}
                     ORDER BY b.created_at DESC
                 `);
