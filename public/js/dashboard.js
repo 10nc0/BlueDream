@@ -2699,7 +2699,9 @@
             document.getElementById('nyanAuditCheckBtn').textContent = '🔮 Run AI Check';
             
             // Initialize book selector with dropdown + search + bubbles
-            window.auditSelectedBooks = new Set(books && books.length > 0 ? books.map(b => b.fractal_id) : []);
+            // Auto-select only the currently viewed book for better UX
+            const _currentBookId = selectedBookFractalId || (books && books.length > 0 ? books[0].fractal_id : null);
+            window.auditSelectedBooks = new Set(_currentBookId ? [_currentBookId] : []);
             window.auditAllBooks = books || [];
             
             const renderSelectedBubbles = () => {
