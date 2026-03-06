@@ -276,6 +276,7 @@ async function preflightRouter(options) {
       
       // "Most recent available" = last full calendar year (real estate/income data lags ~1yr)
       const mostRecentYear = String(new Date().getFullYear() - 1);
+      const defaultHistoricalYear = String(new Date().getFullYear() - 50);
 
       // Extract city names for targeted search (major world cities + common variants)
       const cityPattern = /\b(tokyo|singapore|hong kong|hongkong|london|new york|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
@@ -295,9 +296,9 @@ async function preflightRouter(options) {
       // Extract ALL years from query: first = historical, last = current
       // User-specified current year wins; fall back to dynamic most-recent full year
       const allYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)\b/g)].map(m => m[1]);
-      const historicalYear = allYears.length > 0 ? allYears[0] : null;
+      const historicalYear = allYears.length > 0 ? allYears[0] : defaultHistoricalYear;
       const currentYear = allYears.length > 1 ? allYears[allYears.length - 1] : mostRecentYear;
-      const historicalDecade = historicalYear ? `${historicalYear.slice(0, 3)}0s` : '1970s';
+      const historicalDecade = `${historicalYear.slice(0, 3)}0s`;
 
       if (cities.length > 0) {
         result.seedMetricSearchQueries = cities.flatMap(city => [
@@ -398,10 +399,11 @@ async function preflightRouter(options) {
 
         // Detect ALL years: first = historical, last = current
         const gvMostRecentYear = String(new Date().getFullYear() - 1);
+        const gvDefaultHistoricalYear = String(new Date().getFullYear() - 50);
         const gvAllYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)\b/g)].map(m => m[1]);
-        const gvHistoricalYear = gvAllYears.length > 0 ? gvAllYears[0] : null;
+        const gvHistoricalYear = gvAllYears.length > 0 ? gvAllYears[0] : gvDefaultHistoricalYear;
         const gvCurrentYear = gvAllYears.length > 1 ? gvAllYears[gvAllYears.length - 1] : gvMostRecentYear;
-        const gvHistoricalDecade = gvHistoricalYear ? `${gvHistoricalYear.slice(0, 3)}0s` : '1970s';
+        const gvHistoricalDecade = `${gvHistoricalYear.slice(0, 3)}0s`;
 
         if (gvCities.length > 0) {
           result.seedMetricSearchQueries = gvCities.flatMap(city => [

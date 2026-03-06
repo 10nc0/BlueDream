@@ -1079,7 +1079,7 @@ User query: ${query}`;
           }).filter(Boolean))]
         : [];
       
-      const historicalDecade = state.preflight?.historicalDecade || '1970s';
+      const historicalDecade = state.preflight?.historicalDecade || (String(new Date().getFullYear() - 50).slice(0, 3) + '0s');
       
       if (cities.length > 0) {
         console.log(`🏠 Seed Metric: Attempting direct calculation for cities: ${cities.join(', ')}`);
@@ -1252,7 +1252,7 @@ OUTPUT: Table + summary lines + legend. NO PROSE.
     // Seed Metric LLM output: validate format before audit
     // If format is wrong (prose instead of table), try to fix it
     if (state.mode === 'seed-metric' && state.draftAnswer) {
-      const smHistDecade = state.preflight?.historicalDecade || '1970s';
+      const smHistDecade = state.preflight?.historicalDecade || (String(new Date().getFullYear() - 50).slice(0, 3) + '0s');
       const validation = validateSeedMetricOutput(state.draftAnswer, smHistDecade);
       if (!validation.valid) {
         console.log(`⚠️ Seed Metric format validation FAILED: ${validation.issues.join(', ')}`);
@@ -1327,12 +1327,13 @@ Output ONLY the corrected table and summary lines:`;
                   }).filter(Boolean))];
                   
                   if (cities.length > 0) {
-                    const parsedData = parseSeedMetricData(state.searchContext, cities, state.preflight.historicalDecade || '1970s');
+                    const smDynDefault = String(new Date().getFullYear() - 50).slice(0, 3) + '0s';
+                    const parsedData = parseSeedMetricData(state.searchContext, cities, state.preflight.historicalDecade || smDynDefault);
                     const hasCompleteData = Object.values(parsedData.cities).some(c => 
                       c.current?.pricePerSqm?.value && c.current?.income?.value
                     );
                     if (hasCompleteData) {
-                      state.draftAnswer = buildSeedMetricTable(parsedData, state.preflight.historicalDecade || '1970s');
+                      state.draftAnswer = buildSeedMetricTable(parsedData, state.preflight.historicalDecade || smDynDefault);
                       console.log(`✅ Seed Metric fallback direct calculation successful`);
                     } else {
                       console.log(`⚠️ Seed Metric direct calc skipped: insufficient parsed data (need $/sqm AND income for at least one city). Keeping LLM answer for audit.`);

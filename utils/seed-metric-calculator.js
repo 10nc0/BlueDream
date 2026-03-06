@@ -198,7 +198,7 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
  * @param {string} historicalDecade - e.g., "1970s"
  * @returns {object} { cities: { [city]: { current: {...}, historical: {...} } } }
  */
-function parseSeedMetricData(searchContext, cities = [], historicalDecade = '1970s') {
+function parseSeedMetricData(searchContext, cities = [], historicalDecade = String(new Date().getFullYear() - 50).slice(0, 3) + '0s') {
   const result = { cities: {}, parseLog: [] };
   
   if (!searchContext) {
@@ -356,7 +356,7 @@ function formatCurrency(value, currency = 'USD') {
  * @param {string} historicalDecade - e.g., "1970s"
  * @returns {string} Markdown table with regime readings
  */
-function buildSeedMetricTable(parsedData, historicalDecade = '1970s') {
+function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().getFullYear() - 50).slice(0, 3) + '0s') {
   const rows = [];
   const summaries = [];
   
@@ -429,7 +429,7 @@ Formula: **Years = ($/sqm × 700) ÷ (Single-Earner Income)**
  * @param {string} output - LLM-generated output
  * @returns {object} { valid: boolean, issues: string[] }
  */
-function validateSeedMetricOutput(output, historicalDecade = '1970s') {
+function validateSeedMetricOutput(output, historicalDecade = String(new Date().getFullYear() - 50).slice(0, 3) + '0s') {
   const issues = [];
 
   if (!output) {
