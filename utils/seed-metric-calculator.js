@@ -1,174 +1,191 @@
 /**
  * SEED METRIC CALCULATOR
- * 
+ *
  * Direct calculation bypass for Seed Metric analysis.
  * Parses search results, applies proxy rules, builds table deterministically.
- * 
+ *
  * Formula: Years = ($/sqm × 700) ÷ Single-Earner Income
  * NO P/I ratio — if $/sqm unavailable, show "N/A".
- * 
+ *
  * Proxy Rules (from seed-metric.js):
  * - PRIMARY: Published $/m² → MULTIPLY BY 700 (non-negotiable)
  * - INCOME: Single-earner (not household/dual)
  * - Regime: <10yr 🟢 Optimism | 10-25yr 🟡 Extraction | >25yr 🔴 Fatalism
  */
 
+// ─── Currency Registry ────────────────────────────────────────────────────────
+// Single source of truth. To add a new currency: one entry here, nothing else.
+// usdRate = 1 unit of this currency in USD (used only for sanity-check scaling).
+// cities  = lowercase city/country keywords that imply this currency.
+const CURRENCY_REGISTRY = {
+  USD: { symbols: ['USD', '$'],                    usdRate: 1,          cities: [] },
+  EUR: { symbols: ['EUR', '€'],                    usdRate: 0.92,       cities: ['paris', 'berlin', 'vienna', 'amsterdam', 'munich', 'rome', 'madrid', 'milan', 'brussels', 'lisbon', 'dublin', 'hamburg', 'frankfurt', 'europe', 'eurozone'] },
+  GBP: { symbols: ['GBP', '£'],                    usdRate: 1.27,       cities: ['london', 'manchester', 'birmingham', 'edinburgh', 'uk', 'united kingdom'] },
+  JPY: { symbols: ['JPY', 'yen', '¥', '￥'],       usdRate: 0.0067,     cities: ['tokyo', 'osaka', 'kyoto', 'japan'] },
+  KRW: { symbols: ['KRW', 'won', '₩'],             usdRate: 0.00077,    cities: ['seoul', 'busan', 'incheon', 'daegu', 'daejeon', 'korea'] },
+  SGD: { symbols: ['SGD', 'S$'],                   usdRate: 0.74,       cities: ['singapore'] },
+  HKD: { symbols: ['HKD', 'HK$'],                  usdRate: 0.128,      cities: ['hong kong'] },
+  AUD: { symbols: ['AUD', 'A$'],                   usdRate: 0.65,       cities: ['sydney', 'melbourne', 'brisbane', 'perth', 'australia'] },
+  CAD: { symbols: ['CAD', 'C$'],                   usdRate: 0.74,       cities: ['toronto', 'vancouver', 'montreal', 'calgary', 'canada'] },
+  CHF: { symbols: ['CHF', 'Fr'],                   usdRate: 1.12,       cities: ['zurich', 'geneva', 'switzerland'] },
+  CNY: { symbols: ['CNY', 'RMB', 'yuan', '元'],    usdRate: 0.138,      cities: ['beijing', 'shanghai', 'shenzhen', 'guangzhou', 'china'] },
+  INR: { symbols: ['INR', 'Rs', '₹'],              usdRate: 0.012,      cities: ['mumbai', 'delhi', 'bangalore', 'hyderabad', 'chennai', 'india'] },
+  IDR: { symbols: ['IDR', 'Rp'],                   usdRate: 0.000064,   cities: ['jakarta', 'surabaya', 'bali', 'indonesia'] },
+  VND: { symbols: ['VND', 'dong', '₫'],            usdRate: 0.000040,   cities: ['hanoi', 'ho chi minh', 'saigon', 'vietnam'] },
+  THB: { symbols: ['THB', 'baht', '฿'],            usdRate: 0.028,      cities: ['bangkok', 'phuket', 'thailand'] },
+  MYR: { symbols: ['MYR', 'RM', 'ringgit'],        usdRate: 0.213,      cities: ['kuala lumpur', 'penang', 'malaysia'] },
+  PHP: { symbols: ['PHP', '₱', 'peso'],            usdRate: 0.018,      cities: ['manila', 'cebu', 'philippines'] },
+  AED: { symbols: ['AED', 'dirham'],               usdRate: 0.272,      cities: ['dubai', 'abu dhabi', 'uae'] },
+  BRL: { symbols: ['BRL', 'R$'],                   usdRate: 0.196,      cities: ['sao paulo', 'rio', 'brazil'] },
+  NZD: { symbols: ['NZD', 'NZ$'],                  usdRate: 0.61,       cities: ['auckland', 'wellington', 'new zealand'] },
+  ZAR: { symbols: ['ZAR', 'R'],                    usdRate: 0.054,      cities: ['johannesburg', 'cape town', 'south africa'] },
+  MXN: { symbols: ['MXN', 'MX$'],                 usdRate: 0.058,      cities: ['mexico city', 'guadalajara', 'mexico'] },
+  TRY: { symbols: ['TRY', '₺'],                    usdRate: 0.031,      cities: ['istanbul', 'ankara', 'turkey'] },
+};
+
+// Build a flat symbol→code lookup (longest symbols checked first to avoid prefix collisions)
+const _SYMBOL_MAP = (() => {
+  const map = [];
+  for (const [code, info] of Object.entries(CURRENCY_REGISTRY)) {
+    for (const sym of info.symbols) {
+      map.push({ sym, code });
+    }
+  }
+  map.sort((a, b) => b.sym.length - a.sym.length);
+  return map;
+})();
+
 /**
- * Parse price per square meter from text
- * Handles: "$5,000/sqm", "5000 USD/m²", "¥50,000 per sqm", etc.
- * @param {string} text - Search result text
- * @param {string} city - City name for context
- * @returns {object|null} { value: number, currency: string, raw: string }
+ * Detect currency from city name and/or text content.
+ * Priority: city keyword match → explicit symbol in text → USD fallback.
+ * Note: ¥ is shared by JPY/CNY — city context disambiguates; default JPY.
+ */
+function detectCurrency(city = '', text = '') {
+  const cityLower = city.toLowerCase();
+  for (const [code, info] of Object.entries(CURRENCY_REGISTRY)) {
+    if (info.cities.some(c => cityLower.includes(c))) return code;
+  }
+  // Scan text for explicit currency symbols/codes (longest first)
+  for (const { sym, code } of _SYMBOL_MAP) {
+    const escaped = sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(?:^|\\s|[^\\w])${escaped}(?:\\s|[^\\w]|$)`, 'i').test(text)) return code;
+  }
+  return 'USD';
+}
+
+/** Convert a native-currency value to USD equivalent (for sanity checks only). */
+function usdEquiv(value, currency) {
+  return value * (CURRENCY_REGISTRY[currency]?.usdRate ?? 1);
+}
+
+/** Parse numeric multiplier suffixes (million/billion/k and CJK units). */
+function applyMultiplier(value, raw) {
+  if (/billion|bn/i.test(raw))           return value * 1_000_000_000;
+  if (/million|mil\b|\b[Mm]\b|億/i.test(raw)) return value * 1_000_000;
+  if (/만|万/i.test(raw))                return value * 10_000;
+  if (/\bk\b|thousand/i.test(raw))       return value * 1_000;
+  return value;
+}
+
+// Regex fragments reused in both parsers
+const _SQM  = '(?:sq\\s*m|sqm|m²|square\\s*met(?:er|re)s?)';
+const _PSF  = '(?:psf|sq\\s*ft|sqft)';
+const _NUM  = '([\\d,]+(?:\\.\\d+)?)';
+const _MULT = '(?:\\s*(?:billion|bn|million|mil|M|k|thousand|만|万|億|억))?';
+// All known symbols joined for use in patterns (escaped, longest first)
+const _SYMS = _SYMBOL_MAP.map(e => e.sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+
+// ─── Price per sqm parser ─────────────────────────────────────────────────────
+/**
+ * Parse price per square meter from text.
+ * Handles any currency via CURRENCY_REGISTRY.
+ * @param {string} text
+ * @param {string} city - city name for currency hint
+ * @returns {{ value: number, currency: string, raw: string, isPsf: boolean }|null}
  */
 function parsePricePerSqm(text, city = '') {
   if (!text) return null;
-  
-  const cityLower = city.toLowerCase();
-  
-  // Patterns for price per square meter (various formats)
+
+  const currency = detectCurrency(city, text);
+  const { usdRate } = CURRENCY_REGISTRY[currency];
+
+  // Pattern 1: symbol/code BEFORE number → per sqm   e.g. "₩10,500,000/sqm"
+  // Pattern 2: number THEN optional symbol/code → per sqm  e.g. "10,500,000 KRW/sqm"
+  // Pattern 3: psf (price per sq ft) with $ prefix    e.g. "$2,500 psf"
+  // Pattern 4: context-driven — "price/cost per sqm … number"
   const patterns = [
-    // $X,XXX/sqm or $X,XXX per sqm
-    /\$\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²|square\s*met)/gi,
-    // X,XXX USD/sqm
-    /([\d,]+(?:\.\d+)?)\s*(?:USD|usd|\$)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
-    // €X,XXX/sqm or €X,XXX per sqm (EUR)
-    /€\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²|square\s*met)/gi,
-    // X,XXX EUR/sqm or X,XXX €/sqm
-    /([\d,]+(?:\.\d+)?)\s*(?:EUR|€)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
-    // EUR X,XXX per sqm
-    /EUR\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
-    // £X,XXX/sqm (GBP)
-    /£\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²|square\s*met)/gi,
-    // X,XXX GBP/sqm
-    /([\d,]+(?:\.\d+)?)\s*(?:GBP|£)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
-    // ¥X,XXX/sqm (JPY)
-    /[¥￥]\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
-    // X,XXX JPY/sqm
-    /([\d,]+(?:\.\d+)?)\s*(?:JPY|jpy|yen)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
-    // SGD X,XXX/sqm
-    /(?:SGD|S\$)\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
-    // X,XXX SGD/sqm
-    /([\d,]+(?:\.\d+)?)\s*SGD\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi,
-    // Generic: X,XXX per square meter (any currency or none)
-    /([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²|square\s*met)/gi,
-    // "price per sqm" or "cost per m²" followed by number
-    /(?:price|cost|average|median)\s*(?:per|\/)\s*(?:sq\s*m|sqm|m²)[^0-9€$£¥]*([€$£¥]?\s*[\d,]+(?:\.\d+)?)/gi,
-    // psf to sqm conversion hint: $X,XXX psf (1 sqm ≈ 10.764 sqft)
-    /\$\s*([\d,]+(?:\.\d+)?)\s*(?:\/|per)\s*(?:psf|sq\s*ft|sqft)/gi,
+    new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}\\s*(?:\\/|per)\\s*${_SQM}`, 'gi'),
+    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS})?\\s*(?:\\/|per)\\s*${_SQM}`, 'gi'),
+    new RegExp(`\\$\\s*${_NUM}${_MULT}\\s*(?:\\/|per)\\s*${_PSF}`, 'gi'),
+    new RegExp(`(?:price|cost|average|median)\\s*(?:per|\\/)\\s*${_SQM}[^0-9]*${_NUM}`, 'gi'),
   ];
-  
-  // Detect currency from city context
-  let currency = 'USD';
-  if (cityLower.includes('tokyo') || cityLower.includes('osaka') || cityLower.includes('japan')) currency = 'JPY';
-  else if (cityLower.includes('singapore')) currency = 'SGD';
-  else if (cityLower.includes('hong kong')) currency = 'HKD';
-  else if (cityLower.includes('london') || cityLower.includes('uk') || cityLower.includes('manchester') || cityLower.includes('birmingham')) currency = 'GBP';
-  else if (cityLower.includes('paris') || cityLower.includes('berlin') || cityLower.includes('vienna') || cityLower.includes('amsterdam') || cityLower.includes('munich') || cityLower.includes('rome') || cityLower.includes('madrid') || cityLower.includes('milan') || cityLower.includes('brussels') || cityLower.includes('lisbon') || cityLower.includes('dublin') || cityLower.includes('hamburg') || cityLower.includes('frankfurt') || cityLower.includes('europe')) currency = 'EUR';
-  
+
   for (const pattern of patterns) {
-    const matches = [...text.matchAll(pattern)];
-    for (const match of matches) {
-      const valueStr = match[1].replace(/,/g, '');
-      const value = parseFloat(valueStr);
-      if (value > 0 && value < 1000000) { // Sanity check
-        // Check if this is psf (per sq ft) - convert to sqm
-        const isPsf = /psf|sq\s*ft|sqft/i.test(match[0]);
-        const finalValue = isPsf ? value * 10.764 : value;
-        
-        return {
-          value: finalValue,
-          currency,
-          raw: match[0],
-          isPsf
-        };
+    for (const match of text.matchAll(pattern)) {
+      const raw = match[0];
+      const valueStr = (match[1] || match[2] || '').replace(/,/g, '');
+      if (!valueStr) continue;
+      let value = applyMultiplier(parseFloat(valueStr), raw);
+      if (!isFinite(value) || value <= 0) continue;
+      const isPsf = /psf|sq\s*ft|sqft/i.test(raw);
+      if (isPsf) value *= 10.764;
+      // Sanity: $10–$150,000 per sqm in USD equivalent covers all world markets
+      const usd = value * usdRate;
+      if (usd >= 10 && usd <= 150_000) {
+        return { value, currency, raw, isPsf };
       }
     }
   }
-  
   return null;
 }
 
+// ─── Income parser ────────────────────────────────────────────────────────────
 /**
- * Parse median income from text
- * Handles: "$50,000 per year", "median income of $85,000", "¥6.5 million", etc.
- * @param {string} text - Search result text
- * @param {string} city - City name for context
- * @param {boolean} preferSingleEarner - If true, prefer "individual" over "household"
- * @returns {object|null} { value: number, currency: string, type: string, raw: string }
+ * Parse median/individual annual income from text.
+ * Handles any currency via CURRENCY_REGISTRY.
+ * @param {string} text
+ * @param {string} city
+ * @param {boolean} preferSingleEarner
+ * @returns {{ value: number, currency: string, type: string, raw: string }|null}
  */
 function parseIncome(text, city = '', preferSingleEarner = true) {
   if (!text) return null;
-  
-  const cityLower = city.toLowerCase();
-  
-  // Detect currency from city context
-  let currency = 'USD';
-  if (cityLower.includes('tokyo') || cityLower.includes('osaka') || cityLower.includes('japan')) currency = 'JPY';
-  else if (cityLower.includes('singapore')) currency = 'SGD';
-  else if (cityLower.includes('hong kong')) currency = 'HKD';
-  else if (cityLower.includes('london') || cityLower.includes('uk') || cityLower.includes('manchester') || cityLower.includes('birmingham')) currency = 'GBP';
-  else if (cityLower.includes('paris') || cityLower.includes('berlin') || cityLower.includes('vienna') || cityLower.includes('amsterdam') || cityLower.includes('munich') || cityLower.includes('rome') || cityLower.includes('madrid') || cityLower.includes('milan') || cityLower.includes('brussels') || cityLower.includes('lisbon') || cityLower.includes('dublin') || cityLower.includes('hamburg') || cityLower.includes('frankfurt') || cityLower.includes('europe')) currency = 'EUR';
-  
-  // Check for income type context
+
+  const currency = detectCurrency(city, text);
+  const { usdRate } = CURRENCY_REGISTRY[currency];
+
   const hasIndividual = /individual|personal|single[\s-]?earner|per\s*capita/i.test(text);
-  const hasHousehold = /household|family|dual[\s-]?earner/i.test(text);
-  const incomeType = hasIndividual ? 'single' : (hasHousehold ? 'household' : 'unknown');
-  
-  // Patterns for income (various formats)
+  const hasHousehold  = /household|family|dual[\s-]?earner/i.test(text);
+  const incomeType    = hasIndividual ? 'single' : (hasHousehold ? 'household' : 'unknown');
+
+  // Pattern 1: income/salary/wage keyword → symbol → number  e.g. "income: ₩42,000,000"
+  // Pattern 2: symbol → number → per year suffix             e.g. "₩42,000,000 per year"
+  // Pattern 3: number → code → per year suffix               e.g. "42,000,000 KRW/year"
+  // Pattern 4: generic — number near income keywords (last resort)
+  const _YEAR  = '(?:per\\s*year|annually|\\/year|\\/yr|p\\.a\\.|per\\s*annum)';
+  const _INC   = '(?:income|salary|wage|earnings|pay)';
   const patterns = [
-    // $X,XXX or $X.X million
-    /(?:median|average|mean)?\s*(?:individual|personal|household)?\s*income[^$€£]*\$\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M)?/gi,
-    // Standalone: $XX,XXX per year/annually
-    /\$\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M)?\s*(?:per\s*year|annually|\/year|\/yr|p\.a\.)/gi,
-    // €X,XXX (EUR income)
-    /(?:median|average|mean)?\s*(?:individual|personal|household)?\s*(?:income|salary|wage|earnings)[^€$]*€\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M|k|thousand)?/gi,
-    // Standalone: €XX,XXX per year/annually
-    /€\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M|k|thousand)?\s*(?:per\s*year|annually|\/year|\/yr|p\.a\.|per\s*annum)/gi,
-    // X,XXX EUR per year
-    /([\d,]+(?:\.\d+)?)\s*(?:EUR|€)\s*(?:per\s*year|annually|\/year|\/yr|p\.a\.)/gi,
-    // £X,XXX (GBP income)
-    /(?:median|average|mean)?\s*(?:individual|personal|household)?\s*(?:income|salary|wage|earnings)[^£$]*£\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M|k|thousand)?/gi,
-    // Standalone: £XX,XXX per year/annually
-    /£\s*([\d,]+(?:\.\d+)?)\s*(?:million|mil|M|k|thousand)?\s*(?:per\s*year|annually|\/year|\/yr|p\.a\.)/gi,
-    // ¥X.X million (Japanese)
-    /[¥￥]\s*([\d,]+(?:\.\d+)?)\s*(?:million|万|億)?/gi,
-    // X.X million yen
-    /([\d,]+(?:\.\d+)?)\s*million\s*(?:yen|JPY)/gi,
-    // SGD X,XXX
-    /(?:SGD|S\$)\s*([\d,]+(?:\.\d+)?)\s*(?:k|thousand|million)?/gi,
-    // Generic: median income X,XXX (any currency)
-    /median\s*(?:individual|household)?\s*(?:income|salary|wage)[^\d]*[€$£¥]?\s*([\d,]+(?:\.\d+)?)/gi,
-    // Generic: salary/income of X,XXX
-    /(?:income|salary|wage|earnings)\s*(?:of|is|was|:)\s*[€$£¥]?\s*([\d,]+(?:\.\d+)?)\s*(?:k|thousand|million)?/gi,
+    new RegExp(`${_INC}[^\\d]{0,40}(?:${_SYMS})\\s*${_NUM}${_MULT}`, 'gi'),
+    new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}\\s*${_YEAR}`, 'gi'),
+    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS})?\\s*${_YEAR}`, 'gi'),
+    new RegExp(`(?:median|average|mean)\\s*(?:individual|household)?\\s*${_INC}[^\\d]{0,30}${_NUM}${_MULT}`, 'gi'),
+    new RegExp(`${_INC}\\s*(?:of|is|was|:)\\s*(?:${_SYMS})?\\s*${_NUM}${_MULT}`, 'gi'),
   ];
-  
+
   for (const pattern of patterns) {
-    const matches = [...text.matchAll(pattern)];
-    for (const match of matches) {
-      let valueStr = match[1].replace(/,/g, '');
-      let value = parseFloat(valueStr);
-      
-      // Handle "million" suffix
-      if (/million|mil|M|億/i.test(match[0])) {
-        value *= 1000000;
-      } else if (/万/i.test(match[0])) {
-        value *= 10000;
-      } else if (/k|thousand/i.test(match[0])) {
-        value *= 1000;
-      }
-      
-      // Sanity check: income should be reasonable
-      if (value > 0 && value < 100000000) {
-        return {
-          value,
-          currency,
-          type: incomeType,
-          raw: match[0]
-        };
+    for (const match of text.matchAll(pattern)) {
+      const raw = match[0];
+      const valueStr = (match[1] || match[2] || '').replace(/,/g, '');
+      if (!valueStr) continue;
+      const value = applyMultiplier(parseFloat(valueStr), raw);
+      if (!isFinite(value) || value <= 0) continue;
+      // Sanity: $500–$1,000,000 annual income in USD equivalent
+      const usd = value * usdRate;
+      if (usd >= 500 && usd <= 1_000_000) {
+        return { value, currency, type: incomeType, raw };
       }
     }
   }
-  
   return null;
 }
 
