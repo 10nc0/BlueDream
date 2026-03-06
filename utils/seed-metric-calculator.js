@@ -312,26 +312,41 @@ function calculateSeedMetric(pricePerSqm, income) {
 }
 
 /**
- * Format currency value with appropriate symbol and scale
+ * Format currency value with appropriate symbol and scale.
+ * Symbols are derived from CURRENCY_REGISTRY so all currencies are supported.
+ * Scale: T (trillion) → B (billion) → M (million) → K (thousand) → raw
  * @param {number} value - Numeric value
  * @param {string} currency - Currency code
  * @returns {string} Formatted string
  */
 function formatCurrency(value, currency = 'USD') {
   if (value == null || isNaN(value)) return 'N/A';
-  
-  const symbols = {
-    USD: '$', JPY: '¥', SGD: 'S$', HKD: 'HK$', GBP: '£', EUR: '€'
-  };
-  const symbol = symbols[currency] || currency + ' ';
-  
-  // Format large numbers
-  if (value >= 1000000) {
-    return `${symbol}${(value / 1000000).toFixed(1)}M`;
-  } else if (value >= 1000) {
-    return `${symbol}${(value / 1000).toFixed(0)}K`;
+
+  // Prefer a short non-alphabetic symbol (₫ ₩ $ € £ ¥ Rp RM) over the 3-letter code.
+  // Falls back to code-prefix for currencies with only alphabetic identifiers.
+  const regEntry = CURRENCY_REGISTRY[currency];
+  const sym = (() => {
+    if (!regEntry) return currency + ' ';
+    // Priority 1: Unicode currency char or mixed (e.g. $, €, ₩, ₫, S$, HK$)
+    const unicodeOrMixed = regEntry.symbols.find(s => s.length <= 3 && !/^[A-Za-z]+$/.test(s));
+    if (unicodeOrMixed) return unicodeOrMixed;
+    // Priority 2: Short alphabetic abbreviation used as symbol (e.g. Rp, RM, Fr)
+    const shortAlpha = regEntry.symbols.find(s => s.length <= 2);
+    if (shortAlpha) return shortAlpha;
+    // Fallback: code with space
+    return regEntry.symbols[0] + ' ';
+  })();
+
+  if (value >= 1_000_000_000_000) {
+    return `${sym}${(value / 1_000_000_000_000).toFixed(1)}Tr`;
+  } else if (value >= 1_000_000_000) {
+    return `${sym}${(value / 1_000_000_000).toFixed(1)}B`;
+  } else if (value >= 1_000_000) {
+    return `${sym}${(value / 1_000_000).toFixed(1)}M`;
+  } else if (value >= 1_000) {
+    return `${sym}${(value / 1_000).toFixed(0)}K`;
   } else {
-    return `${symbol}${value.toFixed(0)}`;
+    return `${sym}${value.toFixed(0)}`;
   }
 }
 

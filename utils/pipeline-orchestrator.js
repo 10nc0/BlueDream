@@ -1113,11 +1113,38 @@ User query: ${query}`;
     // Append Seed Metric instruction to enforce table format (prevents LLM reformatting)
     // isSeedMetric already defined above
     if (isSeedMetric) {
+      // ── Search-data anchor ──────────────────────────────────────────────────
+      // Extract concrete price/income numbers from real search results and inject
+      // them into the LLM instruction so it cannot hallucinate when the full
+      // calculator bypass failed (e.g. unusual currency format, no explicit /sqm)
+      let searchAnchorBlock = '';
+      if (state.searchContext) {
+        const ctx = state.searchContext;
+        // Find up to 6 price-per-sqm mentions (any currency)
+        const priceHits = [...ctx.matchAll(
+          /[\d,]+(?:\.\d+)?(?:\s*(?:million|billion|M|B|k))?\s*(?:USD|VND|KRW|JPY|EUR|GBP|SGD|IDR|THB|MYR|₩|₫|¥|€|£|\$|Rp|RM)?\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi
+        )].slice(0, 6).map(m => m[0].replace(/\s+/g, ' ').trim());
+
+        // Find up to 6 income/salary mentions
+        const incomeHits = [...ctx.matchAll(
+          /(?:income|salary|wage|earnings)[^.]{0,60}?[\d,]+(?:\.\d+)?(?:\s*(?:million|billion|M|B|k))?(?:\s*(?:USD|VND|KRW|JPY|EUR|GBP|SGD|IDR|\$|₩|₫|¥|€|£|Rp))?\s*(?:per\s*(?:year|month|annum)|annually)?/gi
+        )].slice(0, 6).map(m => m[0].replace(/\s+/g, ' ').trim());
+
+        if (priceHits.length > 0 || incomeHits.length > 0) {
+          searchAnchorBlock = `
+╔═══════════════════════════════════════════════════════════════╗
+║  VERIFIED NUMBERS EXTRACTED FROM SEARCH RESULTS               ║
+║  Use THESE numbers. Do not substitute your own estimates.      ║
+╟───────────────────────────────────────────────────────────────╢
+${priceHits.length > 0 ? `║  PRICES FOUND:\n${priceHits.map(h => `║  • ${h}`).join('\n')}\n` : ''}${incomeHits.length > 0 ? `║  INCOME FOUND:\n${incomeHits.map(h => `║  • ${h}`).join('\n')}\n` : ''}╚═══════════════════════════════════════════════════════════════╝`;
+        }
+      }
+
       const seedMetricInstruction = `
 ═══════════════════════════════════════════════════════════════
 SEED METRIC OUTPUT FORMAT - MANDATORY (DO NOT REFORMAT TO PROSE)
 ═══════════════════════════════════════════════════════════════
-
+${searchAnchorBlock}
 You MUST output this exact table. This is non-negotiable empiric data:
 
 | City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
@@ -1126,6 +1153,14 @@ You MUST output this exact table. This is non-negotiable empiric data:
 
 FORMULA (non-negotiable):
 Years = ($/sqm × 700) ÷ Single-Earner Income
+
+⚠️ MATH CHECK — do this before writing any Years value:
+1. Write down $/sqm (from search above)
+2. Multiply by 700 → this is your 700sqm cost
+3. Write down annual single-earner income
+4. Years = step 2 ÷ step 3
+Example: ₫92M/sqm × 700 = ₫64,400M; income ₫116M/yr → 64,400 ÷ 116 = 555yr 🔴
+If your result is <100yr for cities like HCMC/Hanoi/Seoul/Jakarta, re-check — prices there are EXTREME.
 
 CRITICAL PROXY RULES:
 • 700 m² = family home lot (NOT 700 sqft - that's 10x smaller!)
@@ -1140,6 +1175,7 @@ CRITICAL PROXY RULES:
 • Write prose paragraphs - TABLE ONLY
 • Add a P/I column — the table format has $/sqm, 700sqm Price, Income, Years, Regime only
 • Default to P/I ratio when $/sqm data exists — always prefer $/sqm × 700
+• Copy income value into $/sqm column (price/sqm ≠ income — they are different data points)
 
 REGIME THRESHOLDS ($/sqm × 700 ÷ income = years):
 • 🟢 OPTIMISM: <10 years
@@ -1152,7 +1188,7 @@ After table, ONE summary line per city:
 OUTPUT: Table + summary lines + legend. NO PROSE.
 ═══════════════════════════════════════════════════════════════`;
       finalPrompt = `${finalPrompt}\n\n${seedMetricInstruction}`;
-      console.log(`🏠 Seed Metric instruction appended (enforcing table format)`);
+      console.log(`🏠 Seed Metric instruction appended (enforcing table format, anchor: ${searchAnchorBlock ? 'YES' : 'NO'})`);
     }
     
     const messages = [
