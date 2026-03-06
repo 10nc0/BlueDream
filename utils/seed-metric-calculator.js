@@ -429,37 +429,44 @@ Formula: **Years = ($/sqm × 700) ÷ (Single-Earner Income)**
  * @param {string} output - LLM-generated output
  * @returns {object} { valid: boolean, issues: string[] }
  */
-function validateSeedMetricOutput(output) {
+function validateSeedMetricOutput(output, historicalDecade = '1970s') {
   const issues = [];
-  
+
   if (!output) {
     issues.push('Empty output');
     return { valid: false, issues };
   }
-  
+
+  // Build dynamic historical year regex from the provided decade (e.g. "2000s" → /200\d/)
+  const decadeDigits = historicalDecade.replace(/[^0-9]/g, '').slice(0, 3); // "1970s"→"197", "2000s"→"200"
+  const histRegex = new RegExp(`(?:${decadeDigits}\\d|~?${decadeDigits}|${historicalDecade.replace(/s$/, '')}s?)`, 'i');
+
+  // Build dynamic current year regex (accept any 202x or 203x year)
+  const currRegex = /(?:202\d|203\d|now|today|present)/i;
+
   // Check for table header (must have $/sqm column, NO P/I column)
   const hasTableHeader = /\|\s*City\s*\|\s*Period\s*\|.*\|\s*Regime\s*\|/i.test(output);
   if (!hasTableHeader) {
     issues.push('FORBIDDEN: Missing table header. Output MUST use | City | Period | $/sqm | 700sqm Price | Income | Years | Regime | format.');
   }
-  
+
   // Check table row count — need at least 2 rows per city (historical + current)
   const tableRows = output.match(/^\|[^-][^|]*\|/gm);
   const dataRows = tableRows ? tableRows.filter(r => !/City|Period|Regime/i.test(r)).length : 0;
   if (hasTableHeader && dataRows < 2) {
-    issues.push('FORBIDDEN: Table needs at least 2 data rows (historical + current). Must show ~50yr ago AND now.');
+    issues.push('FORBIDDEN: Table needs at least 2 data rows (historical + current). Must show historical AND now.');
   }
-  
-  // Check that table rows contain historical period references
+
+  // Check that table rows contain historical and current period references
   if (hasTableHeader && dataRows >= 2) {
     const rowText = tableRows ? tableRows.join(' ') : '';
-    const hasHistRow = /(?:197\d|198\d|~197|1970s|1980s)/i.test(rowText);
-    const hasCurrRow = /(?:202\d|2025|2026|now|today|present)/i.test(rowText);
+    const hasHistRow = histRegex.test(rowText);
+    const hasCurrRow = currRegex.test(rowText);
     if (!hasHistRow) {
-      issues.push('Table missing historical period row (~1976/1970s). Must show ~50yr ago data.');
+      issues.push(`Table missing historical period row (${historicalDecade}). Must show historical data.`);
     }
     if (!hasCurrRow) {
-      issues.push('Table missing current period row (2025/2026). Must show current data.');
+      issues.push('Table missing current period row (202x). Must show current data.');
     }
   }
   
@@ -540,15 +547,17 @@ function validateSeedMetricOutput(output) {
     issues.push('FORBIDDEN: Too many paragraphs without table format. Output must be a markdown table.');
   }
   
-  // Check for missing historical data (must have BOTH ~50yr ago AND now)
-  const hasHistorical = /(?:197\d|198\d|~?\d{4}s?|50\s*(?:yr|year)s?\s*ago)/i.test(output);
-  const hasCurrentData = /(?:202\d|today|now|current|present)/i.test(output);
+  // Check for missing historical data (must have BOTH historical AND current)
+  // Use dynamic histRegex (already defined above) to accept user-specified years
+  const hasHistorical = histRegex.test(output) || /~?\d{4}s?|50\s*(?:yr|year)s?\s*ago/i.test(output);
+  const hasCurrentData = currRegex.test(output);
   if (!hasHistorical && hasCurrentData) {
-    issues.push('Missing historical (~50yr ago) data. Must show BOTH historical AND current periods.');
+    issues.push(`Missing historical (${historicalDecade}) data. Must show BOTH historical AND current periods.`);
   }
-  
+
   // Check for "no data" cop-out on historical $/sqm
-  if (/(?:no data|no precise|unavailable|cannot find|don't have).*(?:\$\/sqm|historical|197\d)/i.test(output)) {
+  const noDataCopout = new RegExp(`(?:no data|no precise|unavailable|cannot find|don't have).*(?:\\$\\/sqm|historical|${decadeDigits}\\d)`, 'i');
+  if (noDataCopout.test(output)) {
     issues.push('FORBIDDEN: "No data" cop-out. Must ESTIMATE historical $/sqm from proxy sources.');
   }
   

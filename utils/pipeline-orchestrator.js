@@ -1112,6 +1112,8 @@ User query: ${query}`;
     
     // Append Seed Metric instruction to enforce table format (prevents LLM reformatting)
     // isSeedMetric already defined above
+    const smHistYear = state.preflight?.historicalYear || null;
+    const smCurrYear = state.preflight?.currentYear || String(new Date().getFullYear() - 1);
     if (isSeedMetric) {
       // ── Search-data anchor ──────────────────────────────────────────────────
       // Extract concrete price/income numbers from real search results and inject
@@ -1140,16 +1142,17 @@ ${priceHits.length > 0 ? `║  PRICES FOUND:\n${priceHits.map(h => `║  • ${h
         }
       }
 
+      const histPeriodLabel = smHistYear ? `~${smHistYear}` : '~1976';
       const seedMetricInstruction = `
 ═══════════════════════════════════════════════════════════════
 SEED METRIC OUTPUT FORMAT - MANDATORY (DO NOT REFORMAT TO PROSE)
 ═══════════════════════════════════════════════════════════════
-${searchAnchorBlock}
+${smHistYear ? `⏰ PERIODS REQUESTED: historical = ${smHistYear} | current = ${smCurrYear}\n` : ''}${searchAnchorBlock}
 You MUST output this exact table. This is non-negotiable empiric data:
 
 | City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
 |------|--------|-------|--------------|--------|-------|--------|
-[Fill each city with THEN and NOW rows — EVERY row must show $/sqm source data]
+[Fill each city with ${histPeriodLabel} row AND ${smCurrYear} row — EVERY row must show $/sqm source data]
 
 FORMULA (non-negotiable):
 Years = ($/sqm × 700) ÷ Single-Earner Income
@@ -1249,16 +1252,20 @@ OUTPUT: Table + summary lines + legend. NO PROSE.
     // Seed Metric LLM output: validate format before audit
     // If format is wrong (prose instead of table), try to fix it
     if (state.mode === 'seed-metric' && state.draftAnswer) {
-      const validation = validateSeedMetricOutput(state.draftAnswer);
+      const smHistDecade = state.preflight?.historicalDecade || '1970s';
+      const validation = validateSeedMetricOutput(state.draftAnswer, smHistDecade);
       if (!validation.valid) {
         console.log(`⚠️ Seed Metric format validation FAILED: ${validation.issues.join(', ')}`);
-        
+
         // Try to fix with a format-only prompt
         if (!state.seedMetricFormatRetried) {
           state.seedMetricFormatRetried = true;
           console.log(`🔧 Attempting Seed Metric format fix...`);
-          
+
           try {
+            const histYear = state.preflight?.historicalYear || '~1976';
+            const currYear = state.preflight?.currentYear || String(new Date().getFullYear() - 1);
+
             const fixPrompt = `The following response has incorrect format. Fix it to use the EXACT table format shown below.
 
 WRONG RESPONSE:
@@ -1267,17 +1274,17 @@ ${state.draftAnswer.slice(0, 2000)}
 REQUIRED FORMAT — ONE unified markdown table (NOT separate tables per city):
 | City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
 |------|--------|-------|--------------|--------|-------|--------|
-| [CityA] | ~1976 | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
-| [CityA] | 2025 | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
-| [CityB] | ~1976 | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
-| [CityB] | 2025 | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityA] | ${histYear} | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityA] | ${currYear} | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityB] | ${histYear} | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityB] | ${currYear} | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
 
 **[CityA]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
 **[CityB]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
 
 CRITICAL RULES:
 - ONE table with City column — NOT separate tables per city
-- MUST have rows for BOTH ~50yr ago AND now (4 rows minimum for 2 cities)
+- MUST have rows for BOTH historical (${histYear}) AND current (${currYear}) — 4 rows minimum for 2 cities
 - Regime column MUST have emoji + label: 🟢 Optimism (<10yr) | 🟡 Extraction (10-25yr) | 🔴 Fatalism (>25yr)
 - REGIME MUST MATCH YEARS: e.g., 13.1yr = 🟡 Extraction (NOT Optimism!)
 - 700sqm Price = $/sqm × 700 | Years = 700sqm Price ÷ Income
@@ -1305,7 +1312,7 @@ Output ONLY the corrected table and summary lines:`;
             
             const fixedAnswer = response.data.choices[0]?.message?.content;
             if (fixedAnswer) {
-              const reValidation = validateSeedMetricOutput(fixedAnswer);
+              const reValidation = validateSeedMetricOutput(fixedAnswer, smHistDecade);
               if (reValidation.valid) {
                 console.log(`✅ Seed Metric format fix successful`);
                 state.draftAnswer = fixedAnswer;
