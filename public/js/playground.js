@@ -1112,9 +1112,14 @@ async function sendMessage() {
             const streamingEl = document.getElementById('streamingMessage');
             if (streamingEl) streamingEl.remove();
             const errorData = await res.json().catch(() => ({}));
-            addMessage('assistant', errorData.reply || 'An error occurred. Please try again.');
-            isProcessing = false;
-            sendBtn.disabled = false;
+            if (res.status === 503 && errorData.code === 'warming_up') {
+                addMessage('assistant', '🐱 Still warming up — will retry automatically in 5 seconds...');
+                setTimeout(() => sendMessage(), 5000);
+            } else {
+                addMessage('assistant', errorData.reply || 'An error occurred. Please try again.');
+                isProcessing = false;
+                sendBtn.disabled = false;
+            }
             return;
         }
         

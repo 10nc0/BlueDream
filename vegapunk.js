@@ -559,6 +559,20 @@ app.use(express.static('public', {
     }
 }));
 
+// Readiness gate — blocks all API requests until server is fully initialized
+// Prevents "unexpected error" hits during the startup window (bot logins + DB init)
+let serverReady = false;
+app.use('/api/', (req, res, next) => {
+    if (!serverReady) {
+        return res.status(503).json({
+            code: 'warming_up',
+            message: 'Server is starting up, please retry in a few seconds.',
+            retryAfter: 5
+        });
+    }
+    next();
+});
+
 // Apply tenant context middleware to all API routes (except auth routes)
 app.use('/api/books', setTenantContext);
 app.use('/api/messages', setTenantContext);
@@ -1324,9 +1338,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     
     console.log('🌈 Initializing Trinity architecture...');
     try {
-        // Initialize bots sequentially to reduce connection spike
-        await hermesBot.initialize();
-        await thothBot.initialize();
+        await Promise.all([hermesBot.initialize(), thothBot.initialize()]);
         console.log('✨ Trinity ready: Hermes (φ) + Thoth (0)');
     } catch (error) {
         console.error('❌ Trinity initialization failed:', error.message);
@@ -1335,8 +1347,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     
     console.log('🧿 Initializing Nyan AI Audit bots...');
     try {
-        await idrisBot.initialize();
-        await horusBot.initialize();
+        await Promise.all([idrisBot.initialize(), horusBot.initialize()]);
         console.log('✨ Nyan AI Audit ready: Idris (ι) + Horus (Ω)');
     } catch (error) {
         console.error('❌ Nyan AI Audit initialization failed:', error.message);
@@ -1428,6 +1439,10 @@ app.listen(PORT, '0.0.0.0', async () => {
     // Global error handling (must be after all routes)
     app.use(notFoundHandler);
     app.use(createErrorHandler({ isProd, logger: console }));
+
+    // All routes and error handlers registered — open the gate
+    serverReady = true;
+    console.log('🟢 Server ready — accepting API requests');
     
     // DEFERRED STARTUP: Run non-critical tasks via unified phi breathe orchestrator
     // This prevents connection pool exhaustion during startup
