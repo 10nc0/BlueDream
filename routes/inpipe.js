@@ -487,28 +487,48 @@ async function handleActiveBook(res, channel, msg, rawPayload, bookRecord, deps)
 
 async function sendToDiscordThread(threadId, payload, media, deps) {
     const hermesToken = deps?.constants?.HERMES_TOKEN || process.env.HERMES_TOKEN;
-    
-    if (media) {
-        const form = new FormData();
-        form.append('files[0]', media.buffer, {
-            filename: media.filename,
-            contentType: media.contentType
-        });
-        form.append('payload_json', JSON.stringify(payload));
-        
-        await axios.post(`https://discord.com/api/v10/channels/${threadId}/messages`, form, {
-            headers: {
-                'Authorization': `Bot ${hermesToken}`,
-                ...form.getHeaders()
-            }
-        });
-    } else {
-        await axios.post(`https://discord.com/api/v10/channels/${threadId}/messages`, payload, {
-            headers: {
-                'Authorization': `Bot ${hermesToken}`,
-                'Content-Type': 'application/json'
-            }
-        });
+    const logger = deps?.logger;
+
+    const doSend = async () => {
+        if (media) {
+            const form = new FormData();
+            form.append('files[0]', media.buffer, {
+                filename: media.filename,
+                contentType: media.contentType
+            });
+            form.append('payload_json', JSON.stringify(payload));
+            await axios.post(`https://discord.com/api/v10/channels/${threadId}/messages`, form, {
+                headers: {
+                    'Authorization': `Bot ${hermesToken}`,
+                    ...form.getHeaders()
+                }
+            });
+        } else {
+            await axios.post(`https://discord.com/api/v10/channels/${threadId}/messages`, payload, {
+                headers: {
+                    'Authorization': `Bot ${hermesToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+        }
+    };
+
+    try {
+        await doSend();
+    } catch (err) {
+        const isArchived = err?.response?.status === 403 && err?.response?.data?.code === 50083;
+        if (isArchived) {
+            if (logger) logger.info({ threadId }, '🔓 Thread archived — unarchiving and retrying');
+            else console.log(`🔓 Thread ${threadId} archived — unarchiving and retrying`);
+            await axios.patch(
+                `https://discord.com/api/v10/channels/${threadId}`,
+                { archived: false, auto_archive_duration: 10080 },
+                { headers: { 'Authorization': `Bot ${hermesToken}`, 'Content-Type': 'application/json' } }
+            );
+            await doSend();
+        } else {
+            throw err;
+        }
     }
 }
 
