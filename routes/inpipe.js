@@ -482,8 +482,13 @@ async function handleActiveBook(res, channel, msg, rawPayload, bookRecord, deps)
 
     if (output01?.type === 'thread' && output01?.thread_id) {
         try {
-            await sendToDiscordThread(output01.thread_id, { embeds: [embed] }, media, deps);
+            const discordResponse = await sendToDiscordThread(output01.thread_id, { embeds: [embed] }, media, deps);
             logger.info({ threadId: output01.thread_id }, 'Sent to Ledger thread');
+            // Fill discord_url on capsule attachment before async pin fires
+            if (media && capsule.attachments.length > 0) {
+                const cdnUrl = discordResponse?.data?.attachments?.[0]?.url;
+                if (cdnUrl) capsule.attachments[0].discord_url = cdnUrl;
+            }
         } catch (error) {
             logger.error({ error: error.message }, 'Failed to send to Ledger');
         }
@@ -564,14 +569,14 @@ async function sendToDiscordThread(threadId, payload, media, deps) {
                 contentType: media.contentType
             });
             form.append('payload_json', JSON.stringify(payload));
-            await axios.post(`https://discord.com/api/v10/channels/${threadId}/messages`, form, {
+            return await axios.post(`https://discord.com/api/v10/channels/${threadId}/messages`, form, {
                 headers: {
                     'Authorization': `Bot ${hermesToken}`,
                     ...form.getHeaders()
                 }
             });
         } else {
-            await axios.post(`https://discord.com/api/v10/channels/${threadId}/messages`, payload, {
+            return await axios.post(`https://discord.com/api/v10/channels/${threadId}/messages`, payload, {
                 headers: {
                     'Authorization': `Bot ${hermesToken}`,
                     'Content-Type': 'application/json'
@@ -581,7 +586,7 @@ async function sendToDiscordThread(threadId, payload, media, deps) {
     };
 
     try {
-        await doSend();
+        return await doSend();
     } catch (err) {
         const isArchived = err?.response?.status === 403 && err?.response?.data?.code === 50083;
         if (isArchived) {
@@ -592,7 +597,7 @@ async function sendToDiscordThread(threadId, payload, media, deps) {
                 { archived: false, auto_archive_duration: 10080 },
                 { headers: { 'Authorization': `Bot ${hermesToken}`, 'Content-Type': 'application/json' } }
             );
-            await doSend();
+            return await doSend();
         } else {
             throw err;
         }
