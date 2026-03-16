@@ -38,7 +38,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Scholastic Domain Classifier**: Multi-signal scoring system for classifying image content.
 - **Harmonized Document Processing**: Unified architecture for document extraction using a shared `DocumentExtractionCache`.
 - **Verifiable Export**: Book exports include `manifest.json` with SHA256 hashes and provenance info.
-- **Message Capsule + IPFS Ledger**: Every inpipe message builds a ZK-ready capsule (`utils/message-capsule.js`) containing actual body text, HMAC sender proof (phone proven, not revealed), SHA256 content hash, and per-attachment metadata with `disclosed` flag. Capsule is pinned to IPFS via Pinata (`utils/ipfs-pinner.js`) async — zero latency impact on Discord write path. CID stored in `core.message_ledger` table. Supports full/partial/ZK binary disclosure at message and attachment granularity. `PINATA_JWT` env var enables IPFS; graceful degradation (null CID) if not set.
+- **Message Capsule + IPFS Ledger**: Every inpipe message builds a ZK-ready capsule (`utils/message-capsule.js`) containing actual body text, HMAC sender proof (phone proven, not revealed), SHA256 content hash, and per-attachment metadata with `disclosed` flag. Capsule is pinned to IPFS via Pinata (`utils/ipfs-pinner.js`) async — zero latency impact on Discord write path. CID stored in `core.message_ledger` table. Supports full/partial/ZK binary disclosure at message and attachment granularity. `PINATA_JWT` env var enables IPFS; graceful degradation (null CID) if not set. **Capsule schema contract**: the `v` field is a public interface — once CIDs exist, structural changes to `buildCapsule()` output MUST bump `v` (e.g. `v: 2`), never modify `v: 1` in place. Old CIDs remain permanently valid.
 - **Modular Frontend Architecture**: Dashboard uses `Nyan.StateService` and `Nyan.AuthService` patterns for maintainable, testable code and PWA readiness.
 
 **System Design Choices:**
@@ -70,3 +70,4 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Search**: DuckDuckGo Instant Answer API, Brave Search API
 - **Forex**: fawazahmed0 Currency API
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth`
+- **IPFS**: Pinata (`pinata.cloud`) — free 1GB tier, JWT auth via `PINATA_JWT` secret. Community forks should provision a Pinata account and set this variable to enable the IPFS capsule pipeline.
