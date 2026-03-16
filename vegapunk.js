@@ -778,7 +778,36 @@ async function initializeDatabase() {
         `);
         
         console.log('✅ Book engaged phones table initialized');
-        
+
+        // MESSAGE LEDGER: Immutable append-only receipt for every inpipe message
+        // Stores sender_hash (HMAC — proven not revealed), content_hash, IPFS CID
+        // IPFS CID is filled async after pin resolves; rows always written immediately
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS core.message_ledger (
+                message_fractal_id   TEXT        PRIMARY KEY,
+                book_fractal_id      TEXT        NOT NULL,
+                ipfs_cid             TEXT,
+                sender_hash          TEXT        NOT NULL,
+                content_hash         TEXT        NOT NULL,
+                has_attachment       BOOLEAN     DEFAULT false,
+                attachment_disclosed BOOLEAN     DEFAULT true,
+                attachment_cid       TEXT,
+                recorded_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        `);
+
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_message_ledger_book
+            ON core.message_ledger(book_fractal_id)
+        `);
+
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_message_ledger_ipfs
+            ON core.message_ledger(ipfs_cid) WHERE ipfs_cid IS NOT NULL
+        `);
+
+        console.log('✅ Message ledger initialized');
+
         // PASSWORD RESET TOKENS: Secure tokens for forgot password flow via WhatsApp
         await pool.query(`
             CREATE TABLE IF NOT EXISTS core.password_reset_tokens (

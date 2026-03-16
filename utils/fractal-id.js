@@ -96,8 +96,28 @@ function verify(fractalId, type, tenantId, dbId, createdByAdminId = null) {
     return fractalId === expected;
 }
 
+/**
+ * Generate a deterministic fractal ID for a message record
+ * Derived from content fingerprint — no DB ID needed
+ * Format: msg_t{tenantId}_{hash}
+ *
+ * @param {string} bookFractalId - Parent book's fractal ID
+ * @param {number} tenantId - Tenant ID
+ * @param {string} timestamp - ISO timestamp of the message
+ * @param {string} contentHash - SHA256 of message body
+ * @returns {string} Stable, unique message fractal ID
+ */
+function generateMsg(bookFractalId, tenantId, timestamp, contentHash) {
+    const hash = crypto.createHmac('sha256', SALT)
+        .update(`${bookFractalId}:${timestamp}:${contentHash}`)
+        .digest('hex')
+        .slice(0, 12);
+    return `msg_t${tenantId}_${hash}`;
+}
+
 module.exports = {
     generate,
+    generateMsg,
     parse,
     validateTenant,
     verify

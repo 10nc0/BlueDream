@@ -38,6 +38,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Scholastic Domain Classifier**: Multi-signal scoring system for classifying image content.
 - **Harmonized Document Processing**: Unified architecture for document extraction using a shared `DocumentExtractionCache`.
 - **Verifiable Export**: Book exports include `manifest.json` with SHA256 hashes and provenance info.
+- **Message Capsule + IPFS Ledger**: Every inpipe message builds a ZK-ready capsule (`utils/message-capsule.js`) containing actual body text, HMAC sender proof (phone proven, not revealed), SHA256 content hash, and per-attachment metadata with `disclosed` flag. Capsule is pinned to IPFS via web3.storage (`utils/ipfs-pinner.js`) async — zero latency impact on Discord write path. CID stored in `core.message_ledger` table. Supports full/partial/ZK binary disclosure at message and attachment granularity. `WEB3_STORAGE_TOKEN` env var enables IPFS; graceful degradation (null CID) if not set.
 - **Modular Frontend Architecture**: Dashboard uses `Nyan.StateService` and `Nyan.AuthService` patterns for maintainable, testable code and PWA readiness.
 
 **System Design Choices:**

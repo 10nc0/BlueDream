@@ -1,6 +1,8 @@
 const axios = require('axios');
 const FormData = require('form-data');
 const { TwilioChannel } = require('../lib/channels/twilio');
+const { buildCapsule } = require('../utils/message-capsule');
+const { pinJson, pinBuffer } = require('../utils/ipfs-pinner');
 
 // ═══════════════════════════════════════════════════════════════
 // BURST MITIGATION: In-memory message queue with rate-aligned processing
@@ -446,6 +448,8 @@ async function handleActiveBook(res, channel, msg, rawPayload, bookRecord, deps)
         timestamp: new Date().toISOString()
     };
     
+    const msgTimestamp = embed.timestamp;
+
     let media = null;
     if (msg.hasMedia) {
         media = await channel.downloadMedia(rawPayload.mediaUrl, rawPayload.mediaContentType);
@@ -463,7 +467,19 @@ async function handleActiveBook(res, channel, msg, rawPayload, bookRecord, deps)
             });
         }
     }
-    
+
+    // Build ZK-ready capsule (sync, ~0ms — same data already in scope)
+    const tenantIdMatch = bookRecord.tenant_schema?.match(/tenant_(\d+)/);
+    const capsuleTenantId = tenantIdMatch ? parseInt(tenantIdMatch[1]) : 0;
+    const capsule = buildCapsule({
+        bookFractalId: book.fractal_id,
+        tenantId: capsuleTenantId,
+        phone: msg.phone,
+        body: msg.body,
+        media,
+        timestamp: msgTimestamp
+    });
+
     if (output01?.type === 'thread' && output01?.thread_id) {
         try {
             await sendToDiscordThread(output01.thread_id, { embeds: [embed] }, media, deps);
@@ -481,7 +497,58 @@ async function handleActiveBook(res, channel, msg, rawPayload, bookRecord, deps)
             logger.error({ error: error.message, webhookName: webhook.name }, 'Failed to send to webhook');
         }
     }
-    
+
+    // ── Capsule pipeline (fire-and-forget — never blocks Discord write) ──────
+    // Writes ledger row immediately (CIDs null), fills in async as pins resolve
+    ;(async () => {
+        try {
+            if (pool) {
+                await pool.query(
+                    `INSERT INTO core.message_ledger
+                     (message_fractal_id, book_fractal_id, sender_hash, content_hash,
+                      has_attachment, attachment_disclosed)
+                     VALUES ($1,$2,$3,$4,$5,$6)
+                     ON CONFLICT (message_fractal_id) DO NOTHING`,
+                    [
+                        capsule.message_fractal_id,
+                        capsule.book_fractal_id,
+                        capsule.sender_hash,
+                        capsule.content_hash,
+                        capsule.attachments.length > 0,
+                        capsule.attachments[0]?.disclosed ?? true
+                    ]
+                );
+            }
+            // Pin capsule JSON → get CID
+            const jsonResult = await pinJson(capsule);
+            if (jsonResult?.cid && pool) {
+                await pool.query(
+                    `UPDATE core.message_ledger SET ipfs_cid = $1 WHERE message_fractal_id = $2`,
+                    [jsonResult.cid, capsule.message_fractal_id]
+                );
+            }
+            // Pin attachment binary (if present and disclosed)
+            if (media?.buffer && capsule.attachments[0]?.disclosed) {
+                const fileResult = await pinBuffer(media.buffer, media.contentType);
+                if (fileResult?.cid) {
+                    capsule.attachments[0].attachment_cid = fileResult.cid;
+                    if (pool) {
+                        await pool.query(
+                            `UPDATE core.message_ledger SET attachment_cid = $1 WHERE message_fractal_id = $2`,
+                            [fileResult.cid, capsule.message_fractal_id]
+                        );
+                    }
+                }
+            }
+            logger.info({
+                msgFractalId: capsule.message_fractal_id,
+                ipfsCid: jsonResult?.cid || null
+            }, '🜁 Capsule sealed');
+        } catch (err) {
+            logger.warn({ err: err.message }, '⚠️ Capsule pipeline error (non-fatal)');
+        }
+    })();
+
     return sendChannelResponse(res, channel);
 }
 
