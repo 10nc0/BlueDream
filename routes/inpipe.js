@@ -508,11 +508,12 @@ async function handleActiveBook(res, channel, msg, rawPayload, bookRecord, deps)
     ;(async () => {
         try {
             if (pool) {
+                const env = deps?.constants?.IS_PROD ? 'prod' : 'dev';
                 await pool.query(
                     `INSERT INTO core.message_ledger
                      (message_fractal_id, book_fractal_id, sender_hash, content_hash,
-                      has_attachment, attachment_disclosed)
-                     VALUES ($1,$2,$3,$4,$5,$6)
+                      has_attachment, attachment_disclosed, env)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7)
                      ON CONFLICT (message_fractal_id) DO NOTHING`,
                     [
                         capsule.message_fractal_id,
@@ -520,7 +521,8 @@ async function handleActiveBook(res, channel, msg, rawPayload, bookRecord, deps)
                         capsule.sender_hash,
                         capsule.content_hash,
                         capsule.attachments.length > 0,
-                        capsule.attachments[0]?.disclosed ?? true
+                        capsule.attachments[0]?.disclosed ?? true,
+                        env
                     ]
                 );
             }

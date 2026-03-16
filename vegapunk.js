@@ -792,8 +792,15 @@ async function initializeDatabase() {
                 has_attachment       BOOLEAN     DEFAULT false,
                 attachment_disclosed BOOLEAN     DEFAULT true,
                 attachment_cid       TEXT,
+                env                  TEXT        NOT NULL DEFAULT 'prod',
                 recorded_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
+        `);
+
+        // Migration: add env column if table already existed without it
+        await pool.query(`
+            ALTER TABLE core.message_ledger
+            ADD COLUMN IF NOT EXISTS env TEXT NOT NULL DEFAULT 'prod'
         `);
 
         await pool.query(`
@@ -804,6 +811,11 @@ async function initializeDatabase() {
         await pool.query(`
             CREATE INDEX IF NOT EXISTS idx_message_ledger_ipfs
             ON core.message_ledger(ipfs_cid) WHERE ipfs_cid IS NOT NULL
+        `);
+
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_message_ledger_env
+            ON core.message_ledger(env)
         `);
 
         console.log('✅ Message ledger initialized');
@@ -1412,8 +1424,9 @@ app.listen(PORT, '0.0.0.0', async () => {
         constants: {
             // Webhook URLs (not tokens) - safe to pass
             NYANBOOK_LEDGER_WEBHOOK: process.env.NYANBOOK_WEBHOOK_URL,
-            LIMBO_THREAD_ID: process.env.LIMBO_THREAD_ID
-            // NOTE: HERMES_TOKEN removed - bot already initialized, token not needed downstream
+            LIMBO_THREAD_ID: process.env.LIMBO_THREAD_ID,
+            // Environment tag — inpipe uses this to label ledger rows
+            IS_PROD: isProd
         },
         bots: {
             hermes: hermesBot,
