@@ -944,7 +944,14 @@
             try {
                 const res = await window.authFetch('/api/auth/status');
                 const data = await res.json();
-                
+
+                if (res.status === 503 && data.code === 'warming_up') {
+                    const userInfo = document.getElementById('userInfo');
+                    if (userInfo) userInfo.textContent = '🐱 warming up...';
+                    setTimeout(() => checkAuth(), 5000);
+                    return false;
+                }
+
                 if (!data.authenticated) {
                     window.location.href = '/login.html';
                     return false;
@@ -2943,7 +2950,25 @@
                 });
                 
                 const data = await response.json();
-                
+
+                if (response.status === 503 && data.code === 'warming_up') {
+                    const warmupDiv = document.createElement('div');
+                    warmupDiv.style.cssText = 'display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; padding: 2rem 1rem;';
+                    const warmupIcon = document.createElement('div');
+                    warmupIcon.style.cssText = 'font-size: 2.5rem; margin-bottom: 0.75rem; animation: pulse 1.5s ease-in-out infinite;';
+                    warmupIcon.textContent = '🐱';
+                    warmupDiv.appendChild(warmupIcon);
+                    const warmupText = document.createElement('p');
+                    warmupText.style.cssText = 'margin: 0; color: #a855f7;';
+                    warmupText.textContent = 'Still warming up — retrying in 5 seconds...';
+                    warmupDiv.appendChild(warmupText);
+                    resultContent.replaceChildren(warmupDiv);
+                    btn.disabled = false;
+                    btn.textContent = '🔮 Run AI Check';
+                    setTimeout(() => runNyanAuditCheck(), 5000);
+                    return;
+                }
+
                 if (!response.ok) {
                     throw new Error(data.error || 'AI audit failed');
                 }
