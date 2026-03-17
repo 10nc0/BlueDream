@@ -106,8 +106,8 @@ You MUST output this exact table structure. This is non-negotiable:
 
 | City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
 |------|--------|-------|--------------|--------|-------|--------|
-| [city] | [then] | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] |
-| [city] | [now]  | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] |
+| [city] | [then] | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [Regime] |
+| [city] | [now]  | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [Regime] |
 
 ⚠️ EVERY ROW MUST show $/sqm. This is the source data. 700sqm Price = $/sqm × 700.
 If $/sqm is unavailable, the row MUST show "N/A" — do NOT substitute P/I ratio.
