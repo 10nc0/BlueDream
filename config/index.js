@@ -78,7 +78,6 @@ const config = {
 
   rateLimit: {
     exemptIPs: [
-      '10.83.9.13',
       '127.0.0.1',
       '::1',
       ...(process.env.RATE_LIMIT_EXEMPT_IPS || '').split(',').map(ip => ip.trim()).filter(Boolean)
