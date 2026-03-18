@@ -371,12 +371,18 @@ async function handlePendingBook(res, channel, msg, bookRecord, deps) {
     }
     
     const bookId = bookIdResult.rows[0].id;
-    
+
+    // phone_number stores E.164 only — null for non-phone channels (Line, Telegram, etc.).
+    // PHONE_CHANNELS is the allowlist; all others store null.
+    // Password reset is gated on WhatsApp activation; non-phone users silent-fail on reset.
+    const PHONE_CHANNELS = new Set(['twilio']);
+    const phoneToStore = PHONE_CHANNELS.has(msg.channel) ? msg.phone : null;
+
     await pool.query(`
         UPDATE core.book_registry 
         SET phone_number = $1, creator_phone = $1, status = 'active', activated_at = NOW(), updated_at = NOW()
         WHERE id = $2
-    `, [msg.phone, bookRecord.id]);
+    `, [phoneToStore, bookRecord.id]);
     
     await pool.query(`
         UPDATE ${tenantSchema}.books 
@@ -384,7 +390,7 @@ async function handlePendingBook(res, channel, msg, bookRecord, deps) {
         WHERE id = $1
     `, [bookId]);
     
-    logger.info({ fractalId: bookRecord.fractal_id, bookId, phone: msg.phone }, 'Activated book');
+    logger.info({ fractalId: bookRecord.fractal_id, bookId, phone: msg.phone, channel: msg.channel }, 'Activated book');
     
     await pool.query(`
         INSERT INTO core.book_engaged_phones (book_registry_id, phone, is_creator, first_engaged_at, last_engaged_at)
@@ -771,12 +777,18 @@ async function handlePendingBookAsync(channel, msg, bookRecord, deps) {
     }
     
     const bookId = bookIdResult.rows[0].id;
-    
+
+    // phone_number stores E.164 only — null for non-phone channels (Line, Telegram, etc.).
+    // PHONE_CHANNELS is the allowlist; all others store null.
+    // Password reset is gated on WhatsApp activation; non-phone users silent-fail on reset.
+    const PHONE_CHANNELS = new Set(['twilio']);
+    const phoneToStore = PHONE_CHANNELS.has(msg.channel) ? msg.phone : null;
+
     await pool.query(`
         UPDATE core.book_registry 
         SET phone_number = $1, creator_phone = $1, status = 'active', activated_at = NOW(), updated_at = NOW()
         WHERE id = $2
-    `, [msg.phone, bookRecord.id]);
+    `, [phoneToStore, bookRecord.id]);
     
     await pool.query(`
         UPDATE ${tenantSchema}.books 
@@ -784,7 +796,7 @@ async function handlePendingBookAsync(channel, msg, bookRecord, deps) {
         WHERE id = $1
     `, [bookId]);
     
-    logger.info({ fractalId: bookRecord.fractal_id, bookId, phone: msg.phone }, 'Async: Activated book');
+    logger.info({ fractalId: bookRecord.fractal_id, bookId, phone: msg.phone, channel: msg.channel }, 'Async: Activated book');
     
     await pool.query(`
         INSERT INTO core.book_engaged_phones (book_registry_id, phone, is_creator, first_engaged_at, last_engaged_at)
