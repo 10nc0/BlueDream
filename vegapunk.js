@@ -403,7 +403,10 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(bodyParser.json({ limit: '10mb' })); // Increased for image uploads
+app.use(bodyParser.json({
+    limit: '10mb',
+    verify: (req, res, buf) => { req.rawBody = buf.toString('utf8'); }
+})); // Increased for image uploads; verify captures rawBody for webhook signature validation
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' })); // For Twilio webhooks
 
 // REQUEST ID MIDDLEWARE: Add unique ID to every request for tracing
@@ -1451,7 +1454,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     const SATELLITE_META = {
         'auth': { emoji: '🔐', desc: 'lifecycle, sessions, JWT, audit trail', endpoints: 19 },
         'books': { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export', endpoints: 26 },
-        'inpipe': { emoji: '📥', desc: 'Twilio webhook, media relay', endpoints: 1 },
+        'inpipe': { emoji: '📥', desc: 'WhatsApp + LINE inpipe, channel-agnostic', endpoints: 2 },
         'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit, book history, psi-ema data, diagnostics', endpoints: 9 }
     };
     

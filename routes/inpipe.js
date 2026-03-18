@@ -1,6 +1,7 @@
 const axios = require('axios');
 const FormData = require('form-data');
 const { TwilioChannel } = require('../lib/channels/twilio');
+const { LineChannel } = require('../lib/channels/line');
 const { buildCapsule } = require('../utils/message-capsule');
 const { pinJson, pinBuffer } = require('../utils/ipfs-pinner');
 
@@ -36,10 +37,14 @@ function registerInpipeRoutes(app, deps) {
     
     const twilioChannel = new TwilioChannel({ logger });
     twilioChannel.initialize().catch(err => logger.error({ err }, 'TwilioChannel init failed'));
-    logger.info('Registering inpipe routes: POST /api/twilio/webhook');
-    
-    // Start queue processor
-    startQueueProcessor(twilioChannel, deps);
+
+    const lineChannel = new LineChannel({ logger });
+    lineChannel.initialize().catch(err => logger.error({ err }, 'LineChannel init failed'));
+
+    logger.info('Registering inpipe routes: POST /api/twilio/webhook, POST /api/line/webhook');
+
+    // Start channel-agnostic queue processor (dispatches via item.channel)
+    startQueueProcessor(deps);
     
     // Cleanup old idempotency entries every minute
     setInterval(() => cleanupIdempotencyCache(logger), 60 * 1000);
@@ -85,6 +90,7 @@ function registerInpipeRoutes(app, deps) {
             MESSAGE_QUEUE.push({
                 msg,
                 rawPayload,
+                channel: twilioChannel,
                 messageSid,
                 queuedAt: Date.now()
             });
@@ -103,13 +109,74 @@ function registerInpipeRoutes(app, deps) {
             res.status(500).send(response.body);
         }
     });
-    
+
+    // ─── LINE WEBHOOK ────────────────────────────────────────────
+    // Listen-only: receive → normalize → queue → Discord outpipe.
+    // No reply sent back to Line sender (sendReply is no-op).
+    // Skip route registration if LINE_CHANNEL_SECRET is absent.
+    if (lineChannel.isConfigured()) {
+        app.post('/api/line/webhook', async (req, res) => {
+            try {
+                const sigResult = lineChannel.validateSignature(req);
+                if (!sigResult.valid) {
+                    logger.warn({ error: sigResult.error }, 'Line signature validation failed');
+                    return res.status(sigResult.status).json({ error: sigResult.error });
+                }
+
+                const rawPayload = lineChannel.parsePayload(req);
+                if (!rawPayload) {
+                    logger.info('Line webhook: no message event — ACK and skip');
+                    return res.status(200).json({});
+                }
+
+                const msg = lineChannel.normalizeMessage(rawPayload);
+                if (!msg) {
+                    return res.status(200).json({});
+                }
+
+                logger.info({
+                    userId: msg.phone,
+                    body: msg.body?.substring(0, 50),
+                    joinCode: msg.joinCode,
+                    hasMedia: msg.hasMedia,
+                    queueSize: MESSAGE_QUEUE.length
+                }, 'Line webhook received — queuing');
+
+                if (MESSAGE_QUEUE.length >= MAX_QUEUE_SIZE) {
+                    logger.warn({ queueSize: MESSAGE_QUEUE.length }, 'Queue full — rejecting Line message');
+                    return res.status(503).json({ error: 'Server busy, please retry' });
+                }
+
+                MESSAGE_QUEUE.push({
+                    msg,
+                    rawPayload,
+                    channel: lineChannel,
+                    messageSid: msg.messageId,
+                    queuedAt: Date.now()
+                });
+
+                logger.info({ messageId: msg.messageId, queueSize: MESSAGE_QUEUE.length }, 'Line message queued');
+
+                // Immediate 200 ACK to Line (required within 1 second)
+                return res.status(200).json({});
+
+            } catch (error) {
+                logger.error({ error: error.message, stack: error.stack }, 'Line webhook error');
+                return res.status(200).json({});  // Always 200 to Line to prevent retries
+            }
+        });
+    } else {
+        logger.warn('LINE_CHANNEL_SECRET not set — /api/line/webhook not registered');
+    }
+
 }
 
-// Sequential queue processor at 1 msg/sec
-function startQueueProcessor(twilioChannel, deps) {
+// Sequential queue processor at 1 msg/sec — channel-agnostic
+// Dispatches via item.channel; adding a new inpipe channel requires
+// zero changes here — only a new channel driver + route registration.
+function startQueueProcessor(deps) {
     const { logger } = deps;
-    
+
     if (processorInterval) {
         clearInterval(processorInterval);
     }
@@ -124,7 +191,7 @@ function startQueueProcessor(twilioChannel, deps) {
         
         try {
             const startTime = Date.now();
-            await processQueuedMessage(item.msg, item.rawPayload, twilioChannel, deps);
+            await processQueuedMessage(item.msg, item.rawPayload, item.channel, deps);
             const duration = Date.now() - startTime;
             
             logger.info({ 

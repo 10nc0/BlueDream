@@ -53,7 +53,7 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Book Sharing**: Email-based book sharing with cross-tenant security and features like idempotent share/revoke and invite timeouts.
 - **Phi Breathe Orchestrator**: Unified background task scheduler for continuous logs, heartbeats, memory cleanup, media purging, and share invite expiration.
 - **Nyan API v1**: Internal JSON API for agent-to-agent communication, supporting multimodal input and structured JSON responses. Includes dedicated endpoints for Psi-EMA data and system diagnostics.
-- **Inpipe Architecture**: Multi-channel input with an abstract channel interface.
+- **Inpipe Architecture**: Multi-channel input with an abstract channel interface. Channels: `twilio` (WhatsApp, reply-capable) and `line` (LINE OA, listen-only). Adding future channels (Telegram, Signal) requires only a new `lib/channels/*.js` driver — zero changes to the satellite or queue processor. Channel identity (`msg.phone`) is the sender's platform ID (phone number for WhatsApp, `userId` for Line) — the routing SQL and Discord outpipe never see the messenger.
 - **Architectural Philosophy: Axiom of Choice**: Guides system design for self-governing and scalable components through dependency injection.
 
 **Progressive Web App (PWA)**
