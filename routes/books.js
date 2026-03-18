@@ -402,7 +402,18 @@ function registerBooksRoutes(app, deps) {
             };
             
             const finalContactInfo = contactInfo || (inputPlatform === 'whatsapp' ? 'join baby-ability' : null);
-            
+
+            if (!isGenesisAdmin) {
+                const unlinkCount = await client.query(
+                    `SELECT COUNT(*) FROM ${tenantSchema}.books WHERE status IN ('inactive', 'pending') AND archived = false`,
+                );
+                if (parseInt(unlinkCount.rows[0].count, 10) >= 3) {
+                    return res.status(400).json({
+                        error: 'Max 3 unconnected books allowed. Connect or delete an existing book first.'
+                    });
+                }
+            }
+
             logger.info({ name, inputPlatform, contactInfo }, 'Book creation request');
             
             const result = await client.query(
