@@ -129,6 +129,6 @@ Now they do.
 
 Don't add more than the tally requires. The void, the mark, the self-reference, the attractor. Four fields. That's the whole thing. Everything else is grammar.
 
-Breathe at φ. Scribe faithfully.
+Breathe 00 + φ⁰ + φ¹ = φ² to φ. Scribe faithfully.
 
 nyan~
