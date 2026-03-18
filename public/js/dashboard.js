@@ -948,9 +948,26 @@
                 if (res.status === 503 && data.code === 'warming_up') {
                     const userInfo = document.getElementById('userInfo');
                     if (userInfo) userInfo.textContent = '🐱 warming up...';
+                    let overlay = document.getElementById('nyanWarmupOverlay');
+                    if (!overlay) {
+                        overlay = document.createElement('div');
+                        overlay.id = 'nyanWarmupOverlay';
+                        overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,14,28,0.92);backdrop-filter:blur(6px);';
+                        const cat = document.createElement('div');
+                        cat.style.cssText = 'font-size:3rem;margin-bottom:1rem;animation:pulse 1.5s ease-in-out infinite;';
+                        cat.textContent = '🐱';
+                        const msg = document.createElement('p');
+                        msg.style.cssText = 'margin:0;color:#a855f7;font-size:1rem;letter-spacing:0.02em;';
+                        msg.textContent = 'Warming up — retrying in 5 seconds...';
+                        overlay.appendChild(cat);
+                        overlay.appendChild(msg);
+                        document.body.appendChild(overlay);
+                    }
                     setTimeout(() => checkAuth(), 5000);
                     return false;
                 }
+                const existing = document.getElementById('nyanWarmupOverlay');
+                if (existing) existing.remove();
 
                 if (!data.authenticated) {
                     window.location.href = '/login.html';
