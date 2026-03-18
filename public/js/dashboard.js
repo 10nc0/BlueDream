@@ -2619,7 +2619,7 @@
                                 </div>
                             </div>
                             
-                            <div id="nyanAuditGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; flex: 1; min-height: 0; overflow: hidden;">
+                            <div id="nyanAuditGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; flex: 1; min-height: 0; overflow: visible;">
                                 <!-- Left Pane: Input -->
                                 <div style="display: flex; flex-direction: column; min-height: 0;">
                                     <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.5rem; font-weight: 600;">📝 Your Query</div>
@@ -2629,13 +2629,6 @@
                                         📚 Searching all authorized books
                                     </div>
                                     
-                                    <div id="nyanAuditSuggestions" style="margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.4rem;">
-                                        <span style="font-size: 0.7rem; color: #64748b;">Try:</span>
-                                        <button class="audit-suggestion-btn" data-query="Show all photos with #Perbaikan" style="font-size: 0.7rem; padding: 0.25rem 0.5rem; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 4px; color: #94a3b8; cursor: pointer; transition: all 0.2s;">📷 Photos with #Perbaikan</button>
-                                        <button class="audit-suggestion-btn" data-query="What documents mention BA 99?" style="font-size: 0.7rem; padding: 0.25rem 0.5rem; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 4px; color: #94a3b8; cursor: pointer; transition: all 0.2s;">📄 Docs with BA 99</button>
-                                        <button class="audit-suggestion-btn" data-query="Summarize all invoices from last month" style="font-size: 0.7rem; padding: 0.25rem 0.5rem; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 4px; color: #94a3b8; cursor: pointer; transition: all 0.2s;">🧾 Last month invoices</button>
-                                        <button class="audit-suggestion-btn" data-query="Count all messages by tag" style="font-size: 0.7rem; padding: 0.25rem 0.5rem; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 4px; color: #94a3b8; cursor: pointer; transition: all 0.2s;">🏷️ Count by tag</button>
-                                    </div>
                                     
                                     <button id="nyanAuditCheckBtn" class="form-button" style="width: 100%; margin-top: 0.75rem; padding: 0.75rem; background: linear-gradient(135deg, #a855f7, #ec4899); border: none; border-radius: 8px; color: white; font-weight: 600; cursor: pointer; transition: opacity 0.2s; flex-shrink: 0;">
                                         🔮 Run AI Check
@@ -2661,6 +2654,7 @@
                                     #nyanAuditGrid {
                                         grid-template-columns: 1fr !important;
                                         gap: 1rem !important;
+                                        overflow: visible !important;
                                     }
                                     #nyanAuditModal .book-fan-content {
                                         max-width: 100% !important;
@@ -2668,6 +2662,7 @@
                                         height: 100vh !important;
                                         max-height: 100vh !important;
                                         border-radius: 0 !important;
+                                        overflow-y: auto !important;
                                     }
                                 }
                             </style>
@@ -2684,24 +2679,6 @@
                 document.getElementById('nyanAuditClose').addEventListener('click', closeNyanAuditModal);
                 document.getElementById('nyanAuditCheckBtn').addEventListener('click', runNyanAuditCheck);
                 
-                // Suggestion button handlers
-                document.querySelectorAll('.audit-suggestion-btn').forEach(btn => {
-                    btn.addEventListener('click', function() {
-                        const query = this.getAttribute('data-query');
-                        document.getElementById('nyanAuditMessage').value = query;
-                        document.getElementById('nyanAuditMessage').focus();
-                    });
-                    btn.addEventListener('mouseenter', function() {
-                        this.style.background = 'rgba(168, 85, 247, 0.2)';
-                        this.style.borderColor = 'rgba(168, 85, 247, 0.4)';
-                        this.style.color = '#a855f7';
-                    });
-                    btn.addEventListener('mouseleave', function() {
-                        this.style.background = 'rgba(148, 163, 184, 0.1)';
-                        this.style.borderColor = 'rgba(148, 163, 184, 0.2)';
-                        this.style.color = '#94a3b8';
-                    });
-                });
             }
             
             document.getElementById('nyanAuditMessage').value = '';
