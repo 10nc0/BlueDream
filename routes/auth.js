@@ -345,14 +345,14 @@ function registerAuthRoutes(app, deps) {
                         return res.status(429).json({ error: sybilCheck.reason });
                     }
                     
-                    const rateLimitEmail = await tenantManager.checkRateLimit('tenant_creation', 'email', email);
+                    const rateLimitEmail = await tenantManager.checkRateLimit('tenant_creation', email, 3, 3600000);
                     if (!rateLimitEmail.allowed) {
-                        return res.status(429).json({ error: rateLimitEmail.reason });
+                        return res.status(429).json({ error: 'Too many signup attempts from this email. Please try again later.' });
                     }
                     
-                    const rateLimitIP = await tenantManager.checkRateLimit('tenant_creation', 'ip', req.ip);
+                    const rateLimitIP = await tenantManager.checkRateLimit('tenant_creation', req.ip, 10, 3600000);
                     if (!rateLimitIP.allowed) {
-                        return res.status(429).json({ error: rateLimitIP.reason });
+                        return res.status(429).json({ error: 'Too many signup attempts from this IP. Please try again later.' });
                     }
                 } else {
                     logger.info('Genesis admin signup - skipping rate limits');
