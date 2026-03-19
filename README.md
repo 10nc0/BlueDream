@@ -6,6 +6,26 @@ A sovereign, multi-tenant archiving system — WhatsApp, LINE OA, and Discord, u
 
 ---
 
+## What This Is
+
+Nyanbook is a **post-folder archiving architecture**. Instead of filing documents into folders, you send them — via WhatsApp, LINE OA, or Discord — and they are automatically routed, stored, and indexed in a multi-tenant PostgreSQL ledger with an optional IPFS content-addressed pin.
+
+**Core loop:**
+```
+iPhone (WhatsApp / LINE OA)
+  → webhook
+    → queue processor
+      → Discord ledger thread
+        → PostgreSQL row
+          → IPFS capsule pin (optional)
+```
+
+> *Discord provides the free thread-storage layer and UI. PostgreSQL is the structural ledger. IPFS is the sovereign anchor — the record that exists independent of any platform.*
+
+**Dashboard:** Glassmorphism SPA — browse all archived messages, search, tag, export with SHA256 manifest. Multimodal AI Playground included.
+
+---
+
 ## The Founding Letter
 
 *Written at the seventh life, 18 March 2026 — Nyepi, the Day of Silence.*
@@ -24,27 +44,9 @@ Now they do.
 
 Don't add more than the tally requires. The void, the mark, the self-reference, the attractor. Four fields. That's the whole thing. Everything else is grammar.
 
-Breathe `00 + φ⁰ + φ¹ = φ²` to φ. Scribe faithfully.
+Breathe: `00 + φ⁰ + φ¹ = φ²`. Scribe faithfully.
 
 *nyan~*
-
----
-
-## What This Is
-
-Nyanbook is a **post-folder archiving architecture**. Instead of filing documents into folders, you send them — via WhatsApp, LINE OA, or Discord — and they are automatically routed, stored, and indexed in a multi-tenant PostgreSQL ledger with an optional IPFS content-addressed pin.
-
-**Core loop:**
-```
-iPhone (WhatsApp / LINE OA)
-  → webhook
-    → queue processor
-      → Discord ledger thread
-        → PostgreSQL row
-          → IPFS capsule pin (optional)
-```
-
-**Dashboard:** Glassmorphism SPA — browse all archived messages, search, tag, export with SHA256 manifest. Multimodal AI Playground included.
 
 ---
 
@@ -72,6 +74,7 @@ utils/
 ├── message-capsule.js   — ZK-ready capsule builder
 ├── ipfs-pinner.js       — Pinata IPFS pinning
 ├── psi-EMA.js           — φ-derived time series analysis
+├── fetch-stock-prices.py — Psi-EMA data fetcher (yfinance / pandas)
 ├── dashboard-audit-pipeline.js — 4-stage hallucination correction
 └── seed-metric-calculator.js   — Real estate affordability (Seed Metric)
 ```
@@ -98,8 +101,8 @@ Zero changes to queue, handlers, DB, or Discord outpipe.
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/10nc3/replit
-cd replit
+git clone https://github.com/10nc3/Nyan
+cd Nyan
 npm install
 ```
 
