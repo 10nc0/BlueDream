@@ -10,6 +10,8 @@ A sovereign, multi-tenant archiving system — WhatsApp, LINE OA, and Discord, u
 
 Nyanbook is a **post-folder archiving architecture**. Instead of filing documents into folders, you send them — via WhatsApp, LINE OA, or Discord — and they are automatically routed, stored, and indexed in a multi-tenant PostgreSQL ledger with an optional IPFS content-addressed pin.
 
+Nyanbook is a temporal accountability substrate. Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
+
 **Core loop:**
 ```
 iPhone (WhatsApp / LINE OA)
