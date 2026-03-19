@@ -561,6 +561,23 @@ body::before {
     visibility: hidden;
     display: none;
   }
+
+  /* Prevent Android Chrome auto-zoom on input focus (triggers when font-size < 16px) */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+
+  /* Prevent tap highlight and double-tap zoom on interactive elements */
+  button, a, input, textarea, select {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Lock horizontal overflow on mobile — prevents frame zoom on Android */
+  html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
 }
 
 /* Tablet (iPad): 768-1023px viewport */

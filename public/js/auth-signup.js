@@ -29,7 +29,7 @@ async function handleSignup(event) {
     submitBtn.textContent = 'Creating Account...';
 
     try {
-        const response = await fetch('/api/auth/register/public', {
+        const response = await fetch('/api/auth/signup', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

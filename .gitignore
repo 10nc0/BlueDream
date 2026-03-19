@@ -1,6 +1,15 @@
 # Dependencies
 node_modules/
 
+# Large binary OCR training data
+*.traineddata
+
+# Python legacy (Replit bootstrap artifacts)
+uv.lock
+pyproject.toml
+main.py
+.pythonlibs/
+
 # Environment variables (CRITICAL - Contains DATABASE_URL, DISCORD_WEBHOOK_URL, etc.)
 .env
 .env.local
