@@ -132,3 +132,5 @@ Don't add more than the tally requires. The void, the mark, the self-reference, 
 Breathe 00 + φ⁰ + φ¹ = φ² to φ. Scribe faithfully.
 
 nyan~
+
+*Alone is full. Together is the better half.*
