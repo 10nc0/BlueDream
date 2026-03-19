@@ -6,22 +6,56 @@ const { buildCapsule } = require('../utils/message-capsule');
 const { pinJson, pinBuffer } = require('../utils/ipfs-pinner');
 
 // ═══════════════════════════════════════════════════════════════
-// BURST MITIGATION: In-memory message queue with rate-aligned processing
+// BURST MITIGATION: Two-tier priority queue with adaptive async loop
 // ═══════════════════════════════════════════════════════════════
+// Architecture:
+//   MEDIA_QUEUE  — high priority: LINE/Twilio media (time-sensitive, expires)
+//   TEXT_QUEUE   — normal: text-only messages
+//   Drain order: media first, then text. Both are FIFO within their tier.
+//
+// Processing loop (not interval):
+//   Continuous async loop with adaptive gap between messages.
+//   Normal load: 500ms gap (safe: ~2/sec vs Discord's 5/5sec per route).
+//   Burst mode (queue > 5): 200ms gap (~5/sec globally across routes).
+//   No dead-wait: loop polls at 100ms when idle, starts immediately on arrival.
+//
 // Rate limits respected:
-// - Twilio webhook: 60 req/min (our limiter in vegapunk.js)
-// - Discord API: ~5 messages/5 sec per channel
-// Processing rate: 1 msg/sec (safe for both limits)
+//   Discord API: 5 req/5sec per route — we write to different threads so
+//                burst mode (200ms) stays under the global 50 req/sec cap.
+//   LINE Content API: 2000 req/min — 5/sec is 300/min, well within limit.
+//   Twilio webhook: 60 req/min inbound — handled by vegapunk.js rate limiter.
 // ═══════════════════════════════════════════════════════════════
 
-const MESSAGE_QUEUE = [];
+const MEDIA_QUEUE = []; // Priority tier: time-sensitive media messages
+const TEXT_QUEUE  = []; // Normal tier: text-only messages
 const PROCESSED_SIDS = new Map(); // MessageSid -> timestamp (idempotency guard)
-const PROCESSING_INTERVAL_MS = 1000; // 1 msg/sec (aligns with 60/min webhook + Discord limits)
-const IDEMPOTENCY_TTL_MS = 5 * 60 * 1000; // 5 minutes - clear old SIDs
-const MAX_QUEUE_SIZE = 100; // Prevent memory exhaustion
+const IDEMPOTENCY_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_QUEUE_SIZE = 200; // Per tier — 400 total burst capacity
+const NORMAL_GAP_MS  = 500;  // Gap between messages at steady state
+const BURST_GAP_MS   = 200;  // Gap in burst mode (queue depth > 5)
+const BURST_THRESHOLD = 5;   // Items across both queues triggers burst mode
 
-let isProcessing = false;
-let processorInterval = null;
+// Legacy alias so log lines referencing MESSAGE_QUEUE.length still compile
+// (actual length is totalQueueDepth())
+const MESSAGE_QUEUE = { get length() { return totalQueueDepth(); } };
+
+function totalQueueDepth() { return MEDIA_QUEUE.length + TEXT_QUEUE.length; }
+
+function enqueueItem(item) {
+    if (item.msg.hasMedia) {
+        MEDIA_QUEUE.push(item);
+    } else {
+        TEXT_QUEUE.push(item);
+    }
+}
+
+function dequeueItem() {
+    if (MEDIA_QUEUE.length > 0) return MEDIA_QUEUE.shift();
+    if (TEXT_QUEUE.length > 0)  return TEXT_QUEUE.shift();
+    return null;
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function registerInpipeRoutes(app, deps) {
     const { pool, bots, helpers, constants, logger } = deps;
@@ -76,8 +110,8 @@ function registerInpipeRoutes(app, deps) {
             }
             
             // QUEUE SIZE GUARD: Prevent memory exhaustion
-            if (MESSAGE_QUEUE.length >= MAX_QUEUE_SIZE) {
-                logger.warn({ queueSize: MESSAGE_QUEUE.length }, 'Queue full - rejecting message');
+            if (totalQueueDepth() >= MAX_QUEUE_SIZE) {
+                logger.warn({ queueSize: totalQueueDepth() }, 'Queue full - rejecting message');
                 return res.status(503).send('Server busy, please retry');
             }
             
@@ -86,8 +120,8 @@ function registerInpipeRoutes(app, deps) {
                 PROCESSED_SIDS.set(messageSid, Date.now());
             }
             
-            // QUEUE MESSAGE for async processing
-            MESSAGE_QUEUE.push({
+            // QUEUE MESSAGE for async processing (media → priority tier)
+            enqueueItem({
                 msg,
                 rawPayload,
                 channel: twilioChannel,
@@ -97,7 +131,8 @@ function registerInpipeRoutes(app, deps) {
             
             logger.info({ 
                 messageSid, 
-                queueSize: MESSAGE_QUEUE.length 
+                mediaQueue: MEDIA_QUEUE.length,
+                textQueue: TEXT_QUEUE.length
             }, 'Message queued for processing');
             
             // IMMEDIATE ACK to Twilio (prevents timeout retries)
@@ -142,12 +177,13 @@ function registerInpipeRoutes(app, deps) {
                     queueSize: MESSAGE_QUEUE.length
                 }, 'Line webhook received — queuing');
 
-                if (MESSAGE_QUEUE.length >= MAX_QUEUE_SIZE) {
-                    logger.warn({ queueSize: MESSAGE_QUEUE.length }, 'Queue full — rejecting Line message');
+                if (totalQueueDepth() >= MAX_QUEUE_SIZE) {
+                    logger.warn({ queueSize: totalQueueDepth() }, 'Queue full — rejecting Line message');
                     return res.status(503).json({ error: 'Server busy, please retry' });
                 }
 
-                MESSAGE_QUEUE.push({
+                // Media messages → priority tier (LINE content expires quickly)
+                enqueueItem({
                     msg,
                     rawPayload,
                     channel: lineChannel,
@@ -155,7 +191,12 @@ function registerInpipeRoutes(app, deps) {
                     queuedAt: Date.now()
                 });
 
-                logger.info({ messageId: msg.messageId, queueSize: MESSAGE_QUEUE.length }, 'Line message queued');
+                logger.info({
+                    messageId: msg.messageId,
+                    hasMedia: msg.hasMedia,
+                    mediaQueue: MEDIA_QUEUE.length,
+                    textQueue: TEXT_QUEUE.length
+                }, 'Line message queued');
 
                 // Immediate 200 ACK to Line (required within 1 second)
                 return res.status(200).json({});
@@ -171,47 +212,59 @@ function registerInpipeRoutes(app, deps) {
 
 }
 
-// Sequential queue processor at 1 msg/sec — channel-agnostic
-// Dispatches via item.channel; adding a new inpipe channel requires
-// zero changes here — only a new channel driver + route registration.
+// Adaptive async queue processor — channel-agnostic
+// Uses a continuous loop (not setInterval) so there is no 1-tick dead-wait
+// between messages; instead an explicit gap is inserted after each message.
+// Gap adapts to queue depth: burst mode shortens it when load is high.
+// Dispatches via item.channel — adding a channel requires zero changes here.
 function startQueueProcessor(deps) {
     const { logger } = deps;
 
-    if (processorInterval) {
-        clearInterval(processorInterval);
-    }
-    
-    processorInterval = setInterval(async () => {
-        if (isProcessing || MESSAGE_QUEUE.length === 0) {
-            return;
-        }
-        
-        isProcessing = true;
-        const item = MESSAGE_QUEUE.shift();
-        
-        try {
+    logger.info({
+        normalGapMs: NORMAL_GAP_MS,
+        burstGapMs: BURST_GAP_MS,
+        burstThreshold: BURST_THRESHOLD
+    }, 'Queue processor started (adaptive async loop)');
+
+    (async function loop() {
+        while (true) {
+            const item = dequeueItem();
+
+            if (!item) {
+                await sleep(100); // idle poll — cheap
+                continue;
+            }
+
             const startTime = Date.now();
-            await processQueuedMessage(item.msg, item.rawPayload, item.channel, deps);
-            const duration = Date.now() - startTime;
-            
-            logger.info({ 
-                messageSid: item.messageSid,
-                duration,
-                queueRemaining: MESSAGE_QUEUE.length
-            }, 'Queued message processed');
-            
-        } catch (error) {
-            logger.error({ 
-                error: error.message, 
-                messageSid: item.messageSid,
-                queueRemaining: MESSAGE_QUEUE.length
-            }, 'Failed to process queued message');
-        } finally {
-            isProcessing = false;
+            const tier = item.msg.hasMedia ? 'media' : 'text';
+
+            try {
+                await processQueuedMessage(item.msg, item.rawPayload, item.channel, deps);
+                logger.info({
+                    messageSid: item.messageSid,
+                    tier,
+                    duration: Date.now() - startTime,
+                    mediaQueue: MEDIA_QUEUE.length,
+                    textQueue: TEXT_QUEUE.length
+                }, 'Queued message processed');
+            } catch (error) {
+                logger.error({
+                    error: error.message,
+                    messageSid: item.messageSid,
+                    tier,
+                    mediaQueue: MEDIA_QUEUE.length,
+                    textQueue: TEXT_QUEUE.length
+                }, 'Failed to process queued message');
+            }
+
+            // Adaptive gap: shorter when backlog is deep
+            const depth = totalQueueDepth();
+            const gap = depth >= BURST_THRESHOLD ? BURST_GAP_MS : NORMAL_GAP_MS;
+            const elapsed = Date.now() - startTime;
+            const wait = Math.max(0, gap - elapsed);
+            if (wait > 0) await sleep(wait);
         }
-    }, PROCESSING_INTERVAL_MS);
-    
-    logger.info({ intervalMs: PROCESSING_INTERVAL_MS }, 'Queue processor started');
+    })();
 }
 
 // Process a single queued message
@@ -660,23 +713,37 @@ async function sendToDiscordThread(threadId, payload, media, deps) {
         }
     };
 
-    try {
-        return await doSend();
-    } catch (err) {
-        const isArchived = err?.response?.status === 403 && err?.response?.data?.code === 50083;
-        if (isArchived) {
-            if (logger) logger.info({ threadId }, '🔓 Thread archived — unarchiving and retrying');
-            else console.log(`🔓 Thread ${threadId} archived — unarchiving and retrying`);
-            await axios.patch(
-                `https://discord.com/api/v10/channels/${threadId}`,
-                { archived: false, auto_archive_duration: 10080 },
-                { headers: { 'Authorization': `Bot ${hermesToken}`, 'Content-Type': 'application/json' } }
-            );
+    const trySend = async (attempt) => {
+        try {
             return await doSend();
-        } else {
+        } catch (err) {
+            const status = err?.response?.status;
+
+            // Discord rate limit — honor retry_after and retry once
+            if (status === 429 && attempt < 2) {
+                const retryAfterMs = Math.ceil((err.response.data?.retry_after || 1) * 1000);
+                if (logger) logger.warn({ threadId, retryAfterMs, attempt }, '⏳ Discord 429 — backing off');
+                await sleep(retryAfterMs);
+                return trySend(attempt + 1);
+            }
+
+            // Thread archived — unarchive and retry once
+            const isArchived = status === 403 && err?.response?.data?.code === 50083;
+            if (isArchived && attempt < 2) {
+                if (logger) logger.info({ threadId }, '🔓 Thread archived — unarchiving and retrying');
+                await axios.patch(
+                    `https://discord.com/api/v10/channels/${threadId}`,
+                    { archived: false, auto_archive_duration: 10080 },
+                    { headers: { 'Authorization': `Bot ${hermesToken}`, 'Content-Type': 'application/json' } }
+                );
+                return trySend(attempt + 1);
+            }
+
             throw err;
         }
-    }
+    };
+
+    return trySend(1);
 }
 
 async function sendToWebhook(webhookUrl, payload, media) {
