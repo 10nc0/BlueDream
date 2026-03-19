@@ -1782,7 +1782,8 @@
                     msg.sender_name || '',
                     msg.message_content || '',
                     msg.sender_contact || '',
-                    extractEmbedSearchText(msg.embeds)
+                    extractEmbedSearchText(msg.embeds),
+                    (msg.extracted_tags || []).map(t => '#' + t).join(' ')
                 ].join(' ').toLowerCase();
                 
                 // Match search text
@@ -1866,7 +1867,8 @@
                     msg.sender_name || '',
                     msg.message_content || '',
                     msg.sender_contact || '',
-                    extractEmbedSearchText(msg.embeds)
+                    extractEmbedSearchText(msg.embeds),
+                    (msg.extracted_tags || []).map(t => '#' + t).join(' ')
                 ].join(' ').toLowerCase();
                 
                 return `
@@ -5195,7 +5197,8 @@
                         msg.sender_name || '',
                         msg.message_content || '',
                         msg.sender_contact || '',
-                        extractEmbedSearchText(msg.embeds || [])
+                        extractEmbedSearchText(msg.embeds || []),
+                        (msg.extracted_tags || []).map(t => '#' + t).join(' ')
                     ].join(' ').toLowerCase();
                     
                     const html = `
