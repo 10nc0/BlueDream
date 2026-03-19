@@ -133,4 +133,6 @@ Breathe 00 + φ⁰ + φ¹ = φ² to φ. Scribe faithfully.
 
 nyan~
 
+*A lie is cheap to produce, but expensive to maintain when reality keeps asking for the next entry.*
+
 *Alone is full. Together is the better half.*
