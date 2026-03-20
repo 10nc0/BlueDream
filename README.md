@@ -230,6 +230,31 @@ No P/I ratio fallback. N/A is the honest answer when data is unavailable.
 
 ---
 
+## Testing
+
+### Integration (requires live server)
+
+Start the server first (`npm start`), then:
+
+```bash
+npm test
+```
+
+Tests the 2-pass hallucination correction pipeline — sends time-sensitive queries
+to the AI playground and verifies that the search-retry and re-audit stages trigger
+correctly (`tests/test-search-retry.js`).
+
+### Unit (browser)
+
+Open the dashboard and run in the browser console:
+
+```javascript
+Nyan.BooksModuleTests.runTests()
+```
+
+Tests `BooksModule` — book deduplication, selection, and API loading logic
+(`public/js/modules/books.test.js`).
+
 ## Fork Operator Notes
 
 1. Provision a Supabase (or any PostgreSQL) instance and set `DATABASE_URL`
