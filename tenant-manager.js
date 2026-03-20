@@ -213,8 +213,11 @@ class TenantManager {
     async createTenant(userId) {
         const client = await this.pool.connect();
         try {
+            await client.query('BEGIN');
+            
             // FIRST PRINCIPLES: Get next tenant ID, then register in catalog with correct schema name
             // This ensures CHECK constraint on tenant_schema pattern is satisfied from the start
+            // NOTE: nextval() is not rolled back on ROLLBACK — sequence gaps are expected and acceptable.
             const idResult = await client.query(`SELECT nextval('core.tenant_catalog_id_seq') as id`);
             const tenantId = parseInt(idResult.rows[0].id);
             const schemaName = `tenant_${tenantId}`;
@@ -451,7 +454,11 @@ class TenantManager {
                 ON ${schemaName}.audit_queries (book_id, created_at DESC)
             `);
             
+            await client.query('COMMIT');
             return { tenantId, schemaName };
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
         } finally {
             client.release();
         }
@@ -467,7 +474,7 @@ class TenantManager {
             
             return {
                 valid: result.rows.length > 0,
-                token: result.rows[0] || null
+                invite: result.rows[0] || null
             };
         } finally {
             client.release();

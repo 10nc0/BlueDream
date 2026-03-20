@@ -80,7 +80,8 @@ function createAuthMiddleware(pool, authService, logger) {
             const userRole = result.rows[0].role;
             
             if (userRole === 'dev') {
-                if (process.env.NODE_ENV === 'production') {
+                const isProduction = process.env.REPLIT_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
+                if (isProduction) {
                     logger.warn({ userId: req.userId }, 'Dev role bypass blocked in production');
                     return res.status(403).json({ error: 'Dev role bypass not allowed in production' });
                 }
