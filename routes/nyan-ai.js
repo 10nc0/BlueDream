@@ -1286,18 +1286,17 @@ Analyze the data and answer the user's question. Count carefully when asked abou
     // ========================================================================
     // Nyan API v1 — Internal JSON endpoint for agent-to-agent communication
     // Usage: POST /api/v1/nyan { message, mode? }
-    // Auth: Bearer token (multi-key: NYAN_API_TOKEN, NYAN_API_TOKEN_DEV, NYAN_API_TOKEN_3)
+    // Auth: Bearer token (multi-key: AI_API_TOKEN, AI_API_TOKEN_DEV)
     // ========================================================================
-    const NYAN_API_KEYS = [
-        { env: 'NYAN_API_TOKEN', label: 'prod' },
-        { env: 'NYAN_API_TOKEN_DEV', label: 'dev' },
-        { env: 'NYAN_API_TOKEN_3', label: 'key3' }
+    const AI_API_KEYS = [
+        { env: 'AI_API_TOKEN', label: 'prod' },
+        { env: 'AI_API_TOKEN_DEV', label: 'dev' }
     ].filter(k => process.env[k.env]).map(k => ({
         hash: crypto.createHash('sha256').update(process.env[k.env]).digest(),
         label: k.label
     }));
-    if (NYAN_API_KEYS.length > 0) {
-        console.log(`🔌 Nyan API v1: ${NYAN_API_KEYS.length} key(s) loaded [${NYAN_API_KEYS.map(k => k.label).join(', ')}]`);
+    if (AI_API_KEYS.length > 0) {
+        console.log(`🔌 Nyan API v1: ${AI_API_KEYS.length} key(s) loaded [${AI_API_KEYS.map(k => k.label).join(', ')}]`);
     }
 
     const nyanApiLimiter = rateLimit({
@@ -1312,8 +1311,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
     const nyanApiBodyParser = express.json({ limit: '50mb' });
 
     app.post('/api/v1/nyan', nyanApiBodyParser, nyanApiLimiter, async (req, res) => {
-        if (NYAN_API_KEYS.length === 0) {
-            return res.status(503).json({ error: 'Nyan API not configured. Set NYAN_API_TOKEN secret.' });
+        if (AI_API_KEYS.length === 0) {
+            return res.status(503).json({ error: 'AI API not configured. Set AI_API_TOKEN secret.' });
         }
 
         const authHeader = req.headers.authorization;
@@ -1324,7 +1323,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         const providedHash = crypto.createHash('sha256').update(providedToken).digest();
 
         let matchedLabel = null;
-        for (const key of NYAN_API_KEYS) {
+        for (const key of AI_API_KEYS) {
             if (crypto.timingSafeEqual(key.hash, providedHash)) {
                 matchedLabel = matchedLabel || key.label;
             }
@@ -1639,8 +1638,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
     });
 
     app.post('/api/v1/nyan/psi-ema', express.json(), psiEmaLimiter, async (req, res) => {
-        if (NYAN_API_KEYS.length === 0) {
-            return res.status(503).json({ error: 'Nyan API not configured. Set NYAN_API_TOKEN secret.' });
+        if (AI_API_KEYS.length === 0) {
+            return res.status(503).json({ error: 'AI API not configured. Set AI_API_TOKEN secret.' });
         }
 
         const authHeader = req.headers.authorization;
@@ -1651,7 +1650,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         const providedHash = crypto.createHash('sha256').update(providedToken).digest();
 
         let matchedLabel = null;
-        for (const key of NYAN_API_KEYS) {
+        for (const key of AI_API_KEYS) {
             if (crypto.timingSafeEqual(key.hash, providedHash)) {
                 matchedLabel = matchedLabel || key.label;
             }
@@ -1799,8 +1798,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
     const horusBot = bots?.horus;
 
     app.get('/api/v1/nyan/diagnostics', async (req, res) => {
-        if (NYAN_API_KEYS.length === 0) {
-            return res.status(503).json({ error: 'Nyan API not configured. Set NYAN_API_TOKEN secret.' });
+        if (AI_API_KEYS.length === 0) {
+            return res.status(503).json({ error: 'AI API not configured. Set AI_API_TOKEN secret.' });
         }
 
         const authHeader = req.headers.authorization;
@@ -1811,7 +1810,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         const providedHash = crypto.createHash('sha256').update(providedToken).digest();
 
         let matchedLabel = null;
-        for (const key of NYAN_API_KEYS) {
+        for (const key of AI_API_KEYS) {
             if (crypto.timingSafeEqual(key.hash, providedHash)) {
                 matchedLabel = matchedLabel || key.label;
             }
@@ -1835,8 +1834,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 external: formatBytes(process.memoryUsage().external)
             },
             apiKeys: {
-                loaded: NYAN_API_KEYS.length,
-                labels: NYAN_API_KEYS.map(k => k.label)
+                loaded: AI_API_KEYS.length,
+                labels: AI_API_KEYS.map(k => k.label)
             },
             database: {
                 healthy: false,
