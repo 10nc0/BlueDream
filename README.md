@@ -93,13 +93,17 @@ Zero changes to queue, handlers, DB, or Discord outpipe.
 
 ### Prerequisites
 
-- Node.js 18+
-- PostgreSQL (Supabase recommended — free tier works)
-- Discord server with 4 bot tokens and a webhook
-- Twilio account (WhatsApp Business API) — optional
-- LINE Developer account (LINE OA) — optional
-- Groq API key (AI features)
+  **Minimum to boot the server and AI playground:**
+  - Node.js 18+
+  - PostgreSQL (Supabase recommended — free tier works)
+  - Groq API key — for AI playground (`PLAYGROUND_GROQ_TOKEN`)
 
+  **Add when you need inpipe routing:**
+  - Discord server with 4 bot tokens + webhook — the message outpipe
+  - Twilio account — WhatsApp inpipe (optional)
+  - LINE Developer account — LINE OA inpipe (optional)
+
+  Everything else (Pinata, Resend, Brave Search) degrades gracefully if absent.
 ### 1. Clone & Install
 
 ```bash
@@ -261,7 +265,7 @@ Tests `BooksModule` — book deduplication, selection, and API loading logic
 2. Create your own Discord bots (the 4-bot separation is architectural, not cosmetic)
 3. Provision a Pinata account for IPFS — or skip it (graceful degradation)
 4. The `SESSION_SECRET` in `.env.example` is a placeholder — **change it before production**
-5. `NYAN_API_TOKEN_3` and `NYAN_API_TOKEN_DEV` gate the internal Nyan API v1 — generate your own
+5. `AI_API_TOKEN` and `AI_API_TOKEN_DEV` gate the internal Nyan API v1 — generate your own random strings (min 32 chars)
 
 ---
 
