@@ -3,6 +3,14 @@
 // his consciousness into satellite bodies while maintaining a pure core.
 // This kernel orchestrates 4 modular routes (satellites) via dependency injection.
 
+// EARLY GUARD — fail loudly before any module loads
+// Without DATABASE_URL the pool crashes silently and CSS never serves (ghost UI)
+if (!process.env.DATABASE_URL) {
+    console.error('❌ DATABASE_URL is not set. Add it to Replit Secrets before starting.');
+    console.error('   Get a free PostgreSQL URL from https://supabase.com');
+    process.exit(1);
+}
+
 const { execSync } = require('child_process');
 const path = require('path');
 const crypto = require('crypto');
@@ -214,6 +222,15 @@ function rerror(...args) {
 }
 
 const app = express();
+
+// EARLY STATIC — serve CSS/JS/icons before any auth or DB middleware
+// These assets have zero DB dependency. A DB crash must never ghost the UI.
+// HTML files are deliberately excluded — they remain behind auth routes below.
+['/css', '/js', '/icons', '/vendor', '/lib'].forEach(p =>
+    app.use(p, express.static(`public${p}`))
+);
+app.use('/manifest.json', express.static('public/manifest.json'));
+app.use('/sw.js', express.static('public/sw.js'));
 
 // Make pool available to middleware
 app.locals.pool = pool;
