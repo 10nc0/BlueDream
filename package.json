@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "vegapunk.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node tests/test-search-retry.js",
+    "test:audit": "node tests/test-search-retry.js"
   },
   "keywords": [],
   "author": "",
