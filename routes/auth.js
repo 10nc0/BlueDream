@@ -80,10 +80,6 @@ function createAuthMiddleware(pool, authService, logger) {
             const userRole = result.rows[0].role;
             
             if (userRole === 'dev') {
-                // Dev role = tribal leader / comptroller: cross-tenant god-eye view in all environments.
-                // Replit deployments do NOT set NODE_ENV=production, so this guard only fires if
-                // the operator explicitly sets NODE_ENV=production on a non-Replit host.
-                // Sovereignty model: fork operators publish their own instance and become their own dev.
                 if (process.env.NODE_ENV === 'production') {
                     logger.warn({ userId: req.userId }, 'Dev role bypass blocked in production');
                     return res.status(403).json({ error: 'Dev role bypass not allowed in production' });
