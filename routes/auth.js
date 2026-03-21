@@ -494,15 +494,20 @@ function registerAuthRoutes(app, deps) {
             
             const { tenant_schema } = mappingResult.rows[0];
             
+            // Genesis mark: only the creator_phone of the FIRST activated book for this
+            // email can trigger a reset. Later books activated by other phones don't matter.
+            // 1 phone → many emails ✓ | 1 email → 1 initiating phone ✓
             const phoneCheck = await pool.query(`
-                SELECT ep.phone, br.tenant_email
-                FROM core.book_engaged_phones ep
-                JOIN core.book_registry br ON br.id = ep.book_registry_id
-                WHERE LOWER(br.tenant_email) = $1 AND ep.is_creator = TRUE AND ep.phone = $2
+                SELECT creator_phone
+                FROM core.book_registry
+                WHERE LOWER(tenant_email) = $1
+                  AND status = 'active'
+                  AND creator_phone IS NOT NULL
+                ORDER BY activated_at ASC
                 LIMIT 1
-            `, [normalizedEmail, standardizedPhone]);
-            
-            if (phoneCheck.rows.length === 0) {
+            `, [normalizedEmail]);
+
+            if (phoneCheck.rows.length === 0 || phoneCheck.rows[0].creator_phone !== standardizedPhone) {
                 logger.info({ email, phone: standardizedPhone }, 'Password reset: phone mismatch');
                 return res.json({ success: true, message: 'If your details match, you will receive a reset link via email.' });
             }

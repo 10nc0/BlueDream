@@ -2,6 +2,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const { TwilioChannel } = require('../lib/channels/twilio');
 const { LineChannel } = require('../lib/channels/line');
+const { EmailChannel } = require('../lib/channels/email');
 const { buildCapsule } = require('../utils/message-capsule');
 const { pinJson, pinBuffer } = require('../utils/ipfs-pinner');
 
@@ -75,7 +76,10 @@ function registerInpipeRoutes(app, deps) {
     const lineChannel = new LineChannel({ logger });
     lineChannel.initialize().catch(err => logger.error({ err }, 'LineChannel init failed'));
 
-    logger.info('Registering inpipe routes: POST /api/twilio/webhook, POST /api/line/webhook');
+    const emailChannel = new EmailChannel({ logger });
+    emailChannel.initialize().catch(err => logger.error({ err }, 'EmailChannel init failed'));
+
+    logger.info('Registering inpipe routes: POST /api/twilio/webhook, POST /api/line/webhook, POST /api/email/inpipe');
 
     // Start channel-agnostic queue processor (dispatches via item.channel)
     startQueueProcessor(deps);
@@ -214,6 +218,70 @@ function registerInpipeRoutes(app, deps) {
         });
     } else {
         logger.warn('LINE_CHANNEL_SECRET not set — /api/line/webhook not registered');
+    }
+
+    // ─── EMAIL INPIPE ────────────────────────────────────────────
+    // bookcode@nyanbook.io → parse local part → route to Discord book.
+    // Routing is stateless: TO address always determines the book.
+    // MX record + provider webhook must be configured externally.
+    // Secret validation: X-Inpipe-Secret header must match EMAIL_INPIPE_SECRET.
+    if (emailChannel.isConfigured()) {
+        app.post('/api/email/inpipe', async (req, res) => {
+            try {
+                const secretResult = emailChannel.validateSecret(req);
+                if (!secretResult.valid) {
+                    logger.warn({ error: secretResult.error }, 'Email inpipe: auth failed');
+                    return res.status(secretResult.status).json({ error: secretResult.error });
+                }
+
+                const rawPayload = emailChannel.parsePayload(req);
+
+                if (!rawPayload.toLocal) {
+                    logger.warn('Email inpipe: could not parse TO local part');
+                    return res.status(200).json({});
+                }
+
+                const msg = emailChannel.normalizeMessage(rawPayload);
+
+                if (!msg.body && !msg.hasMedia) {
+                    logger.info({ from: msg.phone }, 'Email inpipe: empty message — skip');
+                    return res.status(200).json({});
+                }
+
+                logger.info({
+                    from: msg.phone,
+                    joinCode: msg.joinCode,
+                    bodyPreview: msg.body?.substring(0, 60),
+                    queueSize: MESSAGE_QUEUE.length
+                }, 'Email inpipe received — queuing');
+
+                if (totalQueueDepth() >= MAX_QUEUE_SIZE) {
+                    logger.warn({ queueSize: totalQueueDepth() }, 'Queue full — rejecting email message');
+                    return res.status(503).json({ error: 'Server busy, please retry' });
+                }
+
+                enqueueItem({
+                    msg,
+                    rawPayload,
+                    channel: emailChannel,
+                    messageSid: msg.messageId,
+                    queuedAt: Date.now()
+                });
+
+                logger.info({
+                    messageId: msg.messageId,
+                    textQueue: TEXT_QUEUE.length
+                }, 'Email message queued');
+
+                return res.status(200).json({});
+
+            } catch (error) {
+                logger.error({ error: error.message, stack: error.stack }, 'Email inpipe error');
+                return res.status(200).json({});
+            }
+        });
+    } else {
+        logger.warn('EMAIL_INPIPE_SECRET not set — /api/email/inpipe not registered');
     }
 
 }
