@@ -85,8 +85,14 @@ function registerInpipeRoutes(app, deps) {
     
     app.post('/api/twilio/webhook', async (req, res) => {
         try {
+            const sigResult = twilioChannel.validateSignature(req);
+            if (!sigResult.valid) {
+                logger.warn({ error: sigResult.error }, 'Twilio signature validation failed');
+                return res.status(sigResult.status).send('Forbidden');
+            }
+
             const rawPayload = twilioChannel.parsePayload(req);
-            const messageSid = rawPayload.MessageSid || rawPayload.SmsSid;
+            const messageSid = rawPayload.messageId;
             
             // IDEMPOTENCY GUARD: Prevent duplicate processing from Twilio retries
             if (messageSid && PROCESSED_SIDS.has(messageSid)) {
