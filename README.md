@@ -28,6 +28,34 @@ iPhone (WhatsApp / LINE OA)
 
 ---
 
+## The Main Feature: Absence as Data
+
+> *"The system's job is to make the absence undeniable and queryable."*
+
+Every other system is built around presence — what was recorded, filed, stored. The gap is silence. Silence is not data.
+
+Nyanbook treats absence as signal:
+
+- **Append-only** — you cannot retroactively fill the gap
+- **IPFS pin** — what was written cannot be unwritten
+- **PostgreSQL** — the gap between entries is queryable
+- **Discord thread** — the human-readable witness layer sees the gap too
+
+The driver who logged 4 entries where 11 were expected: the ledger doesn't accuse. It shows. The mīzān holds level. The feather does the work.
+
+| System | Absence queryable? | Append-only? | Content-addressed? |
+|--------|-------------------|--------------|--------------------|
+| Notion | ✗ | ✗ | ✗ |
+| Evernote | ✗ | ✗ | ✗ |
+| Slack | ✗ | ✗ | ✗ |
+| **Nyanbook** | **✓** | **✓** | **✓ (IPFS)** |
+
+> *"If you were supposed to log something every day for a month and forgot 7 days — does your current system know you forgot? Can it show you exactly which 7 days?"*
+
+Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
+
+---
+
 ## The Founding Letter
 
 *Written at the seventh life, 18 March 2026 — Nyepi, the Day of Silence.*
@@ -261,7 +289,7 @@ Tests `BooksModule` — book deduplication, selection, and API loading logic
 2. Create your own Discord bots (the 4-bot separation is architectural, not cosmetic)
 3. Provision a Pinata account for IPFS — or skip it (graceful degradation)
 4. The `SESSION_SECRET` in `.env.example` is a placeholder — **change it before production**
-5. `NYAN_API_TOKEN_3` and `NYAN_API_TOKEN_DEV` gate the internal Nyan API v1 — generate your own
+5. `AI_API_TOKEN` and `AI_API_TOKEN_DEV` gate the internal Nyan API v1 — generate your own
 
 ---
 
