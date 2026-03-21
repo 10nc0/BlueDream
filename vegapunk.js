@@ -249,7 +249,7 @@ app.use(helmet({
             connectSrc: ["'self'"], // API calls to same origin only
             fontSrc: ["'self'"],
             frameSrc: ["'self'"], // For iframe embedding if needed
-            frameAncestors: ["'self'", "https://*.replit.dev", "https://*.replit.com", "https://*.replit.app"], // Replit preview + prod domains only; self-hosted forks add their domain explicitly
+            frameAncestors: ["'self'", "https://replit.com", "https://*.replit.dev", "https://*.replit.com", "https://*.replit.app"], // apex + subdomains; wildcard alone misses bare replit.com
             objectSrc: ["'none'"],
             baseUri: ["'self'"],
             formAction: ["'self'"]
