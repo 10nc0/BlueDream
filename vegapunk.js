@@ -249,12 +249,14 @@ app.use(helmet({
             connectSrc: ["'self'"], // API calls to same origin only
             fontSrc: ["'self'"],
             frameSrc: ["'self'"], // For iframe embedding if needed
+            frameAncestors: ["'self'", "https:"], // Allow embedding from any HTTPS origin (canvas, self-hosted)
             objectSrc: ["'none'"],
             baseUri: ["'self'"],
             formAction: ["'self'"]
         }
     },
-    crossOriginEmbedderPolicy: false // Required for iframe embedding
+    crossOriginEmbedderPolicy: false, // Required for iframe embedding
+    frameguard: false // X-Frame-Options removed; frameAncestors CSP is the modern replacement
 }));
 
 // Track startup phase for health checks (30s grace period for Autoscale)
