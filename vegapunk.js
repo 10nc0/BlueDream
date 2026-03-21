@@ -1447,7 +1447,65 @@ app.listen(PORT, '0.0.0.0', async () => {
     registerNyanAIRoutes(app, deps);
     
     console.log('\n' + formatPulseLog(['auth', 'books', 'inpipe', 'nyan-ai']) + '\n');
-    
+
+    // SETUP GUIDE: breadcrumb each unconfigured optional feature so no utility is forgotten
+    (() => {
+        const checks = [
+            // [envKey(s), emoji, feature, hint]
+            [['PLAYGROUND_BRAVE_API'],
+             '🔍', 'Live web search',
+             'AI answers from training data only — set PLAYGROUND_BRAVE_API for real-time knowledge'],
+            [['HERMES_TOKEN', 'THOTH_TOKEN', 'IDRIS_TOKEN', 'HORUS_TOKEN'],
+             '🤖', 'Discord bots (Hermes φ · Thoth 0 · Idris ι · Horus Ω)',
+             'Inbound messages will not reach Discord — set all 4 bot tokens + NYANBOOK_WEBHOOK_URL'],
+            [['TWILIO_AUTH_TOKEN', 'TWILIO_ACCOUNT_SID'],
+             '📱', 'WhatsApp inpipe (Twilio)',
+             'WhatsApp → book archiving disabled — set TWILIO_AUTH_TOKEN + TWILIO_ACCOUNT_SID'],
+            [['TWILIO_WEBHOOK_URL'],
+             '🔗', 'Twilio webhook URL',
+             'Signature validation uses guessed URL — set TWILIO_WEBHOOK_URL to your public endpoint (deploy first for persistent URL)'],
+            [['LINE_CHANNEL_SECRET', 'LINE_CHANNEL_ACCESS_TOKEN'],
+             '💚', 'LINE OA inpipe',
+             'LINE → book archiving disabled — set LINE_CHANNEL_SECRET + LINE_CHANNEL_ACCESS_TOKEN'],
+            [['EMAIL_INPIPE_SECRET'],
+             '📨', 'Email inpipe (bookcode@yourdomain)',
+             'Email → book archiving disabled — set EMAIL_INPIPE_SECRET + configure MX + provider webhook'],
+            [['RESEND_API_KEY'],
+             '📧', 'Transactional email (password reset · book sharing)',
+             'Users cannot reset password or receive share invites — set RESEND_API_KEY'],
+            [['PINATA_JWT'],
+             '📌', 'IPFS capsule ledger',
+             'Messages archived to Discord only — set PINATA_JWT to enable permanent IPFS backup (pinata.cloud, free 1 GB)'],
+            [['NYANBOOK_AI_KEY'],
+             '🧠', 'Dashboard AI audit (Nyan AI)',
+             'Book audit features disabled — set NYANBOOK_AI_KEY (Groq API key)'],
+            [['FRACTAL_SALT'],
+             '🔐', 'Fractal ID salt',
+             'Using weak dev default — set FRACTAL_SALT to a 64-char random hex in production'],
+        ];
+
+        const missing = checks.filter(([keys]) => keys.some(k => !process.env[k]));
+
+        if (missing.length === 0) {
+            console.log('✅ All optional features configured — full capability unlocked\n');
+            return;
+        }
+
+        const lines = [
+            '┌─ 📋 SETUP GUIDE ─────────────────────────────────────────────────────────────',
+            '│  Missing config detected. Each line = one disabled feature.',
+            '│',
+            ...missing.map(([, emoji, feature, hint]) =>
+                `│  ${emoji}  ${feature}\n│     → ${hint}`
+            ),
+            '│',
+            '│  💡 Deploy to Replit for a persistent HTTPS URL (required for webhooks).',
+            '│  💡 Each feature works independently — unconfigured ones degrade gracefully.',
+            '└───────────────────────────────────────────────────────────────────────────────'
+        ];
+        console.log(lines.join('\n') + '\n');
+    })();
+
     // Global error handling (must be after all routes)
     app.use(notFoundHandler);
     app.use(createErrorHandler({ isProd, logger: console }));
