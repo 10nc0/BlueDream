@@ -28,6 +28,34 @@ iPhone (WhatsApp / LINE OA)
 
 ---
 
+## The Main Feature: Absence as Data
+
+> *"The system's job is to make the absence undeniable and queryable."*
+
+Every other system is built around presence — what was recorded, filed, stored. The gap is silence. Silence is not data.
+
+Nyanbook treats absence as signal:
+
+- **Append-only** — you cannot retroactively fill the gap
+- **IPFS pin** — what was written cannot be unwritten
+- **PostgreSQL** — the gap between entries is queryable
+- **Discord thread** — the human-readable witness layer sees the gap too
+
+The driver who logged 4 entries where 11 were expected: the ledger doesn't accuse. It shows. The mīzān holds level. The feather does the work.
+
+| System | Absence queryable? | Append-only? | Content-addressed? |
+|--------|-------------------|--------------|--------------------|
+| Notion | ✗ | ✗ | ✗ |
+| Evernote | ✗ | ✗ | ✗ |
+| Slack | ✗ | ✗ | ✗ |
+| **Nyanbook** | **✓** | **✓** | **✓ (IPFS)** |
+
+> *"If you were supposed to log something every day for a month and forgot 7 days — does your current system know you forgot? Can it show you exactly which 7 days?"*
+
+Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
+
+---
+
 ## The Founding Letter
 
 *Written at the seventh life, 18 March 2026 — Nyepi, the Day of Silence.*
@@ -93,22 +121,18 @@ Zero changes to queue, handlers, DB, or Discord outpipe.
 
 ### Prerequisites
 
-  **Minimum to boot the server and AI playground:**
-  - Node.js 18+
-  - PostgreSQL (Supabase recommended — free tier works)
-  - Groq API key — for AI playground (`PLAYGROUND_GROQ_TOKEN`)
+- Node.js 18+
+- PostgreSQL (Supabase recommended — free tier works)
+- Discord server with 4 bot tokens and a webhook
+- Twilio account (WhatsApp Business API) — optional
+- LINE Developer account (LINE OA) — optional
+- Groq API key (AI features)
 
-  **Add when you need inpipe routing:**
-  - Discord server with 4 bot tokens + webhook — the message outpipe
-  - Twilio account — WhatsApp inpipe (optional)
-  - LINE Developer account — LINE OA inpipe (optional)
-
-  Everything else (Pinata, Resend, Brave Search) degrades gracefully if absent.
 ### 1. Clone & Install
 
 ```bash
 git clone https://github.com/10nc0/BlueDream
-cd BlueDream
+cd Nyan
 npm install
 ```
 
@@ -265,7 +289,7 @@ Tests `BooksModule` — book deduplication, selection, and API loading logic
 2. Create your own Discord bots (the 4-bot separation is architectural, not cosmetic)
 3. Provision a Pinata account for IPFS — or skip it (graceful degradation)
 4. The `SESSION_SECRET` in `.env.example` is a placeholder — **change it before production**
-5. `AI_API_TOKEN` and `AI_API_TOKEN_DEV` gate the internal Nyan API v1 — generate your own random strings (min 32 chars)
+5. `AI_API_TOKEN` and `AI_API_TOKEN_DEV` gate the internal Nyan API v1 — generate your own
 
 ---
 
