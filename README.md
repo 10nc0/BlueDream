@@ -266,6 +266,7 @@ No P/I ratio fallback. N/A is the honest answer when data is unavailable.
 
 - JWT authentication with role-based access
 - Multi-tenant schema isolation (complete data separation)
+- The 4-bot separation means compromise of one credential does not compromise the ledger
 - Twilio webhook signature validation
 - LINE webhook HMAC validation
 - Session management with audit logging
@@ -305,7 +306,7 @@ Tests `BooksModule` — book deduplication, selection, and API loading logic
 
 1. Provision a Supabase (or any PostgreSQL) instance and set `DATABASE_URL`
 2. Create your own Discord bots (the 4-bot separation is architectural, not cosmetic)
-3. Provision a Pinata account for IPFS — or skip it (graceful degradation)
+3. Provision a Pinata account for IPFS — or skip it (the ledger remains complete)
 4. The `SESSION_SECRET` in `.env.example` is a placeholder — **change it before production**
 5. `NYAN_OUTBOUND_API` and `NYAN_OUTBOUND_API_DEV` gate the internal Nyan API v1 — generate your own random strings (min 32 chars)
 
