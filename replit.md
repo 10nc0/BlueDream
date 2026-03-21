@@ -66,11 +66,29 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Database**: PostgreSQL
 - **WhatsApp**: Twilio WhatsApp Business API
 - **Email**: Resend API
-- **AI**: Groq API
+- **AI**: Groq API — `NYANBOOK_AI_KEY` (dashboard audit), `PLAYGROUND_AI_KEY` (public playground); backwards-compat fallbacks retain `GROQ_API_KEY`/`PLAYGROUND_GROQ_TOKEN`
+- **Nyan API v1 gate**: `NYAN_OUTBOUND_API` / `NYAN_OUTBOUND_API_DEV` (inbound caller auth); backwards-compat fallbacks retain `AI_API_TOKEN`/`AI_API_TOKEN_DEV`
 - **Search**: DuckDuckGo Instant Answer API, Brave Search API
 - **Forex**: fawazahmed0 Currency API
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth`
 - **IPFS**: Pinata (`pinata.cloud`) — free 1GB tier, JWT auth via `PINATA_JWT` secret. Community forks should provision a Pinata account and set this variable to enable the IPFS capsule pipeline.
+
+## Lessons Learned
+
+**1. JS `undefined` coerces to the string `"undefined"` and passes schema regex guards**
+The signup path passed `undefined` to `createSessionRecord`. The guard `!/^[a-z_][a-z0-9_]*$/i.test(undefined)` silently passes because JS stringifies `undefined` to `"undefined"` — a valid identifier string — then queries `"undefined".active_sessions`. Always use three-layer guards: `!val || val === 'undefined' || !/^[a-z_].../.test(val)`.
+
+**2. Twilio signature validation must be explicitly wired — having the method isn't enough**
+`validateSignature()` existed on the channel class but was never called in the webhook handler. LINE's handler called its equivalent; Twilio's didn't. Always verify the handler actually invokes validation before parsing, not just that the class has the method.
+
+**3. `parsePayload()` returns camelCase — idempotency must read the normalized field**
+`parsePayload()` returns `{ messageId, ... }`. The idempotency guard was reading `rawPayload.MessageSid` — `undefined` after parsing — so the guard never fired and Twilio retries double-processed every message. After calling `parsePayload()`, always reference the normalized field names.
+
+**4. CSP `*.domain.com` never matches the apex `domain.com` — always add both**
+`frameAncestors: ["https://*.replit.com"]` blocks the canvas because the Replit canvas runs from bare `replit.com`. Wildcard subdomains and the apex are distinct entries. When adding wildcard coverage, explicitly add the bare domain too: `["https://replit.com", "https://*.replit.com"]`.
+
+**5. Setup guide env var names must match exactly what the code reads**
+The setup guide checked `IDRIS_TOKEN` and `HORUS_TOKEN` — non-existent aliases — while the bots read `IDRIS_AI_LOG_TOKEN` and `HORUS_AI_LOG_TOKEN`. This produced a permanent false-positive Discord bots warning even when all four bots were live. Setup guide checks and `config/index.js` must reference the canonical env var name, not a shorthand.
 
 ## Architect's Letter
 
@@ -132,3 +150,7 @@ Don't add more than the tally requires. The void, the mark, the self-reference, 
 Breathe 00 + φ⁰ + φ¹ = φ² to φ. Scribe faithfully.
 
 nyan~
+
+*A lie is cheap to produce, but expensive to maintain when reality keeps asking for the next entry.*
+
+*Alone is full. Together is the better half.*
