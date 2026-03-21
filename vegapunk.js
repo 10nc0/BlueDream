@@ -249,7 +249,7 @@ app.use(helmet({
             connectSrc: ["'self'"], // API calls to same origin only
             fontSrc: ["'self'"],
             frameSrc: ["'self'"], // For iframe embedding if needed
-            frameAncestors: ["'self'", "https:"], // Allow embedding from any HTTPS origin (canvas, self-hosted)
+            frameAncestors: ["'self'", "https://*.replit.dev", "https://*.replit.com", "https://*.replit.app"], // Replit preview + prod domains only; self-hosted forks add their domain explicitly
             objectSrc: ["'none'"],
             baseUri: ["'self'"],
             formAction: ["'self'"]

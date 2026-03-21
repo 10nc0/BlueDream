@@ -438,7 +438,7 @@ function registerAuthRoutes(app, deps) {
                     is_genesis_admin: isGenesisAdmin,
                     tenant_id: tenantId,
                     via_invite: !!inviteToken
-                });
+                }, `tenant_${tenantId}`);
                 
                 res.json({
                     success: true,
