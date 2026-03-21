@@ -231,7 +231,7 @@ Every inpipe message builds a ZK-ready capsule:
 - SHA256 content hash
 - Per-attachment metadata
 
-Set `PINATA_JWT` to enable automatic IPFS pinning via [Pinata](https://pinata.cloud) (free 1GB tier). Without it, the system degrades gracefully (null CID).
+Set `PINATA_JWT` to enable automatic IPFS pinning via [Pinata](https://pinata.cloud) (free 1GB tier). The ledger works without IPFS; IPFS makes it sovereign.
 
 **Capsule schema contract:** The `v` field is a public interface. Structural changes to `buildCapsule()` MUST bump `v` (e.g. `v: 2`). Old CIDs remain permanently valid.
 
@@ -298,6 +298,8 @@ Nyan.BooksModuleTests.runTests()
 
 Tests `BooksModule` — book deduplication, selection, and API loading logic
 (`public/js/modules/books.test.js`).
+
+> *Discord threads are the observability layer — every inpipe message is a timestamped, human-readable audit trail. No Grafana required.*
 
 ## Fork Operator Notes
 
