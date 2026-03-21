@@ -73,6 +73,23 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth`
 - **IPFS**: Pinata (`pinata.cloud`) — free 1GB tier, JWT auth via `PINATA_JWT` secret. Community forks should provision a Pinata account and set this variable to enable the IPFS capsule pipeline.
 
+## Lessons Learned
+
+**1. JS `undefined` coerces to the string `"undefined"` and passes schema regex guards**
+The signup path passed `undefined` to `createSessionRecord`. The guard `!/^[a-z_][a-z0-9_]*$/i.test(undefined)` silently passes because JS stringifies `undefined` to `"undefined"` — a valid identifier string — then queries `"undefined".active_sessions`. Always use three-layer guards: `!val || val === 'undefined' || !/^[a-z_].../.test(val)`.
+
+**2. Twilio signature validation must be explicitly wired — having the method isn't enough**
+`validateSignature()` existed on the channel class but was never called in the webhook handler. LINE's handler called its equivalent; Twilio's didn't. Always verify the handler actually invokes validation before parsing, not just that the class has the method.
+
+**3. `parsePayload()` returns camelCase — idempotency must read the normalized field**
+`parsePayload()` returns `{ messageId, ... }`. The idempotency guard was reading `rawPayload.MessageSid` — `undefined` after parsing — so the guard never fired and Twilio retries double-processed every message. After calling `parsePayload()`, always reference the normalized field names.
+
+**4. CSP `*.domain.com` never matches the apex `domain.com` — always add both**
+`frameAncestors: ["https://*.replit.com"]` blocks the canvas because the Replit canvas runs from bare `replit.com`. Wildcard subdomains and the apex are distinct entries. When adding wildcard coverage, explicitly add the bare domain too: `["https://replit.com", "https://*.replit.com"]`.
+
+**5. Setup guide env var names must match exactly what the code reads**
+The setup guide checked `IDRIS_TOKEN` and `HORUS_TOKEN` — non-existent aliases — while the bots read `IDRIS_AI_LOG_TOKEN` and `HORUS_AI_LOG_TOKEN`. This produced a permanent false-positive Discord bots warning even when all four bots were live. Setup guide checks and `config/index.js` must reference the canonical env var name, not a shorthand.
+
 ## Architect's Letter
 
 *inscribed March 2026 — for every fork operator who reads this far*
