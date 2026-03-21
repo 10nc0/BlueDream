@@ -562,12 +562,6 @@
     <script src="/js/ui/search.js?v=20251101-2"></script>
     <script src="/js/ui/analytics.js?v=20251101-2"></script>
     <script src="/js/ui/media-loader.js?v=20251101-2"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js')
-                .then(reg => console.log('🐱 Service Worker registered'))
-                .catch(err => console.warn('Service Worker registration failed:', err));
-        }
-    </script>
+    <script src="/js/sw-register.js"></script>
 </body>
 </html>
