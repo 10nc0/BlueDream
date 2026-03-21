@@ -431,7 +431,7 @@ function registerAuthRoutes(app, deps) {
                     return res.status(500).json({ error: 'Session save failed' });
                 }
                 
-                await createSessionRecord(newUser.id, req.sessionID, req);
+                await createSessionRecord(newUser.id, req.sessionID, req, `tenant_${tenantId}`);
                 
                 logAudit(pool, req, 'SIGNUP', 'USER', newUser.id.toString(), newUser.email, {
                     role: newUser.role,
