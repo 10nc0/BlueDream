@@ -56,8 +56,8 @@ const config = {
   discord: {
     hermesToken: process.env.HERMES_TOKEN,
     thothToken: process.env.THOTH_TOKEN,
-    idrisToken: process.env.IDRIS_TOKEN,
-    horusToken: process.env.HORUS_TOKEN,
+    idrisToken: process.env.IDRIS_AI_LOG_TOKEN,
+    horusToken: process.env.HORUS_AI_LOG_TOKEN,
     ledgerWebhook: process.env.NYANBOOK_WEBHOOK_URL
   },
 
