@@ -67,7 +67,7 @@ const criticalSecrets = {
     SESSION_SECRET: 'Session encryption key',
     FRACTAL_SALT: 'Secure book ID generation (crypto salt)',
     NYANBOOK_WEBHOOK_URL: 'Discord Ledger #01 (output book)',
-    PLAYGROUND_GROQ_TOKEN: 'AI Playground reasoning (Groq Llama 3.3)'
+    PLAYGROUND_AI_KEY: 'AI Playground reasoning (Groq Llama 3.3)'
 };
 
 const missingCriticalSecrets = Object.entries(criticalSecrets).filter(([key]) => !process.env[key]);
@@ -1003,8 +1003,10 @@ function getFileExtension(mimetype) {
 
 // Discord webhook helpers moved to lib/discord-webhooks.js
 // Factory functions created in app.listen() for DI pattern
-let sendToLedger;
-let sendToUserOutput;
+// Initialized to explicit throwers — serverReady gate prevents real calls before assignment,
+// but this makes any mis-ordering immediately obvious rather than a silent TypeError.
+let sendToLedger = () => { throw new Error('sendToLedger called before server initialization'); };
+let sendToUserOutput = () => { throw new Error('sendToUserOutput called before server initialization'); };
 
 // ===== GENESIS COUNTER API (Red Herring) =====
 // Expose counter state for debugging/monitoring
@@ -1044,8 +1046,8 @@ async function getBookTenantSchema(fractalIdInput) {
             throw new Error(`Legacy numeric book ID not supported. Use fractal_id format.`);
         }
         
-        console.warn(`⚠️ Invalid fractal_id format: ${fractalIdInput}`);
-        return 'public';
+        console.error(`❌ Invalid fractal_id format: ${fractalIdInput} — refusing to fall back to public schema`);
+        throw new Error(`Invalid fractal_id format: ${fractalIdInput}`);
     } catch (error) {
         console.error(`❌ Error resolving tenant for book ${fractalIdInput}:`, error.message);
         throw error;
@@ -1082,70 +1084,16 @@ function parseUserAgent(userAgent) {
     return { deviceType, browser, os };
 }
 
-// IP geolocation cache: prevents rate limiting on ipapi.co (1h TTL)
-const ipGeoCache = new Map();
-const IP_GEO_TTL_MS = 60 * 60 * 1000; // 1 hour for success
-const IP_GEO_FAILURE_TTL_MS = 5 * 60 * 1000; // 5 mins for failure
-
-// Simple location detection from IP (with caching and proper timeout)
+// SOVEREIGNTY NOTE: IP geolocation via external API removed.
+// Calling ipapi.co on every login leaks client IPs to a third party —
+// contradicting the data sovereignty mission of this system.
+// Location is logged as 'Unknown Location' in session audit records.
+// To enable geolocation: self-host MaxMind GeoLite2 (free, local, zero external calls).
 async function getLocationFromIP(ipAddress) {
-    try {
-        // For local/private IPs, return Unknown
-        if (!ipAddress || ipAddress === '::1' || ipAddress.startsWith('127.') || ipAddress.startsWith('192.168.') || ipAddress.startsWith('10.')) {
-            return 'Local Network';
-        }
-        
-        // Check cache first
-        const cached = ipGeoCache.get(ipAddress);
-        if (cached && Date.now() - cached.timestamp < (cached.location === 'Unknown Location' ? IP_GEO_FAILURE_TTL_MS : IP_GEO_TTL_MS)) {
-            return cached.location;
-        }
-        
-        // Prune cache if it grows too large (simple LRU-ish: delete first entry)
-        if (ipGeoCache.size > 5000) {
-            const firstKey = ipGeoCache.keys().next().value;
-            ipGeoCache.delete(firstKey);
-        }
-        
-        // Use AbortController for proper fetch timeout (native fetch ignores timeout option)
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        
-        try {
-            const response = await fetch(`https://ipapi.co/${ipAddress}/json/`, {
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            
-            if (response.ok) {
-                const data = await response.json();
-                let location = 'Unknown Location';
-                if (data.city && data.country_name) {
-                    location = `${data.city}, ${data.country_name}`;
-                } else if (data.country_name) {
-                    location = data.country_name;
-                }
-                
-                // Cache the result
-                ipGeoCache.set(ipAddress, { location, timestamp: Date.now() });
-                return location;
-            }
-        } catch (fetchError) {
-            clearTimeout(timeoutId);
-            if (fetchError.name === 'AbortError') {
-                console.warn(`[${getTimestamp()}] ⏱️ IP geo lookup timed out for ${ipAddress}`);
-            } else {
-                throw fetchError;
-            }
-        }
-        
-        // Cache the failure for 5 mins to prevent immediate retry
-        ipGeoCache.set(ipAddress, { location: 'Unknown Location', timestamp: Date.now() });
-        return 'Unknown Location';
-    } catch (error) {
-        console.error(`[${getTimestamp()}] Error getting location:`, error.message);
-        return 'Unknown Location';
+    if (!ipAddress || ipAddress === '::1' || ipAddress.startsWith('127.') || ipAddress.startsWith('192.168.') || ipAddress.startsWith('10.')) {
+        return 'Local Network';
     }
+    return 'Unknown Location';
 }
 
 // Create session tracking record (multi-tenant)

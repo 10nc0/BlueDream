@@ -289,7 +289,7 @@ Tests `BooksModule` — book deduplication, selection, and API loading logic
 2. Create your own Discord bots (the 4-bot separation is architectural, not cosmetic)
 3. Provision a Pinata account for IPFS — or skip it (graceful degradation)
 4. The `SESSION_SECRET` in `.env.example` is a placeholder — **change it before production**
-5. `AI_API_TOKEN` and `AI_API_TOKEN_DEV` gate the internal Nyan API v1 — generate your own
+5. `NYAN_OUTBOUND_API` and `NYAN_OUTBOUND_API_DEV` gate the internal Nyan API v1 — generate your own random strings (min 32 chars)
 
 ---
 

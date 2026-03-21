@@ -2048,7 +2048,7 @@ async function convertDocumentToImages(buffer, fileName) {
 }
 
 async function transcribeAudio(buffer, fileName, options) {
-    const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
+    const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
     if (!PLAYGROUND_GROQ_TOKEN) {
         return { success: false, error: 'Groq token not configured' };
     }

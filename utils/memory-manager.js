@@ -176,7 +176,7 @@ ${attachmentMentions}
 Write the summary as natural prose, not a list. Focus on what a helpful assistant would need to remember to continue this conversation naturally.`;
 
     try {
-      const groqToken = process.env.PLAYGROUND_GROQ_TOKEN;
+      const groqToken = process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
       if (!groqToken) {
         console.warn('⚠️ No GROQ token for memory summarization');
         return this.currentSummary;
