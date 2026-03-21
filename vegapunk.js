@@ -1455,7 +1455,7 @@ app.listen(PORT, '0.0.0.0', async () => {
             [['PLAYGROUND_BRAVE_API'],
              '🔍', 'Live web search',
              'AI answers from training data only — set PLAYGROUND_BRAVE_API for real-time knowledge'],
-            [['HERMES_TOKEN', 'THOTH_TOKEN', 'IDRIS_TOKEN', 'HORUS_TOKEN'],
+            [['HERMES_TOKEN', 'THOTH_TOKEN', 'IDRIS_AI_LOG_TOKEN', 'HORUS_AI_LOG_TOKEN'],
              '🤖', 'Discord bots (Hermes φ · Thoth 0 · Idris ι · Horus Ω)',
              'Inbound messages will not reach Discord — set all 4 bot tokens + NYANBOOK_WEBHOOK_URL'],
             [['TWILIO_AUTH_TOKEN', 'TWILIO_ACCOUNT_SID'],
