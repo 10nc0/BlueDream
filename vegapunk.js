@@ -67,7 +67,7 @@ const criticalSecrets = {
     SESSION_SECRET: 'Session encryption key',
     FRACTAL_SALT: 'Secure book ID generation (crypto salt)',
     NYANBOOK_WEBHOOK_URL: 'Discord Ledger #01 (output book)',
-    PLAYGROUND_GROQ_TOKEN: 'AI Playground reasoning (Groq Llama 3.3)'
+    PLAYGROUND_AI_KEY: 'AI Playground reasoning (Groq Llama 3.3)'
 };
 
 const missingCriticalSecrets = Object.entries(criticalSecrets).filter(([key]) => !process.env[key]);

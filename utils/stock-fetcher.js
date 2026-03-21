@@ -405,8 +405,8 @@ function calculateDataAge(endDate) {
  */
 async function extractTickerWithAI(query) {
   if (!query || typeof query !== 'string') return null;
-  if (!process.env.GROQ_API_KEY) {
-    console.log('⚠️ AI ticker extraction skipped: No GROQ_API_KEY');
+  if (!process.env.NYANBOOK_AI_KEY && !process.env.GROQ_API_KEY) {
+    console.log('⚠️ AI ticker extraction skipped: No NYANBOOK_AI_KEY');
     return null;
   }
   
@@ -440,7 +440,7 @@ EXAMPLES:
       },
       {
         headers: {
-          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+          'Authorization': `Bearer ${process.env.NYANBOOK_AI_KEY || process.env.GROQ_API_KEY}`,
           'Content-Type': 'application/json'
         },
         timeout: 5000

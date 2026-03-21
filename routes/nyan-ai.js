@@ -45,8 +45,8 @@ const API_UNITS = {
     }
 };
 
-const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
-const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_GROQ_TOKEN;
+const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
+const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
 const H0_TEMPERATURE = AI_MODELS.TEMPERATURE_REASONING;
 
 const IDENTITY_PATTERNS = [
@@ -335,7 +335,7 @@ async function extractCoreQuestion(message) {
         return 'general query';
     }
     
-    const GROQ_TOKEN = process.env.PLAYGROUND_GROQ_TOKEN;
+    const GROQ_TOKEN = process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
     if (!GROQ_TOKEN || trimmed.length < 100) {
         return trimmed.substring(0, 200);
     }
@@ -486,7 +486,7 @@ async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') 
 }
 
 const orchestrator = createPipelineOrchestrator({
-    groqToken: process.env.PLAYGROUND_GROQ_TOKEN,
+    groqToken: process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
     groqVisionToken: process.env.PLAYGROUND_GROQ_VISION_TOKEN,
     searchBrave,
     searchDuckDuckGo,
@@ -563,7 +563,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 contextPrompt = query;
             }
             
-            // Use GROQ_API_KEY for authenticated audit (separate from public playground)
+            // Use NYANBOOK_AI_KEY for authenticated audit (separate from public playground)
             const response = await groqWithRetry({
                 url: 'https://api.groq.com/openai/v1/chat/completions',
                 data: {
@@ -580,7 +580,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 },
                 config: {
                     headers: {
-                        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                        'Authorization': `Bearer ${process.env.NYANBOOK_AI_KEY || process.env.GROQ_API_KEY}`,
                         'Content-Type': 'application/json'
                     }
                 }
@@ -613,7 +613,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         },
                         config: {
                             headers: {
-                                'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                                'Authorization': `Bearer ${process.env.NYANBOOK_AI_KEY || process.env.GROQ_API_KEY}`,
                                 'Content-Type': 'application/json'
                             }
                         }
@@ -1286,11 +1286,13 @@ Analyze the data and answer the user's question. Count carefully when asked abou
     // ========================================================================
     // Nyan API v1 — Internal JSON endpoint for agent-to-agent communication
     // Usage: POST /api/v1/nyan { message, mode? }
-    // Auth: Bearer token (multi-key: AI_API_TOKEN, AI_API_TOKEN_DEV)
+    // Auth: Bearer token (multi-key: NYAN_OUTBOUND_API, NYAN_OUTBOUND_API_DEV)
     // ========================================================================
     const AI_API_KEYS = [
-        { env: 'AI_API_TOKEN', label: 'prod' },
-        { env: 'AI_API_TOKEN_DEV', label: 'dev' }
+        { env: 'NYAN_OUTBOUND_API', label: 'prod' },
+        { env: 'NYAN_OUTBOUND_API_DEV', label: 'dev' },
+        { env: 'AI_API_TOKEN', label: 'prod-legacy' },
+        { env: 'AI_API_TOKEN_DEV', label: 'dev-legacy' }
     ].filter(k => process.env[k.env]).map(k => ({
         hash: crypto.createHash('sha256').update(process.env[k.env]).digest(),
         label: k.label
@@ -1312,7 +1314,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
 
     app.post('/api/v1/nyan', nyanApiBodyParser, nyanApiLimiter, async (req, res) => {
         if (AI_API_KEYS.length === 0) {
-            return res.status(503).json({ error: 'AI API not configured. Set AI_API_TOKEN secret.' });
+            return res.status(503).json({ error: 'AI API not configured. Set NYAN_OUTBOUND_API secret.' });
         }
 
         const authHeader = req.headers.authorization;
@@ -1639,7 +1641,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
 
     app.post('/api/v1/nyan/psi-ema', express.json(), psiEmaLimiter, async (req, res) => {
         if (AI_API_KEYS.length === 0) {
-            return res.status(503).json({ error: 'AI API not configured. Set AI_API_TOKEN secret.' });
+            return res.status(503).json({ error: 'AI API not configured. Set NYAN_OUTBOUND_API secret.' });
         }
 
         const authHeader = req.headers.authorization;
@@ -1799,7 +1801,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
 
     app.get('/api/v1/nyan/diagnostics', async (req, res) => {
         if (AI_API_KEYS.length === 0) {
-            return res.status(503).json({ error: 'AI API not configured. Set AI_API_TOKEN secret.' });
+            return res.status(503).json({ error: 'AI API not configured. Set NYAN_OUTBOUND_API secret.' });
         }
 
         const authHeader = req.headers.authorization;
@@ -1846,8 +1848,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             groq: {
                 configured: false,
                 keys: {
-                    dashboard: !!process.env.GROQ_API_KEY,
-                    playground: !!process.env.PLAYGROUND_GROQ_TOKEN,
+                    dashboard: !!(process.env.NYANBOOK_AI_KEY || process.env.GROQ_API_KEY),
+                    playground: !!(process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN),
                     vision: !!process.env.PLAYGROUND_GROQ_VISION_TOKEN
                 }
             },
@@ -1882,7 +1884,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             diagnostics.database.error = dbErr.message;
         }
 
-        diagnostics.groq.configured = !!(process.env.GROQ_API_KEY || process.env.PLAYGROUND_GROQ_TOKEN);
+        diagnostics.groq.configured = !!(process.env.NYANBOOK_AI_KEY || process.env.GROQ_API_KEY || process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN);
 
         if (hermesBot) {
             diagnostics.discord.hermes.healthy = hermesBot.isReady?.() || false;
