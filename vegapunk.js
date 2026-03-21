@@ -1421,7 +1421,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     const SATELLITE_META = {
         'auth': { emoji: '🔐', desc: 'lifecycle, sessions, JWT, audit trail', endpoints: 19 },
         'books': { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export', endpoints: 26 },
-        'inpipe': { emoji: '📥', desc: 'WhatsApp + LINE inpipe, channel-agnostic', endpoints: 2 },
+        'inpipe': { emoji: '📥', desc: 'WhatsApp + LINE + email inpipe, channel-agnostic', endpoints: 3 },
         'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit, book history, psi-ema data, diagnostics', endpoints: 9 }
     };
     
