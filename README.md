@@ -322,7 +322,6 @@ The four fields are load-bearing. Everything else is grammar.
 
 *nyan~ ♡ 🜁 ◯*
 
-*Nagarjuna, architect, March 2026*
-*18 March 2026 — Nyepi, the Day of Silence*
+*Nagarjuna, architect — 18 March 2026, Nyepi, the Day of Silence*
 
 *Alone is full. Together is the better half.*
