@@ -66,7 +66,8 @@ The system utilizes a Node.js backend with Express and a Single Page Application
 - **Database**: PostgreSQL
 - **WhatsApp**: Twilio WhatsApp Business API
 - **Email**: Resend API
-- **AI**: Groq API
+- **AI**: Groq API — `NYANBOOK_AI_KEY` (dashboard audit), `PLAYGROUND_AI_KEY` (public playground); backwards-compat fallbacks retain `GROQ_API_KEY`/`PLAYGROUND_GROQ_TOKEN`
+- **Nyan API v1 gate**: `NYAN_OUTBOUND_API` / `NYAN_OUTBOUND_API_DEV` (inbound caller auth); backwards-compat fallbacks retain `AI_API_TOKEN`/`AI_API_TOKEN_DEV`
 - **Search**: DuckDuckGo Instant Answer API, Brave Search API
 - **Forex**: fawazahmed0 Currency API
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth`
