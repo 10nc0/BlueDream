@@ -8,7 +8,7 @@ A sovereign, multi-tenant archiving system — WhatsApp, LINE OA, and Discord, u
 
 ## What This Is
 
-Nyanbook is a **post-folder archiving architecture**. Instead of filing documents into folders, you send them — via WhatsApp, LINE OA, or Discord — and they are automatically routed, stored, and indexed in a multi-tenant PostgreSQL ledger with an optional IPFS content-addressed pin.
+Nyanbook is a **post-folder archiving architecture**. Instead of filing documents into folders, you send them — via WhatsApp, LINE OA, or Discord — and they are automatically routed via PostgreSQL, stored in Discord threads, and optionally anchored to IPFS.
 
 Nyanbook is a temporal accountability substrate. Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
 
@@ -22,7 +22,7 @@ iPhone (WhatsApp / LINE OA)
           → IPFS capsule pin (optional)
 ```
 
-> *Discord provides the free thread-storage layer and UI. PostgreSQL is the structural ledger. IPFS is the sovereign anchor — the record that exists independent of any platform.*
+> *Discord is the permanent content store — free, searchable, thread-organized. PostgreSQL is the routing and index layer. IPFS is the sovereign anchor — the record that exists independent of any platform.*
 
 **Dashboard:** Glassmorphism SPA — browse all archived messages, search, tag, export with SHA256 manifest. Multimodal AI Playground included.
 
@@ -53,6 +53,19 @@ The driver who logged 4 entries where 11 were expected: the ledger doesn't accus
 > *"If you were supposed to log something every day for a month and forgot 7 days — does your current system know you forgot? Can it show you exactly which 7 days?"*
 
 Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
+
+---
+
+## Who This Is For
+
+| Scale | Deployment | Use Case |
+|-------|-----------|----------|
+| Individual | Replit free tier | Personal archiving |
+| Family | Replit Autoscale | Household records |
+| Community | Self-hosted | Mutual aid, neighbourhood records |
+| Municipal | Fork + customize | Local government transparency |
+
+Open source means anyone can verify the feather is level. No priest. No perriwig. No proprietary black box.
 
 ---
 
@@ -94,11 +107,14 @@ lib/channels/
 ├── twilio.js            — WhatsApp (reply-capable)
 └── line.js              — LINE OA (listen-only)
 
-Discord Bots (4 specialized):
-├── hermes-bot.js        — General messaging
-├── thoth-bot.js         — Ledger scribe
-├── idris-bot.js         — Index / search
-└── horus-bot.js         — Audit / oversight
+Discord Bots (4 specialized, least-privilege):
+├── hermes-bot.js        — General messaging (write)
+├── thoth-bot.js         — Ledger scribe (read)
+├── idris-bot.js         — Index / search (read)
+└── horus-bot.js         — Audit / oversight (read)
+
+Each bot holds only the permissions its role requires.
+Hermes writes. Thoth reads. Compromise one — the others remain clean.
 
 utils/
 ├── message-capsule.js   — ZK-ready capsule builder
