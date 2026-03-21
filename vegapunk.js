@@ -1106,7 +1106,7 @@ async function createSessionRecord(userId, sessionId, req, tenantSchema) {
         const location = await getLocationFromIP(req.ip);
         
         // SECURITY: Validate tenant schema name before interpolation
-        if (!/^[a-z_][a-z0-9_]*$/i.test(tenantSchema)) {
+        if (!tenantSchema || tenantSchema === 'undefined' || !/^[a-z_][a-z0-9_]*$/i.test(tenantSchema)) {
             console.error(`❌ Session creation: Invalid tenant schema: ${tenantSchema}`);
             return;
         }
