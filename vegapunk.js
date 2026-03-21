@@ -227,10 +227,10 @@ const app = express();
 // These assets have zero DB dependency. A DB crash must never ghost the UI.
 // HTML files are deliberately excluded — they remain behind auth routes below.
 ['/css', '/js', '/icons', '/vendor', '/lib'].forEach(p =>
-    app.use(p, express.static(`public${p}`))
+    app.use(p, express.static(path.join(__dirname, `public${p}`)))
 );
-app.use('/manifest.json', express.static('public/manifest.json'));
-app.use('/sw.js', express.static('public/sw.js'));
+app.use('/manifest.json', express.static(path.join(__dirname, 'public/manifest.json')));
+app.use('/sw.js', express.static(path.join(__dirname, 'public/sw.js')));
 
 // Make pool available to middleware
 app.locals.pool = pool;
@@ -568,7 +568,7 @@ app.get('/favicon.ico', (req, res) => {
 
 // Serve only non-HTML static files without authentication
 // HTML files are served through explicit authenticated routes above
-app.use(express.static('public', { 
+app.use(express.static(path.join(__dirname, 'public'), { 
     index: false,
     ignore: ['*.html'], // Don't serve HTML files through static middleware
     setHeaders: (res, path) => {
