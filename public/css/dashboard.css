@@ -3192,8 +3192,7 @@ body.mobile-mode .header > div {
     padding: 0 0.5rem 0 0 !important; /* Only right padding for logout */
 }
 
-/* Cat: transcendental on every mode — only size changes (cat-animation.css owns the size) */
-/* Position: always top-left of the CONTENT pane, not the sidebar pane */
+/* Cat: transcendental — z-index keeps it above all layers always */
 #catContainer {
     position: relative;
     overflow: visible;
@@ -3202,25 +3201,15 @@ body.mobile-mode .header > div {
     align-self: flex-start;
 }
 
-/* Desktop: stay in flex flow (not absolute), clip container to header height.
-   Canvas is shifted up inside the container so ears+face are visible, not the blank top.
-   overflow:hidden on the container prevents ANY cat overflow into sidebar or message pane. */
-body.desktop-mode #catContainer {
-    position: relative;
-    width: 190px;
-    height: var(--header-height);
-    overflow: hidden;
-}
-/* Shift the 190px canvas up by 52px so the ears (canvas y≈52) align to the container top.
-   Visible window: canvas y=52–112 = ears + eyes + face = exactly the header height (60px). */
+/* Canvas size — mirrors cat-animation.css which is not loaded on index.html */
 body.desktop-mode #hopCanvas {
-    position: absolute;
-    top: -52px;
-    left: 0;
     width: 190px !important;
     height: 190px !important;
 }
-/* Mobile: sidebar hidden, cat stays in grid flow at x=0 — no offset needed */
+body.mobile-mode #hopCanvas {
+    width: 80px !important;
+    height: 80px !important;
+}
 
 body.mobile-mode #dateTimeDefault {
     display: none !important; /* Hide date/time below cat */
