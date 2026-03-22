@@ -101,30 +101,30 @@
     }
 }
 
-/* Dashboard (index.html) - Mobile Mode */
+/* Dashboard (index.html) - Mobile Mode: matches --cat-size-sm: 60px */
 body.mobile-mode .cat-animation-component {
-    width: 75px !important;
-    height: 75px !important;
+    width: 60px !important;
+    height: 60px !important;
     margin: 0 !important; /* Let dashboard CSS handle positioning */
 }
 
 body.mobile-mode .character-canvas {
-    width: 75px !important;
-    height: 75px !important;
+    width: 60px !important;
+    height: 60px !important;
 }
 
 body.mobile-mode .cat-datetime-default {
     font-size: 0.6rem !important;
 }
 
-/* Dashboard (index.html) - Desktop Mode */
+/* Dashboard (index.html) - Desktop Mode: matches --cat-size: 125px */
 body.desktop-mode .cat-animation-component {
-    width: 100px !important;
-    height: 100px !important;
+    width: 125px !important;
+    height: 125px !important;
     margin: 0 !important; /* Let dashboard CSS handle positioning */
 }
 
 body.desktop-mode .character-canvas {
-    width: 100px !important;
-    height: 100px !important;
+    width: 125px !important;
+    height: 125px !important;
 }
