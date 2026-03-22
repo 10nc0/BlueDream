@@ -245,10 +245,9 @@ body::before {
 }
 
 .character-canvas {
-  width: 100%;
-  height: 100%;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  display: block;
 }
 
 .logo {
@@ -3192,7 +3191,9 @@ body.mobile-mode .header > div {
     padding: 0 0.5rem 0 0 !important; /* Only right padding for logout */
 }
 
-/* Cat: transcendental — z-index keeps it above all layers always */
+/* Cat: transcendental — z-index keeps it above all layers always.
+   Sizing is owned by cat-animation.css (loaded on index.html).
+   Only positioning lives here. */
 #catContainer {
     position: relative;
     overflow: visible;
@@ -3201,18 +3202,9 @@ body.mobile-mode .header > div {
     align-self: flex-start;
 }
 
-/* Desktop: offset cat so it sits top-left of the content pane (after sidebar).
-   Cat overflows below the 60px header naturally — z-index:1001 keeps it transcendental. */
+/* Desktop: push cat to the top-left corner of the content pane (past the sidebar). */
 body.desktop-mode #catContainer {
     margin-left: var(--sidebar-width);
-}
-body.desktop-mode #hopCanvas {
-    width: 190px !important;
-    height: 190px !important;
-}
-body.mobile-mode #hopCanvas {
-    width: 80px !important;
-    height: 80px !important;
 }
 
 body.mobile-mode #dateTimeDefault {
