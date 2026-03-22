@@ -3199,7 +3199,7 @@ body.mobile-mode .header > div {
 #catContainer {
     position: fixed;
     top: -40px;
-    left: -40px; /* shift left by blank canvas margin so cat face starts ~6px from edge */
+    left: -35px; /* shift left by blank canvas margin so cat face starts ~11px from edge */
     overflow: visible;
     z-index: var(--z-modal-above); /* 1001 — above all layers */
     pointer-events: none; /* clicks pass through to header beneath */
@@ -3207,17 +3207,17 @@ body.mobile-mode .header > div {
 
 body.mobile-mode #catContainer {
     top: -21px;
-    left: -20px; /* mobile: 26px blank, keep 6px gutter */
+    left: -15px; /* mobile: 26px blank, keep 11px gutter */
 }
 
 /* Push header content right so title starts just after cat face right edge + gutter
    Desktop: cat face right ≈ 57px (canvas right=97, shift=-40) + 11px gutter = 68px
    Mobile:  cat face right ≈ 34px (canvas right=54, shift=-20) + 11px gutter = 45px */
 body.desktop-mode .header {
-    padding-left: 68px !important;
+    padding-left: 73px !important;
 }
 body.mobile-mode .header {
-    padding-left: 45px !important;
+    padding-left: 50px !important;
 }
 
 body.mobile-mode #dateTimeDefault {
