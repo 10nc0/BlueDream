@@ -167,7 +167,7 @@ body::before {
   top: 0;
   z-index: var(--z-sticky);
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible; /* cat is transcendental — let it overflow the header */
 }
 
 /* Header Sections */
@@ -3193,6 +3193,13 @@ body.mobile-mode .header > div {
 }
 
 /* 1. Cat (Left Column) - Snap to top-left, zero margins */
+/* Desktop: cat floats to the front layer — transcendental, clips nothing */
+body.desktop-mode #catContainer {
+    position: relative;
+    z-index: var(--z-modal-above); /* 1001 — above header, sidebar, modals */
+    overflow: visible;
+}
+
 body.mobile-mode #catContainer {
     flex-shrink: 0 !important;
     gap: 0 !important;
