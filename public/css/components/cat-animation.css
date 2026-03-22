@@ -117,14 +117,14 @@ body.mobile-mode .cat-datetime-default {
     font-size: 0.6rem !important;
 }
 
-/* Dashboard (index.html) - Desktop Mode: 190px (150% of original 125px) */
+/* Dashboard (index.html) - Desktop Mode: 143px (75% of 190px) */
 body.desktop-mode .cat-animation-component {
-    width: 190px !important;
-    height: 190px !important;
+    width: 143px !important;
+    height: 143px !important;
     margin: 0 !important;
 }
 
 body.desktop-mode .character-canvas {
-    width: 190px !important;
-    height: 190px !important;
+    width: 143px !important;
+    height: 143px !important;
 }

@@ -116,8 +116,8 @@ const LayoutController = (function() {
             clearIdleTimer();
             
             if (el.catCanvas) {
-                el.catCanvas.width = 190;
-                el.catCanvas.height = 190;
+                el.catCanvas.width = 143;
+                el.catCanvas.height = 143;
                 el.catCanvas.style.width = '';
                 el.catCanvas.style.height = '';
             }
