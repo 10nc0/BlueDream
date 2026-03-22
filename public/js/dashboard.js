@@ -4005,14 +4005,15 @@
                     return;
                 }
                 const lineOaId = _channelConfig?.lineOaId || '';
-                const lineUrl = `https://line.me/R/ti/p/@${lineOaId}`;
+                // oaMessage deep link: adds friend if needed AND pre-fills the code in the chat box
+                const lineUrl = `https://line.me/R/oaMessage/@${lineOaId}?text=${encodeURIComponent(joinCode)}`;
 
                 document.getElementById('line-join-code').textContent = joinCode;
                 document.getElementById('line-add-friend-link').href = lineUrl;
                 document.getElementById('line-qr-img').src =
                     `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(lineUrl)}`;
 
-                if (subtitle) subtitle.textContent = 'Follow 2 steps to activate LINE';
+                if (subtitle) subtitle.textContent = 'Scan QR → tap Send to activate';
                 if (waSteps) waSteps.style.display = 'none';
                 if (lineSteps) lineSteps.style.display = 'block';
                 console.log('🟢 Showing LINE activation for:', book.name, 'Code:', joinCode);
