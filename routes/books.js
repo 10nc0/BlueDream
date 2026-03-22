@@ -90,6 +90,7 @@ function registerBooksRoutes(app, deps) {
         const { config } = require('../config');
         res.json({ lineOaId: config.line?.lineOaId || null });
     });
+    // ^^^ Task #6: LINE QR onboarding — auth-gated config endpoint for frontend platform selector
 
     app.get('/api/books', requireAuth, async (req, res) => {
         logger.debug({ userId: req.userId }, '/api/books called');
@@ -473,6 +474,7 @@ function registerBooksRoutes(app, deps) {
                 book.contact_info = `join baby-ability ${joinCode}`;
                 logger.info({ fractalId: generatedFractalId, joinCode }, 'Generated join code for book');
             } else if (inputPlatform === 'line') {
+                // Task #6: raw join code (no "join baby-ability" prefix — that is Twilio-sandbox-specific)
                 const randomCode = crypto.randomBytes(4).toString('hex');
                 const bookNameSlug = name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
                 joinCode = `${bookNameSlug}-${randomCode}`;

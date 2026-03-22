@@ -4017,6 +4017,7 @@
             }
         }
         
+        // Task #6: channel config cache — fetched once on load, drives LINE option visibility
         let _channelConfig = null;
 
         async function loadChannelConfig() {
@@ -4027,7 +4028,7 @@
                     _channelConfig = await res.json();
                     const lineOpt = document.getElementById('line-platform-option');
                     if (lineOpt && _channelConfig.lineOaId) {
-                        lineOpt.style.display = '';
+                        lineOpt.style.display = '';  // reveal LINE option only when OA ID is configured
                     }
                 }
             } catch (e) {
