@@ -3202,15 +3202,21 @@ body.mobile-mode .header > div {
     align-self: flex-start;
 }
 
-/* Desktop: absolute out of flex flow, centered on header height, at content pane left edge */
-/* top:50% + translateY(-50%) = vertically centered → head/body visible in header,
-   ears clip above viewport (off-screen), lower body clips 65px below into content pane */
+/* Desktop: stay in flex flow (not absolute), clip container to header height.
+   Canvas is shifted up inside the container so ears+face are visible, not the blank top.
+   overflow:hidden on the container prevents ANY cat overflow into sidebar or message pane. */
 body.desktop-mode #catContainer {
+    position: relative;
+    width: 190px;
+    height: var(--header-height);
+    overflow: hidden;
+}
+/* Shift the 190px canvas up by 52px so the ears (canvas y≈52) align to the container top.
+   Visible window: canvas y=52–112 = ears + eyes + face = exactly the header height (60px). */
+body.desktop-mode #hopCanvas {
     position: absolute;
-    top: 50%;
-    left: var(--sidebar-width);
-    transform: translateY(-50%);
-    margin-left: 0;
+    top: -52px;
+    left: 0;
 }
 /* Mobile: sidebar hidden, cat stays in grid flow at x=0 — no offset needed */
 
