@@ -3193,6 +3193,7 @@ body.mobile-mode .header > div {
 }
 
 /* Cat: transcendental on every mode — only size changes (cat-animation.css owns the size) */
+/* Position: always top-left of the CONTENT pane, not the sidebar pane */
 #catContainer {
     position: relative;
     overflow: visible;
@@ -3200,6 +3201,12 @@ body.mobile-mode .header > div {
     flex-shrink: 0;
     align-self: flex-start;
 }
+
+/* Desktop: sidebar sits left of content — offset cat so it transcends into content pane */
+body.desktop-mode #catContainer {
+    margin-left: var(--sidebar-width);
+}
+/* Mobile: sidebar is hidden, cat is at x=0 of the full-width header — no offset needed */
 
 body.mobile-mode #dateTimeDefault {
     display: none !important; /* Hide date/time below cat */
