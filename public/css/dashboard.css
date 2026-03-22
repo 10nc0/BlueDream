@@ -3183,10 +3183,9 @@ body.mobile-mode .header {
 }
 
 body.mobile-mode .header > div {
-    display: grid !important;
-    grid-template-columns: 80px 1fr auto; /* Fixed cat width (--cat-size-sm: 80px) - Title - Logout */
-    gap: 0.25rem !important; /* Minimal gap */
-    align-items: center !important; /* Vertically center all columns */
+    display: flex !important;
+    align-items: center !important; /* Center within fixed 55px height — cat overflows, buttons stay centered */
+    gap: 0.25rem !important;
     height: 100%;
     padding: 0 0.5rem 0 0 !important; /* Only right padding for logout */
 }
