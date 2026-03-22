@@ -1,16 +1,14 @@
 const crypto = require('crypto');
 
-// SECURITY: Require FRACTAL_SALT to be set in production
-const FRACTAL_SALT = process.env.FRACTAL_SALT;
-
-if (!FRACTAL_SALT) {
-    console.warn('⚠️  WARNING: FRACTAL_SALT not set! Using weak default salt.');
-    console.warn('   Set FRACTAL_SALT environment variable for production security.');
-    console.warn('   Generate a strong salt: openssl rand -hex 32');
-}
-
-// Fallback for development only - NEVER use this in production
-const SALT = FRACTAL_SALT || 'dev-only-weak-salt-DO-NOT-USE-IN-PRODUCTION';
+// SECURITY: FRACTAL_SALT must be set. vegapunk.js fails-closed at startup if missing.
+// Fallback generates a per-process ephemeral random salt — unpredictable, no known string
+// in the codebase. Dev sessions won't survive restarts (acceptable). Prod never reaches this.
+const SALT = process.env.FRACTAL_SALT || (() => {
+    const ephemeral = require('crypto').randomBytes(32).toString('hex');
+    console.warn('⚠️  FRACTAL_SALT not set — ephemeral salt active (dev only).');
+    console.warn('   Generate a prod salt: openssl rand -hex 32');
+    return ephemeral;
+})();
 
 /**
  * Generate a fractalized ID for a resource

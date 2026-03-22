@@ -1,7 +1,13 @@
 const crypto = require('crypto');
 const fractalId = require('./fractal-id');
 
-const FRACTAL_SALT = process.env.FRACTAL_SALT || 'dev-only-weak-salt-DO-NOT-USE-IN-PRODUCTION';
+// SECURITY: vegapunk.js fails-closed at startup if FRACTAL_SALT is missing.
+// Fallback is ephemeral random — no known string in the codebase. Dev only.
+const FRACTAL_SALT = process.env.FRACTAL_SALT || (() => {
+    const ephemeral = crypto.randomBytes(32).toString('hex');
+    console.warn('⚠️  FRACTAL_SALT not set — ephemeral salt active (dev only).');
+    return ephemeral;
+})();
 
 /**
  * Build a cryptographic provenance capsule (HMAC sender proof + SHA256 content hash).
