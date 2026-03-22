@@ -101,30 +101,30 @@
     }
 }
 
-/* Dashboard (index.html) - Mobile Mode: matches --cat-size-sm: 60px */
+/* Dashboard (index.html) - Mobile Mode: matches --cat-size-sm: 80px */
 body.mobile-mode .cat-animation-component {
-    width: 60px !important;
-    height: 60px !important;
-    margin: 0 !important; /* Let dashboard CSS handle positioning */
+    width: 80px !important;
+    height: 80px !important;
+    margin: 0 !important;
 }
 
 body.mobile-mode .character-canvas {
-    width: 60px !important;
-    height: 60px !important;
+    width: 80px !important;
+    height: 80px !important;
 }
 
 body.mobile-mode .cat-datetime-default {
     font-size: 0.6rem !important;
 }
 
-/* Dashboard (index.html) - Desktop Mode: matches --cat-size: 125px */
+/* Dashboard (index.html) - Desktop Mode: 190px (150% of original 125px) */
 body.desktop-mode .cat-animation-component {
-    width: 125px !important;
-    height: 125px !important;
-    margin: 0 !important; /* Let dashboard CSS handle positioning */
+    width: 190px !important;
+    height: 190px !important;
+    margin: 0 !important;
 }
 
 body.desktop-mode .character-canvas {
-    width: 125px !important;
-    height: 125px !important;
+    width: 190px !important;
+    height: 190px !important;
 }

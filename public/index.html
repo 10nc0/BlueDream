@@ -34,12 +34,12 @@
     <div class="header" style="margin: 0; padding: 0 1rem; background: rgba(30, 41, 59, 0.8); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(148, 163, 184, 0.1);">
         <div style="display: flex; align-items: center; gap: 0.75rem; height: 100%; position: relative;">
             <!-- Cat Animation (constant size) - centered vertically -->
-            <div id="catContainer" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; flex-shrink: 0;">
-                <canvas id="hopCanvas" class="character-canvas" width="125" height="125" style="display: block; margin: 0;"></canvas>
+            <div id="catContainer" style="display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 0; flex-shrink: 0; align-self: flex-start;">
+                <canvas id="hopCanvas" class="character-canvas" width="190" height="190" style="display: block; margin: 0;"></canvas>
             </div>
             
-            <!-- Title Section - centered vertically with cat -->
-            <div id="headerTitle" style="flex-shrink: 0; display: flex; flex-direction: column; justify-content: center;">
+            <!-- Title Section - clips at right edge, starts after cat -->
+            <div id="headerTitle" style="flex: 1 1 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: center;">
                 <div style="background: linear-gradient(135deg, #22d3ee 0%, #ec4899 50%, #a855f7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-size: 1.5rem; font-weight: 700; text-shadow: 0 0 20px rgba(34, 211, 238, 0.3); letter-spacing: 0.5px; white-space: nowrap; line-height: 1.2;">Your Nyanbook~</div>
                 <div style="font-size: 0.875rem; color: #cbd5e1; font-weight: 500; margin-top: 0.125rem; white-space: nowrap; line-height: 1.2;">Every Record, Forever, Searchable also (#Hash)Tag-enabled. Nyan~</div>
             </div>

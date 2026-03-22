@@ -97,7 +97,7 @@
 
   /* Component Dimensions */
   --cat-size: 125px;
-  --cat-size-sm: 60px;
+  --cat-size-sm: 80px;
   --content-max-width: 300px;
   
   /* Transitions */
@@ -3185,7 +3185,7 @@ body.mobile-mode .header {
 
 body.mobile-mode .header > div {
     display: grid !important;
-    grid-template-columns: 60px 1fr auto; /* Fixed cat width (--cat-size-sm) - Title - Logout */
+    grid-template-columns: 80px 1fr auto; /* Fixed cat width (--cat-size-sm: 80px) - Title - Logout */
     gap: 0.25rem !important; /* Minimal gap */
     align-items: center !important; /* Vertically center all columns */
     height: 100%;
@@ -3210,6 +3210,9 @@ body.mobile-mode #catContainer {
     padding: 0 !important;
     width: var(--cat-size-sm) !important;
     height: var(--cat-size-sm) !important;
+    position: relative !important;
+    z-index: var(--z-modal-above) !important; /* transcendental on mobile too */
+    overflow: visible !important;
 }
 
 body.mobile-mode #hopCanvas {
