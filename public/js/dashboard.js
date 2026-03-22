@@ -3965,43 +3965,90 @@
             }
         }
         
-        function showWhatsAppActivationModal(fractalId) {
-            // Find book by fractal_id
+        let _channelConfig = null;
+
+        async function loadChannelConfig() {
+            if (_channelConfig) return _channelConfig;
+            try {
+                const res = await window.authFetch('/api/books/channel-config');
+                if (res.ok) {
+                    _channelConfig = await res.json();
+                    const lineOpt = document.getElementById('line-platform-option');
+                    if (lineOpt && _channelConfig.lineOaId) {
+                        lineOpt.style.display = '';
+                    }
+                }
+            } catch (e) {
+                console.warn('⚠️ Could not load channel config:', e.message);
+            }
+            return _channelConfig;
+        }
+
+        function showBookActivationModal(fractalId, platform) {
             const book = books.find(b => b.fractal_id === fractalId);
             if (!book) {
                 console.error('Book not found:', fractalId);
                 showToast('❌ Book not found', 'error');
                 return;
             }
-            
-            // Extract join code from contact_info (e.g., "join baby-ability v20pc3-95bfd4" -> "v20pc3-95bfd4")
-            const joinCode = (book.contact_info || '').replace(/^join baby-ability\s+/i, '').trim();
-            
-            if (!joinCode) {
-                console.error('No join code found for book:', book);
-                showToast('❌ No activation code found', 'error');
-                return;
+
+            const waSteps = document.getElementById('wa-activation-steps');
+            const lineSteps = document.getElementById('line-activation-steps');
+            const subtitle = document.getElementById('book-activation-subtitle');
+
+            const resolvedPlatform = platform || book.input_platform || 'whatsapp';
+
+            if (resolvedPlatform === 'line') {
+                const joinCode = (book.contact_info || '').trim();
+                if (!joinCode) {
+                    showToast('❌ No activation code found', 'error');
+                    return;
+                }
+                const lineOaId = _channelConfig?.lineOaId || '';
+                const lineUrl = `https://line.me/R/ti/p/@${lineOaId}`;
+
+                document.getElementById('line-join-code').textContent = joinCode;
+                document.getElementById('line-add-friend-link').href = lineUrl;
+                document.getElementById('line-qr-img').src =
+                    `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(lineUrl)}`;
+
+                if (subtitle) subtitle.textContent = 'Follow 2 steps to activate LINE';
+                if (waSteps) waSteps.style.display = 'none';
+                if (lineSteps) lineSteps.style.display = 'block';
+                console.log('🟢 Showing LINE activation for:', book.name, 'Code:', joinCode);
+            } else {
+                const joinCode = (book.contact_info || '').replace(/^join baby-ability\s+/i, '').trim();
+                if (!joinCode) {
+                    showToast('❌ No activation code found', 'error');
+                    return;
+                }
+                document.getElementById('book-join-code').textContent = joinCode;
+
+                if (subtitle) subtitle.textContent = 'Follow 2 steps to activate WhatsApp';
+                if (waSteps) waSteps.style.display = 'block';
+                if (lineSteps) lineSteps.style.display = 'none';
+                console.log('📱 Showing WhatsApp activation for:', book.name, 'Code:', joinCode);
             }
-            
-            // Populate modal
+
             document.getElementById('book-name-display').textContent = `📖 ${book.name}`;
             document.getElementById('book-fractal-id').textContent = book.fractal_id;
-            document.getElementById('book-join-code').textContent = joinCode;
-            
-            // Show activation section, hide form
+
             document.getElementById('book-form-section').style.display = 'none';
             document.getElementById('book-qr-section').style.display = 'block';
-            
-            // Open modal
             document.getElementById('createBookModal').classList.add('active');
-            
-            console.log('📱 Showing activation modal for:', book.name, 'Code:', joinCode);
+        }
+
+        function showWhatsAppActivationModal(fractalId) {
+            showBookActivationModal(fractalId, 'whatsapp');
         }
         
         // Handle book creation form submission
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize URL hash support for shareable message links
             initUrlHashSupport();
+            
+            // Load channel config to enable/disable platform options
+            loadChannelConfig();
             
             const bookForm = document.getElementById('book-create-form');
             if (bookForm) {
@@ -4088,10 +4135,9 @@
                         // Reload books to show the new one
                         await loadBooks();
                         
-                        // 2-MESSAGE FLOW: Show activation modal for WhatsApp books
-                        if (book.input_platform === 'whatsapp' && book.contact_info) {
-                            // Use dedicated function for consistent behavior
-                            showWhatsAppActivationModal(book.fractal_id);
+                        // Show channel-appropriate activation modal
+                        if (book.contact_info) {
+                            showBookActivationModal(book.fractal_id, platform);
                             showToast('✅ Book created! Follow the 2 steps to activate.', 'success');
                         }
                         
@@ -7387,6 +7433,32 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Copy LINE join code button
+    const copyLineCodeBtn = document.getElementById('copy-line-code-btn');
+    if (copyLineCodeBtn) {
+        copyLineCodeBtn.addEventListener('click', function() {
+            const joinCode = document.getElementById('line-join-code').textContent;
+            if (joinCode) {
+                navigator.clipboard.writeText(joinCode).then(() => {
+                    const btn = this;
+                    const originalText = btn.textContent;
+                    btn.textContent = '✓ Copied!';
+                    btn.style.background = 'rgba(34, 197, 94, 0.2)';
+                    btn.style.borderColor = 'rgba(34, 197, 94, 0.3)';
+                    btn.style.color = '#22c55e';
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                        btn.style.background = '';
+                        btn.style.borderColor = '';
+                        btn.style.color = '';
+                    }, 1500);
+                }).catch(err => {
+                    alert('Failed to copy: ' + err.message);
+                });
+            }
+        });
+    }
+
     // Copy sandbox code button (Step 1: join baby-ability)
     const copySandboxCodeBtn = document.getElementById('copy-sandbox-code-btn');
     if (copySandboxCodeBtn) {

@@ -76,6 +76,10 @@ const config = {
     primaryDomain: process.env.REPLIT_DOMAINS?.split(',')[0] || 'nyanbook.io'
   },
 
+  line: {
+    lineOaId: process.env.LINE_OA_ID || null
+  },
+
   rateLimit: {
     exemptIPs: [
       '127.0.0.1',

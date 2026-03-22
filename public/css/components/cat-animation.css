@@ -58,12 +58,12 @@
     text-align: right;
 }
 
-/* Auth Pages: Always centered at 125×125px */
+/* Auth Pages: Always centered at 200×200px */
 .login-container .cat-animation-component,
 .signup-container .cat-animation-component,
 .forgot-container .cat-animation-component {
-    width: 125px !important;
-    height: 125px !important;
+    width: 200px !important;
+    height: 200px !important;
     margin: 0 auto 1.5rem auto; /* Center with bottom margin */
     position: relative;
     z-index: 10; /* Above other elements */
@@ -72,8 +72,8 @@
 .login-container .character-canvas,
 .signup-container .character-canvas,
 .forgot-container .character-canvas {
-    width: 125px !important;
-    height: 125px !important;
+    width: 200px !important;
+    height: 200px !important;
 }
 
 /* Auth Pages - Mobile: Smaller cat with more spacing */

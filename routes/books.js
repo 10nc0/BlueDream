@@ -65,6 +65,11 @@ function registerBooksRoutes(app, deps) {
     const NYANBOOK_LEDGER_WEBHOOK = constants?.NYANBOOK_LEDGER_WEBHOOK;
     const metadataExtractor = new MetadataExtractor();
 
+    app.get('/api/books/channel-config', requireAuth, (req, res) => {
+        const { config } = require('../config');
+        res.json({ lineOaId: config.line?.lineOaId || null });
+    });
+
     app.get('/api/books', requireAuth, async (req, res) => {
         logger.debug({ userId: req.userId }, '/api/books called');
         
@@ -446,6 +451,19 @@ function registerBooksRoutes(app, deps) {
                 
                 book.contact_info = `join baby-ability ${joinCode}`;
                 logger.info({ fractalId: generatedFractalId, joinCode }, 'Generated join code for book');
+            } else if (inputPlatform === 'line') {
+                const randomCode = crypto.randomBytes(4).toString('hex');
+                const bookNameSlug = name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
+                joinCode = `${bookNameSlug}-${randomCode}`;
+                
+                await client.query(`
+                    UPDATE ${tenantSchema}.books 
+                    SET contact_info = $1 
+                    WHERE id = $2
+                `, [joinCode, book.id]);
+                
+                book.contact_info = joinCode;
+                logger.info({ fractalId: generatedFractalId, joinCode }, 'Generated LINE join code for book');
             }
             
             const tenantEmail = req.tenantContext.userEmail;
