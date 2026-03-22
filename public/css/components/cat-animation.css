@@ -58,15 +58,19 @@
     text-align: right;
 }
 
-/* Auth Pages: Always centered at 200×200px */
+/* Auth Pages: 200×200px display on 250px buffer canvas.
+   Buffer has ~55px blank above cat ears and ~55px below feet.
+   margin-top/bottom: -50px on canvas crops that blank from the flex flow.
+   Container height shrunk to match the actual cat-face + date-time height. */
 .login-container .cat-animation-component,
 .signup-container .cat-animation-component,
 .forgot-container .cat-animation-component {
     width: 200px !important;
-    height: 200px !important;
-    margin: 0 auto 1.5rem auto; /* Center with bottom margin */
+    height: 130px !important;   /* was 200px — cropped blank above/below */
+    overflow: visible !important;
+    margin: 0 auto 0.75rem auto;
     position: relative;
-    z-index: 10; /* Above other elements */
+    z-index: 10;
 }
 
 .login-container .character-canvas,
@@ -74,6 +78,8 @@
 .forgot-container .character-canvas {
     width: 200px !important;
     height: 200px !important;
+    margin-top: -50px !important;   /* shift canvas up; crops top blank from flow */
+    margin-bottom: -50px !important; /* crops bottom blank from flow */
 }
 
 /* Auth Pages - Mobile: Smaller cat with more spacing */
@@ -82,8 +88,9 @@
     .signup-container .cat-animation-component,
     .forgot-container .cat-animation-component {
         width: 240px !important;
-        height: 240px !important;
-        margin: 0 auto 1.25rem auto;
+        height: 150px !important;   /* was 240px — 240px display has ~66px blank each side */
+        overflow: visible !important;
+        margin: 0 auto 0.75rem auto;
     }
     
     .login-container .character-canvas,
@@ -91,6 +98,8 @@
     .forgot-container .character-canvas {
         width: 240px !important;
         height: 240px !important;
+        margin-top: -60px !important;
+        margin-bottom: -60px !important;
     }
     
     .login-container .cat-datetime-default,
