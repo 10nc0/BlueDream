@@ -9,6 +9,7 @@
 - **Security**: Multi-user authentication with audit logging
 - **Compatibility**: Safari/iPad support (JWT localStorage + proper cookie handling)
 - **UX**: Auto-expanding interface, zero-friction onboarding, progressive disclosure for power features
+- **Mobile/Desktop parity**: Whenever making any UI size, spacing, or layout change, always check BOTH the desktop CSS rule AND the `@media (max-width: 480px)` mobile override — they are independent `!important` blocks and a fix to one silently leaves the other broken. Auth pages: `cat-animation.css` has separate desktop (200px) and mobile (160px) canvas overrides. Dashboard: `mobile-mode` / `desktop-mode` body classes are set by JS `LayoutController`.
 
 ## System Architecture
 The system uses a Node.js backend with Express and a Single Page Application (SPA) frontend, featuring an Apple glassmorphism design and a Discord-style two-pane layout with real-time updates. It applies conservation laws and sustainability metrics to financial statements.
