@@ -106,7 +106,7 @@ function initHopAnimation() {
     function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, fleeing = false) {
         ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         
-        const scale = CAT_CONFIG.SCALE;
+        const scale = parseFloat(canvas.dataset.scale) || CAT_CONFIG.SCALE;
         const isJump = Math.floor(frameNum / CAT_CONFIG.JUMP_FRAME_INTERVAL) % 2 === 0;
         const yOffset = isJump ? -CAT_CONFIG.JUMP_HEIGHT * scale : 0;
         
