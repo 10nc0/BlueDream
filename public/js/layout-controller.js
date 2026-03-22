@@ -116,10 +116,10 @@ const LayoutController = (function() {
             clearIdleTimer();
             
             if (el.catCanvas) {
-                el.catCanvas.width = 100;
-                el.catCanvas.height = 100;
-                el.catCanvas.style.width = '100px';
-                el.catCanvas.style.height = '100px';
+                el.catCanvas.width = 190;
+                el.catCanvas.height = 190;
+                el.catCanvas.style.width = '';
+                el.catCanvas.style.height = '';
             }
             
             if (el.sidebarResizer) el.sidebarResizer.style.display = 'block';

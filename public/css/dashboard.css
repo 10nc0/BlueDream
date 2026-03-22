@@ -3191,20 +3191,21 @@ body.mobile-mode .header > div {
     padding: 0 0.5rem 0 0 !important; /* Only right padding for logout */
 }
 
-/* Cat: transcendental — z-index keeps it above all layers always.
-   Sizing is owned by cat-animation.css (loaded on index.html).
-   Only positioning lives here. */
+/* Cat: fixed to viewport — completely outside flex/grid flow so it never disrupts layout.
+   Sits at the top-left corner of the content pane (sidebar-width from left).
+   Sizing is owned by cat-animation.css. Only position lives here. */
 #catContainer {
-    position: relative;
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-width);
     overflow: visible;
-    z-index: var(--z-modal-above); /* 1001 — above all layers always */
-    flex-shrink: 0;
-    align-self: flex-start;
+    z-index: var(--z-modal-above); /* 1001 — transcendental layer above all UI */
+    pointer-events: none; /* clicks pass through to header buttons */
 }
 
-/* Desktop: push cat to the top-left corner of the content pane (past the sidebar). */
-body.desktop-mode #catContainer {
-    margin-left: var(--sidebar-width);
+/* Mobile: no sidebar, cat pins to far-left of viewport */
+body.mobile-mode #catContainer {
+    left: 0;
 }
 
 body.mobile-mode #dateTimeDefault {
