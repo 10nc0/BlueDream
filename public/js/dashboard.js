@@ -4017,7 +4017,6 @@
             }
         }
         
-        // Task #6: channel config cache — fetched once on load, drives LINE option visibility
         let _channelConfig = null;
 
         async function loadChannelConfig() {
@@ -4028,7 +4027,7 @@
                     _channelConfig = await res.json();
                     const lineOpt = document.getElementById('line-platform-option');
                     if (lineOpt && _channelConfig.lineOaId) {
-                        lineOpt.style.display = '';  // reveal LINE option only when OA ID is configured
+                        lineOpt.style.display = '';
                     }
                 }
             } catch (e) {
@@ -4058,7 +4057,7 @@
                     return;
                 }
                 const lineOaId = _channelConfig?.lineOaId || '';
-                const addFriendUrl = `https://line.me/ti/p/@${lineOaId}`;
+                const addFriendUrl = `https://line.me/R/ti/p/@${lineOaId}`;
                 const sendCodeUrl = `https://line.me/R/oaMessage/@${lineOaId}?text=${encodeURIComponent(joinCode)}`;
 
                 document.getElementById('line-join-code').textContent = joinCode;

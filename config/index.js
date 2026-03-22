@@ -77,7 +77,7 @@ const config = {
   },
 
   line: {
-    lineOaId: process.env.LINE_OA_ID || null  // Task #6: null → LINE option hidden in modal
+    lineOaId: process.env.LINE_OA_ID || null
   },
 
   rateLimit: {

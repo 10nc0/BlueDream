@@ -95,7 +95,6 @@
                         <label>Input Platform</label>
                         <select id="book-platform-input" required>
                             <option value="whatsapp">WhatsApp</option>
-                            <!-- Task #6: LINE option — hidden by default, revealed by loadChannelConfig() when LINE_OA_ID is set -->
                             <option value="line" id="line-platform-option" style="display:none;">LINE</option>
                             <option value="telegram" disabled>Telegram (Coming Soon)</option>
                         </select>
@@ -144,7 +143,7 @@
                     </div>
                 </div>
 
-                <!-- LINE Activation Steps (Task #6): Step 1 add-friend QR + Step 2 send raw join code -->
+                <!-- LINE Activation Steps -->
                 <div id="line-activation-steps" style="display: none;">
                     <!-- Step 1: Add friend via QR -->
                     <div style="margin-bottom: 1rem; padding: 1rem; background: rgba(6, 194, 112, 0.1); border: 1px solid rgba(6, 194, 112, 0.3); border-radius: 8px; text-align: left;">
