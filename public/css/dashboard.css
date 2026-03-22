@@ -3192,38 +3192,13 @@ body.mobile-mode .header > div {
     padding: 0 0.5rem 0 0 !important; /* Only right padding for logout */
 }
 
-/* 1. Cat (Left Column) - Snap to top-left, zero margins */
-/* Desktop: cat floats to the front layer — transcendental, clips nothing */
-body.desktop-mode #catContainer {
+/* Cat: transcendental on every mode — only size changes (cat-animation.css owns the size) */
+#catContainer {
     position: relative;
-    z-index: var(--z-modal-above); /* 1001 — above header, sidebar, modals */
     overflow: visible;
-}
-
-body.mobile-mode #catContainer {
-    flex-shrink: 0 !important;
-    gap: 0 !important;
-    align-self: flex-start !important;
-    align-items: flex-start !important;
-    justify-content: flex-start !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    width: var(--cat-size-sm) !important;
-    height: var(--cat-size-sm) !important;
-    position: relative !important;
-    z-index: var(--z-modal-above) !important; /* transcendental on mobile too */
-    overflow: visible !important;
-}
-
-body.mobile-mode #hopCanvas {
-    width: var(--cat-size-sm) !important;
-    height: var(--cat-size-sm) !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    display: block !important;
-    position: relative !important;
-    left: 0 !important;
-    top: 0 !important;
+    z-index: var(--z-modal-above); /* 1001 — above all layers always */
+    flex-shrink: 0;
+    align-self: flex-start;
 }
 
 body.mobile-mode #dateTimeDefault {
