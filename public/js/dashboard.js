@@ -1215,6 +1215,13 @@
             item.className = `book-list-item ${isSelected ? 'selected' : ''}`;
             item.dataset.fractalId = book.fractal_id;
             item.style.cssText = `display: flex; justify-content: space-between; align-items: center; padding: 0.625rem 0.875rem; cursor: pointer; background: ${isSelected ? 'rgba(88, 101, 242, 0.12)' : 'transparent'}; border-bottom: 1px solid rgba(148, 163, 184, 0.08); transition: background 0.12s ease; user-select: none;`;
+
+            // Drag handle (≡) — left side, touch-safe
+            const handle = document.createElement('span');
+            handle.className = 'book-drag-handle';
+            handle.setAttribute('aria-label', 'Drag to reorder');
+            handle.textContent = '⠿';
+            item.appendChild(handle);
             
             if (hasSearchMatch) {
                 const matchIndicator = document.createElement('div');
@@ -1272,6 +1279,9 @@
                 fragment.appendChild(createBookListItem(book, selectedBookFractalId));
             });
             sidebar.replaceChildren(fragment);
+
+            // Re-init sortable after DOM rebuild
+            initBookSortable();
             
             if (!skipDetailRender) {
                 renderBookDetail();
@@ -1279,6 +1289,48 @@
                 messagePageState[selectedBookFractalId] = { isLoading: false, hasOlder: true, seenIds: new Set(), oldestId: null };
                 loadBookMessages(selectedBookFractalId, false);
             }
+        }
+
+        // ===== BOOK SORT (SortableJS drag-and-drop) =====
+        let _bookSortable = null;
+
+        function initBookSortable() {
+            const container = document.getElementById('bookListContainer');
+            if (!container || typeof Sortable === 'undefined') return;
+
+            // Destroy old instance so renderBooks can re-init cleanly
+            if (_bookSortable) { _bookSortable.destroy(); _bookSortable = null; }
+
+            _bookSortable = Sortable.create(container, {
+                handle: '.book-drag-handle',
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                dragClass: 'sortable-drag',
+                delay: 120,            // long-press for touch (Apple Stocks feel)
+                delayOnTouchOnly: true,
+                touchStartThreshold: 5,
+                forceFallback: false,
+                onEnd(evt) {
+                    if (evt.oldIndex === evt.newIndex) return;
+
+                    // SortableJS already moved the DOM; sync the data arrays
+                    const allItems = [...container.querySelectorAll('.book-list-item')];
+                    const orderedIds = allItems.map(el => el.dataset.fractalId);
+
+                    // Sort books array to match new DOM order
+                    books.sort((a, b) => orderedIds.indexOf(a.fractal_id) - orderedIds.indexOf(b.fractal_id));
+                    filteredBooks.sort((a, b) => orderedIds.indexOf(a.fractal_id) - orderedIds.indexOf(b.fractal_id));
+
+                    // Build payload and persist
+                    const order = orderedIds.map((fractal_id, idx) => ({ fractal_id, sort_order: idx }));
+                    const _token = localStorage.getItem('accessToken');
+                    fetch('/api/books/reorder', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_token}` },
+                        body: JSON.stringify({ order })
+                    }).catch(err => console.warn('⚠️ Book reorder save failed:', err));
+                }
+            });
         }
 
         async function selectBook(fractalId) {

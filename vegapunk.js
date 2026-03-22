@@ -893,6 +893,20 @@ async function initializeDatabase() {
             ON CONFLICT (key) DO NOTHING
         `);
         
+        // MIGRATION: Add sort_order column to books table in all tenant schemas
+        try {
+            const tenantSchemas = await getAllTenantSchemas(pool, 'dev');
+            for (const row of tenantSchemas) {
+                await pool.query(`
+                    ALTER TABLE ${row.tenant_schema}.books
+                    ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0
+                `);
+            }
+            console.log('✅ sort_order migration applied to all tenant schemas');
+        } catch (err) {
+            console.warn('⚠️ sort_order migration skipped:', err.message);
+        }
+
         // NOTE: One-time migrations have been applied to production database and removed 
         // from startup code for clean deploys:
         // - audit_queries_table (added audit_queries table to tenant schemas)

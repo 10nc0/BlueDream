@@ -65,6 +65,27 @@ function registerBooksRoutes(app, deps) {
     const NYANBOOK_LEDGER_WEBHOOK = constants?.NYANBOOK_LEDGER_WEBHOOK;
     const metadataExtractor = new MetadataExtractor();
 
+    // PATCH /api/books/reorder — persist drag-and-drop sort order
+    app.patch('/api/books/reorder', requireAuth, setTenantContext, async (req, res) => {
+        try {
+            const { order } = req.body; // [{ fractal_id, sort_order }, ...]
+            if (!Array.isArray(order) || order.length === 0) {
+                return res.status(400).json({ error: 'order array required' });
+            }
+            const tenantSchema = req.tenantSchema;
+            await Promise.all(order.map(({ fractal_id, sort_order }) =>
+                pool.query(
+                    `UPDATE ${tenantSchema}.books SET sort_order = $1 WHERE fractal_id = $2`,
+                    [sort_order, fractal_id]
+                )
+            ));
+            res.json({ ok: true });
+        } catch (err) {
+            logger.error({ err }, 'Error in PATCH /api/books/reorder');
+            res.status(500).json({ error: 'Failed to save order' });
+        }
+    });
+
     app.get('/api/books/channel-config', requireAuth, (req, res) => {
         const { config } = require('../config');
         res.json({ lineOaId: config.line?.lineOaId || null });
@@ -127,7 +148,7 @@ function registerBooksRoutes(app, deps) {
                     WHERE b.archived = false
                       AND b.status != 'expired'
                     ${limboFilter}
-                    ORDER BY b.created_at DESC
+                    ORDER BY b.sort_order ASC NULLS LAST, b.created_at DESC
                 `);
                 books = result.rows;
                 

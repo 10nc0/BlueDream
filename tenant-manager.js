@@ -266,7 +266,8 @@ class TenantManager {
                     fractal_id TEXT,
                     created_by_admin_id TEXT,
                     created_at TIMESTAMP DEFAULT NOW(),
-                    updated_at TIMESTAMP DEFAULT NOW()
+                    updated_at TIMESTAMP DEFAULT NOW(),
+                    sort_order INTEGER DEFAULT 0
                 )
             `);
             

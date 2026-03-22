@@ -3690,6 +3690,40 @@ body.mobile-mode #aiPlaygroundBtn {
     background: rgba(148, 163, 184, 0.05) !important;
 }
 
+/* ===================================================================
+   DRAG-AND-DROP BOOK SORTING (SortableJS)
+   =================================================================== */
+.book-drag-handle {
+    cursor: grab;
+    color: #334155;
+    font-size: 0.9rem;
+    padding: 0 0.25rem 0 0;
+    flex-shrink: 0;
+    user-select: none;
+    line-height: 1;
+    transition: color 0.15s ease;
+    touch-action: none; /* required for touch drag */
+}
+
+.book-drag-handle:hover,
+.book-drag-handle:active {
+    color: #64748b;
+    cursor: grab;
+}
+
+.book-list-item.sortable-ghost {
+    opacity: 0.35;
+    background: rgba(88, 101, 242, 0.08) !important;
+}
+
+.book-list-item.sortable-drag {
+    opacity: 1;
+    background: rgba(88, 101, 242, 0.18) !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    border-radius: 6px;
+    cursor: grabbing !important;
+}
+
 /* Modal action button hover styles (CSP-compliant) */
 .book-action-btn:hover {
     border-color: currentColor !important;
