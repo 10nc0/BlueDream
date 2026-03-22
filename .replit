@@ -1,4 +1,4 @@
-modules = ["nodejs-20"]
+modules = ["nodejs-20", "postgresql-16"]
 [agent]
 expertMode = true
 
@@ -33,3 +33,6 @@ externalPort = 80
 [deployment]
 deploymentTarget = "autoscale"
 run = ["node", "vegapunk.js"]
+
+[nix]
+channel = "stable-25_05"

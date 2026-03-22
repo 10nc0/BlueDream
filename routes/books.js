@@ -132,6 +132,7 @@ function registerBooksRoutes(app, deps) {
                             FROM ${schemaName}.books b
                             WHERE b.archived = false
                               AND b.status != 'expired'
+                              AND b.fractal_id IS NOT NULL
                             ORDER BY b.created_at DESC
                         `);
                         books.push(...schemaResult.rows);
@@ -147,6 +148,7 @@ function registerBooksRoutes(app, deps) {
                     FROM ${tenantSchema}.books b
                     WHERE b.archived = false
                       AND b.status != 'expired'
+                      AND b.fractal_id IS NOT NULL
                     ${limboFilter}
                     ORDER BY b.sort_order ASC NULLS LAST, b.created_at DESC
                 `);

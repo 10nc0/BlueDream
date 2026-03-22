@@ -3201,7 +3201,11 @@ body.mobile-mode .header > div {
     align-self: flex-start;
 }
 
-/* Canvas size — mirrors cat-animation.css which is not loaded on index.html */
+/* Desktop: offset cat so it sits top-left of the content pane (after sidebar).
+   Cat overflows below the 60px header naturally — z-index:1001 keeps it transcendental. */
+body.desktop-mode #catContainer {
+    margin-left: var(--sidebar-width);
+}
 body.desktop-mode #hopCanvas {
     width: 190px !important;
     height: 190px !important;
