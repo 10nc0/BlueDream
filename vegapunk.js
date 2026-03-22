@@ -20,6 +20,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const helmet = require('helmet');
 const { Pool } = require('pg');
+const format = require('pg-format'); // Safe SQL identifier quoting (pg-format %I)
 const session = require('express-session');
 const connectPg = require('connect-pg-simple');
 const rateLimit = require('express-rate-limit');
@@ -282,43 +283,35 @@ app.get('/health', async (req, res) => {
         
         const isDbHealthy = dbCheck === 'connected';
         
-        // During startup: always return 200 (Autoscale needs time for DB init)
-        // After startup: return 503 if DB is down
-        if (isDbHealthy || isStartupPhase) {
+        if (isDbHealthy) {
+            // DB is up — healthy regardless of startup phase
             res.json({
-                status: isDbHealthy ? 'healthy' : 'starting',
+                status: 'healthy',
                 message: 'Nyan breathes φ — Server alive',
                 database: dbCheck,
                 pool: poolStats,
                 timestamp: new Date().toISOString()
             });
         } else {
+            // DB is down — return 503 in all cases (startup or not).
+            // During the 30s grace period Autoscale verifies the process responds (TCP/HTTP),
+            // not that it returns 2xx. The body reveals the real state to humans and monitoring.
             res.status(503).json({
-                status: 'unhealthy',
-                message: 'Database connection failed',
+                status: isStartupPhase ? 'starting' : 'unhealthy',
+                message: isStartupPhase ? 'Database not yet available during startup' : 'Database connection failed',
                 database: dbCheck,
                 pool: poolStats,
                 timestamp: new Date().toISOString()
             });
         }
     } catch (err) {
-        // During startup: return 200 to allow initialization
-        // After startup: return 503 for real failures
-        if (isStartupPhase) {
-            res.json({
-                status: 'starting',
-                message: 'Server initializing',
-                database: 'initializing',
-                timestamp: new Date().toISOString()
-            });
-        } else {
-            res.status(503).json({
-                status: 'unhealthy',
-                message: 'Health check failed',
-                error: err.message,
-                timestamp: new Date().toISOString()
-            });
-        }
+        // Any exception during health check — always 503
+        res.status(503).json({
+            status: isStartupPhase ? 'starting' : 'unhealthy',
+            message: isStartupPhase ? 'Server initializing — health check error' : 'Health check failed',
+            error: err.message,
+            timestamp: new Date().toISOString()
+        });
     }
 });
 
@@ -1119,17 +1112,17 @@ async function createSessionRecord(userId, sessionId, req, tenantSchema) {
         const { deviceType, browser, os } = parseUserAgent(userAgent);
         const location = await getLocationFromIP(req.ip);
         
-        // SECURITY: Validate tenant schema name before interpolation
+        // SECURITY: Validate tenant schema name before interpolation (primary guard)
         if (!tenantSchema || tenantSchema === 'undefined' || !/^[a-z_][a-z0-9_]*$/i.test(tenantSchema)) {
             console.error(`❌ Session creation: Invalid tenant schema: ${tenantSchema}`);
             return;
         }
 
         // Use tenant-scoped active_sessions table
-        await pool.query(`
-            INSERT INTO "${tenantSchema}".active_sessions (user_id, session_id, ip_address, user_agent, device_type, browser, os, location)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        `, [userId, sessionId, req.ip, userAgent, deviceType, browser, os, location]);
+        // SECURITY: pg-format %I safely double-quotes the identifier (defense-in-depth)
+        await pool.query(
+            format(`INSERT INTO %I.active_sessions (user_id, session_id, ip_address, user_agent, device_type, browser, os, location) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, tenantSchema),
+            [userId, sessionId, req.ip, userAgent, deviceType, browser, os, location]);
         
         console.log(`[${getTimestamp()}] 📱 Session created - User: ${userId}, Device: ${deviceType}, Browser: ${browser}, OS: ${os}, IP: ${req.ip}, Location: ${location}`);
     } catch (error) {
@@ -1249,12 +1242,11 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
         }
         const tenantSchema = `tenant_${parsed.tenantId}`;
         
-        // SECURITY: Validate schema name before interpolation
+        // SECURITY: Validate schema name before interpolation (primary guard)
         if (!/^[a-z_][a-z0-9_]*$/i.test(tenantSchema)) {
             return res.status(400).json({ error: 'Invalid tenant schema' });
         }
-        // SECURITY: Escape identifier for defense-in-depth (doubles any quotes per SQL standard)
-        const safeSchema = tenantSchema.replace(/"/g, '""');
+        // safeSchema removed — pg-format %I handles identifier quoting (defense-in-depth)
 
         // Get tenant-scoped database client
         const client = await pool.connect();
@@ -1263,8 +1255,9 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
             // TRANSACTION MODE: Use explicit schema prefix instead of SET LOCAL search_path
             
             // Find book by fractal_id
+            // SECURITY: pg-format %I safely double-quotes the schema identifier
             const bookResult = await client.query(
-                `SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM "${safeSchema}".books WHERE fractal_id = $1`,
+                format(`SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM %I.books WHERE fractal_id = $1`, tenantSchema),
                 [fractalIdParam]
             );
             
