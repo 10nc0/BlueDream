@@ -3191,33 +3191,15 @@ body.mobile-mode .header > div {
     padding: 0 0.5rem 0 0 !important; /* Only right padding for logout */
 }
 
-/* Cat: fixed to viewport top-left — zero layout impact, always transcendental.
-   top offset accounts for blank canvas pixels above the cat face so the face
-   is vertically centered in the header (same technique as playground.html).
-   Desktop: 143px canvas (75% of 190), cat ears at canvas y≈40 → top:-40px hides blank above.
-   Mobile:  75px canvas,  cat ears at canvas y≈21 → top:-21px hides blank above. */
+/* Cat: flex item in header — same approach as playground.html.
+   margin: 0 -22px compensates the 32px blank canvas on each side of the cat face,
+   so the face sits flush to the left edge with ~10px gutter. No mobile/desktop split. */
 #catContainer {
-    position: fixed;
-    top: -40px;
-    left: -35px; /* shift left by blank canvas margin so cat face starts ~11px from edge */
-    overflow: visible;
-    z-index: var(--z-modal-above); /* 1001 — above all layers */
-    pointer-events: none; /* clicks pass through to header beneath */
-}
-
-body.mobile-mode #catContainer {
-    top: -21px;
-    left: -15px; /* mobile: 26px blank, keep 11px gutter */
-}
-
-/* Push header content right so title starts just after cat face right edge + gutter
-   Desktop: cat face right ≈ 57px (canvas right=97, shift=-40) + 11px gutter = 68px
-   Mobile:  cat face right ≈ 34px (canvas right=54, shift=-20) + 11px gutter = 45px */
-body.desktop-mode .header {
-    padding-left: 73px !important;
-}
-body.mobile-mode .header {
-    padding-left: 50px !important;
+    position: relative;
+    margin: 0 -22px;
+    z-index: 20;
+    pointer-events: none;
+    flex-shrink: 0;
 }
 
 body.mobile-mode #dateTimeDefault {

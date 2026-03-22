@@ -95,12 +95,7 @@ const LayoutController = (function() {
             el.body.classList.add('mobile-mode');
             el.body.classList.remove('desktop-mode');
             
-            if (el.catCanvas) {
-                el.catCanvas.width = 75;
-                el.catCanvas.height = 75;
-                el.catCanvas.style.width = '75px';
-                el.catCanvas.style.height = '75px';
-            }
+            /* cat canvas: unified 100x100 via HTML attrs — no resize needed */
             
             if (el.sidebarResizer) el.sidebarResizer.style.display = 'none';
             if (el.headerResizer) el.headerResizer.style.display = 'none';
@@ -115,12 +110,7 @@ const LayoutController = (function() {
             
             clearIdleTimer();
             
-            if (el.catCanvas) {
-                el.catCanvas.width = 143;
-                el.catCanvas.height = 143;
-                el.catCanvas.style.width = '';
-                el.catCanvas.style.height = '';
-            }
+            /* cat canvas: unified 100x100 via HTML attrs — no resize needed */
             
             if (el.sidebarResizer) el.sidebarResizer.style.display = 'block';
             if (el.headerResizer) el.headerResizer.style.display = 'block';

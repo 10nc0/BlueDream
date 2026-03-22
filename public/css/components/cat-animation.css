@@ -117,14 +117,5 @@ body.mobile-mode .cat-datetime-default {
     font-size: 0.6rem !important;
 }
 
-/* Dashboard (index.html) - Desktop Mode: 143px (75% of 190px) */
-body.desktop-mode .cat-animation-component {
-    width: 143px !important;
-    height: 143px !important;
-    margin: 0 !important;
-}
-
-body.desktop-mode .character-canvas {
-    width: 143px !important;
-    height: 143px !important;
-}
+/* Dashboard (index.html): canvas is 100x100 (same as playground) via HTML attrs.
+   No desktop/mobile override needed — unified single size, margins handled by CSS. */
