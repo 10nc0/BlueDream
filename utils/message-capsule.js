@@ -4,11 +4,11 @@ const fractalId = require('./fractal-id');
 const FRACTAL_SALT = process.env.FRACTAL_SALT || 'dev-only-weak-salt-DO-NOT-USE-IN-PRODUCTION';
 
 /**
- * Build a full-fidelity ZK-ready message capsule.
+ * Build a cryptographic provenance capsule (HMAC sender proof + SHA256 content hash).
  * Contains the actual message content — same payload as Discord, structured for
  * verifiability and selective disclosure.
  *
- * ZK disclosure semantics:
+ * Selective disclosure semantics:
  *   disclosed: true  → body + attachment binary both pinned to IPFS (full copy)
  *   disclosed: false → only hash + reference stored (existence proven, content not revealed)
  *

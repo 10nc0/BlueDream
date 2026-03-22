@@ -117,7 +117,7 @@ Each bot holds only the permissions its role requires.
 Hermes writes. Thoth reads. Compromise one — the others remain clean.
 
 utils/
-├── message-capsule.js   — ZK-ready capsule builder
+├── message-capsule.js   — Cryptographic provenance capsule builder
 ├── ipfs-pinner.js       — Pinata IPFS pinning
 ├── psi-EMA.js           — φ-derived time series analysis
 ├── fetch-stock-prices.py — Psi-EMA data fetcher (yfinance / pandas)
@@ -225,7 +225,7 @@ After activation, all subsequent messages from that sender are routed to the act
 
 ## IPFS Capsule Ledger (optional)
 
-Every inpipe message builds a ZK-ready capsule:
+Every inpipe message builds a cryptographic provenance capsule:
 - Actual message body
 - HMAC sender proof (phone proven, not revealed)
 - SHA256 content hash
