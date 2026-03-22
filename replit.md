@@ -87,7 +87,10 @@ The signup path passed `undefined` to `createSessionRecord`. The guard `!/^[a-z_
 **4. CSP `*.domain.com` never matches the apex `domain.com` — always add both**
 `frameAncestors: ["https://*.replit.com"]` blocks the canvas because the Replit canvas runs from bare `replit.com`. Wildcard subdomains and the apex are distinct entries. When adding wildcard coverage, explicitly add the bare domain too: `["https://replit.com", "https://*.replit.com"]`.
 
-**5. Setup guide env var names must match exactly what the code reads**
+**5. Vegapunk Compression Principle — derive, don't duplicate**
+When a value can be computed from another already-present parameter, eliminate the redundant config. Every independently-configured copy is a future drift point. Example: visual scale for the cat animation is derived from canvas size (`(canvas.width / 125) * BASE_SCALE`) — auth pages just set `width="200"`, no separate `data-scale` needed. Same principle: `tenant_${tenantId}` is derived, not passed separately. If it can be computed, it should be.
+
+**6. Setup guide env var names must match exactly what the code reads**
 The setup guide checked `IDRIS_TOKEN` and `HORUS_TOKEN` — non-existent aliases — while the bots read `IDRIS_AI_LOG_TOKEN` and `HORUS_AI_LOG_TOKEN`. This produced a permanent false-positive Discord bots warning even when all four bots were live. Setup guide checks and `config/index.js` must reference the canonical env var name, not a shorthand.
 
 ## Architect's Letter
