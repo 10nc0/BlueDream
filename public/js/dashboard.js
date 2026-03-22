@@ -1353,6 +1353,14 @@
             });
             sidebar.replaceChildren(fragment);
             
+            // Messages > sidebar priority: on mobile, switch to messages pane immediately
+            if (isMobile()) {
+                const bookSidebar = document.getElementById('bookSidebar');
+                const bookDetail = document.getElementById('bookDetail');
+                if (bookSidebar) bookSidebar.style.display = 'none';
+                if (bookDetail) bookDetail.style.display = 'flex';
+            }
+            
             // Stop polling for previous book before switching
             stopPolling();
             
@@ -1363,6 +1371,14 @@
             await renderBookDetail();
             await loadBookMessages(selectedBookFractalId, false);
             startPolling(fractalId);
+        }
+        
+        // Mobile: return to book list from messages pane
+        function showBookList() {
+            const bookSidebar = document.getElementById('bookSidebar');
+            const bookDetail = document.getElementById('bookDetail');
+            if (bookSidebar) bookSidebar.style.display = 'flex';
+            if (bookDetail) bookDetail.style.display = 'none';
         }
 
         // Helper functions for badge styling
