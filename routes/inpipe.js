@@ -668,7 +668,7 @@ async function handleActiveBook(res, channel, msg, rawPayload, bookRecord, deps)
         }
     }
 
-    // Build ZK-ready capsule (sync, ~0ms — same data already in scope)
+    // Build cryptographic provenance capsule (HMAC sender proof + SHA256 content hash, sync ~0ms)
     const tenantIdMatch = bookRecord.tenant_schema?.match(/tenant_(\d+)/);
     const capsuleTenantId = tenantIdMatch ? parseInt(tenantIdMatch[1]) : 0;
     const capsule = buildCapsule({

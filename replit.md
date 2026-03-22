@@ -39,7 +39,7 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Scholastic Domain Classifier**: Multi-signal scoring system for classifying image content.
 - **Harmonized Document Processing**: Unified architecture for document extraction using a shared `DocumentExtractionCache`.
 - **Verifiable Export**: Book exports include `manifest.json` with SHA256 hashes and provenance info.
-- **Message Capsule + IPFS Ledger**: Every inpipe message builds a ZK-ready capsule containing body text, HMAC sender proof, SHA256 content hash, and per-attachment metadata. Capsule is pinned to IPFS via Pinata. CID stored in `core.message_ledger` table. Supports full/partial/ZK binary disclosure at message and attachment granularity.
+- **Message Capsule + IPFS Ledger**: Every inpipe message builds a cryptographic provenance capsule containing body text, HMAC sender proof, SHA256 content hash, and per-attachment metadata. Capsule is pinned to IPFS via Pinata. CID stored in `core.message_ledger` table. Supports full/partial/selective binary disclosure at message and attachment granularity.
 - **Modular Frontend Architecture**: Dashboard uses `Nyan.StateService` and `Nyan.AuthService` patterns for maintainable, testable code and PWA readiness.
 
 **System Design Choices:**
