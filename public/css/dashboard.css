@@ -546,8 +546,11 @@ body::before {
   border-radius: 0;
   padding: 0.3125rem;
   flex-shrink: 0;
-  overflow: hidden;
+  overflow-x: hidden;  /* clip horizontal only; let children own vertical scroll */
+  overflow-y: visible;
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Mobile (<768px) */
@@ -3182,7 +3185,7 @@ body.mobile-mode .header {
 
 body.mobile-mode .header > div {
     display: grid !important;
-    grid-template-columns: 75px 1fr auto; /* Fixed cat width - Title - Logout */
+    grid-template-columns: 60px 1fr auto; /* Fixed cat width (--cat-size-sm) - Title - Logout */
     gap: 0.25rem !important; /* Minimal gap */
     align-items: center !important; /* Vertically center all columns */
     height: 100%;
@@ -3602,6 +3605,10 @@ body.desktop-mode .thumbs-zone {
 /* Smooth momentum scrolling */
 .discord-messages-container,
 #bookListContainer {
+    flex: 1 1 0;          /* grow to fill remaining sidebar height */
+    min-height: 0;        /* allow flex child to shrink below content size */
+    overflow-y: auto;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
 }
