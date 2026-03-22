@@ -283,35 +283,45 @@ app.get('/health', async (req, res) => {
         
         const isDbHealthy = dbCheck === 'connected';
         
-        if (isDbHealthy) {
-            // DB is up — healthy regardless of startup phase
+        // During startup: always return 200 (Autoscale needs 30s grace for DB init —
+        // changing to 503 here risks a restart loop before the pool has warmed up).
+        // After startup: return 503 if DB is down.
+        // Body always reflects true state (status: "starting" vs "healthy") for observability.
+        if (isDbHealthy || isStartupPhase) {
             res.json({
-                status: 'healthy',
+                status: isDbHealthy ? 'healthy' : 'starting',
                 message: 'Nyan breathes φ — Server alive',
                 database: dbCheck,
                 pool: poolStats,
                 timestamp: new Date().toISOString()
             });
         } else {
-            // DB is down — return 503 in all cases (startup or not).
-            // During the 30s grace period Autoscale verifies the process responds (TCP/HTTP),
-            // not that it returns 2xx. The body reveals the real state to humans and monitoring.
             res.status(503).json({
-                status: isStartupPhase ? 'starting' : 'unhealthy',
-                message: isStartupPhase ? 'Database not yet available during startup' : 'Database connection failed',
+                status: 'unhealthy',
+                message: 'Database connection failed',
                 database: dbCheck,
                 pool: poolStats,
                 timestamp: new Date().toISOString()
             });
         }
     } catch (err) {
-        // Any exception during health check — always 503
-        res.status(503).json({
-            status: isStartupPhase ? 'starting' : 'unhealthy',
-            message: isStartupPhase ? 'Server initializing — health check error' : 'Health check failed',
-            error: err.message,
-            timestamp: new Date().toISOString()
-        });
+        // During startup: return 200 to allow initialization
+        // After startup: return 503 for real failures
+        if (isStartupPhase) {
+            res.json({
+                status: 'starting',
+                message: 'Server initializing',
+                database: 'initializing',
+                timestamp: new Date().toISOString()
+            });
+        } else {
+            res.status(503).json({
+                status: 'unhealthy',
+                message: 'Health check failed',
+                error: err.message,
+                timestamp: new Date().toISOString()
+            });
+        }
     }
 });
 
