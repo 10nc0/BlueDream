@@ -3217,6 +3217,8 @@ body.desktop-mode #hopCanvas {
     position: absolute;
     top: -52px;
     left: 0;
+    width: 190px !important;
+    height: 190px !important;
 }
 /* Mobile: sidebar hidden, cat stays in grid flow at x=0 — no offset needed */
 
