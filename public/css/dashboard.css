@@ -3202,11 +3202,17 @@ body.mobile-mode .header > div {
     align-self: flex-start;
 }
 
-/* Desktop: sidebar sits left of content — offset cat so it transcends into content pane */
+/* Desktop: absolute out of flex flow, centered on header height, at content pane left edge */
+/* top:50% + translateY(-50%) = vertically centered → head/body visible in header,
+   ears clip above viewport (off-screen), lower body clips 65px below into content pane */
 body.desktop-mode #catContainer {
-    margin-left: var(--sidebar-width);
+    position: absolute;
+    top: 50%;
+    left: var(--sidebar-width);
+    transform: translateY(-50%);
+    margin-left: 0;
 }
-/* Mobile: sidebar is hidden, cat is at x=0 of the full-width header — no offset needed */
+/* Mobile: sidebar hidden, cat stays in grid flow at x=0 — no offset needed */
 
 body.mobile-mode #dateTimeDefault {
     display: none !important; /* Hide date/time below cat */
