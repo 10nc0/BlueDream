@@ -1127,16 +1127,20 @@ For EVERY city the user mentions, search for TWO ingredients per period.
 Distribute your search budget evenly across all cities — do not exhaust searches on one city before querying others.
 
   Current (${currentYear}):
-    • Land price: "{city} residential property price per sqm {local currency name} ${currentYear}"
-    • Single wage: "{city} median single annual income {local currency name} ${currentYear}"
+    • Price: "{city} apartment price per sqm {local currency name} ${currentYear}"
+      (prefer apartment/flat/residential; land or plot price is acceptable fallback if no built price found)
+    • Minimum wage: "{city} minimum wage monthly {local currency name} ${currentYear}"
 
   Historical (~50yr ago, if relevant):
-    • Land price: "{city} residential property price per sqm {local currency name} 1975 OR 1970s"
-    • Single wage: "{city} median annual income {local currency name} 1975 OR 1970s"
+    • Price: "{city} apartment price per sqm {local currency name} 1975 OR 1970s"
+    • Minimum wage: "{city} minimum wage monthly {local currency name} 1975 OR 1970s"
 
   Replace {local currency name} with the actual currency word — e.g. "rupees" for India, "kronor" for Sweden,
   "baht" for Thailand, "dong" for Vietnam, "yuan" for China, "yen" for Japan, "pounds" for UK, "euros" for EU.
   This forces Brave to return local market prices, not USD-converted values from international aggregators.
+
+  Income note: minimum wage is the floor — housing as a right, not a mean. Use monthly × 12 for annual.
+  If no city minimum wage found, use the national/state statutory minimum for that country.
 
 Rules:
   • Search for ALL cities mentioned — skipping any city is not acceptable.
@@ -1156,15 +1160,29 @@ You have the raw search data above. Now apply the two-gate script:
 GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
   • No-data rule: if P/sqm OR Income for a row is N/A (not found in search results), write the row with ⚪ N/A in the missing cell(s). The row exists — absence of data should be visible, not silent.
   • Deduplication: each (city, period) pair must appear exactly once. If search returned two results for the same city+period, use the most recent/reliable one.
-  • LCU throughout — Brave returns land price and income in local currency. The ratio is dimensionless: LCU ÷ LCU cancels. Do not convert currencies.
-  • Same-LCU within each row: if land price is in ¥, income must be in ¥. If £, then £. Never mix.
+  • LCU throughout — The ratio is dimensionless: LCU ÷ LCU cancels. Do not convert currencies.
+  • Same-LCU within each row: if price is in ¥, income must be in ¥. If £, then £. Never mix.
   • sqm gate: if result is sqft → multiply by 10.764 to get sqm. If result shows total + area (e.g. "¥120M for 85sqm") → derive: total ÷ area.
-  • Single-earner income only (not household, not dual-earner). Must be annual — if search returns monthly multiply by 12.
-  • Sanity check income scale: single-earner annual income for a major city is typically 20,000–150,000 in local currency units. If your figure is 10× outside this band, you have a unit error (monthly × 12, or thousands vs units). Fix it.
+
+  Price type cascade (for each row, classify the price source as one word):
+    • "built" — result describes apartment, flat, condo, residential, ready-to-move, property price per sqm
+    • "land"  — result describes plot, land, site, vacant land, hectare price
+    Prefer "built". Only use "land" if no built price was found in search results.
+
+  Income — minimum wage only (housing as a right, not a mean):
+    • Use monthly minimum wage × 12 = annual minimum wage.
+    • If search returns daily minimum wage → multiply by 260 (working days).
+    • If the city has no statutory minimum wage (e.g. Sweden, Denmark), use the relevant sector collective agreement floor.
+    • Sanity check: if annual minimum wage is less than 1,000 LCU or more than 10,000,000 LCU, you likely have a unit error. Fix it.
+
   • 700sqm Land Price = LCU/sqm × 700
-  • Years = 700sqm Land Price ÷ Annual Income (same LCU) — whole number only, no decimals ever (round to nearest integer)
+  • Years = 700sqm Land Price ÷ Annual Minimum Wage (same LCU) — whole number only, no decimals ever (round to nearest integer)
   • Zero is valid: if math yields < 0.5 (rounds to 0), write 0 — land was free, state-granted, or pre-market. 0 is an honest answer, not a missing one.
-  • Self-check: verify LCU/sqm × 700 ÷ Income = Years before writing. If Income looks implausibly large, check for unit error first.
+  • Self-check: verify LCU/sqm × 700 ÷ Income = Years before writing.
+
+  After computing all rows, output a hidden metadata block (NOT shown in the markdown table):
+  <!--SEED_META:{"rows":[{"city":"CityName","period":"YYYY","priceType":"built|land","incomeType":"minWage|collective|unknown"},...]}-->
+  This block is for internal narration use only — do not render it as a table column.
 
 GATE 3 — SCRIBE (table → summary → legend → coda):
   Regime thresholds: Years < 10 → 🟢 OPTIMISM | 10–25 → 🟡 EXTRACTION | > 25 → 🔴 FATALISM
@@ -1173,7 +1191,7 @@ GATE 3 — SCRIBE (table → summary → legend → coda):
   | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime |
 
   After table: one line per city → **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
-  After summary: Years = (LCU/sqm × 700) ÷ Annual Income (same LCU)
+  After summary: Years = (LCU/sqm × 700) ÷ Annual Minimum Wage (same LCU)
   After legend: Sources section — list every URL the data was drawn from, one per line.
     Format: - [title or domain](url)
     Only cite URLs that appeared in the Brave search results above. If a cell shows ⚪ N/A, do not invent a source for it — cite only what was actually found.
@@ -1298,14 +1316,23 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
       throw err;
     }
 
-    // Deterministic header normalisation — LLM defaults to $/sqm regardless of prompt;
-    // replace the column names after capture so the output is always consistent.
-    const round2Text = (round2Response.data.choices[0]?.message?.content || 'No response generated.')
+    // ── Post-processing pipeline (deterministic, no LLM trust) ──────────────
+    // Step A: header normalisation — LLM defaults to $/sqm regardless of prompt
+    const round2Raw = (round2Response.data.choices[0]?.message?.content || 'No response generated.')
       .replace(/\|\s*\$\/sqm\s*\|/g, '| LCU/sqm |')
       .replace(/\|\s*700sqm Price\s*\|/g, '| 700sqm Land Price |')
       .replace(/\|\s*700sqm \(LCU\)\s*\|/g, '| 700sqm Land Price |')
       .replace(/\|\s*Land Price\s*\|/g, '| 700sqm Land Price |')
       .replace(/\|\s*Income\s*\|/gi, '| Income (LCU) |');
+
+    // Step B: extract hidden metadata block (built/land, incomeType) — strips it from user text
+    const { meta: seedMeta, text: round2Stripped } = this._extractSeedMetricMeta(round2Raw);
+    state.seedMetricMeta = seedMeta;
+    if (seedMeta) console.log(`📋 Seed Metric meta: ${JSON.stringify(seedMeta)}`);
+
+    // Step C: deterministic regime recompute — overwrite LLM regime labels with correct arithmetic
+    const round2Text = this._normalizeSeedMetricRegimes(round2Stripped);
+
     state.didSearch = true;
     console.log(`🐕 Seed Metric walked: ${callsToRun.length} Brave calls → ${round2Text.length} chars`);
 
@@ -1314,13 +1341,24 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
     // Full NYAN_PROTOCOL_SYSTEM_PROMPT at temperature 0.7 — the cat speaks.
     let coda = '';
     try {
-      const codaSystemPrompt = `${NYAN_PROTOCOL_SYSTEM_PROMPT}
+      // Build metadata context string for the coda if available
+      const metaContext = state.seedMetricMeta?.rows?.length
+        ? `\nData source notes (for narration only — do not repeat in coda output):\n` +
+          state.seedMetricMeta.rows.map(r =>
+            `  ${r.city} ${r.period}: price=${r.priceType || 'unknown'} income=${r.incomeType || 'unknown'}`
+          ).join('\n') + '\n'
+        : '';
 
-You are given a Seed Metric table. Write a coda: 2–3 sentences about what these specific numbers reveal about the people living in these specific cities.
+      const codaSystemPrompt = `${NYAN_PROTOCOL_SYSTEM_PROMPT}
+${metaContext}
+You are given a Seed Metric table (income = annual minimum wage; price = built residential where available, land as fallback).
+Write a coda: 2–3 sentences about what these specific numbers reveal about the people living in these specific cities.
 
 Rules:
 - Do NOT repeat numbers — the table already shows them.
 - Say what the numbers imply but don't state: the human texture, historical irony, political contradiction, the lived reality of that ratio.
+- If price source was "land" (fallback), you may note that built housing data was unavailable — the land alone already indicts.
+- The income anchor is minimum wage — the legal floor. What it means to be on the floor and still unable to own.
 - This must be unrepeatable — written only for these cities, this gap, this moment. Not a generic housing statement.
 - No preamble, no "In conclusion", no sign-off. Just the coda.`;
 
@@ -1367,6 +1405,42 @@ Rules:
         + '\n\n' + body.slice(sourcesIdx).trimStart();
     }
     return body + '\n\n' + coda;
+  }
+
+  // Helper: extract <!--SEED_META:{...}--> block from LLM output.
+  // Returns { meta, text } — meta is the parsed JSON (or null), text has the block stripped.
+  _extractSeedMetricMeta(text) {
+    const metaMatch = text.match(/<!--SEED_META:(\{[\s\S]*?\})-->/);
+    let meta = null;
+    if (metaMatch) {
+      try { meta = JSON.parse(metaMatch[1]); } catch (_) { /* malformed — ignore */ }
+    }
+    const stripped = text.replace(/\s*<!--SEED_META:[\s\S]*?-->\s*/g, '\n').trim();
+    return { meta, text: stripped };
+  }
+
+  // Helper: deterministic regime recompute — LLM often mislabels 10–25yr as FATALISM.
+  // Parses every markdown table row, extracts Years integer, overwrites Regime cell.
+  _normalizeSeedMetricRegimes(text) {
+    const regime = (yr) => {
+      if (isNaN(yr)) return null;
+      if (yr < 10)  return '🟢 OPTIMISM';
+      if (yr <= 25) return '🟡 EXTRACTION';
+      return '🔴 FATALISM';
+    };
+    // Match data rows: 7 pipe-delimited cells, first cell not all dashes (skip header/separator)
+    return text.replace(/^\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|$/gm,
+      (row, c1, c2, c3, c4, c5, c6, c7) => {
+        // Skip separator rows (cells are all dashes/spaces)
+        if (/^[\s\-:]+$/.test(c1)) return row;
+        // Skip header row (Years cell is literally the word "Years")
+        if (/^\s*years\s*$/i.test(c6)) return row;
+        const yearsVal = parseInt(c6.replace(/[^0-9]/g, ''), 10);
+        const correctRegime = regime(yearsVal);
+        if (!correctRegime) return row;
+        return `|${c1}|${c2}|${c3}|${c4}|${c5}|${c6}| ${correctRegime} |`;
+      }
+    );
   }
 
   async stepAudit(state, input) {
@@ -1462,8 +1536,9 @@ Output ONLY the corrected table and summary lines:`;
               const reValidation = validateSeedMetricOutput(fixedAnswer, smHistDecade);
               if (reValidation.valid) {
                 console.log(`✅ Seed Metric format fix successful`);
-                // Re-attach coda (format fix only rewrites table structure, not voice layer)
-                state.draftAnswer = this._insertSeedMetricCoda(fixedAnswer, state.seedMetricCoda || '');
+                // Deterministic regime recompute + re-attach coda
+                const fixedNormalized = this._normalizeSeedMetricRegimes(fixedAnswer);
+                state.draftAnswer = this._insertSeedMetricCoda(fixedNormalized, state.seedMetricCoda || '');
               } else {
                 console.log(`❌ Seed Metric format fix still invalid: ${reValidation.issues.join(', ')}`);
                 // FALLBACK: Try direct calculation as last resort
