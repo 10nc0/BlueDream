@@ -97,7 +97,7 @@ function registerInpipeRoutes(app, deps) {
         }
     }).catch(err => logger.error({ err }, 'TelegramChannel init failed'));
 
-    logger.info('Registering inpipe routes: POST /api/twilio/webhook, POST /api/line/webhook, POST /api/email/inpipe, POST /api/telegram/webhook (if configured)');
+    logger.info('📥 Registering inpipe routes: POST /api/twilio/webhook, POST /api/line/webhook, POST /api/email/inpipe, POST /api/telegram/webhook (if configured)');
 
     // Start channel-agnostic queue processor (dispatches via item.channel)
     startQueueProcessor(deps);
@@ -299,7 +299,7 @@ function registerInpipeRoutes(app, deps) {
             }
         });
     } else {
-        logger.warn('EMAIL_INPIPE_SECRET not set — /api/email/inpipe not registered');
+        logger.warn('⚠️ EMAIL_INPIPE_SECRET not set — /api/email/inpipe not registered');
     }
 
     // ─── TELEGRAM WEBHOOK ───────────────────────────────────────
@@ -362,7 +362,7 @@ function registerInpipeRoutes(app, deps) {
             }
         });
     } else {
-        logger.warn('TELEGRAM_BOT_TOKEN not set — /api/telegram/webhook not registered');
+        logger.warn('⚠️ TELEGRAM_BOT_TOKEN not set — /api/telegram/webhook not registered');
     }
 
 }
@@ -379,7 +379,7 @@ function startQueueProcessor(deps) {
         normalGapMs: NORMAL_GAP_MS,
         burstGapMs: BURST_GAP_MS,
         burstThreshold: BURST_THRESHOLD
-    }, 'Queue processor started (adaptive async loop)');
+    }, '⚙️ Queue processor started (adaptive async loop)');
 
     (async function loop() {
         while (true) {

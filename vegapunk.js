@@ -141,7 +141,7 @@ pool.on('connect', () => {
     if (usage > 80) {
         logger.warn({ usage: Math.round(usage), total: pool.totalCount, max: pool.options.max }, 'Pool capacity high');
     }
-    logger.debug({ total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount }, 'Pool: connection acquired');
+    logger.debug({ total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount }, '🏊 Pool: connection acquired');
 });
 
 pool.on('error', (err) => {
@@ -159,7 +159,7 @@ if (!dbUrlParts || dbUrlParts.length < 2) {
 }
 const dbHost = dbUrlParts?.[1]?.split('.')[0] || 'unknown';
 
-logger.info({ mode: isProd ? 'production' : 'development', dbHost, poolMax: pool.options.max, poolMin: pool.options.min, idleTimeoutMs: pool.options.idleTimeoutMillis }, 'Startup config');
+logger.info({ mode: isProd ? 'production' : 'development', dbHost, poolMax: pool.options.max, poolMin: pool.options.min, idleTimeoutMs: pool.options.idleTimeoutMillis }, '⚙️ Startup config');
 
 const tenantManager = new TenantManager(pool);
 
@@ -722,7 +722,7 @@ async function initializeDatabase() {
             WHERE heal_status IN ('pending', 'healing')
         `);
         
-        logger.info('Book registry initialized with dynamic indexing + heal queue');
+        logger.info('📚 Book registry initialized with dynamic indexing + heal queue');
         
         // MULTI-SOURCE UPLOADS: Track all phones that have engaged with each book
         // Enables contributors (not just creator) to send files without join code
@@ -754,7 +754,7 @@ async function initializeDatabase() {
             ON core.book_engaged_phones(phone, last_engaged_at DESC)
         `);
         
-        logger.info('Book engaged phones table initialized');
+        logger.info('📱 Book engaged phones table initialized');
 
         // CHANNEL IDENTIFIERS: Generalised routing table for all non-phone channels.
         // Maps (channel, external_id) → (book_fractal_id, tenant_schema).
@@ -775,7 +775,7 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_channel_identifiers_lookup
             ON core.channel_identifiers(channel, external_id)
         `);
-        logger.info('Channel identifiers table initialized');
+        logger.info('🔗 Channel identifiers table initialized');
 
         // MESSAGE LEDGER: Immutable append-only receipt for every inpipe message
         // Stores sender_hash (HMAC — proven not revealed), content_hash, IPFS CID
@@ -816,7 +816,7 @@ async function initializeDatabase() {
             ON core.message_ledger(env)
         `);
 
-        logger.info('Message ledger initialized');
+        logger.info('📜 Message ledger initialized');
 
         // PASSWORD RESET TOKENS: Secure tokens for forgot password flow via WhatsApp
         await pool.query(`
@@ -842,7 +842,7 @@ async function initializeDatabase() {
             ON core.password_reset_tokens(user_email)
         `);
         
-        logger.info('Password reset tokens table initialized');
+        logger.info('🔑 Password reset tokens table initialized');
         
         // MIGRATION TRACKING: Create table to track completed migrations
         await pool.query(`
@@ -886,8 +886,8 @@ async function initializeDatabase() {
         // NOTE: All tenant schemas (users, books, media_buffer, etc.) are created by TenantManager
         // during tenant initialization. No manual migrations needed for N+1 scalability.
         
-        logger.info('Core schema initialized with security tables');
-        logger.info('Database initialized successfully');
+        logger.info('🏗️ Core schema initialized with security tables');
+        logger.info('🗄️ Database initialized successfully');
     } catch (error) {
         logger.error({ err: error }, 'Database initialization error');
         throw error;
@@ -916,7 +916,7 @@ async function initUsageTable() {
             CREATE INDEX IF NOT EXISTS idx_playground_usage_date ON core.playground_usage(date)
         `);
         
-        logger.info('Playground usage table ready');
+        logger.info('🎮 Playground usage table ready');
     } catch (error) {
         logger.warn({ err: error }, 'Failed to create usage table');
     }
@@ -1313,7 +1313,7 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', async () => {
-    logger.info({ port: PORT }, 'Dashboard listening');
+    logger.info({ port: PORT }, '🌐 Dashboard listening');
     
     // TRINITY ARCHITECTURE: Hermes (φ - Creator) + Thoth (0 - Mirror)
     // Security: Principle of least privilege - each bot has minimal permissions
@@ -1366,7 +1366,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     await Promise.all([initBots(), initDb()]);
     
     // Server is now ready for requests
-    logger.info('Multi-tenant NyanBook~ ready');
+    logger.info('🌸 Multi-tenant NyanBook~ ready');
     
     // Initialize dependency injection container with all dependencies
     // SECURITY: Compartmentalized secrets - each route receives only what it needs
@@ -1513,7 +1513,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         // DEFENSIVE: Explicit null guard + ready check (bot instantiated synchronously above)
         if (hermesBot !== null && hermesBot !== undefined && typeof hermesBot.isReady === 'function' && hermesBot.isReady()) {
             try {
-                logger.info('Auto-healing: initializing heal queue...');
+                logger.info('🏥 Auto-healing: initializing heal queue...');
                 healQueue.setDependencies(pool, hermesBot);
                 await healQueue.initialize();
                 healQueue.start(20000);
@@ -1526,7 +1526,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         
         // Start genesis counter (noisy constant for future security)
         genesisCounter.start();
-        logger.info('Genesis counter started (cat + φ breath tiers)');
+        logger.info('🔢 Genesis counter started (cat + φ breath tiers)');
         
         // === PHI BREATHE: Unified orchestrator for all background tasks ===
         phiBreathe.setPool(pool);
