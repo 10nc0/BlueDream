@@ -1426,7 +1426,8 @@ app.listen(PORT, '0.0.0.0', async () => {
     };
     
     const formatPulseLog = (satellites, phiStatus = 'online') => {
-        const timestamp = new Date().toISOString();
+        const _d = new Date();
+        const timestamp = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')} ${String(_d.getHours()).padStart(2,'0')}:${String(_d.getMinutes()).padStart(2,'0')}:${String(_d.getSeconds()).padStart(2,'0')}`;
         const lines = [`🫀 PULSE │ ${timestamp} │ Vegapunk`];
         const lastIdx = satellites.length - 1;
         satellites.forEach((name, idx) => {
