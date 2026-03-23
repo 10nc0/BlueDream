@@ -141,6 +141,103 @@ function parsePricePerSqm(text, city = '') {
   return null;
 }
 
+// ─── Triangulation: total price ÷ area → $/sqm ────────────────────────────────
+/**
+ * "The Baptist" / "The Pilgrimage" — derive price per sqm by triangulation.
+ * When no direct $/sqm quote exists: find (total_price, area_sqm) pairs in close
+ * proximity and compute derived_price_per_sqm = total_price / area_sqm.
+ *
+ * Example: "¥50,000,000 for a 70 sqm apartment" → ¥50M / 70 = ¥714,285/sqm
+ *
+ * @param {string} text
+ * @param {string} city - city name for currency hint
+ * @returns {{ value, currency, raw, isPsf, triangulated }|null}
+ */
+function triangulateFromTotalPrice(text, city = '') {
+  if (!text) return null;
+
+  const currency = detectCurrency(city, text);
+  const { usdRate } = CURRENCY_REGISTRY[currency];
+
+  // ── Step 1: Collect all area mentions with their text positions ────────────
+  // Covers: "70 sqm", "90m²", "120 square meters", "50 sqft" (sqft converted later)
+  const areaPattern = new RegExp(`${_NUM}\\s*(?:${_SQM}|${_PSF})`, 'gi');
+  const areas = [];
+  for (const m of text.matchAll(areaPattern)) {
+    const numStr = m[1].replace(/,/g, '');
+    if (/^(19|20)\d{2}$/.test(numStr)) continue; // reject years
+    let area = parseFloat(numStr);
+    if (!isFinite(area) || area <= 0) continue;
+    const isPsf = /psf|sq\s*ft|sqft/i.test(m[0]);
+    if (isPsf) area /= 10.764; // convert sqft to sqm for the denominator
+    if (area < 10 || area > 10_000) continue; // sanity: 10–10,000 sqm
+    areas.push({ area, index: m.index, raw: m[0], isPsf });
+  }
+  if (areas.length === 0) return null;
+
+  // ── Step 2: Collect total property price mentions ─────────────────────────
+  // Match: SYMBOL NUMBER MULTIPLIER — but NOT followed immediately by /sqm or /sqft
+  // (those are direct $/sqm quotes handled by parsePricePerSqm)
+  const _NOTPER = `(?!\\s*(?:\\/|\\bper\\b)\\s*(?:${_SQM}|${_PSF}))`;
+  const pricePatterns = [
+    // Symbol before number: "¥50,000,000" "S$2.5M" "$800k"
+    new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}${_NOTPER}`, 'gi'),
+    // Number then symbol: "50,000,000 yen" "2.5 million SGD"
+    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS})${_NOTPER}`, 'gi'),
+    // Number + million/billion/k alone (currency inferred from city): "50 million" "2.5M"
+    new RegExp(`${_NUM}\\s*(?:billion|bn|million|mil\\b|[Mm]\\b|thousand|[Kk]\\b|万|億|억)${_NOTPER}`, 'gi'),
+  ];
+  const prices = [];
+  for (const pat of pricePatterns) {
+    for (const m of text.matchAll(pat)) {
+      const numStr = (m[1] || m[2] || '').replace(/,/g, '');
+      if (!numStr) continue;
+      if (/^(19|20)\d{2}$/.test(numStr)) continue; // reject years
+      const value = applyMultiplier(parseFloat(numStr), m[0]);
+      if (!isFinite(value) || value <= 0) continue;
+      // Sanity: total property price $5,000–$2 billion USD
+      const usd = value * usdRate;
+      if (usd < 5_000 || usd > 2_000_000_000) continue;
+      prices.push({ value, index: m.index, raw: m[0] });
+    }
+  }
+  if (prices.length === 0) return null;
+
+  // ── Step 3: Find closest (price, area) pairs within 200 chars ─────────────
+  // The proximity constraint is the main guard against false pairings
+  const WINDOW = 200;
+  const candidates = [];
+  for (const a of areas) {
+    for (const p of prices) {
+      if (Math.abs(a.index - p.index) > WINDOW) continue;
+      const derived = p.value / a.area;
+      const usd = derived * usdRate;
+      if (usd < 10 || usd > 150_000) continue; // same sanity as parsePricePerSqm
+      candidates.push({
+        value: derived,
+        currency,
+        usd,
+        dist: Math.abs(a.index - p.index),
+        raw: `${p.raw} ÷ ${a.raw}` // provenance trail
+      });
+    }
+  }
+  if (candidates.length === 0) return null;
+
+  // Pick closest pair — most likely to be co-referential
+  candidates.sort((a, b) => a.dist - b.dist);
+  const best = candidates[0];
+  return { value: best.value, currency, raw: best.raw, isPsf: false, triangulated: true };
+}
+
+/**
+ * Resolve price per sqm: triangulation (totem) first, direct quote as fallback.
+ * All parseSeedMetricData call sites use this so the hierarchy is enforced in one place.
+ */
+function resolvePrice(text, city = '') {
+  return triangulateFromTotalPrice(text, city) || parsePricePerSqm(text, city);
+}
+
 // ─── Income parser ────────────────────────────────────────────────────────────
 /**
  * Parse median/individual annual income from text.
@@ -234,7 +331,7 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       if (matches) {
         const segment = matches.join(' ');
         if (!result.cities[city].current.pricePerSqm) {
-          result.cities[city].current.pricePerSqm = parsePricePerSqm(segment, city);
+          result.cities[city].current.pricePerSqm = resolvePrice(segment, city);
         }
         if (!result.cities[city].current.income) {
           result.cities[city].current.income = parseIncome(segment, city);
@@ -248,7 +345,7 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       if (matches) {
         const segment = matches.join(' ');
         if (!result.cities[city].historical.pricePerSqm) {
-          result.cities[city].historical.pricePerSqm = parsePricePerSqm(segment, city);
+          result.cities[city].historical.pricePerSqm = resolvePrice(segment, city);
         }
         if (!result.cities[city].historical.income) {
           result.cities[city].historical.income = parseIncome(segment, city);
@@ -266,7 +363,7 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       if (histMatches) {
         const allHistText = histMatches.join(' ');
         if (!result.cities[city].historical.pricePerSqm) {
-          result.cities[city].historical.pricePerSqm = parsePricePerSqm(allHistText, city);
+          result.cities[city].historical.pricePerSqm = resolvePrice(allHistText, city);
         }
         if (!result.cities[city].historical.income) {
           result.cities[city].historical.income = parseIncome(allHistText, city);
@@ -280,7 +377,7 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       if (cityMentions) {
         const allCityText = cityMentions.join(' ');
         if (!result.cities[city].current.pricePerSqm) {
-          result.cities[city].current.pricePerSqm = parsePricePerSqm(allCityText, city);
+          result.cities[city].current.pricePerSqm = resolvePrice(allCityText, city);
         }
         if (!result.cities[city].current.income) {
           result.cities[city].current.income = parseIncome(allCityText, city);
@@ -288,8 +385,10 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       }
     }
     
-    result.parseLog.push(`${city} CURRENT: price/sqm=${result.cities[city].current.pricePerSqm?.value || 'N/A'}, income=${result.cities[city].current.income?.value || 'N/A'}`);
-    result.parseLog.push(`${city} HISTORICAL: price/sqm=${result.cities[city].historical.pricePerSqm?.value || 'N/A'}, income=${result.cities[city].historical.income?.value || 'N/A'}`);
+    const _currP = result.cities[city].current.pricePerSqm;
+    const _histP = result.cities[city].historical.pricePerSqm;
+    result.parseLog.push(`${city} CURRENT: price/sqm=${_currP?.value || 'N/A'}${_currP?.triangulated ? ' (triangulated)' : ''}, income=${result.cities[city].current.income?.value || 'N/A'}`);
+    result.parseLog.push(`${city} HISTORICAL: price/sqm=${_histP?.value || 'N/A'}${_histP?.triangulated ? ' (triangulated)' : ''}, income=${result.cities[city].historical.income?.value || 'N/A'}`);
   }
   
   return result;
