@@ -1331,7 +1331,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     // Total time = max(bot_login, db_init) instead of their sum.
     // Bots are only needed for authenticated users / inpipe webhooks, so they
     // are always ready before the first such request can arrive.
-    logger.info('Parallel startup: bots + DB (all 4 bots ∥ DB init)...');
+    logger.info('⚡ Parallel startup: bots + DB (all 4 bots ∥ DB init)...');
 
     const initBots = async () => {
         try {
@@ -1341,7 +1341,7 @@ app.listen(PORT, '0.0.0.0', async () => {
                 idrisBot.initialize(),
                 horusBot.initialize()
             ]);
-            logger.info('All bots ready: Hermes (φ) + Thoth (0) + Idris (ι) + Horus (Ω)');
+            logger.info('🤖 All bots ready: Hermes (φ) + Thoth (0) + Idris (ι) + Horus (Ω)');
         } catch (error) {
             logger.error({ err: error }, 'Bot initialization failed — Discord features may be unavailable');
         }
