@@ -1127,12 +1127,16 @@ For EVERY city the user mentions, search for TWO ingredients per period.
 Distribute your search budget evenly across all cities — do not exhaust searches on one city before querying others.
 
   Current (${currentYear}):
-    • Land price: "{city} residential property price per sqm ${currentYear}"
-    • Single wage: "{city} median single annual income OR median wage ${currentYear}"
+    • Land price: "{city} residential property price per sqm {local currency name} ${currentYear}"
+    • Single wage: "{city} median single annual income {local currency name} ${currentYear}"
 
   Historical (~50yr ago, if relevant):
-    • Land price: "{city} residential property price per sqm 1975 OR 1970s"
-    • Single wage: "{city} median annual income 1975 OR 1970s"
+    • Land price: "{city} residential property price per sqm {local currency name} 1975 OR 1970s"
+    • Single wage: "{city} median annual income {local currency name} 1975 OR 1970s"
+
+  Replace {local currency name} with the actual currency word — e.g. "rupees" for India, "kronor" for Sweden,
+  "baht" for Thailand, "dong" for Vietnam, "yuan" for China, "yen" for Japan, "pounds" for UK, "euros" for EU.
+  This forces Brave to return local market prices, not USD-converted values from international aggregators.
 
 Rules:
   • Search for ALL cities mentioned — skipping any city is not acceptable.
@@ -1157,18 +1161,18 @@ GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
   • sqm gate: if result is sqft → multiply by 10.764 to get sqm. If result shows total + area (e.g. "¥120M for 85sqm") → derive: total ÷ area.
   • Single-earner income only (not household, not dual-earner). Must be annual — if search returns monthly multiply by 12.
   • Sanity check income scale: single-earner annual income for a major city is typically 20,000–150,000 in local currency units. If your figure is 10× outside this band, you have a unit error (monthly × 12, or thousands vs units). Fix it.
-  • 700sqm Price = P/sqm × 700 (same LCU)
-  • Years = 700sqm Price ÷ Annual Income — whole number only, no decimals ever (round to nearest integer)
+  • 700sqm (LCU) = LCU/sqm × 700
+  • Years = 700sqm (LCU) ÷ Annual Income (same LCU) — whole number only, no decimals ever (round to nearest integer)
   • Self-check: verify P/sqm × 700 ÷ Income = Years before writing. If Years < 1 or Income looks implausibly large, fix inputs first.
 
 GATE 3 — SCRIBE (table → summary → legend → coda):
   Regime thresholds: Years < 10 → 🟢 OPTIMISM | 10–25 → 🟡 EXTRACTION | > 25 → 🔴 FATALISM
 
   Table (show historical AND current row per city):
-  | City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
+  | City | Period | LCU/sqm | 700sqm (LCU) | Income (LCU) | Years | Regime |
 
   After table: one line per city → **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
-  After summary: Years = ($/sqm × 700) ÷ Single-Earner Annual Income
+  After summary: Years = (LCU/sqm × 700) ÷ Annual Income (same LCU)
   After legend: Sources section — list every URL the data was drawn from, one per line.
     Format: - [title or domain](url)
     Only cite URLs that appeared in the Brave search results above. If no source exists for a value, that row should already be omitted (Gate 2 no-data rule).
@@ -1399,12 +1403,12 @@ WRONG RESPONSE:
 ${state.draftAnswer.slice(0, 2000)}
 
 REQUIRED FORMAT — ONE unified markdown table (NOT separate tables per city):
-| City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
-|------|--------|-------|--------------|--------|-------|--------|
-| [CityA] | ${histYear} | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
-| [CityA] | ${currYear} | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
-| [CityB] | ${histYear} | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
-| [CityB] | ${currYear} | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| City | Period | LCU/sqm | 700sqm (LCU) | Income (LCU) | Years | Regime |
+|------|--------|---------|--------------|--------------|-------|--------|
+| [CityA] | ${histYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityA] | ${currYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityB] | ${histYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityB] | ${currYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
 
 **[CityA]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
 **[CityB]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
@@ -1414,7 +1418,7 @@ CRITICAL RULES:
 - MUST have rows for BOTH historical (${histYear}) AND current (${currYear}) — 4 rows minimum for 2 cities
 - Regime column MUST have emoji + label: 🟢 Optimism (<10yr) | 🟡 Extraction (10-25yr) | 🔴 Fatalism (>25yr)
 - REGIME MUST MATCH YEARS: e.g., 13.1yr = 🟡 Extraction (NOT Optimism!)
-- 700sqm Price = $/sqm × 700 | Years = 700sqm Price ÷ Income
+- 700sqm (LCU) = LCU/sqm × 700 | Years = 700sqm (LCU) ÷ Income (same LCU)
 - After table: summary line per city with directional change
 - NO P/I column, NO prose paragraphs, use ⚪ N/A in table cells if historical data truly unavailable
 
