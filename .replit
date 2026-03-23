@@ -36,3 +36,8 @@ run = ["node", "vegapunk.js"]
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+APP_DOMAIN = "nyanbook.io"
