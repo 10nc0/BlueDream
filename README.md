@@ -23,7 +23,7 @@ iPhone (WhatsApp / LINE OA)
           → IPFS capsule pin (optional)
 ```
 
-Discord is the permanent content store — free, searchable, thread-organized. PostgreSQL is the routing and index layer. IPFS is the sovereign anchor — the record that exists independent of any platform.
+Discord is the bootstrap content store — free, searchable, thread-organized. PostgreSQL is the routing and index layer, and the hash anchor for future migration. IPFS is the sovereign anchor — the record that exists independent of any platform.
 
 Dashboard: Glassmorphism SPA — browse all archived messages, search, tag, export with SHA256 manifest. Multimodal AI Playground included.
 
