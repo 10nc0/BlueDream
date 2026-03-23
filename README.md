@@ -126,12 +126,38 @@ utils/
 ├── fetch-stock-prices.py — Psi-EMA data fetcher (yfinance / pandas)
 ├── dashboard-audit-pipeline.js — 4-stage hallucination correction
 └── seed-metric-calculator.js   — Real estate affordability (Seed Metric)
+
+lib/outpipes/
+├── router.js            — Dispatches all configured outpipes in parallel; legacy webhook fallback
+├── discord.js           — Discord webhook delivery
+├── email.js             — Email delivery via Resend
+└── webhook.js           — HTTPS JSON POST with optional HMAC-SHA256 signature
 ```
 
 Adding a new inpipe channel (Telegram, Signal, etc.) requires only:
 - `lib/channels/telegram.js` implementing the `BaseChannel` interface
 - 2 lines in `routes/inpipe.js` to register the route
 - Zero changes to queue, handlers, DB, or Discord outpipe.
+
+---
+
+## Why Discord?
+
+Discord is the bootstrap layer, not the sovereignty layer.
+
+Nyanbook is built for the $7/day mobile user — the household, the mutual aid network, the small business that has never had a scribe. Free infrastructure (Discord threads, Pinata's 1GB IPFS tier, Supabase's free PostgreSQL) is what makes that accessible. This is a deliberate architectural choice.
+
+The sovereignty guarantee is not the URL. It is the hash.
+
+Every inpipe message is assigned a `message_fractal_id` (derived from content + sender + timestamp) and a `content_hash` (SHA256 of the body). Both live in PostgreSQL, independent of Discord. Discord CDN URLs can expire or change. The hashes do not. When a deployment is ready to migrate — to self-hosted storage, to a full IPFS node, to anything — its history transfers intact because the hash is the anchor.
+
+| Layer | Role | Cost |
+|---|---|---|
+| Discord CDN | Content store — free, searchable, thread-organized | Free |
+| PostgreSQL hashes | `content_hash` + `message_fractal_id` — portable migration anchors | Free tier |
+| IPFS via Pinata | Sovereign anchor — content-addressed, platform-independent | Free 1GB tier |
+
+Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arrival. The ledger is complete without IPFS. IPFS makes it sovereign.
 
 ---
 
@@ -199,7 +225,19 @@ Create a webhook for your ledger channel: `NYANBOOK_WEBHOOK_URL`
 
 LINE is listen-only — Nyanbook receives messages but does not reply. The outpipe is Discord.
 
-### 7. Run
+### 7. Per-Book Output Targets (optional)
+
+Each book can deliver messages to zero or more output targets in parallel — Discord webhooks, email, or HTTPS webhooks. These are configured per-book in the dashboard's book edit modal under the **Outpipes** section.
+
+| Type | What it does | Required env |
+|---|---|---|
+| `discord` | Posts to a Discord channel or webhook URL | — |
+| `email` | Sends via Resend to any email address | `RESEND_API_KEY` |
+| `webhook` | HTTPS JSON POST with optional HMAC-SHA256 `X-Nyanbook-Signature` | — |
+
+Multiple outpipes can be configured per book; they fire in parallel. If no outpipes are configured, output is Discord-only via the ledger thread.
+
+### 8. Run
 
 ```bash
 node vegapunk.js
