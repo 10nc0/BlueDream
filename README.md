@@ -149,8 +149,8 @@ Adding a new inpipe channel (Telegram, Signal, etc.) requires only:
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/10nc3/Nyan
-cd Nyan
+git clone https://github.com/10nc0/BlueDream
+cd BlueDream
 npm install
 ```
 
