@@ -73,7 +73,7 @@ const config = {
 
   replit: {
     domains: process.env.REPLIT_DOMAINS?.split(',') || [],
-    primaryDomain: process.env.REPLIT_DOMAINS?.split(',')[0] || 'nyanbook.io'
+    primaryDomain: process.env.APP_DOMAIN || process.env.REPLIT_DOMAINS?.split(',')[0] || 'localhost:5000'
   },
 
   line: {

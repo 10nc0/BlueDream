@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { validate, schemas } = require('../lib/validators');
+const { config } = require('../config');
 
 const VALID_SCHEMA_PATTERN = /^[a-z_][a-z0-9_]*$/i;
 function assertValidSchemaName(schema) {
@@ -524,7 +525,7 @@ function registerAuthRoutes(app, deps) {
                 VALUES ($1, $2, $3, $4, $5)
             `, [resetToken, normalizedEmail, tenant_schema, standardizedPhone, expiresAt]);
             
-            const domain = process.env.REPLIT_DOMAINS?.split(',')[0] || 'nyanbook.io';
+            const domain = config.replit.primaryDomain;
             const resetLink = `https://${domain}/reset-password.html?token=${resetToken}`;
             
             try {
@@ -532,7 +533,7 @@ function registerAuthRoutes(app, deps) {
                 const resend = new Resend(process.env.RESEND_API_KEY);
                 
                 await resend.emails.send({
-                    from: 'Nyan <nyan@nyanbook.io>',
+                    from: `Nyan <nyan@${domain}>`,
                     to: normalizedEmail,
                     subject: 'Reset Your Nyanbook Password',
                     html: `

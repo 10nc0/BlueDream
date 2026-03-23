@@ -1710,7 +1710,7 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
                 version: '1.0',
                 format: 'nyanbook-export',
                 provenance: {
-                    source: 'nyanbook.io',
+                    source: config.replit.primaryDomain,
                     exported_at: exportTimestamp,
                     book_id: book_id,
                     book_name: book.name
@@ -1875,11 +1875,11 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
                     const { Resend } = require('resend');
                     const resend = new Resend(process.env.RESEND_API_KEY);
                     
-                    const domain = process.env.REPLIT_DOMAINS?.split(',')[0] || 'nyanbook.io';
+                    const domain = config.replit.primaryDomain;
                     const dashboardLink = `https://${domain}/`;
                     
                     await resend.emails.send({
-                        from: 'Nyan <nyan@nyanbook.io>',
+                        from: `Nyan <nyan@${domain}>`,
                         to: normalizedEmail,
                         subject: `${normalizedOwnerEmail} shared a book with you on Nyanbook`,
                         html: `

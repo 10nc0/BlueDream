@@ -404,8 +404,9 @@ app.use(cors({
             return callback(null, true);
         }
         
-        // Allow custom domain (nyanbook.io)
-        if (origin.includes('nyanbook.io')) {
+        // Allow custom domain (APP_DOMAIN)
+        const appDomain = config.replit.primaryDomain;
+        if (appDomain && origin.includes(appDomain)) {
             return callback(null, true);
         }
         
