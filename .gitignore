@@ -81,6 +81,9 @@ TRINITY_INTEGRATION_GUIDE.md
 .dev_internal.html
 **/dev.html
 
+# Replit LLM memory (internal only, never public)
+replit.md
+
 # Internal architecture docs (not for public)
 SECURITY_AUDIT.md
 TENANT_ISOLATION*.md
