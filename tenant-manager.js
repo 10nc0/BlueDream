@@ -1,5 +1,6 @@
 // Tenant Manager - Multi-tenant schema management
 const crypto = require('crypto');
+const logger = require('./lib/logger');
 
 // Sybil Rate Limiter - In-memory tracking for signup abuse prevention
 const RATE_LIMITS = {
@@ -204,7 +205,7 @@ class TenantManager {
                 ON core.book_shares (book_fractal_id) WHERE revoked_at IS NULL
             `).catch(() => {});
             
-            console.log('✅ Book shares table initialized');
+            logger.info('✅ Book shares table initialized');
         } finally {
             client.release();
         }
@@ -562,7 +563,7 @@ class TenantManager {
             const allowed = reasons.length === 0;
             
             if (!allowed) {
-                console.warn(`🚫 Sybil check failed for ${email} from ${ip}:`, reasons);
+                logger.warn({ email, ip, reasons }, '🚫 Sybil check failed');
             }
             
             return { 
@@ -588,7 +589,7 @@ class TenantManager {
                 
                 const allowed = count < maxRequests;
                 if (!allowed) {
-                    console.warn(`⏱️ Rate limit exceeded for ${type}:${key} (${count}/${maxRequests})`);
+                    logger.warn({ type, key, count, limit: maxRequests }, '⏱️ Rate limit exceeded');
                 }
                 return { allowed, count, limit: maxRequests };
             }

@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 const DAILY_LIMITS = {
     text: {
         requests: 14400,
@@ -67,7 +68,7 @@ async function persistUsageAsync(serviceType, bucket) {
                 updated_at = NOW()
         `, [todayKey, serviceType, bucket.requests, bucket.promptTokens, bucket.completionTokens, bucket.totalTokens]);
     } catch (error) {
-        console.log(`⚠️ Usage persistence failed: ${error.message}`);
+        logger.warn({ err: error }, '⚠️ Usage persistence failed');
     }
 }
 
@@ -138,9 +139,9 @@ async function loadTodayUsageFromDb() {
             });
         }
         
-        console.log(`📊 Loaded today's usage from DB: text=${getUsageBucket('text').requests} req, vision=${getUsageBucket('vision').requests} req`);
+        logger.info({ text: getUsageBucket('text').requests, vision: getUsageBucket('vision').requests }, '📊 Loaded today\'s usage from DB');
     } catch (error) {
-        console.log(`⚠️ Failed to load usage from DB: ${error.message}`);
+        logger.warn({ err: error }, '⚠️ Failed to load usage from DB');
     }
 }
 
@@ -154,7 +155,7 @@ function cleanupOldBuckets() {
         }
     }
     if (cleaned > 0) {
-        console.log(`🧹 Usage cleanup: removed ${cleaned} stale bucket(s)`);
+        logger.debug({ cleaned }, '🧹 Usage cleanup: removed stale buckets');
     }
 }
 

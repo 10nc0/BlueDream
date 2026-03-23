@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 const ACTIVITY_WINDOW_MS = 180 * 60 * 1000; // 180 minutes (3 hours)
 const REFILL_INTERVAL_MS = 60 * 1000; // Minimum interval between refill checks
 const CIRCUIT_BREAKER_WINDOW_MS = 60 * 60 * 1000; // 1 hour for abuse tracking (more forgiving window)
@@ -108,7 +109,7 @@ async function getReputationMultiplier(ip) {
         
         return multiplier;
     } catch (error) {
-        console.log(`⚠️ Reputation lookup failed: ${error.message}`);
+        logger.warn({ err: error }, '⚠️ Reputation lookup failed');
         return 1.0;
     }
 }
@@ -264,7 +265,7 @@ function recordAbuseEvent(ip) {
     // Forgiveness: Reset counter if 1 hour of good behavior since last abuse
     if (breaker.lastAbuse > 0 && (now - breaker.lastAbuse) > FORGIVENESS_WINDOW_MS) {
         breaker.abuseEvents = [];
-        console.log(`✨ Forgiveness granted for IP (1 hour of good behavior)`);
+        logger.info('✨ Forgiveness granted for IP (1 hour of good behavior)');
     }
     
     // Add this abuse event
@@ -280,7 +281,7 @@ function recordAbuseEvent(ip) {
     if (count >= CIRCUIT_BREAKER_THRESHOLD) {
         breaker.blockedUntil = now + CIRCUIT_BREAKER_COOLDOWN_MS;
         breaker.abuseEvents = []; // Reset events after blocking
-        console.log(`🔌 Circuit breaker activated for IP (30 min cooldown)`);
+        logger.warn('🔌 Circuit breaker activated for IP (30 min cooldown)');
         return { blocked: true, warning: null, count };
     }
     
@@ -429,7 +430,7 @@ function getCapacityStatus() {
 
 async function initReputationTable() {
     if (!dbPool) {
-        console.log('⚠️ No database pool for reputation table');
+        logger.warn('⚠️ No database pool for reputation table');
         return false;
     }
     
@@ -442,10 +443,10 @@ async function initReputationTable() {
                 last_seen TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             )
         `);
-        console.log('✅ Playground reputation table initialized');
+        logger.info('✅ Playground reputation table initialized');
         return true;
     } catch (error) {
-        console.log(`⚠️ Failed to init reputation table: ${error.message}`);
+        logger.error({ err: error }, '⚠️ Failed to init reputation table');
         return false;
     }
 }
