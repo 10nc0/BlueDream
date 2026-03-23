@@ -1169,15 +1169,11 @@ GATE 3 — SCRIBE (table → summary → legend → coda):
 
   After table: one line per city → **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
   After summary: Years = ($/sqm × 700) ÷ Single-Earner Annual Income
-  After legend: 2–3 sentence coda. The table already showed the numbers — do not repeat them.
-    Say what the numbers imply but don't state: the human texture, the historical irony, the political contradiction, the lived reality.
-    Speak to these specific cities. One sharp observation that couldn't apply to any other city on earth.
-    ~nyan writes — not a policy analyst, not a report, not a summary.
-  After coda: Sources section — list every URL the data was drawn from, one per line.
+  After legend: Sources section — list every URL the data was drawn from, one per line.
     Format: - [title or domain](url)
     Only cite URLs that appeared in the Brave search results above. If no source exists for a value, that row should already be omitted (Gate 2 no-data rule).
 
-OUTPUT: Table → summary lines → legend → coda → sources.`;
+OUTPUT: Table → summary lines → legend → sources. No coda here — coda is written separately.`;
 
     const round1Messages = [
       { role: 'system', content: gatherPrompt },
@@ -1297,9 +1293,68 @@ OUTPUT: Table → summary lines → legend → coda → sources.`;
       throw err;
     }
 
-    state.draftAnswer = round2Response.data.choices[0]?.message?.content || 'No response generated.';
+    const round2Text = round2Response.data.choices[0]?.message?.content || 'No response generated.';
     state.didSearch = true;
-    console.log(`🐕 Seed Metric walked: ${callsToRun.length} Brave calls → ${state.draftAnswer.length} chars`);
+    console.log(`🐕 Seed Metric walked: ${callsToRun.length} Brave calls → ${round2Text.length} chars`);
+
+    // ── Round 3: ~nyan coda (voice layer, separate from data assembly) ──────
+    // Round 2 assembles facts. Round 3 writes what the facts imply.
+    // Full NYAN_PROTOCOL_SYSTEM_PROMPT at temperature 0.7 — the cat speaks.
+    let coda = '';
+    try {
+      const codaSystemPrompt = `${NYAN_PROTOCOL_SYSTEM_PROMPT}
+
+You are given a Seed Metric table. Write a coda: 2–3 sentences about what these specific numbers reveal about the people living in these specific cities.
+
+Rules:
+- Do NOT repeat numbers — the table already shows them.
+- Say what the numbers imply but don't state: the human texture, historical irony, political contradiction, the lived reality of that ratio.
+- This must be unrepeatable — written only for these cities, this gap, this moment. Not a generic housing statement.
+- No preamble, no "In conclusion", no sign-off. Just the coda.`;
+
+      const round3Response = await this.groqWithRetry({
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        data: {
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            { role: 'system', content: codaSystemPrompt },
+            { role: 'user', content: round2Text }
+          ],
+          temperature: 0.7,
+          max_tokens: 300
+        },
+        config: {
+          headers: {
+            'Authorization': `Bearer ${this.groqToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
+        }
+      }, 2, 'text');
+
+      coda = round3Response.data.choices[0]?.message?.content?.trim() || '';
+      console.log(`🐱 Seed Metric coda: ${coda.length} chars`);
+    } catch (err) {
+      console.warn(`⚠️ Seed Metric coda (round3) failed: ${err.message} — skipping coda`);
+    }
+
+    // Persist coda on state — survives any downstream format-fix that rewrites draftAnswer
+    state.seedMetricCoda = coda;
+
+    // Insert coda before Sources section (preserving: table → summary → legend → coda → sources)
+    state.draftAnswer = this._insertSeedMetricCoda(round2Text, coda);
+  }
+
+  // Helper: splice coda before sources block, or append if no sources found
+  _insertSeedMetricCoda(body, coda) {
+    if (!coda) return body;
+    const sourcesIdx = body.search(/\n[-*] \[|^[-*] \[/m);
+    if (sourcesIdx !== -1) {
+      return body.slice(0, sourcesIdx).trimEnd()
+        + '\n\n' + coda
+        + '\n\n' + body.slice(sourcesIdx).trimStart();
+    }
+    return body + '\n\n' + coda;
   }
 
   async stepAudit(state, input) {
@@ -1387,7 +1442,8 @@ Output ONLY the corrected table and summary lines:`;
               const reValidation = validateSeedMetricOutput(fixedAnswer, smHistDecade);
               if (reValidation.valid) {
                 console.log(`✅ Seed Metric format fix successful`);
-                state.draftAnswer = fixedAnswer;
+                // Re-attach coda (format fix only rewrites table structure, not voice layer)
+                state.draftAnswer = this._insertSeedMetricCoda(fixedAnswer, state.seedMetricCoda || '');
               } else {
                 console.log(`❌ Seed Metric format fix still invalid: ${reValidation.issues.join(', ')}`);
                 // FALLBACK: Try direct calculation as last resort
