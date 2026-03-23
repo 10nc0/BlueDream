@@ -85,6 +85,7 @@ TRINITY_INTEGRATION_GUIDE.md
 replit.md
 
 # Internal architecture docs (not for public)
+docs/philosophy.md
 SECURITY_AUDIT.md
 TENANT_ISOLATION*.md
 AUTH_DOCUMENTATION.md
