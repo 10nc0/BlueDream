@@ -100,7 +100,7 @@ function createAuthMiddleware(pool, authService, logger) {
 
 function registerAuthRoutes(app, deps) {
     const { pool, authService, tenantManager, helpers, logger } = deps;
-    const { logAudit, noCacheHeaders, getTimestamp, createSessionRecord } = helpers;
+    const { logAudit, noCacheHeaders, createSessionRecord } = helpers;
     
     const { requireAuth, requireRole } = createAuthMiddleware(pool, authService, logger);
 

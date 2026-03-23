@@ -52,7 +52,7 @@ function registerBooksRoutes(app, deps) {
     
     const { requireAuth, requireRole } = middleware;
     const { setTenantContext, getAllTenantSchemas, sanitizeForRole } = tenantMiddleware || {};
-    const { logAudit, noCacheHeaders, getTimestamp } = helpers || {};
+    const { logAudit, noCacheHeaders } = helpers || {};
     const hermesBot = bots?.hermes;
     const thothBot = bots?.thoth;
     const NYANBOOK_LEDGER_WEBHOOK = constants?.NYANBOOK_LEDGER_WEBHOOK;

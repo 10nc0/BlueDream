@@ -5,6 +5,7 @@
 
 // EARLY GUARD — fail loudly before any module loads
 // Without DATABASE_URL the pool crashes silently and CSS never serves (ghost UI)
+// NOTE: intentional console.error — process.exit(1) path fires before logger is initialized
 if (!process.env.DATABASE_URL) {
     console.error('❌ DATABASE_URL is not set. Add it to Replit Secrets before starting.');
     console.error('   Get a free PostgreSQL URL from https://supabase.com');
@@ -164,22 +165,6 @@ const tenantManager = new TenantManager(pool);
 
 // AUTH MIDDLEWARE: Create early so routes can use requireAuth/requireRole
 const { requireAuth, requireRole } = createAuthMiddleware(pool, authService, logger);
-
-// Timestamp helper function with timezone
-function getTimestamp() {
-    const now = new Date();
-    return now.toLocaleString('en-US', { 
-        timeZone: 'America/Los_Angeles',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-        timeZoneName: 'short'
-    });
-}
 
 // Cache-busting headers helper (prevents browsers/CDNs from caching sensitive responses)
 function noCacheHeaders(res) {
@@ -1411,7 +1396,6 @@ app.listen(PORT, '0.0.0.0', async () => {
         },
         helpers: {
             logAudit,
-            getTimestamp,
             noCacheHeaders,
             createSessionRecord
         }
