@@ -43,6 +43,10 @@ const COUNTRY_CITY_MAP = {
   'chile': ['santiago'], 'peru': ['lima'],
 };
 
+// Shared city-name regex — used in seed-metric detection AND geographic guard
+// Single source of truth so both code paths match the same set of cities
+const KNOWN_CITIES_REGEX = /\b(tokyo|singapore|hong kong|hongkong|london|new york|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
+
 const PSI_EMA_IDENTITY_PATTERNS = [
   /^what\s+is\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
   /^(?:explain|describe)\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
@@ -279,8 +283,7 @@ async function preflightRouter(options) {
       const defaultHistoricalYear = String(new Date().getFullYear() - 50);
 
       // Extract city names for targeted search (major world cities + common variants)
-      const cityPattern = /\b(tokyo|singapore|hong kong|hongkong|london|new york|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
-      const cities = [...new Set((classificationQuery.match(cityPattern) || []).map(c => c.toLowerCase()))];
+      const cities = [...new Set((classificationQuery.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => c.toLowerCase()))];
 
       // Expand country names to their primary cities (e.g. "vietnam" → hanoi, ho chi minh)
       const detectedCountries = [];
@@ -582,12 +585,71 @@ async function preflightRouter(options) {
           result.routingFlags.usesPsiEMA = true;
           console.log(`✅ Preflight: Ticker ${result.ticker} verified → mode=psi-ema`);
         } else if (result.ticker) {
-          // Ticker pattern matched but no data (like "NY" for city) - clear and fall through
-          console.log(`❌ Preflight: Ticker ${result.ticker} invalid (no data) → mode=general`);
-          result.ticker = null;
-          result.stockData = null;
-          result.stockContext = null;
-          result.mode = 'general';
+          // Ticker pattern matched but no data — check if it's actually a city/country
+          const _failedTicker = result.ticker;
+          const _geoCheck = (classificationQuery + ' ' + _failedTicker).toLowerCase();
+          const _cityHit = new RegExp(KNOWN_CITIES_REGEX.source, 'i').test(_geoCheck);
+          const _countryHit = new RegExp('\\b(' + Object.keys(COUNTRY_CITY_MAP).join('|') + ')\\b', 'i').test(_geoCheck);
+
+          if ((_cityHit || _countryHit) && !hasExplicitStockCue) {
+            // GEOGRAPHIC GUARD: geographic entity failed YF → redirect to seed-metric
+            console.log(`🌍 GEOGRAPHIC GUARD: "${_failedTicker}" failed YF + geo entity detected → seed-metric`);
+            result.ticker = null;
+            result.stockData = null;
+            result.stockContext = null;
+            result.mode = 'seed-metric';
+            result.routingFlags.isSeedMetric = true;
+            result.routingFlags.geoGuardApplied = true;
+            result.searchStrategy = 'brave';
+
+            // Build city search queries (same logic as primary seed-metric block)
+            const _smCities = [...new Set((_geoCheck.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => c.toLowerCase()))];
+            const _smCountries = [];
+            const _smCountryRegex = new RegExp('\\b(' + Object.keys(COUNTRY_CITY_MAP).join('|') + ')\\b', 'gi');
+            for (const m of _geoCheck.matchAll(_smCountryRegex)) {
+              const ck = m[0].toLowerCase();
+              if (!_smCountries.includes(ck)) _smCountries.push(ck);
+              for (const city of COUNTRY_CITY_MAP[ck] || []) {
+                if (!_smCities.includes(city)) _smCities.push(city);
+              }
+            }
+            const _smCurrentYear = String(new Date().getFullYear() - 1);
+            const _smAllYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)\b/g)].map(m => m[1]);
+            const _smHistoricalYear = _smAllYears[0] || String(new Date().getFullYear() - 50);
+            const _smCurrentYearFinal = _smAllYears.length > 1 ? _smAllYears[_smAllYears.length - 1] : _smCurrentYear;
+            const _smHistoricalDecade = `${_smHistoricalYear.slice(0, 3)}0s`;
+            result.historicalDecade = _smHistoricalDecade;
+            result.historicalYear = _smHistoricalYear;
+            result.currentYear = _smCurrentYearFinal;
+
+            if (_smCities.length > 0) {
+              result.seedMetricSearchQueries = _smCities.flatMap(city => [
+                `${city} residential property price per square meter ${_smCurrentYearFinal}`,
+                `${city} median individual income salary ${_smCurrentYearFinal}`,
+                `${city} housing price ${_smHistoricalDecade} historical per sqm`,
+                `${city} median income ${_smHistoricalDecade} historical`
+              ]);
+              for (const cn of _smCountries) {
+                result.seedMetricSearchQueries.push(`${cn} national average property price per sqm ${_smCurrentYearFinal}`);
+                result.seedMetricSearchQueries.push(`${cn} minimum wage annual ${_smCurrentYearFinal}`);
+              }
+              console.log(`🌍 GEOGRAPHIC GUARD: Seed Metric for cities: ${_smCities.join(', ')}, historical: ${_smHistoricalDecade}`);
+            } else {
+              result.seedMetricSearchQueries = [
+                `residential property price per square meter comparison major cities ${_smCurrentYearFinal}`,
+                `median income by country ${_smCurrentYearFinal}`,
+                `housing price ${_smHistoricalDecade} historical major cities`,
+                `median income ${_smHistoricalDecade} historical`
+              ];
+            }
+          } else {
+            // Not a geographic entity — genuine invalid ticker
+            console.log(`❌ Preflight: Ticker ${_failedTicker} invalid (no data) → mode=general`);
+            result.ticker = null;
+            result.stockData = null;
+            result.stockContext = null;
+            result.mode = 'general';
+          }
         } else {
           // No ticker at all
           result.mode = 'general';
