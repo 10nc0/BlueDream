@@ -1,11 +1,109 @@
 /**
- * Stock Price Fetcher - Node.js wrapper for yfinance Python script
+ * Stock Price Fetcher - Pure Node.js via yahoo-finance2
  * Fetches historical stock prices for Ψ-EMA analysis
+ * Replaced Python/yfinance spawn with direct JS equivalent (same output shape)
  */
 
-const { spawn } = require('child_process');
-const path = require('path');
 const axios = require('axios');
+const YahooFinance = require('yahoo-finance2').default;
+const yahooFinance = new YahooFinance({ suppressNotices: ['ripHistorical', 'yahooSurvey'] });
+
+// ============================================================================
+// PHI-INTERPOLATION (ported from fetch-stock-prices.py)
+// Fills small gaps (2-3 days) using φ-weighted midpoint
+// ============================================================================
+const PHI = 1.6180339887498949;
+
+function phiInterpolate(closes, dates) {
+    if (closes.length < 2) return { closes, dates, flags: closes.map(() => false) };
+    const out = [], outDates = [], flags = [];
+    for (let i = 0; i < closes.length; i++) {
+        out.push(closes[i]);
+        outDates.push(dates[i]);
+        flags.push(false);
+        if (i < closes.length - 1) {
+            const curr = new Date(dates[i]);
+            const next = new Date(dates[i + 1]);
+            const gapDays = Math.round((next - curr) / (1000 * 60 * 60 * 24));
+            if (gapDays >= 2 && gapDays <= 3) {
+                const midValue = closes[i] + (closes[i + 1] - closes[i]) / PHI;
+                const midDate = new Date(curr.getTime() + Math.floor(gapDays / 2) * 24 * 60 * 60 * 1000);
+                out.push(midValue);
+                outDates.push(midDate.toISOString().split('T')[0] + '*');
+                flags.push(true);
+            }
+        }
+    }
+    return { closes: out, dates: outDates, flags };
+}
+
+// ============================================================================
+// ATOMIC UNITS OF PRODUCTION (ported from fetch-stock-prices.py)
+// Maps sector/industry to likely atomic units for Robinhood-style headers
+// ============================================================================
+const SECTOR_ATOMIC_UNITS = {
+    'Financial Services': ['loan book (state)', 'issuance (flow)', 'payments (flow)', 'AUM (state)', 'TPV (flow)'],
+    'Consumer Cyclical': ['inventory (state)', 'orders (flow)', 'shipments (flow)', 'GMV booked (state)', 'tickets (flow)'],
+    'Consumer Defensive': ['inventory (state)', 'orders (flow)', 'baskets (flow)', 'GMV booked (state)', 'tickets (flow)'],
+    'Technology': ['ARR/MRR (state)', 'subscriptions (state)', 'new contracts (flow)', 'API calls (flow)', 'users (state)'],
+    'Basic Materials': ['reserves (state)', 'stockpile (state)', 'extraction (flow)', 'shipments (flow)', 'production (flow)'],
+    'Energy': ['reserves (state)', 'capacity MW (state)', 'barrels (flow)', 'MWh (flow)', 'production (flow)'],
+    'Real Estate': ['portfolio value (state)', 'units (state)', 'acquisitions (flow)', 'rental income (flow)', 'NOI (flow)'],
+    'Industrials': ['inventory (state)', 'WIP (state)', 'production (flow)', 'shipments (flow)', 'backlog (state)'],
+    'Communication Services': ['subscribers (state)', 'ARPU × subs (flow)', 'churn (flow)', 'net adds (flow)', 'MAU (state)'],
+    'Healthcare': ['patient panel (state)', 'bed capacity (state)', 'visits (flow)', 'procedures (flow)', 'admissions (flow)'],
+    'Utilities': ['capacity MW (state)', 'customers (state)', 'MWh generated (flow)', 'sales (flow)', 'connections (state)'],
+};
+
+const INDUSTRY_ATOMIC_UNITS = {
+    'Banks—Diversified': ['loan book (state)', 'deposits (state)', 'issuance (flow)', 'payments (flow)', 'NPL ratio (guard)'],
+    'Banks—Regional': ['loan book (state)', 'deposits (state)', 'issuance (flow)', 'payments (flow)', 'NPL ratio (guard)'],
+    'Credit Services': ['loan book (state)', 'credit lines (state)', 'issuance (flow)', 'payments (flow)', 'NPL ratio (guard)'],
+    'Mortgage Finance': ['loan book (state)', 'properties (state)', 'originations (flow)', 'payments (flow)', 'delinquency (guard)'],
+    'Financial Data & Stock Exchanges': ['wallet avg (state)', 'deposits (state)', 'TPV (flow)', 'active users (flow)', 'velocity (guard)'],
+    'Capital Markets': ['AUM (state)', 'deposits (state)', 'trades (flow)', 'commissions (flow)', 'velocity (guard)'],
+    'Asset Management': ['AUM (state)', 'funds (state)', 'inflows (flow)', 'outflows (flow)', 'fee % (guard)'],
+    'Insurance—Life': ['AUM (state)', 'policies (state)', 'premiums (flow)', 'claims (flow)', 'loss ratio (guard)'],
+    'Insurance—Property & Casualty': ['reserves (state)', 'policies (state)', 'premiums (flow)', 'claims (flow)', 'combined ratio (guard)'],
+    'Internet Retail': ['inventory (state)', 'GMV booked (state)', 'orders (flow)', 'shipments (flow)', 'turnover (guard)'],
+    'Specialty Retail': ['inventory (state)', 'SKUs (state)', 'transactions (flow)', 'tickets (flow)', 'turnover (guard)'],
+    'Restaurants': ['locations (state)', 'inventory (state)', 'orders (flow)', 'covers (flow)', 'turnover (guard)'],
+    'Discount Stores': ['inventory (state)', 'SKUs (state)', 'baskets (flow)', 'transactions (flow)', 'turnover (guard)'],
+    'Grocery Stores': ['inventory (state)', 'SKUs (state)', 'baskets (flow)', 'deliveries (flow)', 'turnover (guard)'],
+    'Apparel Retail': ['inventory (state)', 'SKUs (state)', 'orders (flow)', 'units sold (flow)', 'turnover (guard)'],
+    'Home Improvement Retail': ['inventory (state)', 'SKUs (state)', 'transactions (flow)', 'projects (flow)', 'turnover (guard)'],
+    'Auto Manufacturers': ['backlog (state)', 'inventory (state)', 'vehicles delivered (flow)', 'orders (flow)', 'days inventory (guard)'],
+    'Software—Infrastructure': ['ARR (state)', 'seats (state)', 'new contracts (flow)', 'API calls (flow)', 'burn multiple (guard)'],
+    'Software—Application': ['ARR (state)', 'subscriptions (state)', 'new contracts (flow)', 'users (flow)', 'burn multiple (guard)'],
+    'Semiconductors': ['fab capacity (state)', 'design wins (state)', 'chip units (flow)', 'wafers (flow)', 'utilization (guard)'],
+    'Consumer Electronics': ['inventory (state)', 'SKUs (state)', 'devices sold (flow)', 'units (flow)', 'turnover (guard)'],
+    'Internet Content & Information': ['MAU (state)', 'content items (state)', 'page views (flow)', 'ad impressions (flow)', 'engagement (guard)'],
+    'Entertainment': ['subscribers (state)', 'titles (state)', 'net adds (flow)', 'hours streamed (flow)', 'LTV/CAC (guard)'],
+    'Telecom Services': ['subscribers (state)', 'connections (state)', 'ARPU × subs (flow)', 'churn (flow)', 'churn rate (guard)'],
+    'Electronic Gaming & Multimedia': ['DAU/MAU (state)', 'players (state)', 'installs (flow)', 'in-app purchases (flow)', 'retention (guard)'],
+    'Drug Manufacturers—General': ['patients (state)', 'trials (state)', 'doses (flow)', 'prescriptions (flow)', 'trial success (guard)'],
+    'Biotechnology': ['patients (state)', 'indications (state)', 'doses (flow)', 'approvals (flow)', 'trial success (guard)'],
+    'Medical Devices': ['installed base (state)', 'contracts (state)', 'procedures (flow)', 'units sold (flow)', 'utilization (guard)'],
+    'Healthcare Plans': ['members (state)', 'enrollees (state)', 'claims (flow)', 'visits (flow)', 'MLR (guard)'],
+    'Oil & Gas Integrated': ['reserves (state)', 'wells (state)', 'barrels (flow)', 'MMBtu (flow)', 'reserve replacement (guard)'],
+    'Oil & Gas E&P': ['reserves (state)', 'leases (state)', 'barrels (flow)', 'wells drilled (flow)', 'reserve replacement (guard)'],
+    'Steel': ['capacity (state)', 'inventory (state)', 'tons shipped (flow)', 'orders (flow)', 'utilization (guard)'],
+    'Aerospace & Defense': ['backlog (state)', 'contracts (state)', 'aircraft delivered (flow)', 'systems (flow)', 'book-to-bill (guard)'],
+    'Airlines': ['fleet (state)', 'routes (state)', 'passengers (flow)', 'seat miles (flow)', 'load factor (guard)'],
+    'Railroads': ['track miles (state)', 'cars (state)', 'carloads (flow)', 'ton-miles (flow)', 'operating ratio (guard)'],
+    'Utilities—Regulated Electric': ['capacity MW (state)', 'customers (state)', 'MWh delivered (flow)', 'sales (flow)', 'capacity factor (guard)'],
+    'Utilities—Renewable': ['capacity MW (state)', 'PPAs (state)', 'MWh generated (flow)', 'installations (flow)', 'capacity factor (guard)'],
+    'REIT—Retail': ['sq ft (state)', 'properties (state)', 'rental income (flow)', 'leases signed (flow)', 'cap rate (guard)'],
+    'REIT—Residential': ['units (state)', 'properties (state)', 'rental income (flow)', 'renewals (flow)', 'cap rate (guard)'],
+    'REIT—Industrial': ['sq ft (state)', 'warehouses (state)', 'rental income (flow)', 'leases (flow)', 'cap rate (guard)'],
+    'REIT—Office': ['sq ft (state)', 'buildings (state)', 'rental income (flow)', 'leases (flow)', 'cap rate (guard)'],
+};
+
+function inferAtomicUnits(sector, industry) {
+    if (industry && INDUSTRY_ATOMIC_UNITS[industry]) return INDUSTRY_ATOMIC_UNITS[industry].slice(0, 5);
+    if (sector && SECTOR_ATOMIC_UNITS[sector]) return SECTOR_ATOMIC_UNITS[sector].slice(0, 5);
+    return null;
+}
 
 const DOLLAR_TICKER_REGEX = /\$([A-Za-z]{1,5})\b/gi;
 
@@ -285,67 +383,119 @@ function sanitizeTicker(ticker) {
   return sanitized;
 }
 
-function fetchStockPrices(ticker, customPeriod = null) {
-  return new Promise((resolve, reject) => {
+async function fetchStockPrices(ticker, customPeriod = null) {
     const safeTicker = sanitizeTicker(ticker);
-    if (!safeTicker) {
-      reject(new Error(`Invalid ticker format: ${ticker}`));
-      return;
+    if (!safeTicker) throw new Error(`Invalid ticker format: ${ticker}`);
+
+    const now = new Date();
+    const dailyStart = new Date(now);
+    dailyStart.setFullYear(dailyStart.getFullYear() - 1);
+    const weeklyStart = new Date(now);
+    weeklyStart.setFullYear(weeklyStart.getFullYear() - 4);
+
+    const period2 = now.toISOString().split('T')[0];
+    const dailyPeriod1 = dailyStart.toISOString().split('T')[0];
+    const weeklyPeriod1 = weeklyStart.toISOString().split('T')[0];
+
+    const queryOpts = { period1: dailyPeriod1, period2, interval: '1d' };
+    if (customPeriod) {
+        const yearsBack = parseInt(customPeriod) || 1;
+        const custom = new Date(now);
+        custom.setFullYear(custom.getFullYear() - yearsBack);
+        queryOpts.period1 = custom.toISOString().split('T')[0];
     }
-    
-    const scriptPath = path.join(__dirname, 'fetch-stock-prices.py');
-    const args = [scriptPath, safeTicker];
-    if (customPeriod) args.push(customPeriod);
-    
-    const python = spawn('python', args);
-    
-    let stdout = '';
-    let stderr = '';
-    
-    python.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-    
-    python.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-    
-    python.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(`Python script exited with code ${code}: ${stderr}`));
-        return;
-      }
-      
-      try {
-        // Sanitize Python output: NaN, Infinity are not valid JSON
-        // Replace with null to avoid parse errors
-        let sanitized = stdout.trim()
-          .replace(/:\s*NaN\b/g, ': null')
-          .replace(/:\s*Infinity\b/g, ': null')
-          .replace(/:\s*-Infinity\b/g, ': null')
-          .replace(/,\s*NaN\b/g, ', null')
-          .replace(/\[\s*NaN\b/g, '[null');
-        
-        const result = JSON.parse(sanitized);
-        if (result.error) {
-          reject(new Error(result.error));
-        } else {
-          resolve(result);
-        }
-      } catch (e) {
-        reject(new Error(`Failed to parse stock data: ${e.message}`));
-      }
-    });
-    
-    python.on('error', (err) => {
-      reject(new Error(`Failed to spawn Python: ${err.message}`));
-    });
-    
-    setTimeout(() => {
-      python.kill();
-      reject(new Error('Stock fetch timed out after 30 seconds'));
-    }, 30000);
-  });
+
+    const [dailyRaw, weeklyRaw, summaryRaw] = await Promise.all([
+        yahooFinance.historical(safeTicker, queryOpts),
+        yahooFinance.historical(safeTicker, { period1: weeklyPeriod1, period2, interval: '1wk' }),
+        yahooFinance.quoteSummary(safeTicker, {
+            modules: ['assetProfile', 'summaryDetail', 'defaultKeyStatistics', 'financialData', 'quoteType']
+        }).catch(() => ({})),
+    ]);
+
+    if (!dailyRaw || dailyRaw.length === 0) {
+        throw new Error(`No data found for ${safeTicker}. Check if the ticker is valid.`);
+    }
+
+    const safeFloat = v => (v != null && !isNaN(Number(v))) ? Number(v) : null;
+    const toDate = d => (d instanceof Date ? d : new Date(d)).toISOString().split('T')[0];
+
+    const dailyCloses = dailyRaw.map(r => r.close);
+    const dailyDates  = dailyRaw.map(r => toDate(r.date));
+    const weeklyCloses = (weeklyRaw || []).map(r => r.close);
+    const weeklyDates  = (weeklyRaw || []).map(r => toDate(r.date));
+
+    const daily  = phiInterpolate(dailyCloses, dailyDates);
+    const weekly = weeklyCloses.length > 0
+        ? phiInterpolate(weeklyCloses, weeklyDates)
+        : { closes: [], dates: [], flags: [] };
+
+    const profile      = summaryRaw?.assetProfile        || {};
+    const sumDetail    = summaryRaw?.summaryDetail        || {};
+    const keyStats     = summaryRaw?.defaultKeyStatistics || {};
+    const finData      = summaryRaw?.financialData        || {};
+    const quoteType    = summaryRaw?.quoteType            || {};
+
+    const sector   = profile.sector   || null;
+    const industry = profile.industry || null;
+    const atomicUnits = inferAtomicUnits(sector, industry);
+
+    const fundamentals = {};
+    const pe  = safeFloat(sumDetail.trailingPE);   if (pe  !== null) fundamentals.peRatio        = pe;
+    const fpe = safeFloat(sumDetail.forwardPE);    if (fpe !== null) fundamentals.forwardPE       = fpe;
+    const dy  = safeFloat(sumDetail.dividendYield); if (dy  !== null) fundamentals.dividendYield   = dy;
+    const mc  = safeFloat(sumDetail.marketCap);    if (mc  !== null) fundamentals.marketCap        = mc;
+    const dte = safeFloat(finData.debtToEquity);   if (dte !== null) fundamentals.debtToEquity    = dte;
+    if (sector)   fundamentals.sector   = sector;
+    if (industry) fundamentals.industry = industry;
+    const biz = profile.longBusinessSummary || '';
+    if (biz) {
+        const first = biz.split('.')[0].trim();
+        fundamentals.summary = first.length > 150 ? first.substring(0, 147) + '...' : first;
+    }
+    if (atomicUnits) fundamentals.atomicUnits = atomicUnits;
+    const bv  = safeFloat(keyStats.bookValue);         if (bv  !== null) fundamentals.bookValue         = bv;
+    const h52 = safeFloat(sumDetail.fiftyTwoWeekHigh); if (h52 !== null) fundamentals.fiftyTwoWeekHigh  = h52;
+    const l52 = safeFloat(sumDetail.fiftyTwoWeekLow);  if (l52 !== null) fundamentals.fiftyTwoWeekLow   = l52;
+    const rps = safeFloat(finData.revenuePerShare);    if (rps !== null) fundamentals.revenuePerShare   = rps;
+
+    const currentPrice = daily.closes[daily.closes.length - 1] ?? null;
+    const name = quoteType.longName || quoteType.shortName || profile.longName || profile.shortName || safeTicker;
+    const currency = sumDetail.currency || 'USD';
+
+    const realDailyCount  = daily.flags.filter(f => !f).length;
+    const realWeeklyCount = weekly.flags.filter(f => !f).length;
+    const weeklyUnavailableReason = weekly.closes.length < 13
+        ? `Stock history: only ${weekly.closes.length} weeks (need 13+ for basic EMA)` : null;
+
+    return {
+        ticker: safeTicker,
+        name,
+        currency,
+        currentPrice,
+        closes:    daily.closes,
+        dates:     daily.dates,
+        startDate: daily.dates[0]?.replace('*', '') || null,
+        endDate:   daily.dates[daily.dates.length - 1]?.replace('*', '') || null,
+        daily: {
+            closes:             daily.closes,
+            dates:              daily.dates,
+            barCount:           realDailyCount,
+            interpolatedCount:  daily.flags.filter(Boolean).length,
+            startDate:          daily.dates[0]?.replace('*', '') || null,
+            endDate:            daily.dates[daily.dates.length - 1]?.replace('*', '') || null,
+        },
+        weekly: {
+            closes:             weekly.closes,
+            dates:              weekly.dates,
+            barCount:           realWeeklyCount,
+            interpolatedCount:  weekly.flags.filter(Boolean).length,
+            startDate:          weekly.dates[0]?.replace('*', '') || null,
+            endDate:            weekly.dates[weekly.dates.length - 1]?.replace('*', '') || null,
+            ...(weeklyUnavailableReason ? { unavailableReason: weeklyUnavailableReason } : {}),
+        },
+        fundamentals,
+    };
 }
 
 /**
