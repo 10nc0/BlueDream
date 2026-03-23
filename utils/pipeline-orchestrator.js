@@ -1163,6 +1163,7 @@ GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
   • Sanity check income scale: single-earner annual income for a major city is typically 20,000–150,000 in local currency units. If your figure is 10× outside this band, you have a unit error (monthly × 12, or thousands vs units). Fix it.
   • 700sqm (LCU) = LCU/sqm × 700
   • Years = 700sqm (LCU) ÷ Annual Income (same LCU) — whole number only, no decimals ever (round to nearest integer)
+  • Zero rule: if Years rounds to 0, that row is OMITTED — same as the no-data rule. 0 is not N/A and not OPTIMISM; it means the input data is unusable (e.g. sub-unit price, index artifact). Drop the row silently.
   • Self-check: verify P/sqm × 700 ÷ Income = Years before writing. If Years < 1 or Income looks implausibly large, fix inputs first.
 
 GATE 3 — SCRIBE (table → summary → legend → coda):
