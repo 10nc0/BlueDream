@@ -41,6 +41,7 @@ function phiInterpolate(closes, dates) {
 // ATOMIC UNITS OF PRODUCTION (ported from fetch-stock-prices.py)
 // Maps sector/industry to likely atomic units for Robinhood-style headers
 // ============================================================================
+// Lean sector-level fallback (bypass-path only — LLM infers company-specific units on the LLM path)
 const SECTOR_ATOMIC_UNITS = {
     'Financial Services': ['loan book (state)', 'issuance (flow)', 'payments (flow)', 'AUM (state)', 'TPV (flow)'],
     'Consumer Cyclical': ['inventory (state)', 'orders (flow)', 'shipments (flow)', 'GMV booked (state)', 'tickets (flow)'],
@@ -55,52 +56,9 @@ const SECTOR_ATOMIC_UNITS = {
     'Utilities': ['capacity MW (state)', 'customers (state)', 'MWh generated (flow)', 'sales (flow)', 'connections (state)'],
 };
 
-const INDUSTRY_ATOMIC_UNITS = {
-    'Banks—Diversified': ['loan book (state)', 'deposits (state)', 'issuance (flow)', 'payments (flow)', 'NPL ratio (guard)'],
-    'Banks—Regional': ['loan book (state)', 'deposits (state)', 'issuance (flow)', 'payments (flow)', 'NPL ratio (guard)'],
-    'Credit Services': ['loan book (state)', 'credit lines (state)', 'issuance (flow)', 'payments (flow)', 'NPL ratio (guard)'],
-    'Mortgage Finance': ['loan book (state)', 'properties (state)', 'originations (flow)', 'payments (flow)', 'delinquency (guard)'],
-    'Financial Data & Stock Exchanges': ['wallet avg (state)', 'deposits (state)', 'TPV (flow)', 'active users (flow)', 'velocity (guard)'],
-    'Capital Markets': ['AUM (state)', 'deposits (state)', 'trades (flow)', 'commissions (flow)', 'velocity (guard)'],
-    'Asset Management': ['AUM (state)', 'funds (state)', 'inflows (flow)', 'outflows (flow)', 'fee % (guard)'],
-    'Insurance—Life': ['AUM (state)', 'policies (state)', 'premiums (flow)', 'claims (flow)', 'loss ratio (guard)'],
-    'Insurance—Property & Casualty': ['reserves (state)', 'policies (state)', 'premiums (flow)', 'claims (flow)', 'combined ratio (guard)'],
-    'Internet Retail': ['inventory (state)', 'GMV booked (state)', 'orders (flow)', 'shipments (flow)', 'turnover (guard)'],
-    'Specialty Retail': ['inventory (state)', 'SKUs (state)', 'transactions (flow)', 'tickets (flow)', 'turnover (guard)'],
-    'Restaurants': ['locations (state)', 'inventory (state)', 'orders (flow)', 'covers (flow)', 'turnover (guard)'],
-    'Discount Stores': ['inventory (state)', 'SKUs (state)', 'baskets (flow)', 'transactions (flow)', 'turnover (guard)'],
-    'Grocery Stores': ['inventory (state)', 'SKUs (state)', 'baskets (flow)', 'deliveries (flow)', 'turnover (guard)'],
-    'Apparel Retail': ['inventory (state)', 'SKUs (state)', 'orders (flow)', 'units sold (flow)', 'turnover (guard)'],
-    'Home Improvement Retail': ['inventory (state)', 'SKUs (state)', 'transactions (flow)', 'projects (flow)', 'turnover (guard)'],
-    'Auto Manufacturers': ['backlog (state)', 'inventory (state)', 'vehicles delivered (flow)', 'orders (flow)', 'days inventory (guard)'],
-    'Software—Infrastructure': ['ARR (state)', 'seats (state)', 'new contracts (flow)', 'API calls (flow)', 'burn multiple (guard)'],
-    'Software—Application': ['ARR (state)', 'subscriptions (state)', 'new contracts (flow)', 'users (flow)', 'burn multiple (guard)'],
-    'Semiconductors': ['fab capacity (state)', 'design wins (state)', 'chip units (flow)', 'wafers (flow)', 'utilization (guard)'],
-    'Consumer Electronics': ['inventory (state)', 'SKUs (state)', 'devices sold (flow)', 'units (flow)', 'turnover (guard)'],
-    'Internet Content & Information': ['MAU (state)', 'content items (state)', 'page views (flow)', 'ad impressions (flow)', 'engagement (guard)'],
-    'Entertainment': ['subscribers (state)', 'titles (state)', 'net adds (flow)', 'hours streamed (flow)', 'LTV/CAC (guard)'],
-    'Telecom Services': ['subscribers (state)', 'connections (state)', 'ARPU × subs (flow)', 'churn (flow)', 'churn rate (guard)'],
-    'Electronic Gaming & Multimedia': ['DAU/MAU (state)', 'players (state)', 'installs (flow)', 'in-app purchases (flow)', 'retention (guard)'],
-    'Drug Manufacturers—General': ['patients (state)', 'trials (state)', 'doses (flow)', 'prescriptions (flow)', 'trial success (guard)'],
-    'Biotechnology': ['patients (state)', 'indications (state)', 'doses (flow)', 'approvals (flow)', 'trial success (guard)'],
-    'Medical Devices': ['installed base (state)', 'contracts (state)', 'procedures (flow)', 'units sold (flow)', 'utilization (guard)'],
-    'Healthcare Plans': ['members (state)', 'enrollees (state)', 'claims (flow)', 'visits (flow)', 'MLR (guard)'],
-    'Oil & Gas Integrated': ['reserves (state)', 'wells (state)', 'barrels (flow)', 'MMBtu (flow)', 'reserve replacement (guard)'],
-    'Oil & Gas E&P': ['reserves (state)', 'leases (state)', 'barrels (flow)', 'wells drilled (flow)', 'reserve replacement (guard)'],
-    'Steel': ['capacity (state)', 'inventory (state)', 'tons shipped (flow)', 'orders (flow)', 'utilization (guard)'],
-    'Aerospace & Defense': ['backlog (state)', 'contracts (state)', 'aircraft delivered (flow)', 'systems (flow)', 'book-to-bill (guard)'],
-    'Airlines': ['fleet (state)', 'routes (state)', 'passengers (flow)', 'seat miles (flow)', 'load factor (guard)'],
-    'Railroads': ['track miles (state)', 'cars (state)', 'carloads (flow)', 'ton-miles (flow)', 'operating ratio (guard)'],
-    'Utilities—Regulated Electric': ['capacity MW (state)', 'customers (state)', 'MWh delivered (flow)', 'sales (flow)', 'capacity factor (guard)'],
-    'Utilities—Renewable': ['capacity MW (state)', 'PPAs (state)', 'MWh generated (flow)', 'installations (flow)', 'capacity factor (guard)'],
-    'REIT—Retail': ['sq ft (state)', 'properties (state)', 'rental income (flow)', 'leases signed (flow)', 'cap rate (guard)'],
-    'REIT—Residential': ['units (state)', 'properties (state)', 'rental income (flow)', 'renewals (flow)', 'cap rate (guard)'],
-    'REIT—Industrial': ['sq ft (state)', 'warehouses (state)', 'rental income (flow)', 'leases (flow)', 'cap rate (guard)'],
-    'REIT—Office': ['sq ft (state)', 'buildings (state)', 'rental income (flow)', 'leases (flow)', 'cap rate (guard)'],
-};
+// INDUSTRY_ATOMIC_UNITS removed — LLM deliberates from sector + industry context (no dogmatic 40-entry list)
 
-function inferAtomicUnits(sector, industry) {
-    if (industry && INDUSTRY_ATOMIC_UNITS[industry]) return INDUSTRY_ATOMIC_UNITS[industry].slice(0, 5);
+function inferAtomicUnits(sector) {
     if (sector && SECTOR_ATOMIC_UNITS[sector]) return SECTOR_ATOMIC_UNITS[sector].slice(0, 5);
     return null;
 }
@@ -438,7 +396,7 @@ async function fetchStockPrices(ticker, customPeriod = null) {
 
     const sector   = profile.sector   || null;
     const industry = profile.industry || null;
-    const atomicUnits = inferAtomicUnits(sector, industry);
+    const atomicUnits = inferAtomicUnits(sector);
 
     const fundamentals = {};
     const pe  = safeFloat(sumDetail.trailingPE);   if (pe  !== null) fundamentals.peRatio        = pe;
@@ -454,6 +412,7 @@ async function fetchStockPrices(ticker, customPeriod = null) {
         fundamentals.summary = first.length > 150 ? first.substring(0, 147) + '...' : first;
     }
     if (atomicUnits) fundamentals.atomicUnits = atomicUnits;
+    if (quoteType.quoteType) fundamentals.yfType = quoteType.quoteType;
     const bv  = safeFloat(keyStats.bookValue);         if (bv  !== null) fundamentals.bookValue         = bv;
     const h52 = safeFloat(sumDetail.fiftyTwoWeekHigh); if (h52 !== null) fundamentals.fiftyTwoWeekHigh  = h52;
     const l52 = safeFloat(sumDetail.fiftyTwoWeekLow);  if (l52 !== null) fundamentals.fiftyTwoWeekLow   = l52;

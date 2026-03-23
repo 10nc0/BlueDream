@@ -2728,7 +2728,7 @@ When stock data is provided below, you MUST:
  * @returns {string} Physical audit disclaimer text
  */
 function generatePhysicalAuditDisclaimer(analysis, ticker, fundamentals) {
-  const assetClass = detectAssetClass(ticker);
+  const assetClass = detectAssetClass(ticker, fundamentals);
   const sector = fundamentals?.sector || '';
   const industry = fundamentals?.industry || '';
   const atomicUnits = fundamentals?.atomicUnits || [];
@@ -2742,49 +2742,38 @@ This "seeing is believing" H₀ approach grounds spreadsheet claims in physical 
 }
 
 /**
- * Detect asset class from ticker symbol
- * Prioritizes more specific patterns before general ones
+ * Detect asset class from Yahoo Finance quoteType (already fetched in preflight).
+ * Falls back to format-based heuristics for edge cases (=F futures, =X forex pairs).
+ * The 4 big hardcoded ticker lists (crypto ~50, commodityETFs 21, REITs 40, ETFs 35)
+ * are replaced by fundamentals.yfType — the instrument type YF already returns.
+ *
+ * yfType values: 'EQUITY', 'ETF', 'CRYPTOCURRENCY', 'FUTURE', 'CURRENCY', 'MUTUALFUND'
+ * REITs: yfType='EQUITY' but sector='Real Estate' → 'realestate'
  */
-function detectAssetClass(ticker) {
+function detectAssetClass(ticker, fundamentals) {
   if (!ticker) return 'general';
   const t = ticker.toUpperCase().trim();
-  
-  // Crypto: Handle various formats (BTC, BTC-USD, BTCUSD, BTC/USD)
-  const cryptoBase = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'DOT', 'AVAX', 'MATIC', 'LINK', 
-    'UNI', 'ATOM', 'LTC', 'BCH', 'XLM', 'ALGO', 'VET', 'FIL', 'THETA', 'SAND', 'MANA', 'AXS', 
-    'APE', 'SHIB', 'NEAR', 'FTM', 'CRO', 'EGLD', 'HBAR', 'ICP', 'EOS', 'XTZ', 'AAVE', 'MKR', 
-    'SNX', 'COMP', 'YFI', 'SUSHI', 'CRV', '1INCH', 'ENJ', 'CHZ', 'GALA', 'IMX', 'LRC', 'BAT', 
-    'ZRX', 'REN', 'BNB', 'WBTC', 'WETH', 'USDT', 'USDC', 'DAI', 'BUSD', 'PEPE', 'ARB', 'OP'];
-  const cryptoNormalized = t.replace(/[-\/](USD|USDT|USDC|EUR|GBP|BTC|ETH)$/, '');
-  if (cryptoBase.includes(cryptoNormalized)) return 'crypto';
-  
-  // Commodities futures (=F suffix) - check before forex to avoid =X confusion
+  const yfType = (fundamentals?.yfType || '').toUpperCase();
+  const sector = (fundamentals?.sector || '').toLowerCase();
+
+  // Format-based: commodity futures (=F) and forex (=X) — these are format patterns, not a list
   if (/=F$/.test(t)) return 'commodity';
-  
-  // Commodity ETFs (physical-backed or commodity-focused)
-  const commodityETFs = ['GLD', 'SLV', 'IAU', 'SGOL', 'SIVR', 'PPLT', 'PALL', 'USO', 'UNG', 
-    'DBA', 'DBC', 'PDBC', 'CORN', 'WEAT', 'SOYB', 'CPER', 'JJC', 'JJN', 'JJG', 'COW', 'NIB'];
-  if (commodityETFs.includes(t)) return 'commodity';
-  
-  // Forex pairs (=X suffix or currency pair patterns)
   if (/=X$/.test(t)) return 'forex';
   const forexPairs = /^(EUR|GBP|JPY|AUD|CAD|CHF|NZD|CNY|HKD|SGD|KRW|INR|MXN|BRL|ZAR)(USD|EUR|GBP|JPY|CHF|AUD|CAD|NZD)$/;
   if (forexPairs.test(t)) return 'forex';
-  
-  // REIT / Real Estate (major REITs)
-  const reits = ['VNQ', 'XLRE', 'IYR', 'SCHH', 'RWR', 'USRT', 'REET', 'VNQI', 'REM', 'MORT', 
-    'O', 'AMT', 'PLD', 'CCI', 'EQIX', 'PSA', 'DLR', 'WELL', 'AVB', 'EQR', 'SPG', 'VICI', 
-    'ARE', 'MAA', 'UDR', 'ESS', 'PEAK', 'HST', 'SLG', 'BXP', 'VTR', 'KIM', 'REG', 'FRT', 
-    'NNN', 'WPC', 'STOR', 'ADC', 'EPRT', 'STAG', 'TRNO', 'COLD', 'EXR', 'CUBE', 'LSI', 'NSA', 'REXR'];
-  if (reits.includes(t)) return 'realestate';
-  
-  // Broad market ETFs (not commodity-focused)
-  const etfs = ['SPY', 'QQQ', 'DIA', 'IWM', 'VTI', 'VOO', 'IVV', 'VEA', 'VWO', 'EFA', 'EEM', 
-    'AGG', 'BND', 'TLT', 'LQD', 'HYG', 'XLF', 'XLK', 'XLE', 'XLV', 'XLI', 'XLP', 'XLY', 
-    'XLB', 'XLU', 'VIG', 'VYM', 'SCHD', 'ARKK', 'ARKG', 'ARKW', 'ARKF', 'ARKQ', 'KWEB', 'FXI'];
-  if (etfs.includes(t)) return 'etf';
-  
-  // Default: stocks
+
+  // YF instrument type — the deliberator (replaces all four hardcoded lists)
+  if (yfType === 'CRYPTOCURRENCY') return 'crypto';
+  if (yfType === 'FUTURE') return 'commodity';
+  if (yfType === 'CURRENCY') return 'forex';
+  if (yfType === 'MUTUALFUND') return 'etf';
+  if (yfType === 'ETF') return 'etf';
+  if (yfType === 'EQUITY') {
+    if (sector.includes('real estate')) return 'realestate';
+    return 'stock';
+  }
+
+  // Default: stock (covers unknown yfType — most tickers without preflight data)
   return 'stock';
 }
 

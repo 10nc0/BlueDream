@@ -797,6 +797,7 @@ MANDATORY INSTRUCTIONS:
     
     // Build Ψ-EMA instruction for user prompt (ensures LLM outputs wave analysis)
     let psiEmaInstruction = '';
+    let psiEmaLlmHint = '';  // LLM-path-only deliberation hint (not on bypass path)
     if (isPsiEma) {
       const analysis = state.preflight.psiEmaAnalysis;
       const analysisWeekly = state.preflight.psiEmaAnalysisWeekly;
@@ -862,6 +863,15 @@ MANDATORY INSTRUCTIONS:
       
       // Physical Audit Disclaimer: "See to believe" infrastructure verification (Dec 23, 2025)
       const physicalAuditDisclaimer = generatePhysicalAuditDisclaimer(analysis, ticker, fundamentals);
+
+      // LLM deliberation hint (only reaches LLM path — never appears in bypass direct output)
+      // Tells the LLM to infer company-specific atomic units from sector+industry world knowledge
+      const fSector = fundamentals?.sector || null;
+      const fIndustry = fundamentals?.industry || null;
+      if (fSector || fIndustry) {
+        const label = [fSector, fIndustry].filter(Boolean).join(' / ');
+        psiEmaLlmHint = `\n[H₀ AUDIT NOTE] For the H₀ Physical Audit Advisory: supplement the suggested items with atomic units specific to ${ticker}'s actual business (${label}). Infer 4 physical quantities that are countable/inspectable/auditable for this company — format: \`unit name (state|flow|guard)\`.`;
+      }
       
       // Build assessment one-liner (pragmatic, no medical metaphor)
       const readingText = analysis.reading?.reading || analysis.summary?.reading || 'Unknown';
@@ -1108,6 +1118,8 @@ User query: ${query}`;
     // Append Ψ-EMA instruction to ensure wave analysis is output (fallback if no direct output)
     if (psiEmaInstruction) {
       finalPrompt = `${finalPrompt}\n\n${psiEmaInstruction}`;
+      // LLM deliberation: inject atomic units inference hint (LLM path only — not in bypass direct output)
+      if (psiEmaLlmHint) finalPrompt += psiEmaLlmHint;
     }
     
     // Append Seed Metric instruction to enforce table format (prevents LLM reformatting)
