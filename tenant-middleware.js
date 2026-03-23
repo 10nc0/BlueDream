@@ -1,4 +1,6 @@
 const authService = require('./auth-service');
+const logger = require('./lib/logger');
+const { VALID_SCHEMA_PATTERN } = require('./lib/validators');
 
 /**
  * CRITICAL: Tenant Context Middleware for Transaction Mode
@@ -20,7 +22,7 @@ async function setTenantContext(req, res, next) {
     const pool = req.app.locals.pool;
     
     if (!pool) {
-        console.error('❌ Pool not available in tenant middleware');
+        logger.error('❌ Pool not available in tenant middleware');
         return res.status(500).json({ error: 'Database connection error' });
     }
 
@@ -43,7 +45,7 @@ async function setTenantContext(req, res, next) {
                 }
             } catch (jwtError) {
                 // Invalid token - silently fall back to session
-                console.warn('⚠️  Invalid JWT token:', jwtError.message);
+                logger.warn('⚠️  Invalid JWT token: %s', jwtError.message);
             }
         }
         
@@ -77,9 +79,9 @@ async function setTenantContext(req, res, next) {
         const { tenant_id, tenant_schema } = mappingResult.rows[0];
         
         // Validate tenant_schema is a safe PostgreSQL identifier (defense-in-depth)
-        if (!tenant_schema || !/^[a-z_][a-z0-9_]*$/i.test(tenant_schema)) {
+        if (!tenant_schema || !VALID_SCHEMA_PATTERN.test(tenant_schema)) {
             client.release();
-            console.error('❌ Invalid tenant_schema format:', tenant_schema);
+            logger.error({ schema: tenant_schema }, '❌ Invalid tenant_schema format');
             return res.status(500).json({ error: 'Invalid tenant configuration' });
         }
         
@@ -141,7 +143,7 @@ async function setTenantContext(req, res, next) {
         
         next();
     } catch (error) {
-        console.error('❌ Tenant middleware error:', error);
+        logger.error({ err: error }, '❌ Tenant middleware error');
         // CRITICAL: Always release client on error
         client.release();
         if (!res.headersSent) {

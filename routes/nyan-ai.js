@@ -11,6 +11,7 @@ const { getMemoryManager, cleanupOldSessions } = require('../utils/memory-manage
 const capacityManager = require('../utils/playground-capacity');
 const usageTracker = require('../utils/playground-usage');
 const { AI_MODELS } = require('../config/constants');
+const { config } = require('../config');
 const { PsiEMADashboard, deriveReading } = require('../utils/psi-EMA');
 const { fetchStockPrices, calculateDataAge, sanitizeTicker } = require('../utils/stock-fetcher');
 
@@ -664,7 +665,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 },
                 config: {
                     headers: {
-                        'Authorization': `Bearer ${process.env.NYANBOOK_AI_KEY || process.env.GROQ_API_KEY}`,
+                        'Authorization': `Bearer ${config.ai.dashboardAiKey}`,
                         'Content-Type': 'application/json'
                     }
                 }
@@ -697,7 +698,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         },
                         config: {
                             headers: {
-                                'Authorization': `Bearer ${process.env.NYANBOOK_AI_KEY || process.env.GROQ_API_KEY}`,
+                                'Authorization': `Bearer ${config.ai.dashboardAiKey}`,
                                 'Content-Type': 'application/json'
                             }
                         }
@@ -1932,9 +1933,9 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             groq: {
                 configured: false,
                 keys: {
-                    dashboard: !!(process.env.NYANBOOK_AI_KEY || process.env.GROQ_API_KEY),
-                    playground: !!(process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN),
-                    vision: !!process.env.PLAYGROUND_GROQ_VISION_TOKEN
+                    dashboard: !!config.ai.dashboardAiKey,
+                    playground: !!config.ai.groqToken,
+                    vision: !!config.ai.groqVisionToken
                 }
             },
             discord: {
@@ -1968,7 +1969,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             diagnostics.database.error = dbErr.message;
         }
 
-        diagnostics.groq.configured = !!(process.env.NYANBOOK_AI_KEY || process.env.GROQ_API_KEY || process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN);
+        diagnostics.groq.configured = !!(config.ai.dashboardAiKey || config.ai.groqToken);
 
         if (hermesBot) {
             diagnostics.discord.hermes.healthy = hermesBot.isReady?.() || false;

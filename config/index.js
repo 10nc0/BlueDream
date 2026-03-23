@@ -64,6 +64,7 @@ const config = {
   ai: {
     groqToken: process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
     groqVisionToken: process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
+    dashboardAiKey: process.env.NYANBOOK_AI_KEY || process.env.GROQ_API_KEY,
     braveApiKey: process.env.PLAYGROUND_BRAVE_API
   },
 

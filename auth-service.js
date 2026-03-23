@@ -1,12 +1,13 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const logger = require('./lib/logger');
 
 // SECURITY: Require SESSION_SECRET to be set (fail-closed in index.js startup check)
 const JWT_SECRET = process.env.SESSION_SECRET;
 
 if (!JWT_SECRET) {
     // This should only happen if startup check in index.js missed it (defensive fallback)
-    console.error('❌ CRITICAL: SESSION_SECRET not configured! Token signing disabled.');
+    logger.fatal('❌ CRITICAL: SESSION_SECRET not configured! Token signing disabled.');
     process.exit(1);
 }
 
@@ -74,9 +75,9 @@ function verifyToken(token) {
         });
     } catch (error) {
         if (error.name === 'TokenExpiredError') {
-            console.warn('⚠️ JWT expired');
+            logger.warn('⚠️ JWT expired');
         } else if (error.name === 'JsonWebTokenError') {
-            console.warn('⚠️ Invalid JWT:', error.message);
+            logger.warn('⚠️ Invalid JWT: %s', error.message);
         }
         return null;
     }
