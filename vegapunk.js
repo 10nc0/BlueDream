@@ -52,7 +52,7 @@ const { registerInpipeRoutes } = require('./routes/inpipe');
 const { registerNyanAIRoutes, capacityManager, usageTracker } = require('./routes/nyan-ai');
 const { healQueue } = require('./lib/heal-queue');
 const phiBreathe = require('./lib/phi-breathe');
-const { splitMessageIntoChunks, postPayloadToWebhook, createSendToLedger, createSendToUserOutput } = require('./lib/discord-webhooks');
+const { splitMessageIntoChunks, postPayloadToWebhook, createSendToLedger } = require('./lib/discord-webhooks');
 const { routeUserOutput } = require('./lib/outpipes/router');
 const { createErrorHandler, notFoundHandler } = require('./lib/error-handler');
 const { config, buildConnectionString, getDbHost } = require('./config');
@@ -1062,7 +1062,6 @@ function getFileExtension(mimetype) {
 // Initialized to explicit throwers — serverReady gate prevents real calls before assignment,
 // but this makes any mis-ordering immediately obvious rather than a silent TypeError.
 let sendToLedger = () => { throw new Error('sendToLedger called before server initialization'); };
-let sendToUserOutput = () => { throw new Error('sendToUserOutput called before server initialization'); };
 
 // ===== GENESIS COUNTER API (Red Herring) =====
 // Expose counter state for debugging/monitoring
@@ -1429,7 +1428,6 @@ app.listen(PORT, '0.0.0.0', async () => {
 
         // Initialize Discord webhook factories (DI pattern)
         sendToLedger = createSendToLedger(pool, NYANBOOK_LEDGER_WEBHOOK);
-        sendToUserOutput = createSendToUserOutput(pool);
 
         // Reputation + usage tables can also run in parallel (independent)
         capacityManager.setDbPool(pool);
