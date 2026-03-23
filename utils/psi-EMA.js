@@ -2756,13 +2756,7 @@ function detectAssetClass(ticker, fundamentals) {
   const yfType = (fundamentals?.yfType || '').toUpperCase();
   const sector = (fundamentals?.sector || '').toLowerCase();
 
-  // Format-based: commodity futures (=F) and forex (=X) — these are format patterns, not a list
-  if (/=F$/.test(t)) return 'commodity';
-  if (/=X$/.test(t)) return 'forex';
-  const forexPairs = /^(EUR|GBP|JPY|AUD|CAD|CHF|NZD|CNY|HKD|SGD|KRW|INR|MXN|BRL|ZAR)(USD|EUR|GBP|JPY|CHF|AUD|CAD|NZD)$/;
-  if (forexPairs.test(t)) return 'forex';
-
-  // YF instrument type — the deliberator (replaces all four hardcoded lists)
+  // YF instrument type is authoritative — check first when available
   if (yfType === 'CRYPTOCURRENCY') return 'crypto';
   if (yfType === 'FUTURE') return 'commodity';
   if (yfType === 'CURRENCY') return 'forex';
@@ -2773,7 +2767,13 @@ function detectAssetClass(ticker, fundamentals) {
     return 'stock';
   }
 
-  // Default: stock (covers unknown yfType — most tickers without preflight data)
+  // Format-based fallbacks (used when yfType unavailable — =F futures, =X forex, currency pairs)
+  if (/=F$/.test(t)) return 'commodity';
+  if (/=X$/.test(t)) return 'forex';
+  const forexPairs = /^(EUR|GBP|JPY|AUD|CAD|CHF|NZD|CNY|HKD|SGD|KRW|INR|MXN|BRL|ZAR)(USD|EUR|GBP|JPY|CHF|AUD|CAD|NZD)$/;
+  if (forexPairs.test(t)) return 'forex';
+
+  // Default: stock (covers unknown yfType or tickers without preflight data)
   return 'stock';
 }
 
