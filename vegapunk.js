@@ -1115,24 +1115,15 @@ function parseUserAgent(userAgent) {
     return { deviceType, browser, os };
 }
 
-// SOVEREIGNTY NOTE: IP geolocation via external API removed.
-// Calling ipapi.co on every login leaks client IPs to a third party —
-// contradicting the data sovereignty mission of this system.
-// Location is logged as 'Unknown Location' in session audit records.
-// To enable geolocation: self-host MaxMind GeoLite2 (free, local, zero external calls).
-async function getLocationFromIP(ipAddress) {
-    if (!ipAddress || ipAddress === '::1' || ipAddress.startsWith('127.') || ipAddress.startsWith('192.168.') || ipAddress.startsWith('10.')) {
-        return 'Local Network';
-    }
-    return 'Unknown Location';
-}
-
-// Create session tracking record (multi-tenant)
+// User-Agent parsed + IP stored in tenant schema for user-facing session management (no third-party geolocation)
 async function createSessionRecord(userId, sessionId, req, tenantSchema) {
     try {
         const userAgent = req.get('user-agent') || '';
         const { deviceType, browser, os } = parseUserAgent(userAgent);
-        const location = await getLocationFromIP(req.ip);
+        const ip = req.ip || '';
+        const location = (!ip || ip === '::1' || ip.startsWith('127.') || ip.startsWith('192.168.') || ip.startsWith('10.'))
+            ? 'Local Network'
+            : 'Unknown Location';
         
         // SECURITY: Validate tenant schema name before interpolation (primary guard)
         if (!tenantSchema || tenantSchema === 'undefined' || !/^[a-z_][a-z0-9_]*$/i.test(tenantSchema)) {
