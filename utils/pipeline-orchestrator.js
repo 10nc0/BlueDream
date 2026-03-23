@@ -1129,18 +1129,20 @@ Distribute your search budget evenly across all cities — do not exhaust search
   Current (${currentYear}):
     • Price: "{city} apartment price per sqm {local currency name} ${currentYear}"
       (prefer apartment/flat/residential; land or plot price is acceptable fallback if no built price found)
-    • Minimum wage: "{city} minimum wage monthly {local currency name} ${currentYear}"
+    • Income: "{city} median single earner annual income {local currency name} ${currentYear}"
 
   Historical (~50yr ago, if relevant):
     • Price: "{city} apartment price per sqm {local currency name} 1975 OR 1970s"
-    • Minimum wage: "{city} minimum wage monthly {local currency name} 1975 OR 1970s"
+    • Income: "{city} median single earner annual income {local currency name} 1975 OR 1970s"
 
   Replace {local currency name} with the actual currency word — e.g. "rupees" for India, "kronor" for Sweden,
   "baht" for Thailand, "dong" for Vietnam, "yuan" for China, "yen" for Japan, "pounds" for UK, "euros" for EU.
   This forces Brave to return local market prices, not USD-converted values from international aggregators.
 
-  Income note: minimum wage is the floor — housing as a right, not a mean. Use monthly × 12 for annual.
-  If no city minimum wage found, use the national/state statutory minimum for that country.
+  Income note: median single earner only — not household, not dual-income, not average.
+  Average skews high (outliers); dual-income normalises what should be a one-job threshold.
+  The benchmark: could one working person (a taxi driver, a teacher) afford a home? That was the 20th-century contract.
+  If search returns monthly income → multiply by 12. If it returns household → do NOT use it, search again for individual.
 
 Rules:
   • Search for ALL cities mentioned — skipping any city is not acceptable.
@@ -1169,14 +1171,15 @@ GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
     • "land"  — result describes plot, land, site, vacant land, hectare price
     Prefer "built". Only use "land" if no built price was found in search results.
 
-  Income — minimum wage only (housing as a right, not a mean):
-    • Use monthly minimum wage × 12 = annual minimum wage.
-    • If search returns daily minimum wage → multiply by 260 (working days).
-    • If the city has no statutory minimum wage (e.g. Sweden, Denmark), use the relevant sector collective agreement floor.
-    • Sanity check: if annual minimum wage is less than 1,000 LCU or more than 10,000,000 LCU, you likely have a unit error. Fix it.
+  Income — median single earner only:
+    • Use median individual income, NOT household income, NOT average (average skews high).
+    • Single earner: the benchmark is whether one working person could afford a home — a taxi driver, a teacher.
+    • Must be annual — if search returns monthly, multiply by 12.
+    • If search returns household income only → do not use it; flag as N/A.
+    • Sanity check: if annual single-earner income is less than 1,000 LCU or more than 10,000,000 LCU, you have a unit error. Fix it.
 
   • 700sqm Land Price = LCU/sqm × 700
-  • Years = 700sqm Land Price ÷ Annual Minimum Wage (same LCU) — whole number only, no decimals ever (round to nearest integer)
+  • Years = 700sqm Land Price ÷ Annual Median Single Earner Income (same LCU) — whole number only, no decimals ever (round to nearest integer)
   • Zero is valid: if math yields < 0.5 (rounds to 0), write 0 — land was free, state-granted, or pre-market. 0 is an honest answer, not a missing one.
   • Self-check: verify LCU/sqm × 700 ÷ Income = Years before writing.
 
@@ -1191,7 +1194,7 @@ GATE 3 — SCRIBE (table → summary → legend → coda):
   | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime |
 
   After table: one line per city → **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
-  After summary: Years = (LCU/sqm × 700) ÷ Annual Minimum Wage (same LCU)
+  After summary: Years = (LCU/sqm × 700) ÷ Median Single Earner Income (same LCU)
   After legend: Sources section — list every URL the data was drawn from, one per line.
     Format: - [title or domain](url)
     Only cite URLs that appeared in the Brave search results above. If a cell shows ⚪ N/A, do not invent a source for it — cite only what was actually found.
@@ -1351,14 +1354,14 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
 
       const codaSystemPrompt = `${NYAN_PROTOCOL_SYSTEM_PROMPT}
 ${metaContext}
-You are given a Seed Metric table (income = annual minimum wage; price = built residential where available, land as fallback).
+You are given a Seed Metric table (income = median single earner; price = built residential where available, land as fallback).
 Write a coda: 2–3 sentences about what these specific numbers reveal about the people living in these specific cities.
 
 Rules:
 - Do NOT repeat numbers — the table already shows them.
 - Say what the numbers imply but don't state: the human texture, historical irony, political contradiction, the lived reality of that ratio.
-- If price source was "land" (fallback), you may note that built housing data was unavailable — the land alone already indicts.
-- The income anchor is minimum wage — the legal floor. What it means to be on the floor and still unable to own.
+- The income anchor is median single earner — the 20th-century contract: one job, one home. A taxi driver. A teacher. Not two salaries, not inherited wealth.
+- If price source was "land" (fallback), you may note that the land alone, before any building, already indicts.
 - This must be unrepeatable — written only for these cities, this gap, this moment. Not a generic housing statement.
 - No preamble, no "In conclusion", no sign-off. Just the coda.`;
 
