@@ -919,109 +919,16 @@ async function initializeDatabase() {
             ON CONFLICT (key) DO NOTHING
         `);
         
-        // MIGRATION: Add sort_order column to books table in all tenant schemas
-        // Tracked in core.migrations — runs once, skipped on every subsequent restart.
-        try {
-            const migrationDone = await pool.query(
-                `SELECT 1 FROM core.migrations WHERE name = 'sort_order_books' LIMIT 1`
-            );
-            if (migrationDone.rows.length === 0) {
-                const tenantSchemas = await getAllTenantSchemas(pool, 'dev');
-                await Promise.all(tenantSchemas.map(row =>
-                    pool.query(`
-                        ALTER TABLE ${row.tenant_schema}.books
-                        ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0
-                    `)
-                ));
-                await pool.query(
-                    `INSERT INTO core.migrations (name) VALUES ('sort_order_books') ON CONFLICT DO NOTHING`
-                );
-                console.log('✅ sort_order migration applied to all tenant schemas');
-            } else {
-                console.log('✅ sort_order migration already applied — skipped');
-            }
-        } catch (err) {
-            console.warn('⚠️ sort_order migration skipped:', err.message);
-        }
-
-        // MIGRATION: Add outpipes_user column to tenant books tables
-        // Enables typed multi-outpipe config (discord / email / webhook) per book.
-        try {
-            const migrationDone = await pool.query(
-                `SELECT 1 FROM core.migrations WHERE name = 'outpipes_user_books' LIMIT 1`
-            );
-            if (migrationDone.rows.length === 0) {
-                const tenantSchemas = await getAllTenantSchemas(pool, 'dev');
-                await Promise.all(tenantSchemas.map(row =>
-                    pool.query(`
-                        ALTER TABLE ${row.tenant_schema}.books
-                        ADD COLUMN IF NOT EXISTS outpipes_user JSONB DEFAULT '[]'::jsonb
-                    `)
-                ));
-                await pool.query(
-                    `INSERT INTO core.migrations (name) VALUES ('outpipes_user_books') ON CONFLICT DO NOTHING`
-                );
-                console.log('✅ outpipes_user migration applied to all tenant schemas');
-            } else {
-                console.log('✅ outpipes_user migration already applied — skipped');
-            }
-        } catch (err) {
-            console.warn('⚠️ outpipes_user migration skipped:', err.message);
-        }
-
-        // MIGRATION: Create book_channels table in all tenant schemas
-        // Per-book channel registry: inpipe/outpipe with status badges.
-        // Sequential (not Promise.all) to avoid pg_type concurrent CREATE race.
-        try {
-            const migrationDone = await pool.query(
-                `SELECT 1 FROM core.migrations WHERE name = 'book_channels_table' LIMIT 1`
-            );
-            if (migrationDone.rows.length === 0) {
-                const tenantSchemas = await getAllTenantSchemas(pool, 'dev');
-                let applied = 0;
-                for (const row of tenantSchemas) {
-                    try {
-                        await pool.query(`
-                            CREATE TABLE IF NOT EXISTS ${row.tenant_schema}.book_channels (
-                                id              SERIAL PRIMARY KEY,
-                                book_fractal_id TEXT        NOT NULL,
-                                direction       VARCHAR(10) NOT NULL CHECK (direction IN ('inpipe', 'outpipe')),
-                                channel         VARCHAR(50) NOT NULL,
-                                status          VARCHAR(20) NOT NULL DEFAULT 'pending'
-                                                CHECK (status IN ('active', 'placeholder', 'pending', 'inactive')),
-                                config          JSONB       DEFAULT '{}'::jsonb,
-                                priority        INTEGER     DEFAULT 0,
-                                created_at      TIMESTAMPTZ DEFAULT NOW(),
-                                updated_at      TIMESTAMPTZ DEFAULT NOW(),
-                                UNIQUE(book_fractal_id, direction, channel)
-                            )
-                        `);
-                        applied++;
-                    } catch (schemaErr) {
-                        if (schemaErr.code === '23505' || schemaErr.code === '42P07') {
-                            applied++; // Table already exists — count as applied
-                        } else {
-                            console.warn(`⚠️ book_channels: skipped ${row.tenant_schema}:`, schemaErr.message);
-                        }
-                    }
-                }
-                await pool.query(
-                    `INSERT INTO core.migrations (name) VALUES ('book_channels_table') ON CONFLICT DO NOTHING`
-                );
-                console.log(`✅ book_channels migration applied to ${applied}/${tenantSchemas.length} tenant schemas`);
-            } else {
-                console.log('✅ book_channels migration already applied — skipped');
-            }
-        } catch (err) {
-            console.warn('⚠️ book_channels migration skipped:', err.message);
-        }
-
-        // NOTE: One-time migrations have been applied to production database and removed 
-        // from startup code for clean deploys:
-        // - audit_queries_table (added audit_queries table to tenant schemas)
-        // - ai_log_columns (added ai_log columns to tenant_catalog)
+        // NOTE: One-time migrations have been applied to production database and removed
+        // from startup code for clean deploys. Records remain in core.migrations for audit.
+        // New tenant schemas get all columns/tables via tenant-manager.js initializeTenantSchema.
+        // Retired migrations (all applied, all schemas covered):
+        // - sort_order_books      → books.sort_order INTEGER DEFAULT 0
+        // - outpipes_user_books   → books.outpipes_user JSONB DEFAULT '[]'
+        // - book_channels_table   → {tenant}.book_channels table
+        // - audit_queries_table   → {tenant}.audit_queries table
+        // - ai_log_columns        → tenant_catalog ai_log columns
         // - updated_at, creator_phone, join_code, drops
-        // Migration records preserved in core.migrations table for audit trail.
         
         // ARCHITECTURE: Messages stored ONLY in Discord (not PostgreSQL)
         // No messages table needed - Discord threads provide permanent storage at zero cost
