@@ -125,6 +125,8 @@ function parsePricePerSqm(text, city = '') {
       const raw = match[0];
       const valueStr = (match[1] || match[2] || '').replace(/,/g, '');
       if (!valueStr) continue;
+      // Reject lone 4-digit calendar years (1900–2099) — they appear as context, not prices
+      if (/^(19|20)\d{2}$/.test(valueStr)) continue;
       let value = applyMultiplier(parseFloat(valueStr), raw);
       if (!isFinite(value) || value <= 0) continue;
       const isPsf = /psf|sq\s*ft|sqft/i.test(raw);
@@ -253,7 +255,25 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
         }
       }
     }
-    
+
+    // Historical fallback: scan all decade-keyword sentences (city name may be in heading/URL, not same sentence)
+    if (!result.cities[city].historical.pricePerSqm || !result.cities[city].historical.income) {
+      const histFallbackPattern = new RegExp(
+        `[^.]*(?:${historicalDecade}|1970|1971|1972|1973|1974|1975|1976|1977|1978|1979|1980|1981|1982|1983|1984|1985|historical|decades?\\s*ago|post[\\s-]war|mid[\\s-]century)[^.]*`,
+        'gi'
+      );
+      const histMatches = searchContext.match(histFallbackPattern);
+      if (histMatches) {
+        const allHistText = histMatches.join(' ');
+        if (!result.cities[city].historical.pricePerSqm) {
+          result.cities[city].historical.pricePerSqm = parsePricePerSqm(allHistText, city);
+        }
+        if (!result.cities[city].historical.income) {
+          result.cities[city].historical.income = parseIncome(allHistText, city);
+        }
+      }
+    }
+
     // Fallback: search entire context for this city
     if (!result.cities[city].current.pricePerSqm || !result.cities[city].current.income) {
       const cityMentions = searchContext.match(new RegExp(`[^.]*${city}[^.]*`, 'gi'));
