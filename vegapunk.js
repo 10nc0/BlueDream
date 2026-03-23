@@ -53,6 +53,7 @@ const { registerNyanAIRoutes, capacityManager, usageTracker } = require('./route
 const { healQueue } = require('./lib/heal-queue');
 const phiBreathe = require('./lib/phi-breathe');
 const { splitMessageIntoChunks, postPayloadToWebhook, createSendToLedger, createSendToUserOutput } = require('./lib/discord-webhooks');
+const { routeUserOutput } = require('./lib/outpipes/router');
 const { createErrorHandler, notFoundHandler } = require('./lib/error-handler');
 const { config, buildConnectionString, getDbHost } = require('./config');
 const { z } = require('zod');  // SECURITY: For webhook payload validation
@@ -922,6 +923,31 @@ async function initializeDatabase() {
             console.warn('⚠️ sort_order migration skipped:', err.message);
         }
 
+        // MIGRATION: Add outpipes_user column to tenant books tables
+        // Enables typed multi-outpipe config (discord / email / webhook) per book.
+        try {
+            const migrationDone = await pool.query(
+                `SELECT 1 FROM core.migrations WHERE name = 'outpipes_user_books' LIMIT 1`
+            );
+            if (migrationDone.rows.length === 0) {
+                const tenantSchemas = await getAllTenantSchemas(pool, 'dev');
+                await Promise.all(tenantSchemas.map(row =>
+                    pool.query(`
+                        ALTER TABLE ${row.tenant_schema}.books
+                        ADD COLUMN IF NOT EXISTS outpipes_user JSONB DEFAULT '[]'::jsonb
+                    `)
+                ));
+                await pool.query(
+                    `INSERT INTO core.migrations (name) VALUES ('outpipes_user_books') ON CONFLICT DO NOTHING`
+                );
+                console.log('✅ outpipes_user migration applied to all tenant schemas');
+            } else {
+                console.log('✅ outpipes_user migration already applied — skipped');
+            }
+        } catch (err) {
+            console.warn('⚠️ outpipes_user migration skipped:', err.message);
+        }
+
         // NOTE: One-time migrations have been applied to production database and removed 
         // from startup code for clean deploys:
         // - audit_queries_table (added audit_queries table to tenant schemas)
@@ -971,11 +997,10 @@ async function initUsageTable() {
     }
 }
 
-// WEBHOOK-CENTRIC ARCHITECTURE: Dual-output delivery (Book #01 + Book #0n)
-// Output #01: Nyanbook Ledger (eternal, masked, Dev #01 only) via output_01_url
-// Output #0n: User Discord (mutable, visible, Admin #0n only) via output_0n_url
-// UI MASKING: "webhook" → "book" terminology everywhere except create form
-// DATABASE ROLE: Stores ONLY routing metadata (webhook URLs, thread IDs) - NOT messages
+// DUAL-OUTPUT DELIVERY ARCHITECTURE
+// Output #01: Nyanbook Ledger (eternal, Discord-only, immutable append-only record)
+// Output #0n: User outpipes — fractal, per-book configurable: discord | email | webhook
+// DATABASE ROLE: Stores ONLY routing metadata (URLs, thread IDs, outpipe configs) — NOT messages
 
 // HELPER: Get file extension from MIME type (supports ALL formats)
 function getFileExtension(mimetype) {
@@ -1273,7 +1298,7 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
             // Find book by fractal_id
             // SECURITY: pg-format %I safely double-quotes the schema identifier
             const bookResult = await client.query(
-                format(`SELECT id, fractal_id, output_01_url, output_0n_url, output_credentials FROM %I.books WHERE fractal_id = $1`, tenantSchema),
+                format(`SELECT id, fractal_id, name, output_01_url, output_0n_url, output_credentials, outpipes_user FROM %I.books WHERE fractal_id = $1`, tenantSchema),
                 [fractalIdParam]
             );
             
@@ -1315,23 +1340,29 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
                 });
             }
             
-            // WEBHOOK-FIRST ARCHITECTURE: Dual-output delivery
-            // Output #01: Nyanbook Ledger (eternal, Dev #01 only)
-            // Output #0n: User Discord (mutable, Admin #0n only)
+            // DUAL-OUTPUT DELIVERY
+            // Output #01: Nyanbook Ledger (eternal, Discord-only — immutable append-only)
+            // Output #0n: User outpipes (fractal — discord | email | webhook per book config)
             const threadName = book.output_credentials?.thread_name;
             const threadId = book.output_credentials?.thread_id;
-            
-            // Path 1: Nyanbook Ledger (Output #01)
+
+            // Path 1: Nyanbook Ledger (Output #01) — stays Discord-only
             await sendToLedger(discordPayload, {
                 isMedia: !!media_url,
                 threadName,
                 threadId
             }, book);
-            
-            // Path 2: User Webhook (Output #0n)
-            await sendToUserOutput(discordPayload, {
-                isMedia: !!media_url
-            }, book);
+
+            // Path 2: User outpipes (Output #0n) — fractal routing
+            const capsule = {
+                sender: senderName,
+                text: text || '',
+                media_url: media_url || null,
+                avatar_url: avatar_url || null,
+                book_name: book.name || null,
+                timestamp: new Date().toISOString()
+            };
+            await routeUserOutput(capsule, { isMedia: !!media_url }, book);
             
             await client.query('COMMIT');
             client.release();

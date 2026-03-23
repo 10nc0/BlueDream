@@ -1172,6 +1172,129 @@
             container.replaceChildren(fragment);
         }
 
+        // ── Outpipes Management ──────────────────────────────────────────────────
+        // State: typed outpipe configs {type, name, url?, to?, secret?} per book
+        let userOutpipes = [];
+
+        function renderOutpipes() {
+            const container = document.getElementById('outpipesList');
+            if (!container) return;
+            container.replaceChildren();
+
+            const TYPE_LABELS = { discord: '🔷 Discord', email: '📧 Email', webhook: '🔗 Webhook' };
+            const TYPE_PLACEHOLDER = {
+                discord: 'https://discord.com/api/webhooks/…',
+                email: 'you@example.com',
+                webhook: 'https://yourapp.com/hook'
+            };
+
+            userOutpipes.forEach((pipe, idx) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 0.6rem 0.75rem; margin-bottom: 0.4rem;';
+
+                // Row 1: type selector + name + remove
+                const top = document.createElement('div');
+                top.style.cssText = 'display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.4rem;';
+
+                const typeSelect = document.createElement('select');
+                typeSelect.className = 'form-select';
+                typeSelect.style.cssText = 'flex: 0 0 auto; width: 130px; padding: 0.35rem 0.5rem; font-size: 0.8rem;';
+                ['discord', 'email', 'webhook'].forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t;
+                    opt.textContent = TYPE_LABELS[t];
+                    if (pipe.type === t) opt.selected = true;
+                    typeSelect.appendChild(opt);
+                });
+                typeSelect.addEventListener('change', e => {
+                    userOutpipes[idx] = { ...userOutpipes[idx], type: e.target.value, url: '', to: '' };
+                    renderOutpipes();
+                });
+                top.appendChild(typeSelect);
+
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.className = 'form-input';
+                nameInput.placeholder = 'Label (e.g., My Server)';
+                nameInput.value = pipe.name || '';
+                nameInput.style.cssText = 'flex: 1; padding: 0.35rem 0.5rem; font-size: 0.8rem;';
+                nameInput.addEventListener('input', e => { userOutpipes[idx].name = e.target.value; });
+                top.appendChild(nameInput);
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.textContent = '×';
+                removeBtn.style.cssText = 'background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; border-radius: 6px; padding: 0.35rem 0.6rem; cursor: pointer; font-size: 0.9rem;';
+                removeBtn.addEventListener('click', () => { userOutpipes.splice(idx, 1); renderOutpipes(); });
+                top.appendChild(removeBtn);
+                row.appendChild(top);
+
+                // Row 2: URL or email field
+                const valueInput = document.createElement('input');
+                valueInput.className = 'form-input';
+                valueInput.style.cssText = 'width: 100%; padding: 0.35rem 0.5rem; font-size: 0.8rem; box-sizing: border-box;';
+                if (pipe.type === 'email') {
+                    valueInput.type = 'email';
+                    valueInput.placeholder = TYPE_PLACEHOLDER.email;
+                    valueInput.value = pipe.to || '';
+                    valueInput.addEventListener('input', e => { userOutpipes[idx].to = e.target.value; });
+                } else {
+                    valueInput.type = 'url';
+                    valueInput.placeholder = TYPE_PLACEHOLDER[pipe.type] || 'https://…';
+                    valueInput.value = pipe.url || '';
+                    valueInput.addEventListener('input', e => { userOutpipes[idx].url = e.target.value; });
+                }
+                row.appendChild(valueInput);
+
+                container.appendChild(row);
+            });
+        }
+
+        async function saveOutpipes() {
+            const bookId = editingBookId;
+            if (!bookId) return;
+
+            const outpipes = userOutpipes.map(p => {
+                const cfg = { type: p.type, name: p.name || p.type };
+                if (p.type === 'email') { cfg.to = (p.to || '').trim(); }
+                else { cfg.url = (p.url || '').trim(); }
+                if (p.type === 'webhook' && p.secret) cfg.secret = p.secret;
+                return cfg;
+            }).filter(p => (p.type === 'email' ? p.to : p.url));
+
+            const hasUrlOutpipe = outpipes.some(p => p.type === 'discord' || p.type === 'webhook');
+            let password = null;
+            if (hasUrlOutpipe) {
+                password = prompt('Enter your password to save Discord/Webhook channels:');
+                if (!password) return;
+            }
+
+            const btn = document.getElementById('saveOutpipesBtn');
+            btn.textContent = 'Saving…';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`/api/books/${bookId}/outpipes`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                    body: JSON.stringify({ outpipes, ...(password ? { password } : {}) })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    showToast(data.error || 'Failed to save channels', 'error');
+                } else {
+                    showToast(`${outpipes.length} output channel(s) saved`, 'success');
+                    const book = books.find(b => b.fractal_id === bookId);
+                    if (book) book.outpipes_user = data.outpipes_user;
+                }
+            } catch (e) {
+                showToast('Network error saving channels', 'error');
+            } finally {
+                btn.textContent = 'Save Channels';
+                btn.disabled = false;
+            }
+        }
+
         // Book CRUD Functions - delegates to BooksModule for data operations
         async function loadBooks() {
             const result = await _B.loadBooks();
@@ -4274,6 +4397,16 @@
             
             renderTags();
             renderWebhooks();
+
+            // Show outpipes section when editing
+            const outpipesSection = document.getElementById('outpipesSection');
+            if (outpipesSection) {
+                outpipesSection.style.display = 'block';
+                userOutpipes = Array.isArray(book.outpipes_user) && book.outpipes_user.length > 0
+                    ? book.outpipes_user.map((p, i) => ({ ...p, _idx: i }))
+                    : [];
+                renderOutpipes();
+            }
             
             // Show share section when editing
             const shareSection = document.getElementById('shareBookSection');
@@ -4365,6 +4498,13 @@
             setEditingBookId(null);
             setBotTags([]);
             setBotWebhooks([]);
+            userOutpipes = [];
+
+            // Hide outpipes section and clear
+            const outpipesSection = document.getElementById('outpipesSection');
+            if (outpipesSection) outpipesSection.style.display = 'none';
+            const outpipesList = document.getElementById('outpipesList');
+            if (outpipesList) outpipesList.replaceChildren();
             
             // Hide share section and clear
             const shareSection = document.getElementById('shareBookSection');
@@ -7661,6 +7801,19 @@ document.addEventListener('DOMContentLoaded', function() {
         addWebhookBtn.addEventListener('click', addWebhookInput);
     }
     
+    // Outpipe buttons
+    const addOutpipeBtn = document.getElementById('addOutpipeBtn');
+    if (addOutpipeBtn) {
+        addOutpipeBtn.addEventListener('click', () => {
+            userOutpipes.push({ type: 'discord', name: '', url: '' });
+            renderOutpipes();
+        });
+    }
+    const saveOutpipesBtn = document.getElementById('saveOutpipesBtn');
+    if (saveOutpipesBtn) {
+        saveOutpipesBtn.addEventListener('click', saveOutpipes);
+    }
+
     // Share book button handler
     const shareBookBtn = document.getElementById('shareBookBtn');
     if (shareBookBtn) {

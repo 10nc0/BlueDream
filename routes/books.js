@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const MetadataExtractor = require('../metadata-extractor');
 const { validate, schemas } = require('../lib/validators');
+const { validateOutpipeConfig } = require('../lib/outpipes/router');
 
 const VALID_SCHEMA_PATTERN = /^[a-z_][a-z0-9_]*$/i;
 function assertValidSchemaName(schema) {
@@ -624,6 +625,81 @@ function registerBooksRoutes(app, deps) {
             res.json(sanitized);
         } catch (error) {
             logger.error({ err: error }, 'Error in PUT /api/books/:id');
+            next(error);
+        }
+    });
+
+    // PATCH /api/books/:id/outpipes — replace the outpipes_user array for a book
+    // Validates each typed outpipe config. Password required for any discord/webhook URL entry.
+    app.patch('/api/books/:id/outpipes', requireAuth, setTenantContext, requireRole('admin'), async (req, res, next) => {
+        try {
+            const client = req.dbClient || pool;
+            const tenantSchema = req.tenantContext.tenantSchema;
+            const userId = req.userId;
+            const { id } = req.params;
+            const { outpipes, password } = req.body;
+
+            if (!Array.isArray(outpipes)) {
+                return res.status(400).json({ error: 'outpipes must be an array' });
+            }
+
+            // Validate each outpipe config entry
+            for (const cfg of outpipes) {
+                const result = validateOutpipeConfig(cfg);
+                if (!result.valid) {
+                    return res.status(400).json({ error: `Invalid outpipe config: ${result.error}` });
+                }
+            }
+
+            // Password required when any discord or webhook URL outpipe is added/changed
+            const hasUrlOutpipe = outpipes.some(p => p.type === 'discord' || p.type === 'webhook');
+            if (hasUrlOutpipe) {
+                if (!password) {
+                    return res.status(403).json({
+                        error: 'Password required to configure discord or webhook outpipes',
+                        requiresPassword: true
+                    });
+                }
+                const userResult = await client.query(
+                    `SELECT password_hash FROM ${tenantSchema}.users WHERE id = $1`,
+                    [userId]
+                );
+                if (!userResult.rows.length) {
+                    return res.status(401).json({ error: 'User not found' });
+                }
+                const valid = await bcrypt.compare(password, userResult.rows[0].password_hash);
+                if (!valid) {
+                    return res.status(401).json({
+                        error: 'Invalid password. Outpipes not updated.',
+                        invalidPassword: true
+                    });
+                }
+            }
+
+            // Security: ensure no outpipe points at the system ledger webhook
+            if (NYANBOOK_LEDGER_WEBHOOK) {
+                const ledgerCollision = outpipes.find(p => p.url === NYANBOOK_LEDGER_WEBHOOK);
+                if (ledgerCollision) {
+                    return res.status(400).json({
+                        error: 'Security violation: outpipe URL cannot match the system ledger webhook.'
+                    });
+                }
+            }
+
+            const result = await client.query(
+                `UPDATE ${tenantSchema}.books SET outpipes_user = $1, updated_at = NOW()
+                 WHERE fractal_id = $2 RETURNING fractal_id, name, outpipes_user`,
+                [JSON.stringify(outpipes), id]
+            );
+
+            if (!result.rows.length) {
+                return res.status(404).json({ error: 'Book not found' });
+            }
+
+            logger.info({ bookId: id, count: outpipes.length }, 'Outpipes updated');
+            res.json({ success: true, outpipes_user: result.rows[0].outpipes_user });
+        } catch (error) {
+            logger.error({ err: error }, 'Error in PATCH /api/books/:id/outpipes');
             next(error);
         }
     });

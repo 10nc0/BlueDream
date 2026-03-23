@@ -416,16 +416,24 @@
                     </div>
                 </div>
 
-                <div class="form-group">
+                <!-- Outpipes Section (edit mode only) -->
+                <div class="form-group" id="outpipesSection" style="display: none;">
                     <label class="form-label">
-                        Personal Webhook URL
+                        Output Channels
                         <span class="optional-badge">Optional</span>
                     </label>
-                    <small class="form-help" style="display: block; margin-bottom: 0.5rem;">Add your own webhook to mirror messages to your channel (works with Discord, Slack, etc.)</small>
-                    <div id="webhooksList" style="margin-bottom: 0.5rem;">
-                        <!-- Webhook items will be added here -->
+                    <small class="form-help" style="display: block; margin-bottom: 0.5rem;">Mirror messages to Discord webhooks, email, or any HTTP endpoint. Password required for URL-based channels.</small>
+                    <div id="outpipesList" style="margin-bottom: 0.5rem;">
+                        <!-- Outpipe rows rendered here -->
                     </div>
-                    <button type="button" class="btn" id="addWebhookBtn" style="width: 100%; background: rgba(59, 130, 246, 0.1); border: 1px dashed rgba(59, 130, 246, 0.3); color: #60a5fa;">+ Add Personal Webhook</button>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+                        <button type="button" class="btn" id="addOutpipeBtn" style="flex: 1; background: rgba(59, 130, 246, 0.1); border: 1px dashed rgba(59, 130, 246, 0.3); color: #60a5fa;">+ Add Channel</button>
+                        <button type="button" class="btn" id="saveOutpipesBtn" style="flex: 1; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981;">Save Channels</button>
+                    </div>
+                </div>
+
+                <div class="form-group" style="display: none;">
+                    <div id="webhooksList"><!-- legacy compat --></div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">
