@@ -2789,9 +2789,44 @@ function detectAssetClass(ticker) {
 }
 
 /**
- * Get physical audit suggestions based on asset class
+ * One anchor example per broad sector — keeps the template lean.
+ * The atomicUnits drive the remaining company-specific bullets.
  */
-function getPhysicalAuditSuggestions(assetClass, ticker) {
+function getSectorAnchor(sector) {
+  const s = (sector || '').toLowerCase();
+  if (s.includes('technology') || s.includes('semiconductor') || s.includes('software'))
+    return '• **Fab/server room visit** — count physical units shipped or deployed vs reported (P × Q proxy)';
+  if (s.includes('consumer') || s.includes('retail') || s.includes('discretionary') || s.includes('staples'))
+    return '• **Store/factory floor visit** — count units on shelves, production lines, or loading bays vs reported';
+  if (s.includes('health') || s.includes('pharma') || s.includes('biotech'))
+    return '• **Clinical site / dispensary visit** — verify patient enrolment, prescription counts, or trial progress vs reported';
+  if (s.includes('financial') || s.includes('bank') || s.includes('insurance'))
+    return '• **Loan tape / policy sampling** — independently verify a sample of receivables, policies, or reserves vs reported';
+  if (s.includes('industrial') || s.includes('aerospace') || s.includes('defense') || s.includes('transport'))
+    return '• **Facility / launch site visit** — count hardware units, manifests, or throughput vs reported (P × Q proxy)';
+  if (s.includes('energy') || s.includes('utility') || s.includes('oil') || s.includes('gas'))
+    return '• **Rig / plant site visit + satellite imagery** — verify production output and capacity vs reported';
+  if (s.includes('communication') || s.includes('media') || s.includes('entertainment'))
+    return '• **MAU/subscriber independent sampling** — cross-reference app-store or panel data vs reported user counts';
+  return '• **Third-party unit count** — independently tally the primary output unit vs reported figures (P × Q proxy)';
+}
+
+/**
+ * Map atomic-unit type tag to an audit verb.
+ * Format from stock-fetcher: "vehicle deliveries (flow)" → name="vehicle deliveries", type="flow"
+ */
+function auditVerbFor(type) {
+  if (type === 'flow') return 'Count';
+  if (type === 'state') return 'Inspect';
+  if (type === 'guard') return 'Audit ratio of';
+  return 'Verify';
+}
+
+/**
+ * Get physical audit suggestions based on asset class.
+ * For stocks: template (anchor) + dynamic bullets from atomicUnits — no exhaustive hardcoding.
+ */
+function getPhysicalAuditSuggestions(assetClass, ticker, sector, industry, atomicUnits) {
   switch (assetClass) {
     case 'crypto':
       return `• **On-chain verification** (node runs, UTXO sets) to confirm supply and transaction claims
@@ -2799,42 +2834,63 @@ function getPhysicalAuditSuggestions(assetClass, ticker) {
 • **Miner site visits / hashrate observation** to ground production reality
 • **OTC desk / large holder confirmations** as proxy for true demand magnitude (P × Q)
 • **Blockchain explorer reconciliation** for liquidity and flow verification`;
-    
+
     case 'forex':
       return `• **Central bank reserve reports** to verify currency backing and intervention capacity
 • **Trade balance data verification** to confirm import/export flow reality
 • **Foreign reserve audits** from IMF/BIS to validate sovereign holdings
 • **Cross-border flow sampling** via SWIFT/correspondent banking data
 • **Physical currency circulation data** as proxy for monetary base reality`;
-    
+
     case 'commodity':
       return `• **Rig/site visits** (stock taking) to verify production and inventory claims
 • **Port/tanker verification** (count loadings, satellite tracking) to confirm shipment flows
-• **Refinery/consumer site visits** (e.g., US Gulf, Asia demand hubs) to validate consumption reality
-• **Producer proxy** (output reports, satellite imagery of fields/mines) to verify supply magnitude (P × Q correlation)
+• **Refinery/consumer site visits** to validate consumption reality
+• **Satellite imagery of fields/mines** to verify supply magnitude (P × Q proxy)
 • **Futures/spot reconciliation** for flow and liquidity verification`;
-    
+
     case 'realestate':
       return `• **Property site inspections** to verify physical condition and occupancy
 • **Title search / deed verification** to confirm ownership and encumbrances
 • **Rent roll audits** with tenant verification to validate income claims
 • **Zoning / permit verification** to ground development potential claims
 • **Comparable sales sampling** to verify market value assertions`;
-    
+
     case 'etf':
       return `• **Holdings transparency verification** via daily NAV reconciliation
 • **Authorized participant activity** to confirm creation/redemption flows
 • **Underlying asset sampling** to validate index tracking accuracy
 • **Custodian audit reports** to verify asset segregation and custody
 • **Securities lending disclosure** to understand collateral and counterparty exposure`;
-    
+
     case 'stock':
-    default:
-      return `• **Warehouse visit** (stock taking) to verify inventory claims
-• **Sample PO / AR / vendor verification** to confirm receivables accuracy
-• **Customer site visits** to validate revenue relationships and demand reality
-• **Counting trucks/shipments** as proxy to verify financial magnitude (P × Q correlation)
-• **Bank statement reconciliation** for cash flow and liquidity verification`;
+    default: {
+      const bullets = [];
+
+      // 1 sector-anchored example — the template anchor
+      bullets.push(getSectorAnchor(sector));
+
+      // Dynamic bullets from the company's own atomic units
+      const units = Array.isArray(atomicUnits) ? atomicUnits.slice(0, 4) : [];
+      for (const au of units) {
+        const match = au.match(/^(.+?)\s*\((\w+)\)$/);
+        if (!match) continue;
+        const [, name, type] = match;
+        const verb = auditVerbFor(type);
+        bullets.push(`• **${verb} ${name}** — ground ${ticker}'s reported ${type} figures in observable reality`);
+      }
+
+      // Fallback if no atomic units returned
+      if (bullets.length < 2) {
+        bullets.push('• **Sample PO / AR / vendor verification** — confirm receivables and revenue claims against source documents');
+        bullets.push('• **Bank statement reconciliation** — verify cash flow and liquidity assertions');
+      }
+
+      // Sector + industry label for transparency
+      const label = [sector, industry].filter(Boolean).join(' / ');
+      const header = label ? `[${ticker} — ${label}]\n` : '';
+      return header + bullets.join('\n');
+    }
   }
 }
 
