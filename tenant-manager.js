@@ -272,6 +272,22 @@ class TenantManager {
             `);
             
             await client.query(`
+                CREATE TABLE IF NOT EXISTS ${schemaName}.book_channels (
+                    id              SERIAL PRIMARY KEY,
+                    book_fractal_id TEXT        NOT NULL,
+                    direction       VARCHAR(10) NOT NULL CHECK (direction IN ('inpipe', 'outpipe')),
+                    channel         VARCHAR(50) NOT NULL,
+                    status          VARCHAR(20) NOT NULL DEFAULT 'pending'
+                                    CHECK (status IN ('active', 'placeholder', 'pending', 'inactive')),
+                    config          JSONB       DEFAULT '{}'::jsonb,
+                    priority        INTEGER     DEFAULT 0,
+                    created_at      TIMESTAMPTZ DEFAULT NOW(),
+                    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(book_fractal_id, direction, channel)
+                )
+            `);
+
+            await client.query(`
                 CREATE TABLE IF NOT EXISTS ${schemaName}.drops (
                     id SERIAL PRIMARY KEY,
                     book_id INTEGER NOT NULL REFERENCES ${schemaName}.books(id) ON DELETE CASCADE,

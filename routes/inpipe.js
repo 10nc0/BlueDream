@@ -300,7 +300,8 @@ function registerInpipeRoutes(app, deps) {
     // ─── TELEGRAM WEBHOOK ───────────────────────────────────────
     // Reply-capable: bot can send messages back to the user.
     // /start JOINCODE activates the book; subsequent messages are
-    // routed via book_engaged_phones (same as WhatsApp/LINE).
+    // routed via core.channel_identifiers (Telegram-only path).
+    // WhatsApp/LINE continue using book_engaged_phones (legacy).
     // Skip route registration if TELEGRAM_BOT_TOKEN is absent.
     if (telegramChannel.isConfigured()) {
         app.post('/api/telegram/webhook', async (req, res) => {
@@ -479,6 +480,26 @@ async function routeMessage(pool, msg, logger) {
         } else {
             logger.info({ joinCode: msg.joinCode }, 'Join code not found in registry');
         }
+    } else if (msg.channel === 'telegram') {
+        // Telegram routes via channel_identifiers (not book_engaged_phones)
+        logger.info({ userId: msg.phone }, 'Telegram: no join code — using channel_identifiers lookup');
+        const result = await pool.query(`
+            SELECT br.id, br.tenant_schema, br.tenant_email, br.fractal_id, br.book_name, br.join_code,
+                   br.outpipe_ledger, br.outpipes_user, br.status, br.phone_number, br.creator_phone, br.updated_at,
+                   ci.created_at AS last_engaged_at
+            FROM core.channel_identifiers ci
+            JOIN core.book_registry br ON br.fractal_id = ci.book_fractal_id
+            WHERE ci.channel = 'telegram' AND ci.external_id = $1 AND br.status = 'active'
+            LIMIT 1
+        `, [String(msg.phone)]);
+
+        if (result.rows.length > 0) {
+            bookRecord = result.rows[0];
+            routingMethod = 'channel_id';
+            logger.info({ fractalId: bookRecord.fractal_id, bookName: bookRecord.book_name }, 'Telegram: found via channel_identifiers');
+        } else {
+            logger.info({ userId: msg.phone }, 'Telegram: no active book found in channel_identifiers');
+        }
     } else {
         logger.info({ phone: msg.phone }, 'No join code - using phone lookup');
         const result = await pool.query(`
@@ -600,6 +621,21 @@ async function handlePendingBook(res, channel, msg, bookRecord, deps) {
         ON CONFLICT (book_registry_id, phone) DO UPDATE 
         SET last_engaged_at = NOW(), is_creator = TRUE
     `, [bookRecord.id, msg.phone]);
+
+    // Telegram: write to channel_identifiers + activate book_channels row
+    if (msg.channel === 'telegram') {
+        await pool.query(`
+            INSERT INTO core.channel_identifiers (channel, external_id, book_fractal_id, tenant_schema)
+            VALUES ('telegram', $1, $2, $3)
+            ON CONFLICT (channel, external_id) DO NOTHING
+        `, [String(msg.phone), bookRecord.fractal_id, tenantSchema]);
+        await pool.query(`
+            UPDATE ${tenantSchema}.book_channels
+            SET status = 'active', updated_at = NOW()
+            WHERE book_fractal_id = $1 AND direction = 'inpipe' AND channel = 'telegram'
+        `, [bookRecord.fractal_id]);
+        logger.info({ fractalId: bookRecord.fractal_id }, 'Telegram: channel_identifiers + book_channels activated');
+    }
     
     if (hermesBot && hermesBot.isReady()) {
         try {
@@ -1020,6 +1056,21 @@ async function handlePendingBookAsync(channel, msg, bookRecord, deps) {
         ON CONFLICT (book_registry_id, phone) DO UPDATE 
         SET last_engaged_at = NOW(), is_creator = TRUE
     `, [bookRecord.id, msg.phone]);
+
+    // Telegram: write to channel_identifiers + activate book_channels row
+    if (msg.channel === 'telegram') {
+        await pool.query(`
+            INSERT INTO core.channel_identifiers (channel, external_id, book_fractal_id, tenant_schema)
+            VALUES ('telegram', $1, $2, $3)
+            ON CONFLICT (channel, external_id) DO NOTHING
+        `, [String(msg.phone), bookRecord.fractal_id, tenantSchema]);
+        await pool.query(`
+            UPDATE ${tenantSchema}.book_channels
+            SET status = 'active', updated_at = NOW()
+            WHERE book_fractal_id = $1 AND direction = 'inpipe' AND channel = 'telegram'
+        `, [bookRecord.fractal_id]);
+        logger.info({ fractalId: bookRecord.fractal_id }, 'Async: Telegram channel_identifiers + book_channels activated');
+    }
     
     if (hermesBot && hermesBot.isReady()) {
         try {

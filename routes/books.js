@@ -244,6 +244,32 @@ function registerBooksRoutes(app, deps) {
                 }
             }
             
+            // Fetch book_channels for tenant's own books to attach channels array
+            let channelsMap = {};
+            try {
+                const fractalIds = books
+                    .filter(b => !b.is_shared && !b.is_contributed && b.fractal_id)
+                    .map(b => b.fractal_id);
+                if (fractalIds.length > 0) {
+                    const chResult = await pool.query(`
+                        SELECT book_fractal_id, direction, channel, status
+                        FROM ${tenantSchema}.book_channels
+                        WHERE book_fractal_id = ANY($1::text[])
+                        ORDER BY direction, channel
+                    `, [fractalIds]);
+                    for (const row of chResult.rows) {
+                        if (!channelsMap[row.book_fractal_id]) channelsMap[row.book_fractal_id] = [];
+                        channelsMap[row.book_fractal_id].push({
+                            direction: row.direction,
+                            channel: row.channel,
+                            status: row.status
+                        });
+                    }
+                }
+            } catch (e) {
+                logger.warn({ err: e }, 'book_channels fetch skipped (table may not exist yet)');
+            }
+
             // Build new plain objects to avoid mutating pg Row objects (which breaks JSON serialization)
             const booksWithFractalIds = books.map(book => {
                 // Create a plain object copy
@@ -267,7 +293,13 @@ function registerBooksRoutes(app, deps) {
                 
                 // canView = always true if they can see the book
                 plainBook.canView = true;
-                
+
+                // Attach channels array from book_channels (empty for WhatsApp/LINE — legacy path)
+                const bookChannels = channelsMap[plainBook.fractal_id] || [];
+                plainBook.channels    = bookChannels;
+                plainBook.has_inpipe  = bookChannels.some(c => c.direction === 'inpipe'  && c.status === 'active');
+                plainBook.has_outpipe = bookChannels.some(c => c.direction === 'outpipe' && c.status === 'active');
+
                 return plainBook;
             });
             
@@ -507,6 +539,14 @@ function registerBooksRoutes(app, deps) {
                 
                 book.contact_info = joinCode;
                 logger.info({ fractalId: generatedFractalId, joinCode }, 'Generated Telegram join code for book');
+
+                // Create book_channels inpipe row — status 'pending' until /start JOINCODE is sent
+                await client.query(`
+                    INSERT INTO ${tenantSchema}.book_channels
+                        (book_fractal_id, direction, channel, status)
+                    VALUES ($1, 'inpipe', 'telegram', 'pending')
+                    ON CONFLICT (book_fractal_id, direction, channel) DO NOTHING
+                `, [generatedFractalId]);
             }
             
             const tenantEmail = req.tenantContext.userEmail;

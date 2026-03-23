@@ -806,6 +806,27 @@ async function initializeDatabase() {
         
         console.log('✅ Book engaged phones table initialized');
 
+        // CHANNEL IDENTIFIERS: Generalised routing table for all non-phone channels.
+        // Maps (channel, external_id) → (book_fractal_id, tenant_schema).
+        // WhatsApp/LINE continue using book_engaged_phones (legacy path).
+        // Telegram and future channels use this table exclusively.
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS core.channel_identifiers (
+                id              SERIAL PRIMARY KEY,
+                channel         VARCHAR(50)  NOT NULL,
+                external_id     VARCHAR(255) NOT NULL,
+                book_fractal_id TEXT         NOT NULL,
+                tenant_schema   VARCHAR(100) NOT NULL,
+                created_at      TIMESTAMPTZ  DEFAULT NOW(),
+                UNIQUE(channel, external_id)
+            )
+        `);
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS idx_channel_identifiers_lookup
+            ON core.channel_identifiers(channel, external_id)
+        `);
+        console.log('✅ Channel identifiers table initialized');
+
         // MESSAGE LEDGER: Immutable append-only receipt for every inpipe message
         // Stores sender_hash (HMAC — proven not revealed), content_hash, IPFS CID
         // IPFS CID is filled async after pin resolves; rows always written immediately
@@ -946,6 +967,42 @@ async function initializeDatabase() {
             }
         } catch (err) {
             console.warn('⚠️ outpipes_user migration skipped:', err.message);
+        }
+
+        // MIGRATION: Create book_channels table in all tenant schemas
+        // Per-book channel registry: inpipe/outpipe with status badges.
+        try {
+            const migrationDone = await pool.query(
+                `SELECT 1 FROM core.migrations WHERE name = 'book_channels_table' LIMIT 1`
+            );
+            if (migrationDone.rows.length === 0) {
+                const tenantSchemas = await getAllTenantSchemas(pool, 'dev');
+                await Promise.all(tenantSchemas.map(row =>
+                    pool.query(`
+                        CREATE TABLE IF NOT EXISTS ${row.tenant_schema}.book_channels (
+                            id              SERIAL PRIMARY KEY,
+                            book_fractal_id TEXT        NOT NULL,
+                            direction       VARCHAR(10) NOT NULL CHECK (direction IN ('inpipe', 'outpipe')),
+                            channel         VARCHAR(50) NOT NULL,
+                            status          VARCHAR(20) NOT NULL DEFAULT 'pending'
+                                            CHECK (status IN ('active', 'placeholder', 'pending', 'inactive')),
+                            config          JSONB       DEFAULT '{}'::jsonb,
+                            priority        INTEGER     DEFAULT 0,
+                            created_at      TIMESTAMPTZ DEFAULT NOW(),
+                            updated_at      TIMESTAMPTZ DEFAULT NOW(),
+                            UNIQUE(book_fractal_id, direction, channel)
+                        )
+                    `)
+                ));
+                await pool.query(
+                    `INSERT INTO core.migrations (name) VALUES ('book_channels_table') ON CONFLICT DO NOTHING`
+                );
+                console.log('✅ book_channels migration applied to all tenant schemas');
+            } else {
+                console.log('✅ book_channels migration already applied — skipped');
+            }
+        } catch (err) {
+            console.warn('⚠️ book_channels migration skipped:', err.message);
         }
 
         // NOTE: One-time migrations have been applied to production database and removed 
