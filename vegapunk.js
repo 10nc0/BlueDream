@@ -971,33 +971,44 @@ async function initializeDatabase() {
 
         // MIGRATION: Create book_channels table in all tenant schemas
         // Per-book channel registry: inpipe/outpipe with status badges.
+        // Sequential (not Promise.all) to avoid pg_type concurrent CREATE race.
         try {
             const migrationDone = await pool.query(
                 `SELECT 1 FROM core.migrations WHERE name = 'book_channels_table' LIMIT 1`
             );
             if (migrationDone.rows.length === 0) {
                 const tenantSchemas = await getAllTenantSchemas(pool, 'dev');
-                await Promise.all(tenantSchemas.map(row =>
-                    pool.query(`
-                        CREATE TABLE IF NOT EXISTS ${row.tenant_schema}.book_channels (
-                            id              SERIAL PRIMARY KEY,
-                            book_fractal_id TEXT        NOT NULL,
-                            direction       VARCHAR(10) NOT NULL CHECK (direction IN ('inpipe', 'outpipe')),
-                            channel         VARCHAR(50) NOT NULL,
-                            status          VARCHAR(20) NOT NULL DEFAULT 'pending'
-                                            CHECK (status IN ('active', 'placeholder', 'pending', 'inactive')),
-                            config          JSONB       DEFAULT '{}'::jsonb,
-                            priority        INTEGER     DEFAULT 0,
-                            created_at      TIMESTAMPTZ DEFAULT NOW(),
-                            updated_at      TIMESTAMPTZ DEFAULT NOW(),
-                            UNIQUE(book_fractal_id, direction, channel)
-                        )
-                    `)
-                ));
+                let applied = 0;
+                for (const row of tenantSchemas) {
+                    try {
+                        await pool.query(`
+                            CREATE TABLE IF NOT EXISTS ${row.tenant_schema}.book_channels (
+                                id              SERIAL PRIMARY KEY,
+                                book_fractal_id TEXT        NOT NULL,
+                                direction       VARCHAR(10) NOT NULL CHECK (direction IN ('inpipe', 'outpipe')),
+                                channel         VARCHAR(50) NOT NULL,
+                                status          VARCHAR(20) NOT NULL DEFAULT 'pending'
+                                                CHECK (status IN ('active', 'placeholder', 'pending', 'inactive')),
+                                config          JSONB       DEFAULT '{}'::jsonb,
+                                priority        INTEGER     DEFAULT 0,
+                                created_at      TIMESTAMPTZ DEFAULT NOW(),
+                                updated_at      TIMESTAMPTZ DEFAULT NOW(),
+                                UNIQUE(book_fractal_id, direction, channel)
+                            )
+                        `);
+                        applied++;
+                    } catch (schemaErr) {
+                        if (schemaErr.code === '23505' || schemaErr.code === '42P07') {
+                            applied++; // Table already exists — count as applied
+                        } else {
+                            console.warn(`⚠️ book_channels: skipped ${row.tenant_schema}:`, schemaErr.message);
+                        }
+                    }
+                }
                 await pool.query(
                     `INSERT INTO core.migrations (name) VALUES ('book_channels_table') ON CONFLICT DO NOTHING`
                 );
-                console.log('✅ book_channels migration applied to all tenant schemas');
+                console.log(`✅ book_channels migration applied to ${applied}/${tenantSchemas.length} tenant schemas`);
             } else {
                 console.log('✅ book_channels migration already applied — skipped');
             }

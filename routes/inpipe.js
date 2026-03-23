@@ -622,19 +622,45 @@ async function handlePendingBook(res, channel, msg, bookRecord, deps) {
         SET last_engaged_at = NOW(), is_creator = TRUE
     `, [bookRecord.id, msg.phone]);
 
-    // Telegram: write to channel_identifiers + activate book_channels row
+    // Telegram: write to channel_identifiers + activate book_channels row.
+    // Always upsert (DO UPDATE) so relinking always wins — the latest join code
+    // takes over immediately; messages never fire to a previous book by mistake.
     if (msg.channel === 'telegram') {
+        // Step 1: Check if this user was previously linked to a different book
+        const prevLink = await pool.query(`
+            SELECT book_fractal_id, tenant_schema FROM core.channel_identifiers
+            WHERE channel = 'telegram' AND external_id = $1
+        `, [String(msg.phone)]);
+        if (prevLink.rows.length > 0 && prevLink.rows[0].book_fractal_id !== bookRecord.fractal_id) {
+            // Deactivate the old book's inpipe so it no longer shows as active
+            const oldFractal = prevLink.rows[0].book_fractal_id;
+            const oldSchema  = prevLink.rows[0].tenant_schema;
+            try {
+                await pool.query(`
+                    UPDATE ${oldSchema}.book_channels
+                    SET status = 'inactive', updated_at = NOW()
+                    WHERE book_fractal_id = $1 AND direction = 'inpipe' AND channel = 'telegram'
+                `, [oldFractal]);
+                logger.info({ oldFractal, newFractal: bookRecord.fractal_id }, 'Telegram: old book_channels deactivated on relink');
+            } catch (e) {
+                logger.warn({ err: e.message }, 'Telegram: old book_channels deactivation skipped');
+            }
+        }
+        // Step 2: Upsert channel_identifiers — always points to the latest book
         await pool.query(`
             INSERT INTO core.channel_identifiers (channel, external_id, book_fractal_id, tenant_schema)
             VALUES ('telegram', $1, $2, $3)
-            ON CONFLICT (channel, external_id) DO NOTHING
+            ON CONFLICT (channel, external_id)
+            DO UPDATE SET book_fractal_id = EXCLUDED.book_fractal_id,
+                          tenant_schema   = EXCLUDED.tenant_schema
         `, [String(msg.phone), bookRecord.fractal_id, tenantSchema]);
+        // Step 3: Activate the new book's book_channels row
         await pool.query(`
             UPDATE ${tenantSchema}.book_channels
             SET status = 'active', updated_at = NOW()
             WHERE book_fractal_id = $1 AND direction = 'inpipe' AND channel = 'telegram'
         `, [bookRecord.fractal_id]);
-        logger.info({ fractalId: bookRecord.fractal_id }, 'Telegram: channel_identifiers + book_channels activated');
+        logger.info({ fractalId: bookRecord.fractal_id }, 'Telegram: channel_identifiers + book_channels activated (latest wins)');
     }
     
     if (hermesBot && hermesBot.isReady()) {
@@ -1057,19 +1083,44 @@ async function handlePendingBookAsync(channel, msg, bookRecord, deps) {
         SET last_engaged_at = NOW(), is_creator = TRUE
     `, [bookRecord.id, msg.phone]);
 
-    // Telegram: write to channel_identifiers + activate book_channels row
+    // Telegram: write to channel_identifiers + activate book_channels row.
+    // Always upsert (DO UPDATE) so relinking always wins — latest join code
+    // takes over immediately; messages never fire to a previous book by mistake.
     if (msg.channel === 'telegram') {
+        // Step 1: Check if previously linked to a different book
+        const prevLink = await pool.query(`
+            SELECT book_fractal_id, tenant_schema FROM core.channel_identifiers
+            WHERE channel = 'telegram' AND external_id = $1
+        `, [String(msg.phone)]);
+        if (prevLink.rows.length > 0 && prevLink.rows[0].book_fractal_id !== bookRecord.fractal_id) {
+            const oldFractal = prevLink.rows[0].book_fractal_id;
+            const oldSchema  = prevLink.rows[0].tenant_schema;
+            try {
+                await pool.query(`
+                    UPDATE ${oldSchema}.book_channels
+                    SET status = 'inactive', updated_at = NOW()
+                    WHERE book_fractal_id = $1 AND direction = 'inpipe' AND channel = 'telegram'
+                `, [oldFractal]);
+                logger.info({ oldFractal, newFractal: bookRecord.fractal_id }, 'Async: Telegram old book_channels deactivated on relink');
+            } catch (e) {
+                logger.warn({ err: e.message }, 'Async: Telegram old book_channels deactivation skipped');
+            }
+        }
+        // Step 2: Upsert — always points to the latest book
         await pool.query(`
             INSERT INTO core.channel_identifiers (channel, external_id, book_fractal_id, tenant_schema)
             VALUES ('telegram', $1, $2, $3)
-            ON CONFLICT (channel, external_id) DO NOTHING
+            ON CONFLICT (channel, external_id)
+            DO UPDATE SET book_fractal_id = EXCLUDED.book_fractal_id,
+                          tenant_schema   = EXCLUDED.tenant_schema
         `, [String(msg.phone), bookRecord.fractal_id, tenantSchema]);
+        // Step 3: Activate new book's book_channels row
         await pool.query(`
             UPDATE ${tenantSchema}.book_channels
             SET status = 'active', updated_at = NOW()
             WHERE book_fractal_id = $1 AND direction = 'inpipe' AND channel = 'telegram'
         `, [bookRecord.fractal_id]);
-        logger.info({ fractalId: bookRecord.fractal_id }, 'Async: Telegram channel_identifiers + book_channels activated');
+        logger.info({ fractalId: bookRecord.fractal_id }, 'Async: Telegram channel_identifiers + book_channels activated (latest wins)');
     }
     
     if (hermesBot && hermesBot.isReady()) {
