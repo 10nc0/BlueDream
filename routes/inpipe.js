@@ -6,6 +6,11 @@ const { EmailChannel } = require('../lib/channels/email');
 const { TelegramChannel } = require('../lib/channels/telegram');
 const { buildCapsule } = require('../utils/message-capsule');
 const { pinJson, pinBuffer } = require('../utils/ipfs-pinner');
+const { routeUserOutput } = require('../lib/outpipes/router');
+
+// Phone-bearing channels; all others store phone_number = null (Telegram, LINE, email).
+// Password reset is gated on phone activation — non-phone users silent-fail on reset.
+const PHONE_CHANNELS = new Set(['twilio']);
 
 // ═══════════════════════════════════════════════════════════════
 // BURST MITIGATION: Two-tier priority queue with adaptive async loop
@@ -587,23 +592,6 @@ async function sendToDiscordThread(threadId, payload, media, deps) {
     return trySend(1);
 }
 
-async function sendToWebhook(webhookUrl, payload, media) {
-    if (media) {
-        const form = new FormData();
-        form.append('files[0]', media.buffer, {
-            filename: media.filename,
-            contentType: media.contentType
-        });
-        form.append('payload_json', JSON.stringify(payload));
-        
-        await axios.post(webhookUrl, form, {
-            headers: form.getHeaders()
-        });
-    } else {
-        await axios.post(webhookUrl, payload);
-    }
-}
-
 function sendChannelResponse(res, channel) {
     const response = channel.getEmptyResponse();
     if (response.contentType) {
@@ -756,10 +744,7 @@ async function handlePendingBookAsync(channel, msg, bookRecord, deps) {
     
     const bookId = bookIdResult.rows[0].id;
 
-    // phone_number stores E.164 only — null for non-phone channels (Line, Telegram, etc.).
-    // PHONE_CHANNELS is the allowlist; all others store null.
-    // Password reset is gated on WhatsApp activation; non-phone users silent-fail on reset.
-    const PHONE_CHANNELS = new Set(['twilio']);
+    // phone_number stores E.164 only — null for non-phone channels (Line, Telegram, email).
     const phoneToStore = PHONE_CHANNELS.has(msg.channel) ? msg.phone : null;
 
     await pool.query(`
@@ -902,7 +887,7 @@ async function handleActiveBookAsync(channel, msg, rawPayload, bookRecord, deps)
     logger.info({ fractalId: bookRecord.fractal_id }, 'Async: Forwarding message to active book');
     
     const bookDetailsResult = await pool.query(`
-        SELECT id, name, fractal_id, output_credentials 
+        SELECT id, name, fractal_id, output_credentials, outpipes_user
         FROM ${tenantSchema}.books 
         WHERE fractal_id = $1
         LIMIT 1
@@ -930,7 +915,6 @@ async function handleActiveBookAsync(channel, msg, rawPayload, bookRecord, deps)
     
     const outputCreds = book.output_credentials || {};
     const output01 = outputCreds.output_01;
-    const webhooks = outputCreds.webhooks || [];
     
     const isCreator = (bookRecord.creator_phone && msg.phone === bookRecord.creator_phone) ||
                       (!bookRecord.creator_phone && msg.phone === bookRecord.phone_number);
@@ -975,17 +959,22 @@ async function handleActiveBookAsync(channel, msg, rawPayload, bookRecord, deps)
         }
     }
     
-    // FIRE to all webhooks (parallel, source of truth mirrors)
-    const webhookPromises = webhooks.map(async (webhook) => {
-        try {
-            await sendToWebhook(webhook.url, { embeds: [embed] }, media);
-            logger.info({ webhookName: webhook.name || 'Personal' }, 'Async: Sent to webhook');
-        } catch (error) {
-            logger.error({ error: error.message, webhookName: webhook.name }, 'Async: Failed to send to webhook');
-        }
-    });
-    
-    await Promise.allSettled(webhookPromises);
+    // OUTPUT #0n: fractal user outpipes (discord webhook / email / custom webhook).
+    // routeUserOutput handles both typed outpipes_user and legacy output_credentials.webhooks
+    // fallback in one place — book must include outpipes_user from the re-query above.
+    // media_url uses the Discord CDN attachment URL (stable) when available.
+    try {
+        const outpipeCapsule = {
+            sender: msg.phone,
+            text:   msg.body || '',
+            media_url:  discordResponse?.data?.attachments?.[0]?.url || null,
+            book_name:  book.name || null,
+            timestamp:  new Date().toISOString()
+        };
+        await routeUserOutput(outpipeCapsule, { isMedia: !!media }, book);
+    } catch (err) {
+        logger.warn({ err: err.message }, 'Async: routeUserOutput error (non-fatal)');
+    }
 
     // ── Capsule pipeline (fire-and-forget — never blocks Discord write) ──────
     processCapsule(book, bookRecord, msg, media, discordResponse, deps);
