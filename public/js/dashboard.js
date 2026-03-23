@@ -1284,6 +1284,13 @@
             initBookSortable();
             
             if (!skipDetailRender) {
+                // Adam first: on mobile initial auto-select, navigate to messages pane (Eve hidden)
+                if (wasAutoSelected && isMobile()) {
+                    const _sidebar = document.getElementById('bookSidebar');
+                    const _detail  = document.getElementById('bookDetail');
+                    if (_sidebar) _sidebar.style.display = 'none';
+                    if (_detail)  _detail.style.display  = 'flex';
+                }
                 renderBookDetail();
                 // Reset to fresh state for new book (isLoading:false so loadBookMessages can run)
                 messagePageState[selectedBookFractalId] = { isLoading: false, hasOlder: true, seenIds: new Set(), oldestId: null };

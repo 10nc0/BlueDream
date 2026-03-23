@@ -18,7 +18,7 @@
 // usdRate = 1 unit of this currency in USD (used only for sanity-check scaling).
 // cities  = lowercase city/country keywords that imply this currency.
 const CURRENCY_REGISTRY = {
-  USD: { symbols: ['USD', '$'],                    usdRate: 1,          cities: [] },
+  USD: { symbols: ['USD', '$'],                    usdRate: 1,          cities: ['los angeles', 'la', 'new york', 'nyc', 'chicago', 'san francisco', 'sf', 'seattle', 'boston', 'miami', 'houston', 'dallas', 'denver', 'atlanta', 'phoenix', 'portland', 'austin', 'san diego', 'washington dc', 'philadelphia', 'minneapolis', 'detroit', 'honolulu', 'usa', 'united states'] },
   EUR: { symbols: ['EUR', '€'],                    usdRate: 0.92,       cities: ['paris', 'berlin', 'vienna', 'amsterdam', 'munich', 'rome', 'madrid', 'milan', 'brussels', 'lisbon', 'dublin', 'hamburg', 'frankfurt', 'europe', 'eurozone'] },
   GBP: { symbols: ['GBP', '£'],                    usdRate: 1.27,       cities: ['london', 'manchester', 'birmingham', 'edinburgh', 'uk', 'united kingdom'] },
   JPY: { symbols: ['JPY', 'yen', '¥', '￥'],       usdRate: 0.0067,     cities: ['tokyo', 'osaka', 'kyoto', 'japan'] },

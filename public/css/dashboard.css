@@ -538,6 +538,12 @@ body::before {
   }
 }
 
+/* Eve spawns from the left — Adam (messages) already occupies space */
+@keyframes eveSpawn {
+  from { opacity: 0; transform: translateX(-18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 .book-sidebar {
   background: var(--color-surface);
   backdrop-filter: blur(10px);
@@ -585,12 +591,13 @@ body::before {
 /* Tablet (iPad): 768-1023px viewport */
 @media (min-width: 768px) and (max-width: 1023px) {
   :root {
-    --sidebar-width: 220px;
+    --sidebar-width: 180px;
   }
 
   .book-sidebar {
     width: var(--sidebar-width);
-    max-width: 30%;
+    max-width: 26%;
+    animation: eveSpawn 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   }
 
   .header {
@@ -623,12 +630,13 @@ body::before {
 /* Desktop (Mac): ≥1024px viewport */
 @media (min-width: 1024px) {
   :root {
-    --sidebar-width: 240px;
+    --sidebar-width: 200px;
   }
 
   .book-sidebar {
     width: var(--sidebar-width);
-    max-width: 30%;
+    max-width: 22%;
+    animation: eveSpawn 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   }
 
   .header {
