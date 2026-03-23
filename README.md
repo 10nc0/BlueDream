@@ -1,7 +1,4 @@
 # NyanBook~ 🌈
-> **Artifact**: BlueDream public readme.
-> **Push**: `git add -f README.md && git push bluedream main` — BlueDream remote only.
-> **Never push to**: `origin` (10nc3/Nyan private). Internal LLM notes → `replit.md` (gitignored).
 
 > *The scribe's job was never to create. It was to record faithfully, tally honestly, and let the ledger speak.*
 
