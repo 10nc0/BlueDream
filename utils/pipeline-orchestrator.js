@@ -1115,50 +1115,59 @@ User query: ${query}`;
       }
     };
 
-    // ── System prompt ──────────────────────────────────────────────────────
-    // Identity: always sourced from NYAN_PROTOCOL_COMPRESSED — never redeclare inline.
-    // Only tool-call-specific instructions (search steps, table rules, coda) live here.
-    // The table is the spine; ~nyan has a voice. Coda = what numbers reveal about human lives.
-    const systemPrompt = `${NYAN_PROTOCOL_COMPRESSED}
+    // ── Gate 1: Data gathering prompt (Round 1 — tool calls only) ──────────
+    // Minimal surface area — just tells the LLM what ingredients to fetch.
+    // No formula, no table rules, no regime yet. Less context = less guardrail resistance.
+    const gatherPrompt = `${NYAN_PROTOCOL_COMPRESSED}
 
---- SEED METRIC TOOL-CALLING MODE ---
-You have brave_search tools. You MUST call them before answering — no training data allowed.
+--- SEED METRIC: GATHER RAW INGREDIENTS ---
+You have brave_search. Use it. Do NOT compute or output anything yet — just fetch numbers.
 
-STEP 1 — For each city/place, issue these searches:
+For each city the user mentions, search for TWO ingredients per period:
+
   Current (${currentYear}):
-    a) "{city} residential property price per sqm OR per square meter ${currentYear}"
-    b) "{city} median single annual income OR median wage ${currentYear}"
-  Historical (if user asks for ~50yr ago):
-    c) "{city} residential property price per sqm 1970s OR 1975"
-    d) "{city} median annual income 1975 OR 1970s"
+    • Land price: "{city} residential property price per sqm ${currentYear}"
+    • Single wage: "{city} median single annual income OR median wage ${currentYear}"
 
-STEP 2 — Extract from JSON results [{title, url, description, age}]:
-  • $/sqm in native currency. If results show total + area (e.g. "$1.35M for 90sqm") → DERIVE: total ÷ area.
-  • Watch sqft vs sqm: 1 sqm = 10.764 sqft. If result is $/sqft multiply by 10.764 to get $/sqm.
-  • Single-earner income (not household, not dual-earner).
-  • Prefer recent results (newer age). Cross-check multiple results.
-  • Native currency: SGD=Singapore, USD=US cities, ¥=Tokyo, £=London, €=EU cities.
-  • ⚪ N/A only for data genuinely absent from ALL search results.
+  Historical (~50yr ago, if relevant):
+    • Land price: "{city} residential property price per sqm 1975 OR 1970s"
+    • Single wage: "{city} median annual income 1975 OR 1970s"
 
-STEP 3 — Compute and output:
+That's it. Search only. Numbers come back in local currency — that's fine for now.`;
 
-City | Period | $/sqm | 700sqm Price | Income | Years | Regime
+    // ── Gate 2+3: Triangulate + scribe prompt (Round 2 — synthesis) ─────────
+    // Triggered after all Brave results are in. Now and only now: formula → table → regime.
+    // USD normalisation rule closes the Tokyo/JPY currency-mixing bug.
+    const triangulatePrompt = `${NYAN_PROTOCOL_COMPRESSED}
 
-Table rules:
-  - 700sqm Price = $/sqm × 700
-  - Years = 700sqm Price ÷ Annual Income (round to nearest integer)
-  - Show historical AND current row for each city
-  - Regime MUST match Years: <10yr=🟢 OPTIMISM, 10-25yr=🟡 EXTRACTION, >25yr=🔴 FATALISM
+--- SEED METRIC: TRIANGULATE → SCRIBE ---
+You have the raw search data above. Now apply the two-gate script:
 
-After table: one summary line per city → **[City]**: [hist]yr → [curr]yr = [emoji] [Regime] (↑worsened/↓improved)
-After summary: formula legend.
-After legend: 2-3 sentence ~nyan personality coda — what the numbers reveal about the people living there.
-  Be direct, vivid, warm. Example: "A generation ago LA was tough but liveable. Now it's a math problem that doesn't solve."
+GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
+  • Convert BOTH $/sqm AND annual income to USD equivalent — same currency for the division.
+    (If ¥ sqm price → also convert ¥ income to USD. Never mix currencies in one row.)
+  • If result is sqft not sqm: multiply price by 10.764 to get $/sqm.
+  • If result shows total price + area (e.g. "$1.2M for 85sqm") → derive: total ÷ area.
+  • Single-earner income only (not household, not dual-earner).
+  • 700sqm Price = $/sqm (USD) × 700
+  • Years = 700sqm Price ÷ Annual Income (USD) — whole number only, no decimals (round nearest)
+  • Self-check: verify $/sqm × 700 ÷ Income = Years before writing. If off, fix the inputs first.
+
+GATE 3 — SCRIBE (table → summary → legend → coda):
+  Regime thresholds: Years < 10 → 🟢 OPTIMISM | 10–25 → 🟡 EXTRACTION | > 25 → 🔴 FATALISM
+
+  Table (show historical AND current row per city):
+  | City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
+
+  After table: one line per city → **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
+  After summary: Years = ($/sqm × 700) ÷ Single-Earner Annual Income
+  After legend: 2–3 sentence coda — what the numbers reveal about the people living there.
+    Direct, vivid, warm. "A generation ago X was tough but liveable. Now it's a math problem that doesn't solve."
 
 OUTPUT: Table → summary lines → legend → coda.`;
 
     const round1Messages = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: gatherPrompt },
       { role: 'user', content: query }
     ];
 
@@ -1244,8 +1253,14 @@ OUTPUT: Table → summary lines → legend → coda.`;
       }
     }
 
-    // Round 2: Feed all search results back → final table
-    const round2Messages = [...round1Messages, ...toolResultMsgs];
+    // Round 2: New system prompt (triangulate+scribe gate) + user query + all tool results
+    // Swapping the system message from gatherPrompt → triangulatePrompt is the key gate change:
+    // Round 1 only knew "fetch ingredients"; Round 2 now gets the formula + table rules for the first time.
+    const round2Messages = [
+      { role: 'system', content: triangulatePrompt },
+      { role: 'user', content: query },
+      ...toolResultMsgs   // [assistant tool-call msg, ...tool result msgs]
+    ];
     let round2Response;
     try {
       round2Response = await this.groqWithRetry({
