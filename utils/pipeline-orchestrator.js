@@ -861,7 +861,7 @@ MANDATORY INSTRUCTIONS:
       }
       
       // Physical Audit Disclaimer: "See to believe" infrastructure verification (Dec 23, 2025)
-      const physicalAuditDisclaimer = generatePhysicalAuditDisclaimer(analysis, ticker);
+      const physicalAuditDisclaimer = generatePhysicalAuditDisclaimer(analysis, ticker, fundamentals);
       
       // Build assessment one-liner (pragmatic, no medical metaphor)
       const readingText = analysis.reading?.reading || analysis.summary?.reading || 'Unknown';

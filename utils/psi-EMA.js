@@ -2727,9 +2727,12 @@ When stock data is provided below, you MUST:
  * @param {string} ticker - Stock ticker symbol
  * @returns {string} Physical audit disclaimer text
  */
-function generatePhysicalAuditDisclaimer(analysis, ticker) {
+function generatePhysicalAuditDisclaimer(analysis, ticker, fundamentals) {
   const assetClass = detectAssetClass(ticker);
-  const suggestions = getPhysicalAuditSuggestions(assetClass, ticker);
+  const sector = fundamentals?.sector || '';
+  const industry = fundamentals?.industry || '';
+  const atomicUnits = fundamentals?.atomicUnits || [];
+  const suggestions = getPhysicalAuditSuggestions(assetClass, ticker, sector, industry, atomicUnits);
   
   return `⚠️ **H₀ PHYSICAL AUDIT ADVISORY**: Reported numbers are vulnerable to human error and financial acrobatics. Verify ${ticker}'s reality by combining this analysis with real physical audits:
 
