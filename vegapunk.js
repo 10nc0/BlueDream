@@ -1166,25 +1166,28 @@ async function logAudit(client, req, actionType, targetType, targetId, targetEma
         
         // Fetch email if we have userId but not email (from tenant-scoped users table)
         if (actorUserId && !actorEmail) {
-            const userResult = await client.query(`SELECT email FROM "${schema}".users WHERE id = $1`, [actorUserId]);
+            const userResult = await client.query(
+                format(`SELECT email FROM %I.users WHERE id = $1`, schema),
+                [actorUserId]
+            );
             actorEmail = userResult.rows[0]?.email || null;
         }
         
         // Use tenant-scoped audit_logs table
-        await client.query(`
-            INSERT INTO "${schema}".audit_logs (
-                actor_user_id, action_type, target_type, 
+        await client.query(
+            format(`INSERT INTO %I.audit_logs (
+                actor_user_id, action_type, target_type,
                 target_id, details, ip_address, user_agent
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `, [
-            actorUserId,
-            actionType,
-            targetType,
-            targetId,
-            JSON.stringify(details),
-            req.ip || req.connection?.remoteAddress || 'system',
-            (req.get && typeof req.get === 'function') ? req.get('user-agent') : 'system'
-        ]);
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)`, schema),
+            [
+                actorUserId,
+                actionType,
+                targetType,
+                targetId,
+                JSON.stringify(details),
+                req.ip || req.connection?.remoteAddress || 'system',
+                (req.get && typeof req.get === 'function') ? req.get('user-agent') : 'system'
+            ]);
     } catch (error) {
         console.error('Audit logging failed:', error);
         // Don't throw - audit logging failure shouldn't break the main operation
