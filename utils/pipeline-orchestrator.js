@@ -489,39 +489,8 @@ class PipelineOrchestrator {
           preComputed: true
         });
         
-      // still do seed-metric search if needed
-      const safeDocContext = normalizedInput.docContext || {};
-      if (state.mode === 'seed-metric' && normalizedInput.query && !safeDocContext.isClosedLoop) {
-        console.log(`🌱 Seed Metric (pre-computed): MANDATORY web search for grounded data`);
-        
-        const searchQueries = state.preflight.seedMetricSearchQueries || [];
-        let searchResults = [];
-        
-        if (searchQueries.length > 0) {
-          // Sequential search with rate limiting (350ms delay) to avoid Brave 429 errors
-          searchResults = await this.searchWithRateLimit(searchQueries.slice(0, 6), normalizedInput.clientIp, 350);
-          console.log(`🔍 Seed Metric: ${searchResults.length}/${searchQueries.length} searches returned data`);
-        } else {
-          const searchQuery = await this.extractCoreQuestion(normalizedInput.query);
-          let result = await this.searchBrave(searchQuery, normalizedInput.clientIp);
-          if (!result) {
-            result = await this.searchDuckDuckGo(searchQuery);
-          }
-          if (result) searchResults.push(result);
-        }
-          
-          if (searchResults.length > 0) {
-            state.searchContext = `[REAL ESTATE & INCOME DATA FROM WEB SEARCH - USE THESE EXACT FIGURES]
-${searchResults.join('\n\n')}
-
-MANDATORY INSTRUCTIONS:
-1. Use $/m² data above → MULTIPLY BY 700 for 700sqm price
-2. CITE your sources explicitly (e.g., "According to [source name]...")
-3. Do NOT hallucinate prices — only use figures from search results above
-4. If search data is incomplete, flag which data is missing and use proxy with documented conversion`;
-            state.didSearch = true;
-          }
-        }
+      // Seed-metric searches are now handled in stepSeedMetricToolCall (walk the dog).
+      // LLM calls brave_search itself with city-aware queries — no pre-fetch needed here.
       } else {
         // Pass context-aware query and context result to preflight
         await this.stepPreflight(state, { ...input, query: contextAwareQuery, contextResult: state.contextResult });
@@ -651,39 +620,7 @@ MANDATORY INSTRUCTIONS:
       hasPsiEma: !!state.preflight.psiEmaAnalysis
     });
     
-    if (state.mode === 'seed-metric' && query && !safeDocContext.isClosedLoop) {
-      console.log(`🌱 Seed Metric: MANDATORY web search for grounded real estate data`);
-      
-      // Use specific search queries from preflight (e.g., "tokyo residential price per square meter 2024")
-      const searchQueries = state.preflight.seedMetricSearchQueries || [];
-      let searchResults = [];
-      
-      if (searchQueries.length > 0) {
-        // Sequential search with rate limiting (350ms delay) to avoid Brave 429 errors
-        searchResults = await this.searchWithRateLimit(searchQueries.slice(0, 6), clientIp, 350);
-        console.log(`🔍 Seed Metric: ${searchResults.length}/${searchQueries.length} searches returned data`);
-      } else {
-        // Fallback to generic search
-        const searchQuery = await this.extractCoreQuestion(query);
-        let result = await this.searchBrave(searchQuery, clientIp);
-        if (!result) {
-          result = await this.searchDuckDuckGo(searchQuery);
-        }
-        if (result) searchResults.push(result);
-      }
-      
-      if (searchResults.length > 0) {
-        state.searchContext = `[REAL ESTATE & INCOME DATA FROM WEB SEARCH - USE THESE EXACT FIGURES]
-${searchResults.join('\n\n')}
-
-MANDATORY INSTRUCTIONS:
-1. Use $/m² data above → MULTIPLY BY 700 for 700sqm price
-2. CITE your sources explicitly (e.g., "According to [source name]...")
-3. Do NOT hallucinate prices — only use figures from search results above
-4. If search data is incomplete, flag which data is missing and use proxy with documented conversion`;
-        state.didSearch = true;
-      }
-    }
+    // Seed-metric: searches now done in stepSeedMetricToolCall (walk the dog)
     
     // ========================================
     // REAL-TIME CASCADE: DDG → Brave for sports, news, weather, etc.
@@ -1078,42 +1015,14 @@ User query: ${query}`;
       return; // Exit stepReasoning - run() will continue to stepAudit/stepOutput
     }
     
-    // For Seed Metric queries: Attempt direct calculation bypass if we have search data
-    // Parse price/sqm and income from search results, apply proxy rules deterministically
-    const isSeedMetric = state.mode === 'seed-metric';
-    if (isSeedMetric && state.searchContext) {
-      const cities = state.preflight?.seedMetricSearchQueries?.length > 0
-        ? [...new Set(state.preflight.seedMetricSearchQueries.map(q => {
-            const match = q.match(/^([a-z\s]+)\s+(?:residential|median|housing)/i);
-            return match ? match[1].trim().toLowerCase() : null;
-          }).filter(Boolean))]
-        : [];
-      
-      const historicalDecade = state.preflight?.historicalDecade || (String(new Date().getFullYear() - 50).slice(0, 3) + '0s');
-      
-      if (cities.length > 0) {
-        console.log(`🏠 Seed Metric: Attempting direct calculation for cities: ${cities.join(', ')}`);
-        const parsedData = parseSeedMetricData(state.searchContext, cities, historicalDecade);
-        
-        // Check if we got usable data (at least one city with current price/income)
-        const hasUsableData = Object.values(parsedData.cities).some(c => 
-          c.current?.pricePerSqm?.value && c.current?.income?.value
-        );
-        
-        if (hasUsableData) {
-          const directTable = buildSeedMetricTable(parsedData, historicalDecade);
-          console.log(`🏠 Seed Metric: Direct calculation successful, bypassing LLM`);
-          state.draftAnswer = directTable;
-          state.seedMetricDirectOutput = true;
-          console.log(`🧠 Direct output: ${state.draftAnswer.length} chars (no LLM formatting)`);
-          console.log(`📊 Parse log: ${parsedData.parseLog.join(' | ')}`);
-          return; // Exit stepReasoning - let stepAudit/stepOutput run
-        } else {
-          console.log(`⚠️ Seed Metric: Could not parse usable data, falling back to LLM`);
-          console.log(`📊 Parse log: ${parsedData.parseLog.join(' | ')}`);
-        }
-      }
+    // ── SEED METRIC: walk the dog (LLM-driven tool-call search) ─────────────
+    // LLM calls brave_search itself with city-specific queries, reads results,
+    // triangulates, and outputs the canonical table — no hardcoded parsers.
+    if (state.mode === 'seed-metric') {
+      await this.stepSeedMetricToolCall(state, input);
+      return; // stepAudit / stepOutput continue as normal
     }
+    const isSeedMetric = false; // seed-metric exits above; keep flag for downstream
     
     // Append Ψ-EMA instruction to ensure wave analysis is output (fallback if no direct output)
     if (psiEmaInstruction) {
@@ -1122,89 +1031,6 @@ User query: ${query}`;
       if (psiEmaLlmHint) finalPrompt += psiEmaLlmHint;
     }
     
-    // Append Seed Metric instruction to enforce table format (prevents LLM reformatting)
-    // isSeedMetric already defined above
-    const smHistYear = state.preflight?.historicalYear || null;
-    const smCurrYear = state.preflight?.currentYear || String(new Date().getFullYear() - 1);
-    if (isSeedMetric) {
-      // ── Search-data anchor ──────────────────────────────────────────────────
-      // Extract concrete price/income numbers from real search results and inject
-      // them into the LLM instruction so it cannot hallucinate when the full
-      // calculator bypass failed (e.g. unusual currency format, no explicit /sqm)
-      let searchAnchorBlock = '';
-      if (state.searchContext) {
-        const ctx = state.searchContext;
-        // Find up to 6 price-per-sqm mentions (any currency)
-        const priceHits = [...ctx.matchAll(
-          /[\d,]+(?:\.\d+)?(?:\s*(?:million|billion|M|B|k))?\s*(?:USD|VND|KRW|JPY|EUR|GBP|SGD|IDR|THB|MYR|₩|₫|¥|€|£|\$|Rp|RM)?\s*(?:\/|per)\s*(?:sq\s*m|sqm|m²)/gi
-        )].slice(0, 6).map(m => m[0].replace(/\s+/g, ' ').trim());
-
-        // Find up to 6 income/salary mentions
-        const incomeHits = [...ctx.matchAll(
-          /(?:income|salary|wage|earnings)[^.]{0,60}?[\d,]+(?:\.\d+)?(?:\s*(?:million|billion|M|B|k))?(?:\s*(?:USD|VND|KRW|JPY|EUR|GBP|SGD|IDR|\$|₩|₫|¥|€|£|Rp))?\s*(?:per\s*(?:year|month|annum)|annually)?/gi
-        )].slice(0, 6).map(m => m[0].replace(/\s+/g, ' ').trim());
-
-        if (priceHits.length > 0 || incomeHits.length > 0) {
-          searchAnchorBlock = `
-╔═══════════════════════════════════════════════════════════════╗
-║  VERIFIED NUMBERS EXTRACTED FROM SEARCH RESULTS               ║
-║  Use THESE numbers. Do not substitute your own estimates.      ║
-╟───────────────────────────────────────────────────────────────╢
-${priceHits.length > 0 ? `║  PRICES FOUND:\n${priceHits.map(h => `║  • ${h}`).join('\n')}\n` : ''}${incomeHits.length > 0 ? `║  INCOME FOUND:\n${incomeHits.map(h => `║  • ${h}`).join('\n')}\n` : ''}╚═══════════════════════════════════════════════════════════════╝`;
-        }
-      }
-
-      const histPeriodLabel = smHistYear ? `~${smHistYear}` : '~1976';
-      const seedMetricInstruction = `
-═══════════════════════════════════════════════════════════════
-SEED METRIC OUTPUT FORMAT - MANDATORY (DO NOT REFORMAT TO PROSE)
-═══════════════════════════════════════════════════════════════
-${smHistYear ? `⏰ PERIODS REQUESTED: historical = ${smHistYear} | current = ${smCurrYear}\n` : ''}${searchAnchorBlock}
-You MUST output this exact table. This is non-negotiable empiric data:
-
-| City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
-|------|--------|-------|--------------|--------|-------|--------|
-[Fill each city with ${histPeriodLabel} row AND ${smCurrYear} row — EVERY row must show $/sqm source data]
-
-FORMULA (non-negotiable):
-Years = ($/sqm × 700) ÷ Single-Earner Income
-
-⚠️ MATH CHECK — do this before writing any Years value:
-1. Write down $/sqm (from search above)
-2. Multiply by 700 → this is your 700sqm cost
-3. Write down annual single-earner income
-4. Years = step 2 ÷ step 3
-Example: ₫92M/sqm × 700 = ₫64,400M; income ₫116M/yr → 64,400 ÷ 116 = 555yr 🔴
-If your result is <100yr for cities like HCMC/Hanoi/Seoul/Jakarta, re-check — prices there are EXTREME.
-
-CRITICAL PROXY RULES:
-• 700 m² = family home lot (NOT 700 sqft - that's 10x smaller!)
-• Convert price/m² × 700 to get 700sqm price
-• Use SINGLE-EARNER income (not household/dual)
-• Years = 700sqm Price ÷ Income (income years to afford, NOT mortgage term)
-• Table has NO P/I column — if $/sqm unavailable, show "N/A" (do not invent P/I substitutes)
-
-⚠️ HALLUCINATION GUARDS - DO NOT:
-• Confuse 700 m² with 700 sqft (65 m²) - order of magnitude error
-• Use "time to pay off mortgage" - that's mortgage TERM, not affordability
-• Write prose paragraphs - TABLE ONLY
-• Add a P/I column — the table format has $/sqm, 700sqm Price, Income, Years, Regime only
-• Default to P/I ratio when $/sqm data exists — always prefer $/sqm × 700
-• Copy income value into $/sqm column (price/sqm ≠ income — they are different data points)
-
-REGIME THRESHOLDS ($/sqm × 700 ÷ income = years):
-• 🟢 OPTIMISM: <10 years
-• 🟡 EXTRACTION: 10-25 years  
-• 🔴 FATALISM: >25 years
-
-After table, ONE summary line per city:
-**[City]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
-
-OUTPUT: Table + summary lines + legend. NO PROSE.
-═══════════════════════════════════════════════════════════════`;
-      finalPrompt = `${finalPrompt}\n\n${seedMetricInstruction}`;
-      console.log(`🏠 Seed Metric instruction appended (enforcing table format, anchor: ${searchAnchorBlock ? 'YES' : 'NO'})`);
-    }
     
     const messages = [
       ...state.systemMessages,
@@ -1242,6 +1068,169 @@ OUTPUT: Table + summary lines + legend. NO PROSE.
     }
   }
   
+  // ── Walk the dog: LLM-driven seed metric via Groq tool calling ────────────
+  // LLM decides what to search (city-aware, language-aware), executes Brave
+  // searches itself, reads raw results, triangulates price/sqm from totals,
+  // and produces the canonical seed-metric table.  No hardcoded parsers.
+  async stepSeedMetricToolCall(state, input) {
+    const { query, clientIp } = input;
+    const currentYear = new Date().getFullYear();
+
+    const braveSearchTool = {
+      type: 'function',
+      function: {
+        name: 'brave_search',
+        description: 'Search the web for real-time real estate prices, housing statistics, income data, and wage information. Use specific, targeted queries.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Specific web search query (e.g., "Singapore residential price per sqm 2024" or "Los Angeles median annual household income 2024")'
+            }
+          },
+          required: ['query']
+        }
+      }
+    };
+
+    const systemPrompt = `You are a Seed Metric analyst. Compute housing affordability using the φ-derived formula:
+
+FORMULA:  Years = (Price_per_sqm × 700) ÷ Single-Earner Annual Income
+(No mortgage. No interest. No down payment. Pure cash ownership horizon.)
+
+REGIMES (25yr fertility window):
+🟢 OPTIMISM: <10yr  |  🟡 EXTRACTION: 10–25yr  |  🔴 FATALISM: >25yr  |  ⚪ N/A
+
+STEP 1 — Search for each city/place mentioned:
+  For CURRENT (${currentYear}):
+    a) brave_search("{city} residential property price per sqm OR per square meter ${currentYear}")
+    b) brave_search("{city} median single annual income OR median wage ${currentYear}")
+  For HISTORICAL (1970s, if user asks):
+    c) brave_search("{city} residential property price per sqm 1970s OR 1975")
+    d) brave_search("{city} median annual income 1975 OR 1970s")
+
+STEP 2 — From search results, extract:
+  • Price/sqm in native currency. If results show total price + area (e.g. "$1.35M for 90sqm"), DERIVE $/sqm = total ÷ area.
+  • Single-earner annual income (not household, not dual-earner).
+  • Use native currency: SGD for Singapore, USD for LA/USA/NYC, ¥ for Tokyo, £ for London, € for European cities.
+
+STEP 3 — Compute and output ONLY this table (no prose):
+
+City | Period | $/sqm | 700sqm Price | Income | Years | Regime
+
+Rules:
+  - 700sqm Price = $/sqm × 700
+  - Years = 700sqm Price ÷ Annual Income (round to nearest integer)
+  - Use ⚪ N/A for any value not found in search results — do NOT estimate
+  - Show historical row AND current row for each city
+
+After table, one summary line per city:
+**[City]**: [hist]yr → [curr]yr = [emoji] [Regime] (↑worsened/↓improved)
+
+Then the formula legend.
+
+OUTPUT: Table + summary lines + legend. NO PROSE PARAGRAPHS.`;
+
+    const round1Messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: query }
+    ];
+
+    console.log(`🐕 Seed Metric: Walking the dog — LLM-driven Brave tool calls`);
+
+    let round1Response;
+    try {
+      round1Response = await this.groqWithRetry({
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        data: {
+          model: 'llama-3.3-70b-versatile',
+          messages: round1Messages,
+          tools: [braveSearchTool],
+          tool_choice: 'auto',
+          temperature: 0.1,
+          max_tokens: 800
+        },
+        config: {
+          headers: {
+            'Authorization': `Bearer ${this.groqToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      }, 3, 'text');
+    } catch (err) {
+      console.error(`❌ stepSeedMetricToolCall round1 failed: ${err.message}`);
+      throw err;
+    }
+
+    const round1Msg = round1Response.data.choices[0]?.message;
+    const toolCalls  = round1Msg?.tool_calls || [];
+    const finishReason = round1Response.data.choices[0]?.finish_reason;
+
+    console.log(`🐕 Round 1: finish_reason=${finishReason}, tool_calls=${toolCalls.length}`);
+
+    // LLM answered without needing tools → use directly
+    if (toolCalls.length === 0 || finishReason !== 'tool_calls') {
+      state.draftAnswer = round1Msg?.content || '';
+      state.didSearch = false;
+      console.log(`🐕 Seed Metric: direct answer (no tool calls), ${state.draftAnswer.length} chars`);
+      return;
+    }
+
+    // Execute tool calls — max 8, 400ms rate-limit between Brave requests
+    const callsToRun = toolCalls.slice(0, 8);
+    const toolResultMsgs = [round1Msg];
+
+    for (let i = 0; i < callsToRun.length; i++) {
+      const tc = callsToRun[i];
+      let args;
+      try { args = JSON.parse(tc.function.arguments); }
+      catch { args = { query: String(tc.function.arguments) }; }
+
+      console.log(`🦁 brave_search #${i + 1}: "${args.query}"`);
+      const result = await this.searchBrave(args.query, clientIp);
+      toolResultMsgs.push({
+        role: 'tool',
+        tool_call_id: tc.id,
+        content: result || 'No results found for this query.'
+      });
+
+      if (i < callsToRun.length - 1) {
+        await new Promise(r => setTimeout(r, 400)); // Brave rate-limit guard
+      }
+    }
+
+    // Round 2: Feed all search results back → final table
+    const round2Messages = [...round1Messages, ...toolResultMsgs];
+    let round2Response;
+    try {
+      round2Response = await this.groqWithRetry({
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        data: {
+          model: 'llama-3.3-70b-versatile',
+          messages: round2Messages,
+          temperature: 0.05,
+          max_tokens: 2000
+        },
+        config: {
+          headers: {
+            'Authorization': `Bearer ${this.groqToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 20000
+        }
+      }, 3, 'text');
+    } catch (err) {
+      console.error(`❌ stepSeedMetricToolCall round2 failed: ${err.message}`);
+      throw err;
+    }
+
+    state.draftAnswer = round2Response.data.choices[0]?.message?.content || 'No response generated.';
+    state.didSearch = true;
+    console.log(`🐕 Seed Metric walked: ${callsToRun.length} Brave calls → ${state.draftAnswer.length} chars`);
+  }
+
   async stepAudit(state, input) {
     state.transition(PIPELINE_STEPS.AUDIT);
     
