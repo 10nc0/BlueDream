@@ -78,3 +78,9 @@ The system uses a Node.js backend with Express and a Single Page Application (SP
 - **Forex**: fawazahmed0 Currency API
 - **Document Parsing Libraries**: `pdf-parse`, `tabula-js`, `exceljs`, `mammoth`
 - **IPFS**: Pinata
+
+## Code Conventions — Shared Resources (NEVER REPLICATE)
+- **~nyan identity**: `prompts/nyan-protocol.js` exports `NYAN_PROTOCOL_SYSTEM_PROMPT` (full) and `NYAN_PROTOCOL_COMPRESSED` (ultra-terse seed). Every pipeline path that needs ~nyan's identity MUST import from here. Never write "You are ~nyan..." inline. Domain-specific instructions (search steps, table rules, coda directions) live alongside the injected compressed identity, NOT instead of it.
+- **Forex detection**: `utils/forex-fetcher.js` → `detectForexPair()` / `isForexQuery()`. Currency alias matching uses word-boundary regex (`\bfranc\b`) — NOT `String.includes()`. Substring match causes false positives (e.g. "franc" in "Francisco" → CHF).
+- **Seed Metric formula**: The formula, regimes, and 700sqm symbolism are canonical in `NYAN_PROTOCOL_COMPRESSED`. The tool-calling system prompt in `stepSeedMetricToolCall()` inherits from it — do not redeclare the formula separately.
+- **Any string or constant used in >1 file**: extract to a shared module in `utils/` or `prompts/`. Code bloat = drift risk.
