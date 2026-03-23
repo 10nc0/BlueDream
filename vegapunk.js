@@ -494,8 +494,6 @@ app.use((req, res, next) => {
             console.log(`⏱️  Slow request: ${req.method} ${req.path} - ${duration}ms`);
         }
     });
-    // Set header before response is sent
-    res.setHeader('X-Response-Time', '0ms'); // Placeholder, will be accurate in logs
     next();
 });
 

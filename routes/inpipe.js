@@ -418,25 +418,25 @@ function startQueueProcessor(deps) {
 }
 
 // Process a single queued message
-async function processQueuedMessage(msg, rawPayload, twilioChannel, deps) {
+async function processQueuedMessage(msg, rawPayload, channel, deps) {
     const { pool, logger } = deps;
     
     const routingResult = await routeMessage(pool, msg, logger);
     
     if (!routingResult.bookRecord) {
-        await handleLimboMessageAsync(twilioChannel, msg, rawPayload, deps);
+        await handleLimboMessageAsync(channel, msg, rawPayload, deps);
         return;
     }
     
-    const { bookRecord, routingMethod } = routingResult;
+    const { bookRecord } = routingResult;
     
     if (bookRecord.status === 'pending') {
-        await handlePendingBookAsync(twilioChannel, msg, bookRecord, deps);
+        await handlePendingBookAsync(channel, msg, bookRecord, deps);
         return;
     }
     
     if (bookRecord.status === 'active') {
-        await handleActiveBookAsync(twilioChannel, msg, rawPayload, bookRecord, deps);
+        await handleActiveBookAsync(channel, msg, rawPayload, bookRecord, deps);
         return;
     }
     
@@ -525,376 +525,6 @@ async function routeMessage(pool, msg, logger) {
     return { bookRecord, routingMethod };
 }
 
-async function handleLimboMessage(res, channel, msg, rawPayload, deps) {
-    const { pool, constants, logger } = deps;
-    const LIMBO_THREAD_ID = constants?.LIMBO_THREAD_ID;
-    const NYANBOOK_LEDGER_WEBHOOK = constants?.NYANBOOK_LEDGER_WEBHOOK;
-    
-    logger.info({ phone: msg.phone }, 'Routing to limbo (no valid join code)');
-    
-    const limboPayload = {
-        embeds: [{
-            title: `Limbo Message (No Join Code)`,
-            description: msg.body || '_(No text content)_',
-            color: 0xFF6B6B,
-            fields: [
-                { name: 'Phone', value: msg.phone, inline: true },
-                { name: 'Time', value: new Date().toLocaleString(), inline: true },
-                { name: 'Status', value: 'No valid join code found', inline: false },
-                { name: 'Message', value: `\`${(msg.body || '').substring(0, 100)}\``, inline: false }
-            ],
-            timestamp: new Date().toISOString(),
-            footer: { text: 'User needs to send a valid join code (e.g., "bookname-abc123")' }
-        }]
-    };
-    
-    let media = null;
-    if (msg.hasMedia) {
-        media = await channel.downloadMedia(rawPayload.mediaUrl, rawPayload.mediaContentType);
-        if (media) {
-            limboPayload.embeds[0].fields.push({ 
-                name: 'Media', 
-                value: `${media.contentType} (${(media.buffer.length / 1024).toFixed(1)} KB)`,
-                inline: false 
-            });
-        }
-    }
-    
-    try {
-        await sendToDiscordThread(LIMBO_THREAD_ID, limboPayload, media, deps);
-        logger.info({ phone: msg.phone }, 'Limbo message forwarded to t1-b1 thread');
-    } catch (error) {
-        logger.error({ error: error.message }, 'Failed to forward limbo message');
-    }
-    
-    const domain = process.env.REPLIT_DOMAINS?.split(',')[0] || 'your dashboard';
-    await channel.sendReply(msg.rawFrom, 
-        `Welcome to Nyanbook! To activate your book, send your join code (format: bookname-abc123).\n\nCreate a book at: ${domain}`
-    );
-    
-    return sendChannelResponse(res, channel);
-}
-
-async function handlePendingBook(res, channel, msg, bookRecord, deps) {
-    const { pool, bots, logger } = deps;
-    const { hermes: hermesBot } = bots;
-    const tenantSchema = bookRecord.tenant_schema;
-    
-    logger.info({ fractalId: bookRecord.fractal_id, phone: msg.phone }, 'Activating pending book');
-    
-    const bookIdResult = await pool.query(`
-        SELECT id FROM ${tenantSchema}.books 
-        WHERE fractal_id = $1
-        LIMIT 1
-    `, [bookRecord.fractal_id]);
-    
-    if (bookIdResult.rows.length === 0) {
-        logger.error({ fractalId: bookRecord.fractal_id, tenantSchema }, 'Book not found in tenant schema');
-        return sendChannelResponse(res, channel);
-    }
-    
-    const bookId = bookIdResult.rows[0].id;
-
-    // phone_number stores E.164 only — null for non-phone channels (Line, Telegram, etc.).
-    // PHONE_CHANNELS is the allowlist; all others store null.
-    // Password reset is gated on WhatsApp activation; non-phone users silent-fail on reset.
-    const PHONE_CHANNELS = new Set(['twilio']);
-    const phoneToStore = PHONE_CHANNELS.has(msg.channel) ? msg.phone : null;
-
-    await pool.query(`
-        UPDATE core.book_registry 
-        SET phone_number = $1, creator_phone = $1, status = 'active', activated_at = NOW(), updated_at = NOW()
-        WHERE id = $2
-    `, [phoneToStore, bookRecord.id]);
-    
-    await pool.query(`
-        UPDATE ${tenantSchema}.books 
-        SET status = 'active'
-        WHERE id = $1
-    `, [bookId]);
-    
-    logger.info({ fractalId: bookRecord.fractal_id, bookId, phone: msg.phone, channel: msg.channel }, 'Activated book');
-    
-    await pool.query(`
-        INSERT INTO core.book_engaged_phones (book_registry_id, phone, is_creator, first_engaged_at, last_engaged_at)
-        VALUES ($1, $2, TRUE, NOW(), NOW())
-        ON CONFLICT (book_registry_id, phone) DO UPDATE 
-        SET last_engaged_at = NOW(), is_creator = TRUE
-    `, [bookRecord.id, msg.phone]);
-
-    // Telegram: write to channel_identifiers + activate book_channels row.
-    // Always upsert (DO UPDATE) so relinking always wins — the latest join code
-    // takes over immediately; messages never fire to a previous book by mistake.
-    if (msg.channel === 'telegram') {
-        // Step 1: Check if this user was previously linked to a different book
-        const prevLink = await pool.query(`
-            SELECT book_fractal_id, tenant_schema FROM core.channel_identifiers
-            WHERE channel = 'telegram' AND external_id = $1
-        `, [String(msg.phone)]);
-        if (prevLink.rows.length > 0 && prevLink.rows[0].book_fractal_id !== bookRecord.fractal_id) {
-            // Deactivate the old book's inpipe so it no longer shows as active
-            const oldFractal = prevLink.rows[0].book_fractal_id;
-            const oldSchema  = prevLink.rows[0].tenant_schema;
-            try {
-                await pool.query(`
-                    UPDATE ${oldSchema}.book_channels
-                    SET status = 'inactive', updated_at = NOW()
-                    WHERE book_fractal_id = $1 AND direction = 'inpipe' AND channel = 'telegram'
-                `, [oldFractal]);
-                logger.info({ oldFractal, newFractal: bookRecord.fractal_id }, 'Telegram: old book_channels deactivated on relink');
-            } catch (e) {
-                logger.warn({ err: e.message }, 'Telegram: old book_channels deactivation skipped');
-            }
-        }
-        // Step 2: Upsert channel_identifiers — always points to the latest book
-        await pool.query(`
-            INSERT INTO core.channel_identifiers (channel, external_id, book_fractal_id, tenant_schema)
-            VALUES ('telegram', $1, $2, $3)
-            ON CONFLICT (channel, external_id)
-            DO UPDATE SET book_fractal_id = EXCLUDED.book_fractal_id,
-                          tenant_schema   = EXCLUDED.tenant_schema
-        `, [String(msg.phone), bookRecord.fractal_id, tenantSchema]);
-        // Step 3: Activate the new book's book_channels row
-        await pool.query(`
-            UPDATE ${tenantSchema}.book_channels
-            SET status = 'active', updated_at = NOW()
-            WHERE book_fractal_id = $1 AND direction = 'inpipe' AND channel = 'telegram'
-        `, [bookRecord.fractal_id]);
-        logger.info({ fractalId: bookRecord.fractal_id }, 'Telegram: channel_identifiers + book_channels activated (latest wins)');
-    }
-    
-    if (hermesBot && hermesBot.isReady()) {
-        try {
-            const tenantIdMatch = tenantSchema.match(/tenant_(\d+)/);
-            const tenantId = tenantIdMatch ? parseInt(tenantIdMatch[1]) : 0;
-            
-            let userOutputUrl = null;
-            if (bookRecord.outpipes_user) {
-                try {
-                    const outpipesUser = typeof bookRecord.outpipes_user === 'string' 
-                        ? JSON.parse(bookRecord.outpipes_user) 
-                        : bookRecord.outpipes_user;
-                    if (Array.isArray(outpipesUser) && outpipesUser.length > 0) {
-                        userOutputUrl = outpipesUser[0]?.url || null;
-                    }
-                } catch (e) {
-                    logger.warn({ error: e.message }, 'Failed to parse outpipes_user');
-                }
-            }
-            
-            logger.info({ bookName: bookRecord.book_name, tenantId, bookId, hasUserOutput: !!userOutputUrl }, 'Hermes creating dual outputs');
-            const dualThreads = await hermesBot.createDualThreadsForBook(
-                bookRecord.outpipe_ledger,
-                userOutputUrl,
-                bookRecord.book_name,
-                tenantId,
-                bookId
-            );
-            
-            const outputDestinations = {};
-            if (dualThreads.output_01) outputDestinations.output_01 = dualThreads.output_01;
-            if (dualThreads.output_0n) outputDestinations.output_0n = dualThreads.output_0n;
-            
-            await pool.query(`
-                UPDATE ${tenantSchema}.books 
-                SET output_credentials = COALESCE(output_credentials, '{}'::jsonb) || $1::jsonb
-                WHERE id = $2
-            `, [JSON.stringify(outputDestinations), bookId]);
-            
-            const activationEmbed = {
-                embeds: [{
-                    title: `Book Activated`,
-                    description: `Join code: \`${msg.joinCode}\``,
-                    color: 0x00FF00,
-                    fields: [
-                        { name: 'Phone', value: msg.phone, inline: true },
-                        { name: 'Book', value: bookRecord.book_name, inline: true },
-                        { name: 'Fractal ID', value: bookRecord.fractal_id, inline: false }
-                    ],
-                    timestamp: new Date().toISOString()
-                }]
-            };
-            
-            if (dualThreads.output_01?.thread_id) {
-                await sendToDiscordThread(dualThreads.output_01.thread_id, activationEmbed, null, deps);
-            }
-            
-            logger.info({ 
-                threadId: dualThreads.output_01?.thread_id, 
-                hasUserOutput: !!dualThreads.output_0n 
-            }, 'Hermes dual-thread setup complete');
-        } catch (error) {
-            logger.error({ error: error.message }, 'Failed to create Hermes threads');
-        }
-    }
-    
-    await channel.sendReply(msg.rawFrom, 
-        `Book activated! Your messages will now be saved to "${bookRecord.book_name}". Send anything to test it out!`
-    );
-    
-    return sendChannelResponse(res, channel);
-}
-
-async function handleActiveBook(res, channel, msg, rawPayload, bookRecord, deps) {
-    const { pool, logger } = deps;
-    const tenantSchema = bookRecord.tenant_schema;
-    
-    logger.info({ fractalId: bookRecord.fractal_id }, 'Forwarding message to active book');
-    
-    const bookDetailsResult = await pool.query(`
-        SELECT id, name, fractal_id, output_credentials 
-        FROM ${tenantSchema}.books 
-        WHERE fractal_id = $1
-        LIMIT 1
-    `, [bookRecord.fractal_id]);
-    
-    if (bookDetailsResult.rows.length === 0) {
-        logger.error({ fractalId: bookRecord.fractal_id, tenantSchema }, 'Book not found in tenant schema');
-        return sendChannelResponse(res, channel);
-    }
-    
-    const book = bookDetailsResult.rows[0];
-    
-    try {
-        await pool.query(`
-            INSERT INTO core.book_engaged_phones (book_registry_id, phone, is_creator, first_engaged_at, last_engaged_at)
-            VALUES ($1, $2, FALSE, NOW(), NOW())
-            ON CONFLICT (book_registry_id, phone) DO UPDATE 
-            SET last_engaged_at = NOW()
-        `, [bookRecord.id, msg.phone]);
-        logger.info({ phone: msg.phone, fractalId: bookRecord.fractal_id }, 'Tracked engagement');
-    } catch (error) {
-        logger.error({ error: error.message }, 'Could not track engagement');
-    }
-    
-    const outputCreds = book.output_credentials || {};
-    const output01 = outputCreds.output_01;
-    const webhooks = outputCreds.webhooks || [];
-    
-    const isCreator = (bookRecord.creator_phone && msg.phone === bookRecord.creator_phone) ||
-                      (!bookRecord.creator_phone && msg.phone === bookRecord.phone_number);
-    
-    const embed = {
-        description: msg.body || '_(No text content)_',
-        color: isCreator ? 0x25D366 : 0x7289DA,
-        fields: [
-            { name: 'Phone', value: msg.phone, inline: true },
-            { name: 'Book', value: book.name, inline: true },
-            { name: 'Time', value: new Date().toLocaleString(), inline: true }
-        ],
-        timestamp: new Date().toISOString()
-    };
-    
-    const msgTimestamp = embed.timestamp;
-
-    let media = null;
-    if (msg.hasMedia) {
-        media = await channel.downloadMedia(rawPayload.mediaUrl, rawPayload.mediaContentType);
-        if (media) {
-            embed.fields.push({ 
-                name: 'Media', 
-                value: `${media.contentType} (${(media.buffer.length / 1024).toFixed(1)} KB)`,
-                inline: false 
-            });
-        } else {
-            embed.fields.push({ 
-                name: 'Media (download failed)', 
-                value: `[${rawPayload.mediaContentType || 'attachment'}](${rawPayload.mediaUrl})`,
-                inline: false 
-            });
-        }
-    }
-
-    // Build cryptographic provenance capsule (HMAC sender proof + SHA256 content hash, sync ~0ms)
-    const tenantIdMatch = bookRecord.tenant_schema?.match(/tenant_(\d+)/);
-    const capsuleTenantId = tenantIdMatch ? parseInt(tenantIdMatch[1]) : 0;
-    const capsule = buildCapsule({
-        bookFractalId: book.fractal_id,
-        tenantId: capsuleTenantId,
-        phone: msg.phone,
-        body: msg.body,
-        media,
-        timestamp: msgTimestamp
-    });
-
-    if (output01?.type === 'thread' && output01?.thread_id) {
-        try {
-            const discordResponse = await sendToDiscordThread(output01.thread_id, { embeds: [embed] }, media, deps);
-            logger.info({ threadId: output01.thread_id }, 'Sent to Ledger thread');
-            // Fill discord_url on capsule attachment before async pin fires
-            if (media && capsule.attachments.length > 0) {
-                const cdnUrl = discordResponse?.data?.attachments?.[0]?.url;
-                if (cdnUrl) capsule.attachments[0].discord_url = cdnUrl;
-            }
-        } catch (error) {
-            logger.error({ error: error.message }, 'Failed to send to Ledger');
-        }
-    }
-    
-    for (const webhook of webhooks) {
-        try {
-            await sendToWebhook(webhook.url, { embeds: [embed] }, media);
-            logger.info({ webhookName: webhook.name || 'Personal' }, 'Sent to webhook');
-        } catch (error) {
-            logger.error({ error: error.message, webhookName: webhook.name }, 'Failed to send to webhook');
-        }
-    }
-
-    // ── Capsule pipeline (fire-and-forget — never blocks Discord write) ──────
-    // Writes ledger row immediately (CIDs null), fills in async as pins resolve
-    ;(async () => {
-        try {
-            if (pool) {
-                const env = deps?.constants?.IS_PROD ? 'prod' : 'dev';
-                await pool.query(
-                    `INSERT INTO core.message_ledger
-                     (message_fractal_id, book_fractal_id, sender_hash, content_hash,
-                      has_attachment, attachment_disclosed, env)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7)
-                     ON CONFLICT (message_fractal_id) DO NOTHING`,
-                    [
-                        capsule.message_fractal_id,
-                        capsule.book_fractal_id,
-                        capsule.sender_hash,
-                        capsule.content_hash,
-                        capsule.attachments.length > 0,
-                        capsule.attachments[0]?.disclosed ?? true,
-                        env
-                    ]
-                );
-            }
-            // Pin capsule JSON → get CID
-            const jsonResult = await pinJson(capsule);
-            if (jsonResult?.cid && pool) {
-                await pool.query(
-                    `UPDATE core.message_ledger SET ipfs_cid = $1 WHERE message_fractal_id = $2`,
-                    [jsonResult.cid, capsule.message_fractal_id]
-                );
-            }
-            // Pin attachment binary (if present and disclosed)
-            if (media?.buffer && capsule.attachments[0]?.disclosed) {
-                const fileResult = await pinBuffer(media.buffer, media.contentType);
-                if (fileResult?.cid) {
-                    capsule.attachments[0].attachment_cid = fileResult.cid;
-                    if (pool) {
-                        await pool.query(
-                            `UPDATE core.message_ledger SET attachment_cid = $1 WHERE message_fractal_id = $2`,
-                            [fileResult.cid, capsule.message_fractal_id]
-                        );
-                    }
-                }
-            }
-            logger.info({
-                msgFractalId: capsule.message_fractal_id,
-                ipfsCid: jsonResult?.cid || null
-            }, '🜁 Capsule sealed');
-        } catch (err) {
-            logger.warn({ err: err.message }, '⚠️ Capsule pipeline error (non-fatal)');
-        }
-    })();
-
-    return sendChannelResponse(res, channel);
-}
 
 async function sendToDiscordThread(threadId, payload, media, deps) {
     const hermesToken = deps?.constants?.HERMES_TOKEN || process.env.HERMES_TOKEN;
@@ -986,6 +616,76 @@ function sendChannelResponse(res, channel) {
 // ASYNC HANDLERS: "Send and Fire" - Discord webhook as source of truth
 // No Twilio reply since we already ACK'd immediately
 // ═══════════════════════════════════════════════════════════════
+
+// ── Capsule pipeline helper ───────────────────────────────────────────────────
+// Shared by all active-book message paths. Fire-and-forget — never blocks the
+// Discord write. Writes ledger row immediately (CIDs null), fills in as pins resolve.
+async function processCapsule(book, bookRecord, msg, media, discordResponse, deps) {
+    const { pool, logger } = deps;
+    const tenantIdMatch = bookRecord.tenant_schema?.match(/tenant_(\d+)/);
+    const capsuleTenantId = tenantIdMatch ? parseInt(tenantIdMatch[1]) : 0;
+    const capsule = buildCapsule({
+        bookFractalId: book.fractal_id,
+        tenantId: capsuleTenantId,
+        phone: msg.phone,
+        body: msg.body,
+        media,
+        timestamp: new Date().toISOString()
+    });
+    // Fill discord_url on capsule attachment before async pin fires
+    if (media && capsule.attachments.length > 0) {
+        const cdnUrl = discordResponse?.data?.attachments?.[0]?.url;
+        if (cdnUrl) capsule.attachments[0].discord_url = cdnUrl;
+    }
+    ;(async () => {
+        try {
+            if (pool) {
+                const env = deps?.constants?.IS_PROD ? 'prod' : 'dev';
+                await pool.query(
+                    `INSERT INTO core.message_ledger
+                     (message_fractal_id, book_fractal_id, sender_hash, content_hash,
+                      has_attachment, attachment_disclosed, env)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7)
+                     ON CONFLICT (message_fractal_id) DO NOTHING`,
+                    [
+                        capsule.message_fractal_id,
+                        capsule.book_fractal_id,
+                        capsule.sender_hash,
+                        capsule.content_hash,
+                        capsule.attachments.length > 0,
+                        capsule.attachments[0]?.disclosed ?? true,
+                        env
+                    ]
+                );
+            }
+            const jsonResult = await pinJson(capsule);
+            if (jsonResult?.cid && pool) {
+                await pool.query(
+                    `UPDATE core.message_ledger SET ipfs_cid = $1 WHERE message_fractal_id = $2`,
+                    [jsonResult.cid, capsule.message_fractal_id]
+                );
+            }
+            if (media?.buffer && capsule.attachments[0]?.disclosed) {
+                const fileResult = await pinBuffer(media.buffer, media.contentType);
+                if (fileResult?.cid) {
+                    capsule.attachments[0].attachment_cid = fileResult.cid;
+                    if (pool) {
+                        await pool.query(
+                            `UPDATE core.message_ledger SET attachment_cid = $1 WHERE message_fractal_id = $2`,
+                            [fileResult.cid, capsule.message_fractal_id]
+                        );
+                    }
+                }
+            }
+            logger.info({
+                msgFractalId: capsule.message_fractal_id,
+                ipfsCid: jsonResult?.cid || null
+            }, '🜁 Capsule sealed');
+        } catch (err) {
+            logger.warn({ err: err.message }, '⚠️ Capsule pipeline error (non-fatal)');
+        }
+    })();
+}
 
 async function handleLimboMessageAsync(channel, msg, rawPayload, deps) {
     const { pool, constants, logger } = deps;
@@ -1265,9 +965,10 @@ async function handleActiveBookAsync(channel, msg, rawPayload, bookRecord, deps)
     }
     
     // SEND TO DISCORD (source of truth) - Ledger thread
+    let discordResponse = null;
     if (output01?.type === 'thread' && output01?.thread_id) {
         try {
-            await sendToDiscordThread(output01.thread_id, { embeds: [embed] }, media, deps);
+            discordResponse = await sendToDiscordThread(output01.thread_id, { embeds: [embed] }, media, deps);
             logger.info({ threadId: output01.thread_id }, 'Async: Sent to Ledger thread');
         } catch (error) {
             logger.error({ error: error.message }, 'Async: Failed to send to Ledger');
@@ -1285,6 +986,9 @@ async function handleActiveBookAsync(channel, msg, rawPayload, bookRecord, deps)
     });
     
     await Promise.allSettled(webhookPromises);
+
+    // ── Capsule pipeline (fire-and-forget — never blocks Discord write) ──────
+    processCapsule(book, bookRecord, msg, media, discordResponse, deps);
 }
 
 module.exports = { registerInpipeRoutes };
