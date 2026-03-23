@@ -125,10 +125,13 @@ function detectForexPair(query) {
     'rupee': 'INR', 'inr': 'INR', 'indian rupee': 'INR'
   };
   
-  // Find all currencies mentioned
+  // Find all currencies mentioned — use word-boundary regex, NOT substring includes().
+  // "franc" in "Francisco" must NOT match CHF (substring match is a false positive).
+  // Word boundary: \bfranc\b matches "franc" alone but not "francisco".
   const foundCurrencies = [];
   for (const [alias, code] of Object.entries(currencyAliases)) {
-    if (lower.includes(alias)) {
+    const aliasPattern = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (aliasPattern.test(query)) {
       foundCurrencies.push(code);
     }
   }

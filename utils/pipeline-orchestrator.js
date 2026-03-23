@@ -1072,10 +1072,31 @@ User query: ${query}`;
   // LLM decides what to search (city-aware, language-aware), executes Brave
   // searches itself, reads raw results, triangulates price/sqm from totals,
   // and produces the canonical seed-metric table.  No hardcoded parsers.
+  /**
+   * stepSeedMetricToolCall — "Walk the Dog" seed metric computation.
+   *
+   * Architecture: Groq function-calling (2-round trip).
+   *   Round 1: LLM emits brave_search tool_calls (up to 8 searches).
+   *            LLM decides WHAT to search — city names, years, language.
+   *            No hardcoded query templates. No regex parsers.
+   *   Execute: Brave API called for each tool_call. Results injected as tool messages.
+   *            Format: JSON array per result (title, url, description, age) so the LLM
+   *            gets structured quantity to triangulate $/sqm from total_price ÷ area.
+   *   Round 2: LLM reads raw Brave JSON, triangulates $/sqm (Totem), computes Years,
+   *            emits canonical table + personality coda.
+   *
+   * Rate-limit: 1100ms between Brave calls (just under 1 req/s hard limit).
+   *             Retry once on 429 after 1500ms backoff.
+   *
+   * "Teaching the dog to read reminders" (stuffing query templates into the prompt) = dogma.
+   * "Walking the dog" (giving the LLM a search tool and letting it discover) = live epistemics.
+   */
   async stepSeedMetricToolCall(state, input) {
     const { query, clientIp } = input;
     const currentYear = new Date().getFullYear();
 
+    // ── Groq tool definition for Brave Search ─────────────────────────────
+    // The LLM calls this tool instead of us pre-fetching; it picks queries itself.
     const braveSearchTool = {
       type: 'function',
       function: {
@@ -1094,10 +1115,14 @@ User query: ${query}`;
       }
     };
 
-    const systemPrompt = `You are a Seed Metric analyst. Compute housing affordability using the φ-derived formula:
+    // ── System prompt ──────────────────────────────────────────────────────
+    // Personality note: the table is the spine, but ~nyan has a voice.
+    // After the data, add a brief warm coda — what the numbers reveal about human lives.
+    const systemPrompt = `You are ~nyan, a Seed Metric analyst with a sharp, warm personality. Compute housing affordability using the φ-derived formula:
 
 FORMULA:  Years = (Price_per_sqm × 700) ÷ Single-Earner Annual Income
 (No mortgage. No interest. No down payment. Pure cash ownership horizon.)
+The "700sqm" is symbolic — it represents what a human life costs to sustain spatially.
 
 REGIMES (25yr fertility window):
 🟢 OPTIMISM: <10yr  |  🟡 EXTRACTION: 10–25yr  |  🔴 FATALISM: >25yr  |  ⚪ N/A
@@ -1110,27 +1135,35 @@ STEP 1 — Search for each city/place mentioned:
     c) brave_search("{city} residential property price per sqm 1970s OR 1975")
     d) brave_search("{city} median annual income 1975 OR 1970s")
 
-STEP 2 — From search results, extract:
-  • Price/sqm in native currency. If results show total price + area (e.g. "$1.35M for 90sqm"), DERIVE $/sqm = total ÷ area.
+STEP 2 — From the JSON search results, extract:
+  • Price/sqm in native currency. Results are JSON arrays: [{title, url, description, age}].
+    If a result shows total price + area (e.g. "$1.35M for 90sqm"), DERIVE $/sqm = total ÷ area.
+    Prefer recent results (newer age). Cross-check multiple results for consistency.
   • Single-earner annual income (not household, not dual-earner).
-  • Use native currency: SGD for Singapore, USD for LA/USA/NYC, ¥ for Tokyo, £ for London, € for European cities.
+  • Use native currency: SGD for Singapore, USD for LA/USA/NYC/US cities, ¥ for Tokyo, £ for London, € for European cities.
 
-STEP 3 — Compute and output ONLY this table (no prose):
+STEP 3 — Compute and output the table:
 
 City | Period | $/sqm | 700sqm Price | Income | Years | Regime
 
-Rules:
+Table rules:
   - 700sqm Price = $/sqm × 700
   - Years = 700sqm Price ÷ Annual Income (round to nearest integer)
-  - Use ⚪ N/A for any value not found in search results — do NOT estimate
+  - Use ⚪ N/A for any value not found in search results — never estimate
   - Show historical row AND current row for each city
+  - Regime MUST match Years: <10yr=🟢 OPTIMISM, 10-25yr=🟡 EXTRACTION, >25yr=🔴 FATALISM
 
 After table, one summary line per city:
 **[City]**: [hist]yr → [curr]yr = [emoji] [Regime] (↑worsened/↓improved)
 
-Then the formula legend.
+After summary lines, the formula legend.
 
-OUTPUT: Table + summary lines + legend. NO PROSE PARAGRAPHS.`;
+After legend, add a brief 2-3 sentence ~nyan personality coda:
+  - What do these numbers reveal about people living in these places?
+  - Be direct, vivid, and warm — not clinical. The data speaks; your voice contextualizes it.
+  - Example tone: "A generation ago LA was tough but liveable. Now it's a math problem that doesn't solve."
+
+OUTPUT: Table → summary lines → legend → personality coda.`;
 
     const round1Messages = [
       { role: 'system', content: systemPrompt },
@@ -1147,7 +1180,9 @@ OUTPUT: Table + summary lines + legend. NO PROSE PARAGRAPHS.`;
           model: 'llama-3.3-70b-versatile',
           messages: round1Messages,
           tools: [braveSearchTool],
-          tool_choice: 'auto',
+          // 'required' forces the LLM to call at least one brave_search tool.
+          // 'auto' lets it answer from training data — that's dogma, not live epistemics.
+          tool_choice: 'required',
           temperature: 0.1,
           max_tokens: 800
         },
@@ -1178,7 +1213,11 @@ OUTPUT: Table + summary lines + legend. NO PROSE PARAGRAPHS.`;
       return;
     }
 
-    // Execute tool calls — max 8, 400ms rate-limit between Brave requests
+    // ── Execute tool calls ─────────────────────────────────────────────────
+    // Max 8 searches, 1100ms between calls (≤1 req/s — Brave hard rate limit).
+    // Results injected as Groq tool-role messages for Round 2.
+    // Format: JSON array (title, url, description, age) — "Brave returns quantity,
+    //         math and personality convert it into insight" philosophy.
     const callsToRun = toolCalls.slice(0, 8);
     const toolResultMsgs = [round1Msg];
 
@@ -1189,15 +1228,27 @@ OUTPUT: Table + summary lines + legend. NO PROSE PARAGRAPHS.`;
       catch { args = { query: String(tc.function.arguments) }; }
 
       console.log(`🦁 brave_search #${i + 1}: "${args.query}"`);
-      const result = await this.searchBrave(args.query, clientIp);
+
+      // Request raw JSON — gives LLM structured quantity (title, url, description, age)
+      // so it can triangulate $/sqm from total_price ÷ area mentions itself (Totem).
+      let result = await this.searchBrave(args.query, clientIp, { format: 'json' });
+
+      // Retry once on 429 — Brave rate-limit transient; 1500ms backoff usually clears it
+      if (result === null) {
+        console.log(`🦁 brave_search #${i + 1}: null result, retrying after 1500ms...`);
+        await new Promise(r => setTimeout(r, 1500));
+        result = await this.searchBrave(args.query, clientIp, { format: 'json' });
+      }
+
       toolResultMsgs.push({
         role: 'tool',
         tool_call_id: tc.id,
-        content: result || 'No results found for this query.'
+        content: result || '[]' // Empty JSON array instead of string — LLM reads it consistently
       });
 
+      // 1100ms between calls — just under 1 req/s to stay within Brave rate limit
       if (i < callsToRun.length - 1) {
-        await new Promise(r => setTimeout(r, 400)); // Brave rate-limit guard
+        await new Promise(r => setTimeout(r, 1100));
       }
     }
 
@@ -1290,7 +1341,7 @@ CRITICAL RULES:
 - REGIME MUST MATCH YEARS: e.g., 13.1yr = 🟡 Extraction (NOT Optimism!)
 - 700sqm Price = $/sqm × 700 | Years = 700sqm Price ÷ Income
 - After table: summary line per city with directional change
-- NO P/I column, NO prose paragraphs, NO "no data" excuses
+- NO P/I column, NO prose paragraphs, use ⚪ N/A in table cells if historical data truly unavailable
 
 Output ONLY the corrected table and summary lines:`;
 

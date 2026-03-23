@@ -298,7 +298,7 @@ async function preflightRouter(options) {
 
       // Extract ALL years from query: first = historical, last = current
       // User-specified current year wins; fall back to dynamic most-recent full year
-      const allYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)\b/g)].map(m => m[1]);
+      const allYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)s?\b/g)].map(m => m[1]);
       const historicalYear = allYears.length > 0 ? allYears[0] : defaultHistoricalYear;
       const currentYear = allYears.length > 1 ? allYears[allYears.length - 1] : mostRecentYear;
       const historicalDecade = `${historicalYear.slice(0, 3)}0s`;
@@ -403,7 +403,7 @@ async function preflightRouter(options) {
         // Detect ALL years: first = historical, last = current
         const gvMostRecentYear = String(new Date().getFullYear() - 1);
         const gvDefaultHistoricalYear = String(new Date().getFullYear() - 50);
-        const gvAllYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)\b/g)].map(m => m[1]);
+        const gvAllYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)s?\b/g)].map(m => m[1]);
         const gvHistoricalYear = gvAllYears.length > 0 ? gvAllYears[0] : gvDefaultHistoricalYear;
         const gvCurrentYear = gvAllYears.length > 1 ? gvAllYears[gvAllYears.length - 1] : gvMostRecentYear;
         const gvHistoricalDecade = `${gvHistoricalYear.slice(0, 3)}0s`;
@@ -614,7 +614,7 @@ async function preflightRouter(options) {
               }
             }
             const _smCurrentYear = String(new Date().getFullYear() - 1);
-            const _smAllYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)\b/g)].map(m => m[1]);
+            const _smAllYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)s?\b/g)].map(m => m[1]);
             const _smHistoricalYear = _smAllYears[0] || String(new Date().getFullYear() - 50);
             const _smCurrentYearFinal = _smAllYears.length > 1 ? _smAllYears[_smAllYears.length - 1] : _smCurrentYear;
             const _smHistoricalDecade = `${_smHistoricalYear.slice(0, 3)}0s`;

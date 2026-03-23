@@ -564,13 +564,15 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   const currRegex = /(?:202\d|203\d|now|today|present)/i;
 
   // Check for table header (must have $/sqm column, NO P/I column)
-  const hasTableHeader = /\|\s*City\s*\|\s*Period\s*\|.*\|\s*Regime\s*\|/i.test(output);
+  // Accept both markdown format (| City | ...) and LLM natural format (City | ...)
+  const hasTableHeader = /(?:\|\s*)?City\s*\|.*Period\s*\|.*Regime\s*\|?/i.test(output);
   if (!hasTableHeader) {
     issues.push('FORBIDDEN: Missing table header. Output MUST use | City | Period | $/sqm | 700sqm Price | Income | Years | Regime | format.');
   }
 
   // Check table row count — need at least 2 rows per city (historical + current)
-  const tableRows = output.match(/^\|[^-][^|]*\|/gm);
+  // Accept rows with or without leading |
+  const tableRows = output.match(/^(?:\|)?[^|\n-][^|\n]*(?:\|[^|\n]*){4,}\|?$/gm);
   const dataRows = tableRows ? tableRows.filter(r => !/City|Period|Regime/i.test(r)).length : 0;
   if (hasTableHeader && dataRows < 2) {
     issues.push('FORBIDDEN: Table needs at least 2 data rows (historical + current). Must show historical AND now.');
@@ -607,18 +609,25 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
     issues.push('FORBIDDEN: Multiple tables detected. Must use ONE unified table with City column, not separate tables per city.');
   }
   
-  // Check for emoji regime readings with labels
+  // Check for emoji regime readings with labels.
+  // Only required when at least one row has numeric data (not all-N/A).
+  // If Brave found no income/price data for any row, all-N/A is the honest output.
+  // Detect if at least one row has real monetary data (not all-N/A).
+  // Look for currency-prefixed values: $13,419 / £7,700 / ¥759,000 / €8,000 etc.
+  // Year periods (2024) and formula literals ($/sqm) don't match — they lack a digit right after $¥£€.
+  const hasAnyNumericRow = /[$¥£€]\s*[\d,]+/.test(output);
   const hasRegimeEmoji = /[🟢🟡🔴]/.test(output);
   const hasRegimeLabel = /(?:OPTIMISM|EXTRACTION|FATALISM|Optimism|Extraction|Fatalism)/i.test(output);
-  if (!hasRegimeEmoji) {
-    issues.push('Missing regime emoji (🟢/🟡/🔴) — must appear in Regime column');
+  if (hasAnyNumericRow && !hasRegimeEmoji) {
+    issues.push('Missing regime emoji (🟢/🟡/🔴) — must appear in Regime column for rows with data');
   }
-  if (!hasRegimeLabel) {
+  if (hasAnyNumericRow && !hasRegimeLabel) {
     issues.push('Missing regime label (Optimism/Extraction/Fatalism)');
   }
   
   // Check for summary lines after table (e.g., **London**: 13.1yr → 101.2yr = 🔴 Fatalism)
-  const hasSummaryLine = /\*\*[^*]+\*\*\s*:\s*[\d.]+\s*yr\s*→\s*[\d.]+\s*yr/i.test(output);
+  // Also accept ⚪ N/A yr for missing historical data
+  const hasSummaryLine = /\*\*[^*]+\*\*\s*:\s*(?:[\d.]+|[⚪⬜]?\s*N\/A)\s*yr\s*→\s*(?:[\d.]+|[⚪⬜]?\s*N\/A)\s*yr/i.test(output);
   if (hasTableHeader && !hasSummaryLine) {
     issues.push('Missing summary lines after table. Need: **[City]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)');
   }
@@ -626,8 +635,12 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   // REGIME MISMATCH DETECTION — parse table rows by column index
   // Table format: | City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
   // Column indices: 0=City, 1=Period, 2=$/sqm, 3=700sqm, 4=Income, 5=Years, 6=Regime
-  const allTableLines = output.split('\n').filter(line => /^\|/.test(line.trim()) && !/^[\s|:-]+$/.test(line.trim()));
-  const dataLines = allTableLines.filter(line => !/City|Period|Regime.*\|.*\|.*\|/i.test(line) && !/^[\s|:-]+$/.test(line));
+  // Accept table lines with or without leading | (LLM natural format uses no leading |)
+  const allTableLines = output.split('\n').filter(line => {
+    const t = line.trim();
+    return t.includes('|') && !/^[\s|:-]+$/.test(t);
+  });
+  const dataLines = allTableLines.filter(line => !/City|Period|Regime/i.test(line) && !/^[\s|:-]+$/.test(line.trim()));
   for (const line of dataLines) {
     const cols = line.split('|').map(c => c.trim()).filter(c => c.length > 0);
     if (cols.length >= 6) {
@@ -674,10 +687,11 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
     issues.push(`Missing historical (${historicalDecade}) data. Must show BOTH historical AND current periods.`);
   }
 
-  // Check for "no data" cop-out on historical $/sqm
-  const noDataCopout = new RegExp(`(?:no data|no precise|unavailable|cannot find|don't have).*(?:\\$\\/sqm|historical|${decadeDigits}\\d)`, 'i');
-  if (noDataCopout.test(output)) {
-    issues.push('FORBIDDEN: "No data" cop-out. Must ESTIMATE historical $/sqm from proxy sources.');
+  // Check for "no data" prose cop-out on CURRENT $/sqm only
+  // Historical N/A is acceptable (use ⚪ N/A in table cell — not prose excuse)
+  const currentNoDataCopout = /(?:no data|no precise|unavailable|cannot find).*(?:current|2024|2025|today|present)/i;
+  if (currentNoDataCopout.test(output)) {
+    issues.push('FORBIDDEN: "No data" cop-out on current period. Must use live Brave search data.');
   }
   
   // Check for wrong 700sqm interpretation (e.g., "3-room = 700sqm")
