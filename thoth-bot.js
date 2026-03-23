@@ -4,6 +4,7 @@
 // Security: Can only read messages, cannot create/modify/delete
 
 const { Client, GatewayIntentBits } = require('discord.js');
+const logger = require('./lib/logger');
 
 class ThothBot {
     constructor() {
@@ -13,13 +14,13 @@ class ThothBot {
 
     async initialize() {
         if (this.client) {
-            console.log('📖 Thoth bot already initialized');
+            logger.info('⚡ Thoth bot already initialized');
             return;
         }
 
         const thothToken = process.env.THOTH_TOKEN;
         if (!thothToken) {
-            console.log('⚠️  THOTH_TOKEN not set - message reading disabled');
+            logger.warn('⚠️ THOTH_TOKEN not set — message reading disabled');
             return;
         }
 
@@ -33,7 +34,7 @@ class ThothBot {
             });
 
             this.client.on('error', (error) => {
-                console.error('❌ Thoth bot error:', error.message);
+                logger.error({ err: error }, 'Thoth bot error');
             });
 
             await Promise.race([
@@ -45,16 +46,16 @@ class ThothBot {
                     this.client.once('clientReady', () => {
                         clearTimeout(timeout);
                         this.ready = true;
-                        console.log(`✅ Thoth (0) logged in as ${this.client.user.tag}`);
+                        logger.info({ tag: this.client.user.tag }, '👁️ Thoth (0) logged in');
                         resolve();
                     });
                 }),
                 this.client.login(thothToken)
             ]);
 
-            console.log('🔍 Thoth bot ready for message mirroring');
+            logger.info('👁️ Thoth bot ready for message mirroring');
         } catch (error) {
-            console.error('❌ Failed to initialize Thoth bot:', error.message);
+            logger.error({ err: error }, '❌ Failed to initialize Thoth bot');
             this.client = null;
             this.ready = false;
             throw error;
@@ -95,10 +96,10 @@ class ThothBot {
                 }))
                 .reverse();
 
-            console.log(`📖 Thoth fetched ${filtered.length} messages from thread ${threadId}`);
+            logger.info({ count: filtered.length, threadId }, '📜 Thoth fetched messages from thread');
             return filtered;
         } catch (error) {
-            console.error(`❌ Thoth failed to fetch messages from thread ${threadId}:`, error.message);
+            logger.error({ threadId, err: error }, '❌ Thoth failed to fetch messages from thread');
             throw error;
         }
     }
@@ -109,7 +110,7 @@ class ThothBot {
 
     async shutdown() {
         if (this.client) {
-            console.log('🔌 Shutting down Thoth...');
+            logger.info('🛑 Shutting down Thoth...');
             await this.client.destroy();
             this.client = null;
             this.ready = false;

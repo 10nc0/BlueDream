@@ -7,6 +7,7 @@
 const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
 const axios = require('axios');
 const { AUDIT } = require('./config/constants');
+const logger = require('./lib/logger');
 
 class IdrisBot {
     constructor() {
@@ -17,7 +18,7 @@ class IdrisBot {
 
     async initialize() {
         if (this.client) {
-            console.log('📜 Idris bot already initialized');
+            logger.info('⚡ Idris bot already initialized');
             return;
         }
 
@@ -26,12 +27,12 @@ class IdrisBot {
         this.webhookUrl = process.env.NYAN_AUDIT_WEBHOOK_URL || process.env.PROMETHEUS_WEBHOOK_URL;
         
         if (!idrisToken) {
-            console.log('⚠️  IDRIS_AI_LOG_TOKEN not set - AI audit logging disabled');
+            logger.warn('⚠️ IDRIS_AI_LOG_TOKEN not set — AI audit logging disabled');
             return;
         }
 
         if (!this.webhookUrl) {
-            console.log('⚠️  NYAN_AUDIT_WEBHOOK_URL not set - AI audit posting disabled');
+            logger.warn('⚠️ NYAN_AUDIT_WEBHOOK_URL not set — AI audit posting disabled');
         }
 
         try {
@@ -43,7 +44,7 @@ class IdrisBot {
             });
 
             this.client.on('error', (error) => {
-                console.error('❌ Idris bot error:', error.message);
+                logger.error({ err: error }, 'Idris bot error');
             });
 
             await Promise.race([
@@ -55,16 +56,16 @@ class IdrisBot {
                     this.client.once('clientReady', () => {
                         clearTimeout(timeout);
                         this.ready = true;
-                        console.log(`✅ Idris (ι) logged in as ${this.client.user.tag}`);
+                        logger.info({ tag: this.client.user.tag }, '📝 Idris (ι) logged in');
                         resolve();
                     });
                 }),
                 this.client.login(idrisToken)
             ]);
 
-            console.log('📜 Idris bot ready for AI audit logging');
+            logger.info('📝 Idris bot ready for AI audit logging');
         } catch (error) {
-            console.error('❌ Failed to initialize Idris bot:', error.message);
+            logger.error({ err: error }, '❌ Failed to initialize Idris bot');
             this.client = null;
             this.ready = false;
             throw error;
@@ -126,16 +127,16 @@ class IdrisBot {
                 type: ChannelType.PublicThread
             });
 
-            console.log(`🧵 Idris created AI log thread: "${threadName}" (ID: ${thread.id})`);
+            logger.info({ threadName, threadId: thread.id }, '📝 Idris created AI log thread');
             
             // Add Horus (read bot) to thread for message reading
             const HORUS_USER_ID = process.env.HORUS_BOT_USER_ID;
             if (HORUS_USER_ID) {
                 try {
                     await thread.members.add(HORUS_USER_ID);
-                    console.log(`  ✅ Added Horus (mirror bot) to AI log thread`);
+                    logger.debug({ threadId: thread.id }, '📝 Added Horus to AI log thread');
                 } catch (addError) {
-                    console.warn(`  ⚠️  Failed to add Horus to thread: ${addError.message}`);
+                    logger.warn({ err: addError }, '⚠️ Failed to add Horus to thread');
                 }
             }
             
@@ -150,7 +151,7 @@ class IdrisBot {
                 channelId: channel.id
             };
         } catch (error) {
-            console.error(`❌ Idris failed to create AI log thread for tenant ${tenantId}:`, error.message);
+            logger.error({ tenantId, err: error }, '❌ Idris failed to create AI log thread');
             throw error;
         }
     }
@@ -169,7 +170,7 @@ class IdrisBot {
 
             return response.data;
         } catch (error) {
-            console.error(`❌ Idris failed to post to thread ${threadId}:`, error.message);
+            logger.error({ threadId, err: error }, '❌ Idris failed to post to thread');
             throw error;
         }
     }
@@ -238,7 +239,7 @@ class IdrisBot {
         }
 
         await this.postToThread(threadId, { embeds: [embed] });
-        console.log(`📜 Idris posted audit result to thread ${threadId}`);
+        logger.info({ threadId }, '📝 Idris posted audit result');
     }
 
     getStatusColor(status) {
@@ -263,7 +264,7 @@ class IdrisBot {
 
     async shutdown() {
         if (this.client) {
-            console.log('🔌 Shutting down Idris...');
+            logger.info('🛑 Shutting down Idris...');
             await this.client.destroy();
             this.client = null;
             this.ready = false;

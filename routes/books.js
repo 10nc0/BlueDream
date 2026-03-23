@@ -3,16 +3,8 @@ const axios = require('axios');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const MetadataExtractor = require('../metadata-extractor');
-const { validate, schemas } = require('../lib/validators');
+const { validate, schemas, assertValidSchemaName } = require('../lib/validators');
 const { validateOutpipeConfig } = require('../lib/outpipes/router');
-
-const VALID_SCHEMA_PATTERN = /^[a-z_][a-z0-9_]*$/i;
-function assertValidSchemaName(schema) {
-    if (!schema || !VALID_SCHEMA_PATTERN.test(schema)) {
-        throw new Error('Invalid schema name');
-    }
-    return schema;
-}
 
 // In-memory rate limiter for book sharing (10 shares/hour per user)
 const shareRateLimiter = new Map();

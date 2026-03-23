@@ -4,6 +4,7 @@
 // Security: Cannot read messages, only create/manage threads
 
 const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
+const logger = require('./lib/logger');
 
 class HermesBot {
     constructor() {
@@ -14,13 +15,13 @@ class HermesBot {
 
     async initialize() {
         if (this.client) {
-            console.log('✨ Hermes bot already initialized');
+            logger.info('⚡ Hermes bot already initialized');
             return;
         }
 
         const hermesToken = process.env.HERMES_TOKEN;
         if (!hermesToken) {
-            console.log('⚠️  HERMES_TOKEN not set - thread creation disabled');
+            logger.warn('⚠️ HERMES_TOKEN not set — thread creation disabled');
             return;
         }
 
@@ -33,7 +34,7 @@ class HermesBot {
             });
 
             this.client.on('error', (error) => {
-                console.error('❌ Hermes bot error:', error.message);
+                logger.error({ err: error }, 'Hermes bot error');
             });
 
             await Promise.race([
@@ -45,16 +46,16 @@ class HermesBot {
                     this.client.once('clientReady', () => {
                         clearTimeout(timeout);
                         this.ready = true;
-                        console.log(`✅ Hermes (φ) logged in as ${this.client.user.tag}`);
+                        logger.info({ tag: this.client.user.tag }, '⚡ Hermes (φ) logged in');
                         resolve();
                     });
                 }),
                 this.client.login(hermesToken)
             ]);
 
-            console.log('🌟 Hermes bot ready for thread creation');
+            logger.info('⚡ Hermes bot ready for thread creation');
         } catch (error) {
-            console.error('❌ Failed to initialize Hermes bot:', error.message);
+            logger.error({ err: error }, '❌ Failed to initialize Hermes bot');
             this.client = null;
             this.ready = false;
             throw error;
@@ -149,14 +150,14 @@ class HermesBot {
                 type: ChannelType.PublicThread
             });
 
-            console.log(`🧵 Hermes created thread: "${threadName}" (ID: ${thread.id})`);
+            logger.info({ threadName, threadId: thread.id }, '🧵 Hermes created thread');
             
             const THOTH_USER_ID = '1434213576737820733';
             try {
                 await thread.members.add(THOTH_USER_ID);
-                console.log(`  ✅ Added Thoth (mirror bot) to thread for message reading`);
+                logger.debug({ threadId: thread.id }, '🧵 Added Thoth to thread');
             } catch (addError) {
-                console.warn(`  ⚠️  Failed to add Thoth to thread: ${addError.message}`);
+                logger.warn({ err: addError }, '⚠️ Failed to add Thoth to thread');
             }
             
             return {
@@ -165,11 +166,11 @@ class HermesBot {
                 channelId: channel.id
             };
         } catch (error) {
-            console.error(`❌ Hermes failed to create thread for ${bookName} (attempt ${retryCount + 1}/${maxRetries}):`, error.message);
+            logger.error({ bookName, attempt: retryCount + 1, maxRetries, err: error }, '❌ Hermes failed to create thread');
             
             if (this.isTransientError(error) && retryCount < maxRetries) {
                 const delay = baseDelay * Math.pow(2, retryCount);
-                console.log(`⏳ Retrying thread creation in ${delay}ms...`);
+                logger.info({ delayMs: delay, attempt: retryCount + 1 }, '⏳ Retrying thread creation');
                 
                 await new Promise(resolve => setTimeout(resolve, delay));
                 return this.createThreadForBook(webhookUrl, bookName, tenantId, bookId, channelId, retryCount + 1);
@@ -180,7 +181,7 @@ class HermesBot {
     }
 
     async createDualThreadsForBook(webhook01Url, webhook0nUrl, bookName, tenantId, bookId, threadModeUser = true, existingCredentials = null) {
-        console.log(`🧵 Hermes creating dual outputs for: ${bookName} (t${tenantId}-b${bookId})`);
+        logger.info({ bookName, tenantId, bookId }, '🔀 Hermes creating dual outputs');
         
         const results = {
             output_01: null,
@@ -190,7 +191,7 @@ class HermesBot {
 
         // IDEMPOTENT: Check if output_01 thread already exists
         if (existingCredentials?.output_01?.thread_id) {
-            console.log(`  ℹ️  output_01 thread already exists: ${existingCredentials.output_01.thread_id} (skipping creation)`);
+            logger.debug({ threadId: existingCredentials.output_01.thread_id }, '📌 output_01 thread already exists — skipping creation');
             results.output_01 = existingCredentials.output_01;
         } else if (webhook01Url) {
             // OUTPUT #01: Nyanbook Ledger (ALWAYS THREAD)
@@ -207,16 +208,16 @@ class HermesBot {
                     thread_name: threadInfo.threadName,
                     channel_id: threadInfo.channelId
                 };
-                console.log(`  ✅ output_01 (Ledger thread): ${threadInfo.threadId}`);
+                logger.info({ threadId: threadInfo.threadId }, '📌 output_01 (Ledger thread) ready');
             } catch (error) {
-                console.error(`  ❌ Failed to create output_01 thread:`, error.message);
+                logger.error({ err: error }, '❌ Failed to create output_01 thread');
                 results.errors.push({ output: 'output_01', error: error.message });
             }
         }
 
         // IDEMPOTENT: Check if output_0n already configured (webhook OR thread)
         if (existingCredentials?.output_0n?.webhook_url || existingCredentials?.output_0n?.thread_id) {
-            console.log(`  ℹ️  output_0n already configured (skipping)`);
+            logger.debug('📤 output_0n already configured — skipping');
             results.output_0n = existingCredentials.output_0n;
         } else if (webhook0nUrl) {
             // OUTPUT #0n: User Discord (webhook-only)
@@ -224,7 +225,7 @@ class HermesBot {
                 type: 'webhook',
                 webhook_url: webhook0nUrl
             };
-            console.log(`  ✅ output_0n (webhook): stored`);
+            logger.debug('📤 output_0n (webhook) stored');
         }
 
         return results;
@@ -237,7 +238,7 @@ class HermesBot {
 
     async shutdown() {
         if (this.client) {
-            console.log('🔌 Shutting down Hermes...');
+            logger.info('🛑 Shutting down Hermes...');
             
             for (const [key, retry] of this.retryQueue.entries()) {
                 clearTimeout(retry.timeoutId);

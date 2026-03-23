@@ -25,6 +25,7 @@ const session = require('express-session');
 const connectPg = require('connect-pg-simple');
 const rateLimit = require('express-rate-limit');
 const logger = require('./lib/logger');
+const { VALID_SCHEMA_PATTERN } = require('./lib/validators');
 const twilio = require('twilio');
 const authService = require('./auth-service');
 const TenantManager = require('./tenant-manager');
@@ -1089,7 +1090,7 @@ async function createSessionRecord(userId, sessionId, req, tenantSchema) {
             : 'Unknown Location';
         
         // SECURITY: Validate tenant schema name before interpolation (primary guard)
-        if (!tenantSchema || tenantSchema === 'undefined' || !/^[a-z_][a-z0-9_]*$/i.test(tenantSchema)) {
+        if (!tenantSchema || tenantSchema === 'undefined' || !VALID_SCHEMA_PATTERN.test(tenantSchema)) {
             logger.error({ tenantSchema }, 'Session creation: invalid tenant schema');
             return;
         }
@@ -1125,7 +1126,7 @@ async function logAudit(client, req, actionType, targetType, targetId, targetEma
         }
 
         // SECURITY: Validate schema name before interpolation
-        if (!/^[a-z_][a-z0-9_]*$/i.test(schema)) {
+        if (!VALID_SCHEMA_PATTERN.test(schema)) {
             logger.error({ schema }, 'Audit logging: invalid schema skipped');
             return;
         }
@@ -1222,7 +1223,7 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
         const tenantSchema = `tenant_${parsed.tenantId}`;
         
         // SECURITY: Validate schema name before interpolation (primary guard)
-        if (!/^[a-z_][a-z0-9_]*$/i.test(tenantSchema)) {
+        if (!VALID_SCHEMA_PATTERN.test(tenantSchema)) {
             return res.status(400).json({ error: 'Invalid tenant schema' });
         }
         // safeSchema removed — pg-format %I handles identifier quoting (defense-in-depth)

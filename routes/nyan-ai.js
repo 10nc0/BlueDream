@@ -188,7 +188,7 @@ function getCachedDocumentContext(fileHash, clientIp) {
         const sessionCached = sessionDocumentCache.get(sessionKey);
         if (sessionCached && now - sessionCached.timestamp < SESSION_DOC_TTL) {
             sessionCached.timestamp = now;
-            console.log(`📂 Session Cache HIT: "${fileHash.substring(0, 16)}..." for ${clientIp}`);
+            logger.debug({ hash: fileHash.substring(0, 16), ip: clientIp }, '📂 Document cache hit (session)');
             return sessionCached;
         }
         if (sessionCached) {
@@ -198,7 +198,7 @@ function getCachedDocumentContext(fileHash, clientIp) {
     
     const globalCached = globalDocumentCache.get(fileHash);
     if (globalCached && now - globalCached.timestamp < GLOBAL_DOC_TTL) {
-        console.log(`📂 Global Cache HIT: "${fileHash.substring(0, 16)}..." (age: ${Math.round((now - globalCached.timestamp) / 60000)}min)`);
+        logger.debug({ hash: fileHash.substring(0, 16), ageMin: Math.round((now - globalCached.timestamp) / 60000) }, '📂 Document cache hit (global)');
         return globalCached;
     }
     if (globalCached) {
@@ -219,7 +219,7 @@ function setCachedDocumentContext(fileHash, context, clientIp) {
             timestamp: now,
             fileHash
         });
-        console.log(`📂 Session Cache SET: "${fileHash.substring(0, 16)}..." for ${clientIp}`);
+        logger.debug({ hash: fileHash.substring(0, 16), ip: clientIp }, '📂 Document cache set (session)');
         
         while (sessionDocumentCache.size > 500) {
             const oldestKey = sessionDocumentCache.keys().next().value;
@@ -233,7 +233,7 @@ function setCachedDocumentContext(fileHash, context, clientIp) {
             ...context,
             timestamp: now
         });
-        console.log(`📂 Global Cache SET: "${fileHash.substring(0, 16)}..." (${uploadCount} uploads)`);
+        logger.debug({ hash: fileHash.substring(0, 16), uploads: uploadCount }, '📂 Document cache set (global)');
         
         while (globalDocumentCache.size > 100) {
             const oldestKey = globalDocumentCache.keys().next().value;
@@ -269,9 +269,46 @@ setInterval(() => {
     }
     
     if (sessionEvicted > 0 || globalEvicted > 0) {
-        console.log(`📂 Cache cleanup: ${sessionEvicted} session + ${globalEvicted} global entries evicted`);
+        logger.debug({ sessionEvicted, globalEvicted }, 'Document cache cleanup');
     }
 }, 10 * 60 * 1000);
+
+async function processAndCacheDocList(docList, cachedFileHashes, clientIp, extractedContent, responseFileHashes) {
+    for (const doc of docList) {
+        const fileHash = getDocumentHash(doc.data, doc.name);
+        incrementDocumentUpload(fileHash);
+        
+        const cached = getCachedDocumentContext(fileHash, clientIp);
+        if (cached && cached.extractedText) {
+            logger.debug({ doc: doc.name }, 'Document cache hit');
+            extractedContent.push(cached.extractedText);
+            responseFileHashes.push({ name: doc.name, hash: fileHash });
+            continue;
+        }
+        
+        try {
+            const { processDocumentForAI } = require('../utils/attachment-cascade');
+            const result = await processDocumentForAI(doc.data, doc.name, doc.type, { tenantId: clientIp });
+            if (result && result.text) {
+                extractedContent.push(result.text);
+                setCachedDocumentContext(fileHash, { extractedText: result.text }, clientIp);
+                responseFileHashes.push({ name: doc.name, hash: fileHash });
+            }
+        } catch (docError) {
+            logger.error({ doc: doc.name, err: docError }, 'Document processing error');
+        }
+    }
+    
+    if (cachedFileHashes && Array.isArray(cachedFileHashes)) {
+        for (const hashEntry of cachedFileHashes) {
+            const cached = getCachedDocumentByHash(hashEntry.hash, clientIp);
+            if (cached && cached.extractedText) {
+                logger.debug({ doc: hashEntry.name }, 'Restored cached document context');
+                extractedContent.push(cached.extractedText);
+            }
+        }
+    }
+}
 
 async function searchDuckDuckGo(query) {
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
@@ -293,7 +330,7 @@ async function searchDuckDuckGo(query) {
         const data = response.data;
         
         if (!data || typeof data !== 'object') {
-            console.log(`🔍 DDG: Non-JSON response for "${sanitizedQuery.substring(0, 40)}..." - skipping`);
+            logger.debug({ query: sanitizedQuery.substring(0, 40) }, '🔍 DDG: non-JSON response, skipping');
             return null;
         }
         
@@ -302,7 +339,7 @@ async function searchDuckDuckGo(query) {
             const src = data.AbstractSource ? ` [${data.AbstractSource}]` : '';
             const srcUrl = data.AbstractURL ? ` — ${data.AbstractURL}` : '';
             context.push(`📚 ${data.AbstractText}${src}${srcUrl}`);
-            console.log(`🔍 DDG: Found instant answer for "${sanitizedQuery.substring(0, 40)}..."`);
+            logger.debug({ query: sanitizedQuery.substring(0, 40) }, '🔍 DDG: instant answer found');
         }
         if (data.RelatedTopics && Array.isArray(data.RelatedTopics) && data.RelatedTopics.length > 0) {
             const relevantTopics = data.RelatedTopics.filter(t => t && t.Text && !t.FirstURL).slice(0, 3);
@@ -315,14 +352,14 @@ async function searchDuckDuckGo(query) {
         }
         
         if (context.length > 0) {
-            console.log(`🔍 DDG: Injecting ${context.length} search results into prompt`);
+            logger.debug({ count: context.length }, '🔍 DDG: injecting results');
             return context.join('\n');
         } else {
-            console.log(`🔍 DDG: No results found for "${sanitizedQuery.substring(0, 40)}..." - using base knowledge only`);
+            logger.debug({ query: sanitizedQuery.substring(0, 40) }, '🔍 DDG: no results, using base knowledge');
             return null;
         }
     } catch (err) {
-        console.error('🔍 DDG search error:', err.message);
+        logger.error({ err }, '🔍 DDG search error');
         return null;
     }
 }
@@ -346,7 +383,7 @@ async function extractCoreQuestion(message) {
         /price.*income|land.*afford|fertility|700.*m²|housing.*cost/i.test(message);
     
     try {
-        console.log(`🧠 Extracting core question from ${message.length} char message...`);
+        logger.debug({ messageLen: message.length }, '🧠 Extracting core question');
         const systemPrompt = isNyanProtocol 
             ? 'Extract the core question about land price, housing affordability, or city cost. Include "50 years ago" or "historical" to get comparative data. Return ONLY a short search query (max 30 words). No explanation.'
             : 'Extract the core question or topic from the user message. Return ONLY a short search query (max 25 words) that captures what they want to know. No explanation, just the query.';
@@ -373,17 +410,17 @@ async function extractCoreQuestion(message) {
         
         const extractedQuery = response.data?.choices?.[0]?.message?.content?.trim();
         if (extractedQuery && extractedQuery.length > 3) {
-            console.log(`🧠 Extracted query: "${extractedQuery}"`);
+            logger.debug({ extracted: extractedQuery }, '🧠 Core question extracted');
             if (isNyanProtocol && !extractedQuery.toLowerCase().includes('ago') && !extractedQuery.toLowerCase().includes('historical')) {
                 const enhancedQuery = extractedQuery + ' vs 50 years ago';
-                console.log(`🧠 Enhanced with historical: "${enhancedQuery}"`);
+                logger.debug({ enhanced: enhancedQuery }, '🧠 Historical context appended');
                 return enhancedQuery;
             }
             return extractedQuery;
         }
         return message.substring(0, 200);
     } catch (err) {
-        console.error('🧠 Query extraction error:', err.message);
+        logger.error({ err }, '🧠 Query extraction error');
         return message.substring(0, 200);
     }
 }
@@ -413,20 +450,20 @@ async function searchBrave(query, clientIp = null, opts = {}) {
     
     const BRAVE_API_KEY = process.env.PLAYGROUND_BRAVE_API;
     if (!BRAVE_API_KEY) {
-        console.log('🦁 Brave: API key not configured, skipping');
+        logger.debug('🦁 Brave: API key not configured, skipping');
         return null;
     }
     
     if (clientIp) {
         const braveCapacity = await capacityManager.consumeToken(clientIp, 'brave');
         if (!braveCapacity.allowed) {
-            console.log(`🦁 Brave: Capacity exhausted for ${clientIp} - ${braveCapacity.reason}`);
+            logger.debug({ ip: clientIp, reason: braveCapacity.reason }, '🦁 Brave: capacity exhausted');
             return null;
         }
     }
     
     try {
-        console.log(`🦁 Brave: Searching for real-time context: "${sanitizedQuery.substring(0, 40)}..."`);
+        logger.debug({ query: sanitizedQuery.substring(0, 40) }, '🦁 Brave: searching for real-time context');
         const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
             headers: {
                 'Accept': 'application/json',
@@ -443,11 +480,11 @@ async function searchBrave(query, clientIp = null, opts = {}) {
         
         const results = response.data?.web?.results || [];
         if (results.length === 0) {
-            console.log(`🦁 Brave: No results found for "${sanitizedQuery.substring(0, 40)}..."`);
+            logger.debug({ query: sanitizedQuery.substring(0, 40) }, '🦁 Brave: no results found');
             return null;
         }
         
-        console.log(`🦁 Brave: Found ${results.length} results, injecting top ${Math.min(results.length, 5)} into prompt (format=${format})`);
+        logger.debug({ count: results.length, format }, '🦁 Brave: injecting results into prompt');
 
         if (format === 'json') {
             // Raw JSON — gives LLM structured quantity to extract prices from.
@@ -467,7 +504,7 @@ async function searchBrave(query, clientIp = null, opts = {}) {
         ).join('\n\n');
         return `🌐 Web search results:\n${context}`;
     } catch (err) {
-        console.error('🦁 Brave search error:', err.message);
+        logger.error({ err }, 'Brave search error');
         return null;
     }
 }
@@ -490,24 +527,26 @@ async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') 
             const headers = error.response?.headers || {};
             const errorBody = error.response?.data;
             
-            console.log(`🔴 Groq Error (attempt ${attempt + 1}/${maxRetries + 1}):`);
-            console.log(`   Status: ${status}`);
-            console.log(`   x-ratelimit-limit-requests: ${headers['x-ratelimit-limit-requests'] || 'N/A'}`);
-            console.log(`   x-ratelimit-remaining-requests: ${headers['x-ratelimit-remaining-requests'] || 'N/A'}`);
-            console.log(`   retry-after: ${headers['retry-after'] || 'N/A'}`);
-            console.log(`   Error body: ${JSON.stringify(errorBody) || 'N/A'}`);
-            
             const promptTokensEstimate = axiosConfig.data?.messages 
                 ? JSON.stringify(axiosConfig.data.messages).length / 4 
-                : 'unknown';
-            console.log(`   Prompt size estimate: ~${Math.round(promptTokensEstimate)} tokens`);
+                : null;
+            logger.warn({
+                attempt: attempt + 1,
+                maxAttempts: maxRetries + 1,
+                status,
+                rateLimitRequests: headers['x-ratelimit-limit-requests'] || null,
+                rateLimitRemaining: headers['x-ratelimit-remaining-requests'] || null,
+                retryAfter: headers['retry-after'] || null,
+                promptTokensEstimate: typeof promptTokensEstimate === 'number' ? Math.round(promptTokensEstimate) : null,
+                errorBody
+            }, 'Groq API error');
             
             if (status === 429 && attempt < maxRetries) {
                 const retryAfter = headers['retry-after'];
                 const delayMs = retryAfter 
                     ? parseInt(retryAfter) * 1000 
                     : Math.min(1000 * Math.pow(2, attempt), 8000);
-                console.log(`⏳ Groq 429: Retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+                logger.debug({ delayMs, attempt: attempt + 1, maxRetries }, 'Groq 429: retrying');
                 await new Promise(resolve => setTimeout(resolve, delayMs));
             } else {
                 throw error;
@@ -563,7 +602,7 @@ function registerNyanAIRoutes(app, deps) {
             return res.status(400).json({ error: 'Query is required' });
         }
         
-        console.log(`🌈 Nyan AI Audit: User ${req.userId} querying ${bookIds?.length || 0} book(s)`);
+        logger.info({ userId: req.userId, bookCount: bookIds?.length || 0 }, 'Nyan AI Audit query');
         
         try {
             let bookContext = null;
@@ -682,20 +721,20 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     answer = pipelineResult.text;
                     auditCorrected = true;
                     corrections = pipelineResult.corrections;
-                    console.log(`🔧 Nyan AI: ${corrections.length} count corrections (${pipelineResult.correctionMethod}), +${pipelineResult.latencyMs}ms`);
+                    logger.debug({ corrections: corrections.length, method: pipelineResult.correctionMethod, latencyMs: pipelineResult.latencyMs }, 'Nyan AI: count corrections applied');
                 }
                 
                 if (pipelineResult.needsHumanReview) {
                     needsHumanReview = true;
                     unverifiable = pipelineResult.unverifiable || [];
-                    console.log(`⚠️ Nyan AI: ${unverifiable.length} claims need human review`);
+                    logger.warn({ unverifiableCount: unverifiable.length }, 'Nyan AI: claims need human review');
                 }
             }
             
             // S4: Executive Formatter - strip conversational filler for audit brevity
             answer = formatExecutiveResponse(answer);
             
-            console.log(`✅ Nyan AI Audit complete in ${processingTime}ms for user ${req.userId}`);
+            logger.info({ processingMs: processingTime, userId: req.userId }, 'Nyan AI Audit complete');
             
             // Discord logging via Idris
             if (idrisBot && idrisBot.isReady() && tenantSchema && bookContext) {
@@ -735,10 +774,10 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                             bookName: primaryBookName
                         }, query, primaryBookName);
                         
-                        console.log(`📜 Nyan AI Audit logged to Discord thread ${threadId}`);
+                        logger.info({ threadId }, 'Nyan AI Audit logged to Discord thread');
                     }
                 } catch (discordError) {
-                    console.error('⚠️ Failed to post Nyan AI audit to Discord:', discordError.message);
+                    logger.error({ err: discordError }, 'Failed to post Nyan AI audit to Discord');
                 }
             }
             
@@ -765,7 +804,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             });
             
         } catch (error) {
-            console.error('❌ Nyan AI Audit error:', error.message);
+            logger.error({ err: error }, 'Nyan AI Audit error');
             res.status(500).json({ 
                 error: 'Failed to process audit query',
                 message: error.message
@@ -808,7 +847,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 thread_id: threadId
             });
         } catch (error) {
-            console.error('❌ Discord history error:', error);
+            logger.error({ err: error }, 'Discord history error');
             res.status(500).json({ error: 'An internal error occurred. Please try again.' });
         }
     });
@@ -818,7 +857,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             const stats = usageTracker.getAllUsageStats();
             res.json(stats);
         } catch (error) {
-            console.error('❌ Usage stats error:', error.message);
+            logger.error({ err: error }, 'Usage stats error');
             res.status(500).json({ error: 'Failed to get usage stats' });
         }
     });
@@ -832,7 +871,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             const pkgResult = globalPackageStore.nukeTenant(clientIp);
             clearMemory(clientIp);
             
-            console.log(`🗑️ NUKE endpoint: DataPackage + Memory cleared for ${clientIp}`);
+            logger.info({ ip: clientIp }, 'NUKE: DataPackage + Memory cleared');
             res.json({ 
                 success: true, 
                 ...pkgResult, 
@@ -840,7 +879,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 message: 'Session nuked - fresh start, full privacy' 
             });
         } catch (error) {
-            console.error('❌ Nuke error:', error.message);
+            logger.error({ err: error }, 'Nuke error');
             res.status(500).json({ error: 'Failed to nuke session' });
         }
     });
@@ -884,7 +923,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         }
                     }
                 } catch (zipError) {
-                    console.error('❌ ZIP extraction error:', zipError.message);
+                    logger.error({ err: zipError }, '❌ ZIP extraction error');
                 }
             }
             
@@ -902,7 +941,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 
                 const cached = getCachedDocumentContext(fileHash, clientIp);
                 if (cached && cached.extractedText) {
-                    console.log(`📂 Using cached document context for ${doc.name}`);
+                    logger.debug({ name: doc.name }, '📂 Using cached document context');
                     extractedContent.push(cached.extractedText);
                     responseFileHashes.push({ name: doc.name, hash: fileHash });
                     continue;
@@ -918,7 +957,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         responseFileHashes.push({ name: doc.name, hash: fileHash });
                     }
                 } catch (docError) {
-                    console.error(`❌ Document processing error for ${doc.name}:`, docError.message);
+                    logger.error({ name: doc.name, err: docError }, '❌ Document processing error');
                 }
             }
             
@@ -926,7 +965,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 for (const hashEntry of cachedFileHashes) {
                     const cached = getCachedDocumentByHash(hashEntry.hash, clientIp);
                     if (cached && cached.extractedText) {
-                        console.log(`📂 Restored cached context for ${hashEntry.name}`);
+                        logger.debug({ name: hashEntry.name }, '📂 Restored cached context');
                         extractedContent.push(cached.extractedText);
                     }
                 }
@@ -995,7 +1034,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             });
             
         } catch (error) {
-            console.error('❌ Playground error:', error.message);
+            logger.error({ err: error }, '❌ Playground error');
             res.status(500).json({ error: 'An error occurred. Please try again.' });
         }
     });
@@ -1005,7 +1044,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         max: 15,
         validate: { xForwardedForHeader: false },
         handler: (req, res) => {
-            console.warn(`⚠️ Playground rate limit exceeded - IP: ${req.ip}`);
+            logger.warn({ ip: req.ip }, '⚠️ Playground rate limit exceeded');
             res.setHeader('Content-Type', 'text/event-stream');
             res.write(`data: ${JSON.stringify({ type: 'error', message: 'Too many requests. Please wait a moment before trying again.' })}\n\n`);
             res.end();
@@ -1057,7 +1096,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         }
                     }
                 } catch (zipError) {
-                    console.error('❌ ZIP extraction error:', zipError.message);
+                    logger.error({ err: zipError }, '❌ ZIP extraction error');
                 }
             }
             
@@ -1075,7 +1114,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 
                 const cached = getCachedDocumentContext(fileHash, clientIp);
                 if (cached && cached.extractedText) {
-                    console.log(`📂 Using cached document context for ${doc.name}`);
+                    logger.debug({ name: doc.name }, '📂 Using cached document context');
                     extractedContent.push(cached.extractedText);
                     responseFileHashes.push({ name: doc.name, hash: fileHash });
                     continue;
@@ -1091,7 +1130,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         responseFileHashes.push({ name: doc.name, hash: fileHash });
                     }
                 } catch (docError) {
-                    console.error(`❌ Document processing error for ${doc.name}:`, docError.message);
+                    logger.error({ name: doc.name, err: docError }, '❌ Document processing error');
                 }
             }
             
@@ -1099,7 +1138,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 for (const hashEntry of cachedFileHashes) {
                     const cached = getCachedDocumentByHash(hashEntry.hash, clientIp);
                     if (cached && cached.extractedText) {
-                        console.log(`📂 Restored cached context for ${hashEntry.name}`);
+                        logger.debug({ name: hashEntry.name }, '📂 Restored cached context');
                         extractedContent.push(cached.extractedText);
                     }
                 }
@@ -1147,7 +1186,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             );
             
             if (compoundParts && compoundParts.length > 1) {
-                console.log(`🔀 Compound query: ${compoundParts.length} sub-queries detected`);
+                logger.debug({ parts: compoundParts.length }, '🔀 Compound query: sub-queries detected');
                 res.write(`data: ${JSON.stringify({ type: 'status', message: `Analyzing ${compoundParts.length} parts...` })}\n\n`);
                 
                 const sectionResults = [];
@@ -1241,7 +1280,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     } : null
                 );
                 
-                console.log(`🌊 Compound streaming complete for ${clientIp} [${worstBadge}] (${sectionResults.length} sections)`);
+                logger.info({ ip: clientIp, badge: worstBadge, sections: sectionResults.length }, '🌊 Compound streaming complete');
             } else {
                 // ========================================
                 // SINGLE QUERY PATH (original behavior)
@@ -1265,7 +1304,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 if (!pipelineResult.success || !pipelineResult.answer) {
                     const failStep = pipelineResult.step || 'unknown';
                     const failReason = pipelineResult.error || 'Processing failed';
-                    console.error(`❌ Pipeline failed at ${failStep}: ${failReason}`);
+                    logger.error({ step: failStep, reason: failReason }, '❌ Pipeline failed');
                     const userMessage = failReason.includes('Groq API')
                         ? 'The AI service is temporarily busy. Please try again in a moment.'
                         : 'Something went wrong processing your request. Please try again.';
@@ -1287,7 +1326,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 };
                 
                 if (pipelineResult.fastPath) {
-                    console.log(`⚡ Fast-path: Skipping personality pass (pre-crafted message)`);
+                    logger.debug('⚡ Fast-path: Skipping personality pass (pre-crafted message)');
                     auditMetadata.passCount = 0;
                     res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
                     res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
@@ -1318,11 +1357,11 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     );
                 }
                 
-                console.log(`🌊 Streaming complete for ${clientIp} [${badge}]${didSearchRetry ? ' [+search retry]' : ''}`);
+                logger.info({ ip: clientIp, badge, searchRetry: didSearchRetry }, '🌊 Streaming complete');
             }
             
         } catch (error) {
-            console.error('❌ Streaming error:', error.message);
+            logger.error({ err: error }, '❌ Streaming error');
             res.write(`data: ${JSON.stringify({ type: 'error', message: 'An error occurred. Please try again.' })}\n\n`);
             res.end();
         }
@@ -1343,7 +1382,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         label: k.label
     }));
     if (AI_API_KEYS.length > 0) {
-        console.log(`🔌 Nyan API v1: ${AI_API_KEYS.length} key(s) loaded [${AI_API_KEYS.map(k => k.label).join(', ')}]`);
+        logger.info({ count: AI_API_KEYS.length, keys: AI_API_KEYS.map(k => k.label) }, '🔌 Nyan API v1: keys loaded');
     }
 
     const nyanApiLimiter = rateLimit({
@@ -1456,7 +1495,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             if (photoList.length > 0) mediaInfo.push(`${photoList.length} photo(s)`);
             if (docList.length > 0) mediaInfo.push(`${docList.length} doc(s)`);
             const mediaTag = mediaInfo.length > 0 ? ` [media=${mediaInfo.join(', ')}]` : '';
-            console.log(`🔌 Nyan API v1: "${message.slice(0, 80)}..." [mode=${mode || 'auto'}] [key=${matchedLabel}]${mediaTag}`);
+            logger.info({ message: message.slice(0, 80), mode: mode || 'auto', key: matchedLabel, media: mediaTag || null }, '🔌 Nyan API v1: query');
 
             for (const doc of docList) {
                 try {
@@ -1474,7 +1513,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         setCachedDocumentContext(fileHash, { extractedText: result.text }, clientIp);
                     }
                 } catch (docError) {
-                    console.error(`❌ Nyan API v1: Document processing error for ${doc.name}:`, docError.message);
+                    logger.error({ name: doc.name, err: docError }, '❌ Nyan API v1: Document processing error');
                 }
             }
 
@@ -1510,13 +1549,13 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                                 label: ticker
                             }));
                         }
-                        console.log(`🔌 Nyan API v1: Multi-ticker split — ${uniqueTickers.join(', ')} × "${compoundParts[0].query.replace(compoundParts[0].label + ' ', '')}"`);
+                        logger.debug({ tickers: uniqueTickers }, '🔌 Nyan API v1: Multi-ticker split');
                     }
                 }
             }
 
             if (compoundParts && compoundParts.length > 1) {
-                console.log(`🔌 Nyan API v1: Compound query — ${compoundParts.length} sub-queries`);
+                logger.debug({ parts: compoundParts.length }, '🔌 Nyan API v1: Compound query');
 
                 const sections = [];
                 let worstBadge = 'verified';
@@ -1573,7 +1612,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     ? Math.round(totalConfidence / sections.length)
                     : 0;
 
-                console.log(`🔌 Nyan API v1: Compound complete [${sections.length} sections] ${Date.now() - startTime}ms`);
+                logger.info({ sections: sections.length, processingMs: Date.now() - startTime }, '🔌 Nyan API v1: Compound complete');
                 return res.json({
                     success: true,
                     response: mergedResponse,
@@ -1637,11 +1676,11 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 response.ticker = pipelineResult.preflight.ticker;
             }
 
-            console.log(`🔌 Nyan API v1: Complete [${response.mode}] [${response.source}]${response.vision ? ' [vision]' : ''}${response.documentsProcessed ? ` [${response.documentsProcessed} doc(s)]` : ''} ${response.processingMs}ms`);
+            logger.info({ mode: response.mode, source: response.source, vision: !!response.vision, docs: response.documentsProcessed || 0, processingMs: response.processingMs }, '🔌 Nyan API v1: Complete');
             res.json(response);
 
         } catch (error) {
-            console.error('❌ Nyan API v1 error:', error.message);
+            logger.error({ err: error }, '❌ Nyan API v1 error');
             res.status(500).json({
                 success: false,
                 error: 'Internal processing error',
@@ -1723,7 +1762,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         }
 
         const startTime = Date.now();
-        console.log(`📊 Psi-EMA data endpoint: [${tickerList.join(', ')}] [key=${matchedLabel}]`);
+        logger.info({ tickers: tickerList, key: matchedLabel }, '📊 Psi-EMA data endpoint');
 
         const results = {};
 
@@ -1810,10 +1849,10 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     processingMs: Date.now() - tickerStart
                 };
 
-                console.log(`📊 Psi-EMA: ${safeTicker} → ${daily.reading} (${daily.emoji}) [${Date.now() - tickerStart}ms]`);
+                logger.info({ ticker: safeTicker, reading: daily.reading, emoji: daily.emoji, processingMs: Date.now() - tickerStart }, '📊 Psi-EMA result');
 
             } catch (fetchError) {
-                console.error(`📊 Psi-EMA error for ${safeTicker}:`, fetchError.message);
+                logger.error({ ticker: safeTicker, err: fetchError }, '📊 Psi-EMA error');
                 results[safeTicker] = {
                     ticker: safeTicker,
                     error: fetchError.message,

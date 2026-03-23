@@ -5,6 +5,7 @@
 // Purpose: Read-only bot for fetching Nyan AI audit logs
 
 const { Client, GatewayIntentBits } = require('discord.js');
+const logger = require('./lib/logger');
 
 class HorusBot {
     constructor() {
@@ -14,13 +15,13 @@ class HorusBot {
 
     async initialize() {
         if (this.client) {
-            console.log('👁️ Horus bot already initialized');
+            logger.info('⚡ Horus bot already initialized');
             return;
         }
 
         const horusToken = process.env.HORUS_AI_LOG_TOKEN;
         if (!horusToken) {
-            console.log('⚠️  HORUS_AI_LOG_TOKEN not set - AI audit reading disabled');
+            logger.warn('⚠️ HORUS_AI_LOG_TOKEN not set — AI audit reading disabled');
             return;
         }
 
@@ -34,7 +35,7 @@ class HorusBot {
             });
 
             this.client.on('error', (error) => {
-                console.error('❌ Horus bot error:', error.message);
+                logger.error({ err: error }, 'Horus bot error');
             });
 
             await Promise.race([
@@ -46,16 +47,16 @@ class HorusBot {
                     this.client.once('clientReady', () => {
                         clearTimeout(timeout);
                         this.ready = true;
-                        console.log(`✅ Horus (Ω) logged in as ${this.client.user.tag}`);
+                        logger.info({ tag: this.client.user.tag }, '🔍 Horus (Ω) logged in');
                         resolve();
                     });
                 }),
                 this.client.login(horusToken)
             ]);
 
-            console.log('👁️ Horus bot ready for AI audit reading');
+            logger.info('🔍 Horus bot ready for AI audit reading');
         } catch (error) {
-            console.error('❌ Failed to initialize Horus bot:', error.message);
+            logger.error({ err: error }, '❌ Failed to initialize Horus bot');
             this.client = null;
             this.ready = false;
             throw error;
@@ -120,10 +121,10 @@ class HorusBot {
                 });
             // Discord returns newest first - keep that order for display
 
-            console.log(`👁️ Horus fetched ${auditLogs.length} audit logs from thread ${threadId}`);
+            logger.info({ count: auditLogs.length, threadId }, '📊 Horus fetched audit logs');
             return auditLogs;
         } catch (error) {
-            console.error(`❌ Horus failed to fetch audit logs from thread ${threadId}:`, error.message);
+            logger.error({ threadId, err: error }, '❌ Horus failed to fetch audit logs');
             throw error;
         }
     }
@@ -158,7 +159,7 @@ class HorusBot {
                 newestId: auditLogs.length > 0 ? auditLogs[auditLogs.length - 1].id : null
             };
         } catch (error) {
-            console.error(`❌ Horus failed to fetch paginated audit logs:`, error.message);
+            logger.error({ threadId, err: error }, '❌ Horus failed to fetch paginated audit logs');
             throw error;
         }
     }
@@ -244,7 +245,7 @@ class HorusBot {
 
             return stats;
         } catch (error) {
-            console.error(`❌ Horus failed to get audit stats:`, error.message);
+            logger.error({ threadId, err: error }, '❌ Horus failed to get audit stats');
             throw error;
         }
     }
@@ -255,7 +256,7 @@ class HorusBot {
 
     async shutdown() {
         if (this.client) {
-            console.log('🔌 Shutting down Horus...');
+            logger.info('🛑 Shutting down Horus...');
             await this.client.destroy();
             this.client = null;
             this.ready = false;

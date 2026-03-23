@@ -1,15 +1,7 @@
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const { validate, schemas } = require('../lib/validators');
+const { validate, schemas, assertValidSchemaName } = require('../lib/validators');
 const { config } = require('../config');
-
-const VALID_SCHEMA_PATTERN = /^[a-z_][a-z0-9_]*$/i;
-function assertValidSchemaName(schema) {
-    if (!schema || !VALID_SCHEMA_PATTERN.test(schema)) {
-        throw new Error('Invalid schema name');
-    }
-    return schema;
-}
 
 function createAuthMiddleware(pool, authService, logger) {
     async function requireAuth(req, res, next) {
