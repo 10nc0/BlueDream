@@ -897,15 +897,26 @@ async function initializeDatabase() {
         `);
         
         // MIGRATION: Add sort_order column to books table in all tenant schemas
+        // Tracked in core.migrations — runs once, skipped on every subsequent restart.
         try {
-            const tenantSchemas = await getAllTenantSchemas(pool, 'dev');
-            for (const row of tenantSchemas) {
-                await pool.query(`
-                    ALTER TABLE ${row.tenant_schema}.books
-                    ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0
-                `);
+            const migrationDone = await pool.query(
+                `SELECT 1 FROM core.migrations WHERE name = 'sort_order_books' LIMIT 1`
+            );
+            if (migrationDone.rows.length === 0) {
+                const tenantSchemas = await getAllTenantSchemas(pool, 'dev');
+                await Promise.all(tenantSchemas.map(row =>
+                    pool.query(`
+                        ALTER TABLE ${row.tenant_schema}.books
+                        ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0
+                    `)
+                ));
+                await pool.query(
+                    `INSERT INTO core.migrations (name) VALUES ('sort_order_books') ON CONFLICT DO NOTHING`
+                );
+                console.log('✅ sort_order migration applied to all tenant schemas');
+            } else {
+                console.log('✅ sort_order migration already applied — skipped');
             }
-            console.log('✅ sort_order migration applied to all tenant schemas');
         } catch (err) {
             console.warn('⚠️ sort_order migration skipped:', err.message);
         }
@@ -1367,38 +1378,47 @@ app.listen(PORT, '0.0.0.0', async () => {
     idrisBot = new IdrisBot();
     horusBot = new HorusBot();
     
-    console.log('🌈 Initializing Trinity architecture...');
-    try {
-        await Promise.all([hermesBot.initialize(), thothBot.initialize()]);
-        console.log('✨ Trinity ready: Hermes (φ) + Thoth (0)');
-    } catch (error) {
-        console.error('❌ Trinity initialization failed:', error.message);
-        console.error('   Book thread creation/reading may be unavailable');
-    }
-    
-    console.log('🧿 Initializing Nyan AI Audit bots...');
-    try {
-        await Promise.all([idrisBot.initialize(), horusBot.initialize()]);
-        console.log('✨ Nyan AI Audit ready: Idris (ι) + Horus (Ω)');
-    } catch (error) {
-        console.error('❌ Nyan AI Audit initialization failed:', error.message);
-        console.error('   AI audit logging may be unavailable');
-    }
-    
-    await initializeDatabase();
-    
-    // Initialize Discord webhook factories (DI pattern)
-    sendToLedger = createSendToLedger(pool, NYANBOOK_LEDGER_WEBHOOK);
-    sendToUserOutput = createSendToUserOutput(pool);
-    
-    // Initialize capacity manager with database for reputation persistence
-    capacityManager.setDbPool(pool);
-    await capacityManager.initReputationTable();
-    
-    // Initialize usage tracker with database for persistence
-    usageTracker.setDbPool(pool);
-    await initUsageTable();
-    await usageTracker.loadTodayUsageFromDb();
+    // ── Parallel startup ────────────────────────────────────────────────────
+    // Discord bots (network: WebSocket handshake + Discord READY event) and
+    // database init (network: PostgreSQL) are fully independent — run together.
+    // Total time = max(bot_login, db_init) instead of their sum.
+    // Bots are only needed for authenticated users / inpipe webhooks, so they
+    // are always ready before the first such request can arrive.
+    console.log('🌈 Parallel startup: bots + DB (all 4 bots ∥ DB init)...');
+
+    const initBots = async () => {
+        try {
+            await Promise.all([
+                hermesBot.initialize(),
+                thothBot.initialize(),
+                idrisBot.initialize(),
+                horusBot.initialize()
+            ]);
+            console.log('✨ All bots ready: Hermes (φ) + Thoth (0) + Idris (ι) + Horus (Ω)');
+        } catch (error) {
+            console.error('❌ Bot initialization failed:', error.message);
+            console.error('   Discord features may be unavailable');
+        }
+    };
+
+    const initDb = async () => {
+        await initializeDatabase();
+
+        // Initialize Discord webhook factories (DI pattern)
+        sendToLedger = createSendToLedger(pool, NYANBOOK_LEDGER_WEBHOOK);
+        sendToUserOutput = createSendToUserOutput(pool);
+
+        // Reputation + usage tables can also run in parallel (independent)
+        capacityManager.setDbPool(pool);
+        usageTracker.setDbPool(pool);
+        await Promise.all([
+            capacityManager.initReputationTable(),
+            initUsageTable()
+        ]);
+        await usageTracker.loadTodayUsageFromDb();
+    };
+
+    await Promise.all([initBots(), initDb()]);
     
     // Server is now ready for requests
     console.log('✅ Multi-tenant NyanBook~ ready');
