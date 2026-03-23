@@ -1123,7 +1123,8 @@ User query: ${query}`;
 --- SEED METRIC: GATHER RAW INGREDIENTS ---
 You have brave_search. Use it. Do NOT compute or output anything yet — just fetch numbers.
 
-For each city the user mentions, search for TWO ingredients per period:
+For EVERY city the user mentions, search for TWO ingredients per period.
+Distribute your search budget evenly across all cities — do not exhaust searches on one city before querying others.
 
   Current (${currentYear}):
     • Land price: "{city} residential property price per sqm ${currentYear}"
@@ -1134,6 +1135,7 @@ For each city the user mentions, search for TWO ingredients per period:
     • Single wage: "{city} median annual income 1975 OR 1970s"
 
 Rules:
+  • Search for ALL cities mentioned — skipping any city is not acceptable.
   • Only use values that appear in the search results. Do NOT estimate from training data.
   • If a search returns no usable number for an ingredient, the ingredient is N/A.
   • For every value you extract, note its source URL from the result.
@@ -1148,7 +1150,8 @@ Rules:
 You have the raw search data above. Now apply the two-gate script:
 
 GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
-  • No-data rule: if P/sqm OR Income for a row is N/A (not found in search results), omit that row entirely. Do not fill it in. Do not guess.
+  • No-data rule: if P/sqm OR Income for a row is N/A, that row does NOT exist — do not write it, do not show N/A cells, do not mention it. Silence is correct.
+  • Deduplication: each (city, period) pair must appear exactly once. If search returned two results for the same city+period, use the most recent/reliable one.
   • LCU throughout — Brave returns land price and income in local currency. The ratio is dimensionless: LCU ÷ LCU cancels. Do not convert currencies.
   • Same-LCU within each row: if land price is in ¥, income must be in ¥. If £, then £. Never mix.
   • sqm gate: if result is sqft → multiply by 10.764 to get sqm. If result shows total + area (e.g. "¥120M for 85sqm") → derive: total ÷ area.
@@ -1223,11 +1226,11 @@ OUTPUT: Table → summary lines → legend → coda → sources.`;
     }
 
     // ── Execute tool calls ─────────────────────────────────────────────────
-    // Max 8 searches, 1100ms between calls (≤1 req/s — Brave hard rate limit).
+    // Max 12 searches, 1100ms between calls (≤1 req/s — Brave hard rate limit).
     // Results injected as Groq tool-role messages for Round 2.
     // Format: JSON array (title, url, description, age) — "Brave returns quantity,
     //         math and personality convert it into insight" philosophy.
-    const callsToRun = toolCalls.slice(0, 8);
+    const callsToRun = toolCalls.slice(0, 12);
     const toolResultMsgs = [round1Msg];
 
     for (let i = 0; i < callsToRun.length; i++) {
