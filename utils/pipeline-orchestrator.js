@@ -1161,8 +1161,8 @@ GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
   • sqm gate: if result is sqft → multiply by 10.764 to get sqm. If result shows total + area (e.g. "¥120M for 85sqm") → derive: total ÷ area.
   • Single-earner income only (not household, not dual-earner). Must be annual — if search returns monthly multiply by 12.
   • Sanity check income scale: single-earner annual income for a major city is typically 20,000–150,000 in local currency units. If your figure is 10× outside this band, you have a unit error (monthly × 12, or thousands vs units). Fix it.
-  • 700sqm (LCU) = LCU/sqm × 700
-  • Years = 700sqm (LCU) ÷ Annual Income (same LCU) — whole number only, no decimals ever (round to nearest integer)
+  • 700sqm Land Price = LCU/sqm × 700
+  • Years = 700sqm Land Price ÷ Annual Income (same LCU) — whole number only, no decimals ever (round to nearest integer)
   • Zero is valid: if math yields < 0.5 (rounds to 0), write 0 — land was free, state-granted, or pre-market. 0 is an honest answer, not a missing one.
   • Self-check: verify LCU/sqm × 700 ÷ Income = Years before writing. If Income looks implausibly large, check for unit error first.
 
@@ -1170,7 +1170,7 @@ GATE 3 — SCRIBE (table → summary → legend → coda):
   Regime thresholds: Years < 10 → 🟢 OPTIMISM | 10–25 → 🟡 EXTRACTION | > 25 → 🔴 FATALISM
 
   Table (show historical AND current row per city):
-  | City | Period | LCU/sqm | 700sqm (LCU) | Income (LCU) | Years | Regime |
+  | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime |
 
   After table: one line per city → **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
   After summary: Years = (LCU/sqm × 700) ÷ Annual Income (same LCU)
@@ -1302,7 +1302,9 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
     // replace the column names after capture so the output is always consistent.
     const round2Text = (round2Response.data.choices[0]?.message?.content || 'No response generated.')
       .replace(/\|\s*\$\/sqm\s*\|/g, '| LCU/sqm |')
-      .replace(/\|\s*700sqm Price\s*\|/g, '| 700sqm (LCU) |')
+      .replace(/\|\s*700sqm Price\s*\|/g, '| 700sqm Land Price |')
+      .replace(/\|\s*700sqm \(LCU\)\s*\|/g, '| 700sqm Land Price |')
+      .replace(/\|\s*Land Price\s*\|/g, '| 700sqm Land Price |')
       .replace(/\|\s*Income\s*\|/gi, '| Income (LCU) |');
     state.didSearch = true;
     console.log(`🐕 Seed Metric walked: ${callsToRun.length} Brave calls → ${round2Text.length} chars`);
@@ -1409,8 +1411,8 @@ WRONG RESPONSE:
 ${state.draftAnswer.slice(0, 2000)}
 
 REQUIRED FORMAT — ONE unified markdown table (NOT separate tables per city):
-| City | Period | LCU/sqm | 700sqm (LCU) | Income (LCU) | Years | Regime |
-|------|--------|---------|--------------|--------------|-------|--------|
+| City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime |
+|------|--------|---------|-------------------|--------------|-------|--------|
 | [CityA] | ${histYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
 | [CityA] | ${currYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
 | [CityB] | ${histYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
@@ -1424,7 +1426,7 @@ CRITICAL RULES:
 - MUST have rows for BOTH historical (${histYear}) AND current (${currYear}) — 4 rows minimum for 2 cities
 - Regime column MUST have emoji + label: 🟢 Optimism (<10yr) | 🟡 Extraction (10-25yr) | 🔴 Fatalism (>25yr)
 - REGIME MUST MATCH YEARS: e.g., 13.1yr = 🟡 Extraction (NOT Optimism!)
-- 700sqm (LCU) = LCU/sqm × 700 | Years = 700sqm (LCU) ÷ Income (same LCU)
+- 700sqm Land Price = LCU/sqm × 700 | Years = 700sqm Land Price ÷ Income (same LCU)
 - After table: summary line per city with directional change
 - NO P/I column, NO prose paragraphs, use ⚪ N/A in table cells if historical data truly unavailable
 
@@ -1451,7 +1453,9 @@ Output ONLY the corrected table and summary lines:`;
             const fixedAnswer = fixedAnswerRaw
               ? fixedAnswerRaw
                   .replace(/\|\s*\$\/sqm\s*\|/g, '| LCU/sqm |')
-                  .replace(/\|\s*700sqm Price\s*\|/g, '| 700sqm (LCU) |')
+                  .replace(/\|\s*700sqm Price\s*\|/g, '| 700sqm Land Price |')
+                  .replace(/\|\s*700sqm \(LCU\)\s*\|/g, '| 700sqm Land Price |')
+                  .replace(/\|\s*Land Price\s*\|/g, '| 700sqm Land Price |')
                   .replace(/\|\s*Income\s*\|/gi, '| Income (LCU) |')
               : fixedAnswerRaw;
             if (fixedAnswer) {
