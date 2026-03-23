@@ -813,19 +813,9 @@ async function handlePendingBookAsync(channel, msg, bookRecord, deps) {
             const tenantIdMatch = tenantSchema.match(/tenant_(\d+)/);
             const tenantId = tenantIdMatch ? parseInt(tenantIdMatch[1]) : 0;
             
-            let userOutputUrl = null;
-            if (bookRecord.outpipes_user) {
-                try {
-                    const outpipesUser = typeof bookRecord.outpipes_user === 'string' 
-                        ? JSON.parse(bookRecord.outpipes_user) 
-                        : bookRecord.outpipes_user;
-                    if (Array.isArray(outpipesUser) && outpipesUser.length > 0) {
-                        userOutputUrl = outpipesUser[0]?.url || null;
-                    }
-                } catch (e) {
-                    logger.warn({ error: e.message }, 'Async: Failed to parse outpipes_user');
-                }
-            }
+            // outpipes_user is JSONB in core.book_registry — pg auto-parses it to an array.
+            const outpipesUser = Array.isArray(bookRecord.outpipes_user) ? bookRecord.outpipes_user : [];
+            let userOutputUrl = outpipesUser.length > 0 ? (outpipesUser[0]?.url || null) : null;
             
             logger.info({ bookName: bookRecord.book_name, tenantId, bookId, hasUserOutput: !!userOutputUrl }, 'Async: Hermes creating dual outputs');
             const dualThreads = await hermesBot.createDualThreadsForBook(

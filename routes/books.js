@@ -754,6 +754,14 @@ function registerBooksRoutes(app, deps) {
                 return res.status(404).json({ error: 'Book not found' });
             }
 
+            // Keep core.book_registry in sync — handlePendingBookAsync reads outpipes_user
+            // from the registry when creating Hermes dual threads on first activation.
+            await client.query(
+                `UPDATE core.book_registry SET outpipes_user = $1, updated_at = NOW()
+                 WHERE fractal_id = $2`,
+                [JSON.stringify(outpipes), result.rows[0].fractal_id]
+            );
+
             logger.info({ bookId: id, count: outpipes.length }, 'Outpipes updated');
             res.json({ success: true, outpipes_user: result.rows[0].outpipes_user });
         } catch (error) {
