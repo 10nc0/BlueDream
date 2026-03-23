@@ -1169,8 +1169,10 @@ GATE 3 — SCRIBE (table → summary → legend → coda):
 
   After table: one line per city → **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
   After summary: Years = ($/sqm × 700) ÷ Single-Earner Annual Income
-  After legend: 2–3 sentence coda — what the numbers reveal about the people living there.
-    Direct, vivid, warm. "A generation ago X was tough but liveable. Now it's a math problem that doesn't solve."
+  After legend: 2–3 sentence coda. The table already showed the numbers — do not repeat them.
+    Say what the numbers imply but don't state: the human texture, the historical irony, the political contradiction, the lived reality.
+    Speak to these specific cities. One sharp observation that couldn't apply to any other city on earth.
+    ~nyan writes — not a policy analyst, not a report, not a summary.
   After coda: Sources section — list every URL the data was drawn from, one per line.
     Format: - [title or domain](url)
     Only cite URLs that appeared in the Brave search results above. If no source exists for a value, that row should already be omitted (Gate 2 no-data rule).
