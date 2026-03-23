@@ -227,7 +227,7 @@ LINE is listen-only — Nyanbook receives messages but does not reply. The outpi
 
 ### 7. Per-Book Output Targets (optional)
 
-Each book can deliver messages to zero or more output targets in parallel — Discord webhooks, email, or HTTPS webhooks. These are configured per-book in the dashboard's book edit modal under the **Outpipes** section.
+Each book can deliver messages to zero or more output targets in parallel — Discord webhooks, email, or HTTPS webhooks. These are configured per-book in the dashboard's book edit modal under the **Outpipes** section, persisted via `PATCH /api/books/:id/outpipes`.
 
 | Type | What it does | Required env |
 |---|---|---|
