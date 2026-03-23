@@ -83,10 +83,11 @@ window.Nyan.BooksModule = (function() {
     }
 
     /**
-     * Fetches all books for the current user and updates state
+     * Fetches all books and syncs local state.
+     * @param {boolean} [quiet=false] - Suppress non-error console output (for background refresh)
      * @returns {Promise<BooksResult>} Result with books array on success
      */
-    async function loadBooks() {
+    async function loadBooks(quiet = false) {
         try {
             const response = await window.authFetch(API_PATHS.BOOKS);
             if (!response.ok) {
@@ -94,37 +95,19 @@ window.Nyan.BooksModule = (function() {
                 return { success: false, error: response.statusText };
             }
             const data = await response.json();
-            console.log('📦 Books response:', data);
             const rawBooks = data.books || data || [];
             const uniqueBooks = deduplicateBooks(rawBooks);
-            
+
             _S.setBooks(uniqueBooks);
             _S.setFilteredBooks(uniqueBooks);
-            
-            console.log(`✅ Loaded ${uniqueBooks.length} unique books (${rawBooks.length} total from API)`);
+
+            if (!quiet) {
+                console.log('📦 Books response:', data);
+                console.log(`✅ Loaded ${uniqueBooks.length} unique books (${rawBooks.length} total from API)`);
+            }
             return { success: true, books: uniqueBooks };
         } catch (error) {
             console.error('❌ Error loading books:', error.message || error);
-            return { success: false, error: error.message };
-        }
-    }
-    
-    /**
-     * Fetches all books silently without console logging (for background refresh)
-     * @returns {Promise<BooksResult>} Result with books array on success
-     */
-    async function loadBooksQuietly() {
-        try {
-            const response = await window.authFetch(API_PATHS.BOOKS);
-            const data = await response.json();
-            const rawBooks = data.books || data || [];
-            const uniqueBooks = deduplicateBooks(rawBooks);
-            
-            _S.setBooks(uniqueBooks);
-            _S.setFilteredBooks(uniqueBooks);
-            return { success: true, books: uniqueBooks };
-        } catch (error) {
-            console.error('Error loading books:', error);
             return { success: false, error: error.message };
         }
     }
@@ -360,7 +343,6 @@ window.Nyan.BooksModule = (function() {
 
     return {
         loadBooks,
-        loadBooksQuietly,
         createBook,
         updateBook,
         deleteBook,

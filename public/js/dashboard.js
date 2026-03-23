@@ -1318,7 +1318,7 @@
         
         // Quiet refresh that updates book counts without re-rendering detail panel
         async function loadBooksQuietly() {
-            const result = await _B.loadBooksQuietly();
+            const result = await _B.loadBooks(true);
             if (result.success) {
                 books = _S.getBooks();
                 filteredBooks = _S.getFilteredBooks();
