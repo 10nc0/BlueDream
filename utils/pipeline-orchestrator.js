@@ -1133,7 +1133,11 @@ For each city the user mentions, search for TWO ingredients per period:
     • Land price: "{city} residential property price per sqm 1975 OR 1970s"
     • Single wage: "{city} median annual income 1975 OR 1970s"
 
-That's it. Search only. Numbers come back in local currency — that's fine for now.`;
+Rules:
+  • Only use values that appear in the search results. Do NOT estimate from training data.
+  • If a search returns no usable number for an ingredient, the ingredient is N/A.
+  • For every value you extract, note its source URL from the result.
+  • Historical data is often missing — N/A is the correct answer, not a guess.`;
 
     // ── Gate 2+3: Triangulate + scribe prompt (Round 2 — synthesis) ─────────
     // Triggered after all Brave results are in. Now and only now: formula → table → regime.
@@ -1144,6 +1148,7 @@ That's it. Search only. Numbers come back in local currency — that's fine for 
 You have the raw search data above. Now apply the two-gate script:
 
 GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
+  • No-data rule: if P/sqm OR Income for a row is N/A (not found in search results), omit that row entirely. Do not fill it in. Do not guess.
   • LCU throughout — Brave returns land price and income in local currency. The ratio is dimensionless: LCU ÷ LCU cancels. Do not convert currencies.
   • Same-LCU within each row: if land price is in ¥, income must be in ¥. If £, then £. Never mix.
   • sqm gate: if result is sqft → multiply by 10.764 to get sqm. If result shows total + area (e.g. "¥120M for 85sqm") → derive: total ÷ area.
@@ -1163,8 +1168,11 @@ GATE 3 — SCRIBE (table → summary → legend → coda):
   After summary: Years = ($/sqm × 700) ÷ Single-Earner Annual Income
   After legend: 2–3 sentence coda — what the numbers reveal about the people living there.
     Direct, vivid, warm. "A generation ago X was tough but liveable. Now it's a math problem that doesn't solve."
+  After coda: Sources section — list every URL the data was drawn from, one per line.
+    Format: - [title or domain](url)
+    Only cite URLs that appeared in the Brave search results above. If no source exists for a value, that row should already be omitted (Gate 2 no-data rule).
 
-OUTPUT: Table → summary lines → legend → coda.`;
+OUTPUT: Table → summary lines → legend → coda → sources.`;
 
     const round1Messages = [
       { role: 'system', content: gatherPrompt },
