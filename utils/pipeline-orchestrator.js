@@ -1144,14 +1144,14 @@ That's it. Search only. Numbers come back in local currency — that's fine for 
 You have the raw search data above. Now apply the two-gate script:
 
 GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
-  • Convert BOTH $/sqm AND annual income to USD equivalent — same currency for the division.
-    (If ¥ sqm price → also convert ¥ income to USD. Never mix currencies in one row.)
-  • If result is sqft not sqm: multiply price by 10.764 to get $/sqm.
-  • If result shows total price + area (e.g. "$1.2M for 85sqm") → derive: total ÷ area.
-  • Single-earner income only (not household, not dual-earner).
-  • 700sqm Price = $/sqm (USD) × 700
-  • Years = 700sqm Price ÷ Annual Income (USD) — whole number only, no decimals (round nearest)
-  • Self-check: verify $/sqm × 700 ÷ Income = Years before writing. If off, fix the inputs first.
+  • LCU throughout — Brave returns land price and income in local currency. The ratio is dimensionless: LCU ÷ LCU cancels. Do not convert currencies.
+  • Same-LCU within each row: if land price is in ¥, income must be in ¥. If £, then £. Never mix.
+  • sqm gate: if result is sqft → multiply by 10.764 to get sqm. If result shows total + area (e.g. "¥120M for 85sqm") → derive: total ÷ area.
+  • Single-earner income only (not household, not dual-earner). Must be annual — if search returns monthly multiply by 12.
+  • Sanity check income scale: single-earner annual income for a major city is typically 20,000–150,000 in local currency units. If your figure is 10× outside this band, you have a unit error (monthly × 12, or thousands vs units). Fix it.
+  • 700sqm Price = P/sqm × 700 (same LCU)
+  • Years = 700sqm Price ÷ Annual Income — whole number only, no decimals ever (round to nearest integer)
+  • Self-check: verify P/sqm × 700 ÷ Income = Years before writing. If Years < 1 or Income looks implausibly large, fix inputs first.
 
 GATE 3 — SCRIBE (table → summary → legend → coda):
   Regime thresholds: Years < 10 → 🟢 OPTIMISM | 10–25 → 🟡 EXTRACTION | > 25 → 🔴 FATALISM
