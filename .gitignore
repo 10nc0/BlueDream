@@ -83,6 +83,11 @@ TRINITY_INTEGRATION_GUIDE.md
 
 # Replit LLM memory (internal only, never public)
 replit.md
+.replit
+
+# Git working directories (never track)
+.git-rewrite/
+.git-filter-repo/
 
 # Internal architecture docs (not for public)
 docs/philosophy.md

@@ -1,9 +1,0 @@
-Update session and authentication keys for secure bridge operation
-
-This commit updates the session and authentication keys by regenerating them to ensure the continued secure operation of the WhatsApp to Discord bridge.
-
-Replit-Commit-Author: Agent
-Replit-Commit-Session-Id: 5f81a34d-90c9-4fc9-9fac-90659926ebcd
-Replit-Commit-Checkpoint-Type: intermediate_checkpoint
-Replit-Commit-Event-Id: daf66d7d-8d2b-436a-89f2-7a25e45cf5bc
-Replit-Commit-Screenshot-Url: https://storage.googleapis.com/screenshot-production-us-central1/63609c1a-87fa-4137-96c3-708c3e4fc77e/5f81a34d-90c9-4fc9-9fac-90659926ebcd/WfHx5nx
