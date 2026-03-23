@@ -744,26 +744,38 @@ function registerBooksRoutes(app, deps) {
                 }
             }
 
-            const result = await client.query(
-                `UPDATE ${tenantSchema}.books SET outpipes_user = $1, updated_at = NOW()
-                 WHERE fractal_id = $2 RETURNING fractal_id, name, outpipes_user`,
-                [JSON.stringify(outpipes), id]
-            );
-
-            if (!result.rows.length) {
-                return res.status(404).json({ error: 'Book not found' });
+            // Atomic dual-write: tenant schema + core registry must stay in sync.
+            // A partial failure (books updated, registry stale) causes wrong Hermes
+            // thread layout on first book activation. Explicit transaction guarantees both
+            // rows commit together or neither does.
+            const txClient = await pool.connect();
+            let updateResult;
+            try {
+                await txClient.query('BEGIN');
+                updateResult = await txClient.query(
+                    `UPDATE ${tenantSchema}.books SET outpipes_user = $1, updated_at = NOW()
+                     WHERE fractal_id = $2 RETURNING fractal_id, name, outpipes_user`,
+                    [JSON.stringify(outpipes), id]
+                );
+                if (updateResult.rows.length === 0) {
+                    await txClient.query('ROLLBACK');
+                    return res.status(404).json({ error: 'Book not found' });
+                }
+                await txClient.query(
+                    `UPDATE core.book_registry SET outpipes_user = $1, updated_at = NOW()
+                     WHERE fractal_id = $2`,
+                    [JSON.stringify(outpipes), updateResult.rows[0].fractal_id]
+                );
+                await txClient.query('COMMIT');
+            } catch (txError) {
+                await txClient.query('ROLLBACK').catch(() => {});
+                throw txError;
+            } finally {
+                txClient.release();
             }
 
-            // Keep core.book_registry in sync — handlePendingBookAsync reads outpipes_user
-            // from the registry when creating Hermes dual threads on first activation.
-            await client.query(
-                `UPDATE core.book_registry SET outpipes_user = $1, updated_at = NOW()
-                 WHERE fractal_id = $2`,
-                [JSON.stringify(outpipes), result.rows[0].fractal_id]
-            );
-
             logger.info({ bookId: id, count: outpipes.length }, 'Outpipes updated');
-            res.json({ success: true, outpipes_user: result.rows[0].outpipes_user });
+            res.json({ success: true, outpipes_user: updateResult.rows[0].outpipes_user });
         } catch (error) {
             logger.error({ err: error }, 'Error in PATCH /api/books/:id/outpipes');
             next(error);

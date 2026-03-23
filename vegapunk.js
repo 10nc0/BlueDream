@@ -75,6 +75,7 @@ const criticalSecrets = {
 const missingCriticalSecrets = Object.entries(criticalSecrets).filter(([key]) => !process.env[key]);
 
 if (missingCriticalSecrets.length > 0) {
+    // NOTE: intentional console.error — process.exit(1) path fires before logger is reliable
     console.error('❌ CRITICAL: Missing essential secrets (fail-closed)');
     console.error('');
     missingCriticalSecrets.forEach(([key, description]) => {
@@ -136,41 +137,32 @@ const pool = new Pool({
 pool.on('connect', () => {
     const usage = (pool.totalCount / pool.options.max) * 100;
     if (usage > 80) {
-        console.warn(`[${getTimestamp()}] ⚠️ Pool at ${usage.toFixed(0)}% capacity! (${pool.totalCount}/${pool.options.max})`);
+        logger.warn({ usage: Math.round(usage), total: pool.totalCount, max: pool.options.max }, 'Pool capacity high');
     }
-    console.log(`🔌 Pool: Connection acquired (Total: ${pool.totalCount}, Idle: ${pool.idleCount}, Waiting: ${pool.waitingCount})`);
+    logger.debug({ total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount }, 'Pool: connection acquired');
 });
 
 pool.on('error', (err) => {
-    console.error('💥 Pool: Unexpected error on idle client', err);
+    logger.error({ err }, 'Pool: unexpected error on idle client');
 });
 
 pool.on('remove', () => {
-    console.log(`🔓 Pool: Connection released (Total: ${pool.totalCount}, Idle: ${pool.idleCount})`);
+    logger.debug({ total: pool.totalCount, idle: pool.idleCount }, 'Pool: connection released');
 });
 
 // SAFETY: Defensive parsing with explicit format assertion
 const dbUrlParts = process.env.DATABASE_URL?.split('@');
 if (!dbUrlParts || dbUrlParts.length < 2) {
-    console.warn('⚠️ DATABASE_URL format unexpected, using fallback host identifier');
+    logger.warn('DATABASE_URL format unexpected, using fallback host identifier');
 }
 const dbHost = dbUrlParts?.[1]?.split('.')[0] || 'unknown';
 
-console.log(`🚀 Mode: ${isProd ? 'PRODUCTION' : 'DEVELOPMENT'}`);
-console.log(`🗄️  DB Host: ${dbHost}`);
-console.log(`📊 Pool: max=${pool.options.max}, min=${pool.options.min}, idleTimeout=${pool.options.idleTimeoutMillis}ms`);
+logger.info({ mode: isProd ? 'production' : 'development', dbHost, poolMax: pool.options.max, poolMin: pool.options.min, idleTimeoutMs: pool.options.idleTimeoutMillis }, 'Startup config');
 
 const tenantManager = new TenantManager(pool);
 
 // AUTH MIDDLEWARE: Create early so routes can use requireAuth/requireRole
-// Using simple console logger for early initialization
-const earlyLogger = {
-    info: (...args) => console.log('[auth]', ...args),
-    warn: (...args) => console.warn('[auth]', ...args),
-    error: (...args) => console.error('[auth]', ...args),
-    debug: (...args) => {} // Silent in production
-};
-const { requireAuth, requireRole } = createAuthMiddleware(pool, authService, earlyLogger);
+const { requireAuth, requireRole } = createAuthMiddleware(pool, authService, logger);
 
 // Timestamp helper function with timezone
 function getTimestamp() {
@@ -197,31 +189,6 @@ function noCacheHeaders(res) {
 
 // REQUEST CONTEXT: AsyncLocalStorage for request-scoped data (no global console patching)
 const requestContext = new AsyncLocalStorage();
-
-// Get current request ID (returns empty string if not in request context)
-function getRequestId() {
-    const store = requestContext.getStore();
-    return store?.requestId || '';
-}
-
-// Request-aware logging helper (only prefixes when in request context)
-function rlog(...args) {
-    const reqId = getRequestId();
-    if (reqId) {
-        console.log(`[${reqId}]`, ...args);
-    } else {
-        console.log(...args);
-    }
-}
-
-function rerror(...args) {
-    const reqId = getRequestId();
-    if (reqId) {
-        console.error(`[${reqId}]`, ...args);
-    } else {
-        console.error(...args);
-    }
-}
 
 const app = express();
 
@@ -416,8 +383,7 @@ app.use(cors({
             return callback(null, true);
         }
         
-        // Log blocked origin for debugging
-        console.error(`❌ CORS blocked origin: ${origin}`);
+        logger.warn({ origin }, 'CORS blocked origin');
         
         // SECURITY: Default deny if not in Replit domains or whitelist
         callback(new Error('Not allowed by CORS'));
@@ -456,9 +422,9 @@ app.use(session({
         errorLog: (err) => {
             // Graceful error handling for Transaction Mode connection resets
             if (err.message && err.message.includes('terminated unexpectedly')) {
-                console.warn('⚠️  Session prune failed (connection reset) – will retry next cycle');
+                logger.warn('Session prune failed (connection reset) – will retry next cycle');
             } else {
-                console.error('❌ Session store error:', err.message || err);
+                logger.error({ err }, 'Session store error');
             }
         }
     }),
@@ -491,7 +457,7 @@ app.use((req, res, next) => {
         const duration = Date.now() - req.startTime;
         // Log response time for monitoring (header already sent, so use finish event)
         if (duration > 1000) {
-            console.log(`⏱️  Slow request: ${req.method} ${req.path} - ${duration}ms`);
+            logger.warn({ method: req.method, path: req.path, durationMs: duration }, 'Slow request');
         }
     });
     next();
@@ -647,7 +613,7 @@ async function initializeDatabase() {
             `);
             
             if (tableExists.rows[0].exists) {
-                console.log('⚠️  Sessions table has wrong schema, auto-fixing...');
+                logger.warn('Sessions table has wrong schema, auto-fixing...');
                 await pool.query('DROP TABLE public.sessions CASCADE');
             }
             
@@ -663,7 +629,7 @@ async function initializeDatabase() {
                 CREATE INDEX idx_sessions_expire ON public.sessions(expire)
             `);
             
-            console.log('✅ Sessions table created with correct schema');
+            logger.info('Sessions table created with correct schema');
         }
         
         // Note: RLS for public.sessions is configured directly in Supabase dashboard
@@ -770,7 +736,7 @@ async function initializeDatabase() {
             WHERE heal_status IN ('pending', 'healing')
         `);
         
-        console.log('✅ Book registry initialized with dynamic indexing + heal queue');
+        logger.info('Book registry initialized with dynamic indexing + heal queue');
         
         // MULTI-SOURCE UPLOADS: Track all phones that have engaged with each book
         // Enables contributors (not just creator) to send files without join code
@@ -802,7 +768,7 @@ async function initializeDatabase() {
             ON core.book_engaged_phones(phone, last_engaged_at DESC)
         `);
         
-        console.log('✅ Book engaged phones table initialized');
+        logger.info('Book engaged phones table initialized');
 
         // CHANNEL IDENTIFIERS: Generalised routing table for all non-phone channels.
         // Maps (channel, external_id) → (book_fractal_id, tenant_schema).
@@ -823,7 +789,7 @@ async function initializeDatabase() {
             CREATE INDEX IF NOT EXISTS idx_channel_identifiers_lookup
             ON core.channel_identifiers(channel, external_id)
         `);
-        console.log('✅ Channel identifiers table initialized');
+        logger.info('Channel identifiers table initialized');
 
         // MESSAGE LEDGER: Immutable append-only receipt for every inpipe message
         // Stores sender_hash (HMAC — proven not revealed), content_hash, IPFS CID
@@ -864,7 +830,7 @@ async function initializeDatabase() {
             ON core.message_ledger(env)
         `);
 
-        console.log('✅ Message ledger initialized');
+        logger.info('Message ledger initialized');
 
         // PASSWORD RESET TOKENS: Secure tokens for forgot password flow via WhatsApp
         await pool.query(`
@@ -890,7 +856,7 @@ async function initializeDatabase() {
             ON core.password_reset_tokens(user_email)
         `);
         
-        console.log('✅ Password reset tokens table initialized');
+        logger.info('Password reset tokens table initialized');
         
         // MIGRATION TRACKING: Create table to track completed migrations
         await pool.query(`
@@ -934,10 +900,10 @@ async function initializeDatabase() {
         // NOTE: All tenant schemas (users, books, media_buffer, etc.) are created by TenantManager
         // during tenant initialization. No manual migrations needed for N+1 scalability.
         
-        console.log('✅ Core schema initialized with security tables');
-        console.log('✅ Database initialized successfully');
+        logger.info('Core schema initialized with security tables');
+        logger.info('Database initialized successfully');
     } catch (error) {
-        console.error('❌ Database initialization error:', error.message);
+        logger.error({ err: error }, 'Database initialization error');
         throw error;
     }
 }
@@ -964,9 +930,9 @@ async function initUsageTable() {
             CREATE INDEX IF NOT EXISTS idx_playground_usage_date ON core.playground_usage(date)
         `);
         
-        console.log('✅ Playground usage table ready');
+        logger.info('Playground usage table ready');
     } catch (error) {
-        console.error('⚠️ Failed to create usage table:', error.message);
+        logger.warn({ err: error }, 'Failed to create usage table');
     }
 }
 
@@ -1063,21 +1029,21 @@ async function getBookTenantSchema(fractalIdInput) {
         // SECURITY: Explicitly validate tenantId is a safe positive integer before SQL interpolation
         if (parsed && Number.isInteger(parsed.tenantId) && parsed.tenantId > 0 && parsed.tenantId <= 999999) {
             const tenantSchema = `tenant_${parsed.tenantId}`;
-            console.log(`✅ Parsed fractal_id: Book belongs to ${tenantSchema}`);
+            logger.debug({ fractalId: fractalIdInput, tenantSchema }, 'Parsed fractal_id');
             return tenantSchema;
         }
         
         // Detect legacy numeric IDs and reject explicitly
         const numericId = parseInt(fractalIdInput);
         if (!isNaN(numericId)) {
-            console.error(`❌ DEPRECATED: Numeric book ID ${numericId} rejected. Use fractal_id instead.`);
+            logger.error({ numericId }, 'DEPRECATED: Numeric book ID rejected — use fractal_id instead');
             throw new Error(`Legacy numeric book ID not supported. Use fractal_id format.`);
         }
         
-        console.error(`❌ Invalid fractal_id format: ${fractalIdInput} — refusing to fall back to public schema`);
+        logger.error({ fractalId: fractalIdInput }, 'Invalid fractal_id format — refusing to fall back to public schema');
         throw new Error(`Invalid fractal_id format: ${fractalIdInput}`);
     } catch (error) {
-        console.error(`❌ Error resolving tenant for book ${fractalIdInput}:`, error.message);
+        logger.error({ fractalId: fractalIdInput, err: error }, 'Error resolving tenant for book');
         throw error;
     }
 }
@@ -1124,7 +1090,7 @@ async function createSessionRecord(userId, sessionId, req, tenantSchema) {
         
         // SECURITY: Validate tenant schema name before interpolation (primary guard)
         if (!tenantSchema || tenantSchema === 'undefined' || !/^[a-z_][a-z0-9_]*$/i.test(tenantSchema)) {
-            console.error(`❌ Session creation: Invalid tenant schema: ${tenantSchema}`);
+            logger.error({ tenantSchema }, 'Session creation: invalid tenant schema');
             return;
         }
 
@@ -1134,9 +1100,9 @@ async function createSessionRecord(userId, sessionId, req, tenantSchema) {
             format(`INSERT INTO %I.active_sessions (user_id, session_id, ip_address, user_agent, device_type, browser, os, location) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, tenantSchema),
             [userId, sessionId, req.ip, userAgent, deviceType, browser, os, location]);
         
-        console.log(`[${getTimestamp()}] 📱 Session created - User: ${userId}, Device: ${deviceType}, Browser: ${browser}, OS: ${os}, IP: ${req.ip}, Location: ${location}`);
+        logger.info({ userId, deviceType, browser, os, ip: req.ip, location }, 'Session created');
     } catch (error) {
-        console.error('Error creating session record:', error.message);
+        logger.error({ err: error }, 'Error creating session record');
     }
 }
 
@@ -1154,13 +1120,13 @@ async function logAudit(client, req, actionType, targetType, targetId, targetEma
         const schema = tenantSchema || req.tenantSchema;
         
         if (!schema) {
-            console.warn('⚠️ Audit logging skipped - no tenant schema available');
+            logger.warn('Audit logging skipped — no tenant schema available');
             return;
         }
 
         // SECURITY: Validate schema name before interpolation
         if (!/^[a-z_][a-z0-9_]*$/i.test(schema)) {
-            console.error(`❌ Audit logging: Invalid schema skipped: ${schema}`);
+            logger.error({ schema }, 'Audit logging: invalid schema skipped');
             return;
         }
         
@@ -1189,7 +1155,7 @@ async function logAudit(client, req, actionType, targetType, targetId, targetEma
                 (req.get && typeof req.get === 'function') ? req.get('user-agent') : 'system'
             ]);
     } catch (error) {
-        console.error('Audit logging failed:', error);
+        logger.error({ err: error }, 'Audit logging failed');
         // Don't throw - audit logging failure shouldn't break the main operation
     }
 }
@@ -1206,7 +1172,7 @@ const webhookLimiter = rateLimit({
     // Disable IPv6 validation warning since we're behind Replit's proxy
     validate: { xForwardedForHeader: false },
     handler: (req, res) => {
-        console.warn(`[${getTimestamp()}] ⚠️ Webhook rate limit exceeded - IP: ${req.ip}`);
+        logger.warn({ ip: req.ip }, 'Webhook rate limit exceeded');
         res.status(429).json({ error: 'Too many requests, please try again later.' });
     }
 });
@@ -1289,7 +1255,7 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
                 try {
                     book.output_credentials = JSON.parse(book.output_credentials);
                 } catch (jsonError) {
-                    console.error(`[${getTimestamp()}] ⚠️ Corrupted output_credentials for book ${fractalIdParam}:`, jsonError.message);
+                    logger.error({ bookId: fractalIdParam, err: jsonError }, 'Corrupted output_credentials for book');
                     book.output_credentials = {};
                 }
             }
@@ -1339,7 +1305,7 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
             await client.query('COMMIT');
             client.release();
             
-            console.log(`✅ [Webhook] Forwarded message from ${senderName} to book ${fractalIdParam}`);
+            logger.info({ sender: senderName, bookId: fractalIdParam }, 'Webhook: forwarded message to book');
             res.json({ success: true, message: 'Message forwarded to Webhook' });
             
         } catch (error) {
@@ -1347,21 +1313,21 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
             try {
                 await client.query('ROLLBACK');
             } catch (rollbackError) {
-                console.error('⚠️ ROLLBACK failed (connection likely broken):', rollbackError.message);
+                logger.error({ err: rollbackError }, 'ROLLBACK failed (connection likely broken)');
             } finally {
                 client.release();
             }
             throw error;
         }
     } catch (error) {
-        console.error(`❌ [Webhook] Error processing webhook:`, error);
+        logger.error({ err: error }, 'Webhook: error processing request');
         res.status(500).json({ error: error.message });
     }
 });
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', async () => {
-    console.log(`🌐 Dashboard available at http://localhost:${PORT}`);
+    logger.info({ port: PORT }, 'Dashboard listening');
     
     // TRINITY ARCHITECTURE: Hermes (φ - Creator) + Thoth (0 - Mirror)
     // Security: Principle of least privilege - each bot has minimal permissions
@@ -1379,7 +1345,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     // Total time = max(bot_login, db_init) instead of their sum.
     // Bots are only needed for authenticated users / inpipe webhooks, so they
     // are always ready before the first such request can arrive.
-    console.log('🌈 Parallel startup: bots + DB (all 4 bots ∥ DB init)...');
+    logger.info('Parallel startup: bots + DB (all 4 bots ∥ DB init)...');
 
     const initBots = async () => {
         try {
@@ -1389,10 +1355,9 @@ app.listen(PORT, '0.0.0.0', async () => {
                 idrisBot.initialize(),
                 horusBot.initialize()
             ]);
-            console.log('✨ All bots ready: Hermes (φ) + Thoth (0) + Idris (ι) + Horus (Ω)');
+            logger.info('All bots ready: Hermes (φ) + Thoth (0) + Idris (ι) + Horus (Ω)');
         } catch (error) {
-            console.error('❌ Bot initialization failed:', error.message);
-            console.error('   Discord features may be unavailable');
+            logger.error({ err: error }, 'Bot initialization failed — Discord features may be unavailable');
         }
     };
 
@@ -1415,7 +1380,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     await Promise.all([initBots(), initDb()]);
     
     // Server is now ready for requests
-    console.log('✅ Multi-tenant NyanBook~ ready');
+    logger.info('Multi-tenant NyanBook~ ready');
     
     // Initialize dependency injection container with all dependencies
     // SECURITY: Compartmentalized secrets - each route receives only what it needs
@@ -1480,6 +1445,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     registerInpipeRoutes(app, deps);
     registerNyanAIRoutes(app, deps);
     
+    // NOTE: intentional console.log — multi-line ASCII art; logger would escape newlines
     console.log('\n' + formatPulseLog(['auth', 'books', 'inpipe', 'nyan-ai']) + '\n');
 
     // SETUP GUIDE: breadcrumb each unconfigured optional feature so no utility is forgotten
@@ -1524,6 +1490,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         const missing = checks.filter(([keys]) => keys.some(k => !process.env[k]));
 
         if (missing.length === 0) {
+            // NOTE: intentional console.log — human-readable setup banner
             console.log('✅ All optional features configured — full capability unlocked\n');
             return;
         }
@@ -1540,16 +1507,17 @@ app.listen(PORT, '0.0.0.0', async () => {
             '│  💡 Each feature works independently — unconfigured ones degrade gracefully.',
             '└───────────────────────────────────────────────────────────────────────────────'
         ];
+        // NOTE: intentional console.log — multi-line ASCII setup guide
         console.log(lines.join('\n') + '\n');
     })();
 
     // Global error handling (must be after all routes)
     app.use(notFoundHandler);
-    app.use(createErrorHandler({ isProd, logger: console }));
+    app.use(createErrorHandler({ isProd, logger }));
 
     // All routes and error handlers registered — open the gate
     serverReady = true;
-    console.log('🟢 Server ready — accepting API requests');
+    logger.info('🟢 Server ready — accepting API requests');
     
     // DEFERRED STARTUP: Run non-critical tasks via unified phi breathe orchestrator
     // This prevents connection pool exhaustion during startup
@@ -1559,20 +1527,20 @@ app.listen(PORT, '0.0.0.0', async () => {
         // DEFENSIVE: Explicit null guard + ready check (bot instantiated synchronously above)
         if (hermesBot !== null && hermesBot !== undefined && typeof hermesBot.isReady === 'function' && hermesBot.isReady()) {
             try {
-                console.log('🔧 Auto-healing: Initializing heal queue...');
+                logger.info('Auto-healing: initializing heal queue...');
                 healQueue.setDependencies(pool, hermesBot);
                 await healQueue.initialize();
                 healQueue.start(20000);
             } catch (error) {
-                console.error('❌ Auto-heal initialization failed:', error.message);
+                logger.error({ err: error }, 'Auto-heal initialization failed');
             }
         } else {
-            console.warn('⚠️  Hermes not ready, skipping auto-heal');
+            logger.warn('Hermes not ready — skipping auto-heal');
         }
         
         // Start genesis counter (noisy constant for future security)
         genesisCounter.start();
-        console.log('🔢 Genesis counter started (cat + φ breath tiers)');
+        logger.info('Genesis counter started (cat + φ breath tiers)');
         
         // === PHI BREATHE: Unified orchestrator for all background tasks ===
         phiBreathe.setPool(pool);
@@ -1582,6 +1550,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         // Heartbeat checkpoint every 86 breaths (~15min)
         phiBreathe.setHeartbeatCallback((breathCount) => {
             const satellites = ['auth', 'books', 'inpipe', 'nyan-ai'];
+            // NOTE: intentional console.log — heartbeat PULSE ASCII art
             console.log('\n' + formatPulseLog(satellites, 'online') + '\n');
         });
         
@@ -1595,6 +1564,6 @@ app.listen(PORT, '0.0.0.0', async () => {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-    console.log('\n🛑 Shutting down gracefully...');
+    logger.info('Shutting down gracefully...');
     process.exit(0);
 });
