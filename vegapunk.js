@@ -1482,7 +1482,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     const SATELLITE_META = {
         'auth': { emoji: '🔐', desc: 'lifecycle, sessions, JWT, audit trail', endpoints: 19 },
         'books': { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export', endpoints: 26 },
-        'inpipe': { emoji: '📥', desc: 'WhatsApp + LINE + email inpipe, channel-agnostic', endpoints: 3 },
+        'inpipe': { emoji: '📥', desc: 'WhatsApp + LINE + email + Telegram inpipe, channel-agnostic', endpoints: 4 },
         'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit, book history, psi-ema data, diagnostics', endpoints: 9 }
     };
     
@@ -1531,6 +1531,9 @@ app.listen(PORT, '0.0.0.0', async () => {
             [['EMAIL_INPIPE_SECRET'],
              '📨', 'Email inpipe (bookcode@yourdomain)',
              'Email → book archiving disabled — set EMAIL_INPIPE_SECRET + configure MX + provider webhook'],
+            [['TELEGRAM_BOT_TOKEN'],
+             '✈️', 'Telegram inpipe',
+             'Telegram → book archiving disabled — set TELEGRAM_BOT_TOKEN (+ optional TELEGRAM_WEBHOOK_SECRET, TELEGRAM_BOT_USERNAME)'],
             [['RESEND_API_KEY'],
              '📧', 'Transactional email (password reset · book sharing)',
              'Users cannot reset password or receive share invites — set RESEND_API_KEY'],

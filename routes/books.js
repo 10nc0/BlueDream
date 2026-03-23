@@ -89,7 +89,11 @@ function registerBooksRoutes(app, deps) {
 
     app.get('/api/books/channel-config', requireAuth, (req, res) => {
         const { config } = require('../config');
-        res.json({ lineOaId: config.line?.lineOaId || null });
+        res.json({
+            lineOaId:            config.line?.lineOaId || null,
+            telegramConfigured:  !!process.env.TELEGRAM_BOT_TOKEN,
+            telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || null
+        });
     });
 
     app.get('/api/books', requireAuth, async (req, res) => {
@@ -489,6 +493,20 @@ function registerBooksRoutes(app, deps) {
                 
                 book.contact_info = joinCode;
                 logger.info({ fractalId: generatedFractalId, joinCode }, 'Generated LINE join code for book');
+            } else if (inputPlatform === 'telegram') {
+                // Same slug-hex format as LINE — user sends /start JOINCODE to the bot
+                const randomCode = crypto.randomBytes(4).toString('hex');
+                const bookNameSlug = name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
+                joinCode = `${bookNameSlug}-${randomCode}`;
+                
+                await client.query(`
+                    UPDATE ${tenantSchema}.books 
+                    SET contact_info = $1 
+                    WHERE id = $2
+                `, [joinCode, book.id]);
+                
+                book.contact_info = joinCode;
+                logger.info({ fractalId: generatedFractalId, joinCode }, 'Generated Telegram join code for book');
             }
             
             const tenantEmail = req.tenantContext.userEmail;

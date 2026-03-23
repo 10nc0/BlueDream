@@ -4175,6 +4175,10 @@
                     if (lineOpt && _channelConfig.lineOaId) {
                         lineOpt.style.display = '';
                     }
+                    const tgOpt = document.getElementById('telegram-platform-option');
+                    if (tgOpt && _channelConfig.telegramConfigured) {
+                        tgOpt.style.display = '';
+                    }
                 }
             } catch (e) {
                 console.warn('⚠️ Could not load channel config:', e.message);
@@ -4190,13 +4194,47 @@
                 return;
             }
 
-            const waSteps = document.getElementById('wa-activation-steps');
-            const lineSteps = document.getElementById('line-activation-steps');
-            const subtitle = document.getElementById('book-activation-subtitle');
+            const waSteps       = document.getElementById('wa-activation-steps');
+            const lineSteps     = document.getElementById('line-activation-steps');
+            const telegramSteps = document.getElementById('telegram-activation-steps');
+            const subtitle      = document.getElementById('book-activation-subtitle');
 
             const resolvedPlatform = platform || book.input_platform || 'whatsapp';
 
-            if (resolvedPlatform === 'line') {
+            // Hide all step sections first
+            if (waSteps)       waSteps.style.display = 'none';
+            if (lineSteps)     lineSteps.style.display = 'none';
+            if (telegramSteps) telegramSteps.style.display = 'none';
+
+            if (resolvedPlatform === 'telegram') {
+                const joinCode = (book.contact_info || '').trim();
+                if (!joinCode) {
+                    showToast('❌ No activation code found', 'error');
+                    return;
+                }
+                const botUsername = _channelConfig?.telegramBotUsername || '';
+                // If we have the bot username, build a deep link with /start pre-filled
+                const botLink = botUsername
+                    ? `https://t.me/${botUsername}?start=${encodeURIComponent(joinCode)}`
+                    : `https://t.me/`;  // fallback: open Telegram (no pre-fill without username)
+
+                document.getElementById('telegram-join-code').textContent = joinCode;
+                document.getElementById('telegram-bot-link').href = botLink;
+
+                const copyTgBtn = document.getElementById('copy-telegram-code-btn');
+                if (copyTgBtn) {
+                    copyTgBtn.onclick = () => {
+                        navigator.clipboard.writeText(joinCode).then(() => {
+                            copyTgBtn.textContent = '✅';
+                            setTimeout(() => { copyTgBtn.textContent = 'Copy'; }, 1500);
+                        });
+                    };
+                }
+
+                if (subtitle) subtitle.textContent = 'Open bot → send code to activate';
+                if (telegramSteps) telegramSteps.style.display = 'block';
+                console.log('✈️ Showing Telegram activation for:', book.name, 'Code:', joinCode);
+            } else if (resolvedPlatform === 'line') {
                 const joinCode = (book.contact_info || '').trim();
                 if (!joinCode) {
                     showToast('❌ No activation code found', 'error');
@@ -4213,7 +4251,6 @@
                     `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(addFriendUrl)}`;
 
                 if (subtitle) subtitle.textContent = 'Add friend → send code to activate';
-                if (waSteps) waSteps.style.display = 'none';
                 if (lineSteps) lineSteps.style.display = 'block';
                 console.log('🟢 Showing LINE activation for:', book.name, 'Code:', joinCode);
             } else {
@@ -4226,7 +4263,6 @@
 
                 if (subtitle) subtitle.textContent = 'Follow 2 steps to activate WhatsApp';
                 if (waSteps) waSteps.style.display = 'block';
-                if (lineSteps) lineSteps.style.display = 'none';
                 console.log('📱 Showing WhatsApp activation for:', book.name, 'Code:', joinCode);
             }
 

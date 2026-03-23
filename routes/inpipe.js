@@ -3,6 +3,7 @@ const FormData = require('form-data');
 const { TwilioChannel } = require('../lib/channels/twilio');
 const { LineChannel } = require('../lib/channels/line');
 const { EmailChannel } = require('../lib/channels/email');
+const { TelegramChannel } = require('../lib/channels/telegram');
 const { buildCapsule } = require('../utils/message-capsule');
 const { pinJson, pinBuffer } = require('../utils/ipfs-pinner');
 
@@ -79,7 +80,19 @@ function registerInpipeRoutes(app, deps) {
     const emailChannel = new EmailChannel({ logger });
     emailChannel.initialize().catch(err => logger.error({ err }, 'EmailChannel init failed'));
 
-    logger.info('Registering inpipe routes: POST /api/twilio/webhook, POST /api/line/webhook, POST /api/email/inpipe');
+    const telegramChannel = new TelegramChannel({ logger });
+    telegramChannel.initialize().then(() => {
+        if (telegramChannel.isConfigured()) {
+            const domain = process.env.REPLIT_DOMAINS?.split(',')[0];
+            if (domain) {
+                telegramChannel.setWebhook(domain).catch(err =>
+                    logger.warn({ error: err.message }, 'Telegram setWebhook deferred (will retry on next restart)')
+                );
+            }
+        }
+    }).catch(err => logger.error({ err }, 'TelegramChannel init failed'));
+
+    logger.info('Registering inpipe routes: POST /api/twilio/webhook, POST /api/line/webhook, POST /api/email/inpipe, POST /api/telegram/webhook (if configured)');
 
     // Start channel-agnostic queue processor (dispatches via item.channel)
     startQueueProcessor(deps);
@@ -282,6 +295,68 @@ function registerInpipeRoutes(app, deps) {
         });
     } else {
         logger.warn('EMAIL_INPIPE_SECRET not set — /api/email/inpipe not registered');
+    }
+
+    // ─── TELEGRAM WEBHOOK ───────────────────────────────────────
+    // Reply-capable: bot can send messages back to the user.
+    // /start JOINCODE activates the book; subsequent messages are
+    // routed via book_engaged_phones (same as WhatsApp/LINE).
+    // Skip route registration if TELEGRAM_BOT_TOKEN is absent.
+    if (telegramChannel.isConfigured()) {
+        app.post('/api/telegram/webhook', async (req, res) => {
+            try {
+                const sigResult = telegramChannel.validateSignature(req);
+                if (!sigResult.valid) {
+                    logger.warn({ error: sigResult.error }, 'Telegram signature validation failed');
+                    return res.status(sigResult.status).json({ error: sigResult.error });
+                }
+
+                const rawPayload = telegramChannel.parsePayload(req);
+                if (!rawPayload) {
+                    return res.status(200).json({});
+                }
+
+                const msg = telegramChannel.normalizeMessage(rawPayload);
+                if (!msg) {
+                    return res.status(200).json({});
+                }
+
+                logger.info({
+                    userId:    msg.phone,
+                    body:      msg.body?.substring(0, 50),
+                    joinCode:  msg.joinCode,
+                    hasMedia:  msg.hasMedia,
+                    queueSize: MESSAGE_QUEUE.length
+                }, 'Telegram webhook received — queuing');
+
+                if (totalQueueDepth() >= MAX_QUEUE_SIZE) {
+                    logger.warn({ queueSize: totalQueueDepth() }, 'Queue full — rejecting Telegram message');
+                    return res.status(200).json({}); // Always 200 to Telegram
+                }
+
+                enqueueItem({
+                    msg,
+                    rawPayload,
+                    channel:    telegramChannel,
+                    messageSid: msg.messageId,
+                    queuedAt:   Date.now()
+                });
+
+                logger.info({
+                    messageId:  msg.messageId,
+                    hasMedia:   msg.hasMedia,
+                    mediaQueue: MEDIA_QUEUE.length,
+                    textQueue:  TEXT_QUEUE.length
+                }, 'Telegram message queued');
+
+                return res.status(200).json({});
+            } catch (error) {
+                logger.error({ error: error.message, stack: error.stack }, 'Telegram webhook error');
+                return res.status(200).json({}); // Always 200 to Telegram to prevent retries
+            }
+        });
+    } else {
+        logger.warn('TELEGRAM_BOT_TOKEN not set — /api/telegram/webhook not registered');
     }
 
 }
