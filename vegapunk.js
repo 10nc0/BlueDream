@@ -462,7 +462,7 @@ app.use(session({
             }
         }
     }),
-    secret: process.env.SESSION_SECRET || 'book-secret-key-change-in-production',
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false, // Don't create session until something is stored
     rolling: true, // Reset expiration on every request

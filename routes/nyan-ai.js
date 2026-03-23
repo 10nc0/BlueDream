@@ -540,7 +540,20 @@ function registerNyanAIRoutes(app, deps) {
     const thothBot = bots?.thoth;
     const idrisBot = bots?.idris;
 
-    app.post('/api/nyan-ai/audit', requireAuth, async (req, res) => {
+    const auditLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        max: 20,
+        keyGenerator: (req) => req.userId || req.ip,
+        validate: { keyGeneratorIpFallback: false },
+        handler: (req, res) => {
+            logger.warn({ userId: req.userId }, '⚠️ Audit rate limit exceeded');
+            res.status(429).json({ error: 'Too many audit requests. Max 20 per minute.' });
+        },
+        standardHeaders: true,
+        legacyHeaders: false
+    });
+
+    app.post('/api/nyan-ai/audit', requireAuth, auditLimiter, async (req, res) => {
         const { query, bookIds, language } = req.body;
         const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
         const userRole = req.userRole;
