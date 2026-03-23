@@ -1644,7 +1644,7 @@ Output ONLY the corrected table and summary lines:`;
     // Registry-driven: skip intro/outro stripping for modes that need it
     if (config.skipIntroOutro) {
       if (config.appendSignature && !hasAnySignature(cleaned)) {
-        cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText + ` [${signatureTs}]`;
+        cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText + `\n[${signatureTs}]`;
       }
       return cleaned.trim();
     }
@@ -1681,7 +1681,7 @@ Output ONLY the corrected table and summary lines:`;
     }
     
     // Use unified timestamp from queryTimestamp (single source of truth)
-    const signatureWithTs = `${config.signatureText} [${signatureTs}]`;
+    const signatureWithTs = `${config.signatureText}\n[${signatureTs}]`;
 
     // Use regex to detect any existing nyan signature and replace it with the timestamped version
     const anyNyanSigPattern = /🔥\s*(?:~nyan|nyan~)(?:\s*\[.*?\])?/i;
@@ -1755,7 +1755,7 @@ function applyPersonalityFormat(answer, mode = 'general', signatureTs = null) {
   // Registry-driven: skip intro/outro stripping for modes that need it
   if (config.skipIntroOutro) {
     if (config.appendSignature && !hasAnySignature(cleaned)) {
-      cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText + ` [${ts}]`;
+      cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText + `\n[${ts}]`;
     }
     return cleaned.trim();
   }
@@ -1791,7 +1791,7 @@ function applyPersonalityFormat(answer, mode = 'general', signatureTs = null) {
   }
   
   // Use provided or generated timestamp
-  const signatureWithTs = `${config.signatureText} [${ts}]`;
+  const signatureWithTs = `${config.signatureText}\n[${ts}]`;
   
   // Use regex to detect any existing nyan signature and replace it with the timestamped version
   const anyNyanSigPattern = /🔥\s*(?:~nyan|nyan~)(?:\s*\[.*?\])?/i;
