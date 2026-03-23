@@ -1154,7 +1154,7 @@ Rules:
 You have the raw search data above. Now apply the two-gate script:
 
 GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
-  • No-data rule: if P/sqm OR Income for a row is N/A, that row does NOT exist — do not write it, do not show N/A cells, do not mention it. Silence is correct.
+  • No-data rule: if P/sqm OR Income for a row is N/A (not found in search results), write the row with ⚪ N/A in the missing cell(s). The row exists — absence of data should be visible, not silent.
   • Deduplication: each (city, period) pair must appear exactly once. If search returned two results for the same city+period, use the most recent/reliable one.
   • LCU throughout — Brave returns land price and income in local currency. The ratio is dimensionless: LCU ÷ LCU cancels. Do not convert currencies.
   • Same-LCU within each row: if land price is in ¥, income must be in ¥. If £, then £. Never mix.
@@ -1163,8 +1163,8 @@ GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
   • Sanity check income scale: single-earner annual income for a major city is typically 20,000–150,000 in local currency units. If your figure is 10× outside this band, you have a unit error (monthly × 12, or thousands vs units). Fix it.
   • 700sqm (LCU) = LCU/sqm × 700
   • Years = 700sqm (LCU) ÷ Annual Income (same LCU) — whole number only, no decimals ever (round to nearest integer)
-  • Zero rule: if Years rounds to 0, that row is OMITTED — same as the no-data rule. 0 is not N/A and not OPTIMISM; it means the input data is unusable (e.g. sub-unit price, index artifact). Drop the row silently.
-  • Self-check: verify P/sqm × 700 ÷ Income = Years before writing. If Years < 1 or Income looks implausibly large, fix inputs first.
+  • Zero is valid: if math yields < 0.5 (rounds to 0), write 0 — land was free, state-granted, or pre-market. 0 is an honest answer, not a missing one.
+  • Self-check: verify LCU/sqm × 700 ÷ Income = Years before writing. If Income looks implausibly large, check for unit error first.
 
 GATE 3 — SCRIBE (table → summary → legend → coda):
   Regime thresholds: Years < 10 → 🟢 OPTIMISM | 10–25 → 🟡 EXTRACTION | > 25 → 🔴 FATALISM
@@ -1176,7 +1176,7 @@ GATE 3 — SCRIBE (table → summary → legend → coda):
   After summary: Years = (LCU/sqm × 700) ÷ Annual Income (same LCU)
   After legend: Sources section — list every URL the data was drawn from, one per line.
     Format: - [title or domain](url)
-    Only cite URLs that appeared in the Brave search results above. If no source exists for a value, that row should already be omitted (Gate 2 no-data rule).
+    Only cite URLs that appeared in the Brave search results above. If a cell shows ⚪ N/A, do not invent a source for it — cite only what was actually found.
 
 OUTPUT: Table → summary lines → legend → sources. No coda here — coda is written separately.`;
 
@@ -1298,7 +1298,12 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
       throw err;
     }
 
-    const round2Text = round2Response.data.choices[0]?.message?.content || 'No response generated.';
+    // Deterministic header normalisation — LLM defaults to $/sqm regardless of prompt;
+    // replace the column names after capture so the output is always consistent.
+    const round2Text = (round2Response.data.choices[0]?.message?.content || 'No response generated.')
+      .replace(/\|\s*\$\/sqm\s*\|/g, '| LCU/sqm |')
+      .replace(/\|\s*700sqm Price\s*\|/g, '| 700sqm (LCU) |')
+      .replace(/\|\s*Income\s*\|/gi, '| Income (LCU) |');
     state.didSearch = true;
     console.log(`🐕 Seed Metric walked: ${callsToRun.length} Brave calls → ${round2Text.length} chars`);
 
@@ -1442,7 +1447,13 @@ Output ONLY the corrected table and summary lines:`;
               }
             }, 2, 'text');
             
-            const fixedAnswer = response.data.choices[0]?.message?.content;
+            const fixedAnswerRaw = response.data.choices[0]?.message?.content;
+            const fixedAnswer = fixedAnswerRaw
+              ? fixedAnswerRaw
+                  .replace(/\|\s*\$\/sqm\s*\|/g, '| LCU/sqm |')
+                  .replace(/\|\s*700sqm Price\s*\|/g, '| 700sqm (LCU) |')
+                  .replace(/\|\s*Income\s*\|/gi, '| Income (LCU) |')
+              : fixedAnswerRaw;
             if (fixedAnswer) {
               const reValidation = validateSeedMetricOutput(fixedAnswer, smHistDecade);
               if (reValidation.valid) {
