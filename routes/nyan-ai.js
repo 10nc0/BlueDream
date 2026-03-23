@@ -299,7 +299,9 @@ async function searchDuckDuckGo(query) {
         
         const context = [];
         if (data.AbstractText) {
-            context.push(`📚 ${data.AbstractText}`);
+            const src = data.AbstractSource ? ` [${data.AbstractSource}]` : '';
+            const srcUrl = data.AbstractURL ? ` — ${data.AbstractURL}` : '';
+            context.push(`📚 ${data.AbstractText}${src}${srcUrl}`);
             console.log(`🔍 DDG: Found instant answer for "${sanitizedQuery.substring(0, 40)}..."`);
         }
         if (data.RelatedTopics && Array.isArray(data.RelatedTopics) && data.RelatedTopics.length > 0) {
@@ -459,9 +461,9 @@ async function searchBrave(query, clientIp = null, opts = {}) {
             return JSON.stringify(structured);
         }
 
-        // Default: formatted text for general prompts
-        const context = results.slice(0, 5).map((r, i) => 
-            `${i + 1}. ${r.title || 'Untitled'}\n   ${r.description || ''}`
+        // Default: formatted text for general prompts — include URL so LLM can cite source
+        const context = results.slice(0, 5).map((r, i) =>
+            `${i + 1}. ${r.title || 'Untitled'}\n   ${r.description || ''}\n   Source: ${r.url || ''}`
         ).join('\n\n');
         return `🌐 Web search results:\n${context}`;
     } catch (err) {
