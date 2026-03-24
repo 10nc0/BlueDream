@@ -1038,46 +1038,49 @@ function addUncompressedAttachments(payload, attachmentsList) {
     if (documents.length > 0) payload.documents = documents;
 }
 
-async function sendMessage() {
+async function sendMessage(_retryPayload = null) {
     if (isProcessing) return;
-    
-    const message = messageInput.value.trim();
-    if (!message && attachments.length === 0) {
-        showError('Please enter a message or upload a file.');
-        return;
+
+    const isRetry = _retryPayload !== null && !(_retryPayload instanceof Event);
+
+    let message, savedAttachments, payload;
+
+    if (isRetry) {
+        payload = _retryPayload;
+        message = payload.message || '';
+        savedAttachments = [];
+        isProcessing = true;
+        sendBtn.disabled = true;
+    } else {
+        message = messageInput.value.trim();
+        if (!message && attachments.length === 0) {
+            showError('Please enter a message or upload a file.');
+            return;
+        }
+
+        if (messageInput.blur) messageInput.blur();
+
+        isProcessing = true;
+        sendBtn.disabled = true;
+
+        const userMessageText = message || `(Analyzing ${attachments.length} attachment${attachments.length > 1 ? 's' : ''})`;
+        addMessage('user', userMessageText, [...attachments]);
+
+        const attachmentMetadata = attachments.map(a => ({ name: a.name, type: a.type }));
+        conversationHistory.push({
+            role: 'user',
+            content: userMessageText,
+            attachments: attachmentMetadata.length > 0 ? attachmentMetadata : undefined
+        });
+        saveConversationHistory();
+        messageInput.value = '';
+        messageInput.style.height = '44px';
+
+        payload = { message, history: conversationHistory };
+        savedAttachments = [...attachments];
+        clearAllAttachments();
     }
-    
-    if (messageInput.blur) {
-        messageInput.blur();
-    }
-    
-    isProcessing = true;
-    sendBtn.disabled = true;
-    
-    const userMessageText = message || `(Analyzing ${attachments.length} attachment${attachments.length > 1 ? 's' : ''})`;
-    addMessage('user', userMessageText, [...attachments]);
-    
-    const attachmentMetadata = attachments.map(a => ({
-        name: a.name,
-        type: a.type
-    }));
-    conversationHistory.push({ 
-        role: 'user', 
-        content: userMessageText,
-        attachments: attachmentMetadata.length > 0 ? attachmentMetadata : undefined
-    });
-    saveConversationHistory();
-    messageInput.value = '';
-    messageInput.style.height = '44px';
-    
-    const payload = { 
-        message,
-        history: conversationHistory
-    };
-    
-    const savedAttachments = [...attachments];
-    clearAllAttachments();
-    
+
     if (savedAttachments.length >= 2) {
         try {
             const zipData = await createAttachmentsZip(savedAttachments);
@@ -1114,7 +1117,7 @@ async function sendMessage() {
             const errorData = await res.json().catch(() => ({}));
             if (res.status === 503 && errorData.code === 'warming_up') {
                 addMessage('assistant', '🐱 Still warming up — will retry automatically in 5 seconds...');
-                setTimeout(() => sendMessage(), 5000);
+                setTimeout(() => sendMessage(payload), 5000);
             } else {
                 addMessage('assistant', errorData.reply || 'An error occurred. Please try again.');
                 isProcessing = false;

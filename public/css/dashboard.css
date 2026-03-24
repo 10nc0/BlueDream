@@ -566,6 +566,8 @@ body::before {
   flex-direction: column;
 }
 
+.mobile-break { display: none; }
+
 /* Mobile (<600px) — Eve hidden by CSS (no JS dependency); Adam fills the screen */
 @media (max-width: 599px) {
   .book-sidebar {
@@ -584,6 +586,14 @@ body::before {
 
   #headerTitle > div:last-child {
     display: none !important;
+  }
+
+  .mobile-break {
+    display: inline !important;
+  }
+
+  #headerTitle > div:first-child {
+    white-space: normal !important;
   }
 
   #dateTimeDefault {
