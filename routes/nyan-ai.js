@@ -386,8 +386,8 @@ async function extractCoreQuestion(message) {
     try {
         logger.debug({ messageLen: message.length }, '🧠 Extracting core question');
         const systemPrompt = isNyanProtocol 
-            ? 'Extract the core question about land price, housing affordability, or city cost. Include "50 years ago" or "historical" to get comparative data. Return ONLY a short search query (max 30 words). No explanation.'
-            : 'Extract the core question or topic from the user message. Return ONLY a short search query (max 25 words) that captures what they want to know. No explanation, just the query.';
+            ? 'Extract the core question about land price, housing affordability, or city cost. Include "50 years ago" or "historical" to get comparative data. Return ONLY a short English search query (max 30 words). No explanation.'
+            : 'Extract the core question or topic from the user message. If the message is not in English, translate the topic to English. Return ONLY a short English search query (max 25 words). No explanation, just the English query.';
         
         const response = await axios.post(
             'https://api.groq.com/openai/v1/chat/completions',

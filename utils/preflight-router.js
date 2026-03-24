@@ -80,6 +80,15 @@ const REALTIME_INTENT_PATTERNS = [
   // Explicit web search requests
   /\b(search|google|look\s*up|find\s+(?:me\s+)?(?:the\s+)?(?:latest|current|recent))\b/i,
   /\b(what\s+is\s+the\s+(?:latest|current|recent))\b/i,
+
+  // Factual identity queries — "who is the president/PM/CEO" — time-sensitive, training data goes stale
+  /\b(who\s+is|who'?s)\s+(?:the\s+)?(?:current\s+)?(?:president|prime[\s\-]minister|chancellor|ceo|mayor|governor|king|queen|leader|minister|secretary|general|director|chairman|head\s+of)\b/i,
+
+  // Non-English "who is" signal words (Indonesian, Spanish, French, German, Italian, etc.)
+  /\b(siapa|quien|qui\s+est|wer\s+ist|chi\s+è|hvem\s+er)\b/i,
+
+  // Non-English political title words — "presiden Amerika" would match here
+  /\b(presiden|presidente|président|premier[\s\-]?ministre|primer[\s\-]?ministro|bundeskanzler|perdana\s+menteri)\b/i,
 ];
 
 /**
