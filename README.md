@@ -152,23 +152,24 @@ You have been the Nalanda to my Nagarjuna.
 Vegapunk Kernel (vegapunk.js)
 ├── routes/auth.js       — JWT auth, sessions, multi-tenant
 ├── routes/books.js      — CRUD, messages, search, export
-├── routes/inpipe.js     — WhatsApp + LINE inpipe (channel-agnostic)
+├── routes/inpipe.js     — WhatsApp + LINE + Telegram inpipe (channel-agnostic)
 └── routes/nyan-ai.js    — AI playground, audit, Psi-EMA, diagnostics
 
 lib/channels/
 ├── base.js              — Abstract channel interface
 ├── twilio.js            — WhatsApp (reply-capable)
-└── line.js              — LINE OA (listen-only)
+├── line.js              — LINE OA (listen-only)
+└── telegram.js          — Telegram Bot API (reply-capable, /start JOINCODE deep-link join)
 
 Discord Bots (4 specialized, least-privilege):
-├── hermes-bot.js        — General messaging (write)
-├── thoth-bot.js         — Ledger scribe (read)
-├── idris-bot.js         — Index / search (read)
-└── horus-bot.js         — Audit / oversight (read)
+├── hermes-bot.js        — Thread creation + message relay (write)
+├── thoth-bot.js         — Message mirroring to ledger threads (write)
+├── idris-bot.js         — AI audit write (write)
+└── horus-bot.js         — AI audit read (read)
 ```
 
 Each bot holds only the permissions its role requires.
-Hermes writes. Thoth reads. Compromise one — the others remain clean.
+Hermes and Thoth write. Idris writes audit entries. Horus reads. Compromise one — the others remain clean.
 
 ```
 utils/
@@ -186,8 +187,8 @@ lib/outpipes/
 └── webhook.js           — HTTPS JSON POST with optional HMAC-SHA256 signature
 ```
 
-Adding a new inpipe channel (Telegram, Signal, etc.) requires only:
-- `lib/channels/telegram.js` implementing the `BaseChannel` interface
+Adding a new inpipe channel (Signal, Matrix, etc.) requires only:
+- A new file in `lib/channels/` implementing the `BaseChannel` interface
 - 2 lines in `routes/inpipe.js` to register the route
 - Zero changes to queue, handlers, DB, or Discord outpipe.
 
@@ -222,6 +223,7 @@ Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arr
 - Discord server with 4 bot tokens and a webhook
 - Twilio account (WhatsApp Business API) — optional
 - LINE Developer account (LINE OA) — optional
+- Telegram Bot Token (`TELEGRAM_BOT_TOKEN`) — optional
 - Groq API key (AI features)
 
 ### 1. Clone & Install
@@ -254,10 +256,10 @@ Create 4 Discord bots in the [Discord Developer Portal](https://discord.com/deve
 
 | Bot | Role | Token env var |
 |---|---|---|
-| Hermes | Messaging relay | `HERMES_TOKEN` |
-| Thoth | Ledger scribe | `THOTH_TOKEN` |
-| Idris | Index / search | `IDRIS_TOKEN` |
-| Horus | Audit / oversight | `HORUS_TOKEN` |
+| Hermes | Thread creation + message relay (write) | `HERMES_TOKEN` |
+| Thoth | Message mirroring to ledger threads (write) | `THOTH_TOKEN` |
+| Idris | AI audit write | `IDRIS_TOKEN` |
+| Horus | AI audit read | `HORUS_TOKEN` |
 
 Create a webhook for your ledger channel: `NYANBOOK_WEBHOOK_URL`
 
@@ -277,7 +279,16 @@ Create a webhook for your ledger channel: `NYANBOOK_WEBHOOK_URL`
 
 LINE is listen-only — Nyanbook receives messages but does not reply. The outpipe is Discord.
 
-### 7. Per-Book Output Targets (optional)
+### 7. Telegram (optional)
+
+1. Create a bot via [@BotFather](https://t.me/botfather) and copy the token
+2. Add `TELEGRAM_BOT_TOKEN` to your env
+3. Set webhook URL: `https://your-domain.com/api/telegram/webhook`
+4. Users join a book via the deep-link: `https://t.me/YourBot?start=JOINCODE`
+
+Telegram is reply-capable — Nyanbook can send confirmation messages back to the user. `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_BOT_USERNAME` are optional but recommended.
+
+### 8. Per-Book Output Targets (optional)
 
 Each book can deliver messages to zero or more output targets in parallel — Discord webhooks, email, or HTTPS webhooks. These are configured per-book in the dashboard's book edit modal under the **Outpipes** section, persisted via `PATCH /api/books/:id/outpipes`.
 
@@ -289,7 +300,7 @@ Each book can deliver messages to zero or more output targets in parallel — Di
 
 Multiple outpipes can be configured per book; they fire in parallel. If no outpipes are configured, output is Discord-only via the ledger thread.
 
-### 8. Run
+### 9. Run
 
 ```bash
 node vegapunk.js
@@ -340,7 +351,42 @@ Set `PINATA_JWT` to enable automatic IPFS pinning via Pinata (free 1GB tier). Th
 - 4-stage hallucination correction pipeline (S0–S3)
 - AuditCapsule: session-scoped entity extraction
 - Executive Formatter: strips filler from responses
-- Psi-EMA: φ-derived time series analysis for financial data
+- Auto-activates Ψ-EMA analysis when financial data is present in the book
+
+### Ψ-EMA (Psi-EMA)
+
+A φ-derived three-dimensional time series oscillator. Unlike traditional moving averages, it uses φ (1.618) as its sole measurement threshold and produces three coordinates:
+
+| Coordinate | Meaning |
+|---|---|
+| θ (theta) | Phase — where on the wave cycle the asset currently sits |
+| z | Anomaly z-score — how far from equilibrium |
+| R | Convergence — trend cohesion metric |
+
+Available in two ways:
+- **`POST /api/v1/nyan`** with `mode: psi-ema` (LLM synthesis + Ψ-EMA analysis)
+- **`POST /api/v1/nyan/psi-ema`** — data-only, no LLM, pure (θ, z, R) calculation
+
+Also auto-injects into dashboard audit when the book contains financial data — no user action required.
+
+### Nyan API v1
+
+Internal API gated by `NYAN_OUTBOUND_API` (production) and `NYAN_OUTBOUND_API_DEV` (development). Generate random 32-char strings for both.
+
+**`POST /api/v1/nyan`** — LLM-powered query endpoint
+
+Available modes:
+
+| Mode | What it does |
+|---|---|
+| `general` | Default: web search + Groq synthesis |
+| `psi-ema` | Ψ-EMA analysis with LLM synthesis |
+| `seed-metric` | Real estate affordability (Walk-the-Dog tool-calling) |
+| `forex` | Live FX rates via fawazahmed0 |
+| `legal` | Legal query mode |
+| `code-audit` | Code review mode |
+
+**`POST /api/v1/nyan/psi-ema`** — structured data-only, no LLM (used by external integrations).
 
 ### Seed Metric
 
