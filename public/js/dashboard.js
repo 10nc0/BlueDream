@@ -1503,14 +1503,6 @@
             startPolling(fractalId);
         }
         
-        // Mobile: return to book list from messages pane
-        function showBookList() {
-            const bookSidebar = document.getElementById('bookSidebar');
-            const bookDetail = document.getElementById('bookDetail');
-            if (bookSidebar) bookSidebar.style.display = 'flex';
-            if (bookDetail) bookDetail.style.display = 'none';
-        }
-
         // Helper functions for badge styling
         function getStatusColor(count) {
             if (count === 0) return '';
