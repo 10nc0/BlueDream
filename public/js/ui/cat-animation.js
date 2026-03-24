@@ -59,6 +59,10 @@ function initHopAnimation() {
     let _lastBlinkState = null; // Track blink state to avoid per-frame DOM mutations
     let blinkUntil = 0;
     let nextBlink = Date.now() + 5000 + Math.random() * 3000;
+    // Tail wag: k ∈ [0.5, 0.8] randomised, drifts every 5–10s (φ-breathe derivative)
+    let tailWagK = 0.5 + Math.random() * 0.3;
+    let tailWagKNext = 0.5 + Math.random() * 0.3;
+    let tailWagKChangeAt = Date.now() + 5000 + Math.random() * 5000;
     const TOUCH_COOLDOWN = 100; // ms - prevent ghost/rapid-fire taps
     const IDLE_RESET_TIME = 2000; // ms - reset to center after 2s of no interaction
     
@@ -146,10 +150,15 @@ function initHopAnimation() {
         ctx.fillRect(15.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
         ctx.fillRect(22.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
 
-        // Tail (curved up, pendulum sway) — reset to body colour after inner ears
-        // Base moves a little, tip moves a lot — creates visible left+right arc
+        // Tail (purely clock-driven pendulum, independent of mouse/flee state)
+        // k drifts 0.5–0.8 every 5–10s → period varies ~2.2–3.5s
         ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
-        const tailSway = Math.sin(frameNum / 28) * 1.2 * scale;
+        if (Date.now() > tailWagKChangeAt) {
+            tailWagK = tailWagKNext;
+            tailWagKNext = 0.5 + Math.random() * 0.3;
+            tailWagKChangeAt = Date.now() + 5000 + Math.random() * 5000;
+        }
+        const tailSway = Math.sin(Date.now() / (700 * tailWagK)) * 1.2 * scale;
         ctx.fillRect(25 * scale + offsetX + centerX + tailSway * 0.25, 23 * scale + yOffset + offsetY + centerY, 2 * scale, 4 * scale);
         ctx.fillRect(26 * scale + offsetX + centerX + tailSway, 20 * scale + yOffset + offsetY + centerY, 2 * scale, 3 * scale);
 
