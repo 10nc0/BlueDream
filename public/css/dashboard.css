@@ -334,6 +334,11 @@ body::before {
   align-items: center;
 }
 
+#aiPlaygroundBtn {
+  height: 28px;
+  min-height: 28px;
+}
+
 .logout-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
@@ -569,9 +574,16 @@ body::before {
     max-width: 100%;
   }
 
-  #bookDetail {
-    display: flex !important;
-    width: 100% !important;
+  #headerTitle {
+    opacity: 1 !important;
+    visibility: visible !important;
+    width: auto !important;
+    overflow: visible !important;
+    flex-shrink: 1;
+  }
+
+  #headerTitle > div:last-child {
+    display: none !important;
   }
 
   #dateTimeDefault {
@@ -3641,8 +3653,8 @@ body.desktop-mode .thumbs-zone {
     }
 }
 
-/* Tablet-to-Mobile: Fade out title section only below 700px */
-@media (max-width: 699px) {
+/* Narrow tablet: fade out title 600–699px (Eve sidebar squeezes it; mobile shows title again) */
+@media (min-width: 600px) and (max-width: 699px) {
     #headerTitle {
         opacity: 0;
         visibility: hidden;
