@@ -203,7 +203,7 @@ function initHopAnimation() {
 
         // Nose (pink)
         ctx.fillStyle = CAT_CONFIG.COLORS.NOSE;
-        ctx.fillRect(19 * scale + offsetX + centerX, 20 * scale + yOffset + offsetY + centerY, 2 * scale, 1 * scale);
+        ctx.fillRect(19.5 * scale + offsetX + centerX, 20 * scale + yOffset + offsetY + centerY, 1 * scale, 1 * scale);
         
         // Whiskers (white) - These are the LEFT-MOST pixels
         ctx.fillStyle = CAT_CONFIG.COLORS.WHISKERS;
