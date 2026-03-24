@@ -146,10 +146,11 @@ function initHopAnimation() {
         ctx.fillRect(15.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
         ctx.fillRect(22.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
 
-        // Tail (curved up, gently swaying) — reset to body colour after inner ears
+        // Tail (curved up, pendulum sway) — reset to body colour after inner ears
+        // Base moves a little, tip moves a lot — creates visible left+right arc
         ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
         const tailSway = Math.sin(frameNum / 28) * 1.2 * scale;
-        ctx.fillRect(25 * scale + offsetX + centerX + tailSway, 23 * scale + yOffset + offsetY + centerY, 2 * scale, 4 * scale);
+        ctx.fillRect(25 * scale + offsetX + centerX + tailSway * 0.25, 23 * scale + yOffset + offsetY + centerY, 2 * scale, 4 * scale);
         ctx.fillRect(26 * scale + offsetX + centerX + tailSway, 20 * scale + yOffset + offsetY + centerY, 2 * scale, 3 * scale);
 
         // Blink state (passive check — no side effects, no setTimeout)
