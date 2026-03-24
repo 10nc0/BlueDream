@@ -27,6 +27,7 @@ const CAT_CONFIG = Object.freeze({
         BODY: '#1a1a1a',
         EAR_INNER: '#3a2a2a',
         EYES: '#22c55e',
+        EYE_HIGHLIGHT: '#ffffff',
         NOSE: '#ec4899',
         WHISKERS: '#ffffff',
         TIME_ACTIVE: '#1a1a1a',
@@ -177,7 +178,14 @@ function initHopAnimation() {
         const eyeH = isBlinking ? 0.3 * scale : 2 * scale;
         ctx.fillRect(17 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 2 * scale, eyeH);
         ctx.fillRect(21 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 2 * scale, eyeH);
-        
+
+        // Eye specular highlight (disappears during blink)
+        if (!isBlinking) {
+            ctx.fillStyle = CAT_CONFIG.COLORS.EYE_HIGHLIGHT;
+            ctx.fillRect(17.5 * scale + offsetX + centerX, 17.3 * scale + yOffset + offsetY + centerY, 0.8 * scale, 0.8 * scale);
+            ctx.fillRect(21.5 * scale + offsetX + centerX, 17.3 * scale + yOffset + offsetY + centerY, 0.8 * scale, 0.8 * scale);
+        }
+
         // Nose (pink)
         ctx.fillStyle = CAT_CONFIG.COLORS.NOSE;
         ctx.fillRect(19 * scale + offsetX + centerX, 20 * scale + yOffset + offsetY + centerY, 2 * scale, 1 * scale);
