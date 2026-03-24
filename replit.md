@@ -34,7 +34,7 @@ Every UI size/spacing/layout change: check BOTH the base CSS rule AND the `@medi
 ### Adam/Eve UI hierarchy
 - **Adam** (message pane) = primary, always spawns first, dominates visually at all breakpoints.
 - **Eve** (book sidebar) = secondary, static navigation. Mobile: hidden by default. Tablet/desktop: spawns via `eveSpawn` slide-in (translateX -18px → 0) after Adam is ready.
-- Eve width: `clamp(160px, 22vw, 240px)` — set in base `.book-sidebar` rule, no per-breakpoint overrides. Scales with viewport (160px min at threshold, ~240px cap on Mac). Do NOT add fixed-px width in media queries.
+- Eve width: `width: var(--sidebar-width)` in base `.book-sidebar` rule. Default in `:root` = `clamp(160px, 22vw, 240px)` (responsive on first load). JS drag overrides `--sidebar-width` with a fixed px value; constraints: CSS `min-width: 160px`, `max-width: 400px`; JS `MIN_WIDTH=180`, `MAX_WIDTH=400`. `localStorage` key `nyanbook_sidebar_width` persists across sessions. No per-breakpoint width overrides.
 - Header (cat + title) is eternal — present at all resolutions, above Adam and Eve.
 
 ---
