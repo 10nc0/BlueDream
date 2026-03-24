@@ -924,7 +924,7 @@ async function initUsageTable() {
 
 // DUAL-OUTPUT DELIVERY ARCHITECTURE
 // Output #01: Nyanbook Ledger (eternal, Discord-only, immutable append-only record)
-// Output #0n: User outpipes — fractal, per-book configurable: discord | email | webhook
+// Output #0n: User outpipes — per-book configurable: discord | email | webhook
 // DATABASE ROLE: Stores ONLY routing metadata (URLs, thread IDs, outpipe configs) — NOT messages
 
 // HELPER: Get file extension from MIME type (supports ALL formats)
@@ -1064,7 +1064,7 @@ function parseUserAgent(userAgent) {
     return { deviceType, browser, os };
 }
 
-// User-Agent parsed + IP stored in tenant schema for user-facing session management (no third-party geolocation)
+// User-Agent parsed and IP stored in tenant schema for user-facing session management. No third-party geolocation.
 async function createSessionRecord(userId, sessionId, req, tenantSchema) {
     try {
         const userAgent = req.get('user-agent') || '';
@@ -1266,7 +1266,7 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
             
             // DUAL-OUTPUT DELIVERY
             // Output #01: Nyanbook Ledger (eternal, Discord-only — immutable append-only)
-            // Output #0n: User outpipes (fractal — discord | email | webhook per book config)
+            // Output #0n: User outpipes (per-book config: discord | email | webhook)
             const threadName = book.output_credentials?.thread_name;
             const threadId = book.output_credentials?.thread_id;
 
@@ -1277,7 +1277,7 @@ app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
                 threadId
             }, book);
 
-            // Path 2: User outpipes (Output #0n) — fractal routing
+            // Path 2: User outpipes (Output #0n) — binary ledger/user-output routing
             const capsule = {
                 sender: senderName,
                 text: text || '',
@@ -1405,7 +1405,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     const SATELLITE_META = {
         'auth': { emoji: '🔐', desc: 'lifecycle, sessions, JWT, audit trail', endpoints: 19 },
         'books': { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export', endpoints: 26 },
-        'inpipe': { emoji: '📥', desc: 'WhatsApp + LINE + email + Telegram inpipe, channel-agnostic', endpoints: 4 },
+        'inpipe': { emoji: '📥', desc: 'WhatsApp + LINE + email + Telegram inpipe, per-channel webhooks', endpoints: 4 },
         'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit, book history, psi-ema data, diagnostics', endpoints: 9 }
     };
     
