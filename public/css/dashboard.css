@@ -594,6 +594,8 @@ body::before {
 
   #headerTitle > div:first-child {
     white-space: normal !important;
+    font-size: 0.95rem !important;
+    line-height: 1.15 !important;
   }
 
   #dateTimeDefault {
@@ -3243,10 +3245,10 @@ body.mobile-mode .header > div > div:nth-child(2) {
 }
 
 body.mobile-mode .header > div > div:nth-child(2) > div:first-child {
-    /* "Your Nyanbook~" title */
-    font-size: 0.9rem !important;
-    line-height: 1 !important;
-    white-space: nowrap;
+    /* "Your Nyanbook~" title — 2 lines on mobile */
+    font-size: 0.95rem !important;
+    line-height: 1.15 !important;
+    white-space: normal !important;
 }
 
 body.mobile-mode .header > div > div:nth-child(2) > div:last-child {
