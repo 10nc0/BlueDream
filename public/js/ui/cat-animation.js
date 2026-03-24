@@ -185,13 +185,13 @@ function initHopAnimation() {
             // Left eye
             ctx.fillRect((17 + (2 - 0.35) / 2) * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 0.35 * scale, 0.3 * scale);
             ctx.fillRect((17 + (2 - 0.65) / 2) * scale + offsetX + centerX, 17.3 * scale + yOffset + offsetY + centerY, 0.65 * scale, 0.3 * scale);
-            ctx.fillRect((17 + (2 - 0.9) / 2) * scale + offsetX + centerX, 17.6 * scale + yOffset + offsetY + centerY, 0.9 * scale, 0.3 * scale);
+            ctx.fillRect((17 + (2 - 1.2) / 2) * scale + offsetX + centerX, 17.6 * scale + yOffset + offsetY + centerY, 1.2 * scale, 0.3 * scale);
             ctx.fillRect((17 + (2 - 0.65) / 2) * scale + offsetX + centerX, 17.9 * scale + yOffset + offsetY + centerY, 0.65 * scale, 0.3 * scale);
             ctx.fillRect((17 + (2 - 0.35) / 2) * scale + offsetX + centerX, 18.2 * scale + yOffset + offsetY + centerY, 0.35 * scale, 0.3 * scale);
             // Right eye
             ctx.fillRect((21 + (2 - 0.35) / 2) * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 0.35 * scale, 0.3 * scale);
             ctx.fillRect((21 + (2 - 0.65) / 2) * scale + offsetX + centerX, 17.3 * scale + yOffset + offsetY + centerY, 0.65 * scale, 0.3 * scale);
-            ctx.fillRect((21 + (2 - 0.9) / 2) * scale + offsetX + centerX, 17.6 * scale + yOffset + offsetY + centerY, 0.9 * scale, 0.3 * scale);
+            ctx.fillRect((21 + (2 - 1.2) / 2) * scale + offsetX + centerX, 17.6 * scale + yOffset + offsetY + centerY, 1.2 * scale, 0.3 * scale);
             ctx.fillRect((21 + (2 - 0.65) / 2) * scale + offsetX + centerX, 17.9 * scale + yOffset + offsetY + centerY, 0.65 * scale, 0.3 * scale);
             ctx.fillRect((21 + (2 - 0.35) / 2) * scale + offsetX + centerX, 18.2 * scale + yOffset + offsetY + centerY, 0.35 * scale, 0.3 * scale);
         }
