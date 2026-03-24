@@ -150,17 +150,20 @@ function initHopAnimation() {
         ctx.fillRect(15.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
         ctx.fillRect(22.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
 
-        // Tail (purely clock-driven pendulum, independent of mouse/flee state)
-        // k drifts 0.5–0.8 every 5–10s → period varies ~2.2–3.5s
+        // Tail: purely clock-driven left↔right pendulum
+        // Root stays near body; tip sweeps wide (x: 11→29 in coord space = ~30→70px on canvas)
+        // Both sides are clearly outside the body, so left AND right are visible
         ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
         if (Date.now() > tailWagKChangeAt) {
             tailWagK = tailWagKNext;
             tailWagKNext = 0.5 + Math.random() * 0.3;
             tailWagKChangeAt = Date.now() + 5000 + Math.random() * 5000;
         }
-        const tailSway = Math.sin(Date.now() / (700 * tailWagK)) * 1.2 * scale;
-        ctx.fillRect(25 * scale + offsetX + centerX + tailSway * 0.25, 23 * scale + yOffset + offsetY + centerY, 2 * scale, 4 * scale);
-        ctx.fillRect(26 * scale + offsetX + centerX + tailSway, 20 * scale + yOffset + offsetY + centerY, 2 * scale, 3 * scale);
+        const tailSwing = Math.sin(Date.now() / (700 * tailWagK)); // -1 → +1
+        // Root: x≈24, barely moves
+        ctx.fillRect((24 + tailSwing * 0.4) * scale + offsetX + centerX, 24 * scale + yOffset + offsetY + centerY, 2 * scale, 5 * scale);
+        // Tip: x = 20 ± 9, swings clearly left and right of body
+        ctx.fillRect((20 + tailSwing * 9) * scale + offsetX + centerX, 26 * scale + yOffset + offsetY + centerY, 2 * scale, 3 * scale);
 
         // Blink state (passive check — no side effects, no setTimeout)
         const isBlinking = Date.now() < blinkUntil;
