@@ -182,8 +182,8 @@ function initHopAnimation() {
         // Eye pupil (vertical line, disappears during blink)
         if (!isBlinking) {
             ctx.fillStyle = CAT_CONFIG.COLORS.EYE_HIGHLIGHT;
-            ctx.fillRect(17.8 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 0.3 * scale, 1.5 * scale);
-            ctx.fillRect(21.8 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 0.3 * scale, 1.5 * scale);
+            ctx.fillRect(17.75 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 0.5 * scale, 1.5 * scale);
+            ctx.fillRect(21.75 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 0.5 * scale, 1.5 * scale);
         }
 
         // Nose (pink)
