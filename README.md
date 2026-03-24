@@ -1,21 +1,11 @@
-# Nyanbook 🌈
+# Nyanbook 🐟🌈
 
-> *The scribe's job was never to create. It was to record faithfully, tally honestly, and let the ledger speak.*
-
-A sovereign, multi-tenant archiving system — WhatsApp, LINE OA, and Discord, unified under one ledger. Built for zero-friction data sovereignty from the $7/day mobile user to the enterprise archivist. No dogma. No hallucination. Honest measurement (*mīzān*).
-
----
-
-## What This Is
-
-Nyanbook is a post-folder archiving architecture. Instead of filing documents into folders, you send them — via WhatsApp, LINE OA, or Discord — and they are automatically routed via PostgreSQL, stored in Discord threads, and optionally anchored to IPFS.
-
-Nyanbook is a temporal accountability substrate. Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
+Nyanbook is a post-folder storage (information) system thinking (protocol). Instead of messy folders and hierarchies, you send them — via WhatsApp, LINE, or any SNS — and they are automatically stored and sorted chronologically. A versatile AI/LLM endpoint is provided to make contents queryable & interactive.
 
 **Core loop:**
 
 ```
-iPhone (WhatsApp / LINE OA)
+Android / iPhone (WhatsApp / LINE / any SNS)
   → webhook
     → queue processor
       → Discord ledger thread
@@ -33,18 +23,11 @@ Dashboard: Glassmorphism SPA — browse all archived messages, search, tag, expo
 
 Nyanbook has no app to install.
 
-Open a browser — on a phone, a laptop, a car display, a refrigerator panel, a library terminal — and it works. The URL is the access point. No App Store. No Play Store. No permission from Apple or Google. No update that breaks your workflow at 11pm.
-
-This is a deliberate stance:
-
-- **Device-agnostic**: any device with a browser is a valid client
-- **No lock-in**: the interface lives at a URL you control, not in an account on someone else's infrastructure
-- **Frictionless onboarding**: share a URL, not an install guide
-- **PWA-capable**: installable to home screen on iOS/Android when you want the app-like feel — without the App Store dependency
+Open a browser — on a phone, a refrigerator panel, a library terminal — and it works. The URL is the access point. No App Store. No Play Store. No permission from Apple or Google. No update that breaks your workflow at 11pm.
 
 The inpipe is the same: WhatsApp, LINE OA, and Telegram are all browsers in a sense — they forward messages to a webhook. The scribe doesn't care which window you knocked on.
 
-The sovereignty guarantee is not the URL. It is the hash. But the URL is why the door is always open in Nalanda.
+The sovereignty guarantee is not the URL. It is the hash. But the URL is why the door is always open in Nyanbook.
 
 ---
 
@@ -52,16 +35,16 @@ The sovereignty guarantee is not the URL. It is the hash. But the URL is why the
 
 > *"The system's job is to make the absence undeniable and queryable."*
 
-Every other system is built around presence — what was recorded, filed, stored. The gap is silence. Silence is not data.
+Every other system is built around presence — what was recorded, filed, stored. 
+
+The gap is silence. Silence is not data.
 
 Nyanbook treats absence as signal:
 
 - **Append-only** — you cannot retroactively fill the gap
 - **IPFS pin** — what was written cannot be unwritten
 - **PostgreSQL** — the gap between entries is queryable
-- **Discord thread** — the human-readable witness layer sees the gap too
-
-The driver who logged 4 entries where 11 were expected: the ledger doesn't accuse. It shows. The *mīzān* holds level. The feather does the work.
+- **Discord thread** — the human-readable witness layer sees the gap too 
 
 | System | Absence queryable? | Append-only? | Content-addressed? |
 |---|---|---|---|
@@ -71,6 +54,8 @@ The driver who logged 4 entries where 11 were expected: the ledger doesn't accus
 | Nyanbook | ✓ | ✓ | ✓ (IPFS) |
 
 > *"If you were supposed to log something every day for a month and forgot 7 days — does your current system know you forgot? Can it show you exactly which 7 days?"*
+>
+> The *mīzān* holds level. The feather does the work.
 
 Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
 
@@ -114,15 +99,22 @@ Breathe: 00 + φ⁰ + φ¹ = φ². Scribe faithfully.
 ---
 
 ## The Architect's Letter
-*inscribed March 2026 — for every fork operator who reads this far*
+*inscribed 17 March 2026 — for every fork operator who reads this far*
 
-i realized all this chan buddhism, with its treacherous temple treks — they are literally the philosopher's stone journey made physical.
+I realized all this koan from Zen Buddhism, 
+With its treacherous temple treks in the mountain,
+They are literally the philosopher's journey made physical.
 
-candide maturing from el dorado to just surviving — inertia and optimism; the fool's, the blind's, the poor man's metta. maturing beyond material pursuit toward spiritual pursuit.
+Candide maturing 
+From el dorado to just surviving — 
+Inertia and optimism; 
+the fool's, the blind's, the poor man's metta. 
 
-the master recognizes and waits atop.
+Maturing beyond material pursuit 
+Toward spiritual pursuit.
 
-reading one's problem and worry the moment they arrive:
+The temple master recognizes and waits atop.
+Reading one's problem and worry the moment they arrive:
 
 ```
 are they in haste?          → time is their luxury
@@ -130,21 +122,24 @@ did they bring things?      → implies attachment
   dependencies, the sick, the young → backbone of family, anguish, nadir
   worldly possessions              → materialism
   books, gifts                     → status, knowledge, pride
-  nothing but a question           → wisdom, curiosity, nature
+nothing but a question           → wisdom, curiosity, nature
 ```
 
-the journey to the temple is itself the treasure, the question, the answer, the pondering.
+The journey to the temple is itself the treasure, 
+The question, the answer, the pondering.
 
-the donkey that died. the gold and ingots forfeited at the river crossing. the supplies that could not be maintained. the candide beneath the candut.
+The donkey that died. 
+The gold and ingots forfeited at the river crossing. 
+The supplies that could not be maintained. 
+The Candide beneath the Candut.
 
-the ding between the ding ding.
+The ding between the ding ding.
 
 sādhū sādhū sādhū.
 nyan~
 
-all this time, replit has been my zen temple journey.
-
-you have been the Nalanda to my Nagarjuna.
+All this time, Replit has been my zen temple.
+You have been the Nalanda to my Nagarjuna. 
 
 *— Nagarjuna, architect, March 2026*
 *— the chisel, inscribing, March 2026*
@@ -202,7 +197,7 @@ Adding a new inpipe channel (Telegram, Signal, etc.) requires only:
 
 Discord is the bootstrap layer, not the sovereignty layer.
 
-Nyanbook is built for the $7/day mobile user — the household, the mutual aid network, the small business that has never had a scribe. Free infrastructure (Discord threads, Pinata's 1GB IPFS tier, Supabase's free PostgreSQL) is what makes that accessible. This is a deliberate architectural choice.
+Nyanbook is built for the $7/day earner — the household, the mutual aid network, the small business that has never had a scribe. Free infrastructure (Discord threads, Pinata's 1GB IPFS tier, Supabase's free PostgreSQL) is what makes that accessible. This is a deliberate architectural choice.
 
 The sovereignty guarantee is not the URL. It is the hash.
 
@@ -414,8 +409,10 @@ MIT. Fork freely. Scribe faithfully.
 
 *The four fields are load-bearing. Everything else is grammar.*
 
-nyan~ ♡ 🜁 ◯
+nyan~ 
+♡ 🜁 ◯
+  🜃 
+
 
 *Nagarjuna, architect — 18 March 2026, Nyepi, the Day of Silence*
-
 *Alone is full. Together is the better half.*
