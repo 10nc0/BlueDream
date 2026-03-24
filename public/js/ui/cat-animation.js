@@ -64,6 +64,8 @@ function initHopAnimation() {
     let tailWagK = 0.5 + Math.random() * 0.3;
     let tailWagKNext = 0.5 + Math.random() * 0.3;
     let tailWagKChangeAt = Date.now() + 5000 + Math.random() * 5000;
+    // Startle: brief tail acceleration on mouse proximity — no flip, no cut
+    let startleUntil = 0;
     const TOUCH_COOLDOWN = 100; // ms - prevent ghost/rapid-fire taps
     const IDLE_RESET_TIME = 2000; // ms - reset to center after 2s of no interaction
     
@@ -126,12 +128,7 @@ function initHopAnimation() {
         const centerX = (CANVAS_WIDTH / 2) - (catCenterX * scale);
         const centerY = (CANVAS_HEIGHT / 2) - (catCenterY * scale);
         
-        // Flip cat if fleeing (running away)
-        if (fleeing) {
-            ctx.save();
-            ctx.translate(CANVAS_WIDTH, 0);
-            ctx.scale(-1, 1);
-        }
+        // No flip on mouse proximity — startle handled via tail acceleration, not canvas transform
         
         // Black cat body
         ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
@@ -160,7 +157,10 @@ function initHopAnimation() {
             tailWagKNext = 0.5 + Math.random() * 0.3;
             tailWagKChangeAt = Date.now() + 5000 + Math.random() * 5000;
         }
-        const tailSwing = Math.sin(Date.now() / (700 * tailWagK)); // -1 → +1
+        // Startle: briefly use faster speed (divisor × 0.35) without phase jump
+        const isStartled = Date.now() < startleUntil;
+        const tailSpeedMul = isStartled ? 0.35 : 1.0;
+        const tailSwing = Math.sin(Date.now() / (700 * tailWagK * tailSpeedMul)); // -1 → +1
         // Root: x≈24, barely moves
         ctx.fillRect((24 + tailSwing * 0.4) * scale + offsetX + centerX, 24 * scale + yOffset + offsetY + centerY, 2 * scale, 5 * scale);
         // Tip: x = 20 ± 9, swings clearly left and right of body
@@ -222,9 +222,6 @@ function initHopAnimation() {
             ctx.fillRect(22 * scale + offsetX + centerX, 30 * scale + offsetY + centerY, 3 * scale, 2 * scale);
         }
         
-        if (fleeing) {
-            ctx.restore();
-        }
     }
     
     function animate() {
@@ -257,13 +254,16 @@ function initHopAnimation() {
             const dy = mouseY - canvasCenterY;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            // Cat behavior: flee if cursor is close (within FLEE_DISTANCE), otherwise neutral
+            // Cat behavior: startle + subtle wiggle if cursor is close (within FLEE_DISTANCE)
             if (distance < fleeDistance) {
-                // Flee away from cursor with subtle wiggle
                 fleeing = true;
                 const strength = fleeStrength * (1 - distance / fleeDistance);
                 offsetX = -(dx / distance) * strength;
                 offsetY = -(dy / distance) * strength;
+                // Trigger startle burst (700ms) — accelerates tail, no flip/cut
+                if (Date.now() >= startleUntil) {
+                    startleUntil = Date.now() + 700;
+                }
             }
         }
         
