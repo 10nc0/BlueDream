@@ -5414,54 +5414,59 @@
             const container = document.getElementById(`discord-messages-${bookId}`);
             if (!container) return;
             
+            // Attach to the wrapper (container's parent), not the scrollable container itself.
+            // position:sticky inside a scroll container occupies layout space and pushes messages
+            // down. Attaching to the wrapper as position:absolute overlays without any reflow.
+            const wrapper = container.parentElement;
+            if (!wrapper) return;
+            
             // Remove existing button if any
-            const existing = container.parentElement?.querySelector('.return-to-latest-btn');
+            const existing = wrapper.querySelector('.return-to-latest-btn');
             if (existing) existing.remove();
             
-            // Create floating button
+            // Ensure wrapper is a positioned ancestor for absolute child
+            if (!wrapper.style.position) wrapper.style.position = 'relative';
+            
             const btn = document.createElement('button');
             btn.className = 'return-to-latest-btn';
             btn.innerHTML = '↑ Return to Latest';
             btn.style.cssText = `
-                position: sticky;
-                top: 48px;
+                position: absolute;
+                top: 8px;
                 left: 50%;
                 transform: translateX(-50%);
                 z-index: 100;
-                padding: 8px 16px;
+                padding: 6px 16px;
                 background: rgba(59, 130, 246, 0.9);
                 border: 1px solid rgba(59, 130, 246, 0.5);
                 border-radius: 20px;
                 color: white;
-                font-size: 0.875rem;
+                font-size: 0.8125rem;
                 cursor: pointer;
                 backdrop-filter: blur(8px);
                 box-shadow: 0 4px 12px rgba(0,0,0,0.3);
                 transition: all 0.2s;
-                display: block;
-                margin: 8px auto;
+                white-space: nowrap;
+                pointer-events: auto;
             `;
             
             btn.addEventListener('click', async () => {
                 btn.disabled = true;
                 btn.textContent = 'Loading...';
-                
-                // Reload fresh (latest messages)
                 messagePageState[bookId] = { isLoading: false, hasOlder: false, seenIds: new Set(), oldestId: null };
                 await loadBookMessages(bookId, false);
-                
-                // Remove button
                 btn.remove();
             });
             
-            // Insert at top of container
-            container.insertBefore(btn, container.firstChild);
+            // Append to wrapper — overlays messages without affecting layout
+            wrapper.appendChild(btn);
         }
         
         // Hide "Return to latest" button
         function hideReturnToLatestButton(bookId) {
             const container = document.getElementById(`discord-messages-${bookId}`);
-            const btn = container?.parentElement?.querySelector('.return-to-latest-btn') || 
+            const wrapper = container?.parentElement;
+            const btn = wrapper?.querySelector('.return-to-latest-btn') ||
                        container?.querySelector('.return-to-latest-btn');
             if (btn) btn.remove();
         }

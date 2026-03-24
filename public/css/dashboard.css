@@ -491,8 +491,8 @@ body::before {
 }
 
 .search-box {
-  flex: 1;
-  min-width: 160px;
+  width: 100%;
+  box-sizing: border-box;
   background: rgba(148, 163, 184, 0.1);
   border: 1px solid rgba(148, 163, 184, 0.2);
   padding: 0.25rem 0.625rem;
@@ -501,7 +501,6 @@ body::before {
   font-size: var(--text-sm);
   height: 28px;
   min-height: 28px;
-  box-sizing: border-box;
 }
 
 .filter-dropdown {
