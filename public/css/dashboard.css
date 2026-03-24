@@ -495,10 +495,13 @@ body::before {
   min-width: 160px;
   background: rgba(148, 163, 184, 0.1);
   border: 1px solid rgba(148, 163, 184, 0.2);
-  padding: 0.375rem 0.5rem;
+  padding: 0.25rem 0.625rem;
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);
   font-size: var(--text-sm);
+  height: 28px;
+  min-height: 28px;
+  box-sizing: border-box;
 }
 
 .filter-dropdown {
