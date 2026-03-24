@@ -104,6 +104,7 @@ sessions/
 .env
 node_modules/
 sessions/
+notebook.md
 *.sql
 .env
 node_modules/
