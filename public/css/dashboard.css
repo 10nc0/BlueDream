@@ -561,11 +561,17 @@ body::before {
   flex-direction: column;
 }
 
-/* Mobile (<600px) — Eve hidden by JS; when shown (library mode) it fills phone width */
+/* Mobile (<600px) — Eve hidden by CSS (no JS dependency); Adam fills the screen */
 @media (max-width: 599px) {
   .book-sidebar {
+    display: none !important;
     width: 100%;
     max-width: 100%;
+  }
+
+  #bookDetail {
+    display: flex !important;
+    width: 100% !important;
   }
 
   #dateTimeDefault {

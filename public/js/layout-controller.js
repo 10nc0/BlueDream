@@ -105,7 +105,7 @@ const LayoutController = (function() {
             if (el.sidebarResizer) el.sidebarResizer.style.display = 'block';
             if (el.headerResizer) el.headerResizer.style.display = 'block';
             if (el.bookSidebar) el.bookSidebar.style.display = '';
-            if (el.bookDetail) el.bookDetail.style.display = ''; /* restore if hidden by mobile showBookList() */
+            if (el.bookDetail) el.bookDetail.style.display = '';
             
             if (el.thumbsZone) el.thumbsZone.style.display = 'none';
         }
