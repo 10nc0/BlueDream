@@ -315,7 +315,6 @@ const LayoutController = (function() {
         
         CONSTANTS: {
             MOBILE_BREAKPOINT,
-            ASPECT_RATIO_THRESHOLD,
             EXPAND_DELAY_MS,
             COLLAPSE_DELAY_MS,
             ANIMATION_DURATION_MS
