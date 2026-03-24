@@ -144,12 +144,12 @@ Every inpipe message → cryptographic provenance capsule (body text, HMAC sende
 
 **Any string or constant used in >1 file** → extract to a shared module in `utils/` or `prompts/`. Code bloat = drift risk.
 
-**Git remotes** — two separate push targets with different content rules:
-- `origin` → `10nc3/Nyan` (private, PAT=`GITHUB_PAT_10NC3`) — ALL code + `replit.md` (force-add: `git add -f replit.md`). Push here first.
-- `bluedream` → `10nc0/BlueDream` (public) — ALL code + `README.md`. NEVER include: `replit.md`, `notebook.md`, `.env`, secrets. These are already gitignored.
-- `gitsafe-backup` → Replit internal git — push all code (same as origin minus replit.md).
-- Always use PAT-embedded remote URL: `git remote set-url origin "https://${GITHUB_PAT_10NC3}@github.com/10nc3/Nyan.git"`. Redact in logs: `sed 's/https:\/\/[^@]*@/https:\/\/[REDACTED]@/g'`
-- `replit.md` push sequence: `git add -f replit.md && git commit -m "..." && git push origin main` — then do NOT push that commit to bluedream (push bluedream from the preceding commit hash or just skip replit.md commits to bluedream).
+**Git remotes** — full protocol in `.local/GIT_INSTRUCTIONS.md` (read it before every push). Summary:
+- `origin` → `10nc3/Nyan` (private) — ALL code + `replit.md` (force-add). PAT = `GITHUB_PAT_10NC3`. Push here first.
+- `bluedream` → `10nc0/BlueDream` (PUBLIC) — code + `README.md`. NEVER `replit.md`, `notebook.md`, `.env`, `.local/`. The named remote already has its PAT embedded — always use `git push bluedream main`, never construct the URL manually with `GITHUB_PAT_10NC3` (wrong account, gets 403).
+- `gitsafe-backup` → Replit internal — same as origin minus `replit.md`.
+- `replit.md` push: `git add -f replit.md && git commit && git push origin main && git push gitsafe-backup main` — then push bluedream from the commit BEFORE the replit.md commit.
+- **Pre-push BlueDream safety check** (must return empty): `git diff bluedream/main..HEAD --name-status | grep -E "^[AUM]" | awk '{print $2}' | grep -E "replit\.md|notebook\.md|\.env|\.local/"` — note the `[AUM]` filter: deletions (D) are safe and expected.
 
 **Git commit discipline** — one logical change = one commit, pushed once.
 - Before the first push: check the task's "Done looks like" against the diff. Catch all gaps locally.
