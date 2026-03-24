@@ -13,8 +13,7 @@ const LayoutController = (function() {
     'use strict';
     
     // ===== CONSTANTS =====
-    const MOBILE_BREAKPOINT = 768;
-    const ASPECT_RATIO_THRESHOLD = 1.4;
+    const MOBILE_BREAKPOINT = 600;
     const EXPAND_DELAY_MS = 50;
     const COLLAPSE_DELAY_MS = 40;
     const ANIMATION_DURATION_MS = 400;
@@ -47,17 +46,7 @@ const LayoutController = (function() {
     
     // ===== DEVICE DETECTION =====
     function detectDevice() {
-        const aspectRatio = window.innerHeight / window.innerWidth;
-        
-        if (window.innerWidth < MOBILE_BREAKPOINT && window.innerHeight > window.innerWidth) {
-            return 'mobile';
-        }
-        
-        if (aspectRatio > ASPECT_RATIO_THRESHOLD) {
-            return 'mobile';
-        }
-        
-        return 'desktop';
+        return window.innerWidth < MOBILE_BREAKPOINT ? 'mobile' : 'desktop';
     }
     
     function isMobile() {

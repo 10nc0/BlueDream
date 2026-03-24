@@ -49,7 +49,7 @@
   
   /* Breakpoints (for reference in media queries) */
   --breakpoint-sm: 480px;
-  --breakpoint-md: 768px;
+  --breakpoint-md: 600px;
   --breakpoint-lg: 1024px;
   --breakpoint-xl: 1400px;
   
@@ -57,11 +57,10 @@
   --header-height: 60px; /* Default header height, user-adjustable (min: 55px, max: 120px) */
   
   /* Responsive Sidebar Widths (iPhone X → iPad → Mac)
-   * Mobile (≤767px): 100% width (column layout, stacks vertically)
-   * Tablet (768-1023px): 240px sidebar (~31% of 768px iPad width, row layout)
-   * Desktop (≥1024px): 280px sidebar (~19% of 1440px MacBook width, row layout)
+   * Mobile (<600px): column layout, Eve hidden (JS-driven)
+   * Desktop (≥600px): row layout, Eve = clamp(160px, 22vw, 240px), Adam fills rest
    * Message area: flex: 1 fills remaining space automatically in row layout
-   * Breakpoints aligned with .book-layout flex-direction: row at 768px
+   * Breakpoints aligned with .book-layout flex-direction: row at 600px
    */
   --sidebar-width: 240px; /* Default for tablet/desktop */
   
@@ -519,7 +518,7 @@ body::before {
   height: 100%;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 600px) {
   .book-layout {
     flex-direction: row;
     gap: 0.25rem;
@@ -552,8 +551,9 @@ body::before {
   padding: 0.3125rem;
   flex-shrink: 0;
   flex-grow: 0;         /* Never expand beyond explicit width — Adam always dominates */
-  min-width: 160px;     /* Minimum: readable book list panel */
-  max-width: 300px;     /* Maximum: Eve cap — prevents pane domination at any breakpoint */
+  width: clamp(160px, 22vw, 240px); /* Scales with viewport; bounded 160–240px */
+  min-width: 160px;
+  max-width: 240px;
   overflow-x: hidden;  /* clip horizontal only; let children own vertical scroll */
   overflow-y: visible;
   height: 100%;
@@ -561,11 +561,11 @@ body::before {
   flex-direction: column;
 }
 
-/* Mobile (<768px) — Eve fills phone width but base max-width:300px keeps it capped */
-@media (max-width: 767px) {
+/* Mobile (<600px) — Eve hidden by JS; when shown (library mode) it fills phone width */
+@media (max-width: 599px) {
   .book-sidebar {
     width: 100%;
-    /* max-width intentionally inherited from base (300px) — prevents full-bleed on landscape */
+    max-width: 100%;
   }
 
   #dateTimeDefault {
@@ -592,15 +592,9 @@ body::before {
   }
 }
 
-/* Tablet (iPad): 768-1023px viewport */
-@media (min-width: 768px) and (max-width: 1023px) {
-  :root {
-    --sidebar-width: 180px;
-  }
-
+/* Tablet (600-1023px viewport) — Eve width handled by clamp() in base rule */
+@media (min-width: 600px) and (max-width: 1023px) {
   .book-sidebar {
-    width: var(--sidebar-width);
-    max-width: 26%;
     animation: eveSpawn 0.32s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   }
 
@@ -633,13 +627,7 @@ body::before {
 
 /* Desktop (Mac): ≥1024px viewport */
 @media (min-width: 1024px) {
-  :root {
-    --sidebar-width: 200px;
-  }
-
   .book-sidebar {
-    width: var(--sidebar-width);
-    max-width: 22%;
     animation: eveSpawn 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both;
   }
 
@@ -2022,8 +2010,8 @@ body::before {
   }
 }
 
-/* Tablets (480px - 767px) */
-@media (min-width: 480px) and (max-width: 767px) {
+/* Tablets (480px - 599px) */
+@media (min-width: 480px) and (max-width: 599px) {
   .header {
     display: flex;
     flex-direction: column;
@@ -3467,7 +3455,7 @@ body.desktop-mode .thumbs-zone {
 }
 
 /* Mobile Touch Targets (min 48px for Apple HIG compliance) */
-@media (max-width: 767px) and (orientation: portrait) {
+@media (max-width: 599px) and (orientation: portrait) {
     /* LOCK horizontal scroll completely */
     html, body {
         overflow-x: hidden !important;
@@ -3622,12 +3610,11 @@ body.desktop-mode .thumbs-zone {
 /* ===== RESPONSIVE HEADER SQUEEZE: Smooth Progressive Element Hiding =====
    Desktop (1200px+): All elements visible
    Tablet (1000px-1199px): Hide user info gradually
-   Mobile (768px-999px): Hide title section
-   Compact (<768px): Mobile mode handles layout via body.mobile-mode
+   Compact (<600px): Mobile mode handles layout via body.mobile-mode
    
    Smooth Transition Strategy:
    - Use opacity + transition for non-abrupt disappearance
-   - Coordinate with mobile-mode CSS which activates at <768px
+   - Coordinate with mobile-mode CSS which activates at <600px
    - Ensure no layout shifts as elements hide
 */
 
@@ -3659,7 +3646,7 @@ body.desktop-mode .thumbs-zone {
 }
 
 
-/* Smooth transition coordination: Mobile mode at <768px overrides with grid layout */
+/* Smooth transition coordination: Mobile mode at <600px overrides with grid layout */
 /* Ensure 🧠 AI button stays visible on mobile */
 body.mobile-mode #aiPlaygroundBtn {
     display: flex !important;

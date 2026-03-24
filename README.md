@@ -29,6 +29,25 @@ Dashboard: Glassmorphism SPA — browse all archived messages, search, tag, expo
 
 ---
 
+## Why URL-First
+
+Nyanbook has no app to install.
+
+Open a browser — on a phone, a laptop, a car display, a refrigerator panel, a library terminal — and it works. The URL is the access point. No App Store. No Play Store. No permission from Apple or Google. No update that breaks your workflow at 11pm.
+
+This is a deliberate stance:
+
+- **Device-agnostic**: any device with a browser is a valid client
+- **No lock-in**: the interface lives at a URL you control, not in an account on someone else's infrastructure
+- **Frictionless onboarding**: share a URL, not an install guide
+- **PWA-capable**: installable to home screen on iOS/Android when you want the app-like feel — without the App Store dependency
+
+The inpipe is the same: WhatsApp, LINE OA, and Telegram are all browsers in a sense — they forward messages to a webhook. The scribe doesn't care which window you knocked on.
+
+The sovereignty guarantee is not the URL. It is the hash. But the URL is why the door is always open in Nalanda.
+
+---
+
 ## The Main Feature: Absence as Data
 
 > *"The system's job is to make the absence undeniable and queryable."*
