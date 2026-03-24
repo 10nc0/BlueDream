@@ -179,11 +179,21 @@ function initHopAnimation() {
         ctx.fillRect(17 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 2 * scale, eyeH);
         ctx.fillRect(21 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 2 * scale, eyeH);
 
-        // Eye pupil (vertical line, disappears during blink)
+        // Eye pupil (vertical vesica shape: wide center, narrow top/bottom)
         if (!isBlinking) {
             ctx.fillStyle = CAT_CONFIG.COLORS.EYE_HIGHLIGHT;
-            ctx.fillRect(17.75 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 0.5 * scale, 1.5 * scale);
-            ctx.fillRect(21.75 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 0.5 * scale, 1.5 * scale);
+            // Left eye
+            ctx.fillRect((17 + (2 - 0.35) / 2) * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 0.35 * scale, 0.3 * scale);
+            ctx.fillRect((17 + (2 - 0.65) / 2) * scale + offsetX + centerX, 17.3 * scale + yOffset + offsetY + centerY, 0.65 * scale, 0.3 * scale);
+            ctx.fillRect((17 + (2 - 0.9) / 2) * scale + offsetX + centerX, 17.6 * scale + yOffset + offsetY + centerY, 0.9 * scale, 0.3 * scale);
+            ctx.fillRect((17 + (2 - 0.65) / 2) * scale + offsetX + centerX, 17.9 * scale + yOffset + offsetY + centerY, 0.65 * scale, 0.3 * scale);
+            ctx.fillRect((17 + (2 - 0.35) / 2) * scale + offsetX + centerX, 18.2 * scale + yOffset + offsetY + centerY, 0.35 * scale, 0.3 * scale);
+            // Right eye
+            ctx.fillRect((21 + (2 - 0.35) / 2) * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 0.35 * scale, 0.3 * scale);
+            ctx.fillRect((21 + (2 - 0.65) / 2) * scale + offsetX + centerX, 17.3 * scale + yOffset + offsetY + centerY, 0.65 * scale, 0.3 * scale);
+            ctx.fillRect((21 + (2 - 0.9) / 2) * scale + offsetX + centerX, 17.6 * scale + yOffset + offsetY + centerY, 0.9 * scale, 0.3 * scale);
+            ctx.fillRect((21 + (2 - 0.65) / 2) * scale + offsetX + centerX, 17.9 * scale + yOffset + offsetY + centerY, 0.65 * scale, 0.3 * scale);
+            ctx.fillRect((21 + (2 - 0.35) / 2) * scale + offsetX + centerX, 18.2 * scale + yOffset + offsetY + centerY, 0.35 * scale, 0.3 * scale);
         }
 
         // Nose (pink)
