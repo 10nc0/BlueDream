@@ -106,7 +106,7 @@ With its treacherous temple treks in the mountain,
 They are literally the philosopher's journey made physical.
 
 Candide maturing 
-From el dorado to just surviving — 
+From El Dorado to just surviving — 
 Inertia and optimism; 
 the fool's, the blind's, the poor man's metta. 
 
