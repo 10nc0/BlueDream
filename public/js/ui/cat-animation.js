@@ -179,11 +179,11 @@ function initHopAnimation() {
         ctx.fillRect(17 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 2 * scale, eyeH);
         ctx.fillRect(21 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 2 * scale, eyeH);
 
-        // Eye specular highlight (disappears during blink)
+        // Eye pupil (vertical line, disappears during blink)
         if (!isBlinking) {
             ctx.fillStyle = CAT_CONFIG.COLORS.EYE_HIGHLIGHT;
-            ctx.fillRect(17.5 * scale + offsetX + centerX, 17.3 * scale + yOffset + offsetY + centerY, 0.8 * scale, 0.8 * scale);
-            ctx.fillRect(21.5 * scale + offsetX + centerX, 17.3 * scale + yOffset + offsetY + centerY, 0.8 * scale, 0.8 * scale);
+            ctx.fillRect(17.8 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 0.3 * scale, 1.5 * scale);
+            ctx.fillRect(21.8 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 0.3 * scale, 1.5 * scale);
         }
 
         // Nose (pink)
