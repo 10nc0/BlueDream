@@ -53,20 +53,21 @@ function initHopAnimation() {
     let frame = 0;
     let mouseX = -1000;
     let mouseY = -1000;
-    let catX = CANVAS_WIDTH / 2;
-    let catY = CANVAS_HEIGHT / 2;
     let lastTouchTime = 0;
     let lastInteractionTime = 0;
     let _lastBlinkState = null; // Track blink state to avoid per-frame DOM mutations
     let blinkUntil = 0;
     let nextBlink = Date.now() + 5000 + Math.random() * 3000;
-    // Tail wag: k ∈ [0.5, 0.8] randomised, drifts every 5–10s (φ-breathe derivative)
+    // Tail: phase accumulator — smooth, no phase jumps on speed changes
+    let tailPhase = 0;
+    let tailSwing = 0;
+    let lastFrameTime = Date.now();
     let tailWagK = 0.5 + Math.random() * 0.3;
     let tailWagKNext = 0.5 + Math.random() * 0.3;
     let tailWagKChangeAt = Date.now() + 5000 + Math.random() * 5000;
-    // Startle: brief tail acceleration on mouse proximity — no flip, no cut
-    let startleUntil = 0;
-    let catNearMouse = false; // edge-detect: only startle on entry, cat calms if mouse lingers
+    // Interaction: single source of truth — energy decays, edge-detected wasNear
+    let startleEnergy = 0; // [0,1] spikes on proximity entry, decays each frame
+    let wasNear = false;   // previous-frame proximity for edge detection
     const TOUCH_COOLDOWN = 100; // ms - prevent ghost/rapid-fire taps
     const IDLE_RESET_TIME = 2000; // ms - reset to center after 2s of no interaction
     
@@ -112,6 +113,7 @@ function initHopAnimation() {
         isTouchingCat = false;
         mouseX = -1000;
         mouseY = -1000;
+        wasNear = false; // prevent stuck edge-detector
     });
     
     function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, fleeing = false) {
@@ -149,19 +151,9 @@ function initHopAnimation() {
         ctx.fillRect(15.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
         ctx.fillRect(22.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
 
-        // Tail: purely clock-driven left↔right pendulum
-        // Root stays near body; tip sweeps wide (x: 11→29 in coord space = ~30→70px on canvas)
-        // Both sides are clearly outside the body, so left AND right are visible
+        // Tail: phase-accumulator driven — tailSwing updated each frame in animate()
+        // Root barely moves; tip sweeps wide (x: 11→29 in coord space = ~30→70px on canvas)
         ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
-        if (Date.now() > tailWagKChangeAt) {
-            tailWagK = tailWagKNext;
-            tailWagKNext = 0.5 + Math.random() * 0.3;
-            tailWagKChangeAt = Date.now() + 5000 + Math.random() * 5000;
-        }
-        // Startle: briefly use faster speed (divisor × 0.35) without phase jump
-        const isStartled = Date.now() < startleUntil;
-        const tailSpeedMul = isStartled ? 0.35 : 1.0;
-        const tailSwing = Math.sin(Date.now() / (700 * tailWagK * tailSpeedMul)); // -1 → +1
         // Root: x≈24, barely moves
         ctx.fillRect((24 + tailSwing * 0.4) * scale + offsetX + centerX, 24 * scale + yOffset + offsetY + centerY, 2 * scale, 5 * scale);
         // Tip: x = 20 ± 9, swings clearly left and right of body
@@ -226,55 +218,67 @@ function initHopAnimation() {
     }
     
     function animate() {
-        // Responsive wiggle: Adjust based on mode
+        const now = Date.now();
+
+        // === TAIL PHYSICS (phase accumulator — no phase jumps) ===
+        const dt = Math.min(now - lastFrameTime, 50); // cap at 50ms (tab-switch protection)
+        lastFrameTime = now;
+
+        // Smooth k-drift: lerp toward next target, refresh target when close
+        tailWagK += (tailWagKNext - tailWagK) * 0.002;
+        if (now > tailWagKChangeAt) {
+            tailWagKNext = 0.5 + Math.random() * 0.3;
+            tailWagKChangeAt = now + 5000 + Math.random() * 5000;
+        }
+
+        // Startle energy decays each frame — no binary flip, no phase jump
+        startleEnergy *= 0.97;
+
+        // Advance phase continuously; startle up to 3× speed, blends smoothly
+        tailPhase += dt / (700 * tailWagK) * (1 + startleEnergy * 2);
+        tailSwing = Math.sin(tailPhase);
+
+        // === INTERACTION (single source of truth) ===
         const fleeDistance = isMobileMode() ? CAT_CONFIG.MOBILE_FLEE_DISTANCE : CAT_CONFIG.FLEE_DISTANCE;
         const fleeStrength = isMobileMode() ? CAT_CONFIG.MOBILE_FLEE_STRENGTH : CAT_CONFIG.FLEE_STRENGTH;
-        
+
         let offsetX = 0;
         let offsetY = 0;
         let fleeing = false;
-        
-        // Check if cat should reset to center (idle timeout)
-        const timeSinceInteraction = Date.now() - lastInteractionTime;
-        const isIdle = timeSinceInteraction > IDLE_RESET_TIME;
-        
-        // If idle, smoothly reset cursor position to far away (resets cat to center)
+
+        // Idle timeout — reset cursor; wasNear resets naturally next frame
+        const isIdle = (now - lastInteractionTime) > IDLE_RESET_TIME;
         if (isIdle && (mouseX !== -1000 || mouseY !== -1000)) {
             mouseX = -1000;
             mouseY = -1000;
+            wasNear = false;
         }
-        
-        // Calculate mouse interaction (cursor area tracking for desktop, tap instance tracking for mobile)
+
+        // Proximity: compute isNear fresh every frame — one authoritative result
+        let isNear = false;
         if (fleeDistance > 0 && !isIdle) {
             const rect = canvas.getBoundingClientRect();
-            const canvasCenterX = rect.left + rect.width / 2;
-            const canvasCenterY = rect.top + rect.height / 2;
-            
-            // Calculate distance from mouse to canvas center
-            const dx = mouseX - canvasCenterX;
-            const dy = mouseY - canvasCenterY;
+            const dx = mouseX - (rect.left + rect.width / 2);
+            const dy = mouseY - (rect.top + rect.height / 2);
             const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            // Cat behavior: startle on entry, calm if mouse lingers
+
             if (distance < fleeDistance) {
+                isNear = true;
                 fleeing = true;
                 const strength = fleeStrength * (1 - distance / fleeDistance);
                 offsetX = -(dx / distance) * strength;
                 offsetY = -(dy / distance) * strength;
-                // Only startle on the moment of entry — not while mouse stays near
-                if (!catNearMouse) {
-                    catNearMouse = true;
-                    startleUntil = Date.now() + 700;
-                }
-            } else {
-                // Mouse left proximity — reset so next approach startles again
-                catNearMouse = false;
             }
         }
-        
-        // Date/time breathing animation is now handled purely by CSS (breathe-datetime keyframes)
-        // No more JS-controlled rapid blink toggling - gentler, consistent tempo
-        
+
+        // Edge-detect entry: spike startleEnergy on first near frame only
+        if (isNear && !wasNear) {
+            startleEnergy = 1.0;
+        }
+        wasNear = isNear;
+
+        // Date/time breathing animation handled purely by CSS (breathe-datetime keyframes)
+
         drawPixelCat(frame, offsetX, offsetY, fleeing);
         frame++;
         requestAnimationFrame(animate);
