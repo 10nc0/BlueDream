@@ -25,6 +25,7 @@ const CAT_CONFIG = Object.freeze({
     // Colors
     COLORS: {
         BODY: '#1a1a1a',
+        EAR_INNER: '#3a2a2a',
         EYES: '#22c55e',
         NOSE: '#ec4899',
         WHISKERS: '#ffffff',
@@ -137,7 +138,12 @@ function initHopAnimation() {
         // Ears (pointy cat ears) - These are the TOP-MOST pixels
         ctx.fillRect(15 * scale + offsetX + centerX, 12 * scale + yOffset + offsetY + centerY, 3 * scale, 3 * scale);
         ctx.fillRect(22 * scale + offsetX + centerX, 12 * scale + yOffset + offsetY + centerY, 3 * scale, 3 * scale);
-        
+
+        // Inner ears (warm dark highlight inside each ear)
+        ctx.fillStyle = CAT_CONFIG.COLORS.EAR_INNER;
+        ctx.fillRect(15.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
+        ctx.fillRect(22.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
+
         // Tail (curved up)
         ctx.fillRect(25 * scale + offsetX + centerX, 23 * scale + yOffset + offsetY + centerY, 2 * scale, 4 * scale);
         ctx.fillRect(26 * scale + offsetX + centerX, 20 * scale + yOffset + offsetY + centerY, 2 * scale, 3 * scale);
