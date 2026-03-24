@@ -1196,9 +1196,11 @@ GATE 3 — SCRIBE (table → summary → legend → coda):
 
   After table: one line per city → **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
   After summary: Years = (LCU/sqm × 700) ÷ Median Single Earner Income (same LCU)
-  After legend: Sources section — list every URL the data was drawn from, one per line.
-    Format: - [title or domain](url)
-    Only cite URLs that appeared in the Brave search results above. If a cell shows ⚪ N/A, do not invent a source for it — cite only what was actually found.
+  After legend: Sources section with explicit header.
+    Format:
+    **Sources:**
+    - [page title or domain name](url)
+    Only cite URLs that appeared in the Brave search results above. If a cell shows ⚪ N/A, do not invent a source for it — cite only what was actually found. Every source line MUST have a human-readable title — never output a bare URL or placeholder.
 
 OUTPUT: Table → summary lines → legend → sources. No coda here — coda is written separately.`;
 
@@ -1402,11 +1404,17 @@ Rules:
   // Helper: splice coda before sources block, or append if no sources found
   _insertSeedMetricCoda(body, coda) {
     if (!coda) return body;
+    const sourcesHeaderIdx = body.search(/\n\*\*Sources:\*\*/m);
+    if (sourcesHeaderIdx !== -1) {
+      return body.slice(0, sourcesHeaderIdx).trimEnd()
+        + '\n\n' + coda
+        + '\n\n' + body.slice(sourcesHeaderIdx).trimStart();
+    }
     const sourcesIdx = body.search(/\n[-*] \[|^[-*] \[/m);
     if (sourcesIdx !== -1) {
       return body.slice(0, sourcesIdx).trimEnd()
         + '\n\n' + coda
-        + '\n\n' + body.slice(sourcesIdx).trimStart();
+        + '\n\n**Sources:**\n' + body.slice(sourcesIdx).trimStart();
     }
     return body + '\n\n' + coda;
   }

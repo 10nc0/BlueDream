@@ -46,6 +46,10 @@ const SEED_METRIC_TOPIC_KEYWORDS = [
   '700sqm', '700 m²', 'residential', 'fatalism', 'optimism'
 ];
 
+const SEED_METRIC_KEYWORD_REGEXES = SEED_METRIC_TOPIC_KEYWORDS.map(
+  kw => new RegExp('\\b' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i')
+);
+
 /**
  * Detect if query triggers Seed Metric mode
  * @param {string} query - User query
@@ -54,8 +58,6 @@ const SEED_METRIC_TOPIC_KEYWORDS = [
 function detectSeedMetricIntent(query) {
   if (!query || typeof query !== 'string') return false;
   
-  const lowerQuery = query.toLowerCase();
-  
   for (const pattern of SEED_METRIC_TRIGGER_PATTERNS) {
     if (pattern.test(query)) {
       return true;
@@ -63,8 +65,8 @@ function detectSeedMetricIntent(query) {
   }
   
   let keywordMatches = 0;
-  for (const keyword of SEED_METRIC_TOPIC_KEYWORDS) {
-    if (lowerQuery.includes(keyword.toLowerCase())) {
+  for (const rx of SEED_METRIC_KEYWORD_REGEXES) {
+    if (rx.test(query)) {
       keywordMatches++;
       if (keywordMatches >= 2) return true;
     }
