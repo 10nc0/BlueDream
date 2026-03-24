@@ -12,7 +12,9 @@ NyanBook~ — multi-tenant archiving notebook. Users send messages (WhatsApp / L
 ## UI Implementation Rules — AUTHORITATIVE (do not guess, do not revert)
 
 ### Mobile/Desktop parity
-Every UI size/spacing/layout change: check BOTH the base CSS rule AND the `@media (max-width: 480px)` override — they are independent `!important` blocks. A fix to one silently leaves the other broken. Body classes `mobile-mode` / `desktop-mode` are set by JS `LayoutController`.
+Every UI size/spacing/layout change: check BOTH the base CSS rule AND the `@media (max-width: 599px)` override — they are independent `!important` blocks. A fix to one silently leaves the other broken. Body classes `mobile-mode` / `desktop-mode` are set by JS `LayoutController`.
+- **Mobile threshold**: `viewport width < 600px` — pure width, no aspect-ratio check. `detectDevice()` in `layout-controller.js` is a single line.
+- **CSS breakpoints**: `@media (max-width: 599px)` = mobile; `@media (min-width: 600px)` = desktop row layout.
 
 ### Dashboard cat (#catContainer)
 - `position: relative; margin: 0 -22px` — unified, identical to `playground.html`. No mobile/desktop split.
@@ -32,7 +34,7 @@ Every UI size/spacing/layout change: check BOTH the base CSS rule AND the `@medi
 ### Adam/Eve UI hierarchy
 - **Adam** (message pane) = primary, always spawns first, dominates visually at all breakpoints.
 - **Eve** (book sidebar) = secondary, static navigation. Mobile: hidden by default. Tablet/desktop: spawns via `eveSpawn` slide-in (translateX -18px → 0) after Adam is ready.
-- Eve width: 180px (tablet) / 200px (desktop). Base CSS: `flex-grow: 0; min-width: 160px; max-width: 300px` — Eve can never blow past 300px.
+- Eve width: `clamp(160px, 22vw, 240px)` — set in base `.book-sidebar` rule, no per-breakpoint overrides. Scales with viewport (160px min at threshold, ~240px cap on Mac). Do NOT add fixed-px width in media queries.
 - Header (cat + title) is eternal — present at all resolutions, above Adam and Eve.
 
 ---
@@ -142,11 +144,12 @@ Every inpipe message → cryptographic provenance capsule (body text, HMAC sende
 
 **Any string or constant used in >1 file** → extract to a shared module in `utils/` or `prompts/`. Code bloat = drift risk.
 
-**Git remotes** — full push sequence in `.local/GIT_INSTRUCTIONS.md`
-- `origin` → `10nc3/Nyan` (private, PAT=`GITHUB_PAT_10NC3`) — push all code changes here
-- `bluedream` → `10nc0/BlueDream` (public, PAT=`GITHUB_PAT_10NC0`) — push all code changes; README.md already tracked so pushes automatically
-- `gitsafe-backup` → Replit internal git
-- Always pipe push output through `sed "s/$GITHUB_PAT_XXXX/[REDACTED]/g"` — never expose PAT in logs
+**Git remotes** — two separate push targets with different content rules:
+- `origin` → `10nc3/Nyan` (private, PAT=`GITHUB_PAT_10NC3`) — ALL code + `replit.md` (force-add: `git add -f replit.md`). Push here first.
+- `bluedream` → `10nc0/BlueDream` (public) — ALL code + `README.md`. NEVER include: `replit.md`, `notebook.md`, `.env`, secrets. These are already gitignored.
+- `gitsafe-backup` → Replit internal git — push all code (same as origin minus replit.md).
+- Always use PAT-embedded remote URL: `git remote set-url origin "https://${GITHUB_PAT_10NC3}@github.com/10nc3/Nyan.git"`. Redact in logs: `sed 's/https:\/\/[^@]*@/https:\/\/[REDACTED]@/g'`
+- `replit.md` push sequence: `git add -f replit.md && git commit -m "..." && git push origin main` — then do NOT push that commit to bluedream (push bluedream from the preceding commit hash or just skip replit.md commits to bluedream).
 
 **Git commit discipline** — one logical change = one commit, pushed once.
 - Before the first push: check the task's "Done looks like" against the diff. Catch all gaps locally.
