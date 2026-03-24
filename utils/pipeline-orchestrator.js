@@ -650,7 +650,8 @@ MANDATORY INSTRUCTIONS:
 2. If the search results are recent, explicitly mention dates
 3. If search data conflicts with your training data, PREFER the web search results
 4. If the search results don't fully answer the question, acknowledge what's missing
-5. Each result includes a "Source: <url>" — cite it inline as a markdown link [title](url) after each fact you use`;
+5. Each result includes a "Source: <url>" — cite it inline as a markdown link [title](url) after each fact you use
+6. End with a **Sources:** section listing all cited URLs as markdown links — no bare URLs, no placeholders`;
         state.didSearch = true;
         console.log(`✅ Real-time search successful, context injected`);
       } else {
