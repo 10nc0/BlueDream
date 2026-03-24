@@ -1542,7 +1542,7 @@
             const fragment = document.createDocumentFragment();
             
             const headerBar = document.createElement('div');
-            headerBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(148, 163, 184, 0.1);';
+            headerBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.75rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(148, 163, 184, 0.1);';
             
             const headerLeft = document.createElement('div');
             headerLeft.style.cssText = 'display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;';
@@ -1698,10 +1698,10 @@
                 messagesWrapper.style.cssText = 'display: flex; flex-direction: column; flex: 1; margin-top: 0.5rem; min-height: 0;';
                 
                 const toolbar = document.createElement('div');
-                toolbar.style.cssText = 'display: flex; gap: 0.5rem; padding: 0.5rem; background: rgba(30, 41, 59, 0.4); border-radius: 6px; margin-bottom: 0.5rem; flex-shrink: 0;';
+                toolbar.style.cssText = 'display: flex; gap: 0.3rem; padding: 0.3rem 0.5rem; background: rgba(30, 41, 59, 0.4); border-radius: 6px; margin-bottom: 0.375rem; flex-shrink: 0; align-items: center;';
                 
                 const selectAllLabel = document.createElement('label');
-                selectAllLabel.style.cssText = 'display: flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.625rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.75rem; cursor: pointer; white-space: nowrap;';
+                selectAllLabel.style.cssText = 'display: flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.75rem; cursor: pointer; white-space: nowrap; flex-shrink: 0;';
                 const selectAllCheckbox = document.createElement('input');
                 selectAllCheckbox.type = 'checkbox';
                 selectAllCheckbox.id = `select-all-${book.fractal_id}`;
@@ -1715,14 +1715,14 @@
                 searchInput.type = 'text';
                 searchInput.id = `msg-search-${book.fractal_id}`;
                 searchInput.placeholder = '🔍 Search...';
-                searchInput.style.cssText = 'padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem; flex: 1;';
+                searchInput.style.cssText = 'padding: 0.25rem 0.5rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.8rem; flex: 1 1 80px; min-width: 60px;';
                 searchInput.dataset.filterMessages = book.fractal_id;
                 toolbar.appendChild(searchInput);
                 
                 const statusSelect = document.createElement('select');
                 statusSelect.id = `status-filter-${book.fractal_id}`;
                 statusSelect.dataset.statusFilter = book.fractal_id;
-                statusSelect.style.cssText = 'padding: 0.375rem 0.75rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.875rem;';
+                statusSelect.style.cssText = 'padding: 0.25rem 0.375rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.75rem; flex-shrink: 0;';
                 [['all', 'All'], ['success', '✓'], ['failed', '✗']].forEach(([val, txt]) => {
                     const opt = document.createElement('option');
                     opt.value = val;
@@ -1735,7 +1735,7 @@
                 downloadBtn.id = `download-selected-${book.fractal_id}`;
                 downloadBtn.dataset.downloadBook = book.fractal_id;
                 downloadBtn.disabled = true;
-                downloadBtn.style.cssText = 'padding: 0.375rem 0.75rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;';
+                downloadBtn.style.cssText = 'padding: 0.25rem 0.5rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.7rem; cursor: pointer; white-space: nowrap; opacity: 0.5; flex-shrink: 0;';
                 downloadBtn.textContent = '⬇️ Attachment';
                 toolbar.appendChild(downloadBtn);
                 
@@ -1743,7 +1743,7 @@
                 tagBtn.id = `tag-selected-${book.fractal_id}`;
                 tagBtn.dataset.tagBook = book.fractal_id;
                 tagBtn.disabled = true;
-                tagBtn.style.cssText = 'padding: 0.375rem 0.75rem; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 0.375rem; color: #a855f7; font-size: 0.75rem; cursor: pointer; white-space: nowrap; opacity: 0.5;';
+                tagBtn.style.cssText = 'padding: 0.25rem 0.5rem; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 0.375rem; color: #a855f7; font-size: 0.7rem; cursor: pointer; white-space: nowrap; opacity: 0.5; flex-shrink: 0;';
                 tagBtn.textContent = '🏷️ Tag';
                 toolbar.appendChild(tagBtn);
                 

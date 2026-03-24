@@ -680,7 +680,7 @@ body::before {
 
 /* Draggable Resizer (only on tablet/desktop) */
 .sidebar-resizer {
-  display: none; /* Hidden on mobile */
+  display: block;
   width: 1px;
   background: transparent;
   cursor: col-resize;
