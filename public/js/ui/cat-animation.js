@@ -57,6 +57,8 @@ function initHopAnimation() {
     let lastTouchTime = 0;
     let lastInteractionTime = 0;
     let _lastBlinkState = null; // Track blink state to avoid per-frame DOM mutations
+    let blinkUntil = 0;
+    let nextBlink = Date.now() + 5000 + Math.random() * 3000;
     const TOUCH_COOLDOWN = 100; // ms - prevent ghost/rapid-fire taps
     const IDLE_RESET_TIME = 2000; // ms - reset to center after 2s of no interaction
     
@@ -144,14 +146,24 @@ function initHopAnimation() {
         ctx.fillRect(15.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
         ctx.fillRect(22.75 * scale + offsetX + centerX, 12.5 * scale + yOffset + offsetY + centerY, 1.5 * scale, 2 * scale);
 
-        // Tail (curved up)
-        ctx.fillRect(25 * scale + offsetX + centerX, 23 * scale + yOffset + offsetY + centerY, 2 * scale, 4 * scale);
-        ctx.fillRect(26 * scale + offsetX + centerX, 20 * scale + yOffset + offsetY + centerY, 2 * scale, 3 * scale);
-        
+        // Tail (curved up, gently swaying) — reset to body colour after inner ears
+        ctx.fillStyle = CAT_CONFIG.COLORS.BODY;
+        const tailSway = Math.sin(frameNum / 28) * 1.2 * scale;
+        ctx.fillRect(25 * scale + offsetX + centerX + tailSway, 23 * scale + yOffset + offsetY + centerY, 2 * scale, 4 * scale);
+        ctx.fillRect(26 * scale + offsetX + centerX + tailSway, 20 * scale + yOffset + offsetY + centerY, 2 * scale, 3 * scale);
+
+        // Blink state (passive check — no side effects, no setTimeout)
+        const isBlinking = Date.now() < blinkUntil;
+        if (Date.now() > nextBlink && !isBlinking) {
+            blinkUntil = Date.now() + 260;
+            nextBlink = Date.now() + 5000 + Math.random() * 3000;
+        }
+
         // Eyes (green glow)
         ctx.fillStyle = CAT_CONFIG.COLORS.EYES;
-        ctx.fillRect(17 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 2 * scale, 2 * scale);
-        ctx.fillRect(21 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 2 * scale, 2 * scale);
+        const eyeH = isBlinking ? 0.3 * scale : 2 * scale;
+        ctx.fillRect(17 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 2 * scale, eyeH);
+        ctx.fillRect(21 * scale + offsetX + centerX, 17 * scale + yOffset + offsetY + centerY, 2 * scale, eyeH);
         
         // Nose (pink)
         ctx.fillStyle = CAT_CONFIG.COLORS.NOSE;
