@@ -66,6 +66,7 @@ function initHopAnimation() {
     let tailWagKChangeAt = Date.now() + 5000 + Math.random() * 5000;
     // Startle: brief tail acceleration on mouse proximity — no flip, no cut
     let startleUntil = 0;
+    let catNearMouse = false; // edge-detect: only startle on entry, cat calms if mouse lingers
     const TOUCH_COOLDOWN = 100; // ms - prevent ghost/rapid-fire taps
     const IDLE_RESET_TIME = 2000; // ms - reset to center after 2s of no interaction
     
@@ -254,16 +255,20 @@ function initHopAnimation() {
             const dy = mouseY - canvasCenterY;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            // Cat behavior: startle + subtle wiggle if cursor is close (within FLEE_DISTANCE)
+            // Cat behavior: startle on entry, calm if mouse lingers
             if (distance < fleeDistance) {
                 fleeing = true;
                 const strength = fleeStrength * (1 - distance / fleeDistance);
                 offsetX = -(dx / distance) * strength;
                 offsetY = -(dy / distance) * strength;
-                // Trigger startle burst (700ms) — accelerates tail, no flip/cut
-                if (Date.now() >= startleUntil) {
+                // Only startle on the moment of entry — not while mouse stays near
+                if (!catNearMouse) {
+                    catNearMouse = true;
                     startleUntil = Date.now() + 700;
                 }
+            } else {
+                // Mouse left proximity — reset so next approach startles again
+                catNearMouse = false;
             }
         }
         
