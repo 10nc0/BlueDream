@@ -62,7 +62,7 @@
    * Message area: flex: 1 fills remaining space automatically in row layout
    * Breakpoints aligned with .book-layout flex-direction: row at 600px
    */
-  --sidebar-width: 240px; /* Default for tablet/desktop */
+  --sidebar-width: clamp(160px, 22vw, 240px); /* Default — JS drag overrides with a fixed px value */
   
   /* Border Radius */
   --radius-sm: 0.375rem;
@@ -562,9 +562,9 @@ body::before {
   padding: 0.3125rem;
   flex-shrink: 0;
   flex-grow: 0;         /* Never expand beyond explicit width — Adam always dominates */
-  width: clamp(160px, 22vw, 240px); /* Scales with viewport; bounded 160–240px */
+  width: var(--sidebar-width); /* JS drag sets this; default in :root = clamp(160px,22vw,240px) */
   min-width: 160px;
-  max-width: 240px;
+  max-width: 400px;     /* Matches JS MAX_WIDTH=400 */
   overflow-x: hidden;  /* clip horizontal only; let children own vertical scroll */
   overflow-y: visible;
   height: 100%;
