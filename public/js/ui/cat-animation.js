@@ -269,6 +269,10 @@ function initHopAnimation() {
                 const strength = fleeStrength * (1 - distance / fleeDistance);
                 offsetX = -(dx / distance) * strength;
                 offsetY = -(dy / distance) * strength;
+                // No clamping. The cat is transcendental — it may drift beyond the canvas edge
+                // under strong provocation, but offsetX/offsetY reset to 0 the moment the
+                // cursor withdraws. The calibration point (NyanBook center, 0^0 = I_n) is
+                // always where it returns. No need to cage what can never be bound.
             }
         }
 
