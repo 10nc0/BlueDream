@@ -154,7 +154,7 @@ Perform the dialectical audit and output JSON only.`;
       console.error(`⏱️ Audit Pass Timeout/Reset - Bypassing verification`);
       return { 
         verdict: 'BYPASS', 
-        confidence: 0, 
+        confidence: null, 
         reason: 'Audit timed out — second pass never ran', 
         issues: [{ severity: 'HIGH', reason: 'Verification timed out' }],
         error: 'AUDIT_TIMEOUT'
@@ -164,7 +164,7 @@ Perform the dialectical audit and output JSON only.`;
     // Error Propagation: Skip safely with BYPASS instead of defaulting to APPROVED
     return { 
       verdict: 'BYPASS', 
-      confidence: 0, 
+      confidence: null, 
       reason: `Audit network error: ${err.message}`, 
       issues: [{ severity: 'HIGH', reason: 'Verification service unavailable' }],
       error: 'AUDIT_NETWORK_ERROR'

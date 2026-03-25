@@ -655,7 +655,7 @@ MANDATORY INSTRUCTIONS:
 1. Base your answer primarily on the web search results above — they reflect the current state of the world
 2. If the search results are recent, explicitly mention dates found in them
 3. If search data conflicts with your training data, PREFER the web search results
-4. Synthesize a DIRECT answer — do NOT tell the user to visit a website. You are the answer. Snippets + your training knowledge together = your answer. Fill gaps with training knowledge, flag uncertainty explicitly ("as of my last data..." or "snippets suggest but don't confirm...")
+4. Triangulate a DIRECT answer — do NOT tell the user to visit a website. You are the answer. Find what multiple sources agree on and converge on that as truth. Fill gaps with training knowledge. Do not invent — purify. Flag genuine uncertainty explicitly ("as of my last data..." or "multiple sources suggest but exact figure unconfirmed...")
 5. Each result includes a "Source: <url>" — cite it inline as a markdown link [title](url) after each fact you use
 6. End with a **Sources:** section listing all cited URLs as markdown links — no bare URLs, no placeholders`;
         state.didSearch = true;
@@ -1682,7 +1682,9 @@ Output ONLY the corrected table and summary lines:`;
         this.llmTimeouts.audit
       );
       const _auditLabel = process.env.DEEPSEEK_API ? 'DeepSeek R1' : 'Llama';
-      console.log(`🔍 Audit [${_auditLabel}]: ${state.auditResult.verdict} (${state.auditResult.confidence}%)`);
+      const _confStr = state.auditResult.confidence !== null && state.auditResult.confidence !== undefined
+        ? `${state.auditResult.confidence}%` : 'unverified';
+      console.log(`🔍 Audit [${_auditLabel}]: ${state.auditResult.verdict} (${_confStr})`);
       
       // WRITE to DataPackage: Stage S3 audit MARKERS only (read-only mode)
       // Audit cannot write corrections - only marks issues for retry stage to fix
@@ -1696,7 +1698,7 @@ Output ONLY the corrected table and summary lines:`;
       });
     } catch (err) {
       console.log(`⚠️ Audit error: ${err.message}`);
-      state.auditResult = { verdict: 'BYPASS', confidence: 0, reason: 'Audit failed — second pass never ran' };
+      state.auditResult = { verdict: 'BYPASS', confidence: null, reason: 'Audit failed — second pass never ran' };
     }
   }
   
