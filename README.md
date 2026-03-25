@@ -64,6 +64,14 @@ Identity, in this system, is the pattern that emerges from what was recorded —
 | Community | Self-hosted | Mutual aid, neighbourhood records |
 | Municipal | Fork + customize | Local government transparency |
 
+**What people actually use it for:**
+
+- **Receipts & reimbursements** — photo to WhatsApp, auto-dated, searchable forever. No folder, no rename, no lost file.
+- **Household** — repairs, warranties, maintenance logs. The fridge filter was changed *when*, exactly.
+- **Small business** — client messages, delivery confirmations, invoices. The thread is the paper trail.
+- **Community** — neighbourhood issues, mutual aid requests, meeting notes. The gap between entries is data too.
+- **Personal** — memories, medical history, important conversations. Things you'll need in ten years that you can't predict today.
+
 Open source means anyone can verify the feather is level. No priest. No perriwig. No proprietary black box.
 
 ---
@@ -145,19 +153,6 @@ nyan~
 ---
 
 ## Architecture
-
-**Message flow:**
-
-```
-Android / iPhone (WhatsApp / LINE / any SNS)
-  → webhook
-    → queue processor
-      → Discord ledger thread
-        → PostgreSQL row
-          → IPFS capsule pin (optional)
-```
-
-**Code structure:**
 
 ```
 Vegapunk Kernel (vegapunk.js)
