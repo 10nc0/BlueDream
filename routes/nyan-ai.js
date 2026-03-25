@@ -668,7 +668,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 },
                 config: {
                     headers: {
-                        'Authorization': `Bearer ${config.ai.deepseekKey || config.ai.dashboardAiKey}`,
+                        'Authorization': `Bearer ${config.ai.dashboardAiKey}`,
                         'Content-Type': 'application/json'
                     }
                 }
@@ -701,7 +701,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         },
                         config: {
                             headers: {
-                                'Authorization': `Bearer ${config.ai.deepseekKey || config.ai.dashboardAiKey}`,
+                                'Authorization': `Bearer ${config.ai.dashboardAiKey}`,
                                 'Content-Type': 'application/json'
                             }
                         }
