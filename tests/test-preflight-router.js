@@ -2,12 +2,18 @@
 /**
  * Preflight Router Unit Tests — standalone, no live server required.
  *
- * Tests the routing cascade that determines whether a query goes to:
- *   seed-metric | psi-ema | psi-ema-identity | forex | general
+ * Routing cascade:
+ *   Step 0  city abbreviation (no $) → seed-metric   (longevity > profit — city beats ambiguous ticker)
+ *   Step 1  dollar-prefix / stock kw → psi-ema        (unambiguous ticker = analysis)
+ *   Step 2  forex pair + psi-ema kw  → psi-ema        (run analysis on pair)
+ *           forex pair alone         → forex
+ *   Step 3  other seed-metric kw     → seed-metric    (explicit: "seed metric", sqm, etc.)
+ *   Step n-1 bare psi-ema kw (no asset context) → psi-ema-identity  (self-reflect from codebase)
+ *   Default → psi-ema
  *
- * Covers the two fixes shipped in the routing refactor:
- *   1. City abbreviation + affordability keyword → Seed Metric (not Ψ-EMA)
- *   2. Bloomberg-spec Ψ-EMA: ticker + price sufficient (no "stock/shares" required)
+ * psi-ema-identity: "what is psi-ema?", "who are you?" — needs no external data,
+ *   just injects PSI_EMA_DOCUMENTATION as H0 ground truth. Fires LAST so a real
+ *   asset query with "psi-ema" in it (EURUSD psi-ema) runs analysis instead.
  *
  * Run: node tests/test-preflight-router.js
  */
@@ -39,34 +45,53 @@ function assert(condition, msg) {
 }
 
 // ----------------------------------------------------------------
-// Geo-veto helper (mirrors utils/preflight-router.js logic)
+// Routing helpers
 // ----------------------------------------------------------------
 const CITY_ABBREV_RE   = /\b(la|ny|sf|dc|hk|kl)\b/i;
 const AFFORDABILITY_RE = /\b(price|prices|housing|property|rent|land|cost|income|salary|afford)\b/i;
 const STOCK_CUE_RE     = /\$[A-Z]{1,5}\b|\b(stock|stocks)\b/i;
 
 function geoVetoWouldFire(query) {
-    const hasCityAbbrev   = CITY_ABBREV_RE.test(query);
+    const hasCityAbbrev    = CITY_ABBREV_RE.test(query);
     const hasAffordability = AFFORDABILITY_RE.test(query);
     const hasStockCue      = STOCK_CUE_RE.test(query);
     return hasCityAbbrev && hasAffordability && !hasStockCue;
 }
 
-// NOTE: \b does not work with non-ASCII Unicode (ψ/Ψ). Use lookaround with \s|^|$ instead.
+// NOTE: \b does not work with non-ASCII Unicode (ψ/Ψ). Use lookaround instead.
 const PSI_EMA_RE = /(?:^|[\s,;.!?])(psi|ψ)[\s\-]?ema(?:$|[\s,;.!?])/i;
 
-// Dollar-prefix ($TICK) or "stock/stocks" keyword signals ticker context and bypasses
-// ALL geo / seed-metric detection — mirrors the actual preflight router pre-check.
-// detectSeedMetricIntent does NOT know about the dollar prefix ($SF → still matches SF+price),
-// so this guard must fire BEFORE calling detectSeedMetricIntent.
-const TICKER_CONTEXT_RE = /\$[A-Z]{1,5}\b|\b(stock|stocks)\b/i;
-
 function routeQuery(query) {
-    if (PSI_EMA_RE.test(query))                         return 'psi-ema-identity'; // step 0: explicit psi-ema always wins
-    if (isForexQuery(query) || detectForexPair(query)) return 'forex';             // step 1: forex
-    if (TICKER_CONTEXT_RE.test(query))                  return 'psi-ema';          // step 2: ticker override
-    if (detectSeedMetricIntent(query))                  return 'seed-metric';      // step 3: geo / housing
-    return 'psi-ema'; // default — psi-ema is the general path
+    const hasDollarTicker = /\$[A-Z]{1,5}\b/.test(query);
+    const hasStockKw      = /\b(stock|stocks)\b/i.test(query);
+    const hasCityAbbrev   = CITY_ABBREV_RE.test(query) && !hasDollarTicker; // bare city, no $ prefix
+    const hasForex        = isForexQuery(query) || detectForexPair(query);
+    const hasPsiEma       = PSI_EMA_RE.test(query);
+
+    // Step 0: bare city abbreviation → seed-metric (longevity > profit)
+    // "SF psi-ema" → seed-metric  (SF = San Francisco, not Stifel — less known ticker,
+    //   routing to equity would risk output hallucination on a poorly-known name)
+    // "$SF psi-ema" → NOT here (dollar prefix = unambiguous Stifel, handled below)
+    if (hasCityAbbrev) return 'seed-metric';
+
+    // Step 1: dollar-prefix ($TICK) or "stock/stocks" → psi-ema (unambiguous ticker analysis)
+    if (hasDollarTicker || hasStockKw) return 'psi-ema';
+
+    // Step 2: forex pair
+    // "EURUSD psi-ema" → psi-ema (run psi-ema analysis on the pair from YF — forex is
+    //   also a price wave time series; explicit psi-ema request = run the algorithm)
+    // "EURUSD price"   → forex   (plain price query, no psi-ema intent)
+    if (hasForex) return hasPsiEma ? 'psi-ema' : 'forex';
+
+    // Step 3: explicit seed-metric keywords (no city abbrev — handled above)
+    if (detectSeedMetricIntent(query)) return 'seed-metric';
+
+    // Step n-1: bare psi-ema keyword with no asset context → self-reflection / identity
+    // "what is psi-ema?", "psi ema" — no external data needed; injects PSI_EMA_DOCUMENTATION
+    if (hasPsiEma) return 'psi-ema-identity';
+
+    // Default
+    return 'psi-ema';
 }
 
 // ----------------------------------------------------------------
@@ -172,73 +197,73 @@ test('LA stocks → geo-veto does NOT fire ("stocks" = ticker cue)', () => {
 });
 
 // ----------------------------------------------------------------
-// SECTION 3: Psi-EMA identity keyword (step 0 — overrides all other routes)
-// Forex is also a price wave time series → "EURUSD psi-ema" routes to psi-ema, not forex
+// SECTION 3: Ψ-EMA identity (step n-1 — self-reflection, no external data)
+// Only fires when there is NO recognisable asset context (no city, no forex, no ticker).
+// "EURUSD psi-ema" = run analysis on the pair (step 2), NOT identity.
+// "SF psi-ema"     = city abbrev wins (step 0) → seed-metric, NOT identity.
 // ----------------------------------------------------------------
 console.log('\n🌀 Ψ-EMA identity detection');
 
-test('"What is psi-ema?" → psi-ema-identity', () => {
+test('"What is psi-ema?" → psi-ema-identity (meta question, no asset context)', () => {
     assert(routeQuery('What is psi-ema?') === 'psi-ema-identity', 'expected psi-ema-identity');
 });
 
-test('"explain Ψ-EMA" → psi-ema-identity (Unicode Ψ)', () => {
+test('"explain Ψ-EMA" → psi-ema-identity (Unicode Ψ, no asset context)', () => {
     assert(routeQuery('explain Ψ-EMA') === 'psi-ema-identity', 'expected psi-ema-identity');
 });
 
-test('"psi ema" → psi-ema-identity (space variant — no hyphen)', () => {
+test('"psi ema" → psi-ema-identity (space variant — no asset context)', () => {
     assert(routeQuery('psi ema') === 'psi-ema-identity', 'expected psi-ema-identity for space variant');
 });
 
-test('"NVDA psi ema" → psi-ema-identity (equity + space variant)', () => {
-    assert(routeQuery('NVDA psi ema') === 'psi-ema-identity', 'expected psi-ema-identity');
-});
-
-test('"EURUSD psi-ema" → psi-ema-identity (forex pair — psi-ema explicit request beats forex detection)', () => {
-    assert(routeQuery('EURUSD psi-ema') === 'psi-ema-identity', 'expected psi-ema-identity, not forex');
-});
-
-test('"SF psi-ema" → psi-ema-identity (city abbrev — psi-ema explicit request beats seed-metric)', () => {
-    assert(routeQuery('SF psi-ema') === 'psi-ema-identity', 'expected psi-ema-identity, not seed-metric');
-});
-
 // ----------------------------------------------------------------
-// SECTION 4: Forex detection (step 1 — after psi-ema-identity, before seed-metric)
+// SECTION 4: Forex detection (step 2 — after city + ticker checks)
 // ----------------------------------------------------------------
 console.log('\n💱 Forex detection');
 
-test('EURUSD price → forex route', () => {
+test('EURUSD price → forex (plain price query, no psi-ema intent)', () => {
     assert(routeQuery('EURUSD price') === 'forex', 'expected forex for "EURUSD price"');
 });
 
-test('USD/JPY rate → forex route', () => {
+test('USD/JPY rate → forex', () => {
     assert(routeQuery('USD/JPY rate') === 'forex', 'expected forex');
 });
 
-test('dollar to euro → forex route', () => {
+test('dollar to euro → forex', () => {
     assert(routeQuery('dollar to euro') === 'forex', 'expected forex');
 });
 
 // ----------------------------------------------------------------
-// SECTION 5: Seed-metric takes priority over psi-ema
+// SECTION 5: Seed-metric routing
+// City abbreviation is step 0 — wins even when "psi-ema" is appended.
 // ----------------------------------------------------------------
-console.log('\n🏠 Seed Metric priority over Ψ-EMA');
+console.log('\n🏠 Seed Metric routing');
 
-test('"SF price" routed via seed-metric (not psi-ema)', () => {
+test('"SF price" → seed-metric', () => {
     assert(routeQuery('SF price') === 'seed-metric', `expected seed-metric, got ${routeQuery('SF price')}`);
 });
 
-test('"LA housing" routed via seed-metric', () => {
+test('"LA housing" → seed-metric', () => {
     assert(routeQuery('LA housing') === 'seed-metric', `expected seed-metric, got ${routeQuery('LA housing')}`);
+});
+
+test('"SF psi-ema" → seed-metric (city abbrev wins — SF = San Francisco, not Stifel; longevity > profit)', () => {
+    const result = routeQuery('SF psi-ema');
+    assert(result === 'seed-metric', `expected seed-metric, got ${result}`);
 });
 
 // ----------------------------------------------------------------
 // SECTION 6: Full routing cascade — key edge cases
-// Tests routeQuery() end-to-end for cases that require cascade ordering to be correct
 // ----------------------------------------------------------------
 console.log('\n🔀 Full routing cascade');
 
-test('"$SF price" → psi-ema (Stifel ticker — dollar prefix overrides geo, seed-metric bypassed)', () => {
+test('"$SF price" → psi-ema (Stifel — dollar prefix makes ticker unambiguous)', () => {
     const result = routeQuery('$SF price');
+    assert(result === 'psi-ema', `expected psi-ema, got ${result}`);
+});
+
+test('"$SF psi-ema" → psi-ema (Stifel + psi-ema analysis — dollar prefix wins over geo)', () => {
+    const result = routeQuery('$SF psi-ema');
     assert(result === 'psi-ema', `expected psi-ema, got ${result}`);
 });
 
@@ -247,12 +272,17 @@ test('"$AAPL rent" → psi-ema (dollar prefix on unambiguous ticker)', () => {
     assert(result === 'psi-ema', `expected psi-ema, got ${result}`);
 });
 
-test('"NVDA price" → psi-ema (Bloomberg-spec: equity ticker + price, no geo)', () => {
+test('"EURUSD psi-ema" → psi-ema (run psi-ema analysis on the pair — forex is a price wave time series)', () => {
+    const result = routeQuery('EURUSD psi-ema');
+    assert(result === 'psi-ema', `expected psi-ema, got ${result}`);
+});
+
+test('"NVDA price" → psi-ema (equity, no geo, no forex pair detected)', () => {
     const result = routeQuery('NVDA price');
     assert(result === 'psi-ema', `expected psi-ema, got ${result}`);
 });
 
-test('"AAPL earnings" → psi-ema (Bloomberg-spec: equity context, no geo)', () => {
+test('"AAPL earnings" → psi-ema (equity context, no geo)', () => {
     const result = routeQuery('AAPL earnings');
     assert(result === 'psi-ema', `expected psi-ema, got ${result}`);
 });
@@ -262,8 +292,7 @@ test('"what did Elon tweet?" → psi-ema (general query — psi-ema is the defau
     assert(result === 'psi-ema', `expected psi-ema, got ${result}`);
 });
 
-test('"EURUSD price" → forex (forex step fires first, before geo-veto or seed-metric)', () => {
-    // EURUSD is a currency pair — forex step 0 catches it before any other check
+test('"EURUSD price" → forex (no psi-ema keyword — plain forex query)', () => {
     const result = routeQuery('EURUSD price');
     assert(result === 'forex', `expected forex, got ${result}`);
 });
@@ -275,7 +304,7 @@ console.log(`\n${'='.repeat(50)}`);
 console.log(`📊 Results: ${passed} passed, ${failed} failed`);
 if (failures.length > 0) {
     console.log('\nFailed tests:');
-    failures.forEach(f => console.log(`  ❌ ${f.label}`));
+    failures.forEach(f => console.log(`  ❌ ${f.label}: ${f.error}`));
 }
 console.log('='.repeat(50));
 
