@@ -9,8 +9,6 @@ Nyanbook is a post-folder storage (information) system thinking (protocol). Inst
 
 A versatile AI/LLM endpoint is provided to make contents queryable & interactive.
 
-Dashboard: Glassmorphism SPA — browse all archived messages, search, tag, export with SHA256 manifest. Multimodal AI Playground included.
-
 ---
 
 ## Why URL-First
@@ -225,6 +223,18 @@ Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arr
 > Everything runs on free tiers. No terminal required.
 >
 > **Operators:** see [`RUNBOOK (LOGOS).md`](RUNBOOK%20(LOGOS).md) for secret rotation, incident response, and post-deploy checklist.
+
+### Quick Start (5 minutes)
+
+Minimum to get running:
+
+1. **[Replit](https://replit.com)** — create account, import from GitHub
+2. **[Supabase](https://supabase.com)** — new project, copy `DATABASE_URL`
+3. **[Discord](https://discord.com/developers/applications)** — create 4 bots, copy tokens into Secrets
+
+That's it. The app starts. WhatsApp, LINE, Telegram, IPFS, email — all optional, all addable later.
+
+---
 
 ### 1. Accounts
 
