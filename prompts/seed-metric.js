@@ -35,7 +35,11 @@ const SEED_METRIC_TRIGGER_PATTERNS = [
   /(?:price|income|housing).*city\s*comparison/i,
   /\b\w+\s+vs\.?\s+\w+.*(?:land|housing|property)/i,  // "X vs Y land/housing/property"
   /(?:50|fifty)\s*years?\s*ago/i,
-  /historical.*(?:housing|land|price)/i
+  /historical.*(?:housing|land|price)/i,
+  // City abbreviation + affordability keyword (geo wins over obscure tickers)
+  // Longevity > profit: SF = San Francisco, not Stifel; LA = Los Angeles, not a ticker
+  /\b(sf|la|ny|dc|hk|kl)\b.*\b(price|prices|housing|property|rent|land|cost|income|salary|afford)/i,
+  /\b(price|prices|housing|property|rent|land|cost|income|salary|afford).*\b(sf|la|ny|dc|hk|kl)\b/i,
 ];
 
 const SEED_METRIC_TOPIC_KEYWORDS = [

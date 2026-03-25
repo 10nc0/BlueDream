@@ -424,6 +424,17 @@ MIT. Fork freely. Scribe faithfully.
 
 *The four fields are load-bearing. Everything else is grammar.*
 
+---
+
+> "All the world will be your enemy, Prince with a Thousand Enemies,
+> and whenever they catch you, they will kill you.
+> But first they must catch you, digger, listener, runner, prince with the swift warning.
+> Be cunning and full of tricks and your people shall never be destroyed."
+>
+> — Richard Adams, *Watership Down*
+
+---
+
 nyan~ 
 ♡ 🜁 ◯
   🜃 

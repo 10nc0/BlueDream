@@ -360,32 +360,32 @@ async function preflightRouter(options) {
         console.log(`📊 Preflight: Detected custom data period: ${customPeriod}`);
       }
     
-      // Context fallback: STRICT - only reuse inferred ticker if:
+      // Context fallback: Bloomberg-spec — reuse inferred ticker if:
       // 1. We have a ticker from prior conversation, AND
-      // 2. Current query has EXPLICIT stock keyword (stock/share/ticker/price), AND
-      // 3. Current query has at least a verb OR adjective
+      // 2. Current query has a price/market adjective (no "stock/shares" word needed —
+      //    Ψ-EMA covers equities, forex, crypto, indices — anything YF resolves)
       const hasContextTicker = contextResult?.inferredTicker;
-      const hasExplicitStockKeyword = /\b(stock|stocks|ticker|share|shares|price|prices)\b/i.test(classificationQuery);
       const hasVerbOrAdjective = psiEmaDetection.keys.some(k => k.type === 'verb' || k.type === 'adjective');
       const hasVerb = psiEmaDetection.keys.some(k => k.type === 'verb');
       const hasAdjective = psiEmaDetection.keys.some(k => k.type === 'adjective');
-      const contextFallbackApplies = hasContextTicker && hasExplicitStockKeyword && hasVerbOrAdjective;
+      const contextFallbackApplies = hasContextTicker && hasAdjective && hasVerbOrAdjective;
       
       // ========================================
       // GEO-INTENT VETO: Check for geography context BEFORE AI-PUSH
-      // Prevents "LA vs NY price" from triggering ticker extraction
+      // Longevity > profit: SF = San Francisco, LA = Los Angeles, etc.
+      // City abbreviation + any affordability word → Seed Metric, no "vs" required
       // ========================================
       const cityAbbreviations = /\b(la|ny|sf|dc|hk|kl)\b/i;
-      const geoComparisonPattern = /\bvs\b.*\b(price|land|housing|property|cost|rent|income|salary)\b|\b(price|land|housing|property|cost|rent|income|salary)\b.*\bvs\b/i;
+      const affordabilityPattern = /\b(price|prices|housing|property|rent|land|cost|income|salary|afford)\b/i;
       const hasCityAbbreviation = cityAbbreviations.test(classificationQuery);
-      const hasGeoComparison = geoComparisonPattern.test(classificationQuery);
-      const hasGeoIntent = hasCityAbbreviation && (hasGeoComparison || /\bvs\b/i.test(classificationQuery));
+      const hasAffordabilityWord = affordabilityPattern.test(classificationQuery);
+      const hasGeoIntent = hasCityAbbreviation && hasAffordabilityWord;
       
-      // STOCK-CONTEXT OVERRIDE: Explicit stock keywords disable geo-veto
-      // e.g., "$LA", "LA stock", "LA ticker", "LA shares" → genuine ticker query
-      const hasExplicitStockCue = /\$[A-Z]{1,5}\b|\b(stock|stocks|ticker|tickers|share|shares)\b/i.test(classificationQuery);
+      // TICKER-CONTEXT OVERRIDE: Dollar-prefixed ticker ($SF, $LA) = unambiguous instrument
+      // "stock" alone kept as an override so "SF stock price" → Ψ-EMA if desired
+      const hasExplicitStockCue = /\$[A-Z]{1,5}\b|\b(stock|stocks)\b/i.test(classificationQuery);
       
-      // If geo-intent detected AND no explicit stock cues AND no ticker already detected, force Seed Metric
+      // If geo-intent detected AND no explicit ticker cue AND no ticker already detected, force Seed Metric
       if (hasGeoIntent && !hasExplicitStockCue && !psiEmaDetection.ticker) {
         console.log(`🌍 GEO-VETO: City abbreviations + comparison detected → forcing Seed Metric mode`);
         result.mode = 'seed-metric';
