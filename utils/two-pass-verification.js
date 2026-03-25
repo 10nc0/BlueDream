@@ -85,6 +85,7 @@ Perform the dialectical audit and output JSON only.`;
       )
     };
 
+    const _auditStart = Date.now();
     const response = await axios.post(
       auditBackend.url,
       requestBody,
@@ -96,6 +97,8 @@ Perform the dialectical audit and output JSON only.`;
         timeout: timeout || auditBackend.timeouts.audit
       }
     );
+    const _auditElapsed = ((Date.now() - _auditStart) / 1000).toFixed(1);
+    console.log(`🧠 ${isReasoner ? 'DeepSeek R1' : 'Groq Llama'} audit responded in ${_auditElapsed}s`);
 
     let rawContent = response.data.choices?.[0]?.message?.content || '{}';
 

@@ -1681,7 +1681,8 @@ Output ONLY the corrected table and summary lines:`;
         },
         this.llmTimeouts.audit
       );
-      console.log(`🔍 Audit: ${state.auditResult.verdict} (${state.auditResult.confidence}%)`);
+      const _auditLabel = process.env.DEEPSEEK_API ? 'DeepSeek R1' : 'Llama';
+      console.log(`🔍 Audit [${_auditLabel}]: ${state.auditResult.verdict} (${state.auditResult.confidence}%)`);
       
       // WRITE to DataPackage: Stage S3 audit MARKERS only (read-only mode)
       // Audit cannot write corrections - only marks issues for retry stage to fix
