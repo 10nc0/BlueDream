@@ -815,6 +815,7 @@ function addStreamingMessage() {
     copyBtn.className = 'copy-btn';
     copyBtn.title = 'Copy to clipboard';
     copyBtn.textContent = '📋 Copy';
+    copyBtn.style.display = 'none';
     
     const contentDiv = document.createElement('div');
     contentDiv.className = 'content streaming-content';
@@ -900,6 +901,8 @@ function finalizeStreamingMessage(fullContent, auditData) {
     if (!streamingEl) return;
     
     streamingEl.classList.remove('streaming');
+    const copyBtnEl = streamingEl.querySelector('.copy-btn');
+    if (copyBtnEl) copyBtnEl.style.display = '';
     streamingEl.id = '';
     streamingTextBuffer = '';
     
@@ -961,7 +964,10 @@ function updateThinkingStage(stage) {
     if (!streamingEl) return;
     
     const contentEl = streamingEl.querySelector('.streaming-content');
+    const loadingEl = contentEl && contentEl.querySelector('#streamingLoadingState');
+
     if (contentEl && contentEl.textContent.trim() === '') {
+        // Truly empty — replace with stage text
         contentEl.replaceChildren();
         const stageSpan = document.createElement('span');
         stageSpan.style.cssText = 'color: #94a3b8; font-size: 0.875rem;';
@@ -970,7 +976,22 @@ function updateThinkingStage(stage) {
         cursorSpan.className = 'typing-cursor';
         contentEl.appendChild(stageSpan);
         contentEl.appendChild(cursorSpan);
+    } else if (loadingEl) {
+        // Loading animation still showing — add hint row inside the loading block
+        const existing = loadingEl.querySelector('.streaming-stage-hint');
+        if (!existing) {
+            loadingEl.style.flexDirection = 'column';
+            loadingEl.style.alignItems = 'flex-start';
+            const hintRow = document.createElement('div');
+            hintRow.className = 'streaming-stage-hint';
+            hintRow.style.cssText = 'color:#94a3b8; font-size:0.8rem; font-style:italic; padding-top:0.25rem;';
+            hintRow.textContent = `🔍 ${stage}`;
+            loadingEl.appendChild(hintRow);
+        } else {
+            existing.textContent = `🔍 ${stage}`;
+        }
     } else {
+        // Tokens already streamed — append below the draft text, inside contentEl
         const existing = contentEl && contentEl.querySelector('.streaming-stage-hint');
         if (!existing && contentEl) {
             const hint = document.createElement('div');
