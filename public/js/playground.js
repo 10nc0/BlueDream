@@ -476,6 +476,26 @@ function autoResizeTextarea() {
 }
 messageInput.addEventListener('input', autoResizeTextarea);
 
+// ── URL hint indicator ────────────────────────────────────────────────────────
+const urlFetchHint = document.getElementById('urlFetchHint');
+const urlHintText  = document.getElementById('urlHintText');
+const URL_DETECT_RE = /https?:\/\/[^\s<>"']+/g;
+
+messageInput.addEventListener('input', () => {
+    const urls = (messageInput.value.match(URL_DETECT_RE) || []).slice(0, 3);
+    if (urls.length === 0) {
+        urlFetchHint.classList.remove('visible');
+        return;
+    }
+    const isGitHub = urls.some(u => u.includes('github.com') || u.includes('raw.githubusercontent.com'));
+    const label = urls.length === 1
+        ? (isGitHub ? 'GitHub repo/file will be read via API' : 'URL will be auto-read')
+        : `${urls.length} URLs will be auto-read`;
+    urlHintText.textContent = label;
+    urlFetchHint.classList.add('visible');
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 function handleFileSelect(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -1107,6 +1127,7 @@ async function sendMessage(_retryPayload = null) {
         saveConversationHistory();
         messageInput.value = '';
         messageInput.style.height = '44px';
+        if (urlFetchHint) urlFetchHint.classList.remove('visible');
 
         payload = { message, history: conversationHistory };
         savedAttachments = [...attachments];

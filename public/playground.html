@@ -497,6 +497,22 @@
         .attachment-chip .remove-chip:hover {
             color: #f87171;
         }
+
+        .url-fetch-hint {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            font-size: 0.7rem;
+            color: #7dd3fc;
+            background: rgba(125, 211, 252, 0.08);
+            border-left: 2px solid rgba(125, 211, 252, 0.35);
+            border-radius: 0 4px 4px 0;
+            margin-bottom: 4px;
+            animation: fadeInHint 0.2s ease;
+        }
+        .url-fetch-hint.visible { display: flex; }
+        @keyframes fadeInHint { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
         
         .attachments-count {
             font-size: 0.65rem;
@@ -876,6 +892,7 @@
         </div>
         
         <div class="input-container">
+            <div class="url-fetch-hint" id="urlFetchHint">🔗 <span id="urlHintText">URL detected — will be auto-read</span></div>
             <div class="attachments-container" id="attachmentsContainer"></div>
             <div class="input-row">
                 <div class="action-buttons-left">

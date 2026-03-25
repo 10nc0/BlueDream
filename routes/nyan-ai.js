@@ -15,6 +15,7 @@ const _llm = getLLMBackend();
 const { config } = require('../config');
 const { PsiEMADashboard, deriveReading } = require('../utils/psi-EMA');
 const { fetchStockPrices, calculateDataAge, sanitizeTicker } = require('../utils/stock-fetcher');
+const { fetchUrl, extractUrls } = require('../lib/url-fetcher');
 
 const API_UNITS = {
     'psi-ema': {
@@ -974,6 +975,23 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 }
             }
             
+
+            // ── URL Auto-Fetch (non-stream handler) ──────────────────────────────────
+            const _detectedUrls = extractUrls(message || '');
+            if (_detectedUrls.length > 0) {
+                for (const rawUrl of _detectedUrls.slice(0, 3)) {
+                    try {
+                        const fetched = await fetchUrl(rawUrl);
+                        const block = `[URL Context — ${fetched.title}]\nSource: ${fetched.sourceLabel}\n\n${fetched.text}`;
+                        extractedContent.push(block);
+                        logger.info({ url: rawUrl, chars: fetched.text.length }, '🔗 URL fetched (non-stream)');
+                    } catch (urlErr) {
+                        logger.warn({ url: rawUrl, err: urlErr.message }, '🔗 URL fetch failed (non-stream)');
+                    }
+                }
+            }
+            // ─────────────────────────────────────────────────────────────────────────
+
             const photoList = [];
             if (photos && Array.isArray(photos)) {
                 photos.forEach((p, idx) => {
@@ -1053,6 +1071,22 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             res.end();
         }
     });
+
+    // ── Explicit URL fetch endpoint ───────────────────────────────────────────
+    app.post('/api/playground/fetch-url', playgroundLimiter, async (req, res) => {
+        const { url } = req.body || {};
+        if (!url || typeof url !== 'string') {
+            return res.status(400).json({ error: 'url is required' });
+        }
+        try {
+            const result = await fetchUrl(url.trim());
+            return res.json({ ok: true, title: result.title, sourceLabel: result.sourceLabel, text: result.text });
+        } catch (err) {
+            logger.warn({ url, err: err.message }, '🔗 Explicit fetch-url failed');
+            return res.status(422).json({ error: err.message });
+        }
+    });
+    // ─────────────────────────────────────────────────────────────────────────
 
     app.post('/api/playground/stream', playgroundLimiter, async (req, res) => {
         const clientIp = req.ip || req.connection.remoteAddress;
@@ -1150,6 +1184,29 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 }
             }
             
+
+            // ── URL Auto-Fetch (stream handler) ──────────────────────────────────────
+            // Detect URLs in the message, fetch and inject as extractedContent.
+            // GitHub URLs use the GitHub API; all others fetch and strip HTML.
+            const detectedUrls = extractUrls(message || '');
+            if (detectedUrls.length > 0) {
+                for (const rawUrl of detectedUrls.slice(0, 3)) {
+                    if (isClientDisconnected()) break;
+                    const shortUrl = rawUrl.length > 60 ? rawUrl.slice(0, 57) + '...' : rawUrl;
+                    sseStage({ type: 'thinking', stage: `🔗 Reading ${shortUrl}` });
+                    try {
+                        const fetched = await fetchUrl(rawUrl);
+                        const block = `[URL Context — ${fetched.title}]\nSource: ${fetched.sourceLabel}\n\n${fetched.text}`;
+                        extractedContent.push(block);
+                        logger.info({ url: rawUrl, chars: fetched.text.length }, '🔗 URL fetched and injected');
+                    } catch (urlErr) {
+                        logger.warn({ url: rawUrl, err: urlErr.message }, '🔗 URL fetch failed — skipping');
+                        extractedContent.push(`[URL Context — fetch failed]\nSource: ${rawUrl}\nReason: ${urlErr.message}`);
+                    }
+                }
+            }
+            // ─────────────────────────────────────────────────────────────────────────
+
             const photoList = [];
             if (photos && Array.isArray(photos)) {
                 photos.forEach((p, idx) => {
