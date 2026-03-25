@@ -62,10 +62,10 @@ const PSI_EMA_RE = /(?:^|[\s,;.!?])(psi|ψ)[\s\-]?ema(?:$|[\s,;.!?])/i;
 const TICKER_CONTEXT_RE = /\$[A-Z]{1,5}\b|\b(stock|stocks)\b/i;
 
 function routeQuery(query) {
-    if (isForexQuery(query) || detectForexPair(query)) return 'forex';   // step 0: forex wins
-    if (TICKER_CONTEXT_RE.test(query))                  return 'psi-ema'; // step 1: ticker override
-    if (detectSeedMetricIntent(query))                  return 'seed-metric';  // step 2: geo / housing
-    if (PSI_EMA_RE.test(query))                         return 'psi-ema-identity';   // step 3: Ψ-EMA identity
+    if (PSI_EMA_RE.test(query))                         return 'psi-ema-identity'; // step 0: explicit psi-ema always wins
+    if (isForexQuery(query) || detectForexPair(query)) return 'forex';             // step 1: forex
+    if (TICKER_CONTEXT_RE.test(query))                  return 'psi-ema';          // step 2: ticker override
+    if (detectSeedMetricIntent(query))                  return 'seed-metric';      // step 3: geo / housing
     return 'psi-ema'; // default — psi-ema is the general path
 }
 
@@ -172,20 +172,37 @@ test('LA stocks → geo-veto does NOT fire ("stocks" = ticker cue)', () => {
 });
 
 // ----------------------------------------------------------------
-// SECTION 3: Psi-EMA identity keyword
+// SECTION 3: Psi-EMA identity keyword (step 0 — overrides all other routes)
+// Forex is also a price wave time series → "EURUSD psi-ema" routes to psi-ema, not forex
 // ----------------------------------------------------------------
 console.log('\n🌀 Ψ-EMA identity detection');
 
-test('"What is psi-ema?" → psi-ema-identity route', () => {
+test('"What is psi-ema?" → psi-ema-identity', () => {
     assert(routeQuery('What is psi-ema?') === 'psi-ema-identity', 'expected psi-ema-identity');
 });
 
-test('"explain Ψ-EMA" → psi-ema-identity route', () => {
+test('"explain Ψ-EMA" → psi-ema-identity (Unicode Ψ)', () => {
     assert(routeQuery('explain Ψ-EMA') === 'psi-ema-identity', 'expected psi-ema-identity');
 });
 
+test('"psi ema" → psi-ema-identity (space variant — no hyphen)', () => {
+    assert(routeQuery('psi ema') === 'psi-ema-identity', 'expected psi-ema-identity for space variant');
+});
+
+test('"NVDA psi ema" → psi-ema-identity (equity + space variant)', () => {
+    assert(routeQuery('NVDA psi ema') === 'psi-ema-identity', 'expected psi-ema-identity');
+});
+
+test('"EURUSD psi-ema" → psi-ema-identity (forex pair — psi-ema explicit request beats forex detection)', () => {
+    assert(routeQuery('EURUSD psi-ema') === 'psi-ema-identity', 'expected psi-ema-identity, not forex');
+});
+
+test('"SF psi-ema" → psi-ema-identity (city abbrev — psi-ema explicit request beats seed-metric)', () => {
+    assert(routeQuery('SF psi-ema') === 'psi-ema-identity', 'expected psi-ema-identity, not seed-metric');
+});
+
 // ----------------------------------------------------------------
-// SECTION 4: Forex detection (step 0 — runs before seed-metric)
+// SECTION 4: Forex detection (step 1 — after psi-ema-identity, before seed-metric)
 // ----------------------------------------------------------------
 console.log('\n💱 Forex detection');
 
