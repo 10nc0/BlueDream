@@ -942,31 +942,43 @@ function analyzePhase(prices) {
     };
   }
   
-  // Calculate θ = atan2(Δprice, price) for each period
-  // True north = 0° (equilibrium), +θ = rising, -θ = falling
+  // Calculate θ = atan2(Δprice, price) for raw series (kept for thetaSeries signal flags)
   const thetaSeries = [];
   for (let i = 1; i < prices.length; i++) {
-    const stock = prices[i];                  // Current price (x)
-    const flow = prices[i] - prices[i - 1];   // Price change (y)
-    
-    // atan2(y=flow, x=stock) → 0° at equilibrium, +θ rising, -θ falling
+    const stock = prices[i];
+    const flow = prices[i] - prices[i - 1];
     const radians = Math.atan2(flow, stock);
-    const degrees = radians * (180 / Math.PI);
-    thetaSeries.push(degrees);
+    thetaSeries.push(radians * (180 / Math.PI));
   }
   
-  // Current values
-  const currentTheta = thetaSeries[thetaSeries.length - 1];
   const currentPrice = prices[prices.length - 1];
   const currentDelta = prices[prices.length - 1] - prices[prices.length - 2];
-  console.log(`[DEBUG θ] price=${currentPrice?.toFixed?.(4) ?? currentPrice} delta=${currentDelta?.toFixed?.(4) ?? currentDelta} theta=${currentTheta?.toFixed?.(6) ?? currentTheta}°`);
+  
+  // EMA for smoothing and phase computation
+  const ema34Result = calculateEMA(prices, FIB_PERIODS.FAST_THETA);
+  const ema55Result = calculateEMA(prices, FIB_PERIODS.SLOW_THETA);
+  
+  // vφ⁸: θ = atan2(ΔEMA-55, ΔEMA-34) — phase angle between EMA rates of change.
+  // Robust against stale last bar (pre-market close = prev close → delta=0).
+  // The EMA smoothing absorbs single-bar flat closes; derivatives remain non-zero.
+  const ev34 = ema34Result.values;
+  const ev55 = ema55Result.values;
+  const last34 = ev34[ev34.length - 1];
+  const prev34 = ev34[ev34.length - 2];
+  const last55 = ev55[ev55.length - 1];
+  const prev55 = ev55[ev55.length - 2];
+  let currentTheta;
+  if (last34 != null && prev34 != null && last55 != null && prev55 != null) {
+    const dEMA34 = last34 - prev34;
+    const dEMA55 = last55 - prev55;
+    currentTheta = Math.atan2(dEMA55, dEMA34) * (180 / Math.PI);
+  } else {
+    // Fallback: last bar's raw atan2 delta (may be ~0° on stale bars)
+    currentTheta = thetaSeries[thetaSeries.length - 1];
+  }
   
   // Interpret phase
   const interpretation = interpretPhase(currentTheta);
-  
-  // EMA for smoothing (optional, for crossover signals)
-  const ema34Result = calculateEMA(prices, FIB_PERIODS.FAST_THETA);
-  const ema55Result = calculateEMA(prices, FIB_PERIODS.SLOW_THETA);
   
   const crossover = detectCrossover(ema34Result.values, ema55Result.values, {
     fastInterpolated: ema34Result.interpolated,
@@ -979,8 +991,8 @@ function analyzePhase(prices) {
     currentPhase: currentTheta,
     price: currentPrice,
     deltaPrice: currentDelta,
-    ema34: ema34Result.values[ema34Result.values.length - 1],
-    ema55: ema55Result.values[ema55Result.values.length - 1],
+    ema34: ev34[ev34.length - 1],
+    ema55: ev55[ev55.length - 1],
     crossover,
     interpretation,
     signal: interpretation.signal || crossover.signal,
@@ -989,7 +1001,7 @@ function analyzePhase(prices) {
     emaSlow: ema55Result.values,
     ema34Interpolated: ema34Result.interpolated,
     ema55Interpolated: ema55Result.interpolated,
-    formula: 'θ = atan2(Δprice, price)'
+    formula: 'θ = atan2(ΔEMA-55, ΔEMA-34)'
   };
 }
 
