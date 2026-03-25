@@ -55,11 +55,17 @@ function geoVetoWouldFire(query) {
 // NOTE: \b does not work with non-ASCII Unicode (ψ/Ψ). Use lookaround with \s|^|$ instead.
 const PSI_EMA_RE = /(?:^|[\s,;.!?])(psi|ψ)[\s\-]?ema(?:$|[\s,;.!?])/i;
 
+// Dollar-prefix ($TICK) or "stock/stocks" keyword signals ticker context and bypasses
+// ALL geo / seed-metric detection — mirrors the actual preflight router pre-check.
+// detectSeedMetricIntent does NOT know about the dollar prefix ($SF → still matches SF+price),
+// so this guard must fire BEFORE calling detectSeedMetricIntent.
+const TICKER_CONTEXT_RE = /\$[A-Z]{1,5}\b|\b(stock|stocks)\b/i;
+
 function routeQuery(query) {
-    if (isForexQuery(query) || detectForexPair(query)) return 'forex';
-    if (detectSeedMetricIntent(query))                  return 'seed-metric';
-    if (PSI_EMA_RE.test(query))                         return 'psi-ema-identity';
-    if (geoVetoWouldFire(query))                        return 'seed-metric';
+    if (isForexQuery(query) || detectForexPair(query)) return 'forex';   // step 0: forex wins
+    if (TICKER_CONTEXT_RE.test(query))                  return 'psi-ema-or-general'; // step 1: ticker override
+    if (detectSeedMetricIntent(query))                  return 'seed-metric';        // step 2: geo / housing
+    if (PSI_EMA_RE.test(query))                         return 'psi-ema-identity';   // step 3: Ψ-EMA identity
     return 'psi-ema-or-general';
 }
 
@@ -153,8 +159,8 @@ test('$SF price → geo-veto does NOT fire (dollar prefix = ticker)', () => {
     assert(!geoVetoWouldFire('$SF price'), 'geo-veto should not fire for "$SF price"');
 });
 
-test('$DC price → geo-veto does NOT fire (dollar prefix, non-SF city)', () => {
-    assert(!geoVetoWouldFire('$DC price'), 'geo-veto should not fire for "$DC price"');
+test('$LA price → geo-veto does NOT fire (dollar prefix on city abbrev = ticker context)', () => {
+    assert(!geoVetoWouldFire('$LA price'), 'geo-veto should not fire for "$LA price"');
 });
 
 test('SF stock price → geo-veto does NOT fire ("stock" = ticker cue)', () => {
@@ -219,8 +225,8 @@ test('"$SF price" → psi-ema-or-general (dollar prefix overrides geo — ticker
     assert(result === 'psi-ema-or-general', `expected psi-ema-or-general, got ${result}`);
 });
 
-test('"$DC rent" → psi-ema-or-general (dollar prefix on DC overrides geo)', () => {
-    const result = routeQuery('$DC rent');
+test('"$AAPL rent" → psi-ema-or-general (dollar prefix on obvious ticker, no geo confusion)', () => {
+    const result = routeQuery('$AAPL rent');
     assert(result === 'psi-ema-or-general', `expected psi-ema-or-general, got ${result}`);
 });
 
