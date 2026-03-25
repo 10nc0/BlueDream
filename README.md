@@ -1,7 +1,11 @@
 # Nyanbook 🐟🌈
 *(PATHOS)*
 
-Nyanbook is a post-folder storage (information) system thinking (protocol). Instead of messy folders and hierarchies, you send messages & attachments — via WhatsApp, LINE, or any SNS — and they are automatically stored and sorted chronologically. 
+**Before**: Receipt → Reimbursement Forms for Receipt → Create folder "2026/Taxes" → Rename file → Wrong Input in Forms → Forget where you saved it → ...
+
+**After**:  WhatsApp photo / video to Nyanbook (no need Forms) → Auto-sorted by date → Search "receipt" → Found photo / video
+
+Nyanbook is a post-folder storage (information) system thinking (protocol). Instead of messy folders and hierarchies, you send messages / attachments — via WhatsApp, LINE, or any SNS — and they are automatically stored and sorted chronologically. 
 
 A versatile AI/LLM endpoint is provided to make contents queryable & interactive.
 
