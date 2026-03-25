@@ -959,6 +959,7 @@ function analyzePhase(prices) {
   const currentTheta = thetaSeries[thetaSeries.length - 1];
   const currentPrice = prices[prices.length - 1];
   const currentDelta = prices[prices.length - 1] - prices[prices.length - 2];
+  console.log(`[DEBUG θ] price=${currentPrice?.toFixed?.(4) ?? currentPrice} delta=${currentDelta?.toFixed?.(4) ?? currentDelta} theta=${currentTheta?.toFixed?.(6) ?? currentTheta}°`);
   
   // Interpret phase
   const interpretation = interpretPhase(currentTheta);
