@@ -154,8 +154,8 @@ Perform the dialectical audit and output JSON only.`;
       console.error(`⏱️ Audit Pass Timeout/Reset - Bypassing verification`);
       return { 
         verdict: 'BYPASS', 
-        confidence: 50, 
-        reason: 'Audit timed out', 
+        confidence: 0, 
+        reason: 'Audit timed out — second pass never ran', 
         issues: [{ severity: 'HIGH', reason: 'Verification timed out' }],
         error: 'AUDIT_TIMEOUT'
       };

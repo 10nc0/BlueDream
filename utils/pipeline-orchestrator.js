@@ -1696,7 +1696,7 @@ Output ONLY the corrected table and summary lines:`;
       });
     } catch (err) {
       console.log(`⚠️ Audit error: ${err.message}`);
-      state.auditResult = { verdict: 'BYPASS', confidence: 70, reason: 'Audit failed' };
+      state.auditResult = { verdict: 'BYPASS', confidence: 0, reason: 'Audit failed — second pass never ran' };
     }
   }
   
