@@ -74,7 +74,7 @@ Perform the dialectical audit and output JSON only.`;
     const response = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
       {
-        model: 'llama-3.3-70b-versatile',
+        model: 'moonshotai/kimi-k2-instruct',
         messages: auditMessages,
         temperature: AUDIT_TEMPERATURE,
         max_tokens: 800,
@@ -159,7 +159,7 @@ async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, 
   const response = await axios.post(
     'https://api.groq.com/openai/v1/chat/completions',
     {
-      model: 'llama-3.3-70b-versatile',
+      model: 'moonshotai/kimi-k2-instruct',
       messages: [
         { role: 'system', content: 'You are correcting an AI answer based on audit feedback. Output the corrected answer only.' },
         { role: 'user', content: correctivePrompt }

@@ -115,7 +115,7 @@ const DISCORD = {
 // @ref: https://console.groq.com/docs/models
 // @verified: 2026-01-10
 const AI_MODELS = {
-  TEXT_MODEL: 'llama-3.3-70b-versatile',               // Groq text model (DeepSeek R1 distill — stronger reasoning, less confabulation)
+  TEXT_MODEL: 'moonshotai/kimi-k2-instruct',               // Groq text model (DeepSeek R1 distill — stronger reasoning, less confabulation)
   VISION_MODEL: 'meta-llama/llama-4-scout-17b-16e-instruct', // Groq Vision model (2025)
   VISION: 'meta-llama/llama-4-scout-17b-16e-instruct',       // Alias for backward compatibility
   AUDIO_MODEL: 'whisper-large-v3-turbo',                     // Groq Whisper model

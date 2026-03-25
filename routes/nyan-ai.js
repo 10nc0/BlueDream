@@ -392,7 +392,7 @@ async function extractCoreQuestion(message) {
         const response = await axios.post(
             'https://api.groq.com/openai/v1/chat/completions',
             {
-                model: 'llama-3.3-70b-versatile',
+                model: 'moonshotai/kimi-k2-instruct',
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: message.substring(0, 1000) }
@@ -652,7 +652,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             const response = await groqWithRetry({
                 url: 'https://api.groq.com/openai/v1/chat/completions',
                 data: {
-                    model: 'llama-3.3-70b-versatile',
+                    model: 'moonshotai/kimi-k2-instruct',
                     messages: [
                         {
                             role: 'system',
@@ -685,7 +685,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     const retryResp = await groqWithRetry({
                         url: 'https://api.groq.com/openai/v1/chat/completions',
                         data: {
-                            model: 'llama-3.3-70b-versatile',
+                            model: 'moonshotai/kimi-k2-instruct',
                             messages: [
                                 {
                                     role: 'system',
@@ -767,7 +767,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                             reason: `Nyan AI response (${bookContext.totalMessages} messages analyzed)`,
                             data_extracted: { 
                                 engine: 'nyan-ai',
-                                model: 'llama-3.3-70b-versatile',
+                                model: 'moonshotai/kimi-k2-instruct',
                                 books: bookNames, 
                                 query: query.substring(0, 100),
                                 processingTime: processingTime
@@ -786,7 +786,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 success: true,
                 answer: answer,
                 engine: 'nyan-ai',
-                model: 'llama-3.3-70b-versatile',
+                model: 'moonshotai/kimi-k2-instruct',
                 processingTime: processingTime,
                 pipelineStatus: {
                     verified: pipelineVerified,

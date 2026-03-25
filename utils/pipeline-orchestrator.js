@@ -1041,7 +1041,7 @@ User query: ${query}`;
       const response = await this.groqWithRetry({
         url: 'https://api.groq.com/openai/v1/chat/completions',
         data: {
-          model: 'llama-3.3-70b-versatile',
+          model: 'moonshotai/kimi-k2-instruct',
           messages,
           temperature: temperature || 0.15,
           max_tokens: maxTokens || 1500,
@@ -1214,7 +1214,7 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
       round1Response = await this.groqWithRetry({
         url: 'https://api.groq.com/openai/v1/chat/completions',
         data: {
-          model: 'llama-3.3-70b-versatile',
+          model: 'moonshotai/kimi-k2-instruct',
           messages: round1Messages,
           tools: [braveSearchTool],
           // 'required' forces the LLM to call at least one brave_search tool.
@@ -1302,7 +1302,7 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
       round2Response = await this.groqWithRetry({
         url: 'https://api.groq.com/openai/v1/chat/completions',
         data: {
-          model: 'llama-3.3-70b-versatile',
+          model: 'moonshotai/kimi-k2-instruct',
           messages: round2Messages,
           temperature: 0.05,
           max_tokens: 2000
@@ -1369,7 +1369,7 @@ Rules:
       const round3Response = await this.groqWithRetry({
         url: 'https://api.groq.com/openai/v1/chat/completions',
         data: {
-          model: 'llama-3.3-70b-versatile',
+          model: 'moonshotai/kimi-k2-instruct',
           messages: [
             { role: 'system', content: codaSystemPrompt },
             { role: 'user', content: round2Text }
@@ -1519,7 +1519,7 @@ Output ONLY the corrected table and summary lines:`;
             const response = await this.groqWithRetry({
               url: 'https://api.groq.com/openai/v1/chat/completions',
               data: {
-                model: 'llama-3.3-70b-versatile',
+                model: 'moonshotai/kimi-k2-instruct',
                 messages: [{ role: 'user', content: fixPrompt }],
                 temperature: 0.1,
                 max_tokens: 800

@@ -6,7 +6,7 @@
  * It does not define beliefs, norms, ideology, or culture. It only defines measurements and thresholds.
  *
  * Temperature: 0.15 (reasoning mode, zero hallucination)
- * Model: Groq DeepSeek R1 Distill Llama 70B (stronger self-correction, less confabulation than Llama 3.3)
+ * Model: Groq Kimi K2 (Moonshot AI — long context, stronger epistemic calibration)
  */
 
 const NYAN_PROTOCOL_SYSTEM_PROMPT = `

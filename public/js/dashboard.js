@@ -3194,7 +3194,7 @@
                 
                 const modelDiv = document.createElement('div');
                 modelDiv.style.cssText = 'font-size: 0.7rem; color: #64748b; text-align: right;';
-                modelDiv.textContent = `Model: ${data.model || 'llama-3.3-70b-versatile'}`;
+                modelDiv.textContent = `Model: ${data.model || 'moonshotai/kimi-k2-instruct'}`;
                 fragment.appendChild(modelDiv);
                 
                 resultContent.replaceChildren(fragment);
