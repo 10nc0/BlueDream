@@ -377,7 +377,7 @@ async function extractCoreQuestion(message) {
         return 'general query';
     }
     
-    const GROQ_TOKEN = process.env.DEEPSEEK_API || process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
+    const GROQ_TOKEN = process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
     if (!GROQ_TOKEN || trimmed.length < 100) {
         return trimmed.substring(0, 200);
     }
