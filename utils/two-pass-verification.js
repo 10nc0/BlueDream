@@ -73,15 +73,21 @@ Perform the dialectical audit and output JSON only.`;
 
   try {
     const auditBackend = getAuditBackend();
+    const isReasoner = auditBackend.model.includes('reasoner');
+
+    const requestBody = {
+      model: auditBackend.model,
+      messages: auditMessages,
+      max_tokens: 800,
+      ...(isReasoner
+        ? { temperature: 1 }
+        : { temperature: AUDIT_TEMPERATURE, response_format: { type: 'json_object' } }
+      )
+    };
+
     const response = await axios.post(
       auditBackend.url,
-      {
-        model: auditBackend.model,
-        messages: auditMessages,
-        temperature: AUDIT_TEMPERATURE,
-        max_tokens: 800,
-        response_format: { type: 'json_object' }
-      },
+      requestBody,
       {
         headers: {
           'Authorization': `Bearer ${groqToken}`,
@@ -91,7 +97,15 @@ Perform the dialectical audit and output JSON only.`;
       }
     );
 
-    const auditContent = response.data.choices?.[0]?.message?.content || '{}';
+    let rawContent = response.data.choices?.[0]?.message?.content || '{}';
+
+    if (isReasoner) {
+      const jsonMatch = rawContent.match(/```json\s*([\s\S]*?)```/) ||
+                        rawContent.match(/(\{[\s\S]*\})/);
+      rawContent = jsonMatch ? jsonMatch[1].trim() : rawContent;
+    }
+
+    const auditContent = rawContent;
     
     let parsed;
     try {
@@ -133,8 +147,8 @@ Perform the dialectical audit and output JSON only.`;
       dialecticalAnalysis: parsed.dialecticalAnalysis || null
     };
   } catch (err) {
-    if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {
-      console.error(`⏱️ Audit Pass Timeout - Bypassing verification`);
+    if (err.code === 'ECONNABORTED' || err.message.includes('timeout') || err.message === 'aborted' || err.code === 'ECONNRESET') {
+      console.error(`⏱️ Audit Pass Timeout/Reset - Bypassing verification`);
       return { 
         verdict: 'BYPASS', 
         confidence: 50, 
@@ -159,6 +173,7 @@ async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, 
   const correctivePrompt = buildCorrectivePrompt(originalQuery, draftAnswer, issues);
 
   const correctiveBackend = getAuditBackend();
+  const isCorrectiveReasoner = correctiveBackend.model.includes('reasoner');
   const response = await axios.post(
     correctiveBackend.url,
     {
@@ -167,7 +182,7 @@ async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, 
         { role: 'system', content: 'You are correcting an AI answer based on audit feedback. Output the corrected answer only.' },
         { role: 'user', content: correctivePrompt }
       ],
-      temperature: 0.15,
+      temperature: isCorrectiveReasoner ? 1 : 0.15,
       max_tokens: maxTokens
     },
     {
