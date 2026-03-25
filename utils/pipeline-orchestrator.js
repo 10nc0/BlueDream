@@ -813,9 +813,16 @@ MANDATORY INSTRUCTIONS:
       if (fSector || fIndustry || fSummary) {
         const label = [fSector, fIndustry].filter(Boolean).join(' / ');
         const bizLine = fSummary ? `\nBusiness: "${fSummary}"` : '';
-        // Hint produces a standalone Units line in the company header — NOT inside the
-        // Physical Audit Advisory. Physical Audit keeps its own "see to believe" bullets.
-        psiEmaLlmHint = `\n[HEADER NOTE] Immediately after the company name line, output one compact **Units** line listing 4 key physical quantities for ${ticker} (${label}).${bizLine}\nDerive from the business description above — not a generic sector template.\nFormat: \`unit name (state|flow|guard)\` — e.g. \`inventory (state)\`, \`shipments (flow)\`, \`defect rate (guard)\`.\nDo NOT add these units to the Physical Audit Advisory section — that section keeps its own audit bullets.`;
+        // Hint tells the LLM to add atomic units in the canonical **Atomic Units**: block format,
+        // immediately after the company name line — NOT inside the Physical Audit Advisory.
+        // Physical Audit keeps its own "see to believe" bullets; units stay in the header.
+        psiEmaLlmHint = `\n[HEADER NOTE] After the company name line, output an **Atomic Units**: block using this exact format:
+**Atomic Units**:
+**Stock**: <state units, comma-separated>
+**Flow**: <flow units, comma-separated>
+Infer 4 units specific to ${ticker}'s actual business (${label}).${bizLine}
+Derive from the business description — not a generic sector template.
+Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
       }
       
       // Build assessment one-liner (pragmatic, no medical metaphor)

@@ -40,10 +40,54 @@ function phiInterpolate(closes, dates) {
 // ============================================================================
 // ATOMIC UNITS OF PRODUCTION (ported from fetch-stock-prices.py)
 // Atomic units: structure (state/flow/guard) is the invariant form.
-// Content — the specific units for each company — arrives from Yahoo Finance
-// longBusinessSummary + sector + industry via LLM deliberation.
-// No hardcoded sector map: every company has its own physical quantities.
-// The LLM receives the business description and infers the right units.
+// Sector-level units are domain facts (barrels for Energy, beds for Healthcare),
+// not fabrications — they hold for every company in that sector.
+// Technology is the exception: too broad. Software/SaaS vs semiconductor/hardware
+// have completely different physical quantities, so Technology is split by industry.
+// Hardware industries → null (LLM infers from business description).
+// Unknown/unmapped → null (honest silence over wrong template).
+// ============================================================================
+const SECTOR_ATOMIC_UNITS = {
+    'Financial Services':    ['loan book (state)', 'issuance (flow)', 'payments (flow)', 'AUM (state)', 'TPV (flow)'],
+    'Consumer Cyclical':     ['inventory (state)', 'orders (flow)', 'shipments (flow)', 'GMV booked (state)', 'tickets (flow)'],
+    'Consumer Defensive':    ['inventory (state)', 'orders (flow)', 'baskets (flow)', 'GMV booked (state)', 'tickets (flow)'],
+    'Basic Materials':       ['reserves (state)', 'stockpile (state)', 'extraction (flow)', 'shipments (flow)', 'production (flow)'],
+    'Energy':                ['reserves (state)', 'capacity MW (state)', 'barrels (flow)', 'MWh (flow)', 'production (flow)'],
+    'Real Estate':           ['portfolio value (state)', 'units (state)', 'acquisitions (flow)', 'rental income (flow)', 'NOI (flow)'],
+    'Industrials':           ['inventory (state)', 'WIP (state)', 'production (flow)', 'shipments (flow)', 'backlog (state)'],
+    'Communication Services':['subscribers (state)', 'ARPU × subs (flow)', 'churn (flow)', 'net adds (flow)', 'MAU (state)'],
+    'Healthcare':            ['patient panel (state)', 'bed capacity (state)', 'visits (flow)', 'procedures (flow)', 'admissions (flow)'],
+    'Utilities':             ['capacity MW (state)', 'customers (state)', 'MWh generated (flow)', 'sales (flow)', 'connections (state)'],
+    // Technology split by industry below — not listed here
+};
+
+// Technology sub-sector: software/internet/cloud companies use SaaS metrics.
+const TECH_SOFTWARE_UNITS = ['ARR/MRR (state)', 'subscriptions (state)', 'new contracts (flow)', 'API calls (flow)', 'users (state)'];
+
+// Hardware/semiconductor industries — return null (no SaaS template).
+// LLM deliberates from business description in psiEmaLlmHint.
+const TECH_HARDWARE_INDUSTRIES = new Set([
+    'Semiconductors', 'Semiconductor Equipment & Materials',
+    'Electronic Components', 'Electronics & Computer Distribution',
+    'Computer Hardware', 'Consumer Electronics',
+    'Disk & Optical Drives', 'Scientific & Technical Instruments',
+]);
+
+// Software/internet industries — SaaS metrics are correct.
+const TECH_SOFTWARE_INDUSTRIES = new Set([
+    'Software—Application', 'Software—Infrastructure', 'Software',
+    'Internet Content & Information', 'Information Technology Services',
+]);
+
+function inferAtomicUnits(sector, industry) {
+    if (sector === 'Technology') {
+        if (industry && TECH_HARDWARE_INDUSTRIES.has(industry)) return null; // no SaaS units for chip fabs
+        if (industry && TECH_SOFTWARE_INDUSTRIES.has(industry)) return TECH_SOFTWARE_UNITS.slice(0, 5);
+        return null; // unknown tech sub-type → honest silence, LLM infers
+    }
+    if (sector && SECTOR_ATOMIC_UNITS[sector]) return SECTOR_ATOMIC_UNITS[sector].slice(0, 5);
+    return null;
+}
 
 const DOLLAR_TICKER_REGEX = /\$([A-Za-z]{1,5})\b/gi;
 
@@ -387,6 +431,10 @@ async function fetchStockPrices(ticker, customPeriod = null) {
     const dte = safeFloat(finData.debtToEquity);   if (dte !== null) fundamentals.debtToEquity    = dte;
     if (sector)   fundamentals.sector   = sector;
     if (industry) fundamentals.industry = industry;
+    // Infer atomic units from sector/industry map (domain facts, not LLM fabrication).
+    // Returns null for Technology/hardware (inferred per-company by LLM hint on LLM path).
+    const atomicUnits = inferAtomicUnits(sector, industry);
+    if (atomicUnits) fundamentals.atomicUnits = atomicUnits;
     const biz = profile.longBusinessSummary || '';
     if (biz) {
         const first = biz.split('.')[0].trim();

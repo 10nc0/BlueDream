@@ -810,11 +810,6 @@ function buildStockContext(preflight) {
   
   companyHeader = `### ${stockData.name || ticker} (${ticker})${sectorIndustry ? ` — ${sectorIndustry}` : ''}`;
 
-  // Business summary: one-sentence "what and how" from Yahoo Finance longBusinessSummary.
-  // Appears immediately after company name — grounding the reader in the physical entity
-  // before any price or wave data. Content from data, not LLM fabrication.
-  const summaryLine = fundamentals.summary ? `\n*${fundamentals.summary}*` : '';
-
   // Format fundamentals (inline with D/E ratio)
   const fundParts = [];
   if (fundamentals.peRatio) fundParts.push(`P/E: ${safeFixed(fundamentals.peRatio)}`);
@@ -826,12 +821,21 @@ function buildStockContext(preflight) {
   }
   const fundamentalsLine = fundParts.length > 0 ? fundParts.join(' | ') : '';
 
-  // Compact Ψ-EMA table removed — the expanded DAILY/WEEKLY block in psiEmaInstruction
-  // is the canonical output. Showing the table here too was duplication.
-  return `${companyHeader}${summaryLine}
-
+  // Compact Ψ-EMA table: summary row for quick reading before the DAILY/WEEKLY detail block.
+  // atomicSection before price — "what and how" of the company from sector/industry map.
+  return `${companyHeader}
+${atomicSection}
 **Price**: ${stockData.currency || 'USD'} ${safeFixed(stockData.currentPrice)} (${ageFlag} ${dataAge?.timestamp})
 ${fundamentalsLine}
+
+**Ψ-EMA** (θ=Cycle Position, z=Price Deviation, R=Momentum Ratio): alignment → conviction; conflict → caution.
+| Dim | Value | Signal |
+|-----|-------|--------|
+| θ | ${safeFixed(phaseTheta)}° | ${phaseSignal} |
+| z | ${safeFixed(anomalyZ)}σ | ${anomalyLevel} |
+| R | ${convergenceR != null ? safeFixed(convergenceR) : 'N/A'} | ${regimeLabel} |
+
+**Reading**: ${readingEmoji} ${readingText}${tetralemmaAlert}
 `;
 }
 
