@@ -1,6 +1,8 @@
 # Nyanbook 🐟🌈
 
-Nyanbook is a post-folder storage (information) system thinking (protocol). Instead of messy folders and hierarchies, you send them — via WhatsApp, LINE, or any SNS — and they are automatically stored and sorted chronologically. A versatile AI/LLM endpoint is provided to make contents queryable & interactive.
+Nyanbook is a post-folder storage (information) system thinking (protocol). Instead of messy folders and hierarchies, you send messages & attachments — via WhatsApp, LINE, or any SNS — and they are automatically stored and sorted chronologically. 
+
+A versatile AI/LLM endpoint is provided to make contents queryable & interactive.
 
 **Core loop:**
 
@@ -13,7 +15,9 @@ Android / iPhone (WhatsApp / LINE / any SNS)
           → IPFS capsule pin (optional)
 ```
 
-Discord is the bootstrap content store — free, searchable, thread-organized. PostgreSQL is the routing and index layer, and the hash anchor for future migration. IPFS is the sovereign anchor — the record that exists independent of any platform.
+Discord is the bootstrap content store — free, searchable, thread-organized. 
+PostgreSQL is the routing and index layer, and the hash anchor for future migration. 
+IPFS is the sovereign anchor — the record that exists independent of any platform.
 
 Dashboard: Glassmorphism SPA — browse all archived messages, search, tag, export with SHA256 manifest. Multimodal AI Playground included.
 
@@ -23,7 +27,7 @@ Dashboard: Glassmorphism SPA — browse all archived messages, search, tag, expo
 
 Nyanbook has no app to install.
 
-Open a browser — on a phone, a refrigerator panel, a library terminal — and it works. The URL is the access point. No App Store. No Play Store. No permission from Apple or Google. No update that breaks your workflow at 11pm.
+Open a browser — on a phone, a refrigerator panel, a car with browser — and it works. The URL is the access point. No App Store. No Play Store. No permission from Apple or Google. No update that breaks your workflow at 11pm.
 
 The inpipe is the same: WhatsApp, LINE OA, and Telegram are all browsers in a sense — they forward messages to a webhook. The scribe doesn't care which window you knocked on.
 
@@ -54,8 +58,8 @@ Nyanbook treats absence as signal:
 | Nyanbook | ✓ | ✓ | ✓ (IPFS) |
 
 > *"If you were supposed to log something every day for a month and forgot 7 days — does your current system know you forgot? Can it show you exactly which 7 days?"*
->
-> The *mīzān* holds level. The feather does the work.
+
+The *mīzān* holds level. The feather does the work.
 
 Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
 
