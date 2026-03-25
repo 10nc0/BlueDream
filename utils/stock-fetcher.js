@@ -94,7 +94,7 @@ function inferAtomicUnits(sector, industry) {
     return null;
 }
 
-const DOLLAR_TICKER_REGEX = /\$([A-Za-z]{1,5})\b/gi;
+const DOLLAR_TICKER_REGEX = /\$([A-Za-z]{1,8})\b/gi;
 
 // ========================================
 // Ψ-EMA LEGO KEYS (Push-based 2/3 detection)

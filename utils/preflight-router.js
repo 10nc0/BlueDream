@@ -514,8 +514,9 @@ async function preflightRouter(options) {
       const effectiveKeyCount = (effectiveHasTicker ? 1 : 0) + (effectiveHasVerb ? 1 : 0) + (effectiveHasAdjective ? 1 : 0);
       
       // GEO-VETO GUARD: Skip Ψ-EMA unlock entirely if Seed Metric mode was forced
+      // Also unlock if ticker was pre-set by crypto cross-rate interception (0a above)
       const shouldUnlock = result.mode !== 'seed-metric' && 
-        ((effectiveKeyCount >= 2 && effectiveHasTicker) || psiEmaDetection.shouldTrigger || hasExplicitModeKeyword);
+        ((effectiveKeyCount >= 2 && effectiveHasTicker) || psiEmaDetection.shouldTrigger || hasExplicitModeKeyword || !!result.ticker);
       
       if (shouldUnlock) {
         console.log(`🔑 AI-PUSH: ${effectiveKeyCount}/3 keys [ticker=${effectiveHasTicker}, verb=${effectiveHasVerb}, adj=${effectiveHasAdjective}] OR keyword=${hasExplicitModeKeyword} → ✅ UNLOCK`);
@@ -527,8 +528,8 @@ async function preflightRouter(options) {
       let tickerVerified = false;
       
       if ((shouldUnlock || contextFallbackApplies) && result.mode !== 'seed-metric') {
-        // Use ticker from key detection, AI rescue, or context
-        result.ticker = psiEmaDetection.ticker || aiRescuedTicker || await smartDetectTicker(classificationQuery);
+        // Use ticker from key detection, AI rescue, pre-set (crypto interception), or context
+        result.ticker = psiEmaDetection.ticker || aiRescuedTicker || result.ticker || await smartDetectTicker(classificationQuery);
         
         // If no ticker from current query, use context-inferred ticker
         if (!result.ticker && contextResult?.inferredTicker) {
