@@ -7,7 +7,8 @@
  *   Step 1  dollar-prefix / stock kw → psi-ema        (unambiguous ticker = analysis)
  *   Step 2  forex pair + psi-ema kw  → psi-ema        (run analysis on pair)
  *           forex pair alone         → forex
- *   Step 3  other seed-metric kw     → seed-metric    (explicit: "seed metric", sqm, etc.)
+ *   Step 3  seed-metric proxy kw     → seed-metric    (city+affordability PRIMARY; sqm; long-form city;
+ *                                                    literal "seed metric" phrase is least common)
  *   Step n-1 bare psi-ema kw (no asset context) → psi-ema-identity  (self-reflect from codebase)
  *   Default → psi-ema
  *
@@ -95,9 +96,23 @@ function routeQuery(query) {
 }
 
 // ----------------------------------------------------------------
-// SECTION 1: detectSeedMetricIntent
+// SECTION 1: detectSeedMetricIntent — proxy-triggered, not keyword-literal
+//
+// "Seed Metric" is a housing affordability index ($/sqm triangulation).
+// The router detects it via contextual proxy signals, not by matching
+// the phrase "seed metric" literally. Primary triggers:
+//   • City abbreviation (SF/LA/NY/DC/HK/KL) + affordability keyword
+//     (price, housing, rent, property, land, cost, income, salary, afford)
+//   • Area-unit patterns (sqm, sqft) implying triangulation intent
+//   • Affordability keywords + long-form city name (no abbreviation needed)
+//   • Explicit phrase "seed metric" — least common; aliases all the above
+//
+// Step 0 of routeQuery() is an additional proxy layer: bare city abbreviation
+// (no $ prefix) → seed-metric, even without an affordability keyword present.
+// This catches "SF psi-ema" (no housing word) before detectSeedMetricIntent
+// would see it, because city context alone implies housing/land intent.
 // ----------------------------------------------------------------
-console.log('\n🔍 detectSeedMetricIntent()');
+console.log('\n🔍 detectSeedMetricIntent() — proxy-triggered');
 
 test('SF housing price → seed-metric (city abbrev + housing keyword)', () => {
     assert(detectSeedMetricIntent('SF housing price'), 'expected true for "SF housing price"');
@@ -143,7 +158,7 @@ test('DC housing → seed-metric (DC abbreviation covered)', () => {
     assert(detectSeedMetricIntent('DC housing'), 'expected true for "DC housing"');
 });
 
-test('seed metric → seed-metric (explicit trigger)', () => {
+test('seed metric → seed-metric (explicit phrase — least common proxy; city+affordability is primary)', () => {
     assert(detectSeedMetricIntent('seed metric for Tokyo'), 'expected true');
 });
 
