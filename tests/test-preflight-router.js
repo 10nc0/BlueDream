@@ -63,10 +63,10 @@ const TICKER_CONTEXT_RE = /\$[A-Z]{1,5}\b|\b(stock|stocks)\b/i;
 
 function routeQuery(query) {
     if (isForexQuery(query) || detectForexPair(query)) return 'forex';   // step 0: forex wins
-    if (TICKER_CONTEXT_RE.test(query))                  return 'psi-ema-or-general'; // step 1: ticker override
-    if (detectSeedMetricIntent(query))                  return 'seed-metric';        // step 2: geo / housing
+    if (TICKER_CONTEXT_RE.test(query))                  return 'psi-ema'; // step 1: ticker override
+    if (detectSeedMetricIntent(query))                  return 'seed-metric';  // step 2: geo / housing
     if (PSI_EMA_RE.test(query))                         return 'psi-ema-identity';   // step 3: Ψ-EMA identity
-    return 'psi-ema-or-general';
+    return 'psi-ema'; // default — psi-ema is the general path
 }
 
 // ----------------------------------------------------------------
@@ -220,29 +220,29 @@ test('"LA housing" routed via seed-metric', () => {
 // ----------------------------------------------------------------
 console.log('\n🔀 Full routing cascade');
 
-test('"$SF price" → psi-ema-or-general (dollar prefix overrides geo — ticker wins, seed-metric bypassed)', () => {
+test('"$SF price" → psi-ema (Stifel ticker — dollar prefix overrides geo, seed-metric bypassed)', () => {
     const result = routeQuery('$SF price');
-    assert(result === 'psi-ema-or-general', `expected psi-ema-or-general, got ${result}`);
+    assert(result === 'psi-ema', `expected psi-ema, got ${result}`);
 });
 
-test('"$AAPL rent" → psi-ema-or-general (dollar prefix on obvious ticker, no geo confusion)', () => {
+test('"$AAPL rent" → psi-ema (dollar prefix on unambiguous ticker)', () => {
     const result = routeQuery('$AAPL rent');
-    assert(result === 'psi-ema-or-general', `expected psi-ema-or-general, got ${result}`);
+    assert(result === 'psi-ema', `expected psi-ema, got ${result}`);
 });
 
-test('"NVDA price" → psi-ema-or-general (Bloomberg-spec: equity ticker + price, no geo → general analysis path)', () => {
+test('"NVDA price" → psi-ema (Bloomberg-spec: equity ticker + price, no geo)', () => {
     const result = routeQuery('NVDA price');
-    assert(result === 'psi-ema-or-general', `expected psi-ema-or-general, got ${result}`);
+    assert(result === 'psi-ema', `expected psi-ema, got ${result}`);
 });
 
-test('"AAPL earnings" → psi-ema-or-general (Bloomberg-spec: equity context, no geo)', () => {
+test('"AAPL earnings" → psi-ema (Bloomberg-spec: equity context, no geo)', () => {
     const result = routeQuery('AAPL earnings');
-    assert(result === 'psi-ema-or-general', `expected psi-ema-or-general, got ${result}`);
+    assert(result === 'psi-ema', `expected psi-ema, got ${result}`);
 });
 
-test('"what did Elon tweet?" → psi-ema-or-general (general query, no routing signals)', () => {
+test('"what did Elon tweet?" → psi-ema (general query — psi-ema is the default path)', () => {
     const result = routeQuery('what did Elon tweet?');
-    assert(result === 'psi-ema-or-general', `expected psi-ema-or-general, got ${result}`);
+    assert(result === 'psi-ema', `expected psi-ema, got ${result}`);
 });
 
 test('"EURUSD price" → forex (forex step fires first, before geo-veto or seed-metric)', () => {
