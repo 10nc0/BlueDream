@@ -69,6 +69,13 @@ const REALTIME_INTENT_PATTERNS = [
   /\b(race\s+calendar|race\s+schedule|season\s+schedule|this\s+season|current\s+season|2025\s+season|2026\s+season)\b/i,
   /\b(who\s+(leads?|is\s+leading|won|is\s+winning)\s+the\s+(championship|league|season|race|title))\b/i,
 
+  // Sports — "latest/recent + game/match/score/result" without needing a time word
+  // Catches: "Lakers latest game", "latest score", "recent match result", etc.
+  /\b(latest|recent|new|current)\s+(game|match|score|result|fixture|win|loss|draw|performance)\b/i,
+
+  // NBA team names — any mention of an NBA team is sports-context and needs live data
+  /\b(lakers|pistons|warriors|celtics|bulls|heat|knicks|nets|spurs|clippers|nuggets|bucks|sixers|76ers|suns|hawks|hornets|cavaliers|pacers|raptors|wizards|magic|grizzlies|pelicans|thunder|jazz|timberwolves|blazers|trail\s*blazers|kings|mavericks|rockets)\b/i,
+
   // Sports — schedule/score with time word
   /\b(match|game|fixture|score|schedule|standings|results?)\s+(today|tonight|tomorrow|this\s*week|next\s*week|this\s*month|next\s*month|upcoming)\b/i,
   /\b(upcoming|next|today'?s?|tonight'?s?|this\s*week'?s?|this\s*month'?s?)\s+(match|game|fixture|schedule|results?|race)\b/i,
@@ -99,7 +106,7 @@ const REALTIME_INTENT_PATTERNS = [
   /\b(presiden|presidente|président|premier[\s\-]?ministre|primer[\s\-]?ministro|bundeskanzler|perdana\s+menteri)\b/i,
 
   // Indonesian realtime intent — schedule / current / latest / today / this week / this month
-  /\b(jadwal|pertandingan|klasemen|hasil\s+pertandingan|siaran\s+langsung)\b/i,
+  /\b(jadwal|pertandingan|klasemen|hasil\s+pertandingan|siaran\s+langsung|skor)\b/i,
   /\b(hari\s+ini|minggu\s+ini|bulan\s+ini|tahun\s+ini|malam\s+ini|besok)\b/i,
   /\b(terkini|terbaru|sekarang|saat\s+ini|live\s+score)\b/i,
 
