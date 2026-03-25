@@ -561,7 +561,7 @@ async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') 
 
 const orchestrator = createPipelineOrchestrator({
     groqToken: process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
-    auditToken: process.env.DEEPSEEK_API || process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
+    auditToken: process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
     groqVisionToken: process.env.PLAYGROUND_GROQ_VISION_TOKEN,
     searchBrave,
     searchDuckDuckGo,
