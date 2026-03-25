@@ -1909,7 +1909,8 @@ Output ONLY the corrected table and summary lines:`;
     const signatureWithTs = `${config.signatureText}\n[${signatureTs}]`;
 
     // Use regex to detect any existing nyan signature and replace it with the timestamped version
-    const anyNyanSigPattern = /🔥\s*(?:~nyan|nyan~)(?:\s*\[.*?\])?/i;
+    // Catches 🔥 (canonical) and 🐱 (LLM hallucinated cat emoji variant)
+    const anyNyanSigPattern = /(?:🔥|🐱)\s*(?:~nyan|nyan~)(?:\s*\[.*?\])?/i;
 
     if (anyNyanSigPattern.test(cleaned)) {
       cleaned = cleaned.replace(anyNyanSigPattern, signatureWithTs);
@@ -2028,7 +2029,8 @@ function applyPersonalityFormat(answer, mode = 'general', signatureTs = null) {
   const signatureWithTs = `${config.signatureText}\n[${ts}]`;
   
   // Use regex to detect any existing nyan signature and replace it with the timestamped version
-  const anyNyanSigPattern = /🔥\s*(?:~nyan|nyan~)(?:\s*\[.*?\])?/i;
+  // Catches 🔥 (canonical) and 🐱 (LLM hallucinated cat emoji variant)
+  const anyNyanSigPattern = /(?:🔥|🐱)\s*(?:~nyan|nyan~)(?:\s*\[.*?\])?/i;
   
   if (anyNyanSigPattern.test(cleaned)) {
     cleaned = cleaned.replace(anyNyanSigPattern, signatureWithTs);
