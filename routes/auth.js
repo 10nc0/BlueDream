@@ -177,6 +177,9 @@ function registerAuthRoutes(app, deps) {
             );
             
             if (mappingResult.rows.length === 0) {
+                // Constant-time response: prevent user-existence enumeration via timing side-channel.
+                // bcrypt.compare takes ~100ms regardless; without this, absent-user returns ~0ms.
+                await bcrypt.compare(password, '$2b$10$timingguardXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
                 return res.status(401).json({ error: 'Invalid credentials' });
             }
             

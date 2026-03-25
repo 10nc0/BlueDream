@@ -7,6 +7,7 @@ const { TelegramChannel } = require('../lib/channels/telegram');
 const { buildCapsule } = require('../utils/message-capsule');
 const { pinJson, pinBuffer } = require('../utils/ipfs-pinner');
 const { routeUserOutput } = require('../lib/outpipes/router');
+const { assertValidSchemaName } = require('../lib/validators');
 
 // Phone-bearing channels; all others store phone_number = null (Telegram, LINE, email).
 // Password reset is gated on phone activation — non-phone users silent-fail on reset.
@@ -35,8 +36,11 @@ const PHONE_CHANNELS = new Set(['twilio']);
 
 const MEDIA_QUEUE = []; // Priority tier: time-sensitive media messages
 const TEXT_QUEUE  = []; // Normal tier: text-only messages
-const PROCESSED_SIDS = new Map(); // MessageSid -> timestamp (idempotency guard)
-const IDEMPOTENCY_TTL_MS = 5 * 60 * 1000; // 5 minutes
+// Idempotency guard: persisted to core.processed_sids (survives restarts).
+// Twilio retries up to 11 hours — in-memory Map was lost on restart.
+// Table schema: CREATE TABLE core.processed_sids (sid TEXT PRIMARY KEY, processed_at TIMESTAMPTZ)
+// Cleanup: DELETE WHERE processed_at < NOW() - INTERVAL '6 hours' (run every minute)
+const IDEMPOTENCY_TTL_INTERVAL = '6 hours'; // matches Twilio's max retry window
 const MAX_QUEUE_SIZE = 200; // Per tier — 400 total burst capacity
 const NORMAL_GAP_MS  = 500;  // Gap between messages at steady state
 const BURST_GAP_MS   = 200;  // Gap in burst mode (queue depth > 5)
@@ -102,8 +106,8 @@ function registerInpipeRoutes(app, deps) {
     // Start channel-agnostic queue processor (dispatches via item.channel)
     startQueueProcessor(deps);
     
-    // Cleanup old idempotency entries every minute
-    setInterval(() => cleanupIdempotencyCache(logger), 60 * 1000);
+    // Cleanup old idempotency entries every minute (DB-backed, survives restarts)
+    setInterval(() => cleanupIdempotencyCache(pool, logger), 60 * 1000);
     
     app.post('/api/twilio/webhook', async (req, res) => {
         try {
@@ -116,10 +120,20 @@ function registerInpipeRoutes(app, deps) {
             const rawPayload = twilioChannel.parsePayload(req);
             const messageSid = rawPayload.messageId;
             
-            // IDEMPOTENCY GUARD: Prevent duplicate processing from Twilio retries
-            if (messageSid && PROCESSED_SIDS.has(messageSid)) {
-                logger.info({ messageSid }, 'Duplicate message detected - already processed');
-                return sendChannelResponse(res, twilioChannel);
+            // IDEMPOTENCY GUARD: Atomic DB insert — survives restarts, covers Twilio's 11hr retry window.
+            // INSERT ... ON CONFLICT DO NOTHING returns 0 rows if sid already exists → duplicate.
+            if (messageSid) {
+                const dedupeResult = await pool.query(
+                    `INSERT INTO core.processed_sids (sid, processed_at)
+                     VALUES ($1, NOW())
+                     ON CONFLICT (sid) DO NOTHING
+                     RETURNING sid`,
+                    [messageSid]
+                );
+                if (dedupeResult.rows.length === 0) {
+                    logger.info({ messageSid }, 'Duplicate message detected (DB) - already processed');
+                    return sendChannelResponse(res, twilioChannel);
+                }
             }
             
             const msg = twilioChannel.normalizeMessage(rawPayload);
@@ -141,11 +155,6 @@ function registerInpipeRoutes(app, deps) {
             if (totalQueueDepth() >= MAX_QUEUE_SIZE) {
                 logger.warn({ queueSize: totalQueueDepth() }, 'Queue full - rejecting message');
                 return res.status(503).send('Server busy, please retry');
-            }
-            
-            // Mark as seen immediately (before queuing)
-            if (messageSid) {
-                PROCESSED_SIDS.set(messageSid, Date.now());
             }
             
             // QUEUE MESSAGE for async processing (media → priority tier)
@@ -448,20 +457,19 @@ async function processQueuedMessage(msg, rawPayload, channel, deps) {
     logger.warn({ status: bookRecord.status, fractalId: bookRecord.fractal_id }, 'Unknown book status');
 }
 
-// Cleanup old idempotency entries
-function cleanupIdempotencyCache(logger) {
-    const now = Date.now();
-    let cleaned = 0;
-    
-    for (const [sid, timestamp] of PROCESSED_SIDS.entries()) {
-        if (now - timestamp > IDEMPOTENCY_TTL_MS) {
-            PROCESSED_SIDS.delete(sid);
-            cleaned++;
+// Cleanup old idempotency entries from DB (DELETE rows older than TTL window)
+async function cleanupIdempotencyCache(pool, logger) {
+    try {
+        const result = await pool.query(
+            `DELETE FROM core.processed_sids
+             WHERE processed_at < NOW() - INTERVAL '${IDEMPOTENCY_TTL_INTERVAL}'`
+        );
+        const cleaned = result.rowCount || 0;
+        if (cleaned > 0) {
+            logger.info({ cleaned }, 'Idempotency DB cleanup');
         }
-    }
-    
-    if (cleaned > 0) {
-        logger.info({ cleaned, remaining: PROCESSED_SIDS.size }, 'Idempotency cache cleanup');
+    } catch (err) {
+        logger.warn({ err: err.message }, 'Idempotency DB cleanup error (non-fatal)');
     }
 }
 
@@ -779,7 +787,7 @@ async function handlePendingBookAsync(channel, msg, bookRecord, deps) {
         `, [String(msg.phone)]);
         if (prevLink.rows.length > 0 && prevLink.rows[0].book_fractal_id !== bookRecord.fractal_id) {
             const oldFractal = prevLink.rows[0].book_fractal_id;
-            const oldSchema  = prevLink.rows[0].tenant_schema;
+            const oldSchema  = assertValidSchemaName(prevLink.rows[0].tenant_schema);
             try {
                 await pool.query(`
                     UPDATE ${oldSchema}.book_channels

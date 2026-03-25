@@ -19,15 +19,18 @@ const FRACTAL_SALT = process.env.FRACTAL_SALT || (() => {
  *   disclosed: false → only hash + reference stored (existence proven, content not revealed)
  *
  * @param {object} opts
- * @param {string} opts.bookFractalId   - Parent book's fractal ID
- * @param {number} opts.tenantId        - Tenant ID
- * @param {string} opts.phone           - Sender phone (hashed, not stored raw)
- * @param {string} opts.body            - Message text body
- * @param {object|null} opts.media      - { buffer, contentType } or null
- * @param {string} opts.timestamp       - ISO timestamp string
+ * @param {string} opts.bookFractalId        - Parent book's fractal ID
+ * @param {number} opts.tenantId             - Tenant ID
+ * @param {string} opts.phone                - Sender phone (hashed, not stored raw)
+ * @param {string} opts.body                 - Message text body
+ * @param {object|null} opts.media           - { buffer, contentType } or null
+ * @param {string} opts.timestamp            - ISO timestamp string
+ * @param {boolean} [opts.disclosedAttachments=true] - Whether attachment binaries are disclosed.
+ *   true  → binary pinned to IPFS in full (default; inpipe messages are fully disclosed).
+ *   false → hash-only reference; binary not pinned (use for privacy-sensitive re-attestations).
  * @returns {object} capsule
  */
-function buildCapsule({ bookFractalId, tenantId, phone, body, media, timestamp }) {
+function buildCapsule({ bookFractalId, tenantId, phone, body, media, timestamp, disclosedAttachments = true }) {
     const ts = timestamp || new Date().toISOString();
     const bodyText = body || '';
 
@@ -52,7 +55,7 @@ function buildCapsule({ bookFractalId, tenantId, phone, body, media, timestamp }
             hash: attachHash,
             discord_url: null,
             attachment_cid: null,
-            disclosed: true
+            disclosed: disclosedAttachments
         });
     }
 

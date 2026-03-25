@@ -869,6 +869,18 @@ async function initializeDatabase() {
             ON CONFLICT (key) DO NOTHING
         `);
         
+        // IDEMPOTENCY TABLE: Persisted Twilio SID deduplication (survives restarts, covers 11hr retry window)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS core.processed_sids (
+                sid TEXT PRIMARY KEY,
+                processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        `);
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS processed_sids_processed_at_idx
+            ON core.processed_sids (processed_at)
+        `);
+
         // NOTE: One-time migrations have been applied to production database and removed
         // from startup code for clean deploys. Records remain in core.migrations for audit.
         // New tenant schemas get all columns/tables via tenant-manager.js initializeTenantSchema.
