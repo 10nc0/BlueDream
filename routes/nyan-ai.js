@@ -964,6 +964,32 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     logger.error({ name: doc.name, err: docError }, '❌ Document processing error');
                 }
             }
+
+            // ── Audio Transcription (non-stream handler) ──────────────────────────────
+            const _audioList = [];
+            if (audios && Array.isArray(audios)) _audioList.push(...audios);
+            if (audio) _audioList.push({ name: 'voice-recording', data: audio, type: 'audio' });
+
+            if (_audioList.length > 0) {
+                const { processDocumentForAI } = require('../utils/attachment-cascade');
+                const _transcripts = [];
+                for (const aud of _audioList) {
+                    try {
+                        const result = await processDocumentForAI(aud.data, aud.name || 'audio', aud.type || 'audio', { tenantId: clientIp });
+                        if (result && result.text) {
+                            _transcripts.push(result.text);
+                            logger.info({ name: aud.name, chars: result.text.length }, '🎙️ Audio transcribed (non-stream)');
+                        }
+                    } catch (audErr) {
+                        logger.warn({ name: aud.name, err: audErr.message }, '🎙️ Audio transcription failed (non-stream)');
+                    }
+                }
+                if (_transcripts.length > 0) {
+                    const spoken = _transcripts.join(' ');
+                    finalPrompt = finalPrompt ? `${finalPrompt} ${spoken}` : spoken;
+                }
+            }
+            // ─────────────────────────────────────────────────────────────────────────
             
             if (cachedFileHashes && Array.isArray(cachedFileHashes)) {
                 for (const hashEntry of cachedFileHashes) {
@@ -1106,7 +1132,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         };
         
         try {
-            let { message, photo, photos, document, documentName, documents, history, zipData, contextAttachments, cachedFileHashes } = req.body;
+            let { message, photo, photos, document, documentName, documents, audio, audios, history, zipData, contextAttachments, cachedFileHashes } = req.body;
             let extractedContent = [];
             
             const responseFileHashes = [];
@@ -1122,6 +1148,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         const manifest = JSON.parse(manifestContent);
                         
                         photos = photos || [];
+                        audios = audios || [];
                         documents = documents || [];
                         
                         for (const entry of manifest) {
@@ -1131,6 +1158,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                                 const item = { name: entry.name, data, type: entry.type };
                                 
                                 if (entry.category === 'photo') photos.push(item);
+                                else if (entry.category === 'audio') audios.push(item);
                                 else if (entry.category === 'document') documents.push(item);
                             }
                         }
@@ -1173,6 +1201,37 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     logger.error({ name: doc.name, err: docError }, '❌ Document processing error');
                 }
             }
+
+            // ── Audio Transcription (stream handler) ─────────────────────────────────
+            // Transcribe any audio recordings/uploads via Groq Whisper.
+            // Spoken audio IS the user's query — prepend transcript to message.
+            const audioList = [];
+            if (audios && Array.isArray(audios)) audioList.push(...audios);
+            if (audio) audioList.push({ name: 'voice-recording', data: audio, type: 'audio' });
+
+            if (audioList.length > 0) {
+                const { processDocumentForAI } = require('../utils/attachment-cascade');
+                const transcripts = [];
+                for (const aud of audioList) {
+                    if (isClientDisconnected()) break;
+                    sseStage({ type: 'thinking', stage: '🎙️ Transcribing audio...' });
+                    try {
+                        const result = await processDocumentForAI(aud.data, aud.name || 'audio', aud.type || 'audio', { tenantId: clientIp });
+                        if (result && result.text) {
+                            transcripts.push(result.text);
+                            logger.info({ name: aud.name, chars: result.text.length }, '🎙️ Audio transcribed');
+                        }
+                    } catch (audErr) {
+                        logger.warn({ name: aud.name, err: audErr.message }, '🎙️ Audio transcription failed');
+                    }
+                }
+                if (transcripts.length > 0) {
+                    const spoken = transcripts.join(' ');
+                    message = message ? `${message} ${spoken}` : spoken;
+                    logger.info({ chars: spoken.length }, '🎙️ Transcript prepended to message');
+                }
+            }
+            // ─────────────────────────────────────────────────────────────────────────
             
             if (cachedFileHashes && Array.isArray(cachedFileHashes)) {
                 for (const hashEntry of cachedFileHashes) {
