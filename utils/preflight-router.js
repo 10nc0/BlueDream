@@ -62,12 +62,12 @@ const PSI_EMA_IDENTITY_PATTERNS = [
 const REALTIME_INTENT_PATTERNS = [
   // Sports (EPL, NFL, NBA, etc.)
   /\b(epl|premier\s*league|nfl|nba|mlb|mls|champions\s*league|world\s*cup|la\s*liga|bundesliga|serie\s*a|ligue\s*1)\b/i,
-  /\b(match|game|fixture|score|schedule|standings|results?)\s+(today|tonight|tomorrow|this\s*week|next\s*week|upcoming)\b/i,
-  /\b(upcoming|next|today'?s?|tonight'?s?|this\s*week'?s?)\s+(match|game|fixture|schedule)\b/i,
+  /\b(match|game|fixture|score|schedule|standings|results?)\s+(today|tonight|tomorrow|this\s*week|next\s*week|this\s*month|next\s*month|upcoming)\b/i,
+  /\b(upcoming|next|today'?s?|tonight'?s?|this\s*week'?s?|this\s*month'?s?)\s+(match|game|fixture|schedule|results?)\b/i,
   
   // News & Current Events
   /\b(latest|breaking|recent|current|today'?s?)\s+(news|headlines|events?|updates?|developments?)\b/i,
-  /\bwhat\s+(?:is\s+)?happen(?:ing|ed)\s+(today|now|recently|this\s*week)\b/i,
+  /\bwhat\s+(?:is\s+)?happen(?:ing|ed)\s+(today|now|recently|this\s*week|this\s*month)\b/i,
   
   // Weather
   /\b(weather|forecast|temperature|rain|snow|sunny|cloudy)\s+(today|tomorrow|this\s*week|in\s+\w+)\b/i,
@@ -89,6 +89,17 @@ const REALTIME_INTENT_PATTERNS = [
 
   // Non-English political title words — "presiden Amerika" would match here
   /\b(presiden|presidente|président|premier[\s\-]?ministre|primer[\s\-]?ministro|bundeskanzler|perdana\s+menteri)\b/i,
+
+  // Indonesian realtime intent — schedule / current / latest / today / this week / this month
+  /\b(jadwal|pertandingan|klasemen|hasil\s+pertandingan|siaran\s+langsung)\b/i,
+  /\b(hari\s+ini|minggu\s+ini|bulan\s+ini|tahun\s+ini|malam\s+ini|besok)\b/i,
+  /\b(terkini|terbaru|sekarang|saat\s+ini|live\s+score)\b/i,
+
+  // Malay realtime intent (overlaps with Indonesian, same roots)
+  /\b(jadual|keputusan|perlawanan|minggu\s+depan|bulan\s+depan)\b/i,
+
+  // Chinese realtime intent — 今天/今晚/本周/本月/最新/直播/赛程/比赛/赛果/下周/下月
+  /今天|今晚|今日|本周|本月|本年|下周|下月|明天|最新|直播|赛程|比赛|赛果|积分榜|战报|球队|日程/,
 ];
 
 /**
