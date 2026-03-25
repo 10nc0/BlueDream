@@ -596,13 +596,14 @@ function createAuditBadge(auditData) {
         bypass: { bg: 'rgba(148, 163, 184, 0.2)', border: 'rgba(148, 163, 184, 0.4)', icon: '⚪', text: 'Bypass' }
     };
     const badge = badgeColors[auditData.badge] || badgeColors.unverified;
-    const confidence = auditData.confidence || 0;
+    const confidence = auditData.confidence ?? null;
+    const confDisplay = confidence !== null ? `${confidence}%` : '—';
     const extensions = auditData.extensionsVerified?.join(', ') || 'NYAN';
     
     const badgeEl = document.createElement('div');
     badgeEl.className = 'audit-badge';
     badgeEl.style.cssText = `background: ${badge.bg}; border: 1px solid ${badge.border}; border-radius: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 0.25rem; margin-bottom: 0.5rem; cursor: pointer;`;
-    badgeEl.title = `Confidence: ${confidence}% | Extensions: ${extensions} | Passes: ${auditData.passCount || 1}`;
+    badgeEl.title = `Confidence: ${confDisplay} | Extensions: ${extensions} | Passes: ${auditData.passCount || 1}`;
     
     const iconSpan = document.createElement('span');
     iconSpan.textContent = badge.icon;
@@ -612,7 +613,7 @@ function createAuditBadge(auditData) {
     
     const confSpan = document.createElement('span');
     confSpan.style.opacity = '0.7';
-    confSpan.textContent = `(${confidence}%)`;
+    confSpan.textContent = `(${confDisplay})`;
     
     badgeEl.appendChild(iconSpan);
     badgeEl.appendChild(textSpan);

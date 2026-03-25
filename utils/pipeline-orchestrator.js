@@ -1938,9 +1938,18 @@ Output ONLY the corrected table and summary lines:`;
       return 'unavailable';
     }
     
-    // APPROVED, ACCEPTED, BYPASS → verified (web search sourced, identity, or pre-verified data)
-    if (verdict === 'APPROVED' || verdict === 'ACCEPTED' || verdict === 'BYPASS') {
+    // APPROVED, ACCEPTED → verified (second pass ran and passed)
+    if (verdict === 'APPROVED' || verdict === 'ACCEPTED') {
       return 'verified';
+    }
+
+    // BYPASS → two kinds:
+    //   intentional (pre-verified data: confidence > 0) → verified
+    //   failure (timed out / error: confidence === null) → bypass (grey, ungrounded)
+    if (verdict === 'BYPASS') {
+      return (auditResult.confidence !== null && auditResult.confidence !== undefined)
+        ? 'verified'
+        : 'bypass';
     }
     
     // FIXABLE → corrected (issues were auto-fixed)
