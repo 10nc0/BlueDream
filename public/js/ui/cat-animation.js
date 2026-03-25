@@ -11,6 +11,7 @@ const CAT_CONFIG = Object.freeze({
     CANVAS_ID: 'hopCanvas',
     
     // Animation settings
+    CANONICAL_SIZE: 125, // Reference canvas size for scale calculation (px). Changing this shifts all coordinate math.
     SCALE: 2.8,
     ANIMATION_SPEED: 60,
     JUMP_FRAME_INTERVAL: 15,
@@ -119,7 +120,7 @@ function initHopAnimation() {
     function drawPixelCat(frameNum, offsetX = 0, offsetY = 0, fleeing = false) {
         ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         
-        const scale = parseFloat(canvas.dataset.scale) || (canvas.width / 125) * CAT_CONFIG.SCALE;
+        const scale = parseFloat(canvas.dataset.scale) || (canvas.width / CAT_CONFIG.CANONICAL_SIZE) * CAT_CONFIG.SCALE;
         const isJump = Math.floor(frameNum / CAT_CONFIG.JUMP_FRAME_INTERVAL) % 2 === 0;
         const yOffset = isJump ? -CAT_CONFIG.JUMP_HEIGHT * scale : 0;
         
@@ -332,8 +333,21 @@ function initDateTimeTicker() {
         if (timeElCompact) timeElCompact.textContent = formatted;
     }
     
-    updateTime();
-    setInterval(updateTime, 1000);
+    // RAF-based tick: check elapsed second each frame, update only when it changes.
+    // Consistent with the animation loop's blink system — no setInterval, no drift,
+    // no orphaned timers if the element is later removed from the DOM.
+    let lastClockSecond = -1;
+    function clockTick() {
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (nowSec !== lastClockSecond) {
+            lastClockSecond = nowSec;
+            updateTime();
+        }
+        requestAnimationFrame(clockTick);
+    }
+
+    updateTime();   // immediate first paint
+    clockTick();    // start RAF clock loop
 }
 
 // ========================================
