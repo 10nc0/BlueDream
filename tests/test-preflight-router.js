@@ -108,6 +108,10 @@ test('LA vs NY housing → seed-metric (existing vs-pattern preserved)', () => {
     assert(detectSeedMetricIntent('LA vs NY housing'), 'expected true for "LA vs NY housing"');
 });
 
+test('DC housing → seed-metric (DC abbreviation covered)', () => {
+    assert(detectSeedMetricIntent('DC housing'), 'expected true for "DC housing"');
+});
+
 test('seed metric → seed-metric (explicit trigger)', () => {
     assert(detectSeedMetricIntent('seed metric for Tokyo'), 'expected true');
 });
@@ -147,6 +151,10 @@ test('SF price → geo-veto fires', () => {
 
 test('$SF price → geo-veto does NOT fire (dollar prefix = ticker)', () => {
     assert(!geoVetoWouldFire('$SF price'), 'geo-veto should not fire for "$SF price"');
+});
+
+test('$DC price → geo-veto does NOT fire (dollar prefix, non-SF city)', () => {
+    assert(!geoVetoWouldFire('$DC price'), 'geo-veto should not fire for "$DC price"');
 });
 
 test('SF stock price → geo-veto does NOT fire ("stock" = ticker cue)', () => {

@@ -225,6 +225,8 @@ Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arr
 
 ## Setup
 
+> **Operators:** see [`RUNBOOK.md`](RUNBOOK.md) for secret rotation, incident response, post-deploy checklist, and background queue architecture.
+
 ### Prerequisites
 
 - Node.js 18+
