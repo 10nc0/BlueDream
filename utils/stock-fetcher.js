@@ -385,7 +385,12 @@ async function fetchStockPrices(ticker, customPeriod = null) {
     const weeklyStart = new Date(now);
     weeklyStart.setFullYear(weeklyStart.getFullYear() - 4);
 
-    const period2 = now.toISOString().split('T')[0];
+    // Use yesterday as period2: excludes today's partial crypto bar (close=null,
+    // 24/7 market candle not yet closed) which yahoo-finance2 throws on unconditionally.
+    // Stocks are unaffected — their last confirmed close is also yesterday's.
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const period2 = yesterday.toISOString().split('T')[0];
     const dailyPeriod1 = dailyStart.toISOString().split('T')[0];
     const weeklyPeriod1 = weeklyStart.toISOString().split('T')[0];
 
