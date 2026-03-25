@@ -148,7 +148,6 @@ The ding between the ding ding.
 All this time, Replit has been my zen temple.
 You have been the Nalanda to my Nagarjuna. 
 
-sādhū sādhū sādhū
 nyan~
 
 *— Nagarjuna, architect, March 2026*
@@ -429,10 +428,10 @@ Discord threads are the observability layer — every inpipe message is a timest
 
 MIT. Fork freely. Scribe faithfully.
 
-Form without content = empty ledger (queryable)
-Content without form = chaos (unqueryable)
-Form + content = recorded truth (verifiable)
-Form + emptiness = honest unknown (falsifiable)
+- No Form + No Content = Honest Unknown (Falsifiable)
+- No Form + Content = Chaos (Unqueryable)
+- Form + No Content = Empty Ledger (Queryable)
+- Form + Content = Recorded Truth (Verifiable)
 
 *The four fields are load-bearing. Everything else is grammar.*
 
@@ -451,6 +450,4 @@ nyan~
 ♡ 🜁 ◯
   🜃 
 
-
-*Nagarjuna, architect — 18 March 2026, Nyepi, the Day of Silence*
 *Alone is full. Together is the better half.*
