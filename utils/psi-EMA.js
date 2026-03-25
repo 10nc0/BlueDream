@@ -246,15 +246,15 @@ function deriveReading({ R, z, theta }) {
   if (R < 0) {
     if (zVal < 0) {
       return {
-        reading: 'Local Bottom',
+        reading: 'Local Bottom (Technical Reversal Expected)',
         emoji: '🟢',
-        description: 'R<0, z<0 — technical reversal expected (local bottom)'
+        description: 'R<0, z<0 — momentum inverted below median, technical reversal expected'
       };
     } else {
       return {
         reading: 'Local Top',
         emoji: '🔴',
-        description: 'R<0, z>0 — technical reversal expected (local top)'
+        description: 'R<0, z>0 — momentum inverted above median, technical reversal expected'
       };
     }
   }

@@ -756,32 +756,25 @@ function buildStockContext(preflight) {
   const fidelity = psiEmaAnalysis.fidelity || {};
   const fundamentals = stockData.fundamentals || {};
   
-  // Extract values with correct property names from PsiEMADashboard output
-  const phaseTheta = phase.current;  // theta angle in degrees (e.g., 359.76)
-  const phaseSignal = phase.signal || summary.phaseSignal || 'N/A';
-  const anomalyZ = anomaly.current;  // z-score (e.g., -0.44)
-  const anomalyLevel = anomaly.alert?.level || summary.anomalyLevel || 'N/A';
-  const convergenceR = convergence.currentDisplay ?? convergence.current;  // R ratio - use currentDisplay (always available)
-  // Derive regime label from actual R value when available (not from gated regime)
-  let regimeLabel;
-  if (convergenceR != null && !isNaN(convergenceR)) {
-    // Derive meaningful signal from R value using φ-thresholds
-    if (convergenceR < 0) regimeLabel = 'Reversal';
-    else if (convergenceR < 0.382) regimeLabel = 'Weak';
-    else if (convergenceR < 0.618) regimeLabel = 'Moderate';
-    else if (convergenceR < 1.618) regimeLabel = 'Healthy';
-    else if (convergenceR < 2.618) regimeLabel = 'Strong';
-    else regimeLabel = 'Extreme';
-  } else {
-    regimeLabel = typeof convergence.regime === 'string' 
-      ? convergence.regime 
-      : (convergence.regime?.label || summary.regime || 'N/A');
-  }
-  
-  // vφ⁴: φ-orbital reading from decision tree
+  // Extract raw dimension values
+  const phaseTheta = phase.current;   // θ angle in degrees
+  const anomalyZ   = anomaly.current; // z-score
+  const convergenceR = convergence.currentDisplay ?? convergence.current; // R ratio
+
+  // vφ⁴: reading from deriveReading decision tree — source of truth for all labels
   const reading = psiEmaAnalysis.reading || {};
-  const readingText = reading.reading || summary.reading || 'N/A';
-  const readingEmoji = reading.emoji || summary.readingEmoji || '⚪';
+  const readingText  = reading.reading  || summary.reading      || 'N/A';
+  const readingEmoji = reading.emoji    || summary.readingEmoji  || '⚪';
+
+  // Canonical CSV signal labels — pure math, the scribe describes not prescribes
+  // θ signal: IF(Theta<0,"(-) negative","(+) positive")
+  const phaseSignal = (phaseTheta != null && !isNaN(phaseTheta) && phaseTheta < 0)
+    ? '(-) negative' : '(+) positive';
+  // z signal: IF(ABS(z)>φ²,"Anomaly","Low Anomaly")  — φ²=2.618
+  const anomalyLevel = (anomalyZ != null && !isNaN(anomalyZ) && Math.abs(anomalyZ) > 2.618)
+    ? 'Anomaly' : 'Low Anomaly';
+  // R signal: reading label from deriveReading (same label shown in Assessment line)
+  const regimeLabel = readingText !== 'N/A' ? readingText : 'N/A';
   
   // Build tetralemma alert if φ² crossed
   const tetralemmaAlert = psiEmaAnalysis.renewal?.tetralemma 

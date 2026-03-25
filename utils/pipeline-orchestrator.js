@@ -842,30 +842,8 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
         else rLabel = 'Extreme';
       }
       
-      // Derive z label from value
-      let zLabel = 'Normal';
-      if (zVal != null) {
-        const absZ = Math.abs(zVal);
-        if (absZ > 3) zLabel = 'Extreme';
-        else if (absZ > 2) zLabel = 'High';
-        else if (absZ > 1) zLabel = 'Elevated';
-      }
-      
-      // Dynamic outlook based on reading type
-      const outlookMap = {
-        'False Breakout': 'Watch for mean reversion.',
-        'Breathing': 'Trend continuing, momentum sustainable.',
-        'Consolidation': 'Sideways movement, wait for breakout.',
-        'Local Bottom': 'Potential reversal upward.',
-        'Local Top': 'Potential reversal downward.',
-        'Reversal': 'Momentum shifting, trend change likely.',
-        'Continuation': 'Current trend persisting.',
-        'Optimism': 'Positive momentum building.',
-        'Fatalism': 'Negative momentum building.',
-        'Bull Trend Signal': 'Strong upward momentum confirmed.',
-        'Oversold': 'Price below fair value, bounce possible.'
-      };
-      const outlook = outlookMap[readingText] || 'Monitor for trend development.';
+      // Canonical z label — IF(ABS(z)>φ²,"Anomaly","Low Anomaly") — φ²=2.618
+      const zLabel = (zVal != null && !isNaN(zVal) && Math.abs(zVal) > 2.618) ? 'Anomaly' : 'Low Anomaly';
       
       // Format values for display
       const fmtR = (rVal != null && !isNaN(rVal)) ? rVal.toFixed(2) : 'N/A';
@@ -882,7 +860,7 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
       } else {
         // Healthy - one-liner assessment
         clinicalSection = `
-📊 **Assessment**: ${readingEmoji} ${readingText} — R=${fmtR} (${rLabel}), z=${fmtZ}σ (${zLabel}). ${outlook}
+📊 **Assessment**: ${readingEmoji} ${readingText} — R=${fmtR} (${rLabel}), z=${fmtZ}σ (${zLabel}).
 `;
       }
       
