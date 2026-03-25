@@ -1117,6 +1117,7 @@ async function sendMessage(_retryPayload = null) {
             const errorData = await res.json().catch(() => ({}));
             if (res.status === 503 && errorData.code === 'warming_up') {
                 addMessage('assistant', '🐱 Still warming up — will retry automatically in 5 seconds...');
+                isProcessing = false;
                 setTimeout(() => sendMessage(payload), 5000);
             } else {
                 addMessage('assistant', errorData.reply || 'An error occurred. Please try again.');
