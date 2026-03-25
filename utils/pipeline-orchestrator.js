@@ -39,7 +39,7 @@ const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
 const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer } = require('./psi-EMA');
 const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package');
-const { getLLMBackend } = require('../config/constants');
+const { getLLMBackend, getAuditBackend } = require('../config/constants');
 
 const PIPELINE_STEPS = {
   CONTEXT_EXTRACT: 'S-1',
@@ -153,6 +153,7 @@ class PipelineState {
 class PipelineOrchestrator {
   constructor(config) {
     this.groqToken = config.groqToken;
+    this.auditToken = config.auditToken || config.groqToken;
     this.groqVisionToken = config.groqVisionToken;
     this.searchBrave = config.searchBrave;
     this.searchDuckDuckGo = config.searchDuckDuckGo;
@@ -1654,9 +1655,15 @@ Output ONLY the corrected table and summary lines:`;
       synthesis: state.draftAnswer
     };
     
+    // Notify the stream about who is auditing (humane disclosure while client waits)
+    if (input.onStageChange) {
+      const auditorLabel = process.env.DEEPSEEK_API ? 'DeepSeek R1' : 'Llama';
+      input.onStageChange({ type: 'thinking', stage: `Auditing with ${auditorLabel}...` });
+    }
+
     try {
       state.auditResult = await runAuditPass(
-        this.groqToken,
+        this.auditToken,
         state.draftAnswer,
         query,
         dialecticalContext,

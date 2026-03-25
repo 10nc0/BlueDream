@@ -111,34 +111,40 @@ const DISCORD = {
 };
 
 // ==================== LLM Backend Router ====================
-// Priority: DEEPSEEK_API (DeepSeek R1) → Groq (Kimi K2)
+// Drafter  → always Groq Llama 3.3 70B (fast, expressive, used for S2/S4/tool-calls)
+// Auditor  → DeepSeek R1 if DEEPSEEK_API set (reasoning chain catches confabulation),
+//            else falls back to Groq Llama (graceful degradation, same timeouts as drafter)
 // Both are OpenAI-compatible; swap URL + model + token at the call site.
 const LLM_BACKENDS = {
-  deepseek: {
-    url: 'https://api.deepseek.com/v1/chat/completions',
-    model: 'deepseek-reasoner',
-    // deepseek-reasoner generates chain-of-thought before answering — needs much longer timeouts
-    timeouts: {
-      reasoning: 120000,   // S2 main reasoning (think + answer)
-      toolCall:   90000,   // seed-metric walk-the-dog rounds
-      audit:      60000,   // two-pass audit
-      extract:    10000    // core-question extraction (short, non-reasoning call)
-    }
-  },
-  groq: {
+  drafter: {
     url: 'https://api.groq.com/openai/v1/chat/completions',
-    model: 'moonshotai/kimi-k2-instruct',
+    model: 'llama-3.3-70b-versatile',
     timeouts: {
       reasoning: 15000,
       toolCall:  30000,
       audit:     15000,
       extract:    3000
     }
+  },
+  auditor: {
+    url: 'https://api.deepseek.com/v1/chat/completions',
+    model: 'deepseek-reasoner',
+    // deepseek-reasoner generates chain-of-thought before answering — needs much longer timeouts
+    timeouts: {
+      reasoning: 120000,   // S2 main reasoning (think + answer) — not used by auditor
+      toolCall:   90000,   // not used by auditor
+      audit:      60000,   // S3 two-pass audit
+      extract:    10000    // not used by auditor
+    }
   }
 };
 
 function getLLMBackend() {
-  return process.env.DEEPSEEK_API ? LLM_BACKENDS.deepseek : LLM_BACKENDS.groq;
+  return LLM_BACKENDS.drafter;
+}
+
+function getAuditBackend() {
+  return process.env.DEEPSEEK_API ? LLM_BACKENDS.auditor : LLM_BACKENDS.drafter;
 }
 
 // ==================== AI Models ====================
@@ -146,7 +152,7 @@ function getLLMBackend() {
 // @ref: https://console.groq.com/docs/models
 // @verified: 2026-01-10
 const AI_MODELS = {
-  TEXT_MODEL: 'moonshotai/kimi-k2-instruct',               // Groq fallback model
+  TEXT_MODEL: 'llama-3.3-70b-versatile',                   // Groq drafter model (playground)
   VISION_MODEL: 'meta-llama/llama-4-scout-17b-16e-instruct', // Groq Vision model (2025)
   VISION: 'meta-llama/llama-4-scout-17b-16e-instruct',       // Alias for backward compatibility
   AUDIO_MODEL: 'whisper-large-v3-turbo',                     // Groq Whisper model
@@ -275,5 +281,6 @@ module.exports = {
   IP_GEO,
   MISC,
   LLM_BACKENDS,
-  getLLMBackend
+  getLLMBackend,
+  getAuditBackend
 };

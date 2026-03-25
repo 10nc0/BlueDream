@@ -559,7 +559,8 @@ async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') 
 }
 
 const orchestrator = createPipelineOrchestrator({
-    groqToken: process.env.DEEPSEEK_API || process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
+    groqToken: process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
+    auditToken: process.env.DEEPSEEK_API || process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
     groqVisionToken: process.env.PLAYGROUND_GROQ_VISION_TOKEN,
     searchBrave,
     searchDuckDuckGo,
@@ -1066,6 +1067,9 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         const isClientDisconnected = () => {
             return res.writableEnded || res.destroyed || !res.writable;
         };
+        const sseStage = (event) => {
+            if (!isClientDisconnected()) res.write(`data: ${JSON.stringify(event)}\n\n`);
+        };
         
         try {
             let { message, photo, photos, document, documentName, documents, history, zipData, contextAttachments, cachedFileHashes } = req.body;
@@ -1212,7 +1216,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         clientIp,
                         isVisionRequest: part.includePhotos && photoList.length > 0,
                         contextAttachments: part.includePhotos || part.includeDocuments ? contextAttachments : undefined,
-                        streaming: true
+                        streaming: true,
+                        onStageChange: sseStage
                     };
                     
                     const subResult = await orchestrator.execute(subInput);
@@ -1296,7 +1301,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     clientIp,
                     isVisionRequest: photoList.length > 0,
                     contextAttachments,
-                    streaming: true
+                    streaming: true,
+                    onStageChange: sseStage
                 };
                 
                 const pipelineResult = await orchestrator.execute(pipelineInput);

@@ -18,7 +18,7 @@
 
 const axios = require('axios');
 const { buildAuditPrompt, buildCorrectivePrompt } = require('../prompts/audit-protocol');
-const { getLLMBackend } = require('../config/constants');
+const { getAuditBackend } = require('../config/constants');
 
 const AUDIT_TEMPERATURE = 0.1;
 
@@ -72,10 +72,11 @@ Perform the dialectical audit and output JSON only.`;
   ];
 
   try {
+    const auditBackend = getAuditBackend();
     const response = await axios.post(
-      getLLMBackend().url,
+      auditBackend.url,
       {
-        model: getLLMBackend().model,
+        model: auditBackend.model,
         messages: auditMessages,
         temperature: AUDIT_TEMPERATURE,
         max_tokens: 800,
@@ -86,7 +87,7 @@ Perform the dialectical audit and output JSON only.`;
           'Authorization': `Bearer ${groqToken}`,
           'Content-Type': 'application/json'
         },
-        timeout: timeout || 15000
+        timeout: timeout || auditBackend.timeouts.audit
       }
     );
 
@@ -157,10 +158,11 @@ Perform the dialectical audit and output JSON only.`;
 async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, maxTokens, timeout) {
   const correctivePrompt = buildCorrectivePrompt(originalQuery, draftAnswer, issues);
 
+  const correctiveBackend = getAuditBackend();
   const response = await axios.post(
-    getLLMBackend().url,
+    correctiveBackend.url,
     {
-      model: getLLMBackend().model,
+      model: correctiveBackend.model,
       messages: [
         { role: 'system', content: 'You are correcting an AI answer based on audit feedback. Output the corrected answer only.' },
         { role: 'user', content: correctivePrompt }
