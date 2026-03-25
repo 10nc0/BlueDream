@@ -958,13 +958,15 @@ function analyzePhase(prices) {
   const ema34Result = calculateEMA(prices, FIB_PERIODS.FAST_THETA);
   const ema55Result = calculateEMA(prices, FIB_PERIODS.SLOW_THETA);
   
-  // vφ⁸: θ series = atan2(flow, stock) per bar (stock/flow preserved).
-  // currentTheta = EMA-3 of the theta series — absorbs stale last bar
-  // (pre-market close = prev close → raw delta=0 → raw theta=0°).
-  // EMA-3 smoothing keeps stock/flow semantics while ignoring single-bar noise.
-  const thetaEMA3 = calculateEMA(thetaSeries, 3);
-  const smoothed = thetaEMA3.values;
-  const currentTheta = smoothed[smoothed.length - 1] ?? thetaSeries[thetaSeries.length - 1];
+  // vφ⁸: currentTheta from the last CONFIRMED candle — walk back past phantom bars.
+  // Pre-market / stale bars have flow=0 (close == prev close): not a real candle.
+  // Only 2 real completed candles needed for any timeframe (1d or 7d).
+  // θ = atan2(flow, stock) on the last pair where |flow| > 0 (i.e., price actually moved).
+  let lookback = prices.length - 1;
+  while (lookback > 1 && prices[lookback] === prices[lookback - 1]) lookback--;
+  const confirmedStock = prices[lookback];
+  const confirmedFlow  = prices[lookback] - prices[lookback - 1];
+  const currentTheta   = Math.atan2(confirmedFlow, confirmedStock) * (180 / Math.PI);
   
   // Interpret phase
   const interpretation = interpretPhase(currentTheta);
@@ -992,7 +994,7 @@ function analyzePhase(prices) {
     emaSlow: ev55,
     ema34Interpolated: ema34Result.interpolated,
     ema55Interpolated: ema55Result.interpolated,
-    formula: 'θ = EMA3(atan2(Δprice, price))'
+    formula: 'θ = atan2(flow, stock) — last confirmed candle'
   };
 }
 
