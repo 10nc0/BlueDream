@@ -225,99 +225,135 @@ Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arr
 
 ## Setup
 
-> **Operators:** see [`RUNBOOK (LOGOS).md`](RUNBOOK%20(LOGOS).md) for secret rotation, incident response, post-deploy checklist, and background queue architecture.
+> Everything runs on free tiers. No terminal required.
+>
+> **Operators:** see [`RUNBOOK (LOGOS).md`](RUNBOOK%20(LOGOS).md) for secret rotation, incident response, and post-deploy checklist.
 
-### Prerequisites
+### 1. Accounts
 
-- Node.js 18+
-- PostgreSQL (Supabase recommended — free tier works)
-- Discord server with 4 bot tokens and a webhook
-- Twilio account (WhatsApp Business API) — optional
-- LINE Developer account (LINE OA) — optional
-- Telegram Bot Token (`TELEGRAM_BOT_TOKEN`) — optional
-- Groq API key (AI features)
+One Google / GitHub / Microsoft login works across all services below.
 
-### 1. Clone & Install
-
-```bash
-git clone https://github.com/10nc0/BlueDream
-cd BlueDream
-npm install
-```
-
-### 2. Environment Variables
-
-```bash
-cp .env.example .env
-```
-
-See `.env.example` for all required and optional variables with descriptions.
-
-### 3. Database
-
-```bash
-node -e "require('./tenant-manager').genesis()"
-```
-
-Nyanbook uses isolated PostgreSQL schemas per tenant (`tenant_1`, `tenant_2`, etc.) with a shared `core` schema for cross-tenant routing.
-
-### 4. Discord Bots
-
-Create 4 Discord bots in the [Discord Developer Portal](https://discord.com/developers/applications):
-
-| Bot | Role | Token env var |
+| Service | What it's for | Cost |
 |---|---|---|
-| Hermes | Thread creation + message relay (write) | `HERMES_TOKEN` |
-| Thoth | Message mirroring to ledger threads (write) | `THOTH_TOKEN` |
-| Idris | AI audit write | `IDRIS_TOKEN` |
-| Horus | AI audit read | `HORUS_TOKEN` |
+| [Replit](https://replit.com) | Runs the app | Free |
+| [Supabase](https://supabase.com) | Database | Free |
+| [Discord](https://discord.com) | Ledger storage | Free |
+| [Groq](https://console.groq.com) | AI (Playground + Audit) | Free |
 
-Create a webhook for your ledger channel: `NYANBOOK_WEBHOOK_URL`
+### 2. Import into Replit
 
-### 5. WhatsApp (Twilio)
+1. Go to [replit.com](https://replit.com) → **Create Repl** → **Import from GitHub**
+2. Paste: `https://github.com/10nc0/BlueDream`
+3. Click **Import** — Replit installs all dependencies automatically. No terminal needed.
 
-1. Create a Twilio account
-2. Enable WhatsApp Business API
-3. Set webhook URL: `https://your-domain.com/api/twilio/webhook`
-4. Add `TWILIO_AUTH_TOKEN` to your env
+### 3. Database (Supabase)
 
-### 6. LINE OA (optional)
+1. Go to [supabase.com](https://supabase.com) → **New Project** → pick a region close to you
+2. Once created: **Settings** → **Database** → **Connection pooling**
+3. Copy the **URI** (port should be `6543`)
+4. This becomes your `DATABASE_URL` secret in the next step
 
-1. Create a LINE Developer account
-2. Create a Messaging API channel (LINE OA)
-3. Set webhook URL: `https://your-domain.com/api/line/webhook`
-4. Add `LINE_CHANNEL_SECRET` and `LINE_CHANNEL_ACCESS_TOKEN` to your env
+All database tables are created automatically on first run — no commands needed.
 
-LINE is listen-only — Nyanbook receives messages but does not reply. The outpipe is Discord.
+### 4. Secrets
 
-### 7. Telegram (optional)
+In your Repl: click the **🔒 Secrets** panel (padlock icon) → add each key below.
 
-1. Create a bot via [@BotFather](https://t.me/botfather) and copy the token
-2. Add `TELEGRAM_BOT_TOKEN` to your env
-3. Set webhook URL: `https://your-domain.com/api/telegram/webhook`
-4. Users join a book via the deep-link: `https://t.me/YourBot?start=JOINCODE`
+**Core (required):**
 
-Telegram is reply-capable — Nyanbook can send confirmation messages back to the user. `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_BOT_USERNAME` are optional but recommended.
+| Key | Value |
+|---|---|
+| `DATABASE_URL` | Supabase connection URI from step 3 |
+| `SESSION_SECRET` | Any random string, 32+ characters |
+| `NYAN_OUTBOUND_API` | Any random string, 32+ characters |
 
-### 8. Per-Book Output Targets (optional)
+**AI (required for Playground and Audit):**
 
-Each book can deliver messages to zero or more output targets in parallel — Discord webhooks, email, or HTTPS webhooks. These are configured per-book in the dashboard's book edit modal under the **Outpipes** section, persisted via `PATCH /api/books/:id/outpipes`.
+| Key | Where to get it |
+|---|---|
+| `NYANBOOK_AI_KEY` | [console.groq.com](https://console.groq.com) → API Keys → Create |
+| `PLAYGROUND_AI_KEY` | Same Groq key (or a second one) |
+| `PLAYGROUND_BRAVE_API` | [brave.com/search/api](https://brave.com/search/api) → Free tier (2,000 queries/month) |
 
-| Type | What it does | Required env |
-|---|---|---|
-| `discord` | Posts to a Discord channel or webhook URL | — |
-| `email` | Sends via Resend to any email address | `RESEND_API_KEY` |
-| `webhook` | HTTPS JSON POST with optional HMAC-SHA256 `X-Nyanbook-Signature` | — |
+**Discord ledger (required for message archiving):**
 
-Multiple outpipes can be configured per book; they fire in parallel. If no outpipes are configured, output is Discord-only via the ledger thread.
+| Key | Where to get it |
+|---|---|
+| `HERMES_TOKEN` | Discord Developer Portal → Hermes bot → Token |
+| `THOTH_TOKEN` | Discord Developer Portal → Thoth bot → Token |
+| `IDRIS_TOKEN` | Discord Developer Portal → Idris bot → Token |
+| `HORUS_TOKEN` | Discord Developer Portal → Horus bot → Token |
+| `NYANBOOK_WEBHOOK_URL` | Discord channel → Edit → Integrations → Webhooks → copy URL |
+| `DISCORD_LOG_CHANNEL_ID` | Right-click your log channel → Copy Channel ID |
 
-### 9. Run
+Everything else (WhatsApp, LINE, Telegram, email, IPFS) is optional — the app starts cleanly without them and the startup log tells you exactly what's active and what's missing.
 
-```bash
-node vegapunk.js
-```
+### 5. Discord Bots
 
-The server starts on port 5000 (configurable via `PORT`).
+Create 4 bots at [discord.com/developers/applications](https://discord.com/developers/applications):
+
+| Bot name | Role |
+|---|---|
+| Hermes | Writes messages to ledger threads |
+| Thoth | Mirrors messages |
+| Idris | Writes AI audit results |
+| Horus | Reads AI audit results |
+
+For each: **New Application** → **Bot** → **Reset Token** → copy into Secrets above.
+Invite all 4 to your Discord server with **Send Messages** + **Read Message History** permissions.
+
+### 6. Run
+
+- **Development:** Click the green **▶ Run** button in Replit
+- **Production:** Click **Deploy** → **Autoscale** — gives you a persistent `https://yourapp.replit.app` URL (required for WhatsApp / LINE / Telegram webhooks)
+
+The startup log shows which features are active and which secrets are still missing.
+
+---
+
+### Optional: WhatsApp (Twilio)
+
+1. Create a [Twilio](https://twilio.com) account → enable WhatsApp Business API
+2. Set webhook URL: `https://your-app.replit.app/api/twilio/webhook`
+3. Add `TWILIO_AUTH_TOKEN` to Secrets
+
+### Optional: LINE OA
+
+1. Create a [LINE Developer](https://developers.line.biz) account → Messaging API channel
+2. Set webhook URL: `https://your-app.replit.app/api/line/webhook`
+3. Add `LINE_CHANNEL_SECRET` and `LINE_CHANNEL_ACCESS_TOKEN` to Secrets
+
+LINE is listen-only — Nyanbook receives but does not reply.
+
+### Optional: Telegram
+
+1. Message [@BotFather](https://t.me/botfather) → `/newbot` → copy the token
+2. Add `TELEGRAM_BOT_TOKEN` to Secrets
+3. Set webhook URL: `https://your-app.replit.app/api/telegram/webhook`
+4. Users join a book via: `https://t.me/YourBot?start=JOINCODE`
+
+### Optional: IPFS (Pinata)
+
+1. Create a free account at [pinata.cloud](https://pinata.cloud) — 1 GB free
+2. Generate an API key JWT → add as `PINATA_JWT` to Secrets
+
+Every inpipe message gets pinned permanently to IPFS. The ledger works without it — IPFS makes it sovereign.
+
+### Optional: Email outpipe (Resend)
+
+1. Create a [Resend](https://resend.com) account → API Keys
+2. Add `RESEND_API_KEY` to Secrets
+3. Configure per-book email delivery in the dashboard's book edit modal
+
+### Optional: Per-book webhooks
+
+Each book can deliver messages to zero or more output targets in parallel — configured in the dashboard's **Outpipes** section per book.
+
+| Type | What it does |
+|---|---|
+| `discord` | Posts to any Discord channel or webhook URL |
+| `email` | Sends via Resend to any address |
+| `webhook` | HTTPS JSON POST with optional HMAC-SHA256 signature |
 
 ---
 
