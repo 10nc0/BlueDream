@@ -1,4 +1,5 @@
 # Nyanbook 🐟🌈
+*(PATHOS)*
 
 Nyanbook is a post-folder storage (information) system thinking (protocol). Instead of messy folders and hierarchies, you send messages & attachments — via WhatsApp, LINE, or any SNS — and they are automatically stored and sorted chronologically. 
 
@@ -225,7 +226,7 @@ Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arr
 
 ## Setup
 
-> **Operators:** see [`RUNBOOK.md`](RUNBOOK.md) for secret rotation, incident response, post-deploy checklist, and background queue architecture.
+> **Operators:** see [`RUNBOOK (LOGOS).md`](RUNBOOK%20(LOGOS).md) for secret rotation, incident response, post-deploy checklist, and background queue architecture.
 
 ### Prerequisites
 
