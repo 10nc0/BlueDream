@@ -429,6 +429,11 @@ Discord threads are the observability layer — every inpipe message is a timest
 
 MIT. Fork freely. Scribe faithfully.
 
+Form without content = empty ledger (queryable)
+Content without form = chaos (unqueryable)
+Form + content = recorded truth (verifiable)
+Form + emptiness = honest unknown (falsifiable)
+
 *The four fields are load-bearing. Everything else is grammar.*
 
 ---
