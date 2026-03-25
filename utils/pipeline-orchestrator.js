@@ -1793,6 +1793,26 @@ Output ONLY the corrected table and summary lines:`;
     if (isCodeAudit && !state.finalAnswer.includes('Verdict')) {
         console.warn('⚠️ Personality: Verdict alignment check');
     }
+
+    // SOURCE ATTRIBUTION — deterministic, same canonical tier as 🔥 signature
+    // Injected here so LLM non-compliance can never suppress it
+    if (!state.fastPath && !/\*\*Source[s]?\*\*/i.test(state.finalAnswer)) {
+      let sourceLabel;
+      if (state.psiEmaDirectOutput)        sourceLabel = 'yfinance + SEC EDGAR (live data)';
+      else if (state.seedMetricDirectOutput) sourceLabel = 'Brave Search — live $/sqm triangulation';
+      else if (state.mode === 'forex')     sourceLabel = 'fawazahmed0 — live FX rates';
+      else if (state.didSearch)            sourceLabel = 'Brave Search (live web)';
+      else                                 sourceLabel = 'Llama 3.3 70B training data';
+
+      // Splice before the 🔥 signature block, or append if signature not found
+      const sigIdx = state.finalAnswer.search(/\n\n🔥/);
+      const sourceLine = `\n\n📚 **Source:** ${sourceLabel}`;
+      if (sigIdx !== -1) {
+        state.finalAnswer = state.finalAnswer.slice(0, sigIdx) + sourceLine + state.finalAnswer.slice(sigIdx);
+      } else {
+        state.finalAnswer = state.finalAnswer.trimEnd() + sourceLine;
+      }
+    }
     
     // WRITE to DataPackage: Stage S5 personality result
     state.writeToPackage(STAGE_IDS.PERSONALITY, {
