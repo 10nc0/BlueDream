@@ -64,14 +64,19 @@ const SECTOR_ATOMIC_UNITS = {
 // Technology sub-sector: software/internet/cloud companies use SaaS metrics.
 const TECH_SOFTWARE_UNITS = ['ARR/MRR (state)', 'subscriptions (state)', 'new contracts (flow)', 'API calls (flow)', 'users (state)'];
 
-// Hardware/semiconductor industries — return null (no SaaS template).
-// LLM deliberates from business description in psiEmaLlmHint.
-const TECH_HARDWARE_INDUSTRIES = new Set([
-    'Semiconductors', 'Semiconductor Equipment & Materials',
-    'Electronic Components', 'Electronics & Computer Distribution',
-    'Computer Hardware', 'Consumer Electronics',
-    'Disk & Optical Drives', 'Scientific & Technical Instruments',
-]);
+// Technology/hardware: unit NAMES by industry — not quanta.
+// The name tells the reader what to count; the actual number is theirs to verify physically.
+// Parsing quanta from EDGAR is derivative truth (dogma). Naming is structural (teaching).
+const TECH_HARDWARE_ATOMIC_UNITS = {
+    'Semiconductors':                       ['chips (state)', 'wafers (state)', 'wafer starts (flow)', 'bit shipments (flow)', 'fab yield (guard)'],
+    'Semiconductor Equipment & Materials':  ['tools (state)', 'wafer capacity (state)', 'tool orders (flow)', 'wafers processed (flow)', 'tool uptime (guard)'],
+    'Electronic Components':                ['components (state)', 'inventory (state)', 'units shipped (flow)', 'production (flow)', 'defect rate (guard)'],
+    'Electronics & Computer Distribution': ['SKUs (state)', 'inventory (state)', 'orders (flow)', 'shipments (flow)', 'return rate (guard)'],
+    'Computer Hardware':                    ['units (state)', 'inventory (state)', 'shipments (flow)', 'orders (flow)', 'defect rate (guard)'],
+    'Consumer Electronics':                 ['devices (state)', 'inventory (state)', 'units shipped (flow)', 'orders (flow)', 'return rate (guard)'],
+    'Disk & Optical Drives':                ['drives (state)', 'inventory (state)', 'units shipped (flow)', 'capacity (state)', 'defect rate (guard)'],
+    'Scientific & Technical Instruments':   ['instruments (state)', 'inventory (state)', 'orders (flow)', 'shipments (flow)', 'calibration rate (guard)'],
+};
 
 // Software/internet industries — SaaS metrics are correct.
 const TECH_SOFTWARE_INDUSTRIES = new Set([
@@ -81,9 +86,9 @@ const TECH_SOFTWARE_INDUSTRIES = new Set([
 
 function inferAtomicUnits(sector, industry) {
     if (sector === 'Technology') {
-        if (industry && TECH_HARDWARE_INDUSTRIES.has(industry)) return null; // no SaaS units for chip fabs
+        if (industry && TECH_HARDWARE_ATOMIC_UNITS[industry]) return TECH_HARDWARE_ATOMIC_UNITS[industry].slice(0, 5);
         if (industry && TECH_SOFTWARE_INDUSTRIES.has(industry)) return TECH_SOFTWARE_UNITS.slice(0, 5);
-        return null; // unknown tech sub-type → honest silence, LLM infers
+        return null; // unknown tech sub-type → LLM infers on LLM path, honest silence on bypass
     }
     if (sector && SECTOR_ATOMIC_UNITS[sector]) return SECTOR_ATOMIC_UNITS[sector].slice(0, 5);
     return null;
