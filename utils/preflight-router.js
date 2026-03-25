@@ -163,10 +163,10 @@ function safeFixed(val, decimals = 2) {
   return !isNaN(num) ? num.toFixed(decimals) : 'N/A';
 }
 
-// θ display: 2dp; flag infinitesimal when delta≠0 but value rounds to 0
-function fmtTheta(theta, deltaPrice) {
+// θ display: 2dp; any value that rounds to 0.00 → flag ~0°
+function fmtTheta(theta) {
   if (theta == null || isNaN(theta)) return 'N/A';
-  if (Math.abs(theta) < 0.005 && deltaPrice != null && deltaPrice !== 0) return '~0° (infinitesimal)';
+  if (Math.abs(theta) < 0.005) return '~0°';
   return theta.toFixed(2) + '°';
 }
 
@@ -523,6 +523,17 @@ async function preflightRouter(options) {
           console.log(`📜 Preflight: Using context-inferred ticker ${result.ticker}`);
         }
         
+        // Normalize crypto cross-rate tickers to yfinance format before fetch
+        // e.g. BTCUSD → BTC-USD, ETHUSD → ETH-USD, SOLUSDT → SOL-USD
+        if (result.ticker) {
+          const cryptoNorm = result.ticker.match(/^([A-Z]{2,6})(USDT?)$/);
+          if (cryptoNorm) {
+            const normalized = `${cryptoNorm[1]}-USD`;
+            console.log(`🔄 Preflight: Crypto ticker normalized ${result.ticker} → ${normalized}`);
+            result.ticker = normalized;
+          }
+        }
+
         if (result.ticker) {
           console.log(`🎯 Preflight: Attempting ticker verification for ${result.ticker}`);
           
@@ -831,7 +842,7 @@ ${fundamentalsLine}
 **Ψ-EMA** (θ=Cycle Position, z=Price Deviation, R=Momentum Ratio): alignment → conviction; conflict → caution.
 | Dim | Value | Signal |
 |-----|-------|--------|
-| θ | ${fmtTheta(phaseTheta, phase.deltaPrice)} | ${phaseSignal} |
+| θ | ${fmtTheta(phaseTheta)} | ${phaseSignal} |
 | z | ${safeFixed(anomalyZ)}σ | ${anomalyLevel} |
 | R | ${convergenceR != null ? safeFixed(convergenceR) : 'N/A'} | ${regimeLabel} |
 

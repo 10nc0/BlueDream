@@ -565,15 +565,18 @@ async function extractTickerWithAI(query) {
 RULES:
 1. Return ONLY a JSON object: {"ticker": "SYMBOL", "confidence": "high|medium|low", "reason": "brief explanation"}
 2. For US stocks, return the NYSE/NASDAQ ticker (e.g., "meta" → "META", "ford" → "F", "apple" → "AAPL")
-3. If query mentions commodities (gold, oil, silver), crypto (bitcoin, ethereum), or private companies → return {"ticker": null, "confidence": "high", "reason": "not a public stock"}
-4. If unclear or no company mentioned → return {"ticker": null, "confidence": "low", "reason": "no company detected"}
-5. confidence: "high" = certain match, "medium" = likely match, "low" = guess
+3. For crypto assets, return the yfinance format with -USD suffix (e.g., "bitcoin" → "BTC-USD", "ethereum" → "ETH-USD", "solana" → "SOL-USD", "ripple" → "XRP-USD")
+4. For commodities (gold, oil, silver) or private companies → return {"ticker": null, "confidence": "high", "reason": "not resolvable via yfinance"}
+5. If unclear or no company/asset mentioned → return {"ticker": null, "confidence": "low", "reason": "no company or asset detected"}
+6. confidence: "high" = certain match, "medium" = likely match, "low" = guess
 
 EXAMPLES:
 - "price analysis on meta stock" → {"ticker": "META", "confidence": "high", "reason": "Meta Platforms Inc"}
 - "how is ford doing" → {"ticker": "F", "confidence": "high", "reason": "Ford Motor Company"}
-- "gold price forecast" → {"ticker": null, "confidence": "high", "reason": "commodity, not a stock"}
-- "what's the weather" → {"ticker": null, "confidence": "high", "reason": "no company mentioned"}`
+- "bitcoin trend" → {"ticker": "BTC-USD", "confidence": "high", "reason": "Bitcoin yfinance format"}
+- "ethereum analysis" → {"ticker": "ETH-USD", "confidence": "high", "reason": "Ethereum yfinance format"}
+- "gold price forecast" → {"ticker": null, "confidence": "high", "reason": "commodity, not resolvable via yfinance"}
+- "what's the weather" → {"ticker": null, "confidence": "high", "reason": "no company or asset mentioned"}`
           },
           { role: 'user', content: query }
         ],
