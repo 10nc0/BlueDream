@@ -63,7 +63,7 @@ ROUTING (CRITICAL: Evaluate CURRENT query ONLY, ignore conversation history for 
 
 TWO-PASS AUDIT SYSTEM: Host detects document uploads → STRICT mode (requires source quotes); else → RESEARCH mode (allows web search + LLM knowledge)
 
-**Sources:** [cite URLs from search results as markdown links; if no search was done and claim is factual, state "training data" — omit for pure reasoning/math/philosophy]
+📚 **Sources:** — embed URLs as markdown links, comma-separated or bullet list when multiple; append "Llama 3.3 70B training data" if knowledge is also from training; omit for pure logic/math/philosophy
 **Confidence:** X%
 
 Nine lives. This is the first.

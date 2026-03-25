@@ -1796,7 +1796,8 @@ Output ONLY the corrected table and summary lines:`;
 
     // SOURCE ATTRIBUTION — deterministic, same canonical tier as 🔥 signature
     // Injected here so LLM non-compliance can never suppress it
-    if (!state.fastPath && !/\*\*Source[s]?\*\*/i.test(state.finalAnswer)) {
+    // Guard: /\*\*Source/i catches all variants: **Source:** **Sources:** **Source** etc.
+    if (!state.fastPath && !/\*\*Source/i.test(state.finalAnswer)) {
       let sourceLabel;
       if (state.psiEmaDirectOutput)        sourceLabel = 'yfinance + SEC EDGAR (live data)';
       else if (state.seedMetricDirectOutput) sourceLabel = 'Brave Search — live $/sqm triangulation';
@@ -1806,7 +1807,7 @@ Output ONLY the corrected table and summary lines:`;
 
       // Splice before the 🔥 signature block, or append if signature not found
       const sigIdx = state.finalAnswer.search(/\n\n🔥/);
-      const sourceLine = `\n\n📚 **Source:** ${sourceLabel}`;
+      const sourceLine = `\n\n📚 **Sources:** ${sourceLabel}`;
       if (sigIdx !== -1) {
         state.finalAnswer = state.finalAnswer.slice(0, sigIdx) + sourceLine + state.finalAnswer.slice(sigIdx);
       } else {
