@@ -885,7 +885,7 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
         const weeklyFidelityPct = getFidelityPct(fidelityW);
         weeklySection = `
 **WEEKLY (7d candles, 13-month window)** [${weeklyGradeEmoji} ${fidelityW.grade || '?'} grade, ${weeklyFidelityPct}% fidelity]
-├─ θ (Phase) = **${fmt(phaseW.current)}°**
+├─ θ (Phase) = **${fmt(phaseW.current, 4)}°**
 ├─ z (Anomaly) = **${fmt(anomalyW.current)}σ**
 ├─ R (Convergence) = **${fmt(rWeekly)}**
 └─ **Reading**: ${analysisWeekly.reading?.emoji || '⚪'} ${analysisWeekly.reading?.reading || 'N/A'}`;
@@ -901,7 +901,7 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
 **Ψ-EMA** (θ=Cycle Position, z=Price Deviation, R=Momentum Ratio): alignment → conviction; conflict → caution.
 
 **DAILY (1d candles, 3-month window)** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade, ${dailyFidelityPct}% fidelity]
-├─ θ (Phase) = **${fmt(phase.current)}°**
+├─ θ (Phase) = **${fmt(phase.current, 4)}°**
 ├─ z (Anomaly) = **${fmt(anomaly.current)}σ**
 ├─ R (Convergence) = **${fmt(convergence.currentDisplay ?? convergence.current)}**
 └─ **Reading**: ${analysis.reading?.emoji || '⚪'} ${analysis.reading?.reading || 'N/A'}

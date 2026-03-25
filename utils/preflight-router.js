@@ -480,7 +480,7 @@ async function preflightRouter(options) {
       }
       
       // Scenario 4: Has ticker only + explicit stock context → infer both
-      if (!psiEmaDetection.shouldTrigger && hasTicker && !hasVerb && !hasAdjective && hasExplicitStockKeyword) {
+      if (!psiEmaDetection.shouldTrigger && hasTicker && !hasVerb && !hasAdjective && hasExplicitStockCue) {
         console.log(`🔧 AI-PUSH: ticker + stock keyword detected, inferring verb + adjective`);
         aiInferredVerb = true;
         aiInferredAdjective = true;
@@ -824,7 +824,7 @@ ${fundamentalsLine}
 **Ψ-EMA** (θ=Cycle Position, z=Price Deviation, R=Momentum Ratio): alignment → conviction; conflict → caution.
 | Dim | Value | Signal |
 |-----|-------|--------|
-| θ | ${safeFixed(phaseTheta)}° | ${phaseSignal} |
+| θ | ${safeFixed(phaseTheta, 4)}° | ${phaseSignal} |
 | z | ${safeFixed(anomalyZ)}σ | ${anomalyLevel} |
 | R | ${convergenceR != null ? safeFixed(convergenceR) : 'N/A'} | ${regimeLabel} |
 
