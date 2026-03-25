@@ -652,10 +652,10 @@ class PipelineOrchestrator {
 ${searchResult}
 
 MANDATORY INSTRUCTIONS:
-1. Base your answer on the web search results above
-2. If the search results are recent, explicitly mention dates
+1. Base your answer primarily on the web search results above — they reflect the current state of the world
+2. If the search results are recent, explicitly mention dates found in them
 3. If search data conflicts with your training data, PREFER the web search results
-4. If the search results don't fully answer the question, acknowledge what's missing
+4. Synthesize a DIRECT answer — do NOT tell the user to visit a website. You are the answer. Snippets + your training knowledge together = your answer. Fill gaps with training knowledge, flag uncertainty explicitly ("as of my last data..." or "snippets suggest but don't confirm...")
 5. Each result includes a "Source: <url>" — cite it inline as a markdown link [title](url) after each fact you use
 6. End with a **Sources:** section listing all cited URLs as markdown links — no bare URLs, no placeholders`;
         state.didSearch = true;
