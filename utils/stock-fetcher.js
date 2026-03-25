@@ -94,7 +94,8 @@ function inferAtomicUnits(sector, industry) {
     return null;
 }
 
-const DOLLAR_TICKER_REGEX = /\$([A-Za-z]{1,8})\b/gi;
+// Allow optional .X / .XX class suffix (BRK.A, BRK.B, BF.B) — no \b after dot
+const DOLLAR_TICKER_REGEX = /\$([A-Za-z]{1,8}(?:\.[A-Za-z]{1,2})?)/gi;
 
 // ========================================
 // Ψ-EMA LEGO KEYS (Push-based 2/3 detection)
@@ -364,9 +365,11 @@ function isPsiEMAStockQuery(query) {
 function sanitizeTicker(ticker) {
   if (!ticker || typeof ticker !== 'string') return null;
   
-  const sanitized = ticker.toUpperCase().replace(/[^A-Z0-9\-\.]/g, '');
+  // Normalize class-share dot notation to hyphen (BRK.A → BRK-A, BF.B → BF-B)
+  const normalized = ticker.toUpperCase().replace(/\.([A-Z]{1,2})$/, '-$1');
+  const sanitized = normalized.replace(/[^A-Z0-9\-\.]/g, '');
   
-  if (sanitized.length < 1 || sanitized.length > 10) return null;
+  if (sanitized.length < 1 || sanitized.length > 12) return null;
   if (!/^[A-Z]/.test(sanitized)) return null;
   
   return sanitized;
@@ -394,12 +397,13 @@ async function fetchStockPrices(ticker, customPeriod = null) {
         queryOpts.period1 = custom.toISOString().split('T')[0];
     }
 
+    const noValidate = { validateResult: false };
     const [dailyRaw, weeklyRaw, summaryRaw] = await Promise.all([
-        yahooFinance.historical(safeTicker, queryOpts),
-        yahooFinance.historical(safeTicker, { period1: weeklyPeriod1, period2, interval: '1wk' }),
+        yahooFinance.historical(safeTicker, queryOpts, noValidate),
+        yahooFinance.historical(safeTicker, { period1: weeklyPeriod1, period2, interval: '1wk' }, noValidate),
         yahooFinance.quoteSummary(safeTicker, {
             modules: ['assetProfile', 'summaryDetail', 'defaultKeyStatistics', 'financialData', 'quoteType']
-        }).catch(() => ({})),
+        }, noValidate).catch(() => ({})),
     ]);
 
     if (!dailyRaw || dailyRaw.length === 0) {
