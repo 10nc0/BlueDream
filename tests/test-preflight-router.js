@@ -209,6 +209,43 @@ test('"LA housing" routed via seed-metric', () => {
 });
 
 // ----------------------------------------------------------------
+// SECTION 6: Full routing cascade — key edge cases
+// Tests routeQuery() end-to-end for cases that require cascade ordering to be correct
+// ----------------------------------------------------------------
+console.log('\n🔀 Full routing cascade');
+
+test('"$SF price" → psi-ema-or-general (dollar prefix overrides geo — ticker wins, seed-metric bypassed)', () => {
+    const result = routeQuery('$SF price');
+    assert(result === 'psi-ema-or-general', `expected psi-ema-or-general, got ${result}`);
+});
+
+test('"$DC rent" → psi-ema-or-general (dollar prefix on DC overrides geo)', () => {
+    const result = routeQuery('$DC rent');
+    assert(result === 'psi-ema-or-general', `expected psi-ema-or-general, got ${result}`);
+});
+
+test('"NVDA price" → psi-ema-or-general (Bloomberg-spec: equity ticker + price, no geo → general analysis path)', () => {
+    const result = routeQuery('NVDA price');
+    assert(result === 'psi-ema-or-general', `expected psi-ema-or-general, got ${result}`);
+});
+
+test('"AAPL earnings" → psi-ema-or-general (Bloomberg-spec: equity context, no geo)', () => {
+    const result = routeQuery('AAPL earnings');
+    assert(result === 'psi-ema-or-general', `expected psi-ema-or-general, got ${result}`);
+});
+
+test('"what did Elon tweet?" → psi-ema-or-general (general query, no routing signals)', () => {
+    const result = routeQuery('what did Elon tweet?');
+    assert(result === 'psi-ema-or-general', `expected psi-ema-or-general, got ${result}`);
+});
+
+test('"EURUSD price" → forex (forex step fires first, before geo-veto or seed-metric)', () => {
+    // EURUSD is a currency pair — forex step 0 catches it before any other check
+    const result = routeQuery('EURUSD price');
+    assert(result === 'forex', `expected forex, got ${result}`);
+});
+
+// ----------------------------------------------------------------
 // Summary
 // ----------------------------------------------------------------
 console.log(`\n${'='.repeat(50)}`);
