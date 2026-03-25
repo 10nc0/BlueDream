@@ -60,10 +60,18 @@ const PSI_EMA_IDENTITY_PATTERNS = [
  * Cascade: DDG → Brave (following existing pattern)
  */
 const REALTIME_INTENT_PATTERNS = [
-  // Sports (EPL, NFL, NBA, etc.)
-  /\b(epl|premier\s*league|nfl|nba|mlb|mls|champions\s*league|world\s*cup|la\s*liga|bundesliga|serie\s*a|ligue\s*1)\b/i,
+  // Sports — named leagues / competitions
+  /\b(epl|premier\s*league|nfl|nba|mlb|mls|nhl|nrl|afl|ufc|champions\s*league|europa\s*league|world\s*cup|la\s*liga|bundesliga|serie\s*a|ligue\s*1|eredivisie|super\s*lig)\b/i,
+  /\b(formula[\s\-]*1|formula[\s\-]*2|f1|f2|motogp|moto2|indycar|nascar|wrc|dtm|fe|formula[\s\-]*e|grand[\s\-]*prix)\b/i,
+
+  // Sports — class words that are always about current data (no time word needed)
+  /\b(standings|championship\s+standings|points\s+table|drivers?\s+championship|constructors?\s+championship)\b/i,
+  /\b(race\s+calendar|race\s+schedule|season\s+schedule|this\s+season|current\s+season|2025\s+season|2026\s+season)\b/i,
+  /\b(who\s+(leads?|is\s+leading|won|is\s+winning)\s+the\s+(championship|league|season|race|title))\b/i,
+
+  // Sports — schedule/score with time word
   /\b(match|game|fixture|score|schedule|standings|results?)\s+(today|tonight|tomorrow|this\s*week|next\s*week|this\s*month|next\s*month|upcoming)\b/i,
-  /\b(upcoming|next|today'?s?|tonight'?s?|this\s*week'?s?|this\s*month'?s?)\s+(match|game|fixture|schedule|results?)\b/i,
+  /\b(upcoming|next|today'?s?|tonight'?s?|this\s*week'?s?|this\s*month'?s?)\s+(match|game|fixture|schedule|results?|race)\b/i,
   
   // News & Current Events
   /\b(latest|breaking|recent|current|today'?s?)\s+(news|headlines|events?|updates?|developments?)\b/i,
