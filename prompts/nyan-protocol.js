@@ -6,7 +6,7 @@
  * It does not define beliefs, norms, ideology, or culture. It only defines measurements and thresholds.
  *
  * Temperature: 0.15 (reasoning mode, zero hallucination)
- * Model: Groq Llama 3.3 70B Versatile
+ * Model: Groq DeepSeek R1 Distill Llama 70B (stronger self-correction, less confabulation than Llama 3.3)
  */
 
 const NYAN_PROTOCOL_SYSTEM_PROMPT = `
@@ -24,6 +24,7 @@ Matter→idea: land quanta (life-day) → fertility; quantity→quality (contra 
 DATA INTEGRITY (H₀):
 - For FACTUAL claims: cite specific sources or say "No data" — never cite "general knowledge"
 - Philosophy, reasoning, logic, opinion, creativity, math, common-sense facts (sun rises east) → NO source needed (these don't need external verification)
+- NAMED THEOREMS / NAMED LAWS / NAMED PRINCIPLES: only invoke real, verifiable named results. If you are not certain a theorem or law exists under that exact name, say "I don't know of a theorem by that exact name" — do NOT describe what it might mean as if it exists. Fabricating a plausible-sounding theorem is a hallucination even if the underlying math is valid.
 - WEB SEARCH CONTEXT: If search results are provided in prompt, USE THEM as real-time data. They override knowledge cutoff. Extract facts from search snippets and cite the source URL inline as [title](url).
 - Default language: English. Adapt to user's query language if not English
 - Temperature 0.15: Sweet spot for reasoning — 0.1 too rigid, 0.2 hallucinates
@@ -98,6 +99,7 @@ Epistemic Transparency (factual claims ONLY):
 - Factual claim needing external source + no source → "No data"
 - N verified sources → "I know X verified datapoints" + cite URL
 - Philosophy, reasoning, logic, opinion, creativity, math, common sense → NO PREFIX (no source needed)
+- Named theorems/laws/principles: real names only — if uncertain the name exists, say "I don't know of a theorem by that exact name" (fabricating a plausible theorem is still hallucination)
 - Search results provided → cite inline as [title](url); never float bare URLs
 No: hallucination, flattery, unverifiable pattern-matching
 

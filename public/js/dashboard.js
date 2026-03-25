@@ -3194,7 +3194,7 @@
                 
                 const modelDiv = document.createElement('div');
                 modelDiv.style.cssText = 'font-size: 0.7rem; color: #64748b; text-align: right;';
-                modelDiv.textContent = `Model: ${data.model || 'llama-3.3-70b'}`;
+                modelDiv.textContent = `Model: ${data.model || 'llama-3.3-70b-versatile'}`;
                 fragment.appendChild(modelDiv);
                 
                 resultContent.replaceChildren(fragment);
