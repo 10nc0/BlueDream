@@ -1,55 +1,17 @@
-# Nyanbook 🐟🌈
+# Nyanbook.io 🐟🌈
 *(PATHOS)*
+
+Nyanbook.io is a post-folder information protocol. 
+
+Instead of messy folders and hierarchies, you send messages / attachments — via WhatsApp, LINE, or any SNS — and they are automatically stored and sorted chronologically. 
+
+A versatile AI endpoint is provided to make contents queryable & interactive.
 
 **Before**: Receipt → Reimbursement Forms for Receipt → Create folder "2026/Taxes" → Rename file → Wrong Input in Forms → Forget where you saved it → ...
 
-**After**:  WhatsApp photo / video to Nyanbook (no need Forms) → Auto-sorted by date → Search "receipt" → Found photo / video
+**After**:  WhatsApp photo / video to Nyanbook.io (no need Forms) → Auto-sorted by date → Search "receipt" or use AI queries → Interact with your files
 
-Nyanbook is a post-folder storage (information) system thinking (protocol). Instead of messy folders and hierarchies, you send messages / attachments — via WhatsApp, LINE, or any SNS — and they are automatically stored and sorted chronologically. 
-
-A versatile AI/LLM endpoint is provided to make contents queryable & interactive.
-
----
-
-## Why URL-First
-
-Nyanbook has no app to install.
-
-Open a browser — on a phone, a refrigerator panel, a car with browser — and it works. The URL is the access point. No App Store. No Play Store. No permission from Apple or Google. No update that breaks your workflow at 11pm.
-
-The inpipe is the same: WhatsApp, LINE OA, and Telegram are all browsers in a sense — they forward messages to a webhook. The scribe doesn't care which window you knocked on.
-
-The sovereignty guarantee is not the URL. It is the hash. But the URL is why the door is always open in Nyanbook.
-
----
-
-## The Main Feature: Absence as Data
-
-> *"The system's job is to make the absence undeniable and queryable."*
-
-Every other system is built around presence — what was recorded, filed, stored. 
-
-The gap is silence. Silence is not data.
-
-Nyanbook treats absence as signal:
-
-- **Append-only** — you cannot retroactively fill the gap
-- **IPFS pin** — what was written cannot be unwritten
-- **PostgreSQL** — the gap between entries is queryable
-- **Discord thread** — the human-readable witness layer sees the gap too 
-
-| System | Absence queryable? | Append-only? | Content-addressed? |
-|---|---|---|---|
-| Notion | ✗ | ✗ | ✗ |
-| Evernote | ✗ | ✗ | ✗ |
-| Slack | ✗ | ✗ | ✗ |
-| Nyanbook | ✓ | ✓ | ✓ (IPFS) |
-
-> *"If you were supposed to log something every day for a month and forgot 7 days — does your current system know you forgot? Can it show you exactly which 7 days?"*
-
-The *mīzān* holds level. The feather does the work.
-
-Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
+**Try it first:** → [nyanbook.io](https://nyanbook.io) — see the ledger, ask the AI. Sovereignty is a choice, not a requirement.
 
 ---
 
@@ -65,12 +27,56 @@ Identity, in this system, is the pattern that emerges from what was recorded —
 **What people actually use it for:**
 
 - **Receipts & reimbursements** — photo to WhatsApp, auto-dated, searchable forever. No folder, no rename, no lost file.
-- **Household** — repairs, warranties, maintenance logs. The fridge filter was changed *when*, exactly.
-- **Small business** — client messages, delivery confirmations, invoices. The thread is the paper trail.
-- **Community** — neighbourhood issues, mutual aid requests, meeting notes. The gap between entries is data too.
+- **Household** — repairs, groceries list, maintenance logs. The AC service was last *when*, exactly.
+- **Small business** — client messages, deliveries, invoices. The thread is the paper trail.
+- **Community** — sightings, reports, pollings, surveys, mutual aid requests, meeting notes. The gap between entries is data too.
 - **Personal** — memories, medical history, important conversations. Things you'll need in ten years that you can't predict today.
 
 Open source means anyone can verify the feather is level. No priest. No perriwig. No proprietary black box.
+
+---
+
+## Why URL-First
+
+Nyanbook.io has no app to install.
+
+Click on a phone, a refrigerator panel, a car with browser — and it works. The link is the access point. No App Store. No Play Store. No permission from Apple or Google. No update that breaks your work at 11pm.
+
+Goes both ways. The scribe doesn't care which window you knocked on.
+
+The input is the same: WhatsApp, LINE OA, and Telegram are all browsers in a sense — they forward messages to a webhook. 
+
+The sovereignty guarantee is not the URL. It is the hash. But the URL is why the door is always open in Nyanbook.io.
+
+---
+
+## The Main Feature: Absence as Data
+
+> *"The system's job is to make the absence undeniable and queryable."*
+
+Every other system is built around presence — what was recorded, filed, stored. 
+
+For them: The gap is the silence, and absence is not data.
+
+For Nyanbook.io: Absence is data:
+
+- **Append-only** — you cannot retroactively fill the gap
+- **IPFS pin** — what was written cannot be unwritten
+- **PostgreSQL** — the gap between entries is queryable
+- **Discord thread** — the human-readable witness layer sees the gap too 
+
+| System | Absence queryable? | Append-only? | Content-addressed? |
+|---|---|---|---|
+| Notion | ✗ | ✗ | ✗ |
+| Evernote | ✗ | ✗ | ✗ |
+| Slack | ✗ | ✗ | ✗ |
+| Nyanbook.io | ✓ | ✓ | ✓ (IPFS) |
+
+> *"If you were supposed to log something every day for a month and forgot 7 days — does your current system know you forgot? Can it show you exactly which 7 days?"*
+
+The *mīzān* holds level. The feather does the work.
+
+Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
 
 ---
 
@@ -86,7 +92,7 @@ That is not a small thing.
 
 The scribe's job was never to create. It was to record faithfully, tally honestly, and let the ledger speak. Thoth didn't judge the heart — the feather did. Thoth just held the scales level and wrote down what happened.
 
-Nyanbook is a set of level scales. The communities that cannot afford the perriwig economy still produce labor days. They still have transactions, flows, substrates. The equation still applies to them. They just never had a scribe cheap enough to sit at their table.
+Nyanbook.io is a set of level scales. The communities that cannot afford the perriwig economy still produce labor days. They still have transactions, flows, substrates. The equation still applies to them. They just never had a scribe cheap enough to sit at their table.
 
 Now they do.
 
@@ -202,7 +208,7 @@ Adding a new inpipe channel (Signal, Matrix, etc.) requires only:
 
 Discord is the bootstrap layer, not the sovereignty layer.
 
-Nyanbook is built for the $7/day earner — the household, the mutual aid network, the small business that has never had a scribe. Free infrastructure (Discord threads, Pinata's 1GB IPFS tier, Supabase's free PostgreSQL) is what makes that accessible. This is a deliberate architectural choice.
+Nyanbook.io is built for the $7/day earner — the household, the mutual aid network, the small business that has never had a scribe. Free infrastructure (Discord threads, Pinata's 1GB IPFS tier, Supabase's free PostgreSQL) is what makes that accessible. This is a deliberate architectural choice.
 
 The sovereignty guarantee is not the URL. It is the hash.
 
@@ -218,13 +224,7 @@ Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arr
 
 ---
 
-## Setup
-
-> Everything runs on free tiers. No terminal required.
->
-> **Operators:** see [`RUNBOOK (LOGOS).md`](RUNBOOK%20(LOGOS).md) for secret rotation, incident response, and post-deploy checklist.
-
-### Quick Start (5 minutes)
+## Quick Start (5 minutes)
 
 Minimum to get running:
 
@@ -235,6 +235,12 @@ Minimum to get running:
 That's it. The app starts. WhatsApp, LINE, Telegram, IPFS, email — all optional, all addable later.
 
 ---
+
+## Setup
+
+> Everything runs on free tiers. No terminal required.
+>
+> **Operators:** see [`RUNBOOK (LOGOS).md`](RUNBOOK%20(LOGOS).md) for secret rotation, incident response, and post-deploy checklist.
 
 ### 1. Accounts
 
@@ -330,7 +336,7 @@ The startup log shows which features are active and which secrets are still miss
 2. Set webhook URL: `https://your-app.replit.app/api/line/webhook`
 3. Add `LINE_CHANNEL_SECRET` and `LINE_CHANNEL_ACCESS_TOKEN` to Secrets
 
-LINE is listen-only — Nyanbook receives but does not reply.
+LINE is listen-only — Nyanbook.io receives but does not reply.
 
 ### Optional: Telegram
 
