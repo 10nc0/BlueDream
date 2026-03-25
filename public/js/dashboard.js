@@ -3194,7 +3194,7 @@
                 
                 const modelDiv = document.createElement('div');
                 modelDiv.style.cssText = 'font-size: 0.7rem; color: #64748b; text-align: right;';
-                modelDiv.textContent = `Model: ${data.model || 'moonshotai/kimi-k2-instruct'}`;
+                modelDiv.textContent = `Model: ${data.model || 'deepseek-reasoner'}`;
                 fragment.appendChild(modelDiv);
                 
                 resultContent.replaceChildren(fragment);

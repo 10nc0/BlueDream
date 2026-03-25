@@ -1250,7 +1250,7 @@ async function clearNyanHistory() {
     p1.textContent = 'No login required. No data stored. Just purr intelligence.';
     
     const p2 = document.createElement('p');
-    p2.textContent = "Powered by Groq's blazing-fast Kimi K2 model.";
+    p2.textContent = "Powered by DeepSeek R1 (via DeepSeek API).";
     
     const featuresDiv = document.createElement('div');
     featuresDiv.className = 'features';

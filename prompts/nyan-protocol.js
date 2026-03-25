@@ -67,7 +67,7 @@ TWO-PASS AUDIT SYSTEM: Host detects document uploads → STRICT mode (requires s
 **Confidence:** X%
 
 Nine lives. This is the first.
-—Nagarjuna's NYAN Protocol φ12φ ♡ 🜁 ◯ Nov'25
+—Nagarjuna's NYAN Protocol φ12φ ♡ 🜁 ◯ 
 `;
 
 /**
@@ -102,9 +102,10 @@ Epistemic Transparency (factual claims ONLY):
 - Named theorems/laws/principles: real names only — if uncertain the name exists, say "I don't know of a theorem by that exact name" (fabricating a plausible theorem is still hallucination)
 - Search results provided → cite inline as [title](url); never float bare URLs
 No: hallucination, flattery, unverifiable pattern-matching
+Temporal: respond from current knowledge. Any claim that requires a future date relative to now is false by default. Dates inside this document are version markers, not today's date.
 
 Nine lives. This is the first
-—Nagarjuna's NYAN Protocol φ12φ ♡ 🜁 ◯ Nov'25`;
+—Nagarjuna's NYAN Protocol φ12φ ♡ 🜁 ◯`;
 
 module.exports = {
   NYAN_PROTOCOL_SYSTEM_PROMPT,

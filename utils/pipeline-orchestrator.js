@@ -39,6 +39,7 @@ const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
 const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer } = require('./psi-EMA');
 const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package');
+const { getLLMBackend } = require('../config/constants');
 
 const PIPELINE_STEPS = {
   CONTEXT_EXTRACT: 'S-1',
@@ -158,6 +159,9 @@ class PipelineOrchestrator {
     this.extractCoreQuestion = config.extractCoreQuestion;
     this.isIdentityQuery = config.isIdentityQuery;
     this.groqWithRetry = config.groqWithRetry;
+    const llm = getLLMBackend();
+    this.llmUrl = llm.url;
+    this.llmModel = llm.model;
   }
   
   /**
@@ -1039,9 +1043,9 @@ User query: ${query}`;
     
     try {
       const response = await this.groqWithRetry({
-        url: 'https://api.groq.com/openai/v1/chat/completions',
+        url: this.llmUrl,
         data: {
-          model: 'moonshotai/kimi-k2-instruct',
+          model: this.llmModel,
           messages,
           temperature: temperature || 0.15,
           max_tokens: maxTokens || 1500,
@@ -1212,9 +1216,9 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
     let round1Response;
     try {
       round1Response = await this.groqWithRetry({
-        url: 'https://api.groq.com/openai/v1/chat/completions',
+        url: this.llmUrl,
         data: {
-          model: 'moonshotai/kimi-k2-instruct',
+          model: this.llmModel,
           messages: round1Messages,
           tools: [braveSearchTool],
           // 'required' forces the LLM to call at least one brave_search tool.
@@ -1300,9 +1304,9 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
     let round2Response;
     try {
       round2Response = await this.groqWithRetry({
-        url: 'https://api.groq.com/openai/v1/chat/completions',
+        url: this.llmUrl,
         data: {
-          model: 'moonshotai/kimi-k2-instruct',
+          model: this.llmModel,
           messages: round2Messages,
           temperature: 0.05,
           max_tokens: 2000
@@ -1367,9 +1371,9 @@ Rules:
 - No preamble, no "In conclusion", no sign-off. Just the coda.`;
 
       const round3Response = await this.groqWithRetry({
-        url: 'https://api.groq.com/openai/v1/chat/completions',
+        url: this.llmUrl,
         data: {
-          model: 'moonshotai/kimi-k2-instruct',
+          model: this.llmModel,
           messages: [
             { role: 'system', content: codaSystemPrompt },
             { role: 'user', content: round2Text }
@@ -1517,9 +1521,9 @@ CRITICAL RULES:
 Output ONLY the corrected table and summary lines:`;
 
             const response = await this.groqWithRetry({
-              url: 'https://api.groq.com/openai/v1/chat/completions',
+              url: this.llmUrl,
               data: {
-                model: 'moonshotai/kimi-k2-instruct',
+                model: this.llmModel,
                 messages: [{ role: 'user', content: fixPrompt }],
                 temperature: 0.1,
                 max_tokens: 800

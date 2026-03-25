@@ -18,6 +18,7 @@
 
 const axios = require('axios');
 const { buildAuditPrompt, buildCorrectivePrompt } = require('../prompts/audit-protocol');
+const { getLLMBackend } = require('../config/constants');
 
 const AUDIT_TEMPERATURE = 0.1;
 
@@ -72,9 +73,9 @@ Perform the dialectical audit and output JSON only.`;
 
   try {
     const response = await axios.post(
-      'https://api.groq.com/openai/v1/chat/completions',
+      getLLMBackend().url,
       {
-        model: 'moonshotai/kimi-k2-instruct',
+        model: getLLMBackend().model,
         messages: auditMessages,
         temperature: AUDIT_TEMPERATURE,
         max_tokens: 800,
@@ -157,9 +158,9 @@ async function runCorrectivePass(groqToken, draftAnswer, originalQuery, issues, 
   const correctivePrompt = buildCorrectivePrompt(originalQuery, draftAnswer, issues);
 
   const response = await axios.post(
-    'https://api.groq.com/openai/v1/chat/completions',
+    getLLMBackend().url,
     {
-      model: 'moonshotai/kimi-k2-instruct',
+      model: getLLMBackend().model,
       messages: [
         { role: 'system', content: 'You are correcting an AI answer based on audit feedback. Output the corrected answer only.' },
         { role: 'user', content: correctivePrompt }

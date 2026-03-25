@@ -110,12 +110,30 @@ const DISCORD = {
   THREAD_PAGINATION_LIMIT: 100     // Messages per fetch (Discord max: 100)
 };
 
+// ==================== LLM Backend Router ====================
+// Priority: DEEPSEEK_API (DeepSeek R1) → Groq (Kimi K2)
+// Both are OpenAI-compatible; swap URL + model + token at the call site.
+const LLM_BACKENDS = {
+  deepseek: {
+    url: 'https://api.deepseek.com/v1/chat/completions',
+    model: 'deepseek-reasoner'
+  },
+  groq: {
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    model: 'moonshotai/kimi-k2-instruct'
+  }
+};
+
+function getLLMBackend() {
+  return process.env.DEEPSEEK_API ? LLM_BACKENDS.deepseek : LLM_BACKENDS.groq;
+}
+
 // ==================== AI Models ====================
 // @source: Groq API - Model availability changes with releases
 // @ref: https://console.groq.com/docs/models
 // @verified: 2026-01-10
 const AI_MODELS = {
-  TEXT_MODEL: 'moonshotai/kimi-k2-instruct',               // Groq text model (DeepSeek R1 distill — stronger reasoning, less confabulation)
+  TEXT_MODEL: 'moonshotai/kimi-k2-instruct',               // Groq fallback model
   VISION_MODEL: 'meta-llama/llama-4-scout-17b-16e-instruct', // Groq Vision model (2025)
   VISION: 'meta-llama/llama-4-scout-17b-16e-instruct',       // Alias for backward compatibility
   AUDIO_MODEL: 'whisper-large-v3-turbo',                     // Groq Whisper model
@@ -242,5 +260,7 @@ module.exports = {
   AUDIT,
   PHI_BREATHE,
   IP_GEO,
-  MISC
+  MISC,
+  LLM_BACKENDS,
+  getLLMBackend
 };

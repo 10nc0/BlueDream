@@ -10,7 +10,8 @@ const { recordInMemory, clearSessionMemory } = require('../utils/context-extract
 const { getMemoryManager, cleanupOldSessions } = require('../utils/memory-manager');
 const capacityManager = require('../utils/playground-capacity');
 const usageTracker = require('../utils/playground-usage');
-const { AI_MODELS } = require('../config/constants');
+const { AI_MODELS, getLLMBackend } = require('../config/constants');
+const _llm = getLLMBackend();
 const { config } = require('../config');
 const { PsiEMADashboard, deriveReading } = require('../utils/psi-EMA');
 const { fetchStockPrices, calculateDataAge, sanitizeTicker } = require('../utils/stock-fetcher');
@@ -375,7 +376,7 @@ async function extractCoreQuestion(message) {
         return 'general query';
     }
     
-    const GROQ_TOKEN = process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
+    const GROQ_TOKEN = process.env.DEEPSEEK_API || process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
     if (!GROQ_TOKEN || trimmed.length < 100) {
         return trimmed.substring(0, 200);
     }
@@ -390,9 +391,9 @@ async function extractCoreQuestion(message) {
             : 'Extract the core question or topic from the user message. If the message is not in English, translate the topic to English. Return ONLY a short English search query (max 25 words). No explanation, just the English query.';
         
         const response = await axios.post(
-            'https://api.groq.com/openai/v1/chat/completions',
+            _llm.url,
             {
-                model: 'moonshotai/kimi-k2-instruct',
+                model: _llm.model,
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: message.substring(0, 1000) }
@@ -558,7 +559,7 @@ async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') 
 }
 
 const orchestrator = createPipelineOrchestrator({
-    groqToken: process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
+    groqToken: process.env.DEEPSEEK_API || process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
     groqVisionToken: process.env.PLAYGROUND_GROQ_VISION_TOKEN,
     searchBrave,
     searchDuckDuckGo,
@@ -648,11 +649,11 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 contextPrompt = query;
             }
             
-            // Use NYANBOOK_AI_KEY for authenticated audit (separate from public playground)
+            // Use DeepSeek (if available) or NYANBOOK_AI_KEY for authenticated audit
             const response = await groqWithRetry({
-                url: 'https://api.groq.com/openai/v1/chat/completions',
+                url: _llm.url,
                 data: {
-                    model: 'moonshotai/kimi-k2-instruct',
+                    model: _llm.model,
                     messages: [
                         {
                             role: 'system',
@@ -665,7 +666,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 },
                 config: {
                     headers: {
-                        'Authorization': `Bearer ${config.ai.dashboardAiKey}`,
+                        'Authorization': `Bearer ${config.ai.deepseekKey || config.ai.dashboardAiKey}`,
                         'Content-Type': 'application/json'
                     }
                 }
@@ -683,9 +684,9 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             if (bookContext && bookContext.totalMessages > 0) {
                 const retryFn = async (retryPrompt, options) => {
                     const retryResp = await groqWithRetry({
-                        url: 'https://api.groq.com/openai/v1/chat/completions',
+                        url: _llm.url,
                         data: {
-                            model: 'moonshotai/kimi-k2-instruct',
+                            model: _llm.model,
                             messages: [
                                 {
                                     role: 'system',
@@ -698,7 +699,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         },
                         config: {
                             headers: {
-                                'Authorization': `Bearer ${config.ai.dashboardAiKey}`,
+                                'Authorization': `Bearer ${config.ai.deepseekKey || config.ai.dashboardAiKey}`,
                                 'Content-Type': 'application/json'
                             }
                         }
@@ -767,7 +768,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                             reason: `Nyan AI response (${bookContext.totalMessages} messages analyzed)`,
                             data_extracted: { 
                                 engine: 'nyan-ai',
-                                model: 'moonshotai/kimi-k2-instruct',
+                                model: _llm.model,
                                 books: bookNames, 
                                 query: query.substring(0, 100),
                                 processingTime: processingTime
@@ -786,7 +787,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 success: true,
                 answer: answer,
                 engine: 'nyan-ai',
-                model: 'moonshotai/kimi-k2-instruct',
+                model: _llm.model,
                 processingTime: processingTime,
                 pipelineStatus: {
                     verified: pipelineVerified,
