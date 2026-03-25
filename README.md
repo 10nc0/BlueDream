@@ -9,21 +9,6 @@ Nyanbook is a post-folder storage (information) system thinking (protocol). Inst
 
 A versatile AI/LLM endpoint is provided to make contents queryable & interactive.
 
-**Core loop:**
-
-```
-Android / iPhone (WhatsApp / LINE / any SNS)
-  → webhook
-    → queue processor
-      → Discord ledger thread
-        → PostgreSQL row
-          → IPFS capsule pin (optional)
-```
-
-Discord is the bootstrap content store — free, searchable, thread-organized. 
-PostgreSQL is the routing and index layer, and the hash anchor for future migration. 
-IPFS is the sovereign anchor — the record that exists independent of any platform.
-
 Dashboard: Glassmorphism SPA — browse all archived messages, search, tag, export with SHA256 manifest. Multimodal AI Playground included.
 
 ---
@@ -160,6 +145,19 @@ nyan~
 ---
 
 ## Architecture
+
+**Message flow:**
+
+```
+Android / iPhone (WhatsApp / LINE / any SNS)
+  → webhook
+    → queue processor
+      → Discord ledger thread
+        → PostgreSQL row
+          → IPFS capsule pin (optional)
+```
+
+**Code structure:**
 
 ```
 Vegapunk Kernel (vegapunk.js)
