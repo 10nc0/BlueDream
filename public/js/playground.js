@@ -1081,6 +1081,7 @@ function addUncompressedAttachments(payload, attachmentsList) {
     const photos = attachmentsList.filter(a => a.type === 'photo').map(a => a.data);
     const audios = attachmentsList.filter(a => a.type === 'audio').map(a => ({ 
         data: a.data, 
+        name: a.name,
         source: a.source 
     }));
     const documents = attachmentsList.filter(a => a.type === 'document').map(a => ({ data: a.data, name: a.name }));

@@ -915,14 +915,16 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         documents = documents || [];
                         
                         for (const entry of manifest) {
-                            const file = zip.file(entry.path);
+                            const file = zip.file(entry.filename || entry.path);
                             if (file) {
                                 const data = await file.async('base64');
-                                const item = { name: entry.name, data, type: entry.type };
+                                const itemName = entry.originalName || entry.name || 'file';
+                                const itemCat  = entry.type || entry.category || '';
+                                const item = { name: itemName, data, type: itemCat };
                                 
-                                if (entry.category === 'photo') photos.push(item);
-                                else if (entry.category === 'audio') audios.push(item);
-                                else if (entry.category === 'document') documents.push(item);
+                                if (itemCat === 'photo') photos.push(item);
+                                else if (itemCat === 'audio') audios.push(item);
+                                else if (itemCat === 'document') documents.push(item);
                             }
                         }
                     }
@@ -975,7 +977,14 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 const _transcripts = [];
                 for (const aud of _audioList) {
                     try {
-                        const result = await processDocumentForAI(aud.data, aud.name || 'audio', aud.type || 'audio', { tenantId: clientIp });
+                        let audName = aud.name || '';
+                        if (!audName || !audName.includes('.')) {
+                            const mimeM = typeof aud.data === 'string' && aud.data.match(/^data:([^;]+);base64,/);
+                            const extMap = { 'audio/webm': 'webm', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/flac': 'flac' };
+                            const ext = mimeM ? (extMap[mimeM[1]] || 'webm') : 'webm';
+                            audName = `audio.${ext}`;
+                        }
+                        const result = await processDocumentForAI(aud.data, audName, aud.type || 'audio', { tenantId: clientIp });
                         if (result && result.text) {
                             _transcripts.push(result.text);
                             logger.info({ name: aud.name, chars: result.text.length }, '🎙️ Audio transcribed (non-stream)');
@@ -1152,14 +1161,16 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         documents = documents || [];
                         
                         for (const entry of manifest) {
-                            const file = zip.file(entry.path);
+                            const file = zip.file(entry.filename || entry.path);
                             if (file) {
                                 const data = await file.async('base64');
-                                const item = { name: entry.name, data, type: entry.type };
+                                const itemName = entry.originalName || entry.name || 'file';
+                                const itemCat  = entry.type || entry.category || '';
+                                const item = { name: itemName, data, type: itemCat };
                                 
-                                if (entry.category === 'photo') photos.push(item);
-                                else if (entry.category === 'audio') audios.push(item);
-                                else if (entry.category === 'document') documents.push(item);
+                                if (itemCat === 'photo') photos.push(item);
+                                else if (itemCat === 'audio') audios.push(item);
+                                else if (itemCat === 'document') documents.push(item);
                             }
                         }
                     }
@@ -1216,7 +1227,14 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     if (isClientDisconnected()) break;
                     sseStage({ type: 'thinking', stage: '🎙️ Transcribing audio...' });
                     try {
-                        const result = await processDocumentForAI(aud.data, aud.name || 'audio', aud.type || 'audio', { tenantId: clientIp });
+                        let audName = aud.name || '';
+                        if (!audName || !audName.includes('.')) {
+                            const mimeM = typeof aud.data === 'string' && aud.data.match(/^data:([^;]+);base64,/);
+                            const extMap = { 'audio/webm': 'webm', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/flac': 'flac' };
+                            const ext = mimeM ? (extMap[mimeM[1]] || 'webm') : 'webm';
+                            audName = `audio.${ext}`;
+                        }
+                        const result = await processDocumentForAI(aud.data, audName, aud.type || 'audio', { tenantId: clientIp });
                         if (result && result.text) {
                             transcripts.push(result.text);
                             logger.info({ name: aud.name, chars: result.text.length }, '🎙️ Audio transcribed');
