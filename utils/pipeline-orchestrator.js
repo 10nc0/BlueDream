@@ -1657,8 +1657,7 @@ Output ONLY the corrected table and summary lines:`;
     
     // Notify the stream about who is auditing (humane disclosure while client waits)
     if (input.onStageChange) {
-      const auditorLabel = process.env.DEEPSEEK_API ? 'DeepSeek R1' : 'Llama';
-      input.onStageChange({ type: 'thinking', stage: `Auditing with ${auditorLabel}...` });
+      input.onStageChange({ type: 'thinking', stage: `Auditing with Llama...` });
     }
 
     try {
@@ -1681,7 +1680,7 @@ Output ONLY the corrected table and summary lines:`;
         },
         this.llmTimeouts.audit
       );
-      const _auditLabel = process.env.DEEPSEEK_API ? 'DeepSeek R1' : 'Llama';
+      const _auditLabel = 'Llama';
       const _confStr = state.auditResult.confidence !== null && state.auditResult.confidence !== undefined
         ? `${state.auditResult.confidence}%` : 'unverified';
       console.log(`🔍 Audit [${_auditLabel}]: ${state.auditResult.verdict} (${_confStr})`);

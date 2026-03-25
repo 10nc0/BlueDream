@@ -144,7 +144,10 @@ function getLLMBackend() {
 }
 
 function getAuditBackend() {
-  return process.env.DEEPSEEK_API ? LLM_BACKENDS.auditor : LLM_BACKENDS.drafter;
+  // DeepSeek R1 times out on the free tier (reasoning chain > 60s timeout).
+  // Wired back to Groq Llama until a paid DeepSeek tier is available.
+  // To re-enable DeepSeek: return process.env.DEEPSEEK_API ? LLM_BACKENDS.auditor : LLM_BACKENDS.drafter;
+  return LLM_BACKENDS.drafter;
 }
 
 // ==================== AI Models ====================
