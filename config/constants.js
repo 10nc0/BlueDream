@@ -116,11 +116,24 @@ const DISCORD = {
 const LLM_BACKENDS = {
   deepseek: {
     url: 'https://api.deepseek.com/v1/chat/completions',
-    model: 'deepseek-reasoner'
+    model: 'deepseek-reasoner',
+    // deepseek-reasoner generates chain-of-thought before answering — needs much longer timeouts
+    timeouts: {
+      reasoning: 120000,   // S2 main reasoning (think + answer)
+      toolCall:   90000,   // seed-metric walk-the-dog rounds
+      audit:      60000,   // two-pass audit
+      extract:    10000    // core-question extraction (short, non-reasoning call)
+    }
   },
   groq: {
     url: 'https://api.groq.com/openai/v1/chat/completions',
-    model: 'moonshotai/kimi-k2-instruct'
+    model: 'moonshotai/kimi-k2-instruct',
+    timeouts: {
+      reasoning: 15000,
+      toolCall:  30000,
+      audit:     15000,
+      extract:    3000
+    }
   }
 };
 

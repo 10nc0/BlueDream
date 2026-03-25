@@ -406,7 +406,7 @@ async function extractCoreQuestion(message) {
                     'Authorization': `Bearer ${GROQ_TOKEN}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 3000
+                timeout: _llm.timeouts.extract
             }
         );
         

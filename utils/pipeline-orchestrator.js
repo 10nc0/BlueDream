@@ -162,6 +162,7 @@ class PipelineOrchestrator {
     const llm = getLLMBackend();
     this.llmUrl = llm.url;
     this.llmModel = llm.model;
+    this.llmTimeouts = llm.timeouts;
   }
   
   /**
@@ -1056,7 +1057,7 @@ User query: ${query}`;
             'Authorization': `Bearer ${this.groqToken}`,
             'Content-Type': 'application/json'
           },
-          timeout: 15000
+          timeout: this.llmTimeouts.reasoning
         }
       }, 3, 'text');
       
@@ -1232,7 +1233,7 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
             'Authorization': `Bearer ${this.groqToken}`,
             'Content-Type': 'application/json'
           },
-          timeout: 30000
+          timeout: this.llmTimeouts.toolCall
         }
       }, 3, 'text');
     } catch (err) {
@@ -1316,7 +1317,7 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
             'Authorization': `Bearer ${this.groqToken}`,
             'Content-Type': 'application/json'
           },
-          timeout: 20000
+          timeout: this.llmTimeouts.toolCall
         }
       }, 3, 'text');
     } catch (err) {
@@ -1386,7 +1387,7 @@ Rules:
             'Authorization': `Bearer ${this.groqToken}`,
             'Content-Type': 'application/json'
           },
-          timeout: 15000
+          timeout: this.llmTimeouts.toolCall
         }
       }, 2, 'text');
 
@@ -1533,7 +1534,7 @@ Output ONLY the corrected table and summary lines:`;
                   'Authorization': `Bearer ${this.groqToken}`,
                   'Content-Type': 'application/json'
                 },
-                timeout: 10000
+                timeout: this.llmTimeouts.audit
               }
             }, 2, 'text');
             
@@ -1671,7 +1672,7 @@ Output ONLY the corrected table and summary lines:`;
           // Unified timestamp from pipeline state (single source of truth)
           timestamps: state.queryTimestamp
         },
-        12000
+        this.llmTimeouts.audit
       );
       console.log(`🔍 Audit: ${state.auditResult.verdict} (${state.auditResult.confidence}%)`);
       
