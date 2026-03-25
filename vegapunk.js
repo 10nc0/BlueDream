@@ -1434,6 +1434,35 @@ app.listen(PORT, '0.0.0.0', async () => {
     // NOTE: intentional console.log — multi-line ASCII art; logger would escape newlines
     console.log('\n' + formatPulseLog(['auth', 'books', 'inpipe', 'nyan-ai']) + '\n');
 
+    // PRODUCTION SAFETY: Hard-fail if critical secrets are still .env.example placeholders.
+    // Placeholder SESSION_SECRET → JWTs are trivially forgeable (known string, public repo).
+    // Placeholder FRACTAL_SALT  → capsule HMAC proofs restart-invalid (ephemeral fallback corrupts integrity).
+    (() => {
+        const PLACEHOLDER_SESSION = 'change-me-to-a-long-random-string-in-production';
+        const PLACEHOLDER_FRACTAL  = 'change-me-to-a-random-64-char-hex-string-in-production';
+        if (process.env.NODE_ENV === 'production') {
+            const faults = [];
+            if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET === PLACEHOLDER_SESSION) {
+                faults.push('SESSION_SECRET is unset or still the .env.example placeholder — JWTs are forgeable');
+            }
+            if (!process.env.FRACTAL_SALT || process.env.FRACTAL_SALT === PLACEHOLDER_FRACTAL) {
+                faults.push('FRACTAL_SALT is unset or still the .env.example placeholder — capsule HMAC proofs will be invalid after each restart');
+            }
+            if (faults.length > 0) {
+                faults.forEach(f => logger.error(f));
+                logger.error('❌ FATAL: critical secrets are placeholder values — refusing to start in production');
+                process.exit(1);
+            }
+        } else {
+            if (process.env.SESSION_SECRET === PLACEHOLDER_SESSION) {
+                logger.warn('SESSION_SECRET is still the .env.example placeholder — rotate before deploying to production');
+            }
+            if (!process.env.FRACTAL_SALT || process.env.FRACTAL_SALT === PLACEHOLDER_FRACTAL) {
+                logger.warn('FRACTAL_SALT is unset or placeholder — ephemeral salt active; capsule proofs will not survive restarts (dev only)');
+            }
+        }
+    })();
+
     // SETUP GUIDE: breadcrumb each unconfigured optional feature so no utility is forgotten
     (() => {
         const checks = [

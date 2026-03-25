@@ -4,7 +4,8 @@
   "main": "vegapunk.js",
   "scripts": {
     "test": "node tests/test-search-retry.js",
-    "test:audit": "node tests/test-search-retry.js"
+    "test:audit": "node tests/test-search-retry.js",
+    "test:unit": "node tests/test-preflight-router.js && node tests/test-capsule.js"
   },
   "keywords": [],
   "author": "",
