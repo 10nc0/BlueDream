@@ -2875,10 +2875,7 @@ function getPhysicalAuditSuggestions(assetClass, ticker, sector, industry, atomi
         bullets.push('• **Bank statement reconciliation** — verify cash flow and liquidity assertions');
       }
 
-      // Sector + industry label for transparency
-      const label = [sector, industry].filter(Boolean).join(' / ');
-      const header = label ? `[${ticker} — ${label}]\n` : '';
-      return header + bullets.join('\n');
+      return bullets.join('\n');
     }
   }
 }
