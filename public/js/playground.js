@@ -839,15 +839,10 @@ function addStreamingMessage() {
     loadingContainer.appendChild(statusText);
     contentDiv.appendChild(loadingContainer);
     
-    const stageBar = document.createElement('div');
-    stageBar.id = 'streamingStageBar';
-    stageBar.style.cssText = 'display:none; color:#94a3b8; font-size:0.8rem; margin-top:0.35rem; font-style:italic;';
-
     msgEl.appendChild(labelDiv);
     msgEl.appendChild(badgePlaceholder);
     msgEl.appendChild(copyBtn);
     msgEl.appendChild(contentDiv);
-    msgEl.appendChild(stageBar);
     
     messagesEl.appendChild(msgEl);
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -905,8 +900,6 @@ function finalizeStreamingMessage(fullContent, auditData) {
     if (!streamingEl) return;
     
     streamingEl.classList.remove('streaming');
-    const stageBarEl = streamingEl.querySelector('#streamingStageBar');
-    if (stageBarEl) stageBarEl.style.display = 'none';
     streamingEl.id = '';
     streamingTextBuffer = '';
     
@@ -978,10 +971,15 @@ function updateThinkingStage(stage) {
         contentEl.appendChild(stageSpan);
         contentEl.appendChild(cursorSpan);
     } else {
-        const stageBar = document.getElementById('streamingStageBar');
-        if (stageBar) {
-            stageBar.textContent = `🔍 ${stage}`;
-            stageBar.style.display = 'block';
+        const existing = contentEl && contentEl.querySelector('.streaming-stage-hint');
+        if (!existing && contentEl) {
+            const hint = document.createElement('div');
+            hint.className = 'streaming-stage-hint';
+            hint.style.cssText = 'color:#94a3b8; font-size:0.8rem; margin-top:0.5rem; font-style:italic;';
+            hint.textContent = `🔍 ${stage}`;
+            contentEl.appendChild(hint);
+        } else if (existing) {
+            existing.textContent = `🔍 ${stage}`;
         }
     }
 }
