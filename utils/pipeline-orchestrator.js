@@ -870,6 +870,12 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
       
       // Helper to format number or N/A
       const fmt = (v, decimals = 2) => (v != null && !isNaN(v)) ? v.toFixed(decimals) : 'N/A';
+      // θ display: 2dp; flag infinitesimal when delta≠0 but value rounds to 0
+      const fmtTheta = (theta, deltaPrice) => {
+        if (theta == null || isNaN(theta)) return 'N/A';
+        if (Math.abs(theta) < 0.005 && deltaPrice != null && deltaPrice !== 0) return '~0° (infinitesimal)';
+        return theta.toFixed(2) + '°';
+      };
       
       // Helper to get fidelity percentage (handles undefined, NaN, string 'N/A')
       const getFidelityPct = (f) => {
@@ -885,7 +891,7 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
         const weeklyFidelityPct = getFidelityPct(fidelityW);
         weeklySection = `
 **WEEKLY (7d candles, 13-month window)** [${weeklyGradeEmoji} ${fidelityW.grade || '?'} grade, ${weeklyFidelityPct}% fidelity]
-├─ θ (Phase) = **${fmt(phaseW.current, 4)}°**
+├─ θ (Phase) = **${fmtTheta(phaseW.current, phaseW.deltaPrice)}**
 ├─ z (Anomaly) = **${fmt(anomalyW.current)}σ**
 ├─ R (Convergence) = **${fmt(rWeekly)}**
 └─ **Reading**: ${analysisWeekly.reading?.emoji || '⚪'} ${analysisWeekly.reading?.reading || 'N/A'}`;
@@ -901,7 +907,7 @@ Do NOT add these units inside the H₀ Physical Audit Advisory section.`;
 **Ψ-EMA** (θ=Cycle Position, z=Price Deviation, R=Momentum Ratio): alignment → conviction; conflict → caution.
 
 **DAILY (1d candles, 3-month window)** [${dailyGradeEmoji} ${fidelity.grade || '?'} grade, ${dailyFidelityPct}% fidelity]
-├─ θ (Phase) = **${fmt(phase.current, 4)}°**
+├─ θ (Phase) = **${fmtTheta(phase.current, phase.deltaPrice)}**
 ├─ z (Anomaly) = **${fmt(anomaly.current)}σ**
 ├─ R (Convergence) = **${fmt(convergence.currentDisplay ?? convergence.current)}**
 └─ **Reading**: ${analysis.reading?.emoji || '⚪'} ${analysis.reading?.reading || 'N/A'}

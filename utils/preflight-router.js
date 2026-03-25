@@ -163,6 +163,13 @@ function safeFixed(val, decimals = 2) {
   return !isNaN(num) ? num.toFixed(decimals) : 'N/A';
 }
 
+// θ display: 2dp; flag infinitesimal when delta≠0 but value rounds to 0
+function fmtTheta(theta, deltaPrice) {
+  if (theta == null || isNaN(theta)) return 'N/A';
+  if (Math.abs(theta) < 0.005 && deltaPrice != null && deltaPrice !== 0) return '~0° (infinitesimal)';
+  return theta.toFixed(2) + '°';
+}
+
 /**
  * Format market cap into human-readable format (e.g., $2.5T, $150B)
  */
@@ -824,7 +831,7 @@ ${fundamentalsLine}
 **Ψ-EMA** (θ=Cycle Position, z=Price Deviation, R=Momentum Ratio): alignment → conviction; conflict → caution.
 | Dim | Value | Signal |
 |-----|-------|--------|
-| θ | ${safeFixed(phaseTheta, 4)}° | ${phaseSignal} |
+| θ | ${fmtTheta(phaseTheta, phase.deltaPrice)} | ${phaseSignal} |
 | z | ${safeFixed(anomalyZ)}σ | ${anomalyLevel} |
 | R | ${convergenceR != null ? safeFixed(convergenceR) : 'N/A'} | ${regimeLabel} |
 
