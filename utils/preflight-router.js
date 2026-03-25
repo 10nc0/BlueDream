@@ -265,10 +265,23 @@ async function preflightRouter(options) {
       return result;
     }
     
+    // 0a. CRYPTO CROSS-RATE: Intercept $BTCUSD / BTCUSD / ETHUSD BEFORE forex gate
+    // Crypto pairs (XYZ + USD/USDT suffix) route to yfinance Ψ-EMA, not forex fetcher
+    const cryptoCrossMatch = classificationQuery.match(/\$([A-Z]{2,6}USDT?)\b|\b([A-Z]{2,6}USDT?)\b/i);
+    if (cryptoCrossMatch) {
+      const rawTicker = (cryptoCrossMatch[1] || cryptoCrossMatch[2]).toUpperCase();
+      const cryptoParts = rawTicker.match(/^([A-Z]{2,6})(USDT?)$/);
+      if (cryptoParts) {
+        result.ticker = `${cryptoParts[1]}-USD`;
+        console.log(`₿ Preflight: Crypto cross-rate ${rawTicker} → ${result.ticker} (psi-ema)`);
+      }
+    }
+
     // 0. FOREX: Detect currency pair queries FIRST (before stock detection)
     // USD/JPY, EUR/USD, "yen rate", "dollar to euro", etc.
+    // Guard: skip if already resolved as crypto cross-rate above
     const forexPair = detectForexPair(classificationQuery);
-    if (forexPair || isForexQuery(classificationQuery)) {
+    if (!result.ticker && (forexPair || isForexQuery(classificationQuery))) {
       result.mode = 'forex';
       result.routingFlags.usesForex = true;
       

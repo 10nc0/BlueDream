@@ -179,7 +179,7 @@ function detectPotentialTicker(query) {
   const dollarMatches = query.match(DOLLAR_TICKER_REGEX);
   if (dollarMatches && dollarMatches.length > 0) {
     const ticker = dollarMatches[0].replace('$', '').toUpperCase();
-    if (ticker.length >= 1 && ticker.length <= 5) {
+    if (ticker.length >= 1 && ticker.length <= 8) {
       return ticker;
     }
   }
@@ -319,7 +319,7 @@ function detectPotentialTickerExcluding(query, excludeWords) {
   const dollarMatches = query.match(DOLLAR_TICKER_REGEX);
   if (dollarMatches && dollarMatches.length > 0) {
     const ticker = dollarMatches[0].replace('$', '').toUpperCase();
-    if (ticker.length >= 1 && ticker.length <= 5) {
+    if (ticker.length >= 1 && ticker.length <= 8) {
       return ticker;
     }
   }
@@ -606,7 +606,7 @@ EXAMPLES:
     if (result.ticker && typeof result.ticker === 'string') {
       const ticker = result.ticker.toUpperCase().replace(/[^A-Z]/g, '');
       // Validate: non-empty, 1-5 chars, only letters
-      if (ticker && ticker.length >= 1 && ticker.length <= 5 && /^[A-Z]+$/.test(ticker)) {
+      if (ticker && ticker.length >= 1 && ticker.length <= 8 && /^[A-Z]+$/.test(ticker)) {
         console.log(`🤖 AI extracted ticker: ${ticker} (${result.confidence}) - ${result.reason}`);
         return { ticker, confidence: result.confidence || 'medium', reason: result.reason || '' };
       } else {
