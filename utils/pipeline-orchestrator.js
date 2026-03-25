@@ -804,12 +804,16 @@ MANDATORY INSTRUCTIONS:
       const physicalAuditDisclaimer = generatePhysicalAuditDisclaimer(analysis, ticker, fundamentals);
 
       // LLM deliberation hint (only reaches LLM path — never appears in bypass direct output)
-      // Tells the LLM to infer company-specific atomic units from sector+industry world knowledge
+      // Provides the form (state/flow/guard schema + pattern examples) and the content source
+      // (Yahoo Finance business description). LLM pattern-matches the right units from the
+      // actual business — no hardcoded sector template, no sankhara.
       const fSector = fundamentals?.sector || null;
       const fIndustry = fundamentals?.industry || null;
-      if (fSector || fIndustry) {
+      const fSummary = fundamentals?.summary || null;
+      if (fSector || fIndustry || fSummary) {
         const label = [fSector, fIndustry].filter(Boolean).join(' / ');
-        psiEmaLlmHint = `\n[H₀ AUDIT NOTE] For the H₀ Physical Audit Advisory: supplement the suggested items with atomic units specific to ${ticker}'s actual business (${label}). Infer 4 physical quantities that are countable/inspectable/auditable for this company — format: \`unit name (state|flow|guard)\`.`;
+        const bizLine = fSummary ? `\nBusiness: "${fSummary}"` : '';
+        psiEmaLlmHint = `\n[H₀ AUDIT NOTE] For the H₀ Physical Audit Advisory: infer 4 atomic units specific to ${ticker}'s actual business (${label}).${bizLine}\nDerive from the business description above — not a generic sector template.\nFormat: \`unit name (state|flow|guard)\` — e.g. \`inventory (state)\`, \`shipments (flow)\`, \`defect rate (guard)\`.`;
       }
       
       // Build assessment one-liner (pragmatic, no medical metaphor)

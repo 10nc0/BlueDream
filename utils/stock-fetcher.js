@@ -39,29 +39,11 @@ function phiInterpolate(closes, dates) {
 
 // ============================================================================
 // ATOMIC UNITS OF PRODUCTION (ported from fetch-stock-prices.py)
-// Maps sector/industry to likely atomic units for Robinhood-style headers
-// ============================================================================
-// Lean sector-level fallback (bypass-path only — LLM infers company-specific units on the LLM path)
-const SECTOR_ATOMIC_UNITS = {
-    'Financial Services': ['loan book (state)', 'issuance (flow)', 'payments (flow)', 'AUM (state)', 'TPV (flow)'],
-    'Consumer Cyclical': ['inventory (state)', 'orders (flow)', 'shipments (flow)', 'GMV booked (state)', 'tickets (flow)'],
-    'Consumer Defensive': ['inventory (state)', 'orders (flow)', 'baskets (flow)', 'GMV booked (state)', 'tickets (flow)'],
-    'Technology': ['ARR/MRR (state)', 'subscriptions (state)', 'new contracts (flow)', 'API calls (flow)', 'users (state)'],
-    'Basic Materials': ['reserves (state)', 'stockpile (state)', 'extraction (flow)', 'shipments (flow)', 'production (flow)'],
-    'Energy': ['reserves (state)', 'capacity MW (state)', 'barrels (flow)', 'MWh (flow)', 'production (flow)'],
-    'Real Estate': ['portfolio value (state)', 'units (state)', 'acquisitions (flow)', 'rental income (flow)', 'NOI (flow)'],
-    'Industrials': ['inventory (state)', 'WIP (state)', 'production (flow)', 'shipments (flow)', 'backlog (state)'],
-    'Communication Services': ['subscribers (state)', 'ARPU × subs (flow)', 'churn (flow)', 'net adds (flow)', 'MAU (state)'],
-    'Healthcare': ['patient panel (state)', 'bed capacity (state)', 'visits (flow)', 'procedures (flow)', 'admissions (flow)'],
-    'Utilities': ['capacity MW (state)', 'customers (state)', 'MWh generated (flow)', 'sales (flow)', 'connections (state)'],
-};
-
-// INDUSTRY_ATOMIC_UNITS removed — LLM deliberates from sector + industry context (no dogmatic 40-entry list)
-
-function inferAtomicUnits(sector) {
-    if (sector && SECTOR_ATOMIC_UNITS[sector]) return SECTOR_ATOMIC_UNITS[sector].slice(0, 5);
-    return null;
-}
+// Atomic units: structure (state/flow/guard) is the invariant form.
+// Content — the specific units for each company — arrives from Yahoo Finance
+// longBusinessSummary + sector + industry via LLM deliberation.
+// No hardcoded sector map: every company has its own physical quantities.
+// The LLM receives the business description and infers the right units.
 
 const DOLLAR_TICKER_REGEX = /\$([A-Za-z]{1,5})\b/gi;
 
@@ -396,7 +378,6 @@ async function fetchStockPrices(ticker, customPeriod = null) {
 
     const sector   = profile.sector   || null;
     const industry = profile.industry || null;
-    const atomicUnits = inferAtomicUnits(sector);
 
     const fundamentals = {};
     const pe  = safeFloat(sumDetail.trailingPE);   if (pe  !== null) fundamentals.peRatio        = pe;
@@ -411,7 +392,6 @@ async function fetchStockPrices(ticker, customPeriod = null) {
         const first = biz.split('.')[0].trim();
         fundamentals.summary = first.length > 150 ? first.substring(0, 147) + '...' : first;
     }
-    if (atomicUnits) fundamentals.atomicUnits = atomicUnits;
     if (quoteType.quoteType) fundamentals.yfType = quoteType.quoteType;
     const bv  = safeFloat(keyStats.bookValue);         if (bv  !== null) fundamentals.bookValue         = bv;
     const h52 = safeFloat(sumDetail.fiftyTwoWeekHigh); if (h52 !== null) fundamentals.fiftyTwoWeekHigh  = h52;
