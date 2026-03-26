@@ -1101,9 +1101,81 @@ User query: ${query}`;
     const currentYear = new Date().getFullYear();
     // Use the decade the preflight already extracted from the user's query.
     // Preflight detects "1970s", "1980s", explicit years like "1975" etc.
-    // Fallback: 50 years ago rounded to nearest decade.
-    const histDecade = state.preflight?.historicalDecade || (String(currentYear - 50).slice(0, 3) + '0s');
-    const histYear   = state.preflight?.historicalYear   || String(currentYear - 50);
+    // Fallback: 30 years ago rounded to nearest decade (World Bank data fidelity).
+    const histDecade = state.preflight?.historicalDecade || (String(currentYear - 30).slice(0, 3) + '0s');
+    const histYear   = state.preflight?.historicalYear   || String(currentYear - 30);
+    // Cities to analyze: preflight injects companion when n=1 (server-side selection)
+    const gatherCities = state.preflight?.seedMetricCities?.length
+      ? state.preflight.seedMetricCities
+      : null;
+
+    // ── City metadata: currency word + province/region for TFR granularity ──
+    // Used to generate explicit search queries server-side so the LLM executes
+    // a guaranteed list instead of planning its own (which it does for only 1 city).
+    const _CITY_CURRENCY = {
+      jakarta:'rupiah', bangkok:'baht', manila:'pesos', 'kuala lumpur':'ringgit',
+      'ho chi minh':'dong', hanoi:'dong', singapore:'dollars',
+      tokyo:'yen', osaka:'yen', seoul:'won', beijing:'yuan', shanghai:'yuan',
+      taipei:'dollars', 'hong kong':'dollars',
+      mumbai:'rupees', delhi:'rupees', bangalore:'rupees',
+      london:'pounds', paris:'euros', amsterdam:'euros', berlin:'euros',
+      madrid:'euros', rome:'euros', warsaw:'zloty', lisbon:'euros',
+      zurich:'francs', vienna:'euros', stockholm:'kronor', oslo:'krone',
+      'new york':'dollars', 'los angeles':'dollars', toronto:'dollars',
+      chicago:'dollars', 'san francisco':'dollars', vancouver:'dollars',
+      sydney:'dollars', melbourne:'dollars', auckland:'dollars',
+      'sao paulo':'reais', 'mexico city':'pesos', 'buenos aires':'pesos',
+      bogota:'pesos', lima:'soles', santiago:'pesos',
+      dubai:'dirhams', cairo:'pounds', istanbul:'lira', nairobi:'shillings',
+      lagos:'naira', johannesburg:'rand', 'cape town':'rand',
+    };
+    const _CITY_PROVINCE = {
+      jakarta:'DKI Jakarta', mumbai:'Maharashtra', delhi:'Delhi NCR',
+      bangalore:'Karnataka', tokyo:'Tokyo Metro', osaka:'Osaka Prefecture',
+      seoul:'Seoul Metro', bangkok:'Bangkok Metro', manila:'Metro Manila',
+      'kuala lumpur':'Kuala Lumpur', singapore:'Singapore',
+      'sao paulo':'Sao Paulo state', nairobi:'Nairobi County',
+      lagos:'Lagos state', johannesburg:'Gauteng', cairo:'Cairo Governorate',
+    };
+    // Native-language land price search terms — Brave returns better local listing results
+    // when the query matches the dominant listing language in that market.
+    const _CITY_NATIVE_PRICE = {
+      jakarta:       `harga tanah dijual per meter ${currentYear}`,           // Bahasa Indonesia
+      bangkok:       `ราคาที่ดินขาย ตารางเมตร ${currentYear}`,              // Thai
+      'kuala lumpur':`harga tanah untuk dijual ringgit ${currentYear}`,       // Bahasa Malaysia
+      'ho chi minh': `giá đất bán mỗi mét vuông ${currentYear}`,             // Vietnamese
+      hanoi:         `giá đất bán mỗi mét vuông ${currentYear}`,
+      tokyo:         `土地 売却 価格 平方メートル ${currentYear}`,            // Japanese
+      osaka:         `土地 売却 価格 平方メートル ${currentYear}`,
+      seoul:         `토지 매매 가격 평방미터 ${currentYear}`,               // Korean
+      beijing:       `土地出售价格每平方米 ${currentYear}`,                   // Mandarin
+      shanghai:      `土地出售价格每平方米 ${currentYear}`,
+      warsaw:        `cena gruntu sprzedaż metr kwadratowy ${currentYear}`,   // Polish
+      'sao paulo':   `preço terreno venda metro quadrado ${currentYear}`,     // Portuguese
+      istanbul:      `arsa satış fiyatı metrekare ${currentYear}`,            // Turkish
+      cairo:         `سعر الأرض للبيع متر مربع ${currentYear}`,             // Arabic
+    };
+    function _smCurrency(city) { return _CITY_CURRENCY[city] || 'local currency'; }
+    function _smProvince(city) { return _CITY_PROVINCE[city] || city; }
+    function _smPriceQuery(city) {
+      return _CITY_NATIVE_PRICE[city]
+        || `${city} land sale price ${_smCurrency(city)} ${currentYear}`;
+    }
+    function _smHistPriceQuery(city) {
+      return `${city} land price ${histDecade} historical statistics`;
+    }
+
+    // Build explicit search todo-list when cities are known (5 searches per city).
+    // Each brave_search returns ~5-10 snippets; PURIFY medians all usable price+area pairs.
+    // Historical wages search dropped — consistently returns N/A; income data lives in
+    // the same price/statistics articles that the historical price search already fetches.
+    const searchTodoList = gatherCities ? gatherCities.flatMap(city => [
+      _smPriceQuery(city),                                                        // current land price (local lang)
+      `${city} average annual income ${_smCurrency(city)} ${currentYear}`,        // current income
+      `${_smProvince(city)} fertility rate ${currentYear}`,                       // current TFR (city/province)
+      _smHistPriceQuery(city),                                                    // historical land price
+      `${_smProvince(city)} total fertility rate ${histYear} OR ${histDecade}`,   // historical TFR
+    ]) : null;
 
     // ── Groq tool definition for Brave Search ─────────────────────────────
     // The LLM calls this tool instead of us pre-fetching; it picks queries itself.
@@ -1126,52 +1198,26 @@ User query: ${query}`;
     };
 
     // ── Gate 1: Data gathering prompt (Round 1 — tool calls only) ──────────
-    // Minimal surface area — just tells the LLM what ingredients to fetch.
-    // No formula, no table rules, no regime yet. Less context = less guardrail resistance.
+    // When cities are known from preflight, inject an EXPLICIT numbered search list.
+    // This guarantees the LLM executes all searches (not just the user's city).
+    // When cities are unknown, fall back to generic instructions.
+    const searchListBlock = searchTodoList
+      ? `Execute these ${searchTodoList.length} brave_search calls in order — ALL of them, no skipping:
+${searchTodoList.map((q, i) => `${i + 1}. "${q}"`).join('\n')}
+
+Each search returns ~5-10 snippets with price/area/income data. PURIFY will extract and median them.
+Do NOT compute or output anything — just run every search above.`
+      : `For every city in the query, run 5 searches per period:
+  Current (${currentYear}): land sale price (local language if non-English market), average annual income, TFR (city/province level)
+  Historical (${histDecade}): land price historical statistics (NOMINAL), TFR (city/province)
+  Use local currency words (rupees, yen, baht, etc.). PURCHASE price only — not rent.`;
+
     const gatherPrompt = `${NYAN_PROTOCOL_COMPRESSED}
 
 --- SEED METRIC: GATHER RAW INGREDIENTS ---
 You have brave_search. Do NOT compute or output anything — just fetch.
 
-FOR EVERY CITY in the query, gather per period — all three ingredients at the SAME geographic level (city or province, not country):
-
-  Each brave_search call returns ~5-10 snippets. PURIFY reads ALL of them to triangulate
-  multiple price+area pairs and median them. One well-targeted call gives enough anchors.
-
-  Current period (${currentYear}):
-    Price — 1 search:
-      "{city} apartment listing sale price {local currency} ${currentYear}"
-      Each snippet may show a total price + floor area — PURIFY extracts every usable pair
-      and medians them. Never append "sqm" or "sqft". The area emerges from the listing body.
-      PURCHASE only — NOT rent, NOT monthly payment, NOT mortgage.
-    Income — 1 search:
-      "{city} median individual annual income {local currency} ${currentYear}"
-    TFR — 1 search at the most granular level available (city/province > country):
-      "{city} OR {province/region} total fertility rate ${currentYear}"
-      Jakarta → "DKI Jakarta fertility rate ${currentYear}"
-      Mumbai → "Maharashtra fertility rate ${currentYear}"
-      Only use country-level TFR if city/province data is genuinely absent from results.
-
-  Historical period (${histDecade} era):
-    Price — 1 search (articles/reports, not listings — those don't exist online for past decades):
-      "{city} housing property price ${histDecade} historical report statistics"
-      NOMINAL — the actual face value in ${histDecade} money, NOT "in today's money".
-    Income — 1 search:
-      "{city} wages salaries ${histYear} ${histDecade} nominal historical"
-      NOMINAL — the actual pay then, NOT inflation-adjusted.
-    TFR — 1 search at city/province level if available, else country:
-      "{city} OR {province} total fertility rate ${histYear} OR ${histDecade}"
-
-Replace {local currency} with the currency word (rupees, yen, baht, dong, yuan, pounds, euros, etc.)
-to force Brave to return local-market data, not USD-converted values.
-
-Income = median SINGLE earner only. Not household. Not average.
-If monthly → ×12. If household only → N/A, search again.
-
-Rules:
-  • Only use values that appear in search results. No training-data estimates.
-  • No number → N/A. Historical N/A is honest; a guess is not.
-  • All three ingredients (price, income, TFR) must be at the same geographic resolution.`;
+${searchListBlock}`;
 
     // ── Round 2: PURIFY prompt — LLM reads raw Brave results, outputs structured lines ──
     // LLM job: quanta extraction (including triangulation: total÷area=sqm/sqft→sqm).
@@ -1209,7 +1255,7 @@ Rules:
 • TFR = total fertility rate as a single decimal (e.g. 1.04). N/A if not in results. Do not guess.
   - Prefer city/province TFR over country TFR (DKI Jakarta > Indonesia, Maharashtra > India, etc.)
   - Only use national TFR if no city/province figure appears anywhere in the results.
-• type = built (apartment/flat/condo) or land (vacant plot). Prefer built. N/A if unknown.
+• type = land (vacant plot/lot) or built (apartment/flat/condo). Prefer land. N/A if unknown.
 • NOMINAL ONLY: reject any value described as "real terms", "inflation-adjusted", "in today's money".
 • HISTORICAL SANITY CHECK: for any period before 1990, prices must be explicitly anchored to that
   year in the source (e.g. "In 1975, the average price was X"). If the source is a modern article
