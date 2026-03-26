@@ -480,8 +480,8 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
   const summaries = [];
   
   // Table header — $/sqm shown to force bottoms-up, NO P/I column
-  rows.push('| City | Period | $/sqm | 700sqm Price | Income | Years | Regime |');
-  rows.push('|------|--------|-------|--------------|--------|-------|--------|');
+  rows.push('| City | Period | $/sqm | 700sqm Price | Income | Years | TFR | Regime |');
+  rows.push('|------|--------|-------|--------------|--------|-------|-----|--------|');
   
   for (const [city, data] of Object.entries(parsedData.cities || {})) {
     const cityTitle = city.charAt(0).toUpperCase() + city.slice(1);
@@ -506,13 +506,17 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
     const histYearsDisplay = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
     const currYearsDisplay = currMetric.years ? `${currMetric.years.toFixed(0)}yr` : 'N/A';
     
+    // TFR (Total Fertility Rate) — biological signal alongside affordability regime
+    const histTfr = data.historical?.tfr != null ? String(data.historical.tfr) : 'N/A';
+    const currTfr = data.current?.tfr != null ? String(data.current.tfr) : 'N/A';
+
     // Add historical row — show $/sqm source data
     const histSqmDisplay = histPriceSqm ? formatCurrency(histPriceSqm, histCurrency) : 'N/A';
-    rows.push(`| ${cityTitle} | ${historicalDecade} | ${histSqmDisplay} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histYearsDisplay} | ${histRegimeLabel} |`);
+    rows.push(`| ${cityTitle} | ${historicalDecade} | ${histSqmDisplay} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histYearsDisplay} | ${histTfr} | ${histRegimeLabel} |`);
     
     // Add current row — show $/sqm source data
     const currSqmDisplay = currPriceSqm ? formatCurrency(currPriceSqm, currCurrency) : 'N/A';
-    rows.push(`| ${cityTitle} | 2024 | ${currSqmDisplay} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currYearsDisplay} | ${currRegimeLabel} |`);
+    rows.push(`| ${cityTitle} | 2024 | ${currSqmDisplay} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currYearsDisplay} | ${currTfr} | ${currRegimeLabel} |`);
     
     // Build summary line
     const histSummary = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
