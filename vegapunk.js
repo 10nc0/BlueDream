@@ -876,7 +876,23 @@ async function initializeDatabase() {
             ON CONFLICT (key) DO NOTHING
         `);
         
-        // IDEMPOTENCY TABLE: Persisted Twilio SID deduplication (survives restarts, covers 11hr retry window)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS core.message_queue (
+                id SERIAL PRIMARY KEY,
+                priority TEXT NOT NULL DEFAULT 'text',
+                payload JSONB NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        `);
+        await pool.query(`
+            CREATE INDEX IF NOT EXISTS message_queue_dequeue_idx
+            ON core.message_queue (status, priority, created_at)
+            WHERE status = 'pending'
+        `);
+
         await pool.query(`
             CREATE TABLE IF NOT EXISTS core.processed_sids (
                 sid TEXT PRIMARY KEY,

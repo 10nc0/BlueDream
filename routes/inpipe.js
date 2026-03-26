@@ -14,18 +14,20 @@ const { assertValidSchemaName } = require('../lib/validators');
 const PHONE_CHANNELS = new Set(['twilio']);
 
 // ═══════════════════════════════════════════════════════════════
-// BURST MITIGATION: Two-tier priority queue with adaptive async loop
+// DURABLE MESSAGE QUEUE: PostgreSQL-backed with priority + retry
 // ═══════════════════════════════════════════════════════════════
 // Architecture:
-//   MEDIA_QUEUE  — high priority: LINE/Twilio media (time-sensitive, expires)
-//   TEXT_QUEUE   — normal: text-only messages
-//   Drain order: media first, then text. Both are FIFO within their tier.
+//   core.message_queue table with priority column (media/text).
+//   Drain order: media first, then text (ORDER BY priority, created_at).
+//   Atomic dequeue via UPDATE … FOR UPDATE SKIP LOCKED … RETURNING.
+//   Survives restarts: stale 'processing' rows reset to 'pending' on boot.
+//   Failed items retry up to MAX_RETRY_COUNT times before being dropped.
 //
 // Processing loop (not interval):
 //   Continuous async loop with adaptive gap between messages.
 //   Normal load: 500ms gap (safe: ~2/sec vs Discord's 5/5sec per route).
 //   Burst mode (queue > 5): 200ms gap (~5/sec globally across routes).
-//   No dead-wait: loop polls at 100ms when idle, starts immediately on arrival.
+//   No dead-wait: loop polls at 100ms when idle.
 //
 // Rate limits respected:
 //   Discord API: 5 req/5sec per route — we write to different threads so
@@ -34,36 +36,99 @@ const PHONE_CHANNELS = new Set(['twilio']);
 //   Twilio webhook: 60 req/min inbound — handled by vegapunk.js rate limiter.
 // ═══════════════════════════════════════════════════════════════
 
-const MEDIA_QUEUE = []; // Priority tier: time-sensitive media messages
-const TEXT_QUEUE  = []; // Normal tier: text-only messages
-// Idempotency guard: persisted to core.processed_sids (survives restarts).
-// Twilio retries up to 11 hours — in-memory Map was lost on restart.
-// Table schema: CREATE TABLE core.processed_sids (sid TEXT PRIMARY KEY, processed_at TIMESTAMPTZ)
-// Cleanup: DELETE WHERE processed_at < NOW() - INTERVAL '6 hours' (run every minute)
-const IDEMPOTENCY_TTL_INTERVAL = '6 hours'; // matches Twilio's max retry window
-const MAX_QUEUE_SIZE = 200; // Per tier — 400 total burst capacity
-const NORMAL_GAP_MS  = 500;  // Gap between messages at steady state
-const BURST_GAP_MS   = 200;  // Gap in burst mode (queue depth > 5)
-const BURST_THRESHOLD = 5;   // Items across both queues triggers burst mode
+const IDEMPOTENCY_TTL_INTERVAL = '6 hours';
+const MAX_QUEUE_SIZE = 200;
+const NORMAL_GAP_MS  = 500;
+const BURST_GAP_MS   = 200;
+const BURST_THRESHOLD = 5;
+const MAX_RETRY_COUNT = 3;
 
-// Legacy alias so log lines referencing MESSAGE_QUEUE.length still compile
-// (actual length is totalQueueDepth())
-const MESSAGE_QUEUE = { get length() { return totalQueueDepth(); } };
+let _pool = null;
+let _cachedDepth = 0;
+let _depthCacheTime = 0;
+const DEPTH_CACHE_TTL_MS = 200;
 
-function totalQueueDepth() { return MEDIA_QUEUE.length + TEXT_QUEUE.length; }
+const MESSAGE_QUEUE = { get length() { return _cachedDepth; } };
 
-function enqueueItem(item) {
-    if (item.msg.hasMedia) {
-        MEDIA_QUEUE.push(item);
-    } else {
-        TEXT_QUEUE.push(item);
+async function totalQueueDepth() {
+    const now = Date.now();
+    if (now - _depthCacheTime < DEPTH_CACHE_TTL_MS) return _cachedDepth;
+    try {
+        const r = await _pool.query(`SELECT COUNT(*) AS c FROM core.message_queue WHERE status = 'pending'`);
+        _cachedDepth = parseInt(r.rows[0].c, 10);
+        _depthCacheTime = now;
+    } catch (_) { /* use cached */ }
+    return _cachedDepth;
+}
+
+async function enqueueItem(item) {
+    const priority = item.msg.hasMedia ? 'media' : 'text';
+    await _pool.query(
+        `INSERT INTO core.message_queue (priority, payload, status) VALUES ($1, $2, 'pending')`,
+        [priority, JSON.stringify(item)]
+    );
+    _depthCacheTime = 0;
+}
+
+async function dequeueItem() {
+    const r = await _pool.query(`
+        UPDATE core.message_queue
+        SET status = 'processing', updated_at = NOW()
+        WHERE id = (
+            SELECT id FROM core.message_queue
+            WHERE status = 'pending' AND retry_count < $1
+            ORDER BY CASE WHEN priority = 'media' THEN 0 ELSE 1 END, created_at
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED
+        )
+        RETURNING id, payload
+    `, [MAX_RETRY_COUNT]);
+    if (r.rows.length === 0) return null;
+    const row = r.rows[0];
+    const item = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+    item._queueId = row.id;
+    return item;
+}
+
+async function markQueueDone(queueId) {
+    await _pool.query(`UPDATE core.message_queue SET status = 'done', updated_at = NOW() WHERE id = $1`, [queueId]);
+    _depthCacheTime = 0;
+}
+
+async function markQueueRetry(queueId) {
+    const r = await _pool.query(
+        `UPDATE core.message_queue SET retry_count = retry_count + 1, updated_at = NOW(), status = CASE WHEN retry_count + 1 >= $2 THEN 'failed' ELSE 'pending' END WHERE id = $1 RETURNING status`,
+        [queueId, MAX_RETRY_COUNT]
+    );
+    _depthCacheTime = 0;
+    return r.rows[0]?.status;
+}
+
+async function recoverStaleProcessing(logger) {
+    try {
+        const r = await _pool.query(`
+            UPDATE core.message_queue
+            SET status = 'pending', updated_at = NOW()
+            WHERE status = 'processing' AND updated_at < NOW() - INTERVAL '5 minutes'
+            RETURNING id
+        `);
+        if (r.rowCount > 0) {
+            logger.info({ count: r.rowCount }, `📥 Resuming ${r.rowCount} stale queued messages from previous session`);
+        }
+    } catch (err) {
+        logger.error({ err }, 'Queue recovery failed');
     }
 }
 
-function dequeueItem() {
-    if (MEDIA_QUEUE.length > 0) return MEDIA_QUEUE.shift();
-    if (TEXT_QUEUE.length > 0)  return TEXT_QUEUE.shift();
-    return null;
+async function cleanupDoneMessages(pool, logger) {
+    try {
+        const r = await pool.query(`DELETE FROM core.message_queue WHERE status IN ('done', 'failed') AND updated_at < NOW() - INTERVAL '24 hours'`);
+        if (r.rowCount > 0) {
+            logger.info({ purged: r.rowCount }, '🧹 Purged completed/failed queue entries');
+        }
+    } catch (err) {
+        logger.error({ err }, 'Queue cleanup failed');
+    }
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -79,6 +144,9 @@ function registerInpipeRoutes(app, deps) {
         logger.warn('Inpipe routes: pool not available, skipping registration');
         return;
     }
+
+    _pool = pool;
+    recoverStaleProcessing(logger).catch(err => logger.error({ err }, 'Queue recovery startup failed'));
     
     const twilioChannel = new TwilioChannel({ logger });
     twilioChannel.initialize().catch(err => logger.error({ err }, 'TwilioChannel init failed'));
@@ -103,11 +171,11 @@ function registerInpipeRoutes(app, deps) {
 
     logger.info('📥 Registering inpipe routes: POST /api/twilio/webhook, POST /api/line/webhook, POST /api/email/inpipe, POST /api/telegram/webhook (if configured)');
 
-    // Start channel-agnostic queue processor (dispatches via item.channel)
-    startQueueProcessor(deps);
+    const channelRegistry = { twilio: twilioChannel, line: lineChannel, email: emailChannel, telegram: telegramChannel };
+    startQueueProcessor({ ...deps, channelRegistry });
     
-    // Cleanup old idempotency entries every minute (DB-backed, survives restarts)
     setInterval(() => cleanupIdempotencyCache(pool, logger), 60 * 1000);
+    setInterval(() => cleanupDoneMessages(pool, logger), 60 * 60 * 1000);
     
     app.post('/api/twilio/webhook', async (req, res) => {
         try {
@@ -152,24 +220,23 @@ function registerInpipeRoutes(app, deps) {
             }
             
             // QUEUE SIZE GUARD: Prevent memory exhaustion
-            if (totalQueueDepth() >= MAX_QUEUE_SIZE) {
-                logger.warn({ queueSize: totalQueueDepth() }, 'Queue full - rejecting message');
+            if (await totalQueueDepth() >= MAX_QUEUE_SIZE) {
+                logger.warn({ queueSize: _cachedDepth }, 'Queue full - rejecting message');
                 return res.status(503).send('Server busy, please retry');
             }
             
             // QUEUE MESSAGE for async processing (media → priority tier)
-            enqueueItem({
+            await enqueueItem({
                 msg,
                 rawPayload,
-                channel: twilioChannel,
+                channel: 'twilio',
                 messageSid,
                 queuedAt: Date.now()
             });
             
             logger.info({ 
                 messageSid, 
-                mediaQueue: MEDIA_QUEUE.length,
-                textQueue: TEXT_QUEUE.length
+                queueDepth: _cachedDepth
             }, 'Message queued for processing');
             
             // IMMEDIATE ACK to Twilio (prevents timeout retries)
@@ -214,16 +281,15 @@ function registerInpipeRoutes(app, deps) {
                     queueSize: MESSAGE_QUEUE.length
                 }, 'Line webhook received — queuing');
 
-                if (totalQueueDepth() >= MAX_QUEUE_SIZE) {
-                    logger.warn({ queueSize: totalQueueDepth() }, 'Queue full — rejecting Line message');
+                if (await totalQueueDepth() >= MAX_QUEUE_SIZE) {
+                    logger.warn({ queueSize: _cachedDepth }, 'Queue full — rejecting Line message');
                     return res.status(503).json({ error: 'Server busy, please retry' });
                 }
 
-                // Media messages → priority tier (LINE content expires quickly)
-                enqueueItem({
+                await enqueueItem({
                     msg,
                     rawPayload,
-                    channel: lineChannel,
+                    channel: 'line',
                     messageSid: msg.messageId,
                     queuedAt: Date.now()
                 });
@@ -231,8 +297,7 @@ function registerInpipeRoutes(app, deps) {
                 logger.info({
                     messageId: msg.messageId,
                     hasMedia: msg.hasMedia,
-                    mediaQueue: MEDIA_QUEUE.length,
-                    textQueue: TEXT_QUEUE.length
+                    queueDepth: _cachedDepth
                 }, 'Line message queued');
 
                 // Immediate 200 ACK to Line (required within 1 second)
@@ -282,22 +347,22 @@ function registerInpipeRoutes(app, deps) {
                     queueSize: MESSAGE_QUEUE.length
                 }, 'Email inpipe received — queuing');
 
-                if (totalQueueDepth() >= MAX_QUEUE_SIZE) {
-                    logger.warn({ queueSize: totalQueueDepth() }, 'Queue full — rejecting email message');
+                if (await totalQueueDepth() >= MAX_QUEUE_SIZE) {
+                    logger.warn({ queueSize: _cachedDepth }, 'Queue full — rejecting email message');
                     return res.status(503).json({ error: 'Server busy, please retry' });
                 }
 
-                enqueueItem({
+                await enqueueItem({
                     msg,
                     rawPayload,
-                    channel: emailChannel,
+                    channel: 'email',
                     messageSid: msg.messageId,
                     queuedAt: Date.now()
                 });
 
                 logger.info({
                     messageId: msg.messageId,
-                    textQueue: TEXT_QUEUE.length
+                    queueDepth: _cachedDepth
                 }, 'Email message queued');
 
                 return res.status(200).json({});
@@ -344,15 +409,15 @@ function registerInpipeRoutes(app, deps) {
                     queueSize: MESSAGE_QUEUE.length
                 }, 'Telegram webhook received — queuing');
 
-                if (totalQueueDepth() >= MAX_QUEUE_SIZE) {
-                    logger.warn({ queueSize: totalQueueDepth() }, 'Queue full — rejecting Telegram message');
-                    return res.status(200).json({}); // Always 200 to Telegram
+                if (await totalQueueDepth() >= MAX_QUEUE_SIZE) {
+                    logger.warn({ queueSize: _cachedDepth }, 'Queue full — rejecting Telegram message');
+                    return res.status(200).json({});
                 }
 
-                enqueueItem({
+                await enqueueItem({
                     msg,
                     rawPayload,
-                    channel:    telegramChannel,
+                    channel:    'telegram',
                     messageSid: msg.messageId,
                     queuedAt:   Date.now()
                 });
@@ -360,8 +425,7 @@ function registerInpipeRoutes(app, deps) {
                 logger.info({
                     messageId:  msg.messageId,
                     hasMedia:   msg.hasMedia,
-                    mediaQueue: MEDIA_QUEUE.length,
-                    textQueue:  TEXT_QUEUE.length
+                    queueDepth: _cachedDepth
                 }, 'Telegram message queued');
 
                 return res.status(200).json({});
@@ -382,47 +446,64 @@ function registerInpipeRoutes(app, deps) {
 // Gap adapts to queue depth: burst mode shortens it when load is high.
 // Dispatches via item.channel — adding a channel requires zero changes here.
 function startQueueProcessor(deps) {
-    const { logger } = deps;
+    const { logger, channelRegistry } = deps;
 
     logger.info({
         normalGapMs: NORMAL_GAP_MS,
         burstGapMs: BURST_GAP_MS,
         burstThreshold: BURST_THRESHOLD
-    }, '⚙️ Queue processor started (adaptive async loop)');
+    }, '⚙️ Queue processor started (PostgreSQL-backed, adaptive async loop)');
 
     (async function loop() {
         while (true) {
-            const item = dequeueItem();
+            let item;
+            try {
+                item = await dequeueItem();
+            } catch (err) {
+                logger.error({ err }, 'dequeueItem failed');
+                await sleep(1000);
+                continue;
+            }
 
             if (!item) {
-                await sleep(100); // idle poll — cheap
+                await sleep(100);
                 continue;
             }
 
             const startTime = Date.now();
             const tier = item.msg.hasMedia ? 'media' : 'text';
+            const channel = channelRegistry[item.channel];
+
+            if (!channel) {
+                logger.error({ channelName: item.channel, messageSid: item.messageSid }, 'Unknown channel in queue item — marking done');
+                await markQueueDone(item._queueId).catch(() => {});
+                continue;
+            }
 
             try {
-                await processQueuedMessage(item.msg, item.rawPayload, item.channel, deps);
+                await processQueuedMessage(item.msg, item.rawPayload, channel, deps);
+                await markQueueDone(item._queueId);
+                const depth = await totalQueueDepth();
                 logger.info({
                     messageSid: item.messageSid,
                     tier,
                     duration: Date.now() - startTime,
-                    mediaQueue: MEDIA_QUEUE.length,
-                    textQueue: TEXT_QUEUE.length
+                    queueDepth: depth
                 }, 'Queued message processed');
             } catch (error) {
-                logger.error({
+                const newStatus = await markQueueRetry(item._queueId).catch(() => 'unknown');
+                const depth = await totalQueueDepth();
+                const isFailed = newStatus === 'failed';
+                logger[isFailed ? 'warn' : 'error']({
                     error: error.message,
                     messageSid: item.messageSid,
                     tier,
-                    mediaQueue: MEDIA_QUEUE.length,
-                    textQueue: TEXT_QUEUE.length
-                }, 'Failed to process queued message');
+                    status: newStatus,
+                    queueDepth: depth
+                }, isFailed ? 'Queued message permanently failed (max retries)' : 'Failed to process queued message — will retry');
             }
 
-            // Adaptive gap: shorter when backlog is deep
-            const depth = totalQueueDepth();
+            const depth = await totalQueueDepth();
             const gap = depth >= BURST_THRESHOLD ? BURST_GAP_MS : NORMAL_GAP_MS;
             const elapsed = Date.now() - startTime;
             const wait = Math.max(0, gap - elapsed);
