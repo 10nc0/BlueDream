@@ -1165,8 +1165,16 @@ Distribute your search budget evenly across all cities — do not exhaust search
   The benchmark: could one working person (a taxi driver, a teacher) afford a home? That was the 20th-century contract.
   If search returns monthly income → multiply by 12. If it returns household → do NOT use it, search again for individual.
 
+Companion city rule (depth over cyclops view):
+  • If the user mentions ONLY ONE city, you MUST autonomously choose ONE companion city from a
+    different geographic region and cultural tradition. Search for it exactly as you would for
+    any city the user mentioned. Do not ask for permission — just pick and search.
+  • The companion should make for an interesting contrast: different continent, different economic
+    tier, or a city whose trajectory (TFR, affordability) diverges from the user's city.
+  • If the user mentions TWO or more cities, no companion is needed.
+
 Rules:
-  • Search for ALL cities mentioned — skipping any city is not acceptable.
+  • Search for ALL cities (including your companion if applicable) — skipping any city is not acceptable.
   • Only use values that appear in the search results. Do NOT estimate from training data.
   • If a search returns no usable number for an ingredient, the ingredient is N/A.
   • For every value you extract, note its source URL from the result.

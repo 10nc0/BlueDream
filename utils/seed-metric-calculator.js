@@ -720,10 +720,17 @@ function parsePurifyOutput(purifyText, cities = [], historicalDecade = '1970s', 
 
     // Match LLM city name to our city keys (substring both ways)
     const cityLower = cityRaw.toLowerCase();
-    const cityKey = normalizedCities.find(c => c.includes(cityLower) || cityLower.includes(c));
+    let cityKey = normalizedCities.find(c => c.includes(cityLower) || cityLower.includes(c));
     if (!cityKey) {
-      result.parseLog.push(`PURIFY: no match for "${cityRaw}" (known: ${normalizedCities.join(', ')})`);
-      continue;
+      // Companion city chosen by LLM — not in preflight list.
+      // Accept it dynamically so the companion's data flows through to the table.
+      cityKey = cityLower;
+      normalizedCities.push(cityKey);
+      result.cities[cityKey] = {
+        current:    { pricePerSqm: null, income: null, tfr: null },
+        historical: { pricePerSqm: null, income: null, tfr: null, decade: historicalDecade }
+      };
+      result.parseLog.push(`PURIFY: companion city "${cityRaw}" accepted dynamically`);
     }
 
     // Current vs historical — LLM already labelled the period year
