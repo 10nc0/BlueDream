@@ -1421,7 +1421,7 @@ Rules:
 
   async _fetchTFRData(cities, historicalDecade, clientIp) {
     const tfrCapsule = {};
-    const currentYear = String(new Date().getFullYear());
+    const currentYear = String(new Date().getFullYear() - 1);
     for (let i = 0; i < cities.length; i++) {
       const city = cities[i];
       const cityKey = city.toLowerCase();

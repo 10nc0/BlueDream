@@ -601,7 +601,8 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
     
     // Add current row — show $/sqm source data
     const currSqmDisplay = currPriceSqm ? formatCurrency(currPriceSqm, currCurrency) : 'N/A';
-    const currRowBase = `| ${cityTitle} | 2024 | ${currSqmDisplay} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currYearsDisplay} | ${currRegimeLabel} |`;
+    const currentPeriodLabel = String(new Date().getFullYear() - 1);
+    const currRowBase = `| ${cityTitle} | ${currentPeriodLabel} | ${currSqmDisplay} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currYearsDisplay} | ${currRegimeLabel} |`;
     rows.push(hasTFR ? `${currRowBase} ${currTFR} |` : currRowBase);
     
     // Build summary line
