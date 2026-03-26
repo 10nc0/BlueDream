@@ -1287,7 +1287,7 @@ STRICT RULES:
       console.log(`🧬 TFR capsule: ${city} historical → ${tfrCapsule[cKey].historical ?? 'N/A'}`);
     }
 
-    // ── Parse: server-side regex (triangulation first, direct quote fallback) ─
+    // ── Parse: server-side regex (triangulation primary: price÷area from listings) ─
     console.log(`🏗️ Seed Metric: parsing ${smCities.join(', ')}`);
     let parsedData = parseSeedMetricData(braveResultsSummary, smCities, smHistDecade, smCurrentYear);
     parsedData.parseLog?.forEach(l => console.log(`  📋 ${l}`));

@@ -185,8 +185,8 @@ function parsePricePerSqm(text, city = '') {
 
 // ─── Triangulation: total price ÷ area → LCU/sqm ───────────────────────────────
 /**
- * Derive price per sqm by triangulation when no direct LCU/sqm quote exists.
- * Finds (total_price, area_sqm) pairs within 200 chars proximity and divides.
+ * PRIMARY price derivation. Listings show (A) total price + (B) area.
+ * We divide: LCU/sqm = price ÷ area. Multiple pairs → average.
  * Example: "S$1.2M for 85sqm" → S$14,117/sqm
  *
  * @param {string} text
@@ -200,7 +200,6 @@ function triangulateFromTotalPrice(text, city = '') {
   const currency = detectCurrency(city, text);
   const { usdRate } = CURRENCY_REGISTRY[currency];
 
-  // Collect area mentions with text positions
   const areaPattern = new RegExp(`${_NUM}\\s*(?:${_SQM}|${_PSF})`, 'gi');
   const areas = [];
   for (const m of text.matchAll(areaPattern)) {
@@ -215,12 +214,14 @@ function triangulateFromTotalPrice(text, city = '') {
   }
   if (areas.length === 0) return null;
 
-  // Collect total price mentions — but NOT those already followed by /sqm (direct quotes)
-  const _NOTPER = `(?!\\s*(?:\\/|\\bper\\b)\\s*(?:${_SQM}|${_PSF}))`;
+  const _NOTAREA = `(?!\\s*(?:\\/|per)?\\s*(?:${_SQM}|${_PSF}))`;
+  const _CURSYM_REQ = `(?:${_SYMS_EXACT}|\\b[A-Z]{2,3}\\$)\\s*`;
+  const _CURWORD = '(?:yuan|won|yen|ringgit|baht|rupee|rupiah|dong|peso|franc|krona|krone|dollars?|pounds?|euros?|reais|lira|naira|shillings?|rand|dirhams?|zloty|forint|koruna|soles)';
   const pricePatterns = [
-    new RegExp(`${_CURSYM}${_NUM}${_MULT}${_NOTPER}`, 'gi'),
-    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS_EXACT})${_NOTPER}`, 'gi'),
-    new RegExp(`${_NUM}\\s*(?:billion|bn|million|mil\\b|[Mm]\\b|thousand|[Kk]\\b|万|億|억)${_NOTPER}`, 'gi'),
+    new RegExp(`${_CURSYM_REQ}${_NUM}${_MULT}${_NOTAREA}`, 'gi'),
+    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS_EXACT})${_NOTAREA}`, 'gi'),
+    new RegExp(`${_NUM}${_MULT}\\s+(?:\\w+\\s+)?${_CURWORD}${_NOTAREA}`, 'gi'),
+    new RegExp(`${_NUM}\\s*(?:billion|bn|million|mil\\b|[Mm]\\b|thousand|[Kk]\\b|万|億|억)${_NOTAREA}`, 'gi'),
   ];
   const prices = [];
   for (const pat of pricePatterns) {
@@ -230,40 +231,37 @@ function triangulateFromTotalPrice(text, city = '') {
       if (/^(19|20)\d{2}$/.test(numStr)) continue;
       const value = applyMultiplier(parseFloat(numStr), m[0]);
       if (!isFinite(value) || value <= 0) continue;
-      const usd = value * usdRate;
-      if (usd < 5_000 || usd > 2_000_000_000) continue;
       prices.push({ value, index: m.index, raw: m[0] });
     }
   }
   if (prices.length === 0) return null;
 
-  // Pair closest (price, area) within 200 chars
-  const WINDOW = 200;
+  const WINDOW = 400;
   const candidates = [];
   for (const a of areas) {
     for (const p of prices) {
       if (Math.abs(a.index - p.index) > WINDOW) continue;
       const derived = p.value / a.area;
-      const usd = derived * usdRate;
-      if (usd < 10 || usd > 150_000) continue;
-      candidates.push({ value: derived, currency, usd, dist: Math.abs(a.index - p.index), raw: `${p.raw} ÷ ${a.raw}` });
+      if (!isFinite(derived) || derived <= 0) continue;
+      candidates.push({ value: derived, currency, dist: Math.abs(a.index - p.index), raw: `${p.raw} ÷ ${a.raw}` });
     }
   }
   if (candidates.length === 0) return null;
 
   candidates.sort((a, b) => a.dist - b.dist);
-  const best = candidates[0];
-  const priceType = classifyPriceType(best.raw) || classifyPriceType(text);
-  return { value: best.value, currency, raw: best.raw, isPsf: false, triangulated: true, priceType };
+  const top = candidates.slice(0, 5);
+  const avg = top.reduce((s, c) => s + c.value, 0) / top.length;
+  const rawDesc = top.map(c => c.raw).join(' | ');
+  const priceType = classifyPriceType(rawDesc) || classifyPriceType(text);
+  return { value: avg, currency, raw: rawDesc, isPsf: false, triangulated: true, priceType };
 }
 
 /**
- * Resolve price per sqm: direct quote first, triangulation fallback.
- * Direct /sqm quotes from property portals are authoritative (e.g. "£7,474/m²").
- * Triangulation (total ÷ area) is the fallback when no direct quote exists.
+ * Resolve price per sqm: triangulation FIRST (listings show price + area),
+ * direct /sqm quote as bonus fallback (rare but authoritative when present).
  */
 function resolvePrice(text, city = '') {
-  return parsePricePerSqm(text, city) || triangulateFromTotalPrice(text, city);
+  return triangulateFromTotalPrice(text, city) || parsePricePerSqm(text, city);
 }
 
 // ─── Income parser ────────────────────────────────────────────────────────────
@@ -310,8 +308,13 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
     for (const pattern of patterns) {
       for (const match of text.matchAll(pattern)) {
         const raw = match[0];
-        const valueStr = (match[1] || match[2] || '').replace(/,/g, '');
+        const originalNum = match[1] || match[2] || '';
+        const valueStr = originalNum.replace(/,/g, '');
         if (!valueStr) continue;
+        if (/^(19|20)\d{2}$/.test(valueStr) && !originalNum.includes(',')) {
+          const hasMoneyContext = /[\$€£¥₩₹₫₱฿₺₦]|per\s*month|monthly|\/month|\/mo|per\s*year|annually|\/year|\/yr/i.test(raw);
+          if (!hasMoneyContext) continue;
+        }
         let value = applyMultiplier(parseFloat(valueStr), raw) * multiplier;
         if (!isFinite(value) || value <= 0) continue;
         return { value, currency, type: incomeType, raw, monthly: multiplier === 12 };
@@ -917,6 +920,8 @@ function parsePurifyOutput(purifyText, cities = [], historicalDecade = '1970s', 
 
 module.exports = {
   parsePricePerSqm,
+  triangulateFromTotalPrice,
+  resolvePrice,
   parseIncome,
   parseTFR,
   parseSeedMetricData,
