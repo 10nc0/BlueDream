@@ -109,11 +109,16 @@ async function recoverStaleProcessing(logger) {
         const r = await _pool.query(`
             UPDATE core.message_queue
             SET status = 'pending', updated_at = NOW()
-            WHERE status = 'processing' AND updated_at < NOW() - INTERVAL '5 minutes'
+            WHERE status = 'processing'
             RETURNING id
         `);
         if (r.rowCount > 0) {
-            logger.info({ count: r.rowCount }, `📥 Resuming ${r.rowCount} stale queued messages from previous session`);
+            logger.info({ recovered: r.rowCount }, `📥 Recovered ${r.rowCount} in-flight messages back to pending`);
+        }
+        const pending = await _pool.query(`SELECT COUNT(*) AS c FROM core.message_queue WHERE status = 'pending'`);
+        const depth = parseInt(pending.rows[0].c, 10);
+        if (depth > 0) {
+            logger.info({ queueDepth: depth }, `📥 Resuming with ${depth} queued messages from previous session`);
         }
     } catch (err) {
         logger.error({ err }, 'Queue recovery failed');
