@@ -1423,7 +1423,7 @@ Rules:
     // Seed Metric direct output: bypass audit (data calculated with deterministic proxy rules)
     if (state.seedMetricDirectOutput) {
       console.log(`🏠 Seed Metric direct output - bypassing audit (proxy math applied)`);
-      state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Deterministic $/sqm × 700 proxy calculation' };
+      state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Deterministic LCU/sqm × 700 proxy calculation' };
       return;
     }
     
@@ -1524,7 +1524,7 @@ Output ONLY the corrected table and summary lines:`;
                       state.draftAnswer = buildSeedMetricTable(parsedData, state.preflight.historicalDecade || smDynDefault);
                       console.log(`✅ Seed Metric fallback direct calculation successful`);
                     } else {
-                      console.log(`⚠️ Seed Metric direct calc skipped: insufficient parsed data (need $/sqm AND income for at least one city). Keeping LLM answer for audit.`);
+                      console.log(`⚠️ Seed Metric direct calc skipped: insufficient parsed data (need LCU/sqm AND income for at least one city). Keeping LLM answer for audit.`);
                     }
                   }
                 }

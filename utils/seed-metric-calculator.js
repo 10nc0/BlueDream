@@ -4,11 +4,11 @@
  * Direct calculation bypass for Seed Metric analysis.
  * Parses search results, applies proxy rules, builds table deterministically.
  *
- * Formula: Years = ($/sqm × 700) ÷ Single-Earner Income
- * NO P/I ratio — if $/sqm unavailable, show "N/A".
+ * Formula: Years = (LCU/sqm × 700) ÷ Single-Earner Income
+ * NO P/I ratio — if LCU/sqm unavailable, show "N/A".
  *
  * Proxy Rules (from seed-metric.js):
- * - PRIMARY: Published $/m² → MULTIPLY BY 700 (non-negotiable)
+ * - PRIMARY: Published LCU/m² → MULTIPLY BY 700 (non-negotiable)
  * - INCOME: Single-earner (not household/dual)
  * - Regime: <10yr 🟢 Optimism | 10-25yr 🟡 Extraction | >25yr 🔴 Fatalism
  */
@@ -19,7 +19,7 @@
 // cities  = lowercase city/country keywords that imply this currency.
 const CURRENCY_REGISTRY = {
   USD: { symbols: ['USD', '$'],                    usdRate: 1,          cities: ['los angeles', 'la', 'new york', 'nyc', 'chicago', 'san francisco', 'sf', 'seattle', 'boston', 'miami', 'houston', 'dallas', 'denver', 'atlanta', 'phoenix', 'portland', 'austin', 'san diego', 'washington dc', 'philadelphia', 'minneapolis', 'detroit', 'honolulu', 'usa', 'united states'] },
-  EUR: { symbols: ['EUR', '€'],                    usdRate: 0.92,       cities: ['paris', 'berlin', 'vienna', 'amsterdam', 'munich', 'rome', 'madrid', 'milan', 'brussels', 'lisbon', 'dublin', 'hamburg', 'frankfurt', 'europe', 'eurozone'] },
+  EUR: { symbols: ['EUR', '€'],                    usdRate: 0.92,       cities: ['paris', 'berlin', 'vienna', 'amsterdam', 'munich', 'rome', 'madrid', 'milan', 'brussels', 'lisbon', 'dublin', 'hamburg', 'frankfurt', 'helsinki', 'tallinn', 'riga', 'vilnius', 'athens', 'europe', 'eurozone'] },
   GBP: { symbols: ['GBP', '£'],                    usdRate: 1.27,       cities: ['london', 'manchester', 'birmingham', 'edinburgh', 'uk', 'united kingdom'] },
   JPY: { symbols: ['JPY', 'yen', '¥', '￥'],       usdRate: 0.0067,     cities: ['tokyo', 'osaka', 'kyoto', 'japan'] },
   KRW: { symbols: ['KRW', 'won', '₩'],             usdRate: 0.00077,    cities: ['seoul', 'busan', 'incheon', 'daegu', 'daejeon', 'korea'] },
@@ -81,7 +81,7 @@ function usdEquiv(value, currency) {
 /** Parse numeric multiplier suffixes (million/billion/k and CJK units). */
 function applyMultiplier(value, raw) {
   if (/billion|bn/i.test(raw))           return value * 1_000_000_000;
-  if (/million|mil\b|\b[Mm]\b|億/i.test(raw)) return value * 1_000_000;
+  if (/million|mil\b|億/i.test(raw) || /\bM\b/.test(raw)) return value * 1_000_000;
   if (/만|万/i.test(raw))                return value * 10_000;
   if (/\bk\b|thousand/i.test(raw))       return value * 1_000;
   return value;
@@ -154,9 +154,9 @@ function parsePricePerSqm(text, city = '') {
   return null;
 }
 
-// ─── Triangulation: total price ÷ area → $/sqm ────────────────────────────────
+// ─── Triangulation: total price ÷ area → LCU/sqm ───────────────────────────────
 /**
- * Derive price per sqm by triangulation when no direct $/sqm quote exists.
+ * Derive price per sqm by triangulation when no direct LCU/sqm quote exists.
  * Finds (total_price, area_sqm) pairs within 200 chars proximity and divides.
  * Example: "S$1.2M for 85sqm" → S$14,117/sqm
  *
@@ -427,7 +427,7 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
 
 /**
  * Calculate Seed Metric values and assign regime
- * PRIMARY: ($/sqm × 700) ÷ Single-Earner Income = Years
+ * PRIMARY: (LCU/sqm × 700) ÷ Single-Earner Income = Years
  * Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism
  * 
  * NO mortgage calculations, NO interest rates, NO down payments
@@ -606,11 +606,11 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   // Build dynamic current year regex (accept any 202x or 203x year)
   const currRegex = /(?:202\d|203\d|now|today|present)/i;
 
-  // Check for table header (must have $/sqm column, NO P/I column)
+  // Check for table header (must have LCU/sqm column, NO P/I column)
   // Accept both markdown format (| City | ...) and LLM natural format (City | ...)
   const hasTableHeader = /(?:\|\s*)?City\s*\|.*Period\s*\|.*Regime\s*\|?/i.test(output);
   if (!hasTableHeader) {
-    issues.push('FORBIDDEN: Missing table header. Output MUST use | City | Period | $/sqm | 700sqm Price | Income | Years | Regime | format.');
+    issues.push('FORBIDDEN: Missing table header. Output MUST use | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime | format.');
   }
 
   // Check table row count — need at least 2 rows per city (historical + current)
@@ -637,7 +637,7 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   // Check for forbidden P/I column in table header
   const hasPIColumn = /\|\s*P\/I\s*\|/i.test(output);
   if (hasPIColumn) {
-    issues.push('FORBIDDEN: Table has P/I column. Use $/sqm column instead. Years = ($/sqm × 700) ÷ Income.');
+    issues.push('FORBIDDEN: Table has P/I column. Use LCU/sqm column instead. Years = (LCU/sqm × 700) ÷ Income.');
   }
   
   // Check for City column in table header (must be unified table, not split per city)
@@ -657,7 +657,7 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   // If Brave found no income/price data for any row, all-N/A is the honest output.
   // Detect if at least one row has real monetary data (not all-N/A).
   // Look for currency-prefixed values: $13,419 / £7,700 / ¥759,000 / €8,000 etc.
-  // Year periods (2024) and formula literals ($/sqm) don't match — they lack a digit right after $¥£€.
+  // Year periods (2024) and formula literals (LCU/sqm) don't match — they lack a digit right after $¥£€.
   const hasAnyNumericRow = /[$¥£€]\s*[\d,]+/.test(output);
   const hasRegimeEmoji = /[🟢🟡🔴]/.test(output);
   const hasRegimeLabel = /(?:OPTIMISM|EXTRACTION|FATALISM|Optimism|Extraction|Fatalism)/i.test(output);
@@ -676,8 +676,8 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   }
   
   // REGIME MISMATCH DETECTION — parse table rows by column index
-  // Table format: | City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
-  // Column indices: 0=City, 1=Period, 2=$/sqm, 3=700sqm, 4=Income, 5=Years, 6=Regime
+  // Table format: | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime |
+  // Column indices: 0=City, 1=Period, 2=LCU/sqm, 3=700sqm, 4=Income, 5=Years, 6=Regime
   // Accept table lines with or without leading | (LLM natural format uses no leading |)
   const allTableLines = output.split('\n').filter(line => {
     const t = line.trim();
@@ -713,7 +713,7 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   // Check for prose paragraphs (bad sign — output MUST be table, not prose)
   const proseIndicators = output.match(/(?:Fast forward|Using the Seed Metric|we can calculate|we can estimate|However,|it's essential|In conclusion|assuming a|Comparing the two|Assuming an|The median|approximately \d|50 years ago)/gi);
   if (proseIndicators && proseIndicators.length >= 2) {
-    issues.push('FORBIDDEN: Contains prose paragraphs instead of table. Must use | City | Period | $/sqm | ... | Regime | format.');
+    issues.push('FORBIDDEN: Contains prose paragraphs instead of table. Must use | City | Period | LCU/sqm | ... | Regime | format.');
   }
   
   // Check paragraph count - if >3 paragraphs and no table header, reject
@@ -730,7 +730,7 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
     issues.push(`Missing historical (${historicalDecade}) data. Must show BOTH historical AND current periods.`);
   }
 
-  // Check for "no data" prose cop-out on CURRENT $/sqm only
+  // Check for "no data" prose cop-out on CURRENT LCU/sqm only
   // Historical N/A is acceptable (use ⚪ N/A in table cell — not prose excuse)
   const currentNoDataCopout = /(?:no data|no precise|unavailable|cannot find).*(?:current|2024|2025|today|present)/i;
   if (currentNoDataCopout.test(output)) {
@@ -749,7 +749,7 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
     issues.push('Wrong unit: 700 sqft instead of 700 m² (10x error)');
   }
   
-  // 2. Mortgage/interest rate calculations (FORBIDDEN - Years = ($/sqm × 700) ÷ Income)
+  // 2. Mortgage/interest rate calculations (FORBIDDEN - Years = (LCU/sqm × 700) ÷ Income)
   if (/(?:down\s*payment|interest\s*rate|mortgage|pay\s*off|amortiz|loan\s*term|\d+%\s*interest)/i.test(output)) {
     issues.push('FORBIDDEN: Contains mortgage/interest calculations. Years = Price ÷ Income (simple division)');
   }
@@ -759,11 +759,11 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
     issues.push('FORBIDDEN: P/I 3.5 threshold. Use 10/25yr only.');
   }
   
-  // 3b. Raw P/I ratio used without $/sqm (indicates bypassing the formula)
+  // 3b. Raw P/I ratio used without LCU/sqm (indicates bypassing the formula)
   const rawPIUsed = /(?:price[\s-]*to[\s-]*income|P\/I)\s*(?:ratio)?\s*(?:is|=|:)\s*[\d.]+/i.test(output);
-  const hasSqmColumn = /\|\s*\$\/sqm\s*\|/i.test(output);
+  const hasSqmColumn = /\|\s*(?:\$\/sqm|LCU\/sqm)\s*\|/i.test(output);
   if (rawPIUsed && !hasSqmColumn) {
-    issues.push('Raw P/I ratio used without $/sqm source data. Must use ($/sqm × 700) ÷ income formula.');
+    issues.push('Raw P/I ratio used without LCU/sqm source data. Must use (LCU/sqm × 700) ÷ income formula.');
   }
   
   // 4. Generic sqft mention without 700m² (likely wrong unit)

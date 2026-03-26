@@ -491,7 +491,7 @@ async function searchBrave(query, clientIp = null, opts = {}) {
 
         if (format === 'json') {
             // Raw JSON — gives LLM structured quantity to extract prices from.
-            // "Walk the dog" philosophy: LLM reads raw results and derives $/sqm itself.
+            // "Walk the dog" philosophy: LLM reads raw results and derives LCU/sqm itself.
             const structured = results.slice(0, 5).map(r => ({
                 title: r.title || '',
                 url: r.url || '',
