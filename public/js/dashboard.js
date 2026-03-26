@@ -4752,6 +4752,31 @@
             }
         }
 
+        // Custom confirm dialog — window.confirm() is blocked in cross-origin iframes
+        function nyanConfirm(message, subtext, onConfirm, danger = true) {
+            const existing = document.getElementById('nyanConfirmOverlay');
+            if (existing) existing.remove();
+            const overlay = document.createElement('div');
+            overlay.id = 'nyanConfirmOverlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+            const color = danger ? '#ef4444' : '#a855f7';
+            const colorBg = danger ? 'rgba(239,68,68,0.15)' : 'rgba(168,85,247,0.15)';
+            overlay.innerHTML = `
+              <div style="background:rgba(15,23,42,0.95);border:1px solid rgba(148,163,184,0.25);border-radius:16px;padding:1.75rem 2rem;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+                <div style="font-size:1rem;font-weight:600;color:#e2e8f0;margin-bottom:0.5rem;">${message}</div>
+                ${subtext ? `<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:1.25rem;">${subtext}</div>` : '<div style="margin-bottom:1.25rem;"></div>'}
+                <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
+                  <button id="nyanConfirmCancel" style="padding:0.5rem 1.25rem;background:rgba(148,163,184,0.15);border:1px solid rgba(148,163,184,0.3);border-radius:8px;color:#94a3b8;cursor:pointer;font-size:0.875rem;">Cancel</button>
+                  <button id="nyanConfirmOk" style="padding:0.5rem 1.25rem;background:${colorBg};border:1px solid ${color}55;border-radius:8px;color:${color};cursor:pointer;font-size:0.875rem;font-weight:600;">Delete</button>
+                </div>
+              </div>`;
+            document.body.appendChild(overlay);
+            const close = () => overlay.remove();
+            overlay.querySelector('#nyanConfirmCancel').onclick = close;
+            overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+            overlay.querySelector('#nyanConfirmOk').onclick = () => { close(); onConfirm(); };
+        }
+
         async function confirmDeleteBook(fractalId) {
             // Find book by fractal_id (hash string)
             const book = books.find(b => b.fractal_id === fractalId);
@@ -4759,10 +4784,15 @@
                 console.error(`Book ${fractalId} not found in books array`);
                 return;
             }
-            
-            if (!confirm(`Are you sure you want to delete "${book.name || book.input_platform + ' → ' + book.output_platform}" book?\n\nAll messages will be preserved in Discord.`)) {
-                return;
-            }
+            const bookLabel = book.name || (book.input_platform + ' → ' + book.output_platform);
+            nyanConfirm(
+                `Delete "${bookLabel}"?`,
+                'All messages will be preserved in Discord.',
+                () => _executeDeleteBook(fractalId)
+            );
+        }
+
+        async function _executeDeleteBook(fractalId) {
             
             // Prevent double-clicks during deletion
             const deleteBtn = document.querySelector(`[data-delete-book="${fractalId}"]`);
@@ -6072,20 +6102,20 @@
             }
         }
 
-        async function deleteUser(userId) {
-            if (!confirm('Are you sure you want to delete this user?')) return;
-            
-            try {
-                const response = await window.authFetch(`/api/users/${userId}`, { method: 'DELETE' });
-                if (response.ok) {
-                    loadAdminCards(); // Updated to use new function
-                    loadDevPanelAdmins(); // Also refresh dev panel if visible
-                } else {
-                    alert('Failed to delete user');
+        function deleteUser(userId) {
+            nyanConfirm('Delete this user?', 'This action cannot be undone.', async () => {
+                try {
+                    const response = await window.authFetch(`/api/users/${userId}`, { method: 'DELETE' });
+                    if (response.ok) {
+                        loadAdminCards();
+                        loadDevPanelAdmins();
+                    } else {
+                        alert('Failed to delete user');
+                    }
+                } catch (error) {
+                    console.error('Error deleting user:', error);
                 }
-            } catch (error) {
-                console.error('Error deleting user:', error);
-            }
+            });
         }
 
         function changeUserEmail(userId, currentEmail) {
