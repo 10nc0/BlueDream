@@ -4,6 +4,14 @@ Operational guide for Nyanbook operators. Covers the background scheduler archit
 
 This document pairs with the README's "Fork Operator Notes" section. The README covers *what* to configure. This document covers *what happens when things go wrong* and *how to rotate credentials without downtime*.
 
+**Before**:
+User → App → Structured DB → UI
+
+**Now**:
+User → Messaging platform → Webhook → Ledger → Query layer
+
+It’s a protocol shift, not an app.
+
 ---
 
 ## Queue Processor Architecture
