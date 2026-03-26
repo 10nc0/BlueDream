@@ -1131,54 +1131,52 @@ User query: ${query}`;
     const gatherPrompt = `${NYAN_PROTOCOL_COMPRESSED}
 
 --- SEED METRIC: GATHER RAW INGREDIENTS ---
-You have brave_search. Use it. Do NOT compute or output anything yet — just fetch numbers.
+You have brave_search. Do NOT compute or output anything — just fetch.
 
-For EVERY city the user mentions, search for TWO ingredients per period.
-Distribute your search budget evenly across all cities — do not exhaust searches on one city before querying others.
+STEP 0 — COMPANION CITY (do this BEFORE anything else):
+  Count the cities in the user's query.
+  • ONE city → immediately pick ONE companion from a different continent/culture. Your very first
+    searches must include this companion. Do not ask permission. Just pick and search.
+    The companion should contrast: different economic tier, different TFR trajectory, different region.
+  • TWO or more cities → no companion needed. Proceed to Step 1.
 
-  Current (${currentYear}):
-    • Price: "{city} apartment listing sale price {local currency name} ${currentYear}"
-      Just get any real listing. A result will show a total price and a floor area together —
-      PURIFY extracts both and divides. Do NOT append "sqm" or "sqft" to the query — that forces
-      aggregator noise. The area emerges from the listing itself.
-      PURCHASE price only — NOT rent, NOT monthly payment, NOT mortgage payment.
-    • Income: "{city} median individual annual income {local currency name} ${currentYear}"
+STEP 1 — FOR EVERY CITY (user cities + companion), gather per period:
 
-  Historical (${histDecade} era):
-    • Price: "{city} apartment sale price {local currency name} ${histYear} nominal"
-      Same principle — any listing or market report from that era. PURIFY divides.
-      NOMINAL — the actual face value in ${histDecade} currency, NOT "in today's money".
-    • Income: "{city} median annual wage {local currency name} ${histYear} nominal"
-      NOMINAL wages — the actual amount paid then, NOT inflation-adjusted or "in ${currentYear} money".
+  Each brave_search call returns ~5-10 snippets. PURIFY reads ALL of them to triangulate
+  multiple price+area pairs and median them. You don't need duplicate searches for fidelity —
+  one well-targeted call gives enough anchors. Spend your budget across more cities and periods.
 
-  TFR (Total Fertility Rate) — search once per country per period:
-    • Current: "{country} total fertility rate ${currentYear}" or "{country} TFR ${currentYear}"
-    • Historical: "{country} total fertility rate ${histYear} OR ${histDecade}"
-    TFR is a national statistic — use the country name, not the city name.
+  Current period (${currentYear}):
+    Price — 1 search:
+      "{city} apartment listing sale price {local currency} ${currentYear}"
+      Each snippet may show a total price + floor area — PURIFY extracts every usable pair
+      and medians them. Never append "sqm" or "sqft". The area emerges from the listing body.
+      PURCHASE only — NOT rent, NOT monthly payment, NOT mortgage.
+    Income — 1 search:
+      "{city} median individual annual income {local currency} ${currentYear}"
 
-  Replace {local currency name} with the actual currency word — e.g. "rupees" for India, "kronor" for Sweden,
-  "baht" for Thailand, "dong" for Vietnam, "yuan" for China, "yen" for Japan, "pounds" for UK, "euros" for EU.
-  This forces Brave to return local market prices, not USD-converted values from international aggregators.
+  Historical period (${histDecade} era):
+    NO LISTINGS from 50 years ago. Search for articles, reports, government records:
+      Price — 1 search: "{city} housing property price ${histDecade} historical report statistics"
+      NOMINAL prices only — the actual face value in ${histDecade} money, NOT "in today's money".
+    Income — 1 search:
+      "{city} wages salaries ${histYear} ${histDecade} nominal historical"
+      NOMINAL — the actual pay then, NOT inflation-adjusted.
 
-  Income note: median single earner only — not household, not dual-income, not average.
-  Average skews high (outliers); dual-income normalises what should be a one-job threshold.
-  The benchmark: could one working person (a taxi driver, a teacher) afford a home? That was the 20th-century contract.
-  If search returns monthly income → multiply by 12. If it returns household → do NOT use it, search again for individual.
+  TFR — 1 search per COUNTRY per period (national stat, not city):
+    Current:    "{country} total fertility rate ${currentYear}"
+    Historical: "{country} total fertility rate ${histYear} OR ${histDecade}"
 
-Companion city rule (depth over cyclops view):
-  • If the user mentions ONLY ONE city, you MUST autonomously choose ONE companion city from a
-    different geographic region and cultural tradition. Search for it exactly as you would for
-    any city the user mentioned. Do not ask for permission — just pick and search.
-  • The companion should make for an interesting contrast: different continent, different economic
-    tier, or a city whose trajectory (TFR, affordability) diverges from the user's city.
-  • If the user mentions TWO or more cities, no companion is needed.
+Replace {local currency} with the currency word (rupees, yen, baht, dong, yuan, pounds, euros, etc.)
+to force Brave to return local-market data, not USD conversions.
+
+Income = median SINGLE earner only. Not household. Not average.
+If monthly → ×12. If household only → N/A, search again.
 
 Rules:
-  • Search for ALL cities (including your companion if applicable) — skipping any city is not acceptable.
-  • Only use values that appear in the search results. Do NOT estimate from training data.
-  • If a search returns no usable number for an ingredient, the ingredient is N/A.
-  • For every value you extract, note its source URL from the result.
-  • Historical data is often missing — N/A is the correct answer, not a guess.`;
+  • Search ALL cities (user + companion) — skipping any city is a failure.
+  • Only use values that appear in search results. No training-data estimates.
+  • No number → N/A. Historical N/A is honest; a guess is not.`;
 
     // ── Round 2: PURIFY prompt — LLM reads raw Brave results, outputs structured lines ──
     // LLM job: quanta extraction (including triangulation: total÷area=sqm/sqft→sqm).
@@ -1204,6 +1202,11 @@ Rules:
   - Total price with NO area stated → sqm=N/A (cannot derive without area).
   - Rent (/mo, /month, monthly) → sqm=N/A. Rent ≠ purchase price.
   - If unavailable → sqm=N/A
+  - MULTIPLE ANCHORS (mandatory): each brave_search returns ~5-10 snippets. Scan ALL of them.
+    Extract every usable sqm value you can triangulate (from any snippet that has both a
+    total price and a floor area). Collect those values into a list, sort them, take the MEDIAN
+    (middle value; if even count, average the two middle values). Output that one median as sqm.
+    A single snippet is a red-herring risk. Cross-checking the full result set is data fidelity.
 • income = annual single-earner income in LCU.
   - Monthly figure → multiply by 12.
   - Household/dual-earner figure → income=N/A (do not use).
@@ -1245,7 +1248,7 @@ Example:
           // 'auto' lets it answer from training data — that's dogma, not live epistemics.
           tool_choice: 'required',
           temperature: 0.1,
-          max_tokens: 800
+          max_tokens: 2000
         },
         config: {
           headers: {
@@ -1275,11 +1278,12 @@ Example:
     }
 
     // ── Execute tool calls ─────────────────────────────────────────────────
-    // Max 12 searches, 1100ms between calls (≤1 req/s — Brave hard rate limit).
+    // Max 20 searches (2 cities × 2 periods × 2 price + income + TFR = ~16-18 calls).
+    // 1100ms between calls (≤1 req/s — Brave hard rate limit).
     // Results injected as Groq tool-role messages for Round 2.
     // Format: JSON array (title, url, description, age) — "Brave returns quantity,
     //         math and personality convert it into insight" philosophy.
-    const callsToRun = toolCalls.slice(0, 12);
+    const callsToRun = toolCalls.slice(0, 20);
     const toolResultMsgs = [round1Msg];
 
     for (let i = 0; i < callsToRun.length; i++) {
