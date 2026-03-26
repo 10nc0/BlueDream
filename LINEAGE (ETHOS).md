@@ -121,4 +121,5 @@ The stack that makes the gap queryable — forever, for the price of electricity
 - φ⁰ = I_n — The Identity
 
 *🜃*
+
 Svāhā
