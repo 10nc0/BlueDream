@@ -141,6 +141,77 @@ function parsePricePerSqm(text, city = '') {
   return null;
 }
 
+// ─── TFR (Total Fertility Rate) parser ──────────────────────────────────────────
+function parseTFR(snippets, city = '') {
+  if (!snippets) return null;
+  const text = typeof snippets === 'string' ? snippets : JSON.stringify(snippets);
+  if (!text || text.length < 10) return null;
+
+  const cityLower = city.toLowerCase().replace(/[^a-z\s]/g, '');
+  const patterns = [
+    /(?:total\s+)?fertility\s+rate[^.]{0,60}?(\d\.\d{1,2})/gi,
+    /(?:TFR)[^.]{0,60}?(\d\.\d{1,2})/g,
+    /(\d\.\d{1,2})\s*(?:births?\s+per\s+woman|children\s+per\s+woman)/gi,
+    /(?:fertility\s+rate|TFR)\s*(?:of|is|was|:|=)\s*(\d\.\d{1,2})/gi,
+    /(\d\.\d{1,2})\s*(?:total\s+)?fertility/gi,
+  ];
+
+  const candidates = [];
+  for (const pat of patterns) {
+    for (const m of text.matchAll(pat)) {
+      const val = parseFloat(m[1]);
+      if (val >= 0.5 && val <= 9.9) {
+        const nearCity = cityLower
+          ? text.slice(Math.max(0, m.index - 200), m.index + m[0].length + 200).toLowerCase().includes(cityLower)
+          : true;
+        candidates.push({ value: val, nearCity, index: m.index });
+      }
+    }
+  }
+
+  if (candidates.length === 0) return null;
+  const cityMatches = candidates.filter(c => c.nearCity);
+  const best = cityMatches.length > 0 ? cityMatches[0] : candidates[0];
+  return best.value;
+}
+
+function injectTFRColumn(tableText, tfrCapsule) {
+  if (!tableText || !tfrCapsule) return tableText;
+  const lines = tableText.split('\n');
+  const result = [];
+  let headerInjected = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/\|\s*City\s*\|.*Period\s*\|.*Regime\s*\|/i.test(trimmed) && !/TFR/i.test(trimmed)) {
+      result.push(trimmed + ' TFR |');
+      headerInjected = true;
+    } else if (/^\|[\s:-]+\|[\s:-]+\|/.test(trimmed) && headerInjected && result.length > 0 && /TFR/.test(result[result.length - 1])) {
+      result.push(trimmed + '-----|');
+    } else {
+      const cols = trimmed.split('|').map(c => c.trim()).filter(c => c.length > 0);
+      if (headerInjected && cols.length >= 7 && /^\|/.test(trimmed) && !/^[\s\-:]+$/.test(cols[0]) && !/City/i.test(cols[0])) {
+        const cityCol = cols[0].toLowerCase().replace(/\*\*/g, '').trim();
+        const periodCol = cols[1].trim();
+        const isHistorical = /\d{4}s|~\d{4}|197|198|196|195|200|201/i.test(periodCol) && !/202[3-9]|2030/i.test(periodCol);
+        const isCurrent = /202[0-9]|203[0-9]|now|today|present/i.test(periodCol);
+        let tfrVal = 'N/A';
+        for (const [key, data] of Object.entries(tfrCapsule)) {
+          if (cityCol.includes(key.toLowerCase()) || key.toLowerCase().includes(cityCol)) {
+            if (isCurrent && data.current != null) tfrVal = data.current.toFixed(1);
+            else if (isHistorical && data.historical != null) tfrVal = data.historical.toFixed(1);
+            break;
+          }
+        }
+        result.push(trimmed + ` ${tfrVal} |`);
+      } else {
+        result.push(line);
+      }
+    }
+  }
+  return result.join('\n');
+}
+
 // ─── Triangulation: total price ÷ area → $/sqm ────────────────────────────────
 /**
  * "The Baptist" / "The Pilgrimage" — derive price per sqm by triangulation.
@@ -475,13 +546,17 @@ function formatCurrency(value, currency = 'USD') {
  * @param {string} historicalDecade - e.g., "1970s"
  * @returns {string} Markdown table with regime readings
  */
-function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().getFullYear() - 50).slice(0, 3) + '0s') {
+function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().getFullYear() - 50).slice(0, 3) + '0s', tfrCapsule = null) {
   const rows = [];
   const summaries = [];
+  const hasTFR = tfrCapsule && Object.keys(tfrCapsule).length > 0;
   
-  // Table header — $/sqm shown to force bottoms-up, NO P/I column
-  rows.push('| City | Period | $/sqm | 700sqm Price | Income | Years | Regime |');
-  rows.push('|------|--------|-------|--------------|--------|-------|--------|');
+  rows.push(hasTFR
+    ? '| City | Period | $/sqm | 700sqm Price | Income | Years | Regime | TFR |'
+    : '| City | Period | $/sqm | 700sqm Price | Income | Years | Regime |');
+  rows.push(hasTFR
+    ? '|------|--------|-------|--------------|--------|-------|--------|-----|'
+    : '|------|--------|-------|--------------|--------|-------|--------|');
   
   for (const [city, data] of Object.entries(parsedData.cities || {})) {
     const cityTitle = city.charAt(0).toUpperCase() + city.slice(1);
@@ -506,13 +581,28 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
     const histYearsDisplay = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
     const currYearsDisplay = currMetric.years ? `${currMetric.years.toFixed(0)}yr` : 'N/A';
     
+    // TFR lookup for this city
+    let histTFR = 'N/A', currTFR = 'N/A';
+    if (hasTFR) {
+      const cityLower = city.toLowerCase();
+      for (const [tfrKey, tfrData] of Object.entries(tfrCapsule)) {
+        if (cityLower.includes(tfrKey.toLowerCase()) || tfrKey.toLowerCase().includes(cityLower)) {
+          if (tfrData.historical != null) histTFR = tfrData.historical.toFixed(1);
+          if (tfrData.current != null) currTFR = tfrData.current.toFixed(1);
+          break;
+        }
+      }
+    }
+
     // Add historical row — show $/sqm source data
     const histSqmDisplay = histPriceSqm ? formatCurrency(histPriceSqm, histCurrency) : 'N/A';
-    rows.push(`| ${cityTitle} | ${historicalDecade} | ${histSqmDisplay} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histYearsDisplay} | ${histRegimeLabel} |`);
+    const histRowBase = `| ${cityTitle} | ${historicalDecade} | ${histSqmDisplay} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histYearsDisplay} | ${histRegimeLabel} |`;
+    rows.push(hasTFR ? `${histRowBase} ${histTFR} |` : histRowBase);
     
     // Add current row — show $/sqm source data
     const currSqmDisplay = currPriceSqm ? formatCurrency(currPriceSqm, currCurrency) : 'N/A';
-    rows.push(`| ${cityTitle} | 2024 | ${currSqmDisplay} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currYearsDisplay} | ${currRegimeLabel} |`);
+    const currRowBase = `| ${cityTitle} | 2024 | ${currSqmDisplay} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currYearsDisplay} | ${currRegimeLabel} |`;
+    rows.push(hasTFR ? `${currRowBase} ${currTFR} |` : currRowBase);
     
     // Build summary line
     const histSummary = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
@@ -565,7 +655,8 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
 
   // Check for table header (must have $/sqm column, NO P/I column)
   // Accept both markdown format (| City | ...) and LLM natural format (City | ...)
-  const hasTableHeader = /(?:\|\s*)?City\s*\|.*Period\s*\|.*Regime\s*\|?/i.test(output);
+  // TFR column is optional — accept headers with or without it
+  const hasTableHeader = /(?:\|\s*)?City\s*\|.*Period\s*\|.*Regime\s*\|?\s*(?:TFR\s*\|)?/i.test(output);
   if (!hasTableHeader) {
     issues.push('FORBIDDEN: Missing table header. Output MUST use | City | Period | $/sqm | 700sqm Price | Income | Years | Regime | format.');
   }
@@ -741,5 +832,7 @@ module.exports = {
   calculateSeedMetric,
   formatCurrency,
   buildSeedMetricTable,
-  validateSeedMetricOutput
+  validateSeedMetricOutput,
+  parseTFR,
+  injectTFRColumn
 };

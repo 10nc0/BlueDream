@@ -55,7 +55,7 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
-const { parseSeedMetricData, buildSeedMetricTable, validateSeedMetricOutput } = require('./seed-metric-calculator');
+const { parseSeedMetricData, buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn } = require('./seed-metric-calculator');
 
 function extractVisionSearchTerms(visionDescription) {
   if (!visionDescription || visionDescription.length < 20) return null;
@@ -1341,7 +1341,21 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
     if (seedMeta) console.log(`📋 Seed Metric meta: ${JSON.stringify(seedMeta)}`);
 
     // Step C: deterministic regime recompute — overwrite LLM regime labels with correct arithmetic
-    const round2Text = this._normalizeSeedMetricRegimes(round2Stripped);
+    let round2Text = this._normalizeSeedMetricRegimes(round2Stripped);
+
+    // Step D: TFR column injection — pure Brave + regex, no LLM
+    const tfrCities = this._extractCitiesFromTable(round2Text);
+    if (tfrCities.length > 0) {
+      const histDecade = state.preflight?.historicalDecade || (String(new Date().getFullYear() - 50).slice(0, 3) + '0s');
+      try {
+        const tfrCapsule = await this._fetchTFRData(tfrCities, histDecade, input.clientIp || '127.0.0.1');
+        state.tfrCapsule = tfrCapsule;
+        round2Text = injectTFRColumn(round2Text, tfrCapsule);
+        console.log(`🐣 TFR injected for ${tfrCities.length} cities`);
+      } catch (err) {
+        console.warn(`⚠️ TFR injection failed: ${err.message} — table unchanged`);
+      }
+    }
 
     state.didSearch = true;
     console.log(`🐕 Seed Metric walked: ${callsToRun.length} Brave calls → ${round2Text.length} chars`);
@@ -1405,6 +1419,53 @@ Rules:
     state.draftAnswer = this._insertSeedMetricCoda(round2Text, coda);
   }
 
+  async _fetchTFRData(cities, historicalDecade, clientIp) {
+    const tfrCapsule = {};
+    const currentYear = String(new Date().getFullYear());
+    for (let i = 0; i < cities.length; i++) {
+      const city = cities[i];
+      const cityKey = city.toLowerCase();
+      tfrCapsule[cityKey] = { current: null, historical: null };
+
+      try {
+        const currentQuery = `"${city}" total fertility rate ${currentYear}`;
+        console.log(`🐣 TFR search: "${currentQuery}"`);
+        const currentResult = await this.searchBrave(currentQuery, clientIp);
+        tfrCapsule[cityKey].current = parseTFR(currentResult, city);
+
+        await new Promise(r => setTimeout(r, 1100));
+
+        const histQuery = `"${city}" total fertility rate ${historicalDecade}`;
+        console.log(`🐣 TFR search: "${histQuery}"`);
+        const histResult = await this.searchBrave(histQuery, clientIp);
+        tfrCapsule[cityKey].historical = parseTFR(histResult, city);
+
+        if (i < cities.length - 1) await new Promise(r => setTimeout(r, 1100));
+      } catch (err) {
+        console.warn(`⚠️ TFR fetch failed for ${city}: ${err.message}`);
+      }
+      console.log(`🐣 TFR ${city}: current=${tfrCapsule[cityKey].current}, historical=${tfrCapsule[cityKey].historical}`);
+    }
+    return tfrCapsule;
+  }
+
+  _extractCitiesFromTable(tableText) {
+    const cities = [];
+    const lines = tableText.split('\n');
+    for (const line of lines) {
+      if (!/^\|/.test(line.trim())) continue;
+      const cols = line.split('|').map(c => c.trim()).filter(c => c.length > 0);
+      if (cols.length < 7) continue;
+      if (/^[\s\-:]+$/.test(cols[0])) continue;
+      if (/City/i.test(cols[0])) continue;
+      const city = cols[0].replace(/\*\*/g, '').trim();
+      if (city && !cities.includes(city.toLowerCase())) {
+        cities.push(city.toLowerCase());
+      }
+    }
+    return [...new Set(cities)];
+  }
+
   // Helper: splice coda before sources block, or append if no sources found
   _insertSeedMetricCoda(body, coda) {
     if (!coda) return body;
@@ -1444,17 +1505,16 @@ Rules:
       if (yr <= 25) return '🟡 EXTRACTION';
       return '🔴 FATALISM';
     };
-    // Match data rows: 7 pipe-delimited cells, first cell not all dashes (skip header/separator)
-    return text.replace(/^\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|$/gm,
-      (row, c1, c2, c3, c4, c5, c6, c7) => {
-        // Skip separator rows (cells are all dashes/spaces)
+    // Match data rows: 7 or 8 pipe-delimited cells (8 when TFR column present)
+    return text.replace(/^\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|(?:([^|\n]+)\|)?$/gm,
+      (row, c1, c2, c3, c4, c5, c6, c7, c8) => {
         if (/^[\s\-:]+$/.test(c1)) return row;
-        // Skip header row (Years cell is literally the word "Years")
         if (/^\s*years\s*$/i.test(c6)) return row;
         const yearsVal = parseInt(c6.replace(/[^0-9]/g, ''), 10);
         const correctRegime = regime(yearsVal);
         if (!correctRegime) return row;
-        return `|${c1}|${c2}|${c3}|${c4}|${c5}|${c6}| ${correctRegime} |`;
+        const tfrSuffix = c8 !== undefined ? `${c8}|` : '';
+        return `|${c1}|${c2}|${c3}|${c4}|${c5}|${c6}| ${correctRegime} |${tfrSuffix}`;
       }
     );
   }
@@ -1552,8 +1612,10 @@ Output ONLY the corrected table and summary lines:`;
               const reValidation = validateSeedMetricOutput(fixedAnswer, smHistDecade);
               if (reValidation.valid) {
                 console.log(`✅ Seed Metric format fix successful`);
-                // Deterministic regime recompute + re-attach coda
-                const fixedNormalized = this._normalizeSeedMetricRegimes(fixedAnswer);
+                let fixedNormalized = this._normalizeSeedMetricRegimes(fixedAnswer);
+                if (state.tfrCapsule) {
+                  fixedNormalized = injectTFRColumn(fixedNormalized, state.tfrCapsule);
+                }
                 state.draftAnswer = this._insertSeedMetricCoda(fixedNormalized, state.seedMetricCoda || '');
               } else {
                 console.log(`❌ Seed Metric format fix still invalid: ${reValidation.issues.join(', ')}`);
@@ -1572,7 +1634,12 @@ Output ONLY the corrected table and summary lines:`;
                       c.current?.pricePerSqm?.value && c.current?.income?.value
                     );
                     if (hasCompleteData) {
-                      state.draftAnswer = buildSeedMetricTable(parsedData, state.preflight.historicalDecade || smDynDefault);
+                      let fallbackTfr = null;
+                      try {
+                        fallbackTfr = await this._fetchTFRData(cities, state.preflight.historicalDecade || smDynDefault, input.clientIp || '127.0.0.1');
+                        state.tfrCapsule = fallbackTfr;
+                      } catch (_) {}
+                      state.draftAnswer = buildSeedMetricTable(parsedData, state.preflight.historicalDecade || smDynDefault, fallbackTfr);
                       console.log(`✅ Seed Metric fallback direct calculation successful`);
                     } else {
                       console.log(`⚠️ Seed Metric direct calc skipped: insufficient parsed data (need $/sqm AND income for at least one city). Keeping LLM answer for audit.`);
