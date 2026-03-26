@@ -1171,7 +1171,7 @@ Rules:
 --- SEED METRIC: PURIFY → CALCULATE → SCRIBE ---
 Three gates. Execute in order. Do not skip ahead or merge gates.
 
-GATE 2A — PURIFY (standardize units — work through this internally, output as HTML comment):
+GATE 2A — PURIFY (standardize units — output this block first):
   For every (city, period) pair in the search results, write one line:
   [City] [Period]: raw=[value][unit] → sqm=[converted_value] [LCU] | income=[value] [LCU] | TFR=[value] | type=[built|land]
 
@@ -1189,7 +1189,7 @@ GATE 2A — PURIFY (standardize units — work through this internally, output a
 
   Price type: "built" = apartment/flat/condo; "land" = plot/vacant. Prefer built.
 
-GATE 2B — CALCULATE (arithmetic only — use Gate 2A values, also output as HTML comment):
+GATE 2B — CALCULATE (arithmetic only — use Gate 2A values, output after Gate 2A):
   For each row where both sqm and income are NOT N/A:
   • 700sqm Price = sqm × 700  →  Years = (sqm × 700) ÷ income  (integer, round to nearest, no decimals)
   • Write the arithmetic explicitly: e.g. "10,247 × 700 ÷ 104,400 = 68yr" — this is your self-check.
@@ -1206,8 +1206,10 @@ GATE 3 — SCRIBE (visible output only — build table from Gate 2B, no new arit
   - [page title](url)  ← only URLs from search results. No bare URLs. No invented sources.
 
 OUTPUT ORDER:
-  1. Gate 3 table + summary + legend + sources  (visible — output this first)
-  2. <!--PURIFY: [Gate 2A lines] | CALCULATE: [Gate 2B lines] | SEED_META:{"rows":[...]}-->  (hidden — one HTML comment at the very end)`;
+  1. Gate 2A — PURIFY block
+  2. Gate 2B — CALCULATE block
+  3. Gate 3 table + summary + legend + sources
+  (The server will strip Gate 2A/2B before showing to the user. Work through them in full — do not abbreviate.)`;
 
     const round1Messages = [
       { role: 'system', content: gatherPrompt },
@@ -1342,7 +1344,13 @@ OUTPUT ORDER:
     if (seedMeta) console.log(`📋 Seed Metric meta: ${JSON.stringify(seedMeta)}`);
 
     // Step C: deterministic regime recompute — overwrite LLM regime labels with correct arithmetic
-    const round2Text = this._normalizeSeedMetricRegimes(round2Stripped);
+    const round2Normalized = this._normalizeSeedMetricRegimes(round2Stripped);
+
+    // Step D: strip Gate 2A/2B pre-table reasoning — only table onwards is user-visible
+    // LLM is instructed to output Gate 2A/2B first (better reasoning), then Gate 3 table.
+    // We strip everything before the first markdown table header row so validation runs on clean output.
+    const tableHeaderIdx = round2Normalized.search(/\|\s*City\s*\|/i);
+    const round2Text = tableHeaderIdx > 0 ? round2Normalized.slice(tableHeaderIdx) : round2Normalized;
 
     state.didSearch = true;
     console.log(`🐕 Seed Metric walked: ${callsToRun.length} Brave calls → ${round2Text.length} chars`);
@@ -1502,12 +1510,12 @@ WRONG RESPONSE:
 ${state.draftAnswer.slice(0, 2000)}
 
 REQUIRED FORMAT — ONE unified markdown table (NOT separate tables per city):
-| City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime |
-|------|--------|---------|-------------------|--------------|-------|--------|
-| [CityA] | ${histYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
-| [CityA] | ${currYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
-| [CityB] | ${histYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
-| [CityB] | ${currYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime | TFR |
+|------|--------|---------|-------------------|--------------|-------|--------|-----|
+| [CityA] | ${histYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] | [tfr or N/A] |
+| [CityA] | ${currYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] | [tfr or N/A] |
+| [CityB] | ${histYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] | [tfr or N/A] |
+| [CityB] | ${currYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] | [tfr or N/A] |
 
 **[CityA]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
 **[CityB]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
