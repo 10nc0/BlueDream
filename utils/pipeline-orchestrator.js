@@ -1137,16 +1137,16 @@ For EVERY city the user mentions, search for TWO ingredients per period.
 Distribute your search budget evenly across all cities — do not exhaust searches on one city before querying others.
 
   Current (${currentYear}):
-    • Price: "{city} median apartment sale price {local currency name} ${currentYear} sqm OR sqft"
-      You need TWO numbers from the result: the TOTAL SALE PRICE and the FLOOR AREA (sqm or sqft).
-      PURIFY will divide them: total ÷ area = price/sqm. Do NOT search for "per sqm" directly — that derived
-      number is rarely published and forces Brave to return aggregator noise instead of real listings.
+    • Price: "{city} apartment listing sale price {local currency name} ${currentYear}"
+      Just get any real listing. A result will show a total price and a floor area together —
+      PURIFY extracts both and divides. Do NOT append "sqm" or "sqft" to the query — that forces
+      aggregator noise. The area emerges from the listing itself.
       PURCHASE price only — NOT rent, NOT monthly payment, NOT mortgage payment.
     • Income: "{city} median individual annual income {local currency name} ${currentYear}"
 
   Historical (${histDecade} era):
     • Price: "{city} apartment sale price {local currency name} ${histYear} nominal"
-      Same principle: look for total price + floor area so PURIFY can divide.
+      Same principle — any listing or market report from that era. PURIFY divides.
       NOMINAL — the actual face value in ${histDecade} currency, NOT "in today's money".
     • Income: "{city} median annual wage {local currency name} ${histYear} nominal"
       NOMINAL wages — the actual amount paid then, NOT inflation-adjusted or "in ${currentYear} money".
@@ -1211,6 +1211,12 @@ Rules:
 • TFR = total fertility rate as a single decimal (e.g. 1.04). N/A if not in results. Do not guess.
 • type = built (apartment/flat/condo) or land (vacant plot). Prefer built. N/A if unknown.
 • NOMINAL ONLY: reject any value described as "real terms", "inflation-adjusted", "in today's money".
+• HISTORICAL SANITY CHECK: for any period before 1990, prices must be explicitly anchored to that
+  year in the source (e.g. "In 1975, the average price was X"). If the source is a modern article
+  that does not explicitly state the historical price, output sqm=N/A.
+  Red flag: if a 1970s price is the same order of magnitude as a modern price in the same currency
+  (e.g. Rp27M/sqm in 1975 when modern Jakarta is also Rp34M/sqm) → the source grabbed modern data.
+  Output sqm=N/A and do NOT use it.
 • Currency code: SGD / JPY / USD / EUR / GBP / KRW / HKD / AUD / CNY / INR / MYR / THB / VND etc.
 • Period: use the year from the search (e.g. 2025 or 1975).
 • One line per (city, period). No other text. No explanations.
