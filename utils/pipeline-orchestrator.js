@@ -1289,7 +1289,6 @@ STRICT RULES:
 
     // ── Parse: server-side regex (triangulation first, direct quote fallback) ─
     console.log(`🏗️ Seed Metric: parsing ${smCities.join(', ')}`);
-    console.log(`🔬 DEBUG braveResultsSummary (${braveResultsSummary.length} chars):\n${braveResultsSummary.slice(0, 4000)}`);
     let parsedData = parseSeedMetricData(braveResultsSummary, smCities, smHistDecade, smCurrentYear);
     parsedData.parseLog?.forEach(l => console.log(`  📋 ${l}`));
 

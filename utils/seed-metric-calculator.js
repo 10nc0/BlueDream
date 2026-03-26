@@ -124,8 +124,11 @@ const _SQM  = '(?:sq\\s*m|sqm|m²|square\\s*met(?:er|re)s?)';
 const _PSF  = '(?:psf|sq\\s*ft|sqft)';
 const _NUM  = '([\\d,]+(?:\\.\\d+)?)';
 const _MULT = '(?:\\s*(?:billion|bn|million|mil|M|k|thousand|만|万|億|억))?';
-// All known symbols joined for use in patterns (escaped, longest first)
-const _SYMS = _SYMBOL_MAP.map(e => e.sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+// _CURSYM: optional currency noise before/after a number.
+// LCU/LCU cancels — detectCurrency(city) determines the LCU.
+// This just skips past whatever symbol/code sits next to the digit.
+const _SYMS_EXACT = _SYMBOL_MAP.map(e => e.sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+const _CURSYM = `(?:(?:${_SYMS_EXACT}|[A-Z]{1,3}\\$?)\\s*)?`;
 
 /**
  * Classify price source as "built" (apartment/condo) or "land" (vacant plot).
@@ -155,15 +158,13 @@ function parsePricePerSqm(text, city = '') {
   const { usdRate } = CURRENCY_REGISTRY[currency];
 
   const _AREA = `(?:${_SQM}|${_PSF})`;
-  // Pattern 1: symbol/code BEFORE number → per area   e.g. "₩10,500,000/sqm", "S$2,100/psf"
-  // Pattern 2: number THEN optional symbol/code → per area  e.g. "10,500,000 KRW/sqm", "2,100 SGD per sq ft"
-  // Pattern 3: context-driven — "price/cost per sqm/psf … number"
-  // Pattern 4: bare psf — "S$2,100 psf" (no / or per, common in SG/HK listings)
+  // _CURSYM: optional currency noise — LCU/LCU cancels.
   const patterns = [
-    new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}\\s*(?:\\/|per)\\s*${_AREA}`, 'gi'),
-    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS})?\\s*(?:\\/|per)\\s*${_AREA}`, 'gi'),
+    new RegExp(`${_CURSYM}${_NUM}${_MULT}\\s*(?:\\/|per)\\s*${_AREA}`, 'gi'),
+    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS_EXACT})?\\s*(?:\\/|per)\\s*${_AREA}`, 'gi'),
     new RegExp(`(?:price|cost|average|median)\\s*(?:per|\\/)\\s*${_AREA}[^0-9]*${_NUM}`, 'gi'),
-    new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}\\s+${_PSF}`, 'gi'),
+    new RegExp(`${_CURSYM}${_NUM}${_MULT}\\s+${_PSF}`, 'gi'),
+    new RegExp(`${_NUM}${_MULT}\\s*(?:yuan|won|yen|ringgit|baht|rupee|rupiah|dong|peso|franc|krona|krone)\\s*(?:\\/|per)\\s*${_AREA}`, 'gi'),
   ];
 
   for (const pattern of patterns) {
@@ -171,8 +172,10 @@ function parsePricePerSqm(text, city = '') {
       const raw = match[0];
       const valueStr = (match[1] || match[2] || '').replace(/,/g, '');
       if (!valueStr) continue;
-      // Reject lone 4-digit calendar years (1900–2099) — they appear as context, not prices
-      if (/^(19|20)\d{2}$/.test(valueStr)) continue;
+      if (/^(19|20)\d{2}$/.test(valueStr)) {
+        const hasCurrencyContext = /[\$€£¥₩₹₫₱฿]|yuan|won|yen|ringgit|rupee|dollar|franc|krona|sgd|hkd|usd|eur|gbp|jpy|krw|inr|cny|rmb/i.test(raw);
+        if (!hasCurrencyContext) continue;
+      }
       let value = applyMultiplier(parseFloat(valueStr), raw);
       if (!isFinite(value) || value <= 0) continue;
       const isPsf = /psf|sq\s*ft|sqft/i.test(raw);
@@ -222,8 +225,8 @@ function triangulateFromTotalPrice(text, city = '') {
   // Collect total price mentions — but NOT those already followed by /sqm (direct quotes)
   const _NOTPER = `(?!\\s*(?:\\/|\\bper\\b)\\s*(?:${_SQM}|${_PSF}))`;
   const pricePatterns = [
-    new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}${_NOTPER}`, 'gi'),
-    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS})${_NOTPER}`, 'gi'),
+    new RegExp(`${_CURSYM}${_NUM}${_MULT}${_NOTPER}`, 'gi'),
+    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS_EXACT})${_NOTPER}`, 'gi'),
     new RegExp(`${_NUM}\\s*(?:billion|bn|million|mil\\b|[Mm]\\b|thousand|[Kk]\\b|万|億|억)${_NOTPER}`, 'gi'),
   ];
   const prices = [];
@@ -295,18 +298,18 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
   const _INC   = '(?:income|salary|wage|earnings|pay|gaji|salaire|sueldo)';
 
   const annualPatterns = [
-    new RegExp(`${_INC}[^\\d]{0,40}(?:${_SYMS})\\s*${_NUM}${_MULT}`, 'gi'),
-    new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}\\s*${_YEAR}`, 'gi'),
-    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS})?\\s*${_YEAR}`, 'gi'),
-    new RegExp(`(?:median|average|mean)\\s*(?:individual|household)?\\s*${_INC}[^\\d]{0,30}${_NUM}${_MULT}`, 'gi'),
-    new RegExp(`${_INC}\\s*(?:of|is|was|:)\\s*(?:${_SYMS})?\\s*${_NUM}${_MULT}`, 'gi'),
+    new RegExp(`${_INC}[^\\d]{0,40}${_CURSYM}${_NUM}${_MULT}`, 'gi'),
+    new RegExp(`${_CURSYM}${_NUM}${_MULT}\\s*${_YEAR}`, 'gi'),
+    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS_EXACT})?\\s*${_YEAR}`, 'gi'),
+    new RegExp(`(?:median|average|mean)\\s*(?:individual|household)?\\s*${_INC}[^\\d]{0,30}${_CURSYM}${_NUM}${_MULT}`, 'gi'),
+    new RegExp(`${_INC}\\s*(?:of|is|was|:)\\s*${_CURSYM}${_NUM}${_MULT}`, 'gi'),
   ];
 
   const monthlyPatterns = [
-    new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}\\s*${_MONTH}`, 'gi'),
-    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS})?\\s*${_MONTH}`, 'gi'),
-    new RegExp(`${_INC}[^\\d]{0,40}(?:${_SYMS})\\s*${_NUM}${_MULT}[^.]{0,20}${_MONTH}`, 'gi'),
-    new RegExp(`(?:monthly|month)\\s*${_INC}[^\\d]{0,30}(?:${_SYMS})?\\s*${_NUM}${_MULT}`, 'gi'),
+    new RegExp(`${_CURSYM}${_NUM}${_MULT}\\s*${_MONTH}`, 'gi'),
+    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS_EXACT})?\\s*${_MONTH}`, 'gi'),
+    new RegExp(`${_INC}[^\\d]{0,40}${_CURSYM}${_NUM}${_MULT}[^.]{0,20}${_MONTH}`, 'gi'),
+    new RegExp(`(?:monthly|month)\\s*${_INC}[^\\d]{0,30}${_CURSYM}${_NUM}${_MULT}`, 'gi'),
   ];
 
   const _isMonthlyContext = /\b(?:per\s*month|monthly|\/month|\/mo|p\.m\.|mensuel|bulanan|cada\s*mes|al\s*mes)\b/i;
@@ -317,7 +320,10 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
         const raw = match[0];
         const valueStr = (match[1] || match[2] || '').replace(/,/g, '');
         if (!valueStr) continue;
-        if (/^(19|20)\d{2}$/.test(valueStr)) continue;
+        if (/^(19|20)\d{2}$/.test(valueStr)) {
+          const hasCurrencyContext = /[\$€£¥₩₹₫₱฿]|yuan|won|yen|ringgit|rupee|dollar|franc|krona|sgd|hkd|usd|eur|gbp|jpy|krw|inr|cny|rmb/i.test(raw);
+          if (!hasCurrencyContext) continue;
+        }
         if (multiplier === 1) {
           const matchEnd = match.index + raw.length;
           const vicinity = text.slice(Math.max(0, match.index - 30), Math.min(text.length, matchEnd + 30));
