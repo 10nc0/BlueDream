@@ -1159,21 +1159,21 @@ Cities: ${citiesWithCurrency}
 Current year: ${smCurrentYear} | Historical period: ${histDecade} (approx ${histYear})
 
 For EACH city, for EACH period (current + historical), run exactly 2 searches = 4 searches per city:
-  1. "{city} median price per square foot residential property {currency word} ${smCurrentYear}"
+  1. "{city} residential property price per square meter {currency word} ${smCurrentYear}"
   2. "{city} median single earner annual income {currency word} ${smCurrentYear}"
-  3. "{city} median price per square foot residential property {currency word} ${histYear} OR ${histDecade}"
+  3. "{city} residential property price per square meter {currency word} ${histYear} OR ${histDecade}"
   4. "{city} median single earner annual income {currency word} ${histYear} OR ${histDecade}"
 
 {currency word} = the actual word (not symbol): "yen", "rupiah", "Singapore dollars", "baht", "won", "zloty", "reais", "lira", "ringgit", "dong", "yuan", "pounds", "euros", "dollars", etc.
 
 Example queries for Singapore:
-  "Singapore median price per square foot residential property Singapore dollars ${smCurrentYear}"
+  "Singapore residential property price per square meter Singapore dollars ${smCurrentYear}"
   "Singapore median single earner annual income Singapore dollars ${smCurrentYear}"
-  "Singapore median price per square foot residential property Singapore dollars ${histYear} OR ${histDecade}"
+  "Singapore residential property price per square meter Singapore dollars ${histYear} OR ${histDecade}"
   "Singapore median single earner annual income Singapore dollars ${histYear} OR ${histDecade}"
 
 STRICT RULES:
-- Always include "per square foot" in price queries — we need unit-price data, not total home prices
+- Always include "per square meter" in price queries — we need unit-price data, not total home prices
 - Do NOT search TFR or fertility rates — the server handles TFR separately
 - Use the local currency WORD to return local market results, not USD international aggregators
 - Run ALL searches. Do NOT compute or output any text.`;
