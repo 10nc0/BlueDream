@@ -185,7 +185,14 @@ const app = express();
     app.use(p, express.static(path.join(__dirname, `public${p}`)))
 );
 app.use('/manifest.json', express.static(path.join(__dirname, 'public/manifest.json')));
-app.use('/sw.js', express.static(path.join(__dirname, 'public/sw.js')));
+// SW must never be cached — browsers check byte-equality to detect updates.
+// If the browser serves a cached sw.js, the version bump never takes effect.
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.sendFile(path.join(__dirname, 'public/sw.js'));
+});
 
 // Make pool available to middleware
 app.locals.pool = pool;
