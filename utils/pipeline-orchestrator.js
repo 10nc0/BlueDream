@@ -1125,6 +1125,8 @@ User query: ${query}`;
       bangalore:'Karnataka', tokyo:'Tokyo Metro', osaka:'Osaka Prefecture',
       seoul:'Seoul Metro', bangkok:'Bangkok Metro', manila:'Metro Manila',
       'kuala lumpur':'Kuala Lumpur', singapore:'Singapore',
+      'san francisco':'San Francisco California', 'los angeles':'Los Angeles California',
+      'new york':'New York City', chicago:'Chicago Illinois',
       'sao paulo':'Sao Paulo state', nairobi:'Nairobi County',
       lagos:'Lagos state', johannesburg:'Gauteng', cairo:'Cairo Governorate',
     };

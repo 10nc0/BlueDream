@@ -402,25 +402,7 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       }
     }
 
-    // Historical fallback: scan all decade-keyword sentences (no city anchor)
-    if (!result.cities[city].historical.pricePerSqm || !result.cities[city].historical.income) {
-      const histFallbackPattern = new RegExp(
-        `[^.]*(?:${_histKeywords}|decades?\\s*ago|post[\\s-]war|mid[\\s-]century)[^.]*`,
-        'gi'
-      );
-      const histMatches = searchContext.match(histFallbackPattern);
-      if (histMatches) {
-        const allHistText = _restore(histMatches.join(' '));
-        if (!result.cities[city].historical.pricePerSqm) {
-          result.cities[city].historical.pricePerSqm = resolvePrice(allHistText, city);
-        }
-        if (!result.cities[city].historical.income) {
-          result.cities[city].historical.income = parseIncome(allHistText, city);
-        }
-      }
-    }
-
-    // Fallback: search entire context for this city
+    // Fallback: search entire context for this city (city-anchored only — no cross-contamination)
     if (!result.cities[city].current.pricePerSqm || !result.cities[city].current.income) {
       const cityMentions = searchContext.match(new RegExp(`[^.]*${city}[^.]*`, 'gi'));
       if (cityMentions) {

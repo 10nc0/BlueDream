@@ -84,6 +84,16 @@ const COUNTRY_CITY_MAP = {
 // Single source of truth so both code paths match the same set of cities
 const KNOWN_CITIES_REGEX = /\b(tokyo|singapore|hong kong|hongkong|london|new york|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
 
+const CITY_ALIASES = {
+  sf: 'san francisco', nyc: 'new york', la: 'los angeles', kl: 'kuala lumpur',
+  hongkong: 'hong kong', bombay: 'mumbai', saigon: 'ho chi minh',
+  'new delhi': 'delhi', dc: 'washington dc',
+};
+function canonicalCity(name) {
+  const lower = name.toLowerCase().trim();
+  return CITY_ALIASES[lower] || lower;
+}
+
 const PSI_EMA_IDENTITY_PATTERNS = [
   /^what\s+is\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
   /^(?:explain|describe)\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
@@ -375,7 +385,7 @@ async function preflightRouter(options) {
       const defaultHistoricalYear = String(new Date().getFullYear() - 30);
 
       // Extract city names for targeted search (major world cities + common variants)
-      const cities = [...new Set((classificationQuery.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => c.toLowerCase()))];
+      const cities = [...new Set((classificationQuery.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => canonicalCity(c)))];
 
       // Expand country names to their primary cities (e.g. "vietnam" → hanoi, ho chi minh)
       const detectedCountries = [];
@@ -724,7 +734,7 @@ async function preflightRouter(options) {
             result.searchStrategy = 'brave';
 
             // Build city search queries (same logic as primary seed-metric block)
-            const _smCities = [...new Set((_geoCheck.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => c.toLowerCase()))];
+            const _smCities = [...new Set((_geoCheck.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => canonicalCity(c)))];
             const _smCountries = [];
             const _smCountryRegex = new RegExp('\\b(' + Object.keys(COUNTRY_CITY_MAP).join('|') + ')\\b', 'gi');
             for (const m of _geoCheck.matchAll(_smCountryRegex)) {
