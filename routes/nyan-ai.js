@@ -1,5 +1,4 @@
 const axios = require('axios');
-const querystring = require('querystring');
 const crypto = require('crypto');
 const JSZip = require('jszip');
 const rateLimit = require('express-rate-limit');
@@ -327,7 +326,7 @@ async function searchDuckDuckGo(query) {
         skip_disambig: 1,
         t: 'nyanbook'
     };
-    const url = `https://api.duckduckgo.com/?${querystring.stringify(params)}`;
+    const url = `https://api.duckduckgo.com/?${new URLSearchParams(params).toString()}`;
     
     try {
         const response = await axios.get(url, { timeout: 5000, responseType: 'json' });

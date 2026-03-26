@@ -3,7 +3,6 @@ const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
 const crypto = require('crypto');
 const axios = require('axios');
-const querystring = require('querystring');
 const { analyzeFinancialDocument, formatPhysicsAnalysis, getFinancialPhysicsSeed, quickNonFinancialCheck } = require('./financial-physics');
 // Harmonized imports from data-package for shared caching
 const { globalDocCache, computeDocHash, FILE_TYPES: DP_FILE_TYPES } = require('./data-package');
@@ -348,7 +347,7 @@ async function searchDDGForFormula(formula) {
         skip_disambig: 1,
         t: 'nyanbook'
     };
-    const url = `https://api.duckduckgo.com/?${querystring.stringify(params)}`;
+    const url = `https://api.duckduckgo.com/?${new URLSearchParams(params)}`;
     
     try {
         const response = await axios.get(url, { timeout: 5000 });
@@ -426,7 +425,7 @@ async function identifyCompoundByFormula(formula, structureDescription = '', kno
             skip_disambig: 1,
             t: 'nyanbook'
         };
-        const url = `https://api.duckduckgo.com/?${querystring.stringify(params)}`;
+        const url = `https://api.duckduckgo.com/?${new URLSearchParams(params)}`;
         
         try {
             const response = await axios.get(url, { timeout: 5000 });
@@ -471,7 +470,7 @@ async function identifyCompoundByFormula(formula, structureDescription = '', kno
                 skip_disambig: 1,
                 t: 'nyanbook'
             };
-            const url = `https://api.duckduckgo.com/?${querystring.stringify(params)}`;
+            const url = `https://api.duckduckgo.com/?${new URLSearchParams(params)}`;
             
             try {
                 const response = await axios.get(url, { timeout: 5000 });
@@ -759,7 +758,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         const formulaQuery = `${formula} compound molecule chemical`;
         console.log(`🔬 DDG Query 1: "${formulaQuery}"`);
         
-        const formulaPromise = axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
+        const formulaPromise = axios.get(`https://api.duckduckgo.com/?${new URLSearchParams({
             q: formulaQuery,
             format: 'json',
             no_html: 1,
@@ -801,7 +800,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
             const structureQuery = `${structureTerms.join(' ')} compound molecule`;
             console.log(`🔬 DDG Query 2: "${structureQuery}"`);
             
-            const structurePromise = axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
+            const structurePromise = axios.get(`https://api.duckduckgo.com/?${new URLSearchParams({
                 q: structureQuery,
                 format: 'json',
                 no_html: 1,
@@ -861,7 +860,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         
         console.log(`🔬 DDG Query 3: "${queryName}"${fullName ? ` (expanded from ${cleanName})` : ''}`);
         
-        const compoundPromise = axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
+        const compoundPromise = axios.get(`https://api.duckduckgo.com/?${new URLSearchParams({
             q: queryName,
             format: 'json',
             no_html: 1,
@@ -881,7 +880,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
             // Fallback: try abbreviation if we expanded
             if (fullName && cleanName !== queryName) {
                 console.log(`🔬 DDG Query 3b: Trying "${cleanName}" as fallback`);
-                const fallbackRes = await axios.get(`https://api.duckduckgo.com/?${querystring.stringify({
+                const fallbackRes = await axios.get(`https://api.duckduckgo.com/?${new URLSearchParams({
                     q: cleanName,
                     format: 'json',
                     no_html: 1,
