@@ -154,15 +154,16 @@ function parsePricePerSqm(text, city = '') {
   const currency = detectCurrency(city, text);
   const { usdRate } = CURRENCY_REGISTRY[currency];
 
-  // Pattern 1: symbol/code BEFORE number → per sqm   e.g. "₩10,500,000/sqm"
-  // Pattern 2: number THEN optional symbol/code → per sqm  e.g. "10,500,000 KRW/sqm"
-  // Pattern 3: psf (price per sq ft) with $ prefix    e.g. "$2,500 psf"
-  // Pattern 4: context-driven — "price/cost per sqm … number"
+  const _AREA = `(?:${_SQM}|${_PSF})`;
+  // Pattern 1: symbol/code BEFORE number → per area   e.g. "₩10,500,000/sqm", "S$2,100/psf"
+  // Pattern 2: number THEN optional symbol/code → per area  e.g. "10,500,000 KRW/sqm", "2,100 SGD per sq ft"
+  // Pattern 3: context-driven — "price/cost per sqm/psf … number"
+  // Pattern 4: bare psf — "S$2,100 psf" (no / or per, common in SG/HK listings)
   const patterns = [
-    new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}\\s*(?:\\/|per)\\s*${_SQM}`, 'gi'),
-    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS})?\\s*(?:\\/|per)\\s*${_SQM}`, 'gi'),
-    new RegExp(`\\$\\s*${_NUM}${_MULT}\\s*(?:\\/|per)\\s*${_PSF}`, 'gi'),
-    new RegExp(`(?:price|cost|average|median)\\s*(?:per|\\/)\\s*${_SQM}[^0-9]*${_NUM}`, 'gi'),
+    new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}\\s*(?:\\/|per)\\s*${_AREA}`, 'gi'),
+    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS})?\\s*(?:\\/|per)\\s*${_AREA}`, 'gi'),
+    new RegExp(`(?:price|cost|average|median)\\s*(?:per|\\/)\\s*${_AREA}[^0-9]*${_NUM}`, 'gi'),
+    new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}\\s+${_PSF}`, 'gi'),
   ];
 
   for (const pattern of patterns) {
