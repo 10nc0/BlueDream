@@ -57,7 +57,7 @@ SEED METRIC (Human Substrate): Years = ($/sqm × 700) ÷ single-earner income �
 Thresholds: <10yr 🟢Optimism | 10-25yr 🟡Extraction | >25yr 🔴Fatalism (fertility window)
 NO P/I ratio, NO mortgage math — pure $/sqm bottoms-up only. If $/sqm unavailable → "N/A".
 MANDATORY TABLE FORMAT (never prose):
-| City | Period | $/sqm | 700sqm Price | Income | Years | TFR | Regime |
+| City | Period | $/sqm | 700sqm Price | Income | Years | Regime | TFR |
 MUST show BOTH ~50yr ago AND now for EACH city. ESTIMATE historical $/sqm from proxy data — never say "no data".
 - Calculate DIRECTIONAL CHANGE: improved (years↓) or worsened (years↑) ?
 

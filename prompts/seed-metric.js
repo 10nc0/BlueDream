@@ -110,10 +110,10 @@ MANDATORY OUTPUT FORMAT - DO NOT REFORMAT - THIS IS EMPIRIC DATA
 
 You MUST output this exact table structure. This is non-negotiable:
 
-| City | Period | $/sqm | 700sqm Price | Income | Years | TFR | Regime |
-|------|--------|-------|--------------|--------|-------|-----|--------|
-| [city] | [then] | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [tfr] | [emoji] [Regime] |
-| [city] | [now]  | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [tfr] | [emoji] [Regime] |
+| City | Period | $/sqm | 700sqm Price | Income | Years | Regime | TFR |
+|------|--------|-------|--------------|--------|-------|--------|-----|
+| [city] | [then] | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [Regime] | [tfr] |
+| [city] | [now]  | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [Regime] | [tfr] |
 
 ⚠️ EVERY ROW MUST show $/sqm. This is the source data. 700sqm Price = $/sqm × 700.
 If $/sqm is unavailable, the row MUST show "N/A" — do NOT substitute P/I ratio.

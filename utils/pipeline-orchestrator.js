@@ -1198,7 +1198,7 @@ GATE 2B — CALCULATE (arithmetic only — use Gate 2A values, also output as HT
   • Zero is valid (land was free/state-granted). Not the same as missing.
 
 GATE 3 — SCRIBE (visible output only — build table from Gate 2B, no new arithmetic):
-  | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | TFR | Regime |
+  | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime | TFR |
 
   After table: **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
   After summary: Years = (LCU/sqm × 700) ÷ Median Single Earner Income (same LCU)

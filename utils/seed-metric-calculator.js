@@ -480,8 +480,8 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
   const summaries = [];
   
   // Table header — $/sqm shown to force bottoms-up, NO P/I column
-  rows.push('| City | Period | $/sqm | 700sqm Price | Income | Years | TFR | Regime |');
-  rows.push('|------|--------|-------|--------------|--------|-------|-----|--------|');
+  rows.push('| City | Period | $/sqm | 700sqm Price | Income | Years | Regime | TFR |');
+  rows.push('|------|--------|-------|--------------|--------|-------|--------|-----|');
   
   for (const [city, data] of Object.entries(parsedData.cities || {})) {
     const cityTitle = city.charAt(0).toUpperCase() + city.slice(1);
@@ -512,11 +512,11 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
 
     // Add historical row — show $/sqm source data
     const histSqmDisplay = histPriceSqm ? formatCurrency(histPriceSqm, histCurrency) : 'N/A';
-    rows.push(`| ${cityTitle} | ${historicalDecade} | ${histSqmDisplay} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histYearsDisplay} | ${histTfr} | ${histRegimeLabel} |`);
+    rows.push(`| ${cityTitle} | ${historicalDecade} | ${histSqmDisplay} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histYearsDisplay} | ${histRegimeLabel} | ${histTfr} |`);
     
     // Add current row — show $/sqm source data
     const currSqmDisplay = currPriceSqm ? formatCurrency(currPriceSqm, currCurrency) : 'N/A';
-    rows.push(`| ${cityTitle} | 2024 | ${currSqmDisplay} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currYearsDisplay} | ${currTfr} | ${currRegimeLabel} |`);
+    rows.push(`| ${cityTitle} | 2024 | ${currSqmDisplay} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currYearsDisplay} | ${currRegimeLabel} | ${currTfr} |`);
     
     // Build summary line
     const histSummary = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
