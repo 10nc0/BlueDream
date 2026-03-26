@@ -7,6 +7,7 @@ const querystring = require('querystring');
 const { analyzeFinancialDocument, formatPhysicsAnalysis, getFinancialPhysicsSeed, quickNonFinancialCheck } = require('./financial-physics');
 // Harmonized imports from data-package for shared caching
 const { globalDocCache, computeDocHash, FILE_TYPES: DP_FILE_TYPES } = require('./data-package');
+const { FILE_TYPES, identifyFileType, CODE_EXTENSIONS } = require('./file-types');
 
 // ===== INTELLIGENT CHUNKING (GroundX-inspired) =====
 // Splits text by sections without cutting mid-table or mid-paragraph
@@ -169,9 +170,8 @@ function lookupSettledScience(formula) {
 // ===== CODE DETECTION HEURISTICS =====
 // Determines if a text file likely contains code
 function isLikelyCode(text, fileName) {
+    if (CODE_EXTENSIONS.test(fileName || '')) return true;
     const ext = (fileName || '').toLowerCase().split('.').pop();
-    const codeExts = ['js', 'ts', 'py', 'go', 'java', 'cpp', 'c', 'cs', 'php', 'rb', 'rs', 'swift', 'sh', 'sql', 'html', 'css'];
-    if (codeExts.includes(ext)) return true;
     
     // Heuristics for .txt files
     if (ext === 'txt') {
@@ -1295,17 +1295,6 @@ function getCacheKey(buffer) {
     return computeDocHash(buffer);
 }
 
-const FILE_TYPES = {
-    PDF: 'pdf',
-    EXCEL: 'excel',
-    WORD: 'word',
-    PRESENTATION: 'presentation',
-    TEXT: 'text',
-    IMAGE: 'image',
-    AUDIO: 'audio',
-    UNKNOWN: 'unknown'
-};
-
 const DATA_STRUCTURES = {
     TEXT: 'text',
     TABLE: 'table',
@@ -1331,35 +1320,6 @@ const EXTRACTION_TOOLS = {
     'groq-doc-vision': { tier: COST_TIERS.MODERATE_API, type: 'vision', name: 'groq-doc-vision' },
     'tesseract-ocr': { tier: COST_TIERS.MODERATE_API, type: 'ocr', name: 'tesseract.js' }
 };
-
-function identifyFileType(fileName, mimeType) {
-    const ext = (fileName || '').toLowerCase().split('.').pop();
-    const mime = (mimeType || '').toLowerCase();
-    
-    if (ext === 'pdf' || mime.includes('pdf')) {
-        return { type: FILE_TYPES.PDF, extension: ext, mime: mime };
-    }
-    if (['xlsx', 'xls'].includes(ext) || mime.includes('spreadsheet') || mime.includes('excel')) {
-        return { type: FILE_TYPES.EXCEL, extension: ext, mime: mime };
-    }
-    if (['docx', 'doc'].includes(ext) || mime.includes('word')) {
-        return { type: FILE_TYPES.WORD, extension: ext, mime: mime };
-    }
-    if (['pptx', 'ppt'].includes(ext) || mime.includes('presentation') || mime.includes('powerpoint')) {
-        return { type: FILE_TYPES.PRESENTATION, extension: ext, mime: mime };
-    }
-    if (['txt', 'md', 'csv', 'json', 'xml', 'html'].includes(ext) || mime.includes('text')) {
-        return { type: FILE_TYPES.TEXT, extension: ext, mime: mime };
-    }
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext) || mime.includes('image')) {
-        return { type: FILE_TYPES.IMAGE, extension: ext, mime: mime };
-    }
-    if (['mp3', 'wav', 'ogg', 'm4a', 'webm', 'flac'].includes(ext) || mime.includes('audio')) {
-        return { type: FILE_TYPES.AUDIO, extension: ext, mime: mime };
-    }
-    
-    return { type: FILE_TYPES.UNKNOWN, extension: ext, mime: mime };
-}
 
 function selectExtractionPipeline(fileType) {
     const pipeline = [];

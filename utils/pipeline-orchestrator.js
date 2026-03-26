@@ -40,6 +40,8 @@ const { isFalseDichotomy } = require('../prompts/audit-protocol');
 const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer } = require('./psi-EMA');
 const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package');
 const { getLLMBackend, getAuditBackend } = require('../config/constants');
+const { CITY_EXPAND, COUNTRY_TO_CITY, CITY_TO_COUNTRY } = require('./geo-data');
+const { MAX_CONTENT_CHARS } = require('./config-constants');
 
 const PIPELINE_STEPS = {
   CONTEXT_EXTRACT: 'S-1',
@@ -55,7 +57,9 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
-const { parseSeedMetricData, buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn } = require('./seed-metric-calculator');
+const { buildSeedMetricTable, validateSeedMetricOutput, parseTFR, injectTFRColumn } = require('./seed-metric-calculator');
+const { cleanMarkdownJson, EMPTY_TABLE_ROW_REGEX } = require('./parse-helpers');
+const { buildGatherPromptBlock } = require('../prompts/seed-metric');
 
 function extractVisionSearchTerms(visionDescription) {
   if (!visionDescription || visionDescription.length < 20) return null;
@@ -582,6 +586,7 @@ class PipelineOrchestrator {
         didSearchRetry: state.didSearch && state.retryCount > 0,
         retryCount: state.retryCount,
         passCount: state.retryCount + 1,
+        sourceUrls: state.seedMetricSourceUrls || [],
         dataPackageId: state.dataPackage.id,
         dataPackageSummary: state.dataPackage.toCompressedSummary()
       };
@@ -925,8 +930,7 @@ ${physicalAuditDisclaimer}
       console.log(`📊 Ψ-EMA dual-timeframe instruction injected for ${ticker} (daily + ${analysisWeekly ? 'weekly' : 'weekly unavailable'})`);
     }
     
-    // Large attachment chunking: truncate extractedContent to avoid prompt overflow
-    const MAX_ATTACHMENT_CHARS = 100000; // 100k chars threshold
+    const MAX_ATTACHMENT_CHARS = MAX_CONTENT_CHARS;
     let processedContent = [];
     if (hasAttachments) {
       // Safely extract ONLY text content from items (filter out metadata, buffers, large objects)
@@ -1080,25 +1084,25 @@ User query: ${query}`;
   /**
    * stepSeedMetricToolCall — "Walk the Dog" seed metric computation.
    *
-   * Architecture: Groq function-calling (2-round trip).
-   *   Round 1: LLM emits brave_search tool_calls (up to 8 searches).
+   * Architecture: agent swarm (LLM eyes → server math → LLM voice).
+   *   Round 1 (SEARCH): LLM emits brave_search tool_calls (up to 8 searches).
    *            LLM decides WHAT to search — city names, years, language.
-   *            No hardcoded query templates. No regex parsers.
-   *   Execute: Brave API called for each tool_call. Results injected as tool messages.
-   *            Format: JSON array per result (title, url, description, age) so the LLM
-   *            gets structured quantity to triangulate $/sqm from total_price ÷ area.
-   *   Round 2: LLM reads raw Brave JSON, triangulates $/sqm (Totem), computes Years,
-   *            emits canonical table + personality coda.
+   *   Per-search EXTRACT: Each Brave result gets its own micro LLM call (~50 token
+   *            system prompt, no Nyan Protocol). LLM sees ONE result for ONE city —
+   *            zero cross-city contamination. Returns {value, currency} JSON.
+   *            Fires async during Brave rate-limit wait (net zero added latency).
+   *   Server:  Collects all micro-extractions into parsedData → computes Years,
+   *            Regime → builds table. Deterministic math.
+   *   Coda:    LLM writes narrative interpretation (the "voice").
    *
    * Rate-limit: 1100ms between Brave calls (just under 1 req/s hard limit).
    *             Retry once on 429 after 1500ms backoff.
-   *
-   * "Teaching the dog to read reminders" (stuffing query templates into the prompt) = dogma.
-   * "Walking the dog" (giving the LLM a search tool and letting it discover) = live epistemics.
    */
   async stepSeedMetricToolCall(state, input) {
     const { query, clientIp } = input;
     const currentYear = new Date().getFullYear();
+    const histDecade = state.preflight?.historicalDecade || (String(currentYear - 25).slice(0, 3) + '0s');
+    const histYear = state.preflight?.historicalYear || String(currentYear - 25);
 
     // ── Groq tool definition for Brave Search ─────────────────────────────
     // The LLM calls this tool instead of us pre-fetching; it picks queries itself.
@@ -1112,7 +1116,7 @@ User query: ${query}`;
           properties: {
             query: {
               type: 'string',
-              description: 'Specific web search query (e.g., "Singapore residential price per sqm 2024" or "Los Angeles median annual household income 2024")'
+              description: 'Specific web search query (e.g., "Singapore residential price per sqm 2024" or "Los Angeles average income 2024")'
             }
           },
           required: ['query']
@@ -1127,27 +1131,7 @@ User query: ${query}`;
 
 --- SEED METRIC: GATHER RAW INGREDIENTS ---
 You have brave_search. Use it. Do NOT compute or output anything yet — just fetch numbers.
-
-For EVERY city the user mentions, search for TWO ingredients per period.
-Distribute your search budget evenly across all cities — do not exhaust searches on one city before querying others.
-
-  Current (${currentYear}):
-    • Price: "{city} apartment price per sqm {local currency name} ${currentYear}"
-      (prefer apartment/flat/residential; land or plot price is acceptable fallback if no built price found)
-    • Income: "{city} median single earner annual income {local currency name} ${currentYear}"
-
-  Historical (~50yr ago, if relevant):
-    • Price: "{city} apartment price per sqm {local currency name} 1975 OR 1970s"
-    • Income: "{city} median single earner annual income {local currency name} 1975 OR 1970s"
-
-  Replace {local currency name} with the actual currency word — e.g. "rupees" for India, "kronor" for Sweden,
-  "baht" for Thailand, "dong" for Vietnam, "yuan" for China, "yen" for Japan, "pounds" for UK, "euros" for EU.
-  This forces Brave to return local market prices, not USD-converted values from international aggregators.
-
-  Income note: median single earner only — not household, not dual-income, not average.
-  Average skews high (outliers); dual-income normalises what should be a one-job threshold.
-  The benchmark: could one working person (a taxi driver, a teacher) afford a home? That was the 20th-century contract.
-  If search returns monthly income → multiply by 12. If it returns household → do NOT use it, search again for individual.
+${buildGatherPromptBlock({ currentYear: String(currentYear), histYear, histDecade })}
 
 Rules:
   • Search for ALL cities mentioned — skipping any city is not acceptable.
@@ -1155,58 +1139,6 @@ Rules:
   • If a search returns no usable number for an ingredient, the ingredient is N/A.
   • For every value you extract, note its source URL from the result.
   • Historical data is often missing — N/A is the correct answer, not a guess.`;
-
-    // ── Gate 2+3: Triangulate + scribe prompt (Round 2 — synthesis) ─────────
-    // Triggered after all Brave results are in. Now and only now: formula → table → regime.
-    // USD normalisation rule closes the Tokyo/JPY currency-mixing bug.
-    const triangulatePrompt = `${NYAN_PROTOCOL_COMPRESSED}
-
---- SEED METRIC: TRIANGULATE → SCRIBE ---
-You have the raw search data above. Now apply the two-gate script:
-
-GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
-  • No-data rule: if P/sqm OR Income for a row is N/A (not found in search results), write the row with ⚪ N/A in the missing cell(s). The row exists — absence of data should be visible, not silent.
-  • Deduplication: each (city, period) pair must appear exactly once. If search returned two results for the same city+period, use the most recent/reliable one.
-  • LCU throughout — The ratio is dimensionless: LCU ÷ LCU cancels. Do not convert currencies.
-  • Same-LCU within each row: if price is in ¥, income must be in ¥. If £, then £. Never mix.
-  • sqm gate: if result is sqft → multiply by 10.764 to get sqm. If result shows total + area (e.g. "¥120M for 85sqm") → derive: total ÷ area.
-
-  Price type cascade (for each row, classify the price source as one word):
-    • "built" — result describes apartment, flat, condo, residential, ready-to-move, property price per sqm
-    • "land"  — result describes plot, land, site, vacant land, hectare price
-    Prefer "built". Only use "land" if no built price was found in search results.
-
-  Income — median single earner only:
-    • Use median individual income, NOT household income, NOT average (average skews high).
-    • Single earner: the benchmark is whether one working person could afford a home — a taxi driver, a teacher.
-    • Must be annual — if search returns monthly, multiply by 12.
-    • If search returns household income only → do not use it; flag as N/A.
-    • Sanity check: if annual single-earner income is less than 1,000 LCU or more than 10,000,000 LCU, you have a unit error. Fix it.
-
-  • 700sqm Land Price = LCU/sqm × 700
-  • Years = 700sqm Land Price ÷ Annual Median Single Earner Income (same LCU) — whole number only, no decimals ever (round to nearest integer)
-  • Zero is valid: if math yields < 0.5 (rounds to 0), write 0 — land was free, state-granted, or pre-market. 0 is an honest answer, not a missing one.
-  • Self-check: verify LCU/sqm × 700 ÷ Income = Years before writing.
-
-  After computing all rows, output a hidden metadata block (NOT shown in the markdown table):
-  <!--SEED_META:{"rows":[{"city":"CityName","period":"YYYY","priceType":"built|land","incomeType":"minWage|collective|unknown"},...]}-->
-  This block is for internal narration use only — do not render it as a table column.
-
-GATE 3 — SCRIBE (table → summary → legend → coda):
-  Regime thresholds: Years < 10 → 🟢 OPTIMISM | 10–25 → 🟡 EXTRACTION | > 25 → 🔴 FATALISM
-
-  Table (show historical AND current row per city):
-  | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime |
-
-  After table: one line per city → **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
-  After summary: Years = (LCU/sqm × 700) ÷ Median Single Earner Income (same LCU)
-  After legend: Sources section with explicit header.
-    Format:
-    **Sources:**
-    - [page title or domain name](url)
-    Only cite URLs that appeared in the Brave search results above. If a cell shows ⚪ N/A, do not invent a source for it — cite only what was actually found. Every source line MUST have a human-readable title — never output a bare URL or placeholder.
-
-OUTPUT: Table → summary lines → legend → sources. No coda here — coda is written separately.`;
 
     const round1Messages = [
       { role: 'system', content: gatherPrompt },
@@ -1256,13 +1188,42 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
       return;
     }
 
-    // ── Execute tool calls ─────────────────────────────────────────────────
-    // Max 12 searches, 1100ms between calls (≤1 req/s — Brave hard rate limit).
-    // Results injected as Groq tool-role messages for Round 2.
-    // Format: JSON array (title, url, description, age) — "Brave returns quantity,
-    //         math and personality convert it into insight" philosophy.
+    // ── Execute tool calls + per-search micro-extraction (agent swarm) ────
+    // For each Brave search: fetch result → fire tiny LLM to extract ONE number → slot into parsedData.
+    // Each LLM call sees exactly ONE Brave result for ONE city/metric — zero cross-city contamination.
+    // Speed: Groq Llama ~200-400ms per micro-extraction, fires during Brave rate-limit wait.
     const callsToRun = toolCalls.slice(0, 12);
-    const toolResultMsgs = [round1Msg];
+    const sourceUrls = [];
+
+    const cities = state.preflight?.seedMetricSearchQueries
+      ? [...new Set(state.preflight.seedMetricSearchQueries.map(q => {
+          const match = q.match(/^([a-z\s]+)\s+(?:residential|average|median|housing|apartment)/i);
+          return match ? match[1].trim().toLowerCase() : null;
+        }).filter(Boolean))]
+      : [];
+    const histDecadeNum = parseInt(histDecade) || (currentYear - 25);
+
+    const parsedData = { cities: {}, parseLog: [] };
+    for (const city of cities) {
+      parsedData.cities[city] = {
+        current: { pricePerSqm: null, income: null },
+        historical: { pricePerSqm: null, income: null, decade: histDecade }
+      };
+    }
+
+    const microExtractPrompt = `You are a number extraction engine. You will receive ONE search result about a specific city.
+Extract EXACTLY ONE number from it. Output ONLY valid JSON — no markdown, no backticks, no explanation.
+
+Rules:
+- If you find a residential property PURCHASE price per sqm (or can derive it from total price ÷ area, or from price/sqft × 10.764): output {"value": <number>, "type": "pricePerSqm", "currency": "<ISO code>"}
+- If you find average/median individual annual income (or monthly × 12): output {"value": <number>, "type": "income", "currency": "<ISO code>"}
+- Monthly rent is NOT purchase price — ignore it.
+- Household/dual income is NOT single-earner — ignore it.
+- GDP per capita is NOT income — ignore it.
+- If no usable number found: output {"value": null}
+- null is always better than a guess. Every number must come from the search text.`;
+
+    const pendingExtractions = [];
 
     for (let i = 0; i < callsToRun.length; i++) {
       const tc = callsToRun[i];
@@ -1270,129 +1231,261 @@ OUTPUT: Table → summary lines → legend → sources. No coda here — coda is
       try { args = JSON.parse(tc.function.arguments); }
       catch { args = { query: String(tc.function.arguments) }; }
 
-      console.log(`🦁 brave_search #${i + 1}: "${args.query}"`);
+      const searchQuery = args.query || '';
+      console.log(`🦁 brave_search #${i + 1}: "${searchQuery}"`);
 
-      // Request raw JSON — gives LLM structured quantity (title, url, description, age)
-      // so it can triangulate $/sqm from total_price ÷ area mentions itself (Totem).
-      let result = await this.searchBrave(args.query, clientIp, { format: 'json' });
+      let result = await this.searchBrave(searchQuery, clientIp, { format: 'json' });
 
-      // Retry once on 429 — Brave rate-limit transient; 1500ms backoff usually clears it
       if (result === null) {
         console.log(`🦁 brave_search #${i + 1}: null result, retrying after 1500ms...`);
         await new Promise(r => setTimeout(r, 1500));
-        result = await this.searchBrave(args.query, clientIp, { format: 'json' });
+        result = await this.searchBrave(searchQuery, clientIp, { format: 'json' });
       }
 
-      toolResultMsgs.push({
-        role: 'tool',
-        tool_call_id: tc.id,
-        content: result || '[]' // Empty JSON array instead of string — LLM reads it consistently
-      });
+      let braveText = '';
+      try {
+        const parsed = JSON.parse(result || '[]');
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (item.description) braveText += item.description + '\n';
+            if (item.title) braveText += item.title + '\n';
+            if (item.url && item.title) sourceUrls.push({ title: item.title, url: item.url });
+          }
+        }
+      } catch {
+        braveText = String(result || '');
+      }
 
-      // 1100ms between calls — just under 1 req/s to stay within Brave rate limit
+      const queryLower = searchQuery.toLowerCase();
+      let matchedCity = null;
+      for (const city of cities) {
+        const expanded = CITY_EXPAND[city] || city;
+        const escapedCity = city.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escapedExpanded = expanded.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const cityWordBoundary = new RegExp(`(?:^|\\s|[^a-z])${escapedCity}(?:$|\\s|[^a-z])`, 'i');
+        const expandedWordBoundary = new RegExp(`(?:^|\\s|[^a-z])${escapedExpanded}(?:$|\\s|[^a-z])`, 'i');
+        if (expandedWordBoundary.test(queryLower) || (city.length > 2 && cityWordBoundary.test(queryLower))) {
+          matchedCity = city;
+          break;
+        }
+      }
+      if (!matchedCity) {
+        for (const [country, city] of Object.entries(COUNTRY_TO_CITY)) {
+          if (cities.includes(city) && new RegExp(`\\b${country.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(queryLower)) {
+            matchedCity = city;
+            break;
+          }
+        }
+      }
+      const isIncome = /income|salary|wage|earnings/i.test(searchQuery);
+      const metricType = isIncome ? 'income' : 'pricePerSqm';
+      const histYearStart = histDecadeNum;
+      const histYearEnd = histDecadeNum + 15;
+      const queryYears = [...searchQuery.matchAll(/\b(19\d{2}|20\d{2})\b/g)].map(m => parseInt(m[1]));
+      const hasHistoricalYear = queryYears.some(y => y >= histYearStart && y <= histYearEnd);
+      const hasAnyOldYear = queryYears.some(y => y < currentYear - 5);
+      const isHistorical = hasHistoricalYear || hasAnyOldYear || new RegExp(`${histDecade}|\\d{4}s|historical`, 'i').test(searchQuery);
+      const period = isHistorical ? 'historical' : 'current';
+
+      if (matchedCity && braveText.trim()) {
+        const extractionPromise = (async () => {
+          try {
+            const extractResponse = await this.groqWithRetry({
+              url: this.llmUrl,
+              data: {
+                model: this.llmModel,
+                messages: [
+                  { role: 'system', content: microExtractPrompt },
+                  { role: 'user', content: `Search query: "${searchQuery}"\n\nSearch results:\n${braveText.slice(0, 3000)}` }
+                ],
+                temperature: 0,
+                max_tokens: 100
+              },
+              config: {
+                headers: {
+                  'Authorization': `Bearer ${this.groqToken}`,
+                  'Content-Type': 'application/json'
+                },
+                timeout: 10000
+              }
+            }, 1, 'text');
+
+            let rawJson = extractResponse.data.choices[0]?.message?.content?.trim() || '';
+            rawJson = cleanMarkdownJson(rawJson);
+            const extracted = JSON.parse(rawJson);
+
+            if (extracted.value != null && isFinite(extracted.value) && extracted.value > 0) {
+              const currency = extracted.currency || 'USD';
+              const resolvedType = (extracted.type === 'pricePerSqm' || extracted.type === 'income')
+                ? extracted.type : metricType;
+              if (!parsedData.cities[matchedCity]) {
+                parsedData.cities[matchedCity] = {
+                  current: { pricePerSqm: null, income: null },
+                  historical: { pricePerSqm: null, income: null, decade: histDecade }
+                };
+              }
+              const bucket = parsedData.cities[matchedCity][period];
+              if (!bucket[resolvedType]) {
+                if (resolvedType === 'income') {
+                  bucket[resolvedType] = { value: extracted.value, currency, type: 'single' };
+                } else {
+                  bucket[resolvedType] = { value: extracted.value, currency };
+                }
+                console.log(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} = ${extracted.value} ${currency}`);
+              } else {
+                console.log(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} already filled, skipping`);
+              }
+            } else {
+              console.log(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${metricType} = null`);
+            }
+          } catch (err) {
+            console.warn(`⚠️ Extract #${i + 1} failed: ${err.message}`);
+          }
+        })();
+
+        pendingExtractions.push(extractionPromise);
+      } else {
+        console.log(`👁️ Extract #${i + 1}: no city match or empty result, skipping`);
+      }
+
       if (i < callsToRun.length - 1) {
         await new Promise(r => setTimeout(r, 1100));
       }
     }
 
-    // Round 2: New system prompt (triangulate+scribe gate) + user query + all tool results
-    // Swapping the system message from gatherPrompt → triangulatePrompt is the key gate change:
-    // Round 1 only knew "fetch ingredients"; Round 2 now gets the formula + table rules for the first time.
-    const round2Messages = [
-      { role: 'system', content: triangulatePrompt },
-      { role: 'user', content: query },
-      ...toolResultMsgs   // [assistant tool-call msg, ...tool result msgs]
-    ];
-    let round2Response;
-    try {
-      round2Response = await this.groqWithRetry({
-        url: this.llmUrl,
-        data: {
-          model: this.llmModel,
-          messages: round2Messages,
-          temperature: 0.05,
-          max_tokens: 2000
-        },
-        config: {
-          headers: {
-            'Authorization': `Bearer ${this.groqToken}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: this.llmTimeouts.toolCall
-        }
-      }, 3, 'text');
-    } catch (err) {
-      console.error(`❌ stepSeedMetricToolCall round2 failed: ${err.message}`);
-      throw err;
-    }
+    await Promise.all(pendingExtractions);
 
-    // ── Post-processing pipeline (deterministic, no LLM trust) ──────────────
-    // Step A: header normalisation — LLM defaults to $/sqm regardless of prompt
-    const round2Raw = (round2Response.data.choices[0]?.message?.content || 'No response generated.')
-      .replace(/\|\s*\$\/sqm\s*\|/g, '| LCU/sqm |')
-      .replace(/\|\s*700sqm Price\s*\|/g, '| 700sqm Land Price |')
-      .replace(/\|\s*700sqm \(LCU\)\s*\|/g, '| 700sqm Land Price |')
-      .replace(/\|\s*Land Price\s*\|/g, '| 700sqm Land Price |')
-      .replace(/\|\s*Income\s*\|/gi, '| Income (LCU) |');
+    const incomeFallbacks = [];
+    for (const [city, data] of Object.entries(parsedData.cities)) {
+      const country = CITY_TO_COUNTRY[city];
+      if (!country) continue;
 
-    // Step B: extract hidden metadata block (built/land, incomeType) — strips it from user text
-    const { meta: seedMeta, text: round2Stripped } = this._extractSeedMetricMeta(round2Raw);
-    state.seedMetricMeta = seedMeta;
-    if (seedMeta) console.log(`📋 Seed Metric meta: ${JSON.stringify(seedMeta)}`);
+      for (const period of ['current', 'historical']) {
+        if (data[period]?.income) continue;
+        const yearToken = period === 'current' ? String(currentYear) : histDecade;
+        const fallbackQuery = `${country} average income ${yearToken}`;
+        console.log(`🔄 Income fallback: ${city}/${period} → "${fallbackQuery}"`);
 
-    // Step C: deterministic regime recompute — overwrite LLM regime labels with correct arithmetic
-    let round2Text = this._normalizeSeedMetricRegimes(round2Stripped);
+        incomeFallbacks.push((async () => {
+          try {
+            await new Promise(r => setTimeout(r, 1100));
+            const braveResult = await this.searchBrave(fallbackQuery, input.clientIp || '127.0.0.1');
+            if (!braveResult?.trim()) return;
 
-    // Step D: TFR column injection — pure Brave + regex, no LLM
-    const tfrCities = this._extractCitiesFromTable(round2Text);
-    if (tfrCities.length > 0) {
-      const histDecade = state.preflight?.historicalDecade || (String(new Date().getFullYear() - 50).slice(0, 3) + '0s');
-      try {
-        const tfrCapsule = await this._fetchTFRData(tfrCities, histDecade, input.clientIp || '127.0.0.1');
-        state.tfrCapsule = tfrCapsule;
-        round2Text = injectTFRColumn(round2Text, tfrCapsule);
-        console.log(`🐣 TFR injected for ${tfrCities.length} cities`);
-      } catch (err) {
-        console.warn(`⚠️ TFR injection failed: ${err.message} — table unchanged`);
+            const extractResponse = await this.groqWithRetry({
+              url: this.llmUrl,
+              data: {
+                model: this.llmModel,
+                messages: [
+                  { role: 'system', content: microExtractPrompt },
+                  { role: 'user', content: `Search query: "${fallbackQuery}"\n\nSearch results:\n${braveResult.slice(0, 3000)}` }
+                ],
+                temperature: 0,
+                max_tokens: 100
+              },
+              config: {
+                headers: {
+                  'Authorization': `Bearer ${this.groqToken}`,
+                  'Content-Type': 'application/json'
+                },
+                timeout: 10000
+              }
+            }, 1, 'text');
+
+            let rawJson = extractResponse.data.choices[0]?.message?.content?.trim() || '';
+            rawJson = cleanMarkdownJson(rawJson);
+            const extracted = JSON.parse(rawJson);
+
+            if (extracted.value != null && isFinite(extracted.value) && extracted.value > 0) {
+              const currency = extracted.currency || 'USD';
+              if (!data[period].income) {
+                data[period].income = { value: extracted.value, currency, type: 'single' };
+                console.log(`🔄 Fallback hit: ${city}/${period}/income = ${extracted.value} ${currency} (via ${country})`);
+              }
+            } else {
+              console.log(`🔄 Fallback miss: ${city}/${period}/income still null (${country})`);
+            }
+          } catch (err) {
+            console.warn(`⚠️ Income fallback failed for ${city}/${period}: ${err.message}`);
+          }
+        })());
       }
     }
 
-    state.didSearch = true;
-    console.log(`🐕 Seed Metric walked: ${callsToRun.length} Brave calls → ${round2Text.length} chars`);
+    if (incomeFallbacks.length > 0) {
+      await Promise.all(incomeFallbacks);
+    }
 
-    // ── Round 3: ~nyan coda (voice layer, separate from data assembly) ──────
-    // Round 2 assembles facts. Round 3 writes what the facts imply.
-    // Full NYAN_PROTOCOL_SYSTEM_PROMPT at temperature 0.7 — the cat speaks.
+    for (const [city, data] of Object.entries(parsedData.cities)) {
+      const _cp = data.current?.pricePerSqm?.value, _ci = data.current?.income?.value;
+      const _hp = data.historical?.pricePerSqm?.value, _hi = data.historical?.income?.value;
+      const _cc = data.current?.pricePerSqm?.currency || data.current?.income?.currency || '?';
+      const _hc = data.historical?.pricePerSqm?.currency || data.historical?.income?.currency || '?';
+      parsedData.parseLog.push(`${city} CURRENT: price/sqm=${_cp ?? 'N/A'} (${_cc}), income=${_ci ?? 'N/A'}`);
+      parsedData.parseLog.push(`${city} HISTORICAL: price/sqm=${_hp ?? 'N/A'} (${_hc}), income=${_hi ?? 'N/A'}`);
+    }
+
+    for (const line of parsedData.parseLog) {
+      console.log(`📊 ${line}`);
+    }
+
+    // ── TFR: fetch and inject before building table ──────────────────────────
+    let tfrCapsule = null;
+    if (cities.length > 0) {
+      try {
+        const tfrCities = cities.map(c => c.charAt(0).toUpperCase() + c.slice(1));
+        tfrCapsule = await this._fetchTFRData(tfrCities, histDecade, input.clientIp || '127.0.0.1', CITY_TO_COUNTRY);
+        state.tfrCapsule = tfrCapsule;
+        console.log(`🐣 TFR fetched for ${tfrCities.length} cities`);
+      } catch (err) {
+        console.warn(`⚠️ TFR fetch failed: ${err.message}`);
+      }
+    }
+
+    // ── Server-side math: buildSeedMetricTable (deterministic) ───────────────
+    const serverTable = buildSeedMetricTable(parsedData, histDecade, tfrCapsule);
+
+    const seenUrls = new Set();
+    const sourcesLines = [];
+    for (const src of sourceUrls) {
+      if (seenUrls.has(src.url)) continue;
+      seenUrls.add(src.url);
+      sourcesLines.push(`- [${src.title}](${src.url})`);
+    }
+    const sourcesBlock = sourcesLines.length > 0
+      ? `\n**Sources:**\n${sourcesLines.slice(0, 5).join('\n')}`
+      : '';
+
+    const fullOutput = `${serverTable}${sourcesBlock}`;
+
+    state.didSearch = true;
+    state.seedMetricDirectOutput = true;
+    state.seedMetricSourceUrls = sourceUrls;
+    console.log(`🐕 Seed Metric: ${callsToRun.length} Brave calls → LLM extract → server table (${fullOutput.length} chars)`);
+
+    // ── Coda: LLM voice layer ────────────────────────────────────────────────
     let coda = '';
     try {
-      // Build metadata context string for the coda if available
-      const metaContext = state.seedMetricMeta?.rows?.length
-        ? `\nData source notes (for narration only — do not repeat in coda output):\n` +
-          state.seedMetricMeta.rows.map(r =>
-            `  ${r.city} ${r.period}: price=${r.priceType || 'unknown'} income=${r.incomeType || 'unknown'}`
-          ).join('\n') + '\n'
-        : '';
-
       const codaSystemPrompt = `${NYAN_PROTOCOL_SYSTEM_PROMPT}
-${metaContext}
-You are given a Seed Metric table (income = median single earner; price = built residential where available, land as fallback).
+
+You are given a Seed Metric table (income = average single earner; price = built residential where available, land as fallback).
 Write a coda: 2–3 sentences about what these specific numbers reveal about the people living in these specific cities.
 
 Rules:
 - Do NOT repeat numbers — the table already shows them.
 - Say what the numbers imply but don't state: the human texture, historical irony, political contradiction, the lived reality of that ratio.
-- The income anchor is median single earner — the 20th-century contract: one job, one home. A taxi driver. A teacher. Not two salaries, not inherited wealth.
+- The income anchor is average single earner — the 20th-century contract: one job, one home. A taxi driver. A teacher. Not two salaries, not inherited wealth.
 - If price source was "land" (fallback), you may note that the land alone, before any building, already indicts.
 - This must be unrepeatable — written only for these cities, this gap, this moment. Not a generic housing statement.
 - No preamble, no "In conclusion", no sign-off. Just the coda.`;
 
-      const round3Response = await this.groqWithRetry({
+      const codaResponse = await this.groqWithRetry({
         url: this.llmUrl,
         data: {
           model: this.llmModel,
           messages: [
             { role: 'system', content: codaSystemPrompt },
-            { role: 'user', content: round2Text }
+            { role: 'user', content: fullOutput }
           ],
           temperature: 0.7,
           max_tokens: 300
@@ -1406,20 +1499,17 @@ Rules:
         }
       }, 2, 'text');
 
-      coda = round3Response.data.choices[0]?.message?.content?.trim() || '';
+      coda = codaResponse.data.choices[0]?.message?.content?.trim() || '';
       console.log(`🐱 Seed Metric coda: ${coda.length} chars`);
     } catch (err) {
-      console.warn(`⚠️ Seed Metric coda (round3) failed: ${err.message} — skipping coda`);
+      console.warn(`⚠️ Seed Metric coda failed: ${err.message} — skipping coda`);
     }
 
-    // Persist coda on state — survives any downstream format-fix that rewrites draftAnswer
     state.seedMetricCoda = coda;
-
-    // Insert coda before Sources section (preserving: table → summary → legend → coda → sources)
-    state.draftAnswer = this._insertSeedMetricCoda(round2Text, coda);
+    state.draftAnswer = this._insertSeedMetricCoda(fullOutput, coda);
   }
 
-  async _fetchTFRData(cities, historicalDecade, clientIp) {
+  async _fetchTFRData(cities, historicalDecade, clientIp, cityToCountry = {}) {
     const tfrCapsule = {};
     const currentYear = String(new Date().getFullYear() - 1);
     for (let i = 0; i < cities.length; i++) {
@@ -1433,6 +1523,18 @@ Rules:
         const currentResult = await this.searchBrave(currentQuery, clientIp);
         tfrCapsule[cityKey].current = parseTFR(currentResult, city, currentYear);
 
+        if (!tfrCapsule[cityKey].current && cityToCountry[cityKey]) {
+          const country = cityToCountry[cityKey];
+          await new Promise(r => setTimeout(r, 1100));
+          const countryQuery = `${country} total fertility rate ${currentYear}`;
+          console.log(`🐣 TFR country fallback: "${countryQuery}"`);
+          const countryResult = await this.searchBrave(countryQuery, clientIp);
+          tfrCapsule[cityKey].current = parseTFR(countryResult, country, currentYear);
+          if (tfrCapsule[cityKey].current) {
+            console.log(`🐣 TFR fallback hit: ${city} current = ${tfrCapsule[cityKey].current} (via ${country})`);
+          }
+        }
+
         await new Promise(r => setTimeout(r, 1100));
 
         const histQuery = `"${city}" total fertility rate ${historicalDecade}`;
@@ -1440,6 +1542,18 @@ Rules:
         const histResult = await this.searchBrave(histQuery, clientIp);
         const histTargetYear = historicalDecade.replace(/s$/, '');
         tfrCapsule[cityKey].historical = parseTFR(histResult, city, histTargetYear);
+
+        if (!tfrCapsule[cityKey].historical && cityToCountry[cityKey]) {
+          const country = cityToCountry[cityKey];
+          await new Promise(r => setTimeout(r, 1100));
+          const countryHistQuery = `${country} total fertility rate ${historicalDecade}`;
+          console.log(`🐣 TFR country fallback: "${countryHistQuery}"`);
+          const countryHistResult = await this.searchBrave(countryHistQuery, clientIp);
+          tfrCapsule[cityKey].historical = parseTFR(countryHistResult, country, histTargetYear);
+          if (tfrCapsule[cityKey].historical) {
+            console.log(`🐣 TFR fallback hit: ${city} historical = ${tfrCapsule[cityKey].historical} (via ${country})`);
+          }
+        }
 
         if (i < cities.length - 1) await new Promise(r => setTimeout(r, 1100));
       } catch (err) {
@@ -1457,7 +1571,7 @@ Rules:
       if (!/^\|/.test(line.trim())) continue;
       const cols = line.split('|').map(c => c.trim()).filter(c => c.length > 0);
       if (cols.length < 7) continue;
-      if (/^[\s\-:]+$/.test(cols[0])) continue;
+      if (EMPTY_TABLE_ROW_REGEX.test(cols[0])) continue;
       if (/City/i.test(cols[0])) continue;
       const city = cols[0].replace(/\*\*/g, '').trim();
       if (city && !cities.includes(city.toLowerCase())) {
@@ -1467,7 +1581,20 @@ Rules:
     return [...new Set(cities)];
   }
 
-  // Helper: splice coda before sources block, or append if no sources found
+  _reattachSeedMetricSources(body, sourceUrls) {
+    if (!sourceUrls || sourceUrls.length === 0) return body;
+    if (/\*\*Sources:\*\*/i.test(body)) return body;
+    const seenUrls = new Set();
+    const lines = [];
+    for (const src of sourceUrls) {
+      if (seenUrls.has(src.url)) continue;
+      seenUrls.add(src.url);
+      lines.push(`- [${src.title}](${src.url})`);
+    }
+    if (lines.length === 0) return body;
+    return body.trimEnd() + `\n**Sources:**\n${lines.slice(0, 5).join('\n')}`;
+  }
+
   _insertSeedMetricCoda(body, coda) {
     if (!coda) return body;
     const sourcesHeaderIdx = body.search(/\n\*\*Sources:\*\*/m);
@@ -1509,7 +1636,7 @@ Rules:
     // Match data rows: 7 or 8 pipe-delimited cells (8 when TFR column present)
     return text.replace(/^\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|(?:([^|\n]+)\|)?$/gm,
       (row, c1, c2, c3, c4, c5, c6, c7, c8) => {
-        if (/^[\s\-:]+$/.test(c1)) return row;
+        if (EMPTY_TABLE_ROW_REGEX.test(c1)) return row;
         if (/^\s*years\s*$/i.test(c6)) return row;
         const yearsVal = parseInt(c6.replace(/[^0-9]/g, ''), 10);
         const correctRegime = regime(yearsVal);
@@ -1542,7 +1669,7 @@ Rules:
     // Seed Metric LLM output: validate format before audit
     // If format is wrong (prose instead of table), try to fix it
     if (state.mode === 'seed-metric' && state.draftAnswer) {
-      const smHistDecade = state.preflight?.historicalDecade || (String(new Date().getFullYear() - 50).slice(0, 3) + '0s');
+      const smHistDecade = state.preflight?.historicalDecade || (String(new Date().getFullYear() - 25).slice(0, 3) + '0s');
       const validation = validateSeedMetricOutput(state.draftAnswer, smHistDecade);
       if (!validation.valid) {
         console.log(`⚠️ Seed Metric format validation FAILED: ${validation.issues.join(', ')}`);
@@ -1553,7 +1680,7 @@ Rules:
           console.log(`🔧 Attempting Seed Metric format fix...`);
 
           try {
-            const histYear = state.preflight?.historicalYear || '~1976';
+            const histYear = state.preflight?.historicalYear || String(new Date().getFullYear() - 25);
             const currYear = state.preflight?.currentYear || String(new Date().getFullYear() - 1);
 
             const fixPrompt = `The following response has incorrect format. Fix it to use the EXACT table format shown below.
@@ -1617,36 +1744,10 @@ Output ONLY the corrected table and summary lines:`;
                 if (state.tfrCapsule) {
                   fixedNormalized = injectTFRColumn(fixedNormalized, state.tfrCapsule);
                 }
-                state.draftAnswer = this._insertSeedMetricCoda(fixedNormalized, state.seedMetricCoda || '');
+                const fixedWithSources = this._reattachSeedMetricSources(fixedNormalized, state.seedMetricSourceUrls);
+                state.draftAnswer = this._insertSeedMetricCoda(fixedWithSources, state.seedMetricCoda || '');
               } else {
-                console.log(`❌ Seed Metric format fix still invalid: ${reValidation.issues.join(', ')}`);
-                // FALLBACK: Try direct calculation as last resort
-                if (state.searchContext && state.preflight?.seedMetricSearchQueries) {
-                  console.log(`🔧 Attempting fallback to direct calculation...`);
-                  const cities = [...new Set(state.preflight.seedMetricSearchQueries.map(q => {
-                    const match = q.match(/^([a-z\s]+)\s+(?:residential|median|housing)/i);
-                    return match ? match[1].trim().toLowerCase() : null;
-                  }).filter(Boolean))];
-                  
-                  if (cities.length > 0) {
-                    const smDynDefault = String(new Date().getFullYear() - 50).slice(0, 3) + '0s';
-                    const parsedData = parseSeedMetricData(state.searchContext, cities, state.preflight.historicalDecade || smDynDefault);
-                    const hasCompleteData = Object.values(parsedData.cities).some(c => 
-                      c.current?.pricePerSqm?.value && c.current?.income?.value
-                    );
-                    if (hasCompleteData) {
-                      let fallbackTfr = null;
-                      try {
-                        fallbackTfr = await this._fetchTFRData(cities, state.preflight.historicalDecade || smDynDefault, input.clientIp || '127.0.0.1');
-                        state.tfrCapsule = fallbackTfr;
-                      } catch (_) {}
-                      state.draftAnswer = buildSeedMetricTable(parsedData, state.preflight.historicalDecade || smDynDefault, fallbackTfr);
-                      console.log(`✅ Seed Metric fallback direct calculation successful`);
-                    } else {
-                      console.log(`⚠️ Seed Metric direct calc skipped: insufficient parsed data (need $/sqm AND income for at least one city). Keeping LLM answer for audit.`);
-                    }
-                  }
-                }
+                console.log(`❌ Seed Metric format fix still invalid: ${reValidation.issues.join(', ')} — keeping original`);
               }
             }
           } catch (err) {

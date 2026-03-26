@@ -10,6 +10,7 @@
  */
 
 const { getMemoryManager } = require('./memory-manager');
+const { detectAttachmentType } = require('./file-types');
 
 const KNOWN_COMPANIES = new Map([
   ['netflix', 'NFLX'], ['apple', 'AAPL'], ['google', 'GOOGL'], ['alphabet', 'GOOGL'],
@@ -118,16 +119,6 @@ function extractEntitiesFromText(text, recency) {
   return entities;
 }
 
-function detectAttachmentType(filename) {
-  if (!filename) return 'unknown';
-  const lower = filename.toLowerCase();
-  if (lower.match(/\.(xlsx|xls|csv)$/)) return 'spreadsheet';
-  if (lower.match(/\.(pdf)$/)) return 'pdf';
-  if (lower.match(/\.(doc|docx)$/)) return 'document';
-  if (lower.match(/\.(png|jpg|jpeg|gif|webp)$/)) return 'image';
-  if (lower.match(/\.(mp3|wav|m4a|ogg)$/)) return 'audio';
-  return 'unknown';
-}
 
 function mergeContextForTickerDetection(currentQuery, contextResult) {
   if (!contextResult || !contextResult.inferredTicker) return currentQuery;

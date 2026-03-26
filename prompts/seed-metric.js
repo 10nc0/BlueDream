@@ -84,7 +84,10 @@ function detectSeedMetricIntent(query) {
  * This is the "scavenger hunt map" for finding real data
  * @returns {string} Seed Metric proxy block
  */
-function getSeedMetricProxy() {
+function getSeedMetricProxy({ historicalDecade, historicalYear, currentYear } = {}) {
+  const histDecade = historicalDecade || (String(new Date().getFullYear() - 25).slice(0, 3) + '0s');
+  const histYear = historicalYear || String(new Date().getFullYear() - 25);
+  const curYear = currentYear || String(new Date().getFullYear() - 1);
   return `
 SEED METRIC BEST AVAILABLE PROXY (H₀): 
 - IMPORTANT: Always use single-earner income (not dual-earner) + Always output real estate prices AS 700sqm equivalents
@@ -94,15 +97,16 @@ SEED METRIC BEST AVAILABLE PROXY (H₀):
   * NEVER output $/m² alone; ALWAYS convert to 700sqm price
   * If $/sqm unavailable → show "N/A" in table (do NOT substitute P/I ratio)
 - FORMULA: Years = ($/sqm × 700) ÷ single-earner income (the ONLY metric)
-- INCOME PROXY CASCADE (ALWAYS single-earner, NO dual-earner):
-  * Prefer median individual income
+- INCOME PROXY CASCADE (single-earner):
+  * Average income (most commonly reported, best Brave coverage)
   * (Household income / 2) with "dual-earner" flag if used
   * Occupational wage survey as fallback
 - Goal: Acquire 700sqm/HH residential real estate within 25yr fertility window (age 20-45)
-- 50yr ago (40-60yr ok) AND most recent available data
+- HISTORICAL PERIOD: Search for data from the ${histDecade}. Use "${histDecade}" in your brave_search calls for historical data.
+- CURRENT PERIOD: Search for most recent available data (~${curYear}).
 - 2 cities if possible
 - DO NOT USE GDP, Gini, national averages
-- DECADE LABELING: When using decade-range data (e.g., 1960-1979 for "1970"), label the Period column as "1970s" or "~1970", NOT the exact year "1970" unless you have exact year data
+- DECADE LABELING: When using decade-range data (e.g., 1960-1979 for "1970"), label the Period column as "${histDecade}" or "~${histYear}", NOT the exact year "${histYear}" unless you have exact year data
 
 ═══════════════════════════════════════════════════════════════
 MANDATORY OUTPUT FORMAT - DO NOT REFORMAT - THIS IS EMPIRIC DATA
@@ -166,10 +170,56 @@ Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism (fertility wind
 - Calculate DIRECTIONAL CHANGE: improved (ratio↓) or worsened (ratio↑) ?`;
 }
 
+function buildSearchQueries({ city, currencyName, currentYear, histYear, histDecade }) {
+  const currSuffix = currencyName ? ` ${currencyName}` : '';
+  return {
+    currentPrice:     `${city} residential property price per square meter${currSuffix} ${currentYear}`,
+    currentIncome:    `${city} average income ${currentYear}`,
+    historicalPrice:  `${city} housing price ${histDecade} historical per sqm`,
+    historicalIncome: `${city} average income ${histDecade}`,
+  };
+}
+
+function buildFallbackSearchQueries({ currentYear, histDecade }) {
+  return {
+    currentPrice:     `residential property price per square meter comparison major cities ${currentYear}`,
+    currentIncome:    `average income by country ${currentYear}`,
+    historicalPrice:  `housing price ${histDecade} historical major cities`,
+    historicalIncome: `average income ${histDecade}`,
+  };
+}
+
+function buildGatherPromptBlock({ currentYear, histYear, histDecade }) {
+  const ex = buildSearchQueries({ city: '{city}', currencyName: '{local currency name}', currentYear, histYear, histDecade });
+  return `
+For EVERY city the user mentions, search for TWO ingredients per period.
+Distribute your search budget evenly across all cities — do not exhaust searches on one city before querying others.
+
+  Current (${currentYear}):
+    • Price: "${ex.currentPrice}"
+      (prefer apartment/flat/residential; land or plot price is acceptable fallback if no built price found)
+    • Income: "${ex.currentIncome}"
+
+  Historical (${histDecade}):
+    • Price: "${ex.historicalPrice}"
+    • Income: "${ex.historicalIncome}"
+
+  Replace {local currency name} with the actual currency word — e.g. "rupees" for India, "kronor" for Sweden,
+  "baht" for Thailand, "dong" for Vietnam, "yuan" for China, "yen" for Japan, "pounds" for UK, "euros" for EU.
+  This forces Brave to return local market prices, not USD-converted values from international aggregators.
+
+  Income note: use "average income" — it is the most commonly reported and searchable statistic.
+  The benchmark: could one working person (a taxi driver, a teacher) afford a home? That was the 20th-century contract.
+  If search returns monthly income → multiply by 12. If it returns household → do NOT use it, search again for individual.`;
+}
+
 module.exports = {
   SEED_METRIC_TRIGGER_PATTERNS,
   SEED_METRIC_TOPIC_KEYWORDS,
   detectSeedMetricIntent,
   getSeedMetricProxy,
-  getSeedMetricCore
+  getSeedMetricCore,
+  buildSearchQueries,
+  buildFallbackSearchQueries,
+  buildGatherPromptBlock
 };

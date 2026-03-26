@@ -16,36 +16,10 @@ const { getPsiEMAContext, PsiEMADashboard, PSI_EMA_DOCUMENTATION } = require('./
 const { getFinancialPhysicsSeed } = require('./financial-physics');
 const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal-analysis');
 const { detectForexPair, isForexQuery, fetchForexRate, buildForexContext } = require('./forex-fetcher');
-const { getSeedMetricProxy, detectSeedMetricIntent } = require('../prompts/seed-metric');
+const { getSeedMetricProxy, detectSeedMetricIntent, buildSearchQueries, buildFallbackSearchQueries } = require('../prompts/seed-metric');
 const { detectCodeMode, getLanguageFromExtension } = require('../lib/mode-registry');
 const { isDesignQuestion, getSystemContextForDesign } = require('./code-context');
-
-// Country → primary cities mapping for Seed Metric city expansion
-// Defined at module level so both primary and GEO-VETO code paths can use it
-const COUNTRY_CITY_MAP = {
-  'vietnam': ['hanoi', 'ho chi minh'],
-  'korea': ['seoul'], 'south korea': ['seoul'],
-  'japan': ['tokyo'], 'china': ['beijing', 'shanghai'],
-  'indonesia': ['jakarta'], 'thailand': ['bangkok'],
-  'malaysia': ['kuala lumpur'], 'philippines': ['manila'],
-  'india': ['mumbai', 'delhi'], 'australia': ['sydney'],
-  'canada': ['toronto'], 'uk': ['london'],
-  'england': ['london'], 'britain': ['london'],
-  'france': ['paris'], 'germany': ['berlin'],
-  'spain': ['madrid'], 'italy': ['rome'],
-  'switzerland': ['zurich'], 'brazil': ['sao paulo'],
-  'uae': ['dubai'], 'usa': ['new york'],
-  'united states': ['new york'], 'mexico': ['mexico city'],
-  'taiwan': ['taipei'], 'hong kong': ['hong kong'],
-  'russia': ['moscow'], 'turkey': ['istanbul'],
-  'egypt': ['cairo'], 'nigeria': ['lagos'],
-  'argentina': ['buenos aires'], 'colombia': ['bogota'],
-  'chile': ['santiago'], 'peru': ['lima'],
-};
-
-// Shared city-name regex — used in seed-metric detection AND geographic guard
-// Single source of truth so both code paths match the same set of cities
-const KNOWN_CITIES_REGEX = /\b(tokyo|singapore|hong kong|hongkong|london|new york|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
+const { COUNTRY_CITY_MAP, KNOWN_CITIES_REGEX, CITY_EXPAND, COUNTRY_CITY_MAP_KEYS_PATTERN } = require('./geo-data');
 
 const PSI_EMA_IDENTITY_PATTERNS = [
   /^what\s+is\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
@@ -336,14 +310,14 @@ async function preflightRouter(options) {
       
       // "Most recent available" = last full calendar year (real estate/income data lags ~1yr)
       const mostRecentYear = String(new Date().getFullYear() - 1);
-      const defaultHistoricalYear = String(new Date().getFullYear() - 50);
+      const defaultHistoricalYear = String(new Date().getFullYear() - 25);
 
       // Extract city names for targeted search (major world cities + common variants)
       const cities = [...new Set((classificationQuery.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => c.toLowerCase()))];
 
       // Expand country names to their primary cities (e.g. "vietnam" → hanoi, ho chi minh)
       const detectedCountries = [];
-      const countryRegex = new RegExp('\\b(' + Object.keys(COUNTRY_CITY_MAP).join('|') + ')\\b', 'gi');
+      const countryRegex = new RegExp(COUNTRY_CITY_MAP_KEYS_PATTERN, 'gi');
       for (const match of classificationQuery.matchAll(countryRegex)) {
         const countryKey = match[0].toLowerCase();
         if (!detectedCountries.includes(countryKey)) detectedCountries.push(countryKey);
@@ -360,12 +334,10 @@ async function preflightRouter(options) {
       const historicalDecade = `${historicalYear.slice(0, 3)}0s`;
 
       if (cities.length > 0) {
-        result.seedMetricSearchQueries = cities.flatMap(city => [
-          `${city} residential property price per square meter ${currentYear}`,
-          `${city} median individual income salary ${currentYear}`,
-          `${city} housing price ${historicalDecade} historical per sqm`,
-          `${city} median income ${historicalDecade} historical`
-        ]);
+        result.seedMetricSearchQueries = cities.flatMap(city => {
+          const q = buildSearchQueries({ city, currentYear, histYear: historicalYear, histDecade: historicalDecade });
+          return [q.currentPrice, q.currentIncome, q.historicalPrice, q.historicalIncome];
+        });
         // National-level fallback: gives LLM country-wide data if city searches miss
         for (const countryName of detectedCountries) {
           result.seedMetricSearchQueries.push(`${countryName} national average property price per sqm ${currentYear}`);
@@ -377,12 +349,8 @@ async function preflightRouter(options) {
         console.log(`🏠 Preflight: SEED_METRIC detected for cities: ${cities.join(', ')}, historical: ${historicalDecade}, current: ${currentYear}`);
         console.log(`🔍 Preflight: Will search for: ${result.seedMetricSearchQueries.slice(0, 3).join(' | ')}...`);
       } else {
-        result.seedMetricSearchQueries = [
-          `residential property price per square meter comparison major cities ${currentYear}`,
-          `median income by country ${currentYear}`,
-          `housing price ${historicalDecade} historical major cities`,
-          `median income ${historicalDecade} historical`
-        ];
+        const fb = buildFallbackSearchQueries({ currentYear, histDecade: historicalDecade });
+        result.seedMetricSearchQueries = [fb.currentPrice, fb.currentIncome, fb.historicalPrice, fb.historicalIncome];
         result.historicalDecade = historicalDecade;
         result.historicalYear = historicalYear;
         result.currentYear = currentYear;
@@ -441,13 +409,12 @@ async function preflightRouter(options) {
         result.searchStrategy = 'brave';
         
         // Extract cities from abbreviations for search (use global flag to get ALL matches)
-        const cityMap = { 'la': 'los angeles', 'ny': 'new york', 'sf': 'san francisco', 'dc': 'washington dc', 'hk': 'hong kong', 'kl': 'kuala lumpur' };
         const detectedAbbrevs = classificationQuery.toLowerCase().match(/\b(la|ny|sf|dc|hk|kl)\b/gi) || [];
-        const gvCities = [...new Set(detectedAbbrevs.map(abbr => cityMap[abbr.toLowerCase()] || abbr.toLowerCase()))];
+        const gvCities = [...new Set(detectedAbbrevs.map(abbr => CITY_EXPAND[abbr.toLowerCase()] || abbr.toLowerCase()))];
 
         // Expand country names (GEO-VETO path)
         const gvDetectedCountries = [];
-        const gvCountryRegex = new RegExp('\\b(' + Object.keys(COUNTRY_CITY_MAP).join('|') + ')\\b', 'gi');
+        const gvCountryRegex = new RegExp(COUNTRY_CITY_MAP_KEYS_PATTERN, 'gi');
         for (const match of classificationQuery.matchAll(gvCountryRegex)) {
           const countryKey = match[0].toLowerCase();
           if (!gvDetectedCountries.includes(countryKey)) gvDetectedCountries.push(countryKey);
@@ -458,19 +425,17 @@ async function preflightRouter(options) {
 
         // Detect ALL years: first = historical, last = current
         const gvMostRecentYear = String(new Date().getFullYear() - 1);
-        const gvDefaultHistoricalYear = String(new Date().getFullYear() - 50);
+        const gvDefaultHistoricalYear = String(new Date().getFullYear() - 25);
         const gvAllYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)s?\b/g)].map(m => m[1]);
         const gvHistoricalYear = gvAllYears.length > 0 ? gvAllYears[0] : gvDefaultHistoricalYear;
         const gvCurrentYear = gvAllYears.length > 1 ? gvAllYears[gvAllYears.length - 1] : gvMostRecentYear;
         const gvHistoricalDecade = `${gvHistoricalYear.slice(0, 3)}0s`;
 
         if (gvCities.length > 0) {
-          result.seedMetricSearchQueries = gvCities.flatMap(city => [
-            `${city} residential property price per square meter ${gvCurrentYear}`,
-            `${city} median individual income salary ${gvCurrentYear}`,
-            `${city} housing price ${gvHistoricalDecade} historical per sqm`,
-            `${city} median income ${gvHistoricalDecade} historical`
-          ]);
+          result.seedMetricSearchQueries = gvCities.flatMap(city => {
+            const q = buildSearchQueries({ city, currentYear: gvCurrentYear, histYear: gvHistoricalYear, histDecade: gvHistoricalDecade });
+            return [q.currentPrice, q.currentIncome, q.historicalPrice, q.historicalIncome];
+          });
           for (const countryName of gvDetectedCountries) {
             result.seedMetricSearchQueries.push(`${countryName} national average property price per sqm ${gvCurrentYear}`);
             result.seedMetricSearchQueries.push(`${countryName} minimum wage annual ${gvCurrentYear}`);
@@ -657,7 +622,7 @@ async function preflightRouter(options) {
           const _failedTicker = result.ticker;
           const _geoCheck = (classificationQuery + ' ' + _failedTicker).toLowerCase();
           const _cityHit = new RegExp(KNOWN_CITIES_REGEX.source, 'i').test(_geoCheck);
-          const _countryHit = new RegExp('\\b(' + Object.keys(COUNTRY_CITY_MAP).join('|') + ')\\b', 'i').test(_geoCheck);
+          const _countryHit = new RegExp(COUNTRY_CITY_MAP_KEYS_PATTERN, 'i').test(_geoCheck);
 
           if ((_cityHit || _countryHit) && !hasExplicitStockCue) {
             // GEOGRAPHIC GUARD: geographic entity failed YF → redirect to seed-metric
@@ -673,7 +638,7 @@ async function preflightRouter(options) {
             // Build city search queries (same logic as primary seed-metric block)
             const _smCities = [...new Set((_geoCheck.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => c.toLowerCase()))];
             const _smCountries = [];
-            const _smCountryRegex = new RegExp('\\b(' + Object.keys(COUNTRY_CITY_MAP).join('|') + ')\\b', 'gi');
+            const _smCountryRegex = new RegExp(COUNTRY_CITY_MAP_KEYS_PATTERN, 'gi');
             for (const m of _geoCheck.matchAll(_smCountryRegex)) {
               const ck = m[0].toLowerCase();
               if (!_smCountries.includes(ck)) _smCountries.push(ck);
@@ -683,7 +648,7 @@ async function preflightRouter(options) {
             }
             const _smCurrentYear = String(new Date().getFullYear() - 1);
             const _smAllYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)s?\b/g)].map(m => m[1]);
-            const _smHistoricalYear = _smAllYears[0] || String(new Date().getFullYear() - 50);
+            const _smHistoricalYear = _smAllYears[0] || String(new Date().getFullYear() - 25);
             const _smCurrentYearFinal = _smAllYears.length > 1 ? _smAllYears[_smAllYears.length - 1] : _smCurrentYear;
             const _smHistoricalDecade = `${_smHistoricalYear.slice(0, 3)}0s`;
             result.historicalDecade = _smHistoricalDecade;
@@ -691,24 +656,18 @@ async function preflightRouter(options) {
             result.currentYear = _smCurrentYearFinal;
 
             if (_smCities.length > 0) {
-              result.seedMetricSearchQueries = _smCities.flatMap(city => [
-                `${city} residential property price per square meter ${_smCurrentYearFinal}`,
-                `${city} median individual income salary ${_smCurrentYearFinal}`,
-                `${city} housing price ${_smHistoricalDecade} historical per sqm`,
-                `${city} median income ${_smHistoricalDecade} historical`
-              ]);
+              result.seedMetricSearchQueries = _smCities.flatMap(city => {
+                const q = buildSearchQueries({ city, currentYear: _smCurrentYearFinal, histYear: _smHistoricalYear, histDecade: _smHistoricalDecade });
+                return [q.currentPrice, q.currentIncome, q.historicalPrice, q.historicalIncome];
+              });
               for (const cn of _smCountries) {
                 result.seedMetricSearchQueries.push(`${cn} national average property price per sqm ${_smCurrentYearFinal}`);
                 result.seedMetricSearchQueries.push(`${cn} minimum wage annual ${_smCurrentYearFinal}`);
               }
               console.log(`🌍 GEOGRAPHIC GUARD: Seed Metric for cities: ${_smCities.join(', ')}, historical: ${_smHistoricalDecade}`);
             } else {
-              result.seedMetricSearchQueries = [
-                `residential property price per square meter comparison major cities ${_smCurrentYearFinal}`,
-                `median income by country ${_smCurrentYearFinal}`,
-                `housing price ${_smHistoricalDecade} historical major cities`,
-                `median income ${_smHistoricalDecade} historical`
-              ];
+              const fb = buildFallbackSearchQueries({ currentYear: _smCurrentYearFinal, histDecade: _smHistoricalDecade });
+              result.seedMetricSearchQueries = [fb.currentPrice, fb.currentIncome, fb.historicalPrice, fb.historicalIncome];
             }
           } else {
             // Not a geographic entity — genuine invalid ticker
@@ -1023,7 +982,11 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
   
   // Seed Metric proxy cascade - conditional injection (saves ~300 tokens when not triggered)
   if (preflight.routingFlags.isSeedMetric) {
-    messages.push({ role: 'system', content: getSeedMetricProxy() });
+    messages.push({ role: 'system', content: getSeedMetricProxy({
+      historicalDecade: preflight.historicalDecade,
+      historicalYear: preflight.historicalYear,
+      currentYear: preflight.currentYear
+    }) });
     console.log(`🏠 Seed Metric proxy cascade injected (scavenger hunt map)`);
   }
   

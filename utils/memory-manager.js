@@ -14,8 +14,7 @@
 const axios = require('axios');
 const crypto = require('crypto');
 
-const MAX_MESSAGE_SIZE = 50000; // 50KB per message
-const MAX_ATTACHMENT_TEXT_SIZE = 100000; // 100KB per attachment
+const { MAX_CONTENT_CHARS, MAX_MESSAGE_SIZE, GROQ_API_URL } = require('./config-constants');
 
 /**
  * Hash session ID for privacy
@@ -26,7 +25,6 @@ function hashSessionId(sessionId) {
   return crypto.createHash('sha256').update(`${sessionId}:nyan-memory`).digest('hex').slice(0, 16);
 }
 
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const SUMMARY_MODEL = 'llama-3.1-8b-instant';
 const MAX_WINDOW = 8;
 const SUMMARY_TRIGGER_INTERVAL = 2;
@@ -95,9 +93,9 @@ class LocalMemoryManager {
 
     if (attachment) {
       let extractedText = attachment.processedText || attachment.extractedText || '';
-      if (extractedText.length > MAX_ATTACHMENT_TEXT_SIZE) {
-        extractedText = extractedText.slice(0, MAX_ATTACHMENT_TEXT_SIZE) + '... [truncated]';
-        console.warn(`⚠️ Attachment text truncated from ${(attachment.processedText || attachment.extractedText || '').length} to ${MAX_ATTACHMENT_TEXT_SIZE} chars`);
+      if (extractedText.length > MAX_CONTENT_CHARS) {
+        extractedText = extractedText.slice(0, MAX_CONTENT_CHARS) + '... [truncated]';
+        console.warn(`⚠️ Attachment text truncated from ${(attachment.processedText || attachment.extractedText || '').length} to ${MAX_CONTENT_CHARS} chars`);
       }
       
       this.attachments.push({
@@ -481,5 +479,5 @@ module.exports = {
   cleanupOldSessions,
   hashSessionId,
   MAX_MESSAGE_SIZE,
-  MAX_ATTACHMENT_TEXT_SIZE
+  MAX_CONTENT_CHARS
 };

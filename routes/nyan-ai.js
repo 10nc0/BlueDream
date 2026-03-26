@@ -16,6 +16,7 @@ const { config } = require('../config');
 const { PsiEMADashboard, deriveReading } = require('../utils/psi-EMA');
 const { fetchStockPrices, calculateDataAge, sanitizeTicker } = require('../utils/stock-fetcher');
 const { fetchUrl, extractUrls } = require('../lib/url-fetcher');
+const { AUDIO_MIME_EXT_MAP } = require('../utils/file-types');
 
 const API_UNITS = {
     'psi-ema': {
@@ -866,6 +867,35 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         }
     });
 
+    app.get('/api/playground/test-seed-metric', async (req, res) => {
+        if (process.env.NODE_ENV === 'production' || process.env.REPL_SLUG === 'production') {
+            return res.status(404).json({ error: 'Not available in production' });
+        }
+        const rawCities = Array.isArray(req.query.cities) ? req.query.cities.join(',') : (req.query.cities || 'singapore,seoul');
+        const cities = rawCities.split(',').map(c => c.trim().toLowerCase().replace(/[^a-z\s-]/g, '')).filter(Boolean).slice(0, 6);
+        const message = `${cities.join(' ')} seed metric`;
+        const clientIp = req.ip || req.connection.remoteAddress;
+        try {
+            const result = await orchestrator.run({
+                message,
+                conversationHistory: [],
+                clientIp,
+                extractedContent: [],
+            });
+            res.json({
+                query: message,
+                cities,
+                mode: result.mode,
+                answer: result.answer,
+                processingTime: result.processingTime,
+                sourceUrls: result.sourceUrls || [],
+            });
+        } catch (error) {
+            logger.error({ err: error, cities }, 'Test seed metric error');
+            res.status(500).json({ error: error.message });
+        }
+    });
+
     app.delete('/api/playground/nuke', (req, res) => {
         const clientIp = req.ip || req.connection.remoteAddress;
         try {
@@ -980,8 +1010,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         let audName = aud.name || '';
                         if (!audName || !audName.includes('.')) {
                             const mimeM = typeof aud.data === 'string' && aud.data.match(/^data:([^;]+);base64,/);
-                            const extMap = { 'audio/webm': 'webm', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/flac': 'flac' };
-                            const ext = mimeM ? (extMap[mimeM[1]] || 'webm') : 'webm';
+                            const ext = mimeM ? (AUDIO_MIME_EXT_MAP[mimeM[1]] || 'webm') : 'webm';
                             audName = `audio.${ext}`;
                         }
                         const result = await processDocumentForAI(aud.data, audName, aud.type || 'audio', { tenantId: clientIp });
@@ -1230,8 +1259,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         let audName = aud.name || '';
                         if (!audName || !audName.includes('.')) {
                             const mimeM = typeof aud.data === 'string' && aud.data.match(/^data:([^;]+);base64,/);
-                            const extMap = { 'audio/webm': 'webm', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/flac': 'flac' };
-                            const ext = mimeM ? (extMap[mimeM[1]] || 'webm') : 'webm';
+                            const ext = mimeM ? (AUDIO_MIME_EXT_MAP[mimeM[1]] || 'webm') : 'webm';
                             audName = `audio.${ext}`;
                         }
                         const result = await processDocumentForAI(aud.data, audName, aud.type || 'audio', { tenantId: clientIp });

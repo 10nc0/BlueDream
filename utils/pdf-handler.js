@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { MAX_CONTENT_CHARS } = require('./config-constants');
 
 // Retry helper with exponential backoff for Groq API calls
 async function groqWithRetry(axiosCall, maxRetries = 3) {
@@ -40,8 +41,7 @@ async function parsePDFHybrid(buffer, fileName) {
     
     console.log(`📄 Hybrid PDF parser: Processing ${fileName}`);
     
-    // Token limit safeguard: ~100k chars ≈ 25k tokens (safe for Groq context)
-    const MAX_TEXT_CHARS = 100000;
+    const MAX_TEXT_CHARS = MAX_CONTENT_CHARS;
     
     try {
         // Use standard pdfParse(buffer) API - extracts ALL pages automatically
