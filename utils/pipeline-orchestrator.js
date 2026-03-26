@@ -1171,7 +1171,7 @@ Rules:
 --- SEED METRIC: PURIFY → CALCULATE → SCRIBE ---
 Three gates. Execute in order. Do not skip ahead or merge gates.
 
-GATE 2A — PURIFY (standardize units — output this block before any math):
+GATE 2A — PURIFY (standardize units — work through this internally, output as HTML comment):
   For every (city, period) pair in the search results, write one line:
   [City] [Period]: raw=[value][unit] → sqm=[converted_value] [LCU] | income=[value] [LCU] | TFR=[value] | type=[built|land]
 
@@ -1189,7 +1189,7 @@ GATE 2A — PURIFY (standardize units — output this block before any math):
 
   Price type: "built" = apartment/flat/condo; "land" = plot/vacant. Prefer built.
 
-GATE 2B — CALCULATE (arithmetic only — use Gate 2A values, no new data):
+GATE 2B — CALCULATE (arithmetic only — use Gate 2A values, also output as HTML comment):
   For each row where both sqm and income are NOT N/A:
   • 700sqm Price = sqm × 700  →  Years = (sqm × 700) ÷ income  (integer, round to nearest, no decimals)
   • Write the arithmetic explicitly: e.g. "10,247 × 700 ÷ 104,400 = 68yr" — this is your self-check.
@@ -1197,10 +1197,7 @@ GATE 2B — CALCULATE (arithmetic only — use Gate 2A values, no new data):
   • If either value N/A → Years = N/A, Regime = N/A.
   • Zero is valid (land was free/state-granted). Not the same as missing.
 
-  After all rows, output:
-  <!--SEED_META:{"rows":[{"city":"CityName","period":"YYYY","priceType":"built|land","incomeType":"single|household"},...]}-->
-
-GATE 3 — SCRIBE (build table from Gate 2B — no new arithmetic here):
+GATE 3 — SCRIBE (visible output only — build table from Gate 2B, no new arithmetic):
   | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | TFR | Regime |
 
   After table: **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
@@ -1208,7 +1205,9 @@ GATE 3 — SCRIBE (build table from Gate 2B — no new arithmetic here):
   **Sources:**
   - [page title](url)  ← only URLs from search results. No bare URLs. No invented sources.
 
-OUTPUT ORDER: Gate 2A block → Gate 2B block → Gate 3 table → summary → legend → sources.`;
+OUTPUT ORDER:
+  1. Gate 3 table + summary + legend + sources  (visible — output this first)
+  2. <!--PURIFY: [Gate 2A lines] | CALCULATE: [Gate 2B lines] | SEED_META:{"rows":[...]}-->  (hidden — one HTML comment at the very end)`;
 
     const round1Messages = [
       { role: 'system', content: gatherPrompt },
