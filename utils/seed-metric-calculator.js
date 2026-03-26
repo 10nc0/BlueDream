@@ -103,7 +103,7 @@ function applyMultiplier(value, raw) {
   if (/billion|bn/i.test(raw))           return value * 1_000_000_000;
   if (/million|mil\b|億/i.test(raw) || /\bM\b/.test(raw)) return value * 1_000_000;
   if (/만|万/i.test(raw))                return value * 10_000;
-  if (/\bk\b|thousand/i.test(raw))       return value * 1_000;
+  if (/\dk\b|thousand/i.test(raw))       return value * 1_000;
   return value;
 }
 
@@ -121,7 +121,7 @@ function normalizeNumberFormat(text) {
 
 // Regex fragments reused in both parsers
 const _SQM  = '(?:sq\\s*m|sqm|m²|square\\s*met(?:er|re)s?)';
-const _PSF  = '(?:psf|sq\\s*ft|sqft)';
+const _PSF  = '(?:psf|sq(?:uare)?\\s*(?:ft|f(?:oo|ee)t)|sqft)';
 const _NUM  = '([\\d,]+(?:\\.\\d+)?)';
 const _MULT = '(?:\\s*(?:billion|bn|million|mil|M|k|thousand|만|万|億|억))?';
 // _CURSYM: optional currency noise before/after a number.
@@ -162,7 +162,8 @@ function parsePricePerSqm(text, city = '') {
   const patterns = [
     new RegExp(`${_CURSYM}${_NUM}${_MULT}\\s*(?:\\/|per)\\s*${_AREA}`, 'gi'),
     new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS_EXACT})?\\s*(?:\\/|per)\\s*${_AREA}`, 'gi'),
-    new RegExp(`(?:price|cost|average|median)\\s*(?:per|\\/)\\s*${_AREA}[^0-9]*${_NUM}`, 'gi'),
+    new RegExp(`(?:price|cost|average|median)[^.]{0,40}(?:per|\\/)\\s*${_AREA}[^0-9]{0,40}${_CURSYM}${_NUM}${_MULT}`, 'gi'),
+    new RegExp(`(?:per|\\/)\\s*${_AREA}[^0-9]{0,40}${_CURSYM}${_NUM}${_MULT}`, 'gi'),
     new RegExp(`${_CURSYM}${_NUM}${_MULT}\\s+${_PSF}`, 'gi'),
     new RegExp(`${_NUM}${_MULT}\\s*(?:yuan|won|yen|ringgit|baht|rupee|rupiah|dong|peso|franc|krona|krone)\\s*(?:\\/|per)\\s*${_AREA}`, 'gi'),
   ];
@@ -174,7 +175,7 @@ function parsePricePerSqm(text, city = '') {
       if (!valueStr) continue;
       let value = applyMultiplier(parseFloat(valueStr), raw);
       if (!isFinite(value) || value <= 0) continue;
-      const isPsf = /psf|sq\s*ft|sqft/i.test(raw);
+      const isPsf = /psf|sq(?:uare)?\s*(?:ft|f(?:oo|ee)t)|sqft/i.test(raw);
       if (isPsf) value *= 10.764;
       const priceType = classifyPriceType(raw) || classifyPriceType(text);
       return { value, currency, raw, isPsf, priceType };
@@ -207,7 +208,7 @@ function triangulateFromTotalPrice(text, city = '') {
     if (/^(19|20)\d{2}$/.test(numStr)) continue;
     let area = parseFloat(numStr);
     if (!isFinite(area) || area <= 0) continue;
-    const isPsf = /psf|sq\s*ft|sqft/i.test(m[0]);
+    const isPsf = /psf|sq(?:uare)?\s*(?:ft|f(?:oo|ee)t)|sqft/i.test(m[0]);
     if (isPsf) area /= 10.764;
     if (area < 10 || area > 10_000) continue;
     areas.push({ area, index: m.index, raw: m[0], isPsf });

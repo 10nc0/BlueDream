@@ -1159,21 +1159,21 @@ Cities: ${citiesWithCurrency}
 Current year: ${smCurrentYear} | Historical period: ${histDecade} (approx ${histYear})
 
 For EACH city, for EACH period (current + historical), run exactly 2 searches = 4 searches per city:
-  1. "{city} apartment sale price {currency word} ${smCurrentYear}"
+  1. "{city} median price per square foot residential property {currency word} ${smCurrentYear}"
   2. "{city} median single earner annual income {currency word} ${smCurrentYear}"
-  3. "{city} apartment sale price {currency word} ${histYear} OR ${histDecade}"
+  3. "{city} median price per square foot residential property {currency word} ${histYear} OR ${histDecade}"
   4. "{city} median single earner annual income {currency word} ${histYear} OR ${histDecade}"
 
 {currency word} = the actual word (not symbol): "yen", "rupiah", "Singapore dollars", "baht", "won", "zloty", "reais", "lira", "ringgit", "dong", "yuan", "pounds", "euros", "dollars", etc.
 
 Example queries for Singapore:
-  "Singapore apartment sale price Singapore dollars ${smCurrentYear}"
+  "Singapore median price per square foot residential property Singapore dollars ${smCurrentYear}"
   "Singapore median single earner annual income Singapore dollars ${smCurrentYear}"
-  "Singapore apartment sale price Singapore dollars ${histYear} OR ${histDecade}"
+  "Singapore median price per square foot residential property Singapore dollars ${histYear} OR ${histDecade}"
   "Singapore median single earner annual income Singapore dollars ${histYear} OR ${histDecade}"
 
 STRICT RULES:
-- Do NOT include "per sqm" in any query — listings naturally contain total price and area
+- Always include "per square foot" in price queries — we need unit-price data, not total home prices
 - Do NOT search TFR or fertility rates — the server handles TFR separately
 - Use the local currency WORD to return local market results, not USD international aggregators
 - Run ALL searches. Do NOT compute or output any text.`;
@@ -1237,6 +1237,8 @@ STRICT RULES:
       const lines = items.slice(0, 6).map(r =>
         `  • ${[r.title, r.description].filter(Boolean).join(': ')} [${r.url || ''}]`
       ).join('\n');
+      console.log(`🔬 Brave #${i + 1} "${q}" → ${items.length} results`);
+      items.slice(0, 3).forEach((r, j) => console.log(`   [${j}] ${(r.description || '').slice(0, 200)}`));
       return `[Search ${i + 1}] "${q}"\n${lines || '  (no results)'}`;
     }).join('\n\n');
 
@@ -1290,8 +1292,10 @@ STRICT RULES:
     }
 
     // ── Parse: server-side regex (triangulation primary: price÷area from listings) ─
+    const parserInput = braveResultsSummary.replace(/^\[Search \d+\].*$/gm, '');
     console.log(`🏗️ Seed Metric: parsing ${smCities.join(', ')}`);
-    let parsedData = parseSeedMetricData(braveResultsSummary, smCities, smHistDecade, smCurrentYear);
+    console.log(`📝 Parser input (${parserInput.length} chars):\n${parserInput.slice(0, 2000)}`);
+    let parsedData = parseSeedMetricData(parserInput, smCities, smHistDecade, smCurrentYear);
     parsedData.parseLog?.forEach(l => console.log(`  📋 ${l}`));
 
     // ── Coverage check: count N/A cells across all city-period slots ─────

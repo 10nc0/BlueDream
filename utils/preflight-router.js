@@ -407,9 +407,9 @@ async function preflightRouter(options) {
 
       if (cities.length > 0) {
         result.seedMetricSearchQueries = cities.flatMap(city => [
-          `${city} residential property price per square meter ${currentYear}`,
+          `${city} median price per square foot residential property ${currentYear}`,
           `${city} median individual income salary ${currentYear}`,
-          `${city} housing price ${historicalDecade} historical per sqm`,
+          `${city} median price per square foot residential property ${historicalDecade} historical`,
           `${city} median income ${historicalDecade} historical`
         ]);
         // National-level fallback: gives LLM country-wide data if city searches miss
