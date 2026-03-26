@@ -142,7 +142,7 @@ function parsePricePerSqm(text, city = '') {
 }
 
 // ─── TFR (Total Fertility Rate) parser ──────────────────────────────────────────
-function parseTFR(snippets, city = '') {
+function parseTFR(snippets, city = '', targetYear = '') {
   if (!snippets) return null;
   const text = typeof snippets === 'string' ? snippets : JSON.stringify(snippets);
   if (!text || text.length < 10) return null;
@@ -156,23 +156,50 @@ function parseTFR(snippets, city = '') {
     /(\d\.\d{1,2})\s*(?:total\s+)?fertility/gi,
   ];
 
+  const targetYearNum = parseInt(targetYear) || 0;
+  const targetDecadeBase = targetYearNum ? Math.floor(targetYearNum / 10) * 10 : 0;
+
   const candidates = [];
   for (const pat of patterns) {
     for (const m of text.matchAll(pat)) {
       const val = parseFloat(m[1]);
       if (val >= 0.5 && val <= 9.9) {
-        const nearCity = cityLower
-          ? text.slice(Math.max(0, m.index - 200), m.index + m[0].length + 200).toLowerCase().includes(cityLower)
-          : true;
-        candidates.push({ value: val, nearCity, index: m.index });
+        const window = text.slice(Math.max(0, m.index - 200), m.index + m[0].length + 200);
+        const windowLower = window.toLowerCase();
+        const nearCity = cityLower ? windowLower.includes(cityLower) : true;
+
+        let yearProximity = 0;
+        if (targetYearNum) {
+          const yearsInWindow = [...window.matchAll(/\b(19[5-9]\d|20[0-4]\d)\b/g)].map(y => parseInt(y[1]));
+          const decadesInWindow = [...window.matchAll(/\b(19[5-9]\d|20[0-4]\d)s\b/g)].map(d => parseInt(d[1]));
+          for (const y of yearsInWindow) {
+            if (Math.abs(y - targetYearNum) <= 3) { yearProximity = 3; break; }
+            if (Math.abs(y - targetYearNum) <= 10) yearProximity = Math.max(yearProximity, 2);
+          }
+          for (const d of decadesInWindow) {
+            if (d === targetDecadeBase) yearProximity = Math.max(yearProximity, 2);
+          }
+        }
+
+        candidates.push({ value: val, nearCity, yearProximity, index: m.index });
       }
     }
   }
 
   if (candidates.length === 0) return null;
+
   const cityMatches = candidates.filter(c => c.nearCity);
-  const best = cityMatches.length > 0 ? cityMatches[0] : candidates[0];
-  return best.value;
+  const pool = cityMatches.length > 0 ? cityMatches : candidates;
+
+  if (targetYearNum) {
+    const maxProx = Math.max(...pool.map(c => c.yearProximity));
+    if (maxProx > 0) {
+      const yearBest = pool.filter(c => c.yearProximity === maxProx);
+      return yearBest[0].value;
+    }
+  }
+
+  return pool[0].value;
 }
 
 function injectTFRColumn(tableText, tfrCapsule) {

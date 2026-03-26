@@ -1431,14 +1431,15 @@ Rules:
         const currentQuery = `"${city}" total fertility rate ${currentYear}`;
         console.log(`🐣 TFR search: "${currentQuery}"`);
         const currentResult = await this.searchBrave(currentQuery, clientIp);
-        tfrCapsule[cityKey].current = parseTFR(currentResult, city);
+        tfrCapsule[cityKey].current = parseTFR(currentResult, city, currentYear);
 
         await new Promise(r => setTimeout(r, 1100));
 
         const histQuery = `"${city}" total fertility rate ${historicalDecade}`;
         console.log(`🐣 TFR search: "${histQuery}"`);
         const histResult = await this.searchBrave(histQuery, clientIp);
-        tfrCapsule[cityKey].historical = parseTFR(histResult, city);
+        const histTargetYear = historicalDecade.replace(/s$/, '');
+        tfrCapsule[cityKey].historical = parseTFR(histResult, city, histTargetYear);
 
         if (i < cities.length - 1) await new Promise(r => setTimeout(r, 1100));
       } catch (err) {
