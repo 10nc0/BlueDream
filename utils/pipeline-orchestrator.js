@@ -1090,9 +1090,12 @@ User query: ${query}`;
    */
   async stepSeedMetricToolCall(state, input) {
     const { query, clientIp } = input;
-    const currentYear = new Date().getFullYear();
-    const histDecade = state.preflight?.historicalDecade || (String(currentYear - 30).slice(0, 3) + '0s');
-    const histYear   = state.preflight?.historicalYear   || String(currentYear - 30);
+    const currentYear    = new Date().getFullYear();
+    // smCurrentYear: preflight-detected year (e.g. "now" → 2025 from query context)
+    // Must be defined BEFORE gatherPrompt so gather and parser use the same year.
+    const smCurrentYear  = state.preflight?.currentYear || currentYear;
+    const histDecade     = state.preflight?.historicalDecade || (String(smCurrentYear - 30).slice(0, 3) + '0s');
+    const histYear       = state.preflight?.historicalYear   || String(smCurrentYear - 30);
     const gatherCities = state.preflight?.seedMetricCities?.length
       ? state.preflight.seedMetricCities
       : null;
@@ -1151,19 +1154,19 @@ User query: ${query}`;
 
 --- SEED METRIC: GATHER ---
 Cities: ${citiesWithCurrency}
-Current year: ${currentYear} | Historical period: ${histDecade} (approx ${histYear})
+Current year: ${smCurrentYear} | Historical period: ${histDecade} (approx ${histYear})
 
 For EACH city, for EACH period (current + historical), run exactly 2 searches = 4 searches per city:
-  1. "{city} apartment sale price {currency word} ${currentYear}"
-  2. "{city} median single earner annual income {currency word} ${currentYear}"
+  1. "{city} apartment sale price {currency word} ${smCurrentYear}"
+  2. "{city} median single earner annual income {currency word} ${smCurrentYear}"
   3. "{city} apartment sale price {currency word} ${histYear} OR ${histDecade}"
   4. "{city} median single earner annual income {currency word} ${histYear} OR ${histDecade}"
 
 {currency word} = the actual word (not symbol): "yen", "rupiah", "Singapore dollars", "baht", "won", "zloty", "reais", "lira", "ringgit", "dong", "yuan", "pounds", "euros", "dollars", etc.
 
 Example queries for Singapore:
-  "Singapore apartment sale price Singapore dollars ${currentYear}"
-  "Singapore median single earner annual income Singapore dollars ${currentYear}"
+  "Singapore apartment sale price Singapore dollars ${smCurrentYear}"
+  "Singapore median single earner annual income Singapore dollars ${smCurrentYear}"
   "Singapore apartment sale price Singapore dollars ${histYear} OR ${histDecade}"
   "Singapore median single earner annual income Singapore dollars ${histYear} OR ${histDecade}"
 
@@ -1248,7 +1251,7 @@ STRICT RULES:
         })();
 
     const smHistDecade = histDecade;
-    const smCurrentYear = state.preflight?.currentYear || currentYear;
+    // smCurrentYear already defined at function top — do not redefine
 
     // ── TFR bypass: 1 server Brave call per city (never passed to LLM) ────
     const stripDia = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');

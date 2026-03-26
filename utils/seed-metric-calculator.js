@@ -87,6 +87,18 @@ function applyMultiplier(value, raw) {
   return value;
 }
 
+/**
+ * Normalize European number formats before running regex parsers.
+ * Collapses space-as-thousands-separator: "3 800" → "3800", "3 800 000" → "3800000".
+ * Applied twice to handle chained groups (e.g. "1 234 567" → "1234567").
+ * Covers Finnish/Scandinavian/French formats common in property portal snippets.
+ */
+function normalizeNumberFormat(text) {
+  if (!text) return text;
+  const once = s => s.replace(/(\d) (\d{3})(?!\d)/g, '$1$2');
+  return once(once(text));
+}
+
 // Regex fragments reused in both parsers
 const _SQM  = '(?:sq\\s*m|sqm|m²|square\\s*met(?:er|re)s?)';
 const _PSF  = '(?:psf|sq\\s*ft|sqft)';
@@ -105,6 +117,7 @@ const _SYMS = _SYMBOL_MAP.map(e => e.sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
  */
 function parsePricePerSqm(text, city = '') {
   if (!text) return null;
+  text = normalizeNumberFormat(text);
 
   const currency = detectCurrency(city, text);
   const { usdRate } = CURRENCY_REGISTRY[currency];
@@ -153,6 +166,7 @@ function parsePricePerSqm(text, city = '') {
  */
 function triangulateFromTotalPrice(text, city = '') {
   if (!text) return null;
+  text = normalizeNumberFormat(text);
 
   const currency = detectCurrency(city, text);
   const { usdRate } = CURRENCY_REGISTRY[currency];
@@ -214,11 +228,12 @@ function triangulateFromTotalPrice(text, city = '') {
 }
 
 /**
- * Resolve price per sqm: triangulation first (total÷area), direct quote fallback.
- * Triangulation is preferred — it works even when the snippet has no pre-computed $/sqm.
+ * Resolve price per sqm: direct quote first, triangulation fallback.
+ * Direct /sqm quotes from property portals are authoritative (e.g. "£7,474/m²").
+ * Triangulation (total ÷ area) is the fallback when no direct quote exists.
  */
 function resolvePrice(text, city = '') {
-  return triangulateFromTotalPrice(text, city) || parsePricePerSqm(text, city);
+  return parsePricePerSqm(text, city) || triangulateFromTotalPrice(text, city);
 }
 
 // ─── Income parser ────────────────────────────────────────────────────────────
@@ -232,6 +247,7 @@ function resolvePrice(text, city = '') {
  */
 function parseIncome(text, city = '', preferSingleEarner = true) {
   if (!text) return null;
+  text = normalizeNumberFormat(text);
 
   const currency = detectCurrency(city, text);
   const { usdRate } = CURRENCY_REGISTRY[currency];
@@ -259,6 +275,8 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
       const raw = match[0];
       const valueStr = (match[1] || match[2] || '').replace(/,/g, '');
       if (!valueStr) continue;
+      // Reject lone 4-digit calendar years (1900–2099) — they appear as context, not incomes
+      if (/^(19|20)\d{2}$/.test(valueStr)) continue;
       const value = applyMultiplier(parseFloat(valueStr), raw);
       if (!isFinite(value) || value <= 0) continue;
       // Sanity: $500–$1,000,000 annual income in USD equivalent
