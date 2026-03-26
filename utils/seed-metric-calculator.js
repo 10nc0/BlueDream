@@ -34,13 +34,27 @@ const CURRENCY_REGISTRY = {
   VND: { symbols: ['VND', 'dong', '₫'],            usdRate: 0.000040,   cities: ['hanoi', 'ho chi minh', 'saigon', 'vietnam'] },
   THB: { symbols: ['THB', 'baht', '฿'],            usdRate: 0.028,      cities: ['bangkok', 'phuket', 'thailand'] },
   MYR: { symbols: ['MYR', 'RM', 'ringgit'],        usdRate: 0.213,      cities: ['kuala lumpur', 'penang', 'malaysia'] },
-  PHP: { symbols: ['PHP', '₱', 'peso'],            usdRate: 0.018,      cities: ['manila', 'cebu', 'philippines'] },
+  PHP: { symbols: ['PHP', '₱'],                    usdRate: 0.018,      cities: ['manila', 'cebu', 'philippines'] },
   AED: { symbols: ['AED', 'dirham'],               usdRate: 0.272,      cities: ['dubai', 'abu dhabi', 'uae'] },
   BRL: { symbols: ['BRL', 'R$'],                   usdRate: 0.196,      cities: ['sao paulo', 'rio', 'brazil'] },
   NZD: { symbols: ['NZD', 'NZ$'],                  usdRate: 0.61,       cities: ['auckland', 'wellington', 'new zealand'] },
-  ZAR: { symbols: ['ZAR', 'R'],                    usdRate: 0.054,      cities: ['johannesburg', 'cape town', 'south africa'] },
+  ZAR: { symbols: ['ZAR'],                         usdRate: 0.054,      cities: ['johannesburg', 'cape town', 'south africa'] },
   MXN: { symbols: ['MXN', 'MX$'],                 usdRate: 0.058,      cities: ['mexico city', 'guadalajara', 'mexico'] },
-  TRY: { symbols: ['TRY', '₺'],                    usdRate: 0.031,      cities: ['istanbul', 'ankara', 'turkey'] },
+  TRY: { symbols: ['TRY', '₺', 'lira'],            usdRate: 0.031,      cities: ['istanbul', 'ankara', 'turkey'] },
+  SEK: { symbols: ['SEK', 'kr', 'kronor'],          usdRate: 0.095,      cities: ['stockholm', 'gothenburg', 'malmö', 'sweden'] },
+  NOK: { symbols: ['NOK', 'krone'],                 usdRate: 0.091,      cities: ['oslo', 'bergen', 'norway'] },
+  DKK: { symbols: ['DKK'],                          usdRate: 0.14,       cities: ['copenhagen', 'denmark'] },
+  PLN: { symbols: ['PLN', 'zł', 'zloty'],           usdRate: 0.25,       cities: ['warsaw', 'krakow', 'gdansk', 'poland'] },
+  CZK: { symbols: ['CZK', 'Kč', 'koruna'],          usdRate: 0.043,      cities: ['prague', 'brno', 'czech republic', 'czechia'] },
+  HUF: { symbols: ['HUF', 'Ft', 'forint'],          usdRate: 0.0027,     cities: ['budapest', 'hungary'] },
+  TWD: { symbols: ['TWD', 'NT$'],                   usdRate: 0.031,      cities: ['taipei', 'kaohsiung', 'taiwan'] },
+  ARS: { symbols: ['ARS', 'AR$'],                   usdRate: 0.00085,    cities: ['buenos aires', 'argentina'] },
+  COP: { symbols: ['COP', 'COL$'],                  usdRate: 0.00024,    cities: ['bogota', 'medellin', 'colombia'] },
+  PEN: { symbols: ['PEN', 'S/.', 'soles'],          usdRate: 0.27,       cities: ['lima', 'peru'] },
+  CLP: { symbols: ['CLP', 'CL$'],                   usdRate: 0.0010,     cities: ['santiago', 'chile'] },
+  EGP: { symbols: ['EGP', 'E£'],                    usdRate: 0.020,      cities: ['cairo', 'alexandria', 'egypt'] },
+  KES: { symbols: ['KES', 'KSh', 'shillings'],      usdRate: 0.0077,     cities: ['nairobi', 'mombasa', 'kenya'] },
+  NGN: { symbols: ['NGN', '₦', 'naira'],             usdRate: 0.00061,    cities: ['lagos', 'abuja', 'nigeria'] },
 };
 
 // Build a flat symbol→code lookup (longest symbols checked first to avoid prefix collisions)
@@ -63,7 +77,10 @@ const _SYMBOL_MAP = (() => {
 function detectCurrency(city = '', text = '') {
   const cityLower = city.toLowerCase();
   for (const [code, info] of Object.entries(CURRENCY_REGISTRY)) {
-    if (info.cities.some(c => cityLower.includes(c))) return code;
+    if (info.cities.includes(cityLower)) return code;
+  }
+  for (const [code, info] of Object.entries(CURRENCY_REGISTRY)) {
+    if (info.cities.some(c => c.length > 2 && cityLower.includes(c))) return code;
   }
   // Scan text for explicit currency symbols/codes (longest first)
   for (const { sym, code } of _SYMBOL_MAP) {
