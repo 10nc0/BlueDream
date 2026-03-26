@@ -484,9 +484,7 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
   const table        = rows.join('\n');
   const summaryBlock = summaries.join('\n');
 
-  const legend = `\n---\n**Seed Metric Regime** (φ-derived from 25yr fertility window):\n\nFormula: **Years = (LCU/sqm × 700) ÷ (Single-Earner Income)**\n*(Simple division. NO mortgage. NO interest rates. NO down payments.)*\n\n- 🟢 **Optimism**: <10yr — Housing accessible within early career\n- 🟡 **Extraction**: 10-25yr — Affordable but requires sustained effort\n- 🔴 **Fatalism**: >25yr — Exceeds fertility window; systemic barrier`;
-
-  return `${table}\n\n${summaryBlock}\n${legend}`;
+  return `${table}\n\n${summaryBlock}`;
 }
 
 /**

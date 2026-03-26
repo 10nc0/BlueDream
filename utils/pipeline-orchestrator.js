@@ -1366,8 +1366,6 @@ OUTPUT ORDER:
     }
     const sourcesSection = `\n\n📚 **Sources:** Brave Search (live web)${sourceUrls.length ? '\n' + sourceUrls.map(u => `- ${u}`).join('\n') : ''}`;
 
-    const tableWithSources = tableText + sourcesSection;
-
     state.didSearch = true;
     state.seedMetricDirectOutput = true;
     console.log(`🐕 Seed Metric: ${callsToRun.length} Brave calls → deterministic table (${tableText.length} chars)`);
@@ -1396,7 +1394,7 @@ Rules:
           model: this.llmModel,
           messages: [
             { role: 'system', content: codaSystemPrompt },
-            { role: 'user', content: tableWithSources }
+            { role: 'user', content: tableText }
           ],
           temperature: 0.7,
           max_tokens: 300
@@ -1417,7 +1415,10 @@ Rules:
     }
 
     state.seedMetricCoda = coda;
-    state.draftAnswer = this._insertSeedMetricCoda(tableWithSources, coda);
+    // Canonical order: table → coda → sources
+    state.draftAnswer = tableText
+      + (coda ? '\n\n' + coda : '')
+      + sourcesSection;
   }
 
   // Helper: splice coda before sources block, or append if no sources found
@@ -1817,7 +1818,7 @@ Output ONLY the corrected table and summary lines:`;
     if (!state.fastPath && !/\*\*Source/i.test(state.finalAnswer)) {
       let sourceLabel;
       if (state.psiEmaDirectOutput)        sourceLabel = 'yfinance + SEC EDGAR (live data)';
-      else if (state.seedMetricDirectOutput) sourceLabel = 'Brave Search — live $/sqm triangulation';
+      else if (state.seedMetricDirectOutput) sourceLabel = 'Brave Search (live web)';
       else if (state.mode === 'forex')     sourceLabel = 'fawazahmed0 — live FX rates';
       else if (state.didSearch)            sourceLabel = 'Brave Search (live web)';
       else                                 sourceLabel = 'Llama 3.3 70B training data';
