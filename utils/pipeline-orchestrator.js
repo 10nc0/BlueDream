@@ -1133,18 +1133,10 @@ User query: ${query}`;
 --- SEED METRIC: GATHER RAW INGREDIENTS ---
 You have brave_search. Do NOT compute or output anything — just fetch.
 
-STEP 0 — COMPANION CITY (do this BEFORE anything else):
-  Count the cities in the user's query.
-  • ONE city → immediately pick ONE companion from a different continent/culture. Your very first
-    searches must include this companion. Do not ask permission. Just pick and search.
-    The companion should contrast: different economic tier, different TFR trajectory, different region.
-  • TWO or more cities → no companion needed. Proceed to Step 1.
-
-STEP 1 — FOR EVERY CITY (user cities + companion), gather per period:
+FOR EVERY CITY in the query, gather per period — all three ingredients at the SAME geographic level (city or province, not country):
 
   Each brave_search call returns ~5-10 snippets. PURIFY reads ALL of them to triangulate
-  multiple price+area pairs and median them. You don't need duplicate searches for fidelity —
-  one well-targeted call gives enough anchors. Spend your budget across more cities and periods.
+  multiple price+area pairs and median them. One well-targeted call gives enough anchors.
 
   Current period (${currentYear}):
     Price — 1 search:
@@ -1154,29 +1146,32 @@ STEP 1 — FOR EVERY CITY (user cities + companion), gather per period:
       PURCHASE only — NOT rent, NOT monthly payment, NOT mortgage.
     Income — 1 search:
       "{city} median individual annual income {local currency} ${currentYear}"
+    TFR — 1 search at the most granular level available (city/province > country):
+      "{city} OR {province/region} total fertility rate ${currentYear}"
+      Jakarta → "DKI Jakarta fertility rate ${currentYear}"
+      Mumbai → "Maharashtra fertility rate ${currentYear}"
+      Only use country-level TFR if city/province data is genuinely absent from results.
 
   Historical period (${histDecade} era):
-    NO LISTINGS from 50 years ago. Search for articles, reports, government records:
-      Price — 1 search: "{city} housing property price ${histDecade} historical report statistics"
-      NOMINAL prices only — the actual face value in ${histDecade} money, NOT "in today's money".
+    Price — 1 search (articles/reports, not listings — those don't exist online for past decades):
+      "{city} housing property price ${histDecade} historical report statistics"
+      NOMINAL — the actual face value in ${histDecade} money, NOT "in today's money".
     Income — 1 search:
       "{city} wages salaries ${histYear} ${histDecade} nominal historical"
       NOMINAL — the actual pay then, NOT inflation-adjusted.
-
-  TFR — 1 search per COUNTRY per period (national stat, not city):
-    Current:    "{country} total fertility rate ${currentYear}"
-    Historical: "{country} total fertility rate ${histYear} OR ${histDecade}"
+    TFR — 1 search at city/province level if available, else country:
+      "{city} OR {province} total fertility rate ${histYear} OR ${histDecade}"
 
 Replace {local currency} with the currency word (rupees, yen, baht, dong, yuan, pounds, euros, etc.)
-to force Brave to return local-market data, not USD conversions.
+to force Brave to return local-market data, not USD-converted values.
 
 Income = median SINGLE earner only. Not household. Not average.
 If monthly → ×12. If household only → N/A, search again.
 
 Rules:
-  • Search ALL cities (user + companion) — skipping any city is a failure.
   • Only use values that appear in search results. No training-data estimates.
-  • No number → N/A. Historical N/A is honest; a guess is not.`;
+  • No number → N/A. Historical N/A is honest; a guess is not.
+  • All three ingredients (price, income, TFR) must be at the same geographic resolution.`;
 
     // ── Round 2: PURIFY prompt — LLM reads raw Brave results, outputs structured lines ──
     // LLM job: quanta extraction (including triangulation: total÷area=sqm/sqft→sqm).
@@ -1212,6 +1207,8 @@ Rules:
   - Household/dual-earner figure → income=N/A (do not use).
   - If unavailable → income=N/A
 • TFR = total fertility rate as a single decimal (e.g. 1.04). N/A if not in results. Do not guess.
+  - Prefer city/province TFR over country TFR (DKI Jakarta > Indonesia, Maharashtra > India, etc.)
+  - Only use national TFR if no city/province figure appears anywhere in the results.
 • type = built (apartment/flat/condo) or land (vacant plot). Prefer built. N/A if unknown.
 • NOMINAL ONLY: reject any value described as "real terms", "inflation-adjusted", "in today's money".
 • HISTORICAL SANITY CHECK: for any period before 1990, prices must be explicitly anchored to that
