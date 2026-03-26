@@ -1353,9 +1353,13 @@ async function clearNyanHistory() {
     console.log('🧹 Conversation cleared - fresh start! State completely reset.');
 }
 
-// Glassmorphism confirm dialog — window.confirm() is blocked in cross-origin iframes
-// Identical pattern to dashboard.js nyanConfirm.
-function nyanConfirm(message, subtext, onConfirm, danger = true) {
+function _escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function nyanConfirm(message, subtext, onConfirm, danger = true, okLabel = 'Clear') {
     const existing = document.getElementById('nyanConfirmOverlay');
     if (existing) existing.remove();
     const overlay = document.createElement('div');
@@ -1365,11 +1369,11 @@ function nyanConfirm(message, subtext, onConfirm, danger = true) {
     const colorBg = danger ? 'rgba(239,68,68,0.15)' : 'rgba(168,85,247,0.15)';
     overlay.innerHTML = `
       <div style="background:rgba(15,23,42,0.95);border:1px solid rgba(148,163,184,0.25);border-radius:16px;padding:1.75rem 2rem;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
-        <div style="font-size:1rem;font-weight:600;color:#e2e8f0;margin-bottom:0.5rem;">${message}</div>
-        ${subtext ? `<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:1.25rem;">${subtext}</div>` : '<div style="margin-bottom:1.25rem;"></div>'}
+        <div style="font-size:1rem;font-weight:600;color:#e2e8f0;margin-bottom:0.5rem;">${_escHtml(message)}</div>
+        ${subtext ? `<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:1.25rem;">${_escHtml(subtext)}</div>` : '<div style="margin-bottom:1.25rem;"></div>'}
         <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
           <button id="nyanConfirmCancel" style="padding:0.5rem 1.25rem;background:rgba(148,163,184,0.15);border:1px solid rgba(148,163,184,0.3);border-radius:8px;color:#94a3b8;cursor:pointer;font-size:0.875rem;">Cancel</button>
-          <button id="nyanConfirmOk" style="padding:0.5rem 1.25rem;background:${colorBg};border:1px solid ${color}55;border-radius:8px;color:${color};cursor:pointer;font-size:0.875rem;font-weight:600;">Clear</button>
+          <button id="nyanConfirmOk" style="padding:0.5rem 1.25rem;background:${colorBg};border:1px solid ${color}55;border-radius:8px;color:${color};cursor:pointer;font-size:0.875rem;font-weight:600;">${_escHtml(okLabel)}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);

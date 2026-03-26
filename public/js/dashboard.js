@@ -4507,17 +4507,16 @@
             loadBookShares(fractalId);
         }
         
-        async function revokeBookShare(fractalId, email) {
-            if (!confirm(`Revoke access for ${email}?`)) return;
-            
-            const result = await _B.revokeBookShare(fractalId, email);
-            if (!result.success) {
-                showToast(result.error || 'Failed to revoke', 'error');
-                return;
-            }
-            
-            showToast(`Revoked access for ${email}`, 'success');
-            loadBookShares(fractalId);
+        function revokeBookShare(fractalId, email) {
+            nyanConfirm(`Revoke access for ${email}?`, null, async () => {
+                const result = await _B.revokeBookShare(fractalId, email);
+                if (!result.success) {
+                    showToast(result.error || 'Failed to revoke', 'error');
+                    return;
+                }
+                showToast(`Revoked access for ${email}`, 'success');
+                loadBookShares(fractalId);
+            });
         }
 
         function closeBotModal() {
@@ -4740,20 +4739,24 @@
         }
 
 
-        async function relinkWhatsApp(bookId) {
-            if (!confirm('Show WhatsApp activation instructions?\n\nYour user will need to:\n1. Text "join baby-ability" to the Twilio number\n2. Send their book code')) return;
-            
-            const result = await _B.relinkWhatsApp(bookId);
-            if (result.success) {
-                // Show the activation modal with the actual join code
-                showWhatsAppActivationModal(bookId);
-            } else {
-                alert(`Failed to relink WhatsApp: ${result.error || 'Unknown error'}`);
-            }
+        function relinkWhatsApp(bookId) {
+            nyanConfirm('Show WhatsApp activation instructions?', 'Your user will need to text the join code to the Twilio number and send their book code.', async () => {
+                const result = await _B.relinkWhatsApp(bookId);
+                if (result.success) {
+                    showWhatsAppActivationModal(bookId);
+                } else {
+                    alert(`Failed to relink WhatsApp: ${result.error || 'Unknown error'}`);
+                }
+            }, false, 'Show');
         }
 
-        // Custom confirm dialog — window.confirm() is blocked in cross-origin iframes
-        function nyanConfirm(message, subtext, onConfirm, danger = true) {
+        function _escHtml(s) {
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function nyanConfirm(message, subtext, onConfirm, danger = true, okLabel = 'Confirm') {
             const existing = document.getElementById('nyanConfirmOverlay');
             if (existing) existing.remove();
             const overlay = document.createElement('div');
@@ -4763,11 +4766,11 @@
             const colorBg = danger ? 'rgba(239,68,68,0.15)' : 'rgba(168,85,247,0.15)';
             overlay.innerHTML = `
               <div style="background:rgba(15,23,42,0.95);border:1px solid rgba(148,163,184,0.25);border-radius:16px;padding:1.75rem 2rem;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
-                <div style="font-size:1rem;font-weight:600;color:#e2e8f0;margin-bottom:0.5rem;">${message}</div>
-                ${subtext ? `<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:1.25rem;">${subtext}</div>` : '<div style="margin-bottom:1.25rem;"></div>'}
+                <div style="font-size:1rem;font-weight:600;color:#e2e8f0;margin-bottom:0.5rem;">${_escHtml(message)}</div>
+                ${subtext ? `<div style="font-size:0.8rem;color:#94a3b8;margin-bottom:1.25rem;">${_escHtml(subtext)}</div>` : '<div style="margin-bottom:1.25rem;"></div>'}
                 <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
                   <button id="nyanConfirmCancel" style="padding:0.5rem 1.25rem;background:rgba(148,163,184,0.15);border:1px solid rgba(148,163,184,0.3);border-radius:8px;color:#94a3b8;cursor:pointer;font-size:0.875rem;">Cancel</button>
-                  <button id="nyanConfirmOk" style="padding:0.5rem 1.25rem;background:${colorBg};border:1px solid ${color}55;border-radius:8px;color:${color};cursor:pointer;font-size:0.875rem;font-weight:600;">Delete</button>
+                  <button id="nyanConfirmOk" style="padding:0.5rem 1.25rem;background:${colorBg};border:1px solid ${color}55;border-radius:8px;color:${color};cursor:pointer;font-size:0.875rem;font-weight:600;">${_escHtml(okLabel)}</button>
                 </div>
               </div>`;
             document.body.appendChild(overlay);
@@ -6325,44 +6328,44 @@
             }
         }
 
-        async function revokeSession(sessionId) {
-            if (!confirm('Are you sure you want to revoke this session? The user will be logged out immediately.')) return;
-            
-            try {
-                const response = await window.authFetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
-                if (response.ok) {
-                    loadSessions();
-                    alert('Session revoked successfully');
-                } else {
-                    alert('Failed to revoke session');
+        function revokeSession(sessionId) {
+            nyanConfirm('Revoke this session?', 'The user will be logged out immediately.', async () => {
+                try {
+                    const response = await window.authFetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+                    if (response.ok) {
+                        loadSessions();
+                        alert('Session revoked successfully');
+                    } else {
+                        alert('Failed to revoke session');
+                    }
+                } catch (error) {
+                    console.error('Error revoking session:', error);
+                    alert('Error revoking session');
                 }
-            } catch (error) {
-                console.error('Error revoking session:', error);
-                alert('Error revoking session');
-            }
+            });
         }
 
-        async function revokeAllSessions() {
-            if (!confirm('⚠️ WARNING: This will revoke ALL active sessions except your current one. All other users will be logged out immediately. Are you sure?')) return;
-            
-            try {
-                const response = await window.authFetch('/api/sessions/revoke-all', { 
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({})
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    loadSessions();
-                    alert(`Successfully revoked ${data.count} session(s)`);
-                } else {
-                    alert('Failed to revoke all sessions');
+        function revokeAllSessions() {
+            nyanConfirm('Revoke ALL sessions?', 'All other users will be logged out immediately. Your current session is preserved.', async () => {
+                try {
+                    const response = await window.authFetch('/api/sessions/revoke-all', { 
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({})
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        loadSessions();
+                        alert(`Successfully revoked ${data.count} session(s)`);
+                    } else {
+                        alert('Failed to revoke all sessions');
+                    }
+                } catch (error) {
+                    console.error('Error revoking all sessions:', error);
+                    alert('Error revoking all sessions');
                 }
-            } catch (error) {
-                console.error('Error revoking all sessions:', error);
-                alert('Error revoking all sessions');
-            }
+            });
         }
 
         // Load Dev Panel (dev role only)
