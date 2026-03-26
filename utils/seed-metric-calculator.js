@@ -703,8 +703,11 @@ function parsePurifyOutput(purifyText, cities = [], historicalDecade = '1970s', 
     };
   }
 
-  // Match each structured line the LLM outputs
-  const lineRx = /\[([^\]]+)\]\s*\[([^\]]+)\]\s*:\s*sqm=([^\s|]+)(?:\s+([A-Z]{2,4}))?\s*\|\s*income=([^\s|]+)(?:\s+([A-Z]{2,4}))?\s*\|\s*TFR=([^\s|]+)\s*\|\s*type=(\S+)/gi;
+  // Match each structured line the LLM outputs.
+  // Brackets are optional — LLM occasionally omits them despite instructions.
+  // Format: [City] [Period]: sqm=V CUR | income=V CUR | TFR=V | type=T
+  //    or:   City Period:    sqm=V CUR | income=V CUR | TFR=V | type=T
+  const lineRx = /\[?([A-Za-z][^\]\[|:\n]{1,40}?)\]?\s*\[?(\d{4}[^\]\[|:\n]{0,20}?)\]?\s*:\s*sqm=([^\s|]+)(?:\s+([A-Z]{2,4}))?\s*\|\s*income=([^\s|]+)(?:\s+([A-Z]{2,4}))?\s*\|\s*TFR=([^\s|]+)\s*\|\s*type=(\S+)/gi;
 
   for (const match of purifyText.matchAll(lineRx)) {
     const cityRaw = match[1].trim();

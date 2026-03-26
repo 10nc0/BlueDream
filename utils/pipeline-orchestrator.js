@@ -1184,6 +1184,10 @@ You have been given raw search results. Extract the numbers. Do NOT compute Year
 For each (city, period) pair found in the results, output EXACTLY ONE LINE in this format:
 [City] [Period]: sqm=VALUE CURRENCY | income=VALUE CURRENCY | TFR=VALUE | type=built/land/N/A
 
+CRITICAL FORMAT RULE: The square brackets [ ] around City and Period are MANDATORY.
+"Jakarta 2025: ..." is WRONG. "[Jakarta] [2025]: ..." is CORRECT.
+If you omit the brackets, the parser cannot read your output and all values become N/A.
+
 Rules:
 • sqm = price per square meter in LOCAL currency (LCU, do NOT convert to USD).
   - Direct $/sqm or $/m² given → use it directly.
