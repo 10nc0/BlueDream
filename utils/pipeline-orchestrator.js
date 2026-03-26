@@ -1342,7 +1342,7 @@ OUTPUT ORDER:
 
     const smHistDecade = histDecade;
     const smCurrentYear = state.preflight?.currentYear || currentYear;
-    const parsedData = parseSeedMetricData(smCorpus, smCities, smHistDecade);
+    const parsedData = parseSeedMetricData(smCorpus, smCities, smHistDecade, smCurrentYear);
 
     parsedData.parseLog?.forEach(l => console.log(`  📋 ${l}`));
 

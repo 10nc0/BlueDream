@@ -193,15 +193,13 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
 }
 
 /**
- * Parse search results for Seed Metric data
- * Extracts price/sqm and income for each city/period
- * Uses ONLY $/sqm × 700 formula - NO raw price fallback
- * @param {string} searchContext - Combined search results text
- * @param {string[]} cities - City names to look for
- * @param {string} historicalDecade - e.g., "1970s"
- * @returns {object} { cities: { [city]: { current: {...}, historical: {...} } } }
+ * Parse search results for Seed Metric data.
+ * @param {string}   searchContext   - Combined Brave result text
+ * @param {string[]} cities          - City names to look for
+ * @param {string}   historicalDecade - e.g., "1970s"
+ * @param {number}   currentYear     - Request timestamp year (passed from orchestrator, avoids repeated Date calls)
  */
-function parseSeedMetricData(searchContext, cities = [], historicalDecade = String(new Date().getFullYear() - 50).slice(0, 3) + '0s') {
+function parseSeedMetricData(searchContext, cities = [], historicalDecade = String(new Date().getFullYear() - 50).slice(0, 3) + '0s', currentYear = new Date().getFullYear()) {
   const result = { cities: {}, parseLog: [] };
   
   if (!searchContext) {
@@ -218,10 +216,9 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       historical: { pricePerSqm: null, income: null, decade: historicalDecade }
     };
     
-    // Current year window: accept any year within 5 years of today
+    // Current year window: accept any year within 5 years of the request timestamp
     // (many govts publish stats 1-3 years after the reference period)
-    const _nowYr = new Date().getFullYear();
-    const _recentYears = Array.from({ length: 6 }, (_, k) => String(_nowYr - k)).join('|');
+    const _recentYears = Array.from({ length: 6 }, (_, k) => String(currentYear - k)).join('|');
     const cityPatterns = [
       new RegExp(`${city}[^.]*(?:${_recentYears}|current|today|now|latest|recent)[^.]*`, 'gi'),
       new RegExp(`(?:${_recentYears}|current|today|now|latest|recent)[^.]*${city}[^.]*`, 'gi'),
@@ -294,11 +291,10 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
     
     // ── TFR extraction ───────────────────────────────────────────────────────
     // Scan any sentence that mentions fertility + city OR decade keyword.
-    const tfrNow = new Date().getFullYear();
     const tfrCurrentPatterns = [
       new RegExp(`${city}[^.]*(?:fertility|tfr|birth)[^.]*`, 'gi'),
       new RegExp(`(?:fertility|tfr|birth)[^.]*${city}[^.]*`, 'gi'),
-      new RegExp(`[^.]*(?:${tfrNow}|${String(tfrNow - 1)})[^.]*(?:fertility|tfr|birth)[^.]*`, 'gi'),
+      new RegExp(`[^.]*(?:${currentYear}|${currentYear - 1})[^.]*(?:fertility|tfr|birth)[^.]*`, 'gi'),
     ];
     const tfrHistPatterns = [
       new RegExp(`${city}[^.]*(?:${historicalDecade}|1970|1971|1972|1973|1974|1975|1976|1977|1978|1979|1980)[^.]*(?:fertility|tfr|birth)[^.]*`, 'gi'),
