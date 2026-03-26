@@ -1140,6 +1140,11 @@ Distribute your search budget evenly across all cities — do not exhaust search
     • Price: "{city} apartment price per sqm {local currency name} 1975 OR 1970s"
     • Income: "{city} median single earner annual income {local currency name} 1975 OR 1970s"
 
+  TFR (Total Fertility Rate) — search once per country per period:
+    • Current: "{country} total fertility rate ${currentYear}" or "{country} TFR ${currentYear}"
+    • Historical: "{country} total fertility rate 1975"
+    TFR is a national statistic — use the country name, not the city name.
+
   Replace {local currency name} with the actual currency word — e.g. "rupees" for India, "kronor" for Sweden,
   "baht" for Thailand, "dong" for Vietnam, "yuan" for China, "yen" for Japan, "pounds" for UK, "euros" for EU.
   This forces Brave to return local market prices, not USD-converted values from international aggregators.
@@ -1161,52 +1166,45 @@ Rules:
     // USD normalisation rule closes the Tokyo/JPY currency-mixing bug.
     const triangulatePrompt = `${NYAN_PROTOCOL_COMPRESSED}
 
---- SEED METRIC: TRIANGULATE → SCRIBE ---
-You have the raw search data above. Now apply the two-gate script:
+--- SEED METRIC: PURIFY → CALCULATE → SCRIBE ---
+Three gates. Execute in order. Do not skip ahead or merge gates.
 
-GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
-  • No-data rule: if P/sqm OR Income for a row is N/A (not found in search results), write the row with ⚪ N/A in the missing cell(s). The row exists — absence of data should be visible, not silent.
-  • Deduplication: each (city, period) pair must appear exactly once. If search returned two results for the same city+period, use the most recent/reliable one.
-  • LCU throughout — The ratio is dimensionless: LCU ÷ LCU cancels. Do not convert currencies.
-  • Same-LCU within each row: if price is in ¥, income must be in ¥. If £, then £. Never mix.
-  • sqm gate: if result is sqft → multiply by 10.764 to get sqm. If result shows total + area (e.g. "¥120M for 85sqm") → derive: total ÷ area.
+GATE 2A — PURIFY (standardize units — output this block before any math):
+  For every (city, period) pair in the search results, write one line:
+  [City] [Period]: raw=[value][unit] → sqm=[converted_value] [LCU] | income=[value] [LCU] | TFR=[value] | type=[built|land]
 
-  Price type cascade (for each row, classify the price source as one word):
-    • "built" — result describes apartment, flat, condo, residential, ready-to-move, property price per sqm
-    • "land"  — result describes plot, land, site, vacant land, hectare price
-    Prefer "built". Only use "land" if no built price was found in search results.
+  Unit conversion rules:
+  • US/UK results almost always report sqft — declare this and convert: sqft × 10.764 = sqm.
+  • If result shows total price + area (e.g. "¥120M for 85sqm") → derive: total ÷ area = price/sqm.
+  • LCU = local currency of that city/period. Never convert to USD. price_sqm and income must share the same LCU.
+  • Income must be annual single-earner. Monthly → ×12. Household → N/A (do not use).
+  • TFR = single decimal from search results (e.g. 0.97). N/A if not in results — do not guess.
+  • Sanity check: US city sqm prices should be $5,000–15,000 USD/sqm. If < $2,000, unit error — recheck.
+  • Missing price or income → write N/A for that field.
+  • Deduplication: one line per (city, period) pair. Use the most recent/reliable value if duplicates exist.
 
-  Income — median single earner only:
-    • Use median individual income, NOT household income, NOT average (average skews high).
-    • Single earner: the benchmark is whether one working person could afford a home — a taxi driver, a teacher.
-    • Must be annual — if search returns monthly, multiply by 12.
-    • If search returns household income only → do not use it; flag as N/A.
-    • Sanity check: if annual single-earner income is less than 1,000 LCU or more than 10,000,000 LCU, you have a unit error. Fix it.
+  Price type: "built" = apartment/flat/condo; "land" = plot/vacant. Prefer built.
 
-  • 700sqm Land Price = LCU/sqm × 700
-  • Years = 700sqm Land Price ÷ Annual Median Single Earner Income (same LCU) — whole number only, no decimals ever (round to nearest integer)
-  • Zero is valid: if math yields < 0.5 (rounds to 0), write 0 — land was free, state-granted, or pre-market. 0 is an honest answer, not a missing one.
-  • Self-check: verify LCU/sqm × 700 ÷ Income = Years before writing.
+GATE 2B — CALCULATE (arithmetic only — use Gate 2A values, no new data):
+  For each row where both sqm and income are NOT N/A:
+  • 700sqm Price = sqm × 700  →  Years = (sqm × 700) ÷ income  (integer, round to nearest, no decimals)
+  • Write the arithmetic explicitly: e.g. "10,247 × 700 ÷ 104,400 = 68yr" — this is your self-check.
+  • Regime: < 10yr → 🟢 OPTIMISM | 10–25yr → 🟡 EXTRACTION | > 25yr → 🔴 FATALISM
+  • If either value N/A → Years = N/A, Regime = N/A.
+  • Zero is valid (land was free/state-granted). Not the same as missing.
 
-  After computing all rows, output a hidden metadata block (NOT shown in the markdown table):
-  <!--SEED_META:{"rows":[{"city":"CityName","period":"YYYY","priceType":"built|land","incomeType":"minWage|collective|unknown"},...]}-->
-  This block is for internal narration use only — do not render it as a table column.
+  After all rows, output:
+  <!--SEED_META:{"rows":[{"city":"CityName","period":"YYYY","priceType":"built|land","incomeType":"single|household"},...]}-->
 
-GATE 3 — SCRIBE (table → summary → legend → coda):
-  Regime thresholds: Years < 10 → 🟢 OPTIMISM | 10–25 → 🟡 EXTRACTION | > 25 → 🔴 FATALISM
+GATE 3 — SCRIBE (build table from Gate 2B — no new arithmetic here):
+  | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | TFR | Regime |
 
-  Table (show historical AND current row per city):
-  | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime |
-
-  After table: one line per city → **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
+  After table: **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
   After summary: Years = (LCU/sqm × 700) ÷ Median Single Earner Income (same LCU)
-  After legend: Sources section with explicit header.
-    Format:
-    **Sources:**
-    - [page title or domain name](url)
-    Only cite URLs that appeared in the Brave search results above. If a cell shows ⚪ N/A, do not invent a source for it — cite only what was actually found. Every source line MUST have a human-readable title — never output a bare URL or placeholder.
+  **Sources:**
+  - [page title](url)  ← only URLs from search results. No bare URLs. No invented sources.
 
-OUTPUT: Table → summary lines → legend → sources. No coda here — coda is written separately.`;
+OUTPUT ORDER: Gate 2A block → Gate 2B block → Gate 3 table → summary → legend → sources.`;
 
     const round1Messages = [
       { role: 'system', content: gatherPrompt },
