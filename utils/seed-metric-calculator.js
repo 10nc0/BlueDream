@@ -351,14 +351,21 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
     result.parseLog.push('No search context provided');
     return result;
   }
-  
+
+  // Protect decimal points (e.g. "1.65", "0.87") from being treated as sentence
+  // boundaries by [^.]* patterns. Replace "N.N" with "N\x00N", restore before
+  // passing segments to value parsers (parseIncome, resolvePrice, parseTFR).
+  const _protect   = t => t.replace(/(\d)\.(\d)/g, '$1\x00$2');
+  const _restore   = t => t.replace(/\x00/g, '.');
+  searchContext = _protect(searchContext);
+
   // Normalize city names
   const normalizedCities = cities.map(c => c.toLowerCase().trim());
   
   for (const city of normalizedCities) {
     result.cities[city] = {
-      current: { pricePerSqm: null, income: null },
-      historical: { pricePerSqm: null, income: null, decade: historicalDecade }
+      current: { pricePerSqm: null, income: null, tfr: null },
+      historical: { pricePerSqm: null, income: null, tfr: null, decade: historicalDecade }
     };
     
     // Current year window: accept any year within 5 years of the request timestamp
@@ -369,16 +376,19 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       new RegExp(`(?:${_recentYears}|current|today|now|latest|recent)[^.]*${city}[^.]*`, 'gi'),
     ];
 
+    const _decadeBase = parseInt(historicalDecade) || 1970;
+    const _histYears = Array.from({ length: 10 }, (_, k) => String(_decadeBase + k)).join('|');
+    const _histKeywords = `${historicalDecade}|${_histYears}|historical|\\d+\\s*years?\\s*ago`;
     const historicalPatterns = [
-      new RegExp(`${city}[^.]*(?:${historicalDecade}|1970|1980|historical|50\\s*years?\\s*ago)[^.]*`, 'gi'),
-      new RegExp(`(?:${historicalDecade}|1970|1980|historical|50\\s*years?\\s*ago)[^.]*${city}[^.]*`, 'gi'),
+      new RegExp(`${city}[^.]*(?:${_histKeywords})[^.]*`, 'gi'),
+      new RegExp(`(?:${_histKeywords})[^.]*${city}[^.]*`, 'gi'),
     ];
 
     // Try to find current data
     for (const pattern of cityPatterns) {
       const matches = searchContext.match(pattern);
       if (matches) {
-        const segment = matches.join(' ');
+        const segment = _restore(matches.join(' '));
         if (!result.cities[city].current.pricePerSqm) {
           result.cities[city].current.pricePerSqm = resolvePrice(segment, city);
         }
@@ -392,7 +402,7 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
     for (const pattern of historicalPatterns) {
       const matches = searchContext.match(pattern);
       if (matches) {
-        const segment = matches.join(' ');
+        const segment = _restore(matches.join(' '));
         if (!result.cities[city].historical.pricePerSqm) {
           result.cities[city].historical.pricePerSqm = resolvePrice(segment, city);
         }
@@ -402,15 +412,15 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       }
     }
 
-    // Historical fallback: scan all decade-keyword sentences
+    // Historical fallback: scan all decade-keyword sentences (no city anchor)
     if (!result.cities[city].historical.pricePerSqm || !result.cities[city].historical.income) {
       const histFallbackPattern = new RegExp(
-        `[^.]*(?:${historicalDecade}|1970|1971|1972|1973|1974|1975|1976|1977|1978|1979|1980|1981|1982|1983|1984|1985|historical|decades?\\s*ago|post[\\s-]war|mid[\\s-]century)[^.]*`,
+        `[^.]*(?:${_histKeywords}|decades?\\s*ago|post[\\s-]war|mid[\\s-]century)[^.]*`,
         'gi'
       );
       const histMatches = searchContext.match(histFallbackPattern);
       if (histMatches) {
-        const allHistText = histMatches.join(' ');
+        const allHistText = _restore(histMatches.join(' '));
         if (!result.cities[city].historical.pricePerSqm) {
           result.cities[city].historical.pricePerSqm = resolvePrice(allHistText, city);
         }
@@ -424,7 +434,7 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
     if (!result.cities[city].current.pricePerSqm || !result.cities[city].current.income) {
       const cityMentions = searchContext.match(new RegExp(`[^.]*${city}[^.]*`, 'gi'));
       if (cityMentions) {
-        const allCityText = cityMentions.join(' ');
+        const allCityText = _restore(cityMentions.join(' '));
         if (!result.cities[city].current.pricePerSqm) {
           result.cities[city].current.pricePerSqm = resolvePrice(allCityText, city);
         }
@@ -434,33 +444,10 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       }
     }
     
-    // ── TFR extraction ───────────────────────────────────────────────────────
-    // Scan any sentence that mentions fertility + city OR decade keyword.
-    const tfrCurrentPatterns = [
-      new RegExp(`${city}[^.]*(?:fertility|tfr|birth)[^.]*`, 'gi'),
-      new RegExp(`(?:fertility|tfr|birth)[^.]*${city}[^.]*`, 'gi'),
-      new RegExp(`[^.]*(?:${currentYear}|${currentYear - 1})[^.]*(?:fertility|tfr|birth)[^.]*`, 'gi'),
-    ];
-    const tfrHistPatterns = [
-      new RegExp(`${city}[^.]*(?:${historicalDecade}|1970|1971|1972|1973|1974|1975|1976|1977|1978|1979|1980)[^.]*(?:fertility|tfr|birth)[^.]*`, 'gi'),
-      new RegExp(`(?:${historicalDecade}|1970|1976|1980)[^.]*(?:fertility|tfr|birth)[^.]*`, 'gi'),
-    ];
-    for (const p of tfrCurrentPatterns) {
-      const m = searchContext.match(p);
-      if (m && result.cities[city].current.tfr == null) {
-        result.cities[city].current.tfr = parseTFR(m.join(' '));
-      }
-    }
-    for (const p of tfrHistPatterns) {
-      const m = searchContext.match(p);
-      if (m && result.cities[city].historical.tfr == null) {
-        result.cities[city].historical.tfr = parseTFR(m.join(' '));
-      }
-    }
-    // Wide fallback: any TFR sentence in full context
-    if (result.cities[city].current.tfr == null) {
-      result.cities[city].current.tfr = parseTFR(searchContext);
-    }
+    // ── TFR: NOT extracted here — handled by TFR capsule in orchestrator ────
+    // TFR bypass does dedicated Brave searches per city for both current and
+    // historical periods, then merges into parsedData.cities[city].*.tfr.
+    // This avoids regex cross-city contamination and decimal-in-sentence issues.
 
     // ── LCU/LCU invariant assertion ─────────────────────────────────────────
     // Both price and income are parsed via detectCurrency(city, ...) which always
@@ -570,15 +557,20 @@ function formatCurrency(value, currency = 'USD') {
  */
 function parseTFR(text) {
   if (!text) return null;
+  const _reject = /per\s*1[,.]?000|‰|treatment|clinic|ivf|in\s*vitro|crude\s+birth/i;
   const patterns = [
     /\btotal\s+fertility\s+rate\b[^0-9]*([0-9]+\.[0-9]+)/i,
     /\bTFR\b[^0-9]*([0-9]+\.[0-9]+)/i,
     /\bfertility\s+rate\b[^0-9]*([0-9]+\.[0-9]+)/i,
+    /\bbirth\s+rate\b[^0-9]*([0-9]+\.[0-9]+)/i,
     /\bbirths?\s+per\s+woman\b[^0-9]*([0-9]+\.[0-9]+)/i,
+    /\bfertility\b[^0-9]*([0-9]+\.[0-9]+)/i,
   ];
   for (const pat of patterns) {
     const m = text.match(pat);
     if (m) {
+      const ctx = text.slice(Math.max(0, m.index - 30), m.index + m[0].length + 30);
+      if (_reject.test(ctx)) continue;
       const v = parseFloat(m[1]);
       if (v >= 0.5 && v <= 10) return Math.round(v * 100) / 100;
     }

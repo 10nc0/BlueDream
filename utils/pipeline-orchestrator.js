@@ -1253,22 +1253,38 @@ STRICT RULES:
     const smHistDecade = histDecade;
     // smCurrentYear already defined at function top — do not redefine
 
-    // ── TFR bypass: 1 server Brave call per city (never passed to LLM) ────
+    // ── TFR capsule: dedicated Brave calls per city (current + historical) ──
     const stripDia = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const tfrBypass = {};
+    const tfrCapsule = {};
     const tfrCities = smCities.length ? smCities : (gatherCities || []);
     for (const city of tfrCities) {
       const province = _smProvince(city);
-      const tfrQuery = `${province} total fertility rate ${smCurrentYear}`;
-      console.log(`🧬 TFR bypass: "${tfrQuery}"`);
-      let tfrRaw = await this.searchBrave(tfrQuery, clientIp);
-      if (tfrRaw === null) {
+      const cKey = stripDia(city.toLowerCase());
+      tfrCapsule[cKey] = { current: null, historical: null };
+
+      const tfrQueryCurr = `${province} total fertility rate ${smCurrentYear}`;
+      console.log(`🧬 TFR capsule: "${tfrQueryCurr}"`);
+      await new Promise(r => setTimeout(r, 1100));
+      let tfrRawCurr = await this.searchBrave(tfrQueryCurr, clientIp);
+      if (tfrRawCurr === null) {
         await new Promise(r => setTimeout(r, 1500));
-        tfrRaw = await this.searchBrave(tfrQuery, clientIp);
+        tfrRawCurr = await this.searchBrave(tfrQueryCurr, clientIp);
       }
-      const tfrVal = parseTFR(tfrRaw || '');
-      tfrBypass[stripDia(city.toLowerCase())] = tfrVal;
-      console.log(`🧬 TFR bypass: ${city} → ${tfrVal ?? 'N/A'}`);
+      tfrCapsule[cKey].current = parseTFR(tfrRawCurr || '');
+      console.log(`🧬 TFR capsule: ${city} current → ${tfrCapsule[cKey].current ?? 'N/A'}`);
+
+      const _decadeBase = parseInt(smHistDecade) || 1970;
+      const histMidYear = _decadeBase + 5;
+      const tfrQueryHist = `${province} total fertility rate ${histMidYear}`;
+      console.log(`🧬 TFR capsule: "${tfrQueryHist}"`);
+      await new Promise(r => setTimeout(r, 1100));
+      let tfrRawHist = await this.searchBrave(tfrQueryHist, clientIp);
+      if (tfrRawHist === null) {
+        await new Promise(r => setTimeout(r, 1500));
+        tfrRawHist = await this.searchBrave(tfrQueryHist, clientIp);
+      }
+      tfrCapsule[cKey].historical = parseTFR(tfrRawHist || '');
+      console.log(`🧬 TFR capsule: ${city} historical → ${tfrCapsule[cKey].historical ?? 'N/A'}`);
     }
 
     // ── Parse: server-side regex (triangulation first, direct quote fallback) ─
@@ -1365,13 +1381,17 @@ ${braveResultsSummary}`;
       }
     }
 
-    // ── Merge TFR bypass into parsedData (current period only) ────────────
-    for (const [key, tfrVal] of Object.entries(tfrBypass)) {
-      if (tfrVal == null) continue;
+    // ── Merge TFR capsule into parsedData (current + historical) ───────────
+    for (const [key, capsule] of Object.entries(tfrCapsule)) {
       const cityKey = Object.keys(parsedData.cities).find(c => stripDia(c.toLowerCase()) === key);
-      if (cityKey) {
-        parsedData.cities[cityKey].current.tfr = tfrVal;
-        console.log(`  🧬 TFR merged: ${cityKey} current.tfr = ${tfrVal}`);
+      if (!cityKey) continue;
+      if (capsule.current != null) {
+        parsedData.cities[cityKey].current.tfr = capsule.current;
+        console.log(`  🧬 TFR merged: ${cityKey} current.tfr = ${capsule.current}`);
+      }
+      if (capsule.historical != null) {
+        parsedData.cities[cityKey].historical.tfr = capsule.historical;
+        console.log(`  🧬 TFR merged: ${cityKey} historical.tfr = ${capsule.historical}`);
       }
     }
 
