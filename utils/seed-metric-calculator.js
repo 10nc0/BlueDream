@@ -398,8 +398,10 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
 
     const _currP = result.cities[city].current.pricePerSqm;
     const _histP = result.cities[city].historical.pricePerSqm;
-    result.parseLog.push(`${city} CURRENT: price/sqm=${_currP?.value || 'N/A'}, income=${result.cities[city].current.income?.value || 'N/A'}, tfr=${result.cities[city].current.tfr ?? 'N/A'}`);
-    result.parseLog.push(`${city} HISTORICAL: price/sqm=${_histP?.value || 'N/A'}, income=${result.cities[city].historical.income?.value || 'N/A'}, tfr=${result.cities[city].historical.tfr ?? 'N/A'}`);
+    const _currPSuffix = _currP?.triangulated ? ' (triangulated)' : '';
+    const _histPSuffix = _histP?.triangulated ? ' (triangulated)' : '';
+    result.parseLog.push(`${city} CURRENT: price/sqm=${_currP?.value || 'N/A'}${_currPSuffix}, income=${result.cities[city].current.income?.value || 'N/A'}, tfr=${result.cities[city].current.tfr ?? 'N/A'}`);
+    result.parseLog.push(`${city} HISTORICAL: price/sqm=${_histP?.value || 'N/A'}${_histPSuffix}, income=${result.cities[city].historical.income?.value || 'N/A'}, tfr=${result.cities[city].historical.tfr ?? 'N/A'}`);
   }
   
   return result;

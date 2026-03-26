@@ -1098,21 +1098,23 @@ User query: ${query}`;
       : null;
 
     // ── City metadata ──────────────────────────────────────────────────────
+    // Currency words use explicit local forms to anchor Brave searches to local
+    // markets ("Singapore dollars" rather than ambiguous "dollars").
     const _CITY_CURRENCY = {
-      jakarta:'rupiah', bangkok:'baht', manila:'pesos', 'kuala lumpur':'ringgit',
-      'ho chi minh':'dong', hanoi:'dong', singapore:'dollars',
+      jakarta:'rupiah', bangkok:'baht', manila:'Philippine pesos', 'kuala lumpur':'ringgit',
+      'ho chi minh':'dong', hanoi:'dong', singapore:'Singapore dollars',
       tokyo:'yen', osaka:'yen', seoul:'won', beijing:'yuan', shanghai:'yuan',
-      taipei:'dollars', 'hong kong':'dollars',
+      taipei:'New Taiwan dollars', 'hong kong':'Hong Kong dollars',
       mumbai:'rupees', delhi:'rupees', bangalore:'rupees',
-      london:'pounds', paris:'euros', amsterdam:'euros', berlin:'euros',
+      london:'British pounds', paris:'euros', amsterdam:'euros', berlin:'euros',
       madrid:'euros', rome:'euros', warsaw:'zloty', lisbon:'euros',
-      zurich:'francs', vienna:'euros', stockholm:'kronor', oslo:'krone',
-      'new york':'dollars', 'los angeles':'dollars', toronto:'dollars',
-      chicago:'dollars', 'san francisco':'dollars', vancouver:'dollars',
-      sydney:'dollars', melbourne:'dollars', auckland:'dollars',
-      'sao paulo':'reais', 'mexico city':'pesos', 'buenos aires':'pesos',
-      bogota:'pesos', lima:'soles', santiago:'pesos',
-      dubai:'dirhams', cairo:'pounds', istanbul:'lira', nairobi:'shillings',
+      zurich:'Swiss francs', vienna:'euros', stockholm:'Swedish kronor', oslo:'Norwegian krone',
+      'new york':'US dollars', 'los angeles':'US dollars', chicago:'US dollars',
+      'san francisco':'US dollars', toronto:'Canadian dollars', vancouver:'Canadian dollars',
+      sydney:'Australian dollars', melbourne:'Australian dollars', auckland:'New Zealand dollars',
+      'sao paulo':'reais', 'mexico city':'Mexican pesos', 'buenos aires':'Argentine pesos',
+      bogota:'Colombian pesos', lima:'soles', santiago:'Chilean pesos',
+      dubai:'dirhams', cairo:'Egyptian pounds', istanbul:'lira', nairobi:'shillings',
       lagos:'naira', johannesburg:'rand', 'cape town':'rand',
     };
     const _CITY_PROVINCE = {
