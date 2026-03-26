@@ -1183,7 +1183,9 @@ GATE 2A — PURIFY (standardize units — output this block first):
   • LCU = local currency of that city/period. Never convert to USD. price_sqm and income must share the same LCU.
   • Income must be annual single-earner. Monthly → ×12. Household → N/A (do not use).
   • TFR = single decimal from search results (e.g. 0.97). N/A if not in results — do not guess.
-  • Sanity check: US city sqm prices should be $5,000–15,000 USD/sqm. If < $2,000, unit error — recheck.
+  • Sanity check (US): city sqm prices should be $5,000–15,000 USD/sqm. If < $2,000, unit error — convert sqft to sqm or recheck.
+  • Sanity check (Japan): Tokyo/Osaka sqm prices must be > 100,000 JPY/sqm. If result shows < 10,000 JPY/sqm, the source used 万円 units (×10,000 each) — multiply by 10,000.
+  • Sanity check (general): if years > 1,000 or years < 0.01, arithmetic is wrong — recheck sqm and income are in the same LCU and same time unit.
   • Missing price or income → write N/A for that field.
   • Deduplication: one line per (city, period) pair. Use the most recent/reliable value if duplicates exist.
 
