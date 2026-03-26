@@ -15,7 +15,10 @@
 
 // ─── Currency Registry ────────────────────────────────────────────────────────
 // Single source of truth. To add a new currency: one entry here, nothing else.
-// usdRate = 1 unit of this currency in USD (used only for sanity-check scaling).
+// usdRate = 1 unit of this currency in USD.
+// Used ONLY to normalize sanity-check bounds (e.g. "LCU/sqm plausible?") into
+// a single universal range. NOT used for conversion — the Seed Metric ratio
+// is LCU/LCU = unitless years, so currency cancels out in the division.
 // cities  = lowercase city/country keywords that imply this currency.
 const CURRENCY_REGISTRY = {
   USD: { symbols: ['USD', '$'],                    usdRate: 1,          cities: ['los angeles', 'la', 'new york', 'nyc', 'chicago', 'san francisco', 'sf', 'seattle', 'boston', 'miami', 'houston', 'dallas', 'denver', 'atlanta', 'phoenix', 'portland', 'austin', 'san diego', 'washington dc', 'philadelphia', 'minneapolis', 'detroit', 'honolulu', 'usa', 'united states'] },
@@ -90,7 +93,7 @@ function detectCurrency(city = '', text = '') {
   return 'USD';
 }
 
-/** Convert a native-currency value to USD equivalent (for sanity checks only). */
+/** Normalize an LCU value to USD scale for sanity-check bounds only. Not a conversion. */
 function usdEquiv(value, currency) {
   return value * (CURRENCY_REGISTRY[currency]?.usdRate ?? 1);
 }
@@ -458,29 +461,17 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       result.cities[city].current.tfr = parseTFR(searchContext);
     }
 
-    // ── Currency mismatch guard ──────────────────────────────────────────────
-    // If price and income parsed from different currencies (e.g. ¥ price + $ income
-    // from an international aggregator), the Years ratio is meaningless.
-    // Resolution: force re-parse of income using city-filtered text to anchor to LCU.
+    // ── LCU/LCU invariant assertion ─────────────────────────────────────────
+    // Both price and income are parsed via detectCurrency(city, ...) which always
+    // returns the city's LCU first. Since Years = (LCU/sqm × 700) ÷ LCU/year,
+    // the currency cancels out → unitless ratio. No conversion needed.
+    // This assertion catches any future regression where currencies diverge.
     for (const slot of ['current', 'historical']) {
       const priceCur = result.cities[city][slot].pricePerSqm?.currency;
       const incCur   = result.cities[city][slot].income?.currency;
       if (priceCur && incCur && priceCur !== incCur) {
-        result.parseLog.push(`⚠️ ${city} ${slot}: CURRENCY MISMATCH price=${priceCur} income=${incCur} — re-parsing income with city anchor`);
-        const cityMentions = searchContext.match(new RegExp(`[^.]*${city}[^.]*`, 'gi'));
-        if (cityMentions) {
-          const reparse = parseIncome(cityMentions.join(' '), city);
-          if (reparse && reparse.currency === priceCur) {
-            result.cities[city][slot].income = reparse;
-            result.parseLog.push(`  ✅ ${city} ${slot}: income re-parsed → ${reparse.value} ${reparse.currency}`);
-          } else {
-            result.parseLog.push(`  ⚠️ ${city} ${slot}: re-parse failed — nulling mismatched income to prevent invalid ratio`);
-            result.cities[city][slot].income = null;
-          }
-        } else {
-          result.parseLog.push(`  ⚠️ ${city} ${slot}: no city-anchored text found — nulling mismatched income`);
-          result.cities[city][slot].income = null;
-        }
+        result.parseLog.push(`⚠️ ${city} ${slot}: LCU VIOLATION price=${priceCur} income=${incCur} — nulling income (ratio would be meaningless)`);
+        result.cities[city][slot].income = null;
       }
     }
 
