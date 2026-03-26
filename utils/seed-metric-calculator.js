@@ -718,9 +718,14 @@ function parsePurifyOutput(purifyText, cities = [], historicalDecade = '1970s', 
     const incCurr = match[6]?.trim() || sqmCurr;
     const tfrStr  = match[7].trim();
 
-    // Match LLM city name to our city keys (substring both ways)
-    const cityLower = cityRaw.toLowerCase();
-    let cityKey = normalizedCities.find(c => c.includes(cityLower) || cityLower.includes(c));
+    // Match LLM city name to our city keys (substring both ways, diacritic-insensitive)
+    // e.g. PURIFY outputs "São Paulo" but our key is "sao paulo" — strip accents before match
+    const stripDia = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const cityLower = stripDia(cityRaw.toLowerCase());
+    let cityKey = normalizedCities.find(c => {
+      const cn = stripDia(c);
+      return cn.includes(cityLower) || cityLower.includes(cn);
+    });
     if (!cityKey) {
       // Companion city chosen by LLM — not in preflight list.
       // Accept it dynamically so the companion's data flows through to the table.
