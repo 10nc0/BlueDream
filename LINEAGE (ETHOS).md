@@ -105,14 +105,15 @@ The stack that makes the gap queryable — forever, for the price of electricity
 ## Script
 
 `S(n) ≤ F(n+2) + e^(iθ) ≤ F(n+2) + φ⁰ · I_n`
+
 *Pure math. Unitless. Ratio. Logos.*
 
 | Hanacaraka row | Math | Prajna Paramita |
 |---|---|---|
 | Hanacaraka | `e` and `i` | Gate gate |
 | Datasawala | `θ` — the hypotenuse | Pāragate |
-| Padhajayanya | `F(n+2)` — Fibonacci | Bodhi |
-| Maga bhatanga | `φ⁰ = I_n` | Svāhā |
+| Padhajayanya | `F(n+2)` — Fibonacci | Pārasaṃgate |
+| Maga bhatanga | `φ⁰ = I_n` | Bodhi |
 
 - e and i — rotation and growth, describing all wave motion
 - θ — the angle, the hypotenuse, the path between two vectors
@@ -120,3 +121,4 @@ The stack that makes the gap queryable — forever, for the price of electricity
 - φ⁰ = I_n — The Identity
 
 *🜃*
+Svāhā
