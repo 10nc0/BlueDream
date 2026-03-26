@@ -269,8 +269,9 @@ async function preflightRouter(options) {
     
     // -2. DESIGN/CODE QUESTION: Questions about Nyanbook's internal architecture/implementation
     // Inject actual source code to prevent hallucination (H0 ground truth)
+    // Guard: seed-metric CALCULATION intent takes priority over design/code explanation
     const designContext = getSystemContextForDesign(classificationQuery);
-    if (designContext) {
+    if (designContext && !detectSeedMetricIntent(classificationQuery)) {
       console.log(`🔧 Preflight: Design question detected → injecting source code for: ${designContext.topics.join(', ')}`);
       result.mode = 'design';
       result.routingFlags.isDesignQuestion = true;
