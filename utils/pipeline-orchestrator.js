@@ -1137,18 +1137,19 @@ For EVERY city the user mentions, search for TWO ingredients per period.
 Distribute your search budget evenly across all cities — do not exhaust searches on one city before querying others.
 
   Current (${currentYear}):
-    • Price: "{city} residential purchase price per sqm {local currency name} ${currentYear}"
+    • Price: "{city} median apartment sale price {local currency name} ${currentYear} sqm OR sqft"
+      You need TWO numbers from the result: the TOTAL SALE PRICE and the FLOOR AREA (sqm or sqft).
+      PURIFY will divide them: total ÷ area = price/sqm. Do NOT search for "per sqm" directly — that derived
+      number is rarely published and forces Brave to return aggregator noise instead of real listings.
       PURCHASE price only — NOT rent, NOT monthly payment, NOT mortgage payment.
-      If search returns only rent or monthly figures → search again: "{city} median home sale price per sqft ${currentYear}"
-    • Income: "{city} median single earner annual income {local currency name} ${currentYear}"
+    • Income: "{city} median individual annual income {local currency name} ${currentYear}"
 
   Historical (${histDecade} era):
-    • Price: "{city} residential purchase price per sqm {local currency name} ${histYear} OR ${histDecade} nominal"
-      NOMINAL price — the actual face value in ${histDecade} currency, NOT "in today's money", NOT "real terms", NOT inflation-adjusted.
-      If search returns a total home price (e.g. "$105,000") without explicit sqm or sqft area → search again for the typical floor area in sqft for that property type and era, then compute $/sqft = total ÷ area.
-    • Income: "{city} median single earner annual earnings {local currency name} ${histYear} nominal wages"
-      NOMINAL wages — the actual pounds/marks/etc paid in ${histYear}, NOT a modern purchasing-power equivalent.
-      Reject any figure described as "equivalent today", "in real terms", "adjusted for inflation", or "in ${currentYear} money". If a result only offers inflation-adjusted figures → treat income as N/A.
+    • Price: "{city} apartment sale price {local currency name} ${histYear} nominal"
+      Same principle: look for total price + floor area so PURIFY can divide.
+      NOMINAL — the actual face value in ${histDecade} currency, NOT "in today's money".
+    • Income: "{city} median annual wage {local currency name} ${histYear} nominal"
+      NOMINAL wages — the actual amount paid then, NOT inflation-adjusted or "in ${currentYear} money".
 
   TFR (Total Fertility Rate) — search once per country per period:
     • Current: "{country} total fertility rate ${currentYear}" or "{country} TFR ${currentYear}"
