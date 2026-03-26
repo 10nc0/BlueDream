@@ -177,6 +177,8 @@ function parsePricePerSqm(text, city = '') {
       if (!isFinite(value) || value <= 0) continue;
       const isPsf = /psf|sq(?:uare)?\s*(?:ft|f(?:oo|ee)t)|sqft/i.test(raw);
       if (isPsf) value *= 10.764;
+      const usd = value * usdRate;
+      if (usd < 10 || usd > 150_000) continue;
       const priceType = classifyPriceType(raw) || classifyPriceType(text);
       return { value, currency, raw, isPsf, priceType };
     }
@@ -232,6 +234,8 @@ function triangulateFromTotalPrice(text, city = '') {
       if (/^(19|20)\d{2}$/.test(numStr)) continue;
       const value = applyMultiplier(parseFloat(numStr), m[0]);
       if (!isFinite(value) || value <= 0) continue;
+      const usdTotal = value * usdRate;
+      if (usdTotal < 5_000 || usdTotal > 2_000_000_000) continue;
       prices.push({ value, index: m.index, raw: m[0] });
     }
   }
@@ -244,6 +248,8 @@ function triangulateFromTotalPrice(text, city = '') {
       if (Math.abs(a.index - p.index) > WINDOW) continue;
       const derived = p.value / a.area;
       if (!isFinite(derived) || derived <= 0) continue;
+      const usdDerived = derived * usdRate;
+      if (usdDerived < 10 || usdDerived > 150_000) continue;
       candidates.push({ value: derived, currency, dist: Math.abs(a.index - p.index), raw: `${p.raw} ÷ ${a.raw}` });
     }
   }
@@ -320,6 +326,8 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
         }
         let value = applyMultiplier(parseFloat(valueStr), raw) * multiplier;
         if (!isFinite(value) || value <= 0) continue;
+        const usd = value * usdRate;
+        if (usd < 500 || usd > 1_000_000) continue;
         return { value, currency, type: incomeType, raw, monthly: multiplier === 12 };
       }
     }
