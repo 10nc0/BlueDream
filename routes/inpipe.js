@@ -485,16 +485,10 @@ function startQueueProcessor(deps) {
                 continue;
             }
 
+            let processed = false;
             try {
                 await processQueuedMessage(item.msg, item.rawPayload, channel, deps);
-                await markQueueDone(item._queueId);
-                const depth = await totalQueueDepth();
-                logger.info({
-                    messageSid: item.messageSid,
-                    tier,
-                    duration: Date.now() - startTime,
-                    queueDepth: depth
-                }, 'Queued message processed');
+                processed = true;
             } catch (error) {
                 const newStatus = await markQueueRetry(item._queueId).catch(() => 'unknown');
                 const depth = await totalQueueDepth();
@@ -506,6 +500,19 @@ function startQueueProcessor(deps) {
                     status: newStatus,
                     queueDepth: depth
                 }, isFailed ? 'Queued message permanently failed (max retries)' : 'Failed to process queued message — will retry');
+            }
+
+            if (processed) {
+                await markQueueDone(item._queueId).catch(err =>
+                    logger.error({ err, queueId: item._queueId }, 'markQueueDone failed — row will be recovered on restart')
+                );
+                const depth = await totalQueueDepth();
+                logger.info({
+                    messageSid: item.messageSid,
+                    tier,
+                    duration: Date.now() - startTime,
+                    queueDepth: depth
+                }, 'Queued message processed');
             }
 
             const depth = await totalQueueDepth();
