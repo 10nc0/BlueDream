@@ -1273,8 +1273,97 @@ STRICT RULES:
 
     // ── Parse: server-side regex (triangulation first, direct quote fallback) ─
     console.log(`🏗️ Seed Metric: parsing ${smCities.join(', ')}`);
-    const parsedData = parseSeedMetricData(braveResultsSummary, smCities, smHistDecade, smCurrentYear);
+    let parsedData = parseSeedMetricData(braveResultsSummary, smCities, smHistDecade, smCurrentYear);
     parsedData.parseLog?.forEach(l => console.log(`  📋 ${l}`));
+
+    // ── Coverage check: count N/A cells across all city-period slots ─────
+    // If regex missed >50% of current-period data, invoke LLM PURIFY fallback.
+    const _totalCurrentSlots = smCities.length * 2; // price + income per city
+    let _filledCurrentSlots = 0;
+    for (const cityData of Object.values(parsedData.cities)) {
+      if (cityData.current?.pricePerSqm?.value) _filledCurrentSlots++;
+      if (cityData.current?.income?.value) _filledCurrentSlots++;
+    }
+    const _coverageRatio = _totalCurrentSlots > 0 ? _filledCurrentSlots / _totalCurrentSlots : 1;
+    console.log(`📊 Regex coverage: ${_filledCurrentSlots}/${_totalCurrentSlots} current slots filled (${Math.round(_coverageRatio * 100)}%)`);
+
+    if (_coverageRatio < 0.5 && braveResultsSummary.length > 100) {
+      console.log(`🔬 PURIFY fallback: regex coverage too low — invoking LLM extraction`);
+      try {
+        const purifyPrompt = `${NYAN_PROTOCOL_COMPRESSED}
+
+--- SEED METRIC: PURIFY (structured extraction) ---
+Extract ONLY numbers that appear in the search results below. Do NOT guess or use training data.
+
+For each (city, period) pair, output EXACTLY one line in this format:
+[City] [Year]: sqm=VALUE CURRENCY | income=VALUE CURRENCY | TFR=VALUE | type=built/land/N/A
+
+Rules:
+- sqm = price per square meter. If results show total price + area, divide: total ÷ area = sqm.
+- income = median SINGLE earner annual income. If monthly, multiply by 12 first.
+- TFR = total fertility rate (births per woman). N/A if not found.
+- type = "built" if apartment/condo/residential, "land" if plot/vacant land, "N/A" if unclear.
+- CURRENCY = 3-letter code (USD, JPY, KRW, SGD, EUR, GBP, etc.)
+- Use N/A for any value not found in the search results. Do NOT estimate.
+- Each line must have EXACTLY this format — no prose, no explanation.
+
+Cities: ${smCities.join(', ')}
+Current year: ${smCurrentYear} | Historical: ${histDecade} (approx ${histYear})
+
+SEARCH RESULTS:
+${braveResultsSummary}`;
+
+        const purifyResponse = await this.groqWithRetry({
+          url: this.llmUrl,
+          data: {
+            model: this.llmModel,
+            messages: [{ role: 'user', content: purifyPrompt }],
+            temperature: 0.05,
+            max_tokens: 600
+          },
+          config: {
+            headers: { 'Authorization': `Bearer ${this.groqToken}`, 'Content-Type': 'application/json' },
+            timeout: this.llmTimeouts.toolCall
+          }
+        }, 2, 'text');
+
+        const purifyText = purifyResponse.data.choices[0]?.message?.content || '';
+        console.log(`🔬 PURIFY output (${purifyText.length} chars):\n${purifyText}`);
+
+        const purifiedData = parsePurifyOutput(purifyText, smCities, smHistDecade, smCurrentYear);
+        purifiedData.parseLog?.forEach(l => console.log(`  🔬 ${l}`));
+
+        // Merge: PURIFY fills gaps that regex missed, but regex results take priority
+        for (const city of Object.keys(parsedData.cities)) {
+          for (const slot of ['current', 'historical']) {
+            const purifyCity = Object.keys(purifiedData.cities).find(c =>
+              c.includes(city) || city.includes(c)
+            );
+            if (!purifyCity) continue;
+            if (!parsedData.cities[city][slot].pricePerSqm?.value && purifiedData.cities[purifyCity]?.[slot]?.pricePerSqm?.value) {
+              parsedData.cities[city][slot].pricePerSqm = purifiedData.cities[purifyCity][slot].pricePerSqm;
+              console.log(`  🔬 PURIFY filled: ${city} ${slot} pricePerSqm = ${purifiedData.cities[purifyCity][slot].pricePerSqm.value}`);
+            }
+            if (!parsedData.cities[city][slot].income?.value && purifiedData.cities[purifyCity]?.[slot]?.income?.value) {
+              parsedData.cities[city][slot].income = purifiedData.cities[purifyCity][slot].income;
+              console.log(`  🔬 PURIFY filled: ${city} ${slot} income = ${purifiedData.cities[purifyCity][slot].income.value}`);
+            }
+            if (parsedData.cities[city][slot].tfr == null && purifiedData.cities[purifyCity]?.[slot]?.tfr != null) {
+              parsedData.cities[city][slot].tfr = purifiedData.cities[purifyCity][slot].tfr;
+            }
+          }
+        }
+        // Accept companion cities PURIFY discovered that regex didn't know about
+        for (const purifyCity of Object.keys(purifiedData.cities)) {
+          if (!parsedData.cities[purifyCity]) {
+            parsedData.cities[purifyCity] = purifiedData.cities[purifyCity];
+            console.log(`  🔬 PURIFY companion city accepted: ${purifyCity}`);
+          }
+        }
+      } catch (purifyErr) {
+        console.warn(`⚠️ PURIFY fallback failed: ${purifyErr.message} — using regex-only data`);
+      }
+    }
 
     // ── Merge TFR bypass into parsedData (current period only) ────────────
     for (const [key, tfrVal] of Object.entries(tfrBypass)) {
@@ -1285,6 +1374,18 @@ STRICT RULES:
         console.log(`  🧬 TFR merged: ${cityKey} current.tfr = ${tfrVal}`);
       }
     }
+
+    // ── Build metadata context for coda narration ────────────────────────
+    const seedMetaRows = [];
+    for (const [city, data] of Object.entries(parsedData.cities)) {
+      for (const slot of ['current', 'historical']) {
+        const pt = data[slot]?.pricePerSqm?.priceType || 'unknown';
+        const it = data[slot]?.income?.type || 'unknown';
+        const mo = data[slot]?.income?.monthly ? ' (monthly×12)' : '';
+        seedMetaRows.push({ city, period: slot === 'current' ? String(smCurrentYear) : histDecade, priceType: pt, incomeType: `${it}${mo}` });
+      }
+    }
+    state.seedMetricMeta = { rows: seedMetaRows };
 
     const tableText = buildSeedMetricTable(parsedData, smHistDecade, smCurrentYear);
 
@@ -1312,16 +1413,23 @@ STRICT RULES:
     // ── Coda: ~nyan voice layer ────────────────────────────────────────────
     let coda = '';
     try {
-      const codaSystemPrompt = `${NYAN_PROTOCOL_SYSTEM_PROMPT}
+      const metaContext = state.seedMetricMeta?.rows?.length
+        ? `\nData source notes (for narration only — do not repeat in coda output):\n` +
+          state.seedMetricMeta.rows.map(r =>
+            `  ${r.city} ${r.period}: price=${r.priceType || 'unknown'} income=${r.incomeType || 'unknown'}`
+          ).join('\n') + '\n'
+        : '';
 
-You are given a Seed Metric table (income = median single earner; price = land where available, built residential as fallback).
+      const codaSystemPrompt = `${NYAN_PROTOCOL_SYSTEM_PROMPT}
+${metaContext}
+You are given a Seed Metric table (income = median single earner; price = built residential where available, land as fallback).
 Write a coda: 2–3 sentences about what these specific numbers reveal about the people living in these specific cities.
 
 Rules:
 - Do NOT repeat numbers — the table already shows them.
 - Say what the numbers imply but don't state: the human texture, historical irony, political contradiction, the lived reality of that ratio.
 - The income anchor is median single earner — the 20th-century contract: one job, one home. A taxi driver. A teacher. Not two salaries, not inherited wealth.
-- If price source was "land", you may note that the land alone, before any building, already indicts.
+- If price source was "land" (fallback), you may note that the land alone, before any building, already indicts.
 - This must be unrepeatable — written only for these cities, this gap, this moment. Not a generic housing statement.
 - No preamble, no "In conclusion", no sign-off. Just the coda.`;
 

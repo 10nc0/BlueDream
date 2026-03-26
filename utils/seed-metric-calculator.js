@@ -124,6 +124,18 @@ const _MULT = '(?:\\s*(?:billion|bn|million|mil|M|k|thousand|만|万|億|억))?'
 // All known symbols joined for use in patterns (escaped, longest first)
 const _SYMS = _SYMBOL_MAP.map(e => e.sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
 
+/**
+ * Classify price source as "built" (apartment/condo) or "land" (vacant plot).
+ * Returns null if classification is ambiguous.
+ */
+function classifyPriceType(text) {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  if (/\b(?:apartment|flat|condo|condominium|residential|house|home|unit|room|hdb|built|property\s+price|housing)\b/.test(t)) return 'built';
+  if (/\b(?:land|plot|site|vacant|hectare|acre|tanah|terrain|terreno)\b/.test(t)) return 'land';
+  return null;
+}
+
 // ─── Price per sqm parser ─────────────────────────────────────────────────────
 /**
  * Parse price per square meter from text.
@@ -161,10 +173,10 @@ function parsePricePerSqm(text, city = '') {
       if (!isFinite(value) || value <= 0) continue;
       const isPsf = /psf|sq\s*ft|sqft/i.test(raw);
       if (isPsf) value *= 10.764;
-      // Sanity: $10–$150,000 per sqm in USD equivalent covers all world markets
       const usd = value * usdRate;
       if (usd >= 10 && usd <= 150_000) {
-        return { value, currency, raw, isPsf };
+        const priceType = classifyPriceType(raw) || classifyPriceType(text);
+        return { value, currency, raw, isPsf, priceType };
       }
     }
   }
@@ -241,7 +253,8 @@ function triangulateFromTotalPrice(text, city = '') {
 
   candidates.sort((a, b) => a.dist - b.dist);
   const best = candidates[0];
-  return { value: best.value, currency, raw: best.raw, isPsf: false, triangulated: true };
+  const priceType = classifyPriceType(best.raw) || classifyPriceType(text);
+  return { value: best.value, currency, raw: best.raw, isPsf: false, triangulated: true, priceType };
 }
 
 /**
@@ -273,13 +286,11 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
   const hasHousehold  = /household|family|dual[\s-]?earner/i.test(text);
   const incomeType    = hasIndividual ? 'single' : (hasHousehold ? 'household' : 'unknown');
 
-  // Pattern 1: income/salary/wage keyword → symbol → number  e.g. "income: ₩42,000,000"
-  // Pattern 2: symbol → number → per year suffix             e.g. "₩42,000,000 per year"
-  // Pattern 3: number → code → per year suffix               e.g. "42,000,000 KRW/year"
-  // Pattern 4: generic — number near income keywords (last resort)
   const _YEAR  = '(?:per\\s*year|annually|\\/year|\\/yr|p\\.a\\.|per\\s*annum)';
-  const _INC   = '(?:income|salary|wage|earnings|pay)';
-  const patterns = [
+  const _MONTH = '(?:per\\s*month|monthly|\\/month|\\/mo|p\\.m\\.|mensuel|bulanan|cada\\s*mes|al\\s*mes)';
+  const _INC   = '(?:income|salary|wage|earnings|pay|gaji|salaire|sueldo)';
+
+  const annualPatterns = [
     new RegExp(`${_INC}[^\\d]{0,40}(?:${_SYMS})\\s*${_NUM}${_MULT}`, 'gi'),
     new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}\\s*${_YEAR}`, 'gi'),
     new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS})?\\s*${_YEAR}`, 'gi'),
@@ -287,23 +298,39 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
     new RegExp(`${_INC}\\s*(?:of|is|was|:)\\s*(?:${_SYMS})?\\s*${_NUM}${_MULT}`, 'gi'),
   ];
 
-  for (const pattern of patterns) {
-    for (const match of text.matchAll(pattern)) {
-      const raw = match[0];
-      const valueStr = (match[1] || match[2] || '').replace(/,/g, '');
-      if (!valueStr) continue;
-      // Reject lone 4-digit calendar years (1900–2099) — they appear as context, not incomes
-      if (/^(19|20)\d{2}$/.test(valueStr)) continue;
-      const value = applyMultiplier(parseFloat(valueStr), raw);
-      if (!isFinite(value) || value <= 0) continue;
-      // Sanity: $500–$1,000,000 annual income in USD equivalent
-      const usd = value * usdRate;
-      if (usd >= 500 && usd <= 1_000_000) {
-        return { value, currency, type: incomeType, raw };
+  const monthlyPatterns = [
+    new RegExp(`(?:${_SYMS})\\s*${_NUM}${_MULT}\\s*${_MONTH}`, 'gi'),
+    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS})?\\s*${_MONTH}`, 'gi'),
+    new RegExp(`${_INC}[^\\d]{0,40}(?:${_SYMS})\\s*${_NUM}${_MULT}[^.]{0,20}${_MONTH}`, 'gi'),
+    new RegExp(`(?:monthly|month)\\s*${_INC}[^\\d]{0,30}(?:${_SYMS})?\\s*${_NUM}${_MULT}`, 'gi'),
+  ];
+
+  const _isMonthlyContext = /\b(?:per\s*month|monthly|\/month|\/mo|p\.m\.|mensuel|bulanan|cada\s*mes|al\s*mes)\b/i;
+
+  function tryPatterns(patterns, multiplier) {
+    for (const pattern of patterns) {
+      for (const match of text.matchAll(pattern)) {
+        const raw = match[0];
+        const valueStr = (match[1] || match[2] || '').replace(/,/g, '');
+        if (!valueStr) continue;
+        if (/^(19|20)\d{2}$/.test(valueStr)) continue;
+        if (multiplier === 1) {
+          const matchEnd = match.index + raw.length;
+          const vicinity = text.slice(Math.max(0, match.index - 30), Math.min(text.length, matchEnd + 30));
+          if (_isMonthlyContext.test(vicinity)) continue;
+        }
+        let value = applyMultiplier(parseFloat(valueStr), raw) * multiplier;
+        if (!isFinite(value) || value <= 0) continue;
+        const usd = value * usdRate;
+        if (usd >= 500 && usd <= 1_000_000) {
+          return { value, currency, type: incomeType, raw, monthly: multiplier === 12 };
+        }
       }
     }
+    return null;
   }
-  return null;
+
+  return tryPatterns(annualPatterns, 1) || tryPatterns(monthlyPatterns, 12);
 }
 
 /**
@@ -431,12 +458,38 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       result.cities[city].current.tfr = parseTFR(searchContext);
     }
 
+    // ── Currency mismatch guard ──────────────────────────────────────────────
+    // If price and income parsed from different currencies (e.g. ¥ price + $ income
+    // from an international aggregator), the Years ratio is meaningless.
+    // Resolution: force re-parse of income using city-filtered text to anchor to LCU.
+    for (const slot of ['current', 'historical']) {
+      const priceCur = result.cities[city][slot].pricePerSqm?.currency;
+      const incCur   = result.cities[city][slot].income?.currency;
+      if (priceCur && incCur && priceCur !== incCur) {
+        result.parseLog.push(`⚠️ ${city} ${slot}: CURRENCY MISMATCH price=${priceCur} income=${incCur} — re-parsing income with city anchor`);
+        const cityMentions = searchContext.match(new RegExp(`[^.]*${city}[^.]*`, 'gi'));
+        if (cityMentions) {
+          const reparse = parseIncome(cityMentions.join(' '), city);
+          if (reparse && reparse.currency === priceCur) {
+            result.cities[city][slot].income = reparse;
+            result.parseLog.push(`  ✅ ${city} ${slot}: income re-parsed → ${reparse.value} ${reparse.currency}`);
+          } else {
+            result.parseLog.push(`  ⚠️ ${city} ${slot}: re-parse failed — nulling mismatched income to prevent invalid ratio`);
+            result.cities[city][slot].income = null;
+          }
+        } else {
+          result.parseLog.push(`  ⚠️ ${city} ${slot}: no city-anchored text found — nulling mismatched income`);
+          result.cities[city][slot].income = null;
+        }
+      }
+    }
+
     const _currP = result.cities[city].current.pricePerSqm;
     const _histP = result.cities[city].historical.pricePerSqm;
     const _currPSuffix = _currP?.triangulated ? ' (triangulated)' : '';
     const _histPSuffix = _histP?.triangulated ? ' (triangulated)' : '';
-    result.parseLog.push(`${city} CURRENT: price/sqm=${_currP?.value || 'N/A'}${_currPSuffix}, income=${result.cities[city].current.income?.value || 'N/A'}, tfr=${result.cities[city].current.tfr ?? 'N/A'}`);
-    result.parseLog.push(`${city} HISTORICAL: price/sqm=${_histP?.value || 'N/A'}${_histPSuffix}, income=${result.cities[city].historical.income?.value || 'N/A'}, tfr=${result.cities[city].historical.tfr ?? 'N/A'}`);
+    result.parseLog.push(`${city} CURRENT: price/sqm=${_currP?.value || 'N/A'}${_currPSuffix} [${_currP?.priceType || '?'}], income=${result.cities[city].current.income?.value || 'N/A'}${result.cities[city].current.income?.monthly ? ' (monthly×12)' : ''}, tfr=${result.cities[city].current.tfr ?? 'N/A'}`);
+    result.parseLog.push(`${city} HISTORICAL: price/sqm=${_histP?.value || 'N/A'}${_histPSuffix} [${_histP?.priceType || '?'}], income=${result.cities[city].historical.income?.value || 'N/A'}${result.cities[city].historical.income?.monthly ? ' (monthly×12)' : ''}, tfr=${result.cities[city].historical.tfr ?? 'N/A'}`);
   }
   
   return result;
@@ -833,6 +886,7 @@ function parsePurifyOutput(purifyText, cities = [], historicalDecade = '1970s', 
     const incStr  = match[5].trim();
     const incCurr = match[6]?.trim() || sqmCurr;
     const tfrStr  = match[7].trim();
+    const typeStr = match[8]?.trim() || '';
 
     // Match LLM city name to our city keys (substring both ways, diacritic-insensitive)
     // e.g. PURIFY outputs "São Paulo" but our key is "sao paulo" — strip accents before match
@@ -863,7 +917,10 @@ function parsePurifyOutput(purifyText, cities = [], historicalDecade = '1970s', 
 
     if (sqmStr !== 'N/A') {
       const v = parseFloat(sqmStr.replace(/[^0-9.]/g, ''));
-      if (isFinite(v) && v > 0) result.cities[cityKey][slot].pricePerSqm = { value: v, currency };
+      if (isFinite(v) && v > 0) {
+        const pt = typeStr && typeStr !== 'N/A' ? typeStr.toLowerCase() : null;
+        result.cities[cityKey][slot].pricePerSqm = { value: v, currency, priceType: pt === 'built' || pt === 'land' ? pt : null };
+      }
     }
     if (incStr !== 'N/A') {
       const v = parseFloat(incStr.replace(/[^0-9.]/g, ''));
