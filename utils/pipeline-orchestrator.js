@@ -1132,12 +1132,14 @@ For EVERY city the user mentions, search for TWO ingredients per period.
 Distribute your search budget evenly across all cities — do not exhaust searches on one city before querying others.
 
   Current (${currentYear}):
-    • Price: "{city} apartment price per sqm {local currency name} ${currentYear}"
-      (prefer apartment/flat/residential; land or plot price is acceptable fallback if no built price found)
+    • Price: "{city} residential purchase price per sqm {local currency name} ${currentYear}"
+      PURCHASE price only — NOT rent, NOT monthly payment, NOT mortgage payment.
+      If search returns only rent or monthly figures → search again: "{city} median home sale price per sqft ${currentYear}"
     • Income: "{city} median single earner annual income {local currency name} ${currentYear}"
 
   Historical (~50yr ago, if relevant):
-    • Price: "{city} apartment price per sqm {local currency name} 1975 OR 1970s"
+    • Price: "{city} residential purchase price per sqm {local currency name} 1975 OR 1970s"
+      If search returns a total home price (e.g. "$105,000") without explicit sqm or sqft area → search again for the typical floor area in sqft for that property type and era, then compute $/sqft = total ÷ area.
     • Income: "{city} median single earner annual income {local currency name} 1975 OR 1970s"
 
   TFR (Total Fertility Rate) — search once per country per period:
@@ -1175,7 +1177,9 @@ GATE 2A — PURIFY (standardize units — output this block before any math):
 
   Unit conversion rules:
   • US/UK results almost always report sqft — declare this and convert: sqft × 10.764 = sqm.
-  • If result shows total price + area (e.g. "¥120M for 85sqm") → derive: total ÷ area = price/sqm.
+  • If result shows total price + explicit area (e.g. "$105,000 for 1,100 sqft") → derive: total ÷ area = $/sqft → ×10.764 = $/sqm.
+  • If result shows a total price with NO explicit sqm or sqft area (e.g. "$105,000 for a 5-story townhouse") → price = N/A. Cannot derive without area.
+  • RENT REJECTION: if raw value contains "/mo", "/month", "per month", "monthly rent" → it is rent, NOT purchase price → price = N/A. Rent ≠ purchase price.
   • LCU = local currency of that city/period. Never convert to USD. price_sqm and income must share the same LCU.
   • Income must be annual single-earner. Monthly → ×12. Household → N/A (do not use).
   • TFR = single decimal from search results (e.g. 0.97). N/A if not in results — do not guess.
