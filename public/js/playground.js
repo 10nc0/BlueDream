@@ -1361,15 +1361,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 100);
     
     // Attach event listener to clear button
+    // NOTE: never use confirm() here — window.confirm() is blocked in cross-origin iframes
+    // (Replit preview, embedded contexts). It silently returns false, making the button appear dead.
     const clearBtn = document.querySelector('.clear-btn');
     if (clearBtn) {
         clearBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (confirm('Start a new conversation? This will clear your chat history.')) {
-                console.log('✅ Clear button confirmed via event listener');
-                clearNyanHistory();
-            }
+            console.log('✅ Clear button clicked — resetting session');
+            clearNyanHistory();
         });
         console.log('✅ Event listener attached to clear button');
     } else {
