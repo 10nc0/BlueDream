@@ -172,19 +172,12 @@ function parsePricePerSqm(text, city = '') {
       const raw = match[0];
       const valueStr = (match[1] || match[2] || '').replace(/,/g, '');
       if (!valueStr) continue;
-      if (/^(19|20)\d{2}$/.test(valueStr)) {
-        const hasCurrencyContext = /[\$€£¥₩₹₫₱฿]|yuan|won|yen|ringgit|rupee|dollar|franc|krona|sgd|hkd|usd|eur|gbp|jpy|krw|inr|cny|rmb/i.test(raw);
-        if (!hasCurrencyContext) continue;
-      }
       let value = applyMultiplier(parseFloat(valueStr), raw);
       if (!isFinite(value) || value <= 0) continue;
       const isPsf = /psf|sq\s*ft|sqft/i.test(raw);
       if (isPsf) value *= 10.764;
-      const usd = value * usdRate;
-      if (usd >= 10 && usd <= 150_000) {
-        const priceType = classifyPriceType(raw) || classifyPriceType(text);
-        return { value, currency, raw, isPsf, priceType };
-      }
+      const priceType = classifyPriceType(raw) || classifyPriceType(text);
+      return { value, currency, raw, isPsf, priceType };
     }
   }
   return null;
@@ -297,6 +290,14 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
   const _MONTH = '(?:per\\s*month|monthly|\\/month|\\/mo|p\\.m\\.|mensuel|bulanan|cada\\s*mes|al\\s*mes)';
   const _INC   = '(?:income|salary|wage|earnings|pay|gaji|salaire|sueldo)';
 
+  // Monthly patterns first — if Brave says "per month", take it × 12. No re-engineering.
+  const monthlyPatterns = [
+    new RegExp(`${_CURSYM}${_NUM}${_MULT}\\s*${_MONTH}`, 'gi'),
+    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS_EXACT})?\\s*${_MONTH}`, 'gi'),
+    new RegExp(`${_INC}[^\\d]{0,40}${_CURSYM}${_NUM}${_MULT}[^.]{0,20}${_MONTH}`, 'gi'),
+    new RegExp(`(?:monthly|month)\\s*${_INC}[^\\d]{0,30}${_CURSYM}${_NUM}${_MULT}`, 'gi'),
+  ];
+
   const annualPatterns = [
     new RegExp(`${_INC}[^\\d]{0,40}${_CURSYM}${_NUM}${_MULT}`, 'gi'),
     new RegExp(`${_CURSYM}${_NUM}${_MULT}\\s*${_YEAR}`, 'gi'),
@@ -305,42 +306,22 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
     new RegExp(`${_INC}\\s*(?:of|is|was|:)\\s*${_CURSYM}${_NUM}${_MULT}`, 'gi'),
   ];
 
-  const monthlyPatterns = [
-    new RegExp(`${_CURSYM}${_NUM}${_MULT}\\s*${_MONTH}`, 'gi'),
-    new RegExp(`${_NUM}${_MULT}\\s*(?:${_SYMS_EXACT})?\\s*${_MONTH}`, 'gi'),
-    new RegExp(`${_INC}[^\\d]{0,40}${_CURSYM}${_NUM}${_MULT}[^.]{0,20}${_MONTH}`, 'gi'),
-    new RegExp(`(?:monthly|month)\\s*${_INC}[^\\d]{0,30}${_CURSYM}${_NUM}${_MULT}`, 'gi'),
-  ];
-
-  const _isMonthlyContext = /\b(?:per\s*month|monthly|\/month|\/mo|p\.m\.|mensuel|bulanan|cada\s*mes|al\s*mes)\b/i;
-
   function tryPatterns(patterns, multiplier) {
     for (const pattern of patterns) {
       for (const match of text.matchAll(pattern)) {
         const raw = match[0];
         const valueStr = (match[1] || match[2] || '').replace(/,/g, '');
         if (!valueStr) continue;
-        if (/^(19|20)\d{2}$/.test(valueStr)) {
-          const hasCurrencyContext = /[\$€£¥₩₹₫₱฿]|yuan|won|yen|ringgit|rupee|dollar|franc|krona|sgd|hkd|usd|eur|gbp|jpy|krw|inr|cny|rmb/i.test(raw);
-          if (!hasCurrencyContext) continue;
-        }
-        if (multiplier === 1) {
-          const matchEnd = match.index + raw.length;
-          const vicinity = text.slice(Math.max(0, match.index - 30), Math.min(text.length, matchEnd + 30));
-          if (_isMonthlyContext.test(vicinity)) continue;
-        }
         let value = applyMultiplier(parseFloat(valueStr), raw) * multiplier;
         if (!isFinite(value) || value <= 0) continue;
-        const usd = value * usdRate;
-        if (usd >= 500 && usd <= 1_000_000) {
-          return { value, currency, type: incomeType, raw, monthly: multiplier === 12 };
-        }
+        return { value, currency, type: incomeType, raw, monthly: multiplier === 12 };
       }
     }
     return null;
   }
 
-  return tryPatterns(annualPatterns, 1) || tryPatterns(monthlyPatterns, 12);
+  // Monthly first — if "per month" present, it wins. Then annual. Binary: match or drop.
+  return tryPatterns(monthlyPatterns, 12) || tryPatterns(annualPatterns, 1);
 }
 
 /**
