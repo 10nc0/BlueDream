@@ -55,7 +55,7 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
-const { parseSeedMetricData, parsePurifyOutput, buildSeedMetricTable, validateSeedMetricOutput, parseTFR } = require('./seed-metric-calculator');
+const { parseSeedMetricData, buildSeedMetricTable, validateSeedMetricOutput } = require('./seed-metric-calculator');
 
 function extractVisionSearchTerms(visionDescription) {
   if (!visionDescription || visionDescription.length < 20) return null;
@@ -1073,110 +1073,147 @@ User query: ${query}`;
     }
   }
   
+  // ── Walk the dog: LLM-driven seed metric via Groq tool calling ────────────
+  // LLM decides what to search (city-aware, language-aware), executes Brave
+  // searches itself, reads raw results, triangulates price/sqm from totals,
+  // and produces the canonical seed-metric table.  No hardcoded parsers.
   /**
    * stepSeedMetricToolCall — "Walk the Dog" seed metric computation.
    *
-   * Architecture (LLM Round 1 for all cases):
-   *   Gather: LLM fires 4 tool_calls per city (land + income × current + historical).
-   *           Query format: "{city} apartment sale price {currency word} {year}"
-   *           No "per sqm" in queries — listings return total price + area naturally.
-   *           No TFR — handled by server bypass after Round 1.
-   *   Parse: parseSeedMetricData → resolvePrice (triangulation first, direct quote fallback)
-   *   TFR bypass: 1 server Brave call per city, merged into parsedData before table.
-   *   Coda: ~nyan voice layer — 2-3 sentences, temperature 0.7.
+   * Architecture: Groq function-calling (2-round trip).
+   *   Round 1: LLM emits brave_search tool_calls (up to 8 searches).
+   *            LLM decides WHAT to search — city names, years, language.
+   *            No hardcoded query templates. No regex parsers.
+   *   Execute: Brave API called for each tool_call. Results injected as tool messages.
+   *            Format: JSON array per result (title, url, description, age) so the LLM
+   *            gets structured quantity to triangulate $/sqm from total_price ÷ area.
+   *   Round 2: LLM reads raw Brave JSON, triangulates $/sqm (Totem), computes Years,
+   *            emits canonical table + personality coda.
    *
    * Rate-limit: 1100ms between Brave calls (just under 1 req/s hard limit).
    *             Retry once on 429 after 1500ms backoff.
+   *
+   * "Teaching the dog to read reminders" (stuffing query templates into the prompt) = dogma.
+   * "Walking the dog" (giving the LLM a search tool and letting it discover) = live epistemics.
    */
   async stepSeedMetricToolCall(state, input) {
     const { query, clientIp } = input;
-    const currentYear    = new Date().getFullYear();
-    // smCurrentYear: preflight-detected year (e.g. "now" → 2025 from query context)
-    // Must be defined BEFORE gatherPrompt so gather and parser use the same year.
-    const smCurrentYear  = state.preflight?.currentYear || currentYear;
-    const histDecade     = state.preflight?.historicalDecade || (String(smCurrentYear - 30).slice(0, 3) + '0s');
-    const histYear       = state.preflight?.historicalYear   || String(smCurrentYear - 30);
-    const gatherCities = state.preflight?.seedMetricCities?.length
-      ? state.preflight.seedMetricCities
-      : null;
+    const currentYear = new Date().getFullYear();
 
-    // ── City metadata ──────────────────────────────────────────────────────
-    // Currency words use explicit local forms to anchor Brave searches to local
-    // markets ("Singapore dollars" rather than ambiguous "dollars").
-    const _CITY_CURRENCY = {
-      jakarta:'rupiah', bangkok:'baht', manila:'Philippine pesos', 'kuala lumpur':'ringgit',
-      'ho chi minh':'dong', hanoi:'dong', singapore:'Singapore dollars',
-      tokyo:'yen', osaka:'yen', seoul:'won', beijing:'yuan', shanghai:'yuan',
-      taipei:'New Taiwan dollars', 'hong kong':'Hong Kong dollars',
-      mumbai:'rupees', delhi:'rupees', bangalore:'rupees',
-      london:'British pounds', paris:'euros', amsterdam:'euros', berlin:'euros',
-      madrid:'euros', rome:'euros', warsaw:'zloty', lisbon:'euros',
-      zurich:'Swiss francs', vienna:'euros', stockholm:'Swedish kronor', oslo:'Norwegian krone',
-      'new york':'US dollars', 'los angeles':'US dollars', chicago:'US dollars',
-      'san francisco':'US dollars', toronto:'Canadian dollars', vancouver:'Canadian dollars',
-      sydney:'Australian dollars', melbourne:'Australian dollars', auckland:'New Zealand dollars',
-      'sao paulo':'reais', 'mexico city':'Mexican pesos', 'buenos aires':'Argentine pesos',
-      bogota:'Colombian pesos', lima:'soles', santiago:'Chilean pesos',
-      dubai:'dirhams', cairo:'Egyptian pounds', istanbul:'lira', nairobi:'shillings',
-      lagos:'naira', johannesburg:'rand', 'cape town':'rand',
-    };
-    const _CITY_PROVINCE = {
-      jakarta:'DKI Jakarta', mumbai:'Maharashtra', delhi:'Delhi NCR',
-      bangalore:'Karnataka', tokyo:'Tokyo Metro', osaka:'Osaka Prefecture',
-      seoul:'Seoul Metro', bangkok:'Bangkok Metro', manila:'Metro Manila',
-      'kuala lumpur':'Kuala Lumpur', singapore:'Singapore',
-      'san francisco':'San Francisco California', 'los angeles':'Los Angeles California',
-      'new york':'New York City', chicago:'Chicago Illinois',
-      'sao paulo':'Sao Paulo state', nairobi:'Nairobi County',
-      lagos:'Lagos state', johannesburg:'Gauteng', cairo:'Cairo Governorate',
-    };
-    function _smCurrency(city) { return _CITY_CURRENCY[city] || 'local currency'; }
-    function _smProvince(city) { return _CITY_PROVINCE[city] || city; }
-
-    // ── Gather: LLM Round 1 — always runs, all cities via tool_calls ──────
+    // ── Groq tool definition for Brave Search ─────────────────────────────
+    // The LLM calls this tool instead of us pre-fetching; it picks queries itself.
     const braveSearchTool = {
       type: 'function',
       function: {
         name: 'brave_search',
-        description: 'Search for residential real estate sale prices and individual income statistics.',
+        description: 'Search the web for real-time real estate prices, housing statistics, income data, and wage information. Use specific, targeted queries.',
         parameters: {
           type: 'object',
-          properties: { query: { type: 'string' } },
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Specific web search query (e.g., "Singapore residential price per sqm 2024" or "Los Angeles median annual household income 2024")'
+            }
+          },
           required: ['query']
         }
       }
     };
 
-    // Tell the LLM which cities to search with their local currency word
-    const citiesWithCurrency = gatherCities
-      ? gatherCities.map(c => `${c} (${_smCurrency(c)})`).join(', ')
-      : 'unknown — determine from user query';
-
+    // ── Gate 1: Data gathering prompt (Round 1 — tool calls only) ──────────
+    // Minimal surface area — just tells the LLM what ingredients to fetch.
+    // No formula, no table rules, no regime yet. Less context = less guardrail resistance.
     const gatherPrompt = `${NYAN_PROTOCOL_COMPRESSED}
 
---- SEED METRIC: GATHER ---
-Cities: ${citiesWithCurrency}
-Current year: ${smCurrentYear} | Historical period: ${histDecade} (approx ${histYear})
+--- SEED METRIC: GATHER RAW INGREDIENTS ---
+You have brave_search. Use it. Do NOT compute or output anything yet — just fetch numbers.
 
-For EACH city, for EACH period (current + historical), run exactly 2 searches = 4 searches per city:
-  1. "{city} residential property price per square meter {currency word} ${smCurrentYear}"
-  2. "{city} median single earner annual income {currency word} ${smCurrentYear}"
-  3. "{city} residential property price per square meter {currency word} ${histYear} OR ${histDecade}"
-  4. "{city} median single earner annual income {currency word} ${histYear} OR ${histDecade}"
+For EVERY city the user mentions, search for TWO ingredients per period.
+Distribute your search budget evenly across all cities — do not exhaust searches on one city before querying others.
 
-{currency word} = the actual word (not symbol): "yen", "rupiah", "Singapore dollars", "baht", "won", "zloty", "reais", "lira", "ringgit", "dong", "yuan", "pounds", "euros", "dollars", etc.
+  Current (${currentYear}):
+    • Price: "{city} apartment price per sqm {local currency name} ${currentYear}"
+      (prefer apartment/flat/residential; land or plot price is acceptable fallback if no built price found)
+    • Income: "{city} median single earner annual income {local currency name} ${currentYear}"
 
-Example queries for Singapore:
-  "Singapore residential property price per square meter Singapore dollars ${smCurrentYear}"
-  "Singapore median single earner annual income Singapore dollars ${smCurrentYear}"
-  "Singapore residential property price per square meter Singapore dollars ${histYear} OR ${histDecade}"
-  "Singapore median single earner annual income Singapore dollars ${histYear} OR ${histDecade}"
+  Historical (~50yr ago, if relevant):
+    • Price: "{city} apartment price per sqm {local currency name} 1975 OR 1970s"
+    • Income: "{city} median single earner annual income {local currency name} 1975 OR 1970s"
 
-STRICT RULES:
-- Always include "per square meter" in price queries — we need unit-price data, not total home prices
-- Do NOT search TFR or fertility rates — the server handles TFR separately
-- Use the local currency WORD to return local market results, not USD international aggregators
-- Run ALL searches. Do NOT compute or output any text.`;
+  Replace {local currency name} with the actual currency word — e.g. "rupees" for India, "kronor" for Sweden,
+  "baht" for Thailand, "dong" for Vietnam, "yuan" for China, "yen" for Japan, "pounds" for UK, "euros" for EU.
+  This forces Brave to return local market prices, not USD-converted values from international aggregators.
+
+  Income note: median single earner only — not household, not dual-income, not average.
+  Average skews high (outliers); dual-income normalises what should be a one-job threshold.
+  The benchmark: could one working person (a taxi driver, a teacher) afford a home? That was the 20th-century contract.
+  If search returns monthly income → multiply by 12. If it returns household → do NOT use it, search again for individual.
+
+Rules:
+  • Search for ALL cities mentioned — skipping any city is not acceptable.
+  • Only use values that appear in the search results. Do NOT estimate from training data.
+  • If a search returns no usable number for an ingredient, the ingredient is N/A.
+  • For every value you extract, note its source URL from the result.
+  • Historical data is often missing — N/A is the correct answer, not a guess.`;
+
+    // ── Gate 2+3: Triangulate + scribe prompt (Round 2 — synthesis) ─────────
+    // Triggered after all Brave results are in. Now and only now: formula → table → regime.
+    // USD normalisation rule closes the Tokyo/JPY currency-mixing bug.
+    const triangulatePrompt = `${NYAN_PROTOCOL_COMPRESSED}
+
+--- SEED METRIC: TRIANGULATE → SCRIBE ---
+You have the raw search data above. Now apply the two-gate script:
+
+GATE 2 — TRIANGULATE (pure arithmetic, no opinion):
+  • No-data rule: if P/sqm OR Income for a row is N/A (not found in search results), write the row with ⚪ N/A in the missing cell(s). The row exists — absence of data should be visible, not silent.
+  • Deduplication: each (city, period) pair must appear exactly once. If search returned two results for the same city+period, use the most recent/reliable one.
+  • LCU throughout — The ratio is dimensionless: LCU ÷ LCU cancels. Do not convert currencies.
+  • Same-LCU within each row: if price is in ¥, income must be in ¥. If £, then £. Never mix.
+  • sqm gate: if result is sqft → multiply by 10.764 to get sqm. If result shows total + area (e.g. "¥120M for 85sqm") → derive: total ÷ area.
+
+  Price type cascade (for each row, classify the price source as one word):
+    • "built" — result describes apartment, flat, condo, residential, ready-to-move, property price per sqm
+    • "land"  — result describes plot, land, site, vacant land, hectare price
+    Prefer "built". Only use "land" if no built price was found in search results.
+
+  Income — median single earner only:
+    • Use median individual income, NOT household income, NOT average (average skews high).
+    • Single earner: the benchmark is whether one working person could afford a home — a taxi driver, a teacher.
+    • Must be annual — if search returns monthly, multiply by 12.
+    • If search returns household income only → do not use it; flag as N/A.
+    • Sanity check: if annual single-earner income is less than 1,000 LCU or more than 10,000,000 LCU, you have a unit error. Fix it.
+
+  • 700sqm Land Price = LCU/sqm × 700
+  • Years = 700sqm Land Price ÷ Annual Median Single Earner Income (same LCU) — whole number only, no decimals ever (round to nearest integer)
+  • Zero is valid: if math yields < 0.5 (rounds to 0), write 0 — land was free, state-granted, or pre-market. 0 is an honest answer, not a missing one.
+  • Self-check: verify LCU/sqm × 700 ÷ Income = Years before writing.
+
+  After computing all rows, output a hidden metadata block (NOT shown in the markdown table):
+  <!--SEED_META:{"rows":[{"city":"CityName","period":"YYYY","priceType":"built|land","incomeType":"minWage|collective|unknown"},...]}-->
+  This block is for internal narration use only — do not render it as a table column.
+
+GATE 3 — SCRIBE (table → summary → legend → coda):
+  Regime thresholds: Years < 10 → 🟢 OPTIMISM | 10–25 → 🟡 EXTRACTION | > 25 → 🔴 FATALISM
+
+  Table (show historical AND current row per city):
+  | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime |
+
+  After table: one line per city → **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
+  After summary: Years = (LCU/sqm × 700) ÷ Median Single Earner Income (same LCU)
+  After legend: Sources section with explicit header.
+    Format:
+    **Sources:**
+    - [page title or domain name](url)
+    Only cite URLs that appeared in the Brave search results above. If a cell shows ⚪ N/A, do not invent a source for it — cite only what was actually found. Every source line MUST have a human-readable title — never output a bare URL or placeholder.
+
+OUTPUT: Table → summary lines → legend → sources. No coda here — coda is written separately.`;
+
+    const round1Messages = [
+      { role: 'system', content: gatherPrompt },
+      { role: 'user', content: query }
+    ];
+
+    console.log(`🐕 Seed Metric: Walking the dog — LLM-driven Brave tool calls`);
 
     let round1Response;
     try {
@@ -1184,261 +1221,137 @@ STRICT RULES:
         url: this.llmUrl,
         data: {
           model: this.llmModel,
-          messages: [
-            { role: 'system', content: gatherPrompt },
-            { role: 'user', content: query }
-          ],
+          messages: round1Messages,
           tools: [braveSearchTool],
+          // 'required' forces the LLM to call at least one brave_search tool.
+          // 'auto' lets it answer from training data — that's dogma, not live epistemics.
           tool_choice: 'required',
           temperature: 0.1,
-          max_tokens: 2000
+          max_tokens: 800
         },
         config: {
-          headers: { 'Authorization': `Bearer ${this.groqToken}`, 'Content-Type': 'application/json' },
+          headers: {
+            'Authorization': `Bearer ${this.groqToken}`,
+            'Content-Type': 'application/json'
+          },
           timeout: this.llmTimeouts.toolCall
         }
       }, 3, 'text');
     } catch (err) {
-      console.error(`❌ stepSeedMetricToolCall gather failed: ${err.message}`);
+      console.error(`❌ stepSeedMetricToolCall round1 failed: ${err.message}`);
       throw err;
     }
 
     const round1Msg = round1Response.data.choices[0]?.message;
-    const toolCalls = round1Msg?.tool_calls || [];
+    const toolCalls  = round1Msg?.tool_calls || [];
     const finishReason = round1Response.data.choices[0]?.finish_reason;
+
     console.log(`🐕 Round 1: finish_reason=${finishReason}, tool_calls=${toolCalls.length}`);
 
+    // LLM answered without needing tools → use directly
     if (toolCalls.length === 0 || finishReason !== 'tool_calls') {
       state.draftAnswer = round1Msg?.content || '';
       state.didSearch = false;
+      console.log(`🐕 Seed Metric: direct answer (no tool calls), ${state.draftAnswer.length} chars`);
       return;
     }
 
-    const directRuns = [];
-    for (let i = 0; i < toolCalls.slice(0, 12).length; i++) {
-      const tc = toolCalls[i];
+    // ── Execute tool calls ─────────────────────────────────────────────────
+    // Max 12 searches, 1100ms between calls (≤1 req/s — Brave hard rate limit).
+    // Results injected as Groq tool-role messages for Round 2.
+    // Format: JSON array (title, url, description, age) — "Brave returns quantity,
+    //         math and personality convert it into insight" philosophy.
+    const callsToRun = toolCalls.slice(0, 12);
+    const toolResultMsgs = [round1Msg];
+
+    for (let i = 0; i < callsToRun.length; i++) {
+      const tc = callsToRun[i];
       let args;
-      try { args = JSON.parse(tc.function.arguments); } catch { args = { query: String(tc.function.arguments) }; }
+      try { args = JSON.parse(tc.function.arguments); }
+      catch { args = { query: String(tc.function.arguments) }; }
+
       console.log(`🦁 brave_search #${i + 1}: "${args.query}"`);
-      let raw = await this.searchBrave(args.query, clientIp, { format: 'json' });
-      if (raw === null) {
+
+      // Request raw JSON — gives LLM structured quantity (title, url, description, age)
+      // so it can triangulate $/sqm from total_price ÷ area mentions itself (Totem).
+      let result = await this.searchBrave(args.query, clientIp, { format: 'json' });
+
+      // Retry once on 429 — Brave rate-limit transient; 1500ms backoff usually clears it
+      if (result === null) {
+        console.log(`🦁 brave_search #${i + 1}: null result, retrying after 1500ms...`);
         await new Promise(r => setTimeout(r, 1500));
-        raw = await this.searchBrave(args.query, clientIp, { format: 'json' });
+        result = await this.searchBrave(args.query, clientIp, { format: 'json' });
       }
-      directRuns.push({ query: args.query, raw: raw || '[]' });
-      if (i < toolCalls.length - 1) await new Promise(r => setTimeout(r, 1100));
+
+      toolResultMsgs.push({
+        role: 'tool',
+        tool_call_id: tc.id,
+        content: result || '[]' // Empty JSON array instead of string — LLM reads it consistently
+      });
+
+      // 1100ms between calls — just under 1 req/s to stay within Brave rate limit
+      if (i < callsToRun.length - 1) {
+        await new Promise(r => setTimeout(r, 1100));
+      }
     }
 
-    // ── Build PURIFY input: labelled text blocks, one per search ──────────
-    const braveResultsSummary = directRuns.map(({ query: q, raw }, i) => {
-      let items;
-      try { items = JSON.parse(raw); } catch { items = []; }
-      if (!Array.isArray(items)) items = [];
-      const lines = items.slice(0, 6).map(r =>
-        `  • ${[r.title, r.description].filter(Boolean).join(': ')} [${r.url || ''}]`
-      ).join('\n');
-      console.log(`🔬 Brave #${i + 1} "${q}" → ${items.length} results`);
-      items.slice(0, 3).forEach((r, j) => console.log(`   [${j}] ${(r.description || '').slice(0, 200)}`));
-      return `[Search ${i + 1}] "${q}"\n${lines || '  (no results)'}`;
-    }).join('\n\n');
-
-    // ── Cities for parser ──────────────────────────────────────────────────
-    // Primary: preflight-detected cities. Fallback: extract from LLM query strings.
-    const smCities = state.preflight?.seedMetricCities?.length
-      ? state.preflight.seedMetricCities
-      : (() => {
-          const fromQueries = [...new Set(directRuns.map(({ query: q }) => {
-            const m = q.match(/^([a-z][a-z\s]{1,30}?)\s+(?:apartment|median|income|land|housing|residential)/i);
-            return m ? m[1].trim().toLowerCase() : null;
-          }).filter(Boolean))];
-          return fromQueries.length ? fromQueries : (gatherCities || []);
-        })();
-
-    const smHistDecade = histDecade;
-    // smCurrentYear already defined at function top — do not redefine
-
-    // ── TFR capsule: dedicated Brave calls per city (current + historical) ──
-    const stripDia = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const tfrCapsule = {};
-    const tfrCities = smCities.length ? smCities : (gatherCities || []);
-    for (const city of tfrCities) {
-      const province = _smProvince(city);
-      const cKey = stripDia(city.toLowerCase());
-      tfrCapsule[cKey] = { current: null, historical: null };
-
-      const tfrQueryCurr = `${province} total fertility rate ${smCurrentYear}`;
-      console.log(`🧬 TFR capsule: "${tfrQueryCurr}"`);
-      await new Promise(r => setTimeout(r, 1100));
-      let tfrRawCurr = await this.searchBrave(tfrQueryCurr, clientIp);
-      if (tfrRawCurr === null) {
-        await new Promise(r => setTimeout(r, 1500));
-        tfrRawCurr = await this.searchBrave(tfrQueryCurr, clientIp);
-      }
-      tfrCapsule[cKey].current = parseTFR(tfrRawCurr || '');
-      console.log(`🧬 TFR capsule: ${city} current → ${tfrCapsule[cKey].current ?? 'N/A'}`);
-
-      const _decadeBase = parseInt(smHistDecade) || 1970;
-      const histMidYear = _decadeBase + 5;
-      const tfrQueryHist = `${province} total fertility rate ${histMidYear}`;
-      console.log(`🧬 TFR capsule: "${tfrQueryHist}"`);
-      await new Promise(r => setTimeout(r, 1100));
-      let tfrRawHist = await this.searchBrave(tfrQueryHist, clientIp);
-      if (tfrRawHist === null) {
-        await new Promise(r => setTimeout(r, 1500));
-        tfrRawHist = await this.searchBrave(tfrQueryHist, clientIp);
-      }
-      tfrCapsule[cKey].historical = parseTFR(tfrRawHist || '');
-      console.log(`🧬 TFR capsule: ${city} historical → ${tfrCapsule[cKey].historical ?? 'N/A'}`);
-    }
-
-    // ── Parse: server-side regex (triangulation primary: price÷area from listings) ─
-    const parserInput = braveResultsSummary.replace(/^\[Search \d+\].*$/gm, '');
-    console.log(`🏗️ Seed Metric: parsing ${smCities.join(', ')}`);
-    console.log(`📝 Parser input (${parserInput.length} chars):\n${parserInput.slice(0, 2000)}`);
-    let parsedData = parseSeedMetricData(parserInput, smCities, smHistDecade, smCurrentYear);
-    parsedData.parseLog?.forEach(l => console.log(`  📋 ${l}`));
-
-    // ── Coverage check: count N/A cells across all city-period slots ─────
-    // If regex missed >50% of current-period data, invoke LLM PURIFY fallback.
-    const _totalCurrentSlots = smCities.length * 2; // price + income per city
-    let _filledCurrentSlots = 0;
-    for (const cityData of Object.values(parsedData.cities)) {
-      if (cityData.current?.pricePerSqm?.value) _filledCurrentSlots++;
-      if (cityData.current?.income?.value) _filledCurrentSlots++;
-    }
-    const _coverageRatio = _totalCurrentSlots > 0 ? _filledCurrentSlots / _totalCurrentSlots : 1;
-    console.log(`📊 Regex coverage: ${_filledCurrentSlots}/${_totalCurrentSlots} current slots filled (${Math.round(_coverageRatio * 100)}%)`);
-
-    if (_coverageRatio < 0.5 && braveResultsSummary.length > 100) {
-      console.log(`🔬 PURIFY fallback: regex coverage too low — invoking LLM extraction`);
-      try {
-        const purifyPrompt = `${NYAN_PROTOCOL_COMPRESSED}
-
---- SEED METRIC: PURIFY (structured extraction) ---
-Extract ONLY numbers that appear in the search results below. Do NOT guess or use training data.
-
-For each (city, period) pair, output EXACTLY one line in this format:
-[City] [Year]: sqm=VALUE CURRENCY | income=VALUE CURRENCY | TFR=VALUE | type=built/land/N/A
-
-Rules:
-- sqm = price per square meter. If results show total price + area, divide: total ÷ area = sqm.
-- income = median SINGLE earner annual income. If monthly, multiply by 12 first.
-- TFR = total fertility rate (births per woman). N/A if not found.
-- type = "built" if apartment/condo/residential, "land" if plot/vacant land, "N/A" if unclear.
-- CURRENCY = 3-letter code (USD, JPY, KRW, SGD, EUR, GBP, etc.)
-- Use N/A for any value not found in the search results. Do NOT estimate.
-- Each line must have EXACTLY this format — no prose, no explanation.
-
-Cities: ${smCities.join(', ')}
-Current year: ${smCurrentYear} | Historical: ${histDecade} (approx ${histYear})
-
-SEARCH RESULTS:
-${braveResultsSummary}`;
-
-        const purifyResponse = await this.groqWithRetry({
-          url: this.llmUrl,
-          data: {
-            model: this.llmModel,
-            messages: [{ role: 'user', content: purifyPrompt }],
-            temperature: 0.05,
-            max_tokens: 600
+    // Round 2: New system prompt (triangulate+scribe gate) + user query + all tool results
+    // Swapping the system message from gatherPrompt → triangulatePrompt is the key gate change:
+    // Round 1 only knew "fetch ingredients"; Round 2 now gets the formula + table rules for the first time.
+    const round2Messages = [
+      { role: 'system', content: triangulatePrompt },
+      { role: 'user', content: query },
+      ...toolResultMsgs   // [assistant tool-call msg, ...tool result msgs]
+    ];
+    let round2Response;
+    try {
+      round2Response = await this.groqWithRetry({
+        url: this.llmUrl,
+        data: {
+          model: this.llmModel,
+          messages: round2Messages,
+          temperature: 0.05,
+          max_tokens: 2000
+        },
+        config: {
+          headers: {
+            'Authorization': `Bearer ${this.groqToken}`,
+            'Content-Type': 'application/json'
           },
-          config: {
-            headers: { 'Authorization': `Bearer ${this.groqToken}`, 'Content-Type': 'application/json' },
-            timeout: this.llmTimeouts.toolCall
-          }
-        }, 2, 'text');
-
-        const purifyText = purifyResponse.data.choices[0]?.message?.content || '';
-        console.log(`🔬 PURIFY output (${purifyText.length} chars):\n${purifyText}`);
-
-        const purifiedData = parsePurifyOutput(purifyText, smCities, smHistDecade, smCurrentYear);
-        purifiedData.parseLog?.forEach(l => console.log(`  🔬 ${l}`));
-
-        // Merge: PURIFY fills gaps that regex missed, but regex results take priority
-        for (const city of Object.keys(parsedData.cities)) {
-          for (const slot of ['current', 'historical']) {
-            const purifyCity = Object.keys(purifiedData.cities).find(c =>
-              c.includes(city) || city.includes(c)
-            );
-            if (!purifyCity) continue;
-            if (!parsedData.cities[city][slot].pricePerSqm?.value && purifiedData.cities[purifyCity]?.[slot]?.pricePerSqm?.value) {
-              parsedData.cities[city][slot].pricePerSqm = purifiedData.cities[purifyCity][slot].pricePerSqm;
-              console.log(`  🔬 PURIFY filled: ${city} ${slot} pricePerSqm = ${purifiedData.cities[purifyCity][slot].pricePerSqm.value}`);
-            }
-            if (!parsedData.cities[city][slot].income?.value && purifiedData.cities[purifyCity]?.[slot]?.income?.value) {
-              parsedData.cities[city][slot].income = purifiedData.cities[purifyCity][slot].income;
-              console.log(`  🔬 PURIFY filled: ${city} ${slot} income = ${purifiedData.cities[purifyCity][slot].income.value}`);
-            }
-            if (parsedData.cities[city][slot].tfr == null && purifiedData.cities[purifyCity]?.[slot]?.tfr != null) {
-              parsedData.cities[city][slot].tfr = purifiedData.cities[purifyCity][slot].tfr;
-            }
-          }
+          timeout: this.llmTimeouts.toolCall
         }
-        // Accept companion cities PURIFY discovered that regex didn't know about
-        for (const purifyCity of Object.keys(purifiedData.cities)) {
-          if (!parsedData.cities[purifyCity]) {
-            parsedData.cities[purifyCity] = purifiedData.cities[purifyCity];
-            console.log(`  🔬 PURIFY companion city accepted: ${purifyCity}`);
-          }
-        }
-      } catch (purifyErr) {
-        console.warn(`⚠️ PURIFY fallback failed: ${purifyErr.message} — using regex-only data`);
-      }
+      }, 3, 'text');
+    } catch (err) {
+      console.error(`❌ stepSeedMetricToolCall round2 failed: ${err.message}`);
+      throw err;
     }
 
-    // ── Merge TFR capsule into parsedData (current + historical) ───────────
-    for (const [key, capsule] of Object.entries(tfrCapsule)) {
-      const cityKey = Object.keys(parsedData.cities).find(c => stripDia(c.toLowerCase()) === key);
-      if (!cityKey) continue;
-      if (capsule.current != null) {
-        parsedData.cities[cityKey].current.tfr = capsule.current;
-        console.log(`  🧬 TFR merged: ${cityKey} current.tfr = ${capsule.current}`);
-      }
-      if (capsule.historical != null) {
-        parsedData.cities[cityKey].historical.tfr = capsule.historical;
-        console.log(`  🧬 TFR merged: ${cityKey} historical.tfr = ${capsule.historical}`);
-      }
-    }
+    // ── Post-processing pipeline (deterministic, no LLM trust) ──────────────
+    // Step A: header normalisation — LLM defaults to $/sqm regardless of prompt
+    const round2Raw = (round2Response.data.choices[0]?.message?.content || 'No response generated.')
+      .replace(/\|\s*\$\/sqm\s*\|/g, '| LCU/sqm |')
+      .replace(/\|\s*700sqm Price\s*\|/g, '| 700sqm Land Price |')
+      .replace(/\|\s*700sqm \(LCU\)\s*\|/g, '| 700sqm Land Price |')
+      .replace(/\|\s*Land Price\s*\|/g, '| 700sqm Land Price |')
+      .replace(/\|\s*Income\s*\|/gi, '| Income (LCU) |');
 
-    // ── Build metadata context for coda narration ────────────────────────
-    const seedMetaRows = [];
-    for (const [city, data] of Object.entries(parsedData.cities)) {
-      for (const slot of ['current', 'historical']) {
-        const pt = data[slot]?.pricePerSqm?.priceType || 'unknown';
-        const it = data[slot]?.income?.type || 'unknown';
-        const mo = data[slot]?.income?.monthly ? ' (monthly×12)' : '';
-        seedMetaRows.push({ city, period: slot === 'current' ? String(smCurrentYear) : histDecade, priceType: pt, incomeType: `${it}${mo}` });
-      }
-    }
-    state.seedMetricMeta = { rows: seedMetaRows };
+    // Step B: extract hidden metadata block (built/land, incomeType) — strips it from user text
+    const { meta: seedMeta, text: round2Stripped } = this._extractSeedMetricMeta(round2Raw);
+    state.seedMetricMeta = seedMeta;
+    if (seedMeta) console.log(`📋 Seed Metric meta: ${JSON.stringify(seedMeta)}`);
 
-    const tableText = buildSeedMetricTable(parsedData, smHistDecade, smCurrentYear);
-
-    // ── Source URLs ────────────────────────────────────────────────────────
-    const seenUrls = new Set();
-    const sourceUrls = [];
-    for (const { raw } of directRuns) {
-      let items;
-      try { items = JSON.parse(raw); } catch { items = []; }
-      if (Array.isArray(items)) {
-        items.slice(0, 2).forEach(r => {
-          if (r.url && !seenUrls.has(r.url) && sourceUrls.length < 8) {
-            seenUrls.add(r.url);
-            sourceUrls.push(r.url);
-          }
-        });
-      }
-    }
-    const sourcesSection = `\n\n📚 **Sources:** Brave Search (live web)${sourceUrls.length ? '\n' + sourceUrls.map(u => `- ${u}`).join('\n') : ''}`;
+    // Step C: deterministic regime recompute — overwrite LLM regime labels with correct arithmetic
+    const round2Text = this._normalizeSeedMetricRegimes(round2Stripped);
 
     state.didSearch = true;
-    state.seedMetricDirectOutput = true;
-    console.log(`🐕 Seed Metric: ${directRuns.length} Brave calls → deterministic table (${tableText.length} chars)`);
+    console.log(`🐕 Seed Metric walked: ${callsToRun.length} Brave calls → ${round2Text.length} chars`);
 
-    // ── Coda: ~nyan voice layer ────────────────────────────────────────────
+    // ── Round 3: ~nyan coda (voice layer, separate from data assembly) ──────
+    // Round 2 assembles facts. Round 3 writes what the facts imply.
+    // Full NYAN_PROTOCOL_SYSTEM_PROMPT at temperature 0.7 — the cat speaks.
     let coda = '';
     try {
+      // Build metadata context string for the coda if available
       const metaContext = state.seedMetricMeta?.rows?.length
         ? `\nData source notes (for narration only — do not repeat in coda output):\n` +
           state.seedMetricMeta.rows.map(r =>
@@ -1459,33 +1372,37 @@ Rules:
 - This must be unrepeatable — written only for these cities, this gap, this moment. Not a generic housing statement.
 - No preamble, no "In conclusion", no sign-off. Just the coda.`;
 
-      const codaResponse = await this.groqWithRetry({
+      const round3Response = await this.groqWithRetry({
         url: this.llmUrl,
         data: {
           model: this.llmModel,
           messages: [
             { role: 'system', content: codaSystemPrompt },
-            { role: 'user', content: tableText }
+            { role: 'user', content: round2Text }
           ],
           temperature: 0.7,
           max_tokens: 300
         },
         config: {
-          headers: { 'Authorization': `Bearer ${this.groqToken}`, 'Content-Type': 'application/json' },
+          headers: {
+            'Authorization': `Bearer ${this.groqToken}`,
+            'Content-Type': 'application/json'
+          },
           timeout: this.llmTimeouts.toolCall
         }
       }, 2, 'text');
 
-      coda = codaResponse.data.choices[0]?.message?.content?.trim() || '';
+      coda = round3Response.data.choices[0]?.message?.content?.trim() || '';
       console.log(`🐱 Seed Metric coda: ${coda.length} chars`);
     } catch (err) {
-      console.warn(`⚠️ Seed Metric coda failed: ${err.message} — skipping coda`);
+      console.warn(`⚠️ Seed Metric coda (round3) failed: ${err.message} — skipping coda`);
     }
 
+    // Persist coda on state — survives any downstream format-fix that rewrites draftAnswer
     state.seedMetricCoda = coda;
-    state.draftAnswer = tableText
-      + (coda ? '\n\n' + coda : '')
-      + sourcesSection;
+
+    // Insert coda before Sources section (preserving: table → summary → legend → coda → sources)
+    state.draftAnswer = this._insertSeedMetricCoda(round2Text, coda);
   }
 
   // Helper: splice coda before sources block, or append if no sources found
@@ -1557,7 +1474,7 @@ Rules:
     // Seed Metric direct output: bypass audit (data calculated with deterministic proxy rules)
     if (state.seedMetricDirectOutput) {
       console.log(`🏠 Seed Metric direct output - bypassing audit (proxy math applied)`);
-      state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Deterministic LCU/sqm × 700 proxy calculation' };
+      state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Deterministic $/sqm × 700 proxy calculation' };
       return;
     }
     
@@ -1584,12 +1501,12 @@ WRONG RESPONSE:
 ${state.draftAnswer.slice(0, 2000)}
 
 REQUIRED FORMAT — ONE unified markdown table (NOT separate tables per city):
-| City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime | TFR |
-|------|--------|---------|-------------------|--------------|-------|--------|-----|
-| [CityA] | ${histYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] | [tfr or N/A] |
-| [CityA] | ${currYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] | [tfr or N/A] |
-| [CityB] | ${histYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] | [tfr or N/A] |
-| [CityB] | ${currYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] | [tfr or N/A] |
+| City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime |
+|------|--------|---------|-------------------|--------------|-------|--------|
+| [CityA] | ${histYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityA] | ${currYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityB] | ${histYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
+| [CityB] | ${currYear} | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [label] |
 
 **[CityA]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
 **[CityB]**: [old]yr → [new]yr = [emoji] [Regime] (↑worsened/↓improved)
@@ -1658,7 +1575,7 @@ Output ONLY the corrected table and summary lines:`;
                       state.draftAnswer = buildSeedMetricTable(parsedData, state.preflight.historicalDecade || smDynDefault);
                       console.log(`✅ Seed Metric fallback direct calculation successful`);
                     } else {
-                      console.log(`⚠️ Seed Metric direct calc skipped: insufficient parsed data (need LCU/sqm AND income for at least one city). Keeping LLM answer for audit.`);
+                      console.log(`⚠️ Seed Metric direct calc skipped: insufficient parsed data (need $/sqm AND income for at least one city). Keeping LLM answer for audit.`);
                     }
                   }
                 }
@@ -1885,7 +1802,7 @@ Output ONLY the corrected table and summary lines:`;
     if (!state.fastPath && !/\*\*Source/i.test(state.finalAnswer)) {
       let sourceLabel;
       if (state.psiEmaDirectOutput)        sourceLabel = 'yfinance + SEC EDGAR (live data)';
-      else if (state.seedMetricDirectOutput) sourceLabel = 'Brave Search (live web)';
+      else if (state.seedMetricDirectOutput) sourceLabel = 'Brave Search — live $/sqm triangulation';
       else if (state.mode === 'forex')     sourceLabel = 'fawazahmed0 — live FX rates';
       else if (state.didSearch)            sourceLabel = 'Brave Search (live web)';
       else                                 sourceLabel = 'Llama 3.3 70B training data';

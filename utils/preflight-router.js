@@ -20,43 +20,6 @@ const { getSeedMetricProxy, detectSeedMetricIntent } = require('../prompts/seed-
 const { detectCodeMode, getLanguageFromExtension } = require('../lib/mode-registry');
 const { isDesignQuestion, getSystemContextForDesign } = require('./code-context');
 
-// ── Seed Metric companion city selection ──────────────────────────────────
-// When the user asks about only ONE city, the server picks a cross-cultural contrast city.
-// This is deterministic-but-rotating: different pick each ~minute via Date.now() bucket.
-const _SM_CITY_REGION = {
-  sea:           ['jakarta','bangkok','manila','kuala lumpur','ho chi minh','hanoi','singapore'],
-  east_asia:     ['tokyo','osaka','seoul','beijing','shanghai','taipei','hong kong'],
-  south_asia:    ['mumbai','delhi','bangalore','karachi','lahore'],
-  europe:        ['london','paris','amsterdam','berlin','madrid','rome','warsaw','lisbon','zurich','vienna','stockholm','oslo','helsinki','prague','budapest'],
-  north_america: ['new york','los angeles','toronto','chicago','san francisco','vancouver','seattle','boston','miami'],
-  latin_america: ['sao paulo','mexico city','buenos aires','bogota','lima','santiago'],
-  oceania:       ['sydney','melbourne','auckland'],
-  mena:          ['dubai','cairo','tel aviv','istanbul','riyadh'],
-  africa:        ['nairobi','lagos','johannesburg','cape town'],
-};
-// Candidate companions: one pool per user-city region — always from a DIFFERENT region
-const _SM_COMPANION_POOL = {
-  sea:           ['tokyo','warsaw','nairobi','sao paulo','amsterdam','mumbai'],
-  east_asia:     ['amsterdam','jakarta','sao paulo','nairobi','warsaw','mumbai'],
-  south_asia:    ['tokyo','amsterdam','sao paulo','nairobi','bangkok','warsaw'],
-  europe:        ['tokyo','jakarta','nairobi','sao paulo','mumbai','seoul'],
-  north_america: ['tokyo','amsterdam','jakarta','nairobi','mumbai','warsaw'],
-  latin_america: ['tokyo','amsterdam','nairobi','jakarta','warsaw','mumbai'],
-  oceania:       ['tokyo','amsterdam','jakarta','warsaw','nairobi','mumbai'],
-  mena:          ['tokyo','amsterdam','nairobi','jakarta','sao paulo','mumbai'],
-  africa:        ['tokyo','amsterdam','jakarta','sao paulo','mumbai','warsaw'],
-};
-function _smPickCompanion(cityName) {
-  const c = (cityName || '').toLowerCase().trim();
-  let region = 'sea';
-  for (const [r, cities] of Object.entries(_SM_CITY_REGION)) {
-    if (cities.some(x => c.includes(x) || x.includes(c))) { region = r; break; }
-  }
-  const pool = _SM_COMPANION_POOL[region] || _SM_COMPANION_POOL.sea;
-  // Rotate through pool ~every minute so repeated queries see different companions
-  return pool[Math.floor(Date.now() / 60000) % pool.length];
-}
-
 // Country → primary cities mapping for Seed Metric city expansion
 // Defined at module level so both primary and GEO-VETO code paths can use it
 const COUNTRY_CITY_MAP = {
@@ -83,16 +46,6 @@ const COUNTRY_CITY_MAP = {
 // Shared city-name regex — used in seed-metric detection AND geographic guard
 // Single source of truth so both code paths match the same set of cities
 const KNOWN_CITIES_REGEX = /\b(tokyo|singapore|hong kong|hongkong|london|new york|nyc|sydney|paris|berlin|shanghai|beijing|seoul|taipei|osaka|mumbai|bombay|delhi|new delhi|bangkok|jakarta|manila|kuala lumpur|kl|ho chi minh|saigon|hanoi|san francisco|sf|los angeles|la|chicago|toronto|vancouver|melbourne|auckland|dubai|abu dhabi|munich|frankfurt|amsterdam|madrid|barcelona|rome|milan|vienna|zurich|geneva|stockholm|copenhagen|oslo|helsinki|brussels|prague|warsaw|budapest|moscow|st petersburg|sao paulo|rio de janeiro|mexico city|buenos aires|bogota|lima|santiago|johannesburg|cape town|cairo|tel aviv|istanbul|athens|lisbon|dublin|edinburgh|manchester|birmingham|seattle|boston|washington dc|miami|dallas|houston|denver|phoenix|atlanta|detroit|philadelphia|minneapolis|portland|austin|san diego|honolulu|anchorage|montreal|calgary|ottawa|perth|brisbane|adelaide|wellington|christchurch|chengdu|shenzhen|guangzhou|hangzhou|nanjing|wuhan|xian|chongqing|tianjin|suzhou|qingdao|dalian|xiamen|fuzhou|ningbo|changsha|zhengzhou|jinan|shenyang|harbin|kunming|nanchang|hefei|taiyuan|shijiazhuang|lanzhou|urumqi|guiyang|nanning|haikou|lhasa|hohhot|yinchuan|xining)\b/gi;
-
-const CITY_ALIASES = {
-  sf: 'san francisco', nyc: 'new york', la: 'los angeles', kl: 'kuala lumpur',
-  hongkong: 'hong kong', bombay: 'mumbai', saigon: 'ho chi minh',
-  'new delhi': 'delhi', dc: 'washington dc',
-};
-function canonicalCity(name) {
-  const lower = name.toLowerCase().trim();
-  return CITY_ALIASES[lower] || lower;
-}
 
 const PSI_EMA_IDENTITY_PATTERNS = [
   /^what\s+is\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
@@ -382,10 +335,10 @@ async function preflightRouter(options) {
       
       // "Most recent available" = last full calendar year (real estate/income data lags ~1yr)
       const mostRecentYear = String(new Date().getFullYear() - 1);
-      const defaultHistoricalYear = String(new Date().getFullYear() - 30);
+      const defaultHistoricalYear = String(new Date().getFullYear() - 50);
 
       // Extract city names for targeted search (major world cities + common variants)
-      const cities = [...new Set((classificationQuery.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => canonicalCity(c)))];
+      const cities = [...new Set((classificationQuery.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => c.toLowerCase()))];
 
       // Expand country names to their primary cities (e.g. "vietnam" → hanoi, ho chi minh)
       const detectedCountries = [];
@@ -409,7 +362,7 @@ async function preflightRouter(options) {
         result.seedMetricSearchQueries = cities.flatMap(city => [
           `${city} residential property price per square meter ${currentYear}`,
           `${city} median individual income salary ${currentYear}`,
-          `${city} residential property price per square meter ${historicalDecade} historical`,
+          `${city} housing price ${historicalDecade} historical per sqm`,
           `${city} median income ${historicalDecade} historical`
         ]);
         // National-level fallback: gives LLM country-wide data if city searches miss
@@ -420,16 +373,7 @@ async function preflightRouter(options) {
         result.historicalDecade = historicalDecade;
         result.historicalYear = historicalYear;
         result.currentYear = currentYear;
-        // n=1 city → server picks a cross-cultural contrast companion
-        if (cities.length === 1) {
-          const companion = _smPickCompanion(cities[0]);
-          result.seedMetricCities = [cities[0], companion];
-          result.companionCity = companion;
-          console.log(`🏙️ Companion selected: ${companion} (contrast to ${cities[0]})`);
-        } else {
-          result.seedMetricCities = cities;
-        }
-        console.log(`🏠 Preflight: SEED_METRIC detected for cities: ${result.seedMetricCities.join(', ')}, historical: ${historicalDecade}, current: ${currentYear}`);
+        console.log(`🏠 Preflight: SEED_METRIC detected for cities: ${cities.join(', ')}, historical: ${historicalDecade}, current: ${currentYear}`);
         console.log(`🔍 Preflight: Will search for: ${result.seedMetricSearchQueries.slice(0, 3).join(' | ')}...`);
       } else {
         result.seedMetricSearchQueries = [
@@ -513,7 +457,7 @@ async function preflightRouter(options) {
 
         // Detect ALL years: first = historical, last = current
         const gvMostRecentYear = String(new Date().getFullYear() - 1);
-        const gvDefaultHistoricalYear = String(new Date().getFullYear() - 30);
+        const gvDefaultHistoricalYear = String(new Date().getFullYear() - 50);
         const gvAllYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)s?\b/g)].map(m => m[1]);
         const gvHistoricalYear = gvAllYears.length > 0 ? gvAllYears[0] : gvDefaultHistoricalYear;
         const gvCurrentYear = gvAllYears.length > 1 ? gvAllYears[gvAllYears.length - 1] : gvMostRecentYear;
@@ -533,15 +477,7 @@ async function preflightRouter(options) {
           result.historicalDecade = gvHistoricalDecade;
           result.historicalYear = gvHistoricalYear;
           result.currentYear = gvCurrentYear;
-          if (gvCities.length === 1) {
-            const gvCompanion = _smPickCompanion(gvCities[0]);
-            result.seedMetricCities = [gvCities[0], gvCompanion];
-            result.companionCity = gvCompanion;
-            console.log(`🏙️ GEO-VETO companion selected: ${gvCompanion} (contrast to ${gvCities[0]})`);
-          } else {
-            result.seedMetricCities = gvCities;
-          }
-          console.log(`🏠 GEO-VETO: Seed Metric for cities: ${result.seedMetricCities.join(', ')}, historical: ${gvHistoricalDecade}, current: ${gvCurrentYear}`);
+          console.log(`🏠 GEO-VETO: Seed Metric for cities: ${gvCities.join(', ')}, historical: ${gvHistoricalDecade}, current: ${gvCurrentYear}`);
         }
         
         // Skip rest of Ψ-EMA processing - return early handled by mode check below
@@ -734,7 +670,7 @@ async function preflightRouter(options) {
             result.searchStrategy = 'brave';
 
             // Build city search queries (same logic as primary seed-metric block)
-            const _smCities = [...new Set((_geoCheck.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => canonicalCity(c)))];
+            const _smCities = [...new Set((_geoCheck.match(new RegExp(KNOWN_CITIES_REGEX.source, 'gi')) || []).map(c => c.toLowerCase()))];
             const _smCountries = [];
             const _smCountryRegex = new RegExp('\\b(' + Object.keys(COUNTRY_CITY_MAP).join('|') + ')\\b', 'gi');
             for (const m of _geoCheck.matchAll(_smCountryRegex)) {
@@ -746,7 +682,7 @@ async function preflightRouter(options) {
             }
             const _smCurrentYear = String(new Date().getFullYear() - 1);
             const _smAllYears = [...classificationQuery.matchAll(/\b(19[5-9]\d|20[0-2]\d)s?\b/g)].map(m => m[1]);
-            const _smHistoricalYear = _smAllYears[0] || String(new Date().getFullYear() - 30);
+            const _smHistoricalYear = _smAllYears[0] || String(new Date().getFullYear() - 50);
             const _smCurrentYearFinal = _smAllYears.length > 1 ? _smAllYears[_smAllYears.length - 1] : _smCurrentYear;
             const _smHistoricalDecade = `${_smHistoricalYear.slice(0, 3)}0s`;
             result.historicalDecade = _smHistoricalDecade;
@@ -764,15 +700,7 @@ async function preflightRouter(options) {
                 result.seedMetricSearchQueries.push(`${cn} national average property price per sqm ${_smCurrentYearFinal}`);
                 result.seedMetricSearchQueries.push(`${cn} minimum wage annual ${_smCurrentYearFinal}`);
               }
-              if (_smCities.length === 1) {
-                const _smCompanion = _smPickCompanion(_smCities[0]);
-                result.seedMetricCities = [_smCities[0], _smCompanion];
-                result.companionCity = _smCompanion;
-                console.log(`🏙️ GUARD companion selected: ${_smCompanion} (contrast to ${_smCities[0]})`);
-              } else {
-                result.seedMetricCities = _smCities;
-              }
-              console.log(`🌍 GEOGRAPHIC GUARD: Seed Metric for cities: ${result.seedMetricCities.join(', ')}, historical: ${_smHistoricalDecade}`);
+              console.log(`🌍 GEOGRAPHIC GUARD: Seed Metric for cities: ${_smCities.join(', ')}, historical: ${_smHistoricalDecade}`);
             } else {
               result.seedMetricSearchQueries = [
                 `residential property price per square meter comparison major cities ${_smCurrentYearFinal}`,

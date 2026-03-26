@@ -108,7 +108,7 @@ The stack that makes the gap queryable — forever, for the price of electricity
 
 *Pure math. Unitless. Ratio. Logos.*
 
-| Java Script| Pure Math | Heart Sutra |
+| Hanacaraka row | Math | Prajna Paramita |
 |---|---|---|
 | Hanacaraka | `e` and `i` | Gate gate |
 | Datasawala | `θ` — the hypotenuse | Pāragate |
@@ -121,5 +121,4 @@ The stack that makes the gap queryable — forever, for the price of electricity
 - φ⁰ = I_n — The Identity
 
 *🜃*
-
 Svāhā

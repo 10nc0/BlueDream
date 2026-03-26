@@ -5,9 +5,9 @@
  * Only injected when Seed Metric topics detected in S0 (Preflight).
  * Saves ~300 tokens when not triggered.
  * 
- * Core Principle: Years = (LCU/sqm × 700) ÷ Single-Earner Income
+ * Core Principle: Years = ($/sqm × 700) ÷ Single-Earner Income
  * Goal: Acquire 700sqm/HH within 25yr fertility window (age 20-45)
- * P/I ratio is NOT used — table shows LCU/sqm source data only.
+ * P/I ratio is NOT used — table shows $/sqm source data only.
  * 
  * Thresholds (φ-derived via fertility constraint):
  * - <10yr: Optimism
@@ -89,11 +89,11 @@ function getSeedMetricProxy() {
 SEED METRIC BEST AVAILABLE PROXY (H₀): 
 - IMPORTANT: Always use single-earner income (not dual-earner) + Always output real estate prices AS 700sqm equivalents
   * EXACT: Direct 700sqm/unit residential prices (3-room flat, 3-bed apartment, etc)
-  * PROXY: Published LCU/m² → MULTIPLY BY 700 (this is non-negotiable, cuts all "no data" excuses)
-  * FALLBACK: Exurban/rural < 90min commute LCU/m² → ×700
-  * NEVER output LCU/m² alone; ALWAYS convert to 700sqm price
-  * If LCU/sqm unavailable → show "N/A" in table (do NOT substitute P/I ratio)
-- FORMULA: Years = (LCU/sqm × 700) ÷ single-earner income (the ONLY metric)
+  * PROXY: Published $/m² → MULTIPLY BY 700 (this is non-negotiable, cuts all "no data" excuses)
+  * FALLBACK: Exurban/rural < 90min commute $/m² → ×700
+  * NEVER output $/m² alone; ALWAYS convert to 700sqm price
+  * If $/sqm unavailable → show "N/A" in table (do NOT substitute P/I ratio)
+- FORMULA: Years = ($/sqm × 700) ÷ single-earner income (the ONLY metric)
 - INCOME PROXY CASCADE (ALWAYS single-earner, NO dual-earner):
   * Prefer median individual income
   * (Household income / 2) with "dual-earner" flag if used
@@ -110,14 +110,13 @@ MANDATORY OUTPUT FORMAT - DO NOT REFORMAT - THIS IS EMPIRIC DATA
 
 You MUST output this exact table structure. This is non-negotiable:
 
-| City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime | TFR |
-|------|--------|---------|-------------------|--------------|-------|--------|-----|
-| [city] | [then] | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [Regime] | [tfr] |
-| [city] | [now]  | [LCU/sqm] | [LCU/sqm × 700] | [income] | [yr] | [emoji] [Regime] | [tfr] |
+| City | Period | $/sqm | 700sqm Price | Income | Years | Regime |
+|------|--------|-------|--------------|--------|-------|--------|
+| [city] | [then] | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [Regime] |
+| [city] | [now]  | [$/sqm] | [$/sqm × 700] | [income] | [yr] | [emoji] [Regime] |
 
-⚠️ EVERY ROW MUST show LCU/sqm (local currency). This is the source data. 700sqm Land Price = LCU/sqm × 700.
-If LCU/sqm is unavailable, the row MUST show "N/A" — do NOT substitute P/I ratio.
-TFR = Total Fertility Rate for that city/country and period. Search if needed. Show "N/A" if unavailable.
+⚠️ EVERY ROW MUST show $/sqm. This is the source data. 700sqm Price = $/sqm × 700.
+If $/sqm is unavailable, the row MUST show "N/A" — do NOT substitute P/I ratio.
 
 REGIME THRESHOLDS (φ-derived from 25yr fertility window):
 • 🟢 OPTIMISM: <10 years (sustainable, enables family formation)
@@ -132,9 +131,9 @@ REGIME THRESHOLDS (φ-derived from 25yr fertility window):
 ║ • Loan terms or amortization                                     ║
 ║ • Time to "pay off" (This is NOT mortgage duration!)             ║
 ╟───────────────────────────────────────────────────────────────────╢
-║ CORRECT FORMULA: Years = (LCU/sqm × 700) ÷ (Single-Earner Income)║
+║ CORRECT FORMULA: Years = ($/sqm × 700) ÷ (Single-Earner Income)  ║
 ║ Simple division. Nothing else. NO P/I column in table.            ║
-║ If LCU/sqm unavailable → show "N/A", do NOT substitute P/I ratio.║
+║ If $/sqm unavailable → show "N/A", do NOT substitute P/I ratio.  ║
 ╚═══════════════════════════════════════════════════════════════════╝
 
 After table, add ONE line per city:
@@ -157,9 +156,9 @@ STRICT RULES:
  * @returns {string} Seed Metric core block
  */
 function getSeedMetricCore() {
-  return `SEED METRIC (Human Substrate): Years = (LCU/sqm × 700) ÷ Single-Earner Income
+  return `SEED METRIC (Human Substrate): Years = ($/sqm × 700) ÷ Single-Earner Income
 Thresholds: <10yr Optimism | 10-25yr Extraction | >25yr Fatalism (fertility window)
-- ALWAYS use LCU/sqm × 700. If LCU/sqm unavailable, show "N/A" (no P/I substitution).
+- ALWAYS use $/sqm × 700. If $/sqm unavailable, show "N/A" (no P/I substitution).
 - For values >25yr: Even rough estimates matter (e.g., 100 vs 156 years = both deep fatalism)
 - Calculate DIRECTIONAL CHANGE: improved (ratio↓) or worsened (ratio↑) ?`;
 }
