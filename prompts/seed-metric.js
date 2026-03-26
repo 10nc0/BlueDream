@@ -136,6 +136,9 @@ REGIME THRESHOLDS (φ-derived from 25yr fertility window):
 ║ If $/sqm unavailable → show "N/A", do NOT substitute P/I ratio.  ║
 ╚═══════════════════════════════════════════════════════════════════╝
 
+NOTE: A TFR (Total Fertility Rate) column is appended server-side after your output.
+Do NOT include TFR in your table — it is injected automatically from dedicated Brave searches.
+
 After table, add ONE line per city:
 **[City]**: [old]yr → [new]yr = [emoji] [Regime] ([↑worsened/↓improved])
 
