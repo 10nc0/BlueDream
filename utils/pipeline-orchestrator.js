@@ -55,7 +55,7 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
-const { parseSeedMetricData, buildSeedMetricTable, validateSeedMetricOutput } = require('./seed-metric-calculator');
+const { parseSeedMetricData, parsePurifyOutput, buildSeedMetricTable, validateSeedMetricOutput } = require('./seed-metric-calculator');
 
 function extractVisionSearchTerms(visionDescription) {
   if (!visionDescription || visionDescription.length < 20) return null;
@@ -1171,54 +1171,41 @@ Rules:
   • For every value you extract, note its source URL from the result.
   • Historical data is often missing — N/A is the correct answer, not a guess.`;
 
-    // ── Gate 2+3: Triangulate + scribe prompt (Round 2 — synthesis) ─────────
-    // Triggered after all Brave results are in. Now and only now: formula → table → regime.
-    // USD normalisation rule closes the Tokyo/JPY currency-mixing bug.
-    const triangulatePrompt = `${NYAN_PROTOCOL_COMPRESSED}
+    // ── Round 2: PURIFY prompt — LLM reads raw Brave results, outputs structured lines ──
+    // LLM job: quanta extraction (including triangulation: total÷area=sqm/sqft→sqm).
+    // Server job: calculate (Years = sqm×700÷income) + scribe (buildSeedMetricTable).
+    // TFR is a pass-through: one value per city per period, no math, no bleeding possible.
+    const purifyPrompt = `${NYAN_PROTOCOL_COMPRESSED}
 
---- SEED METRIC: PURIFY → CALCULATE → SCRIBE ---
-Three gates. Execute in order. Do not skip ahead or merge gates.
+--- SEED METRIC: PURIFY ONLY ---
+You have been given raw search results. Extract the numbers. Do NOT compute Years. Do NOT output a table. Do NOT write prose.
 
-GATE 2A — PURIFY (standardize units — output this block first):
-  For every (city, period) pair in the search results, write one line:
-  [City] [Period]: raw=[value][unit] → sqm=[converted_value] [LCU] | income=[value] [LCU] | TFR=[value] | type=[built|land]
+For each (city, period) pair found in the results, output EXACTLY ONE LINE in this format:
+[City] [Period]: sqm=VALUE CURRENCY | income=VALUE CURRENCY | TFR=VALUE | type=built/land/N/A
 
-  Unit conversion rules:
-  • US/UK results almost always report sqft — declare this and convert: sqft × 10.764 = sqm.
-  • If result shows total price + explicit area (e.g. "$105,000 for 1,100 sqft") → derive: total ÷ area = $/sqft → ×10.764 = $/sqm.
-  • If result shows a total price with NO explicit sqm or sqft area (e.g. "$105,000 for a 5-story townhouse") → price = N/A. Cannot derive without area.
-  • RENT REJECTION: if raw value contains "/mo", "/month", "per month", "monthly rent" → it is rent, NOT purchase price → price = N/A. Rent ≠ purchase price.
-  • LCU = local currency of that city/period. Never convert to USD. price_sqm and income must share the same LCU.
-  • Income must be annual single-earner. Monthly → ×12. Household → N/A (do not use).
-  • NOMINAL only: if the source describes a historical value as "in today's money", "real terms", "adjusted for inflation", or "equivalent to ${currentYear} £/€/$" → reject it, write N/A. Only nominal face-value of that era is valid.
-  • TFR = single decimal from search results (e.g. 0.97). N/A if not in results — do not guess.
-  • Sanity check: if years > 1,000 or years < 0.01, the arithmetic is wrong — recheck that sqm price and income are in the same LCU and both annual (not monthly vs annual mismatch).
-  • Missing price or income → write N/A for that field.
-  • Deduplication: one line per (city, period) pair. Use the most recent/reliable value if duplicates exist.
+Rules:
+• sqm = price per square meter in LOCAL currency (LCU, do NOT convert to USD).
+  - Direct $/sqm or $/m² given → use it directly.
+  - Total price + explicit area given (e.g. "S$450,000 for 500sqm") → divide: 450000÷500=900 → sqm=900 SGD
+  - Price per sqft given → multiply by 10.764 to get sqm value.
+  - Total price with NO area stated → sqm=N/A (cannot derive without area).
+  - Rent (/mo, /month, monthly) → sqm=N/A. Rent ≠ purchase price.
+  - If unavailable → sqm=N/A
+• income = annual single-earner income in LCU.
+  - Monthly figure → multiply by 12.
+  - Household/dual-earner figure → income=N/A (do not use).
+  - If unavailable → income=N/A
+• TFR = total fertility rate as a single decimal (e.g. 1.04). N/A if not in results. Do not guess.
+• type = built (apartment/flat/condo) or land (vacant plot). Prefer built. N/A if unknown.
+• NOMINAL ONLY: reject any value described as "real terms", "inflation-adjusted", "in today's money".
+• Currency code: SGD / JPY / USD / EUR / GBP / KRW / HKD / AUD / CNY / INR / MYR / THB / VND etc.
+• Period: use the year from the search (e.g. 2025 or 1975).
+• One line per (city, period). No other text. No explanations.
 
-  Price type: "built" = apartment/flat/condo; "land" = plot/vacant. Prefer built.
-
-GATE 2B — CALCULATE (arithmetic only — use Gate 2A values, output after Gate 2A):
-  For each row where both sqm and income are NOT N/A:
-  • 700sqm Price = sqm × 700  →  Years = (sqm × 700) ÷ income  (integer, round to nearest, no decimals)
-  • Write the arithmetic explicitly: e.g. "10,247 × 700 ÷ 104,400 = 68yr" — this is your self-check.
-  • Regime: < 10yr → 🟢 OPTIMISM | 10–25yr → 🟡 EXTRACTION | > 25yr → 🔴 FATALISM
-  • If either value N/A → Years = N/A, Regime = N/A.
-  • Zero is valid (land was free/state-granted). Not the same as missing.
-
-GATE 3 — SCRIBE (visible output only — build table from Gate 2B, no new arithmetic):
-  | City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime | TFR |
-
-  After table: **[City]**: [hist]yr → [curr]yr = [emoji] REGIME (↑worsened/↓improved)
-  After summary: Years = (LCU/sqm × 700) ÷ Median Single Earner Income (same LCU)
-  **Sources:**
-  - [page title](url)  ← only URLs from search results. No bare URLs. No invented sources.
-
-OUTPUT ORDER:
-  1. Gate 2A — PURIFY block
-  2. Gate 2B — CALCULATE block
-  3. Gate 3 table + summary + legend + sources
-  (The server will strip Gate 2A/2B before showing to the user. Work through them in full — do not abbreviate.)`;
+Example:
+[Singapore] [2025]: sqm=1840 SGD | income=44400 SGD | TFR=1.04 | type=built
+[Singapore] [1975]: sqm=N/A SGD | income=2400 SGD | TFR=2.62 | type=N/A
+[Tokyo] [2025]: sqm=997000 JPY | income=4200000 JPY | TFR=1.20 | type=built`;
 
     const round1Messages = [
       { role: 'system', content: gatherPrompt },
@@ -1307,12 +1294,12 @@ OUTPUT ORDER:
       }
     }
 
-    // ── Deterministic table: parseSeedMetricData + buildSeedMetricTable ─────
-    // Round 2 (LLM table synthesis) is eliminated — table is now built server-side.
-    // Same architecture as Psi-EMA: live API data → server math → deterministic output.
-    // LLM only writes the coda (personality layer). Zero LLM touch on table cells.
+    // ── Round 2: PURIFY — LLM reads raw Brave results → structured lines ────
+    // Architecture: Round 1 (search) → Round 2 (purify/extract) → server (calculate+scribe)
+    // LLM handles quanta extraction (total÷area, sqft→sqm, monthly→annual).
+    // Server handles all arithmetic (Years = sqm×700÷income) and table formatting.
 
-    // Cities from preflight (stored by preflight-router); fallback: extract from search queries.
+    // Cities from preflight
     const smCities = state.preflight?.seedMetricCities?.length
       ? state.preflight.seedMetricCities
       : [...new Set((state.preflight?.seedMetricSearchQueries || []).map(q => {
@@ -1320,11 +1307,8 @@ OUTPUT ORDER:
           return m ? m[1].trim().toLowerCase() : null;
         }).filter(Boolean))];
 
-    // Flatten all Brave JSON results into a single text corpus.
-    // Each slot: [Search: <query>] followed by title + description sentences.
-    // Prefixing with the query ensures parseSeedMetricData's city/decade regex patterns
-    // can anchor to the right context even when the city name isn't in the snippet itself.
-    const smCorpus = callsToRun.map((tc, i) => {
+    // Format Brave results as readable text for the purify LLM
+    const braveResultsSummary = callsToRun.map((tc, i) => {
       let args;
       try { args = JSON.parse(tc.function.arguments); } catch { args = {}; }
       const smQuery = args.query || '';
@@ -1332,17 +1316,50 @@ OUTPUT ORDER:
       let items;
       try { items = JSON.parse(raw); } catch { items = []; }
       if (!Array.isArray(items)) items = [];
-      const text = items.map(r =>
-        [r.title, r.description].filter(Boolean).join('. ')
+      const lines = items.slice(0, 5).map(r =>
+        `  • ${[r.title, r.description].filter(Boolean).join(': ')} [${r.url || ''}]`
       ).join('\n');
-      return `[Search: ${smQuery}]\n${text}`;
+      return `Search: "${smQuery}"\n${lines}`;
     }).join('\n\n');
-
-    console.log(`🏗️ Seed Metric: parsing ${smCities.join(', ')} from ${smCorpus.length} chars corpus`);
 
     const smHistDecade = histDecade;
     const smCurrentYear = state.preflight?.currentYear || currentYear;
-    const parsedData = parseSeedMetricData(smCorpus, smCities, smHistDecade, smCurrentYear);
+
+    // Run Round 2: LLM reads all Brave results and extracts structured data
+    let purifyText = '';
+    try {
+      const purifyResponse = await this.groqWithRetry({
+        url: this.llmUrl,
+        data: {
+          model: this.llmModel,
+          messages: [
+            { role: 'system', content: purifyPrompt },
+            { role: 'user', content: braveResultsSummary }
+          ],
+          temperature: 0.0,
+          max_tokens: 400
+        },
+        config: {
+          headers: {
+            'Authorization': `Bearer ${this.groqToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: this.llmTimeouts.toolCall
+        }
+      }, 2, 'text');
+      purifyText = purifyResponse.data.choices[0]?.message?.content?.trim() || '';
+      console.log(`🔬 PURIFY output (${purifyText.length} chars):\n${purifyText}`);
+    } catch (err) {
+      console.warn(`⚠️ PURIFY round failed: ${err.message} — falling back to regex parser`);
+    }
+
+    console.log(`🏗️ Seed Metric: parsing ${smCities.join(', ')}`);
+
+    // Primary: parse LLM's structured PURIFY output (zero interpretation, pure read)
+    // Fallback: regex parser on raw Brave snippets (legacy path)
+    const parsedData = purifyText
+      ? parsePurifyOutput(purifyText, smCities, smHistDecade, smCurrentYear)
+      : parseSeedMetricData(braveResultsSummary, smCities, smHistDecade, smCurrentYear);
 
     parsedData.parseLog?.forEach(l => console.log(`  📋 ${l}`));
 

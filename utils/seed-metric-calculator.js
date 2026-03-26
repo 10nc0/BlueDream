@@ -678,11 +678,90 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
   };
 }
 
+/**
+ * Parse LLM PURIFY output into the same structure as parseSeedMetricData.
+ * Expected LLM output — one line per (city, period):
+ *   [City] [Period]: sqm=VALUE CURRENCY | income=VALUE CURRENCY | TFR=VALUE | type=built/land/N/A
+ *
+ * The LLM does quanta extraction (including triangulation: total÷area=sqm).
+ * This function does zero interpretation — it only reads the structured result.
+ *
+ * @param {string}   purifyText        - LLM PURIFY output
+ * @param {string[]} cities            - Normalized city keys (lowercase)
+ * @param {string}   historicalDecade  - e.g. "1970s"
+ * @param {number}   currentYear       - Request timestamp year
+ */
+function parsePurifyOutput(purifyText, cities = [], historicalDecade = '1970s', currentYear = new Date().getFullYear()) {
+  const result = { cities: {}, parseLog: [] };
+  if (!purifyText || !cities.length) return result;
+
+  const normalizedCities = cities.map(c => c.toLowerCase().trim());
+  for (const city of normalizedCities) {
+    result.cities[city] = {
+      current:    { pricePerSqm: null, income: null, tfr: null },
+      historical: { pricePerSqm: null, income: null, tfr: null, decade: historicalDecade }
+    };
+  }
+
+  // Match each structured line the LLM outputs
+  const lineRx = /\[([^\]]+)\]\s*\[([^\]]+)\]\s*:\s*sqm=([^\s|]+)(?:\s+([A-Z]{2,4}))?\s*\|\s*income=([^\s|]+)(?:\s+([A-Z]{2,4}))?\s*\|\s*TFR=([^\s|]+)\s*\|\s*type=(\S+)/gi;
+
+  for (const match of purifyText.matchAll(lineRx)) {
+    const cityRaw = match[1].trim();
+    const period  = match[2].trim();
+    const sqmStr  = match[3].trim();
+    const sqmCurr = match[4]?.trim() || '';
+    const incStr  = match[5].trim();
+    const incCurr = match[6]?.trim() || sqmCurr;
+    const tfrStr  = match[7].trim();
+
+    // Match LLM city name to our city keys (substring both ways)
+    const cityLower = cityRaw.toLowerCase();
+    const cityKey = normalizedCities.find(c => c.includes(cityLower) || cityLower.includes(c));
+    if (!cityKey) {
+      result.parseLog.push(`PURIFY: no match for "${cityRaw}" (known: ${normalizedCities.join(', ')})`);
+      continue;
+    }
+
+    // Current vs historical — LLM already labelled the period year
+    const periodYear = parseInt(period.replace(/[^0-9]/g, ''));
+    const isHistorical = !isNaN(periodYear) && periodYear < currentYear - 8;
+    const slot = isHistorical ? 'historical' : 'current';
+
+    const currency = sqmCurr || detectCurrency(cityKey, '');
+
+    if (sqmStr !== 'N/A') {
+      const v = parseFloat(sqmStr.replace(/[^0-9.]/g, ''));
+      if (isFinite(v) && v > 0) result.cities[cityKey][slot].pricePerSqm = { value: v, currency };
+    }
+    if (incStr !== 'N/A') {
+      const v = parseFloat(incStr.replace(/[^0-9.]/g, ''));
+      if (isFinite(v) && v > 0) result.cities[cityKey][slot].income = { value: v, currency: incCurr || currency };
+    }
+    if (tfrStr !== 'N/A') {
+      const v = parseFloat(tfrStr);
+      if (isFinite(v) && v > 0 && v < 15) result.cities[cityKey][slot].tfr = v;
+    }
+
+    result.parseLog.push(`PURIFY ${cityKey} ${slot}(${period}): sqm=${result.cities[cityKey][slot].pricePerSqm?.value ?? 'N/A'} ${currency}, income=${result.cities[cityKey][slot].income?.value ?? 'N/A'}, TFR=${result.cities[cityKey][slot].tfr ?? 'N/A'}`);
+  }
+
+  // Summary log
+  for (const city of normalizedCities) {
+    const c = result.cities[city];
+    result.parseLog.push(`${city} CURRENT: price/sqm=${c.current.pricePerSqm?.value ?? 'N/A'}, income=${c.current.income?.value ?? 'N/A'}, tfr=${c.current.tfr ?? 'N/A'}`);
+    result.parseLog.push(`${city} HISTORICAL: price/sqm=${c.historical.pricePerSqm?.value ?? 'N/A'}, income=${c.historical.income?.value ?? 'N/A'}, tfr=${c.historical.tfr ?? 'N/A'}`);
+  }
+
+  return result;
+}
+
 module.exports = {
   parsePricePerSqm,
   parseIncome,
   parseTFR,
   parseSeedMetricData,
+  parsePurifyOutput,
   calculateSeedMetric,
   formatCurrency,
   buildSeedMetricTable,
