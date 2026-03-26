@@ -207,7 +207,6 @@ function triangulateFromTotalPrice(text, city = '') {
   const areas = [];
   for (const m of text.matchAll(areaPattern)) {
     const numStr = m[1].replace(/,/g, '');
-    if (/^(19|20)\d{2}$/.test(numStr)) continue;
     let area = parseFloat(numStr);
     if (!isFinite(area) || area <= 0) continue;
     const isPsf = /psf|sq(?:uare)?\s*(?:ft|f(?:oo|ee)t)|sqft/i.test(m[0]);
@@ -231,7 +230,6 @@ function triangulateFromTotalPrice(text, city = '') {
     for (const m of text.matchAll(pat)) {
       const numStr = (m[1] || m[2] || '').replace(/,/g, '');
       if (!numStr) continue;
-      if (/^(19|20)\d{2}$/.test(numStr)) continue;
       const value = applyMultiplier(parseFloat(numStr), m[0]);
       if (!isFinite(value) || value <= 0) continue;
       const usdTotal = value * usdRate;
