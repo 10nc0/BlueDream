@@ -373,6 +373,7 @@ async function preflightRouter(options) {
         result.historicalDecade = historicalDecade;
         result.historicalYear = historicalYear;
         result.currentYear = currentYear;
+        result.seedMetricCities = cities;
         console.log(`🏠 Preflight: SEED_METRIC detected for cities: ${cities.join(', ')}, historical: ${historicalDecade}, current: ${currentYear}`);
         console.log(`🔍 Preflight: Will search for: ${result.seedMetricSearchQueries.slice(0, 3).join(' | ')}...`);
       } else {

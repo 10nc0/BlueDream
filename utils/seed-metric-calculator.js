@@ -385,10 +385,39 @@ function parseSeedMetricData(searchContext, cities = [], historicalDecade = Stri
       }
     }
     
+    // ── TFR extraction ───────────────────────────────────────────────────────
+    // Scan any sentence that mentions fertility + city OR decade keyword.
+    const tfrNow = new Date().getFullYear();
+    const tfrCurrentPatterns = [
+      new RegExp(`${city}[^.]*(?:fertility|tfr|birth)[^.]*`, 'gi'),
+      new RegExp(`(?:fertility|tfr|birth)[^.]*${city}[^.]*`, 'gi'),
+      new RegExp(`[^.]*(?:${tfrNow}|${String(tfrNow - 1)})[^.]*(?:fertility|tfr|birth)[^.]*`, 'gi'),
+    ];
+    const tfrHistPatterns = [
+      new RegExp(`${city}[^.]*(?:${historicalDecade}|1970|1971|1972|1973|1974|1975|1976|1977|1978|1979|1980)[^.]*(?:fertility|tfr|birth)[^.]*`, 'gi'),
+      new RegExp(`(?:${historicalDecade}|1970|1976|1980)[^.]*(?:fertility|tfr|birth)[^.]*`, 'gi'),
+    ];
+    for (const p of tfrCurrentPatterns) {
+      const m = searchContext.match(p);
+      if (m && result.cities[city].current.tfr == null) {
+        result.cities[city].current.tfr = parseTFR(m.join(' '));
+      }
+    }
+    for (const p of tfrHistPatterns) {
+      const m = searchContext.match(p);
+      if (m && result.cities[city].historical.tfr == null) {
+        result.cities[city].historical.tfr = parseTFR(m.join(' '));
+      }
+    }
+    // Wide fallback: any TFR sentence in full context
+    if (result.cities[city].current.tfr == null) {
+      result.cities[city].current.tfr = parseTFR(searchContext);
+    }
+
     const _currP = result.cities[city].current.pricePerSqm;
     const _histP = result.cities[city].historical.pricePerSqm;
-    result.parseLog.push(`${city} CURRENT: price/sqm=${_currP?.value || 'N/A'}${_currP?.triangulated ? ' (triangulated)' : ''}, income=${result.cities[city].current.income?.value || 'N/A'}`);
-    result.parseLog.push(`${city} HISTORICAL: price/sqm=${_histP?.value || 'N/A'}${_histP?.triangulated ? ' (triangulated)' : ''}, income=${result.cities[city].historical.income?.value || 'N/A'}`);
+    result.parseLog.push(`${city} CURRENT: price/sqm=${_currP?.value || 'N/A'}${_currP?.triangulated ? ' (triangulated)' : ''}, income=${result.cities[city].current.income?.value || 'N/A'}, tfr=${result.cities[city].current.tfr ?? 'N/A'}`);
+    result.parseLog.push(`${city} HISTORICAL: price/sqm=${_histP?.value || 'N/A'}${_histP?.triangulated ? ' (triangulated)' : ''}, income=${result.cities[city].historical.income?.value || 'N/A'}, tfr=${result.cities[city].historical.tfr ?? 'N/A'}`);
   }
   
   return result;
@@ -470,80 +499,90 @@ function formatCurrency(value, currency = 'USD') {
 }
 
 /**
- * Build Seed Metric table from parsed data
+ * Parse Total Fertility Rate from text.
+ * Brave snippets: "TFR of 1.67", "fertility rate: 0.87", "total fertility rate was 2.1"
+ * @param {string} text
+ * @returns {number|null}
+ */
+function parseTFR(text) {
+  if (!text) return null;
+  const patterns = [
+    /\btotal\s+fertility\s+rate\b[^0-9]*([0-9]+\.[0-9]+)/i,
+    /\bTFR\b[^0-9]*([0-9]+\.[0-9]+)/i,
+    /\bfertility\s+rate\b[^0-9]*([0-9]+\.[0-9]+)/i,
+    /\bbirths?\s+per\s+woman\b[^0-9]*([0-9]+\.[0-9]+)/i,
+  ];
+  for (const pat of patterns) {
+    const m = text.match(pat);
+    if (m) {
+      const v = parseFloat(m[1]);
+      if (v >= 0.5 && v <= 10) return Math.round(v * 100) / 100;
+    }
+  }
+  return null;
+}
+
+/**
+ * Build Seed Metric table from parsed data.
+ * Deterministic — no LLM touch. Column headers match the canonical gate format.
  * @param {object} parsedData - Output from parseSeedMetricData()
  * @param {string} historicalDecade - e.g., "1970s"
+ * @param {number} currentYear - e.g., 2026 (defaults to this year)
  * @returns {string} Markdown table with regime readings
  */
-function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().getFullYear() - 50).slice(0, 3) + '0s') {
+function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().getFullYear() - 50).slice(0, 3) + '0s', currentYear = new Date().getFullYear()) {
   const rows = [];
   const summaries = [];
-  
-  // Table header — $/sqm shown to force bottoms-up, NO P/I column
-  rows.push('| City | Period | $/sqm | 700sqm Price | Income | Years | Regime | TFR |');
-  rows.push('|------|--------|-------|--------------|--------|-------|--------|-----|');
-  
+
+  rows.push('| City | Period | LCU/sqm | 700sqm Land Price | Income (LCU) | Years | Regime | TFR |');
+  rows.push('|------|--------|---------|-------------------|--------------|-------|--------|-----|');
+
   for (const [city, data] of Object.entries(parsedData.cities || {})) {
     const cityTitle = city.charAt(0).toUpperCase() + city.slice(1);
-    
+
     // Historical row
     const histPriceSqm = data.historical?.pricePerSqm?.value;
-    const histIncome = data.historical?.income?.value;
-    const histCurrency = data.historical?.pricePerSqm?.currency || data.historical?.income?.currency || 'USD';
-    const histMetric = calculateSeedMetric(histPriceSqm, histIncome);
-    
+    const histIncome   = data.historical?.income?.value;
+    const histCurrency = data.historical?.pricePerSqm?.currency || data.historical?.income?.currency || detectCurrency(city);
+    const histMetric   = calculateSeedMetric(histPriceSqm, histIncome);
+
     // Current row
     const currPriceSqm = data.current?.pricePerSqm?.value;
-    const currIncome = data.current?.income?.value;
-    const currCurrency = data.current?.pricePerSqm?.currency || data.current?.income?.currency || 'USD';
-    const currMetric = calculateSeedMetric(currPriceSqm, currIncome);
-    
-    // Regime label with emoji
-    const histRegimeLabel = histMetric.regime !== 'N/A' ? `${histMetric.emoji} ${histMetric.regime}` : 'N/A';
-    const currRegimeLabel = currMetric.regime !== 'N/A' ? `${currMetric.emoji} ${currMetric.regime}` : 'N/A';
-    
-    // Years display (simple division, no mortgage)
-    const histYearsDisplay = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
-    const currYearsDisplay = currMetric.years ? `${currMetric.years.toFixed(0)}yr` : 'N/A';
-    
-    // TFR (Total Fertility Rate) — biological signal alongside affordability regime
-    const histTfr = data.historical?.tfr != null ? String(data.historical.tfr) : 'N/A';
-    const currTfr = data.current?.tfr != null ? String(data.current.tfr) : 'N/A';
+    const currIncome   = data.current?.income?.value;
+    const currCurrency = data.current?.pricePerSqm?.currency || data.current?.income?.currency || detectCurrency(city);
+    const currMetric   = calculateSeedMetric(currPriceSqm, currIncome);
 
-    // Add historical row — show $/sqm source data
-    const histSqmDisplay = histPriceSqm ? formatCurrency(histPriceSqm, histCurrency) : 'N/A';
-    rows.push(`| ${cityTitle} | ${historicalDecade} | ${histSqmDisplay} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histYearsDisplay} | ${histRegimeLabel} | ${histTfr} |`);
-    
-    // Add current row — show $/sqm source data
-    const currSqmDisplay = currPriceSqm ? formatCurrency(currPriceSqm, currCurrency) : 'N/A';
-    rows.push(`| ${cityTitle} | 2024 | ${currSqmDisplay} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currYearsDisplay} | ${currRegimeLabel} | ${currTfr} |`);
-    
-    // Build summary line
-    const histSummary = histMetric.years ? `${histMetric.years.toFixed(0)}yr` : 'N/A';
-    const currSummary = currMetric.years ? `${currMetric.years.toFixed(0)}yr` : 'N/A';
-    const direction = (currMetric.years && histMetric.years) 
+    // Regime labels
+    const histRegime = histMetric.regime !== 'N/A' ? `${histMetric.emoji} ${histMetric.regime}` : 'N/A';
+    const currRegime = currMetric.regime !== 'N/A' ? `${currMetric.emoji} ${currMetric.regime}` : 'N/A';
+
+    // Years display
+    const histYears = histMetric.years != null ? `${Math.round(histMetric.years)}yr` : 'N/A';
+    const currYears = currMetric.years != null ? `${Math.round(currMetric.years)}yr` : 'N/A';
+
+    // TFR
+    const histTfr = data.historical?.tfr != null ? String(data.historical.tfr) : 'N/A';
+    const currTfr = data.current?.tfr   != null ? String(data.current.tfr)   : 'N/A';
+
+    // LCU/sqm display
+    const histSqm = histPriceSqm ? `${formatCurrency(histPriceSqm, histCurrency)}/sqm` : 'N/A';
+    const currSqm = currPriceSqm ? `${formatCurrency(currPriceSqm, currCurrency)}/sqm` : 'N/A';
+
+    rows.push(`| ${cityTitle} | ${historicalDecade} | ${histSqm} | ${formatCurrency(histMetric.price700sqm, histCurrency)} | ${formatCurrency(histIncome, histCurrency)} | ${histYears} | ${histRegime} | ${histTfr} |`);
+    rows.push(`| ${cityTitle} | ${currentYear} | ${currSqm} | ${formatCurrency(currMetric.price700sqm, currCurrency)} | ${formatCurrency(currIncome, currCurrency)} | ${currYears} | ${currRegime} | ${currTfr} |`);
+
+    // Summary line
+    const direction = (currMetric.years != null && histMetric.years != null)
       ? (currMetric.years > histMetric.years ? '↑worsened' : '↓improved')
       : '';
-    summaries.push(`**${cityTitle}**: ${histSummary} → ${currSummary} = ${currMetric.emoji} ${currMetric.regime} (${direction})`);
+    summaries.push(`**${cityTitle}**: ${histYears} → ${currYears} = ${currMetric.emoji} ${currMetric.regime}${direction ? ` (${direction})` : ''}`);
   }
-  
-  // Combine table + summaries + legend
-  const table = rows.join('\n');
+
+  const table        = rows.join('\n');
   const summaryBlock = summaries.join('\n');
-  
-  // Legend: simple thresholds, NO mortgage complexity
-  const legend = `
----
-**Seed Metric Regime** (φ-derived from 25yr fertility window):
 
-Formula: **Years = ($/sqm × 700) ÷ (Single-Earner Income)**
-*(Simple division. NO mortgage. NO interest rates. NO down payments.)*
-*($/sqm shown in table to force bottoms-up calculation)*
+  const legend = `\n---\n**Seed Metric Regime** (φ-derived from 25yr fertility window):\n\nFormula: **Years = (LCU/sqm × 700) ÷ (Single-Earner Income)**\n*(Simple division. NO mortgage. NO interest rates. NO down payments.)*\n\n- 🟢 **Optimism**: <10yr — Housing accessible within early career\n- 🟡 **Extraction**: 10-25yr — Affordable but requires sustained effort\n- 🔴 **Fatalism**: >25yr — Exceeds fertility window; systemic barrier`;
 
-- 🟢 **OPTIMISM**: <10 years — Housing accessible within early career
-- 🟡 **EXTRACTION**: 10-25 years — Affordable but requires sustained effort  
-- 🔴 **FATALISM**: >25 years — Exceeds fertility window; systemic barrier`;
-  
   return `${table}\n\n${summaryBlock}\n${legend}`;
 }
 
@@ -741,6 +780,7 @@ function validateSeedMetricOutput(output, historicalDecade = String(new Date().g
 module.exports = {
   parsePricePerSqm,
   parseIncome,
+  parseTFR,
   parseSeedMetricData,
   calculateSeedMetric,
   formatCurrency,

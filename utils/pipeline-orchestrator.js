@@ -1307,78 +1307,78 @@ OUTPUT ORDER:
       }
     }
 
-    // Round 2: New system prompt (triangulate+scribe gate) + user query + all tool results
-    // Swapping the system message from gatherPrompt → triangulatePrompt is the key gate change:
-    // Round 1 only knew "fetch ingredients"; Round 2 now gets the formula + table rules for the first time.
-    const round2Messages = [
-      { role: 'system', content: triangulatePrompt },
-      { role: 'user', content: query },
-      ...toolResultMsgs   // [assistant tool-call msg, ...tool result msgs]
-    ];
-    let round2Response;
-    try {
-      round2Response = await this.groqWithRetry({
-        url: this.llmUrl,
-        data: {
-          model: this.llmModel,
-          messages: round2Messages,
-          temperature: 0.05,
-          max_tokens: 2000
-        },
-        config: {
-          headers: {
-            'Authorization': `Bearer ${this.groqToken}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: this.llmTimeouts.toolCall
-        }
-      }, 3, 'text');
-    } catch (err) {
-      console.error(`❌ stepSeedMetricToolCall round2 failed: ${err.message}`);
-      throw err;
+    // ── Deterministic table: parseSeedMetricData + buildSeedMetricTable ─────
+    // Round 2 (LLM table synthesis) is eliminated — table is now built server-side.
+    // Same architecture as Psi-EMA: live API data → server math → deterministic output.
+    // LLM only writes the coda (personality layer). Zero LLM touch on table cells.
+
+    // Cities from preflight (stored by preflight-router); fallback: extract from search queries.
+    const smCities = state.preflight?.seedMetricCities?.length
+      ? state.preflight.seedMetricCities
+      : [...new Set((state.preflight?.seedMetricSearchQueries || []).map(q => {
+          const m = q.match(/^([a-z\s]+)\s+(?:residential|median|housing)/i);
+          return m ? m[1].trim().toLowerCase() : null;
+        }).filter(Boolean))];
+
+    // Flatten all Brave JSON results into a single text corpus.
+    // Each slot: [Search: <query>] followed by title + description sentences.
+    // Prefixing with the query ensures parseSeedMetricData's city/decade regex patterns
+    // can anchor to the right context even when the city name isn't in the snippet itself.
+    const smCorpus = callsToRun.map((tc, i) => {
+      let args;
+      try { args = JSON.parse(tc.function.arguments); } catch { args = {}; }
+      const smQuery = args.query || '';
+      const raw = toolResultMsgs[i + 1]?.content || '[]';
+      let items;
+      try { items = JSON.parse(raw); } catch { items = []; }
+      if (!Array.isArray(items)) items = [];
+      const text = items.map(r =>
+        [r.title, r.description].filter(Boolean).join('. ')
+      ).join('\n');
+      return `[Search: ${smQuery}]\n${text}`;
+    }).join('\n\n');
+
+    console.log(`🏗️ Seed Metric: parsing ${smCities.join(', ')} from ${smCorpus.length} chars corpus`);
+
+    const smHistDecade = histDecade;
+    const smCurrentYear = state.preflight?.currentYear || currentYear;
+    const parsedData = parseSeedMetricData(smCorpus, smCities, smHistDecade);
+
+    parsedData.parseLog?.forEach(l => console.log(`  📋 ${l}`));
+
+    const tableText = buildSeedMetricTable(parsedData, smHistDecade, smCurrentYear);
+
+    // Collect source URLs from Brave results (up to 8 unique, de-duped)
+    const seenUrls = new Set();
+    const sourceUrls = [];
+    for (let i = 0; i < callsToRun.length; i++) {
+      const raw = toolResultMsgs[i + 1]?.content || '[]';
+      let items;
+      try { items = JSON.parse(raw); } catch { items = []; }
+      if (Array.isArray(items)) {
+        items.slice(0, 2).forEach(r => {
+          if (r.url && !seenUrls.has(r.url) && sourceUrls.length < 8) {
+            seenUrls.add(r.url);
+            sourceUrls.push(r.url);
+          }
+        });
+      }
     }
+    const sourcesSection = `\n\n📚 **Sources:** Brave Search (live web)${sourceUrls.length ? '\n' + sourceUrls.map(u => `- ${u}`).join('\n') : ''}`;
 
-    // ── Post-processing pipeline (deterministic, no LLM trust) ──────────────
-    // Step A: header normalisation — LLM defaults to $/sqm regardless of prompt
-    const round2Raw = (round2Response.data.choices[0]?.message?.content || 'No response generated.')
-      .replace(/\|\s*\$\/sqm\s*\|/g, '| LCU/sqm |')
-      .replace(/\|\s*700sqm Price\s*\|/g, '| 700sqm Land Price |')
-      .replace(/\|\s*700sqm \(LCU\)\s*\|/g, '| 700sqm Land Price |')
-      .replace(/\|\s*Land Price\s*\|/g, '| 700sqm Land Price |')
-      .replace(/\|\s*Income\s*\|/gi, '| Income (LCU) |');
-
-    // Step B: extract hidden metadata block (built/land, incomeType) — strips it from user text
-    const { meta: seedMeta, text: round2Stripped } = this._extractSeedMetricMeta(round2Raw);
-    state.seedMetricMeta = seedMeta;
-    if (seedMeta) console.log(`📋 Seed Metric meta: ${JSON.stringify(seedMeta)}`);
-
-    // Step C: deterministic regime recompute — overwrite LLM regime labels with correct arithmetic
-    const round2Normalized = this._normalizeSeedMetricRegimes(round2Stripped);
-
-    // Step D: strip Gate 2A/2B pre-table reasoning — only table onwards is user-visible
-    // LLM is instructed to output Gate 2A/2B first (better reasoning), then Gate 3 table.
-    // We strip everything before the first markdown table header row so validation runs on clean output.
-    const tableHeaderIdx = round2Normalized.search(/\|\s*City\s*\|/i);
-    const round2Text = tableHeaderIdx > 0 ? round2Normalized.slice(tableHeaderIdx) : round2Normalized;
+    const tableWithSources = tableText + sourcesSection;
 
     state.didSearch = true;
-    console.log(`🐕 Seed Metric walked: ${callsToRun.length} Brave calls → ${round2Text.length} chars`);
+    state.seedMetricDirectOutput = true;
+    console.log(`🐕 Seed Metric: ${callsToRun.length} Brave calls → deterministic table (${tableText.length} chars)`);
 
-    // ── Round 3: ~nyan coda (voice layer, separate from data assembly) ──────
-    // Round 2 assembles facts. Round 3 writes what the facts imply.
-    // Full NYAN_PROTOCOL_SYSTEM_PROMPT at temperature 0.7 — the cat speaks.
+    // ── Round 2 (coda only): ~nyan voice layer ───────────────────────────────
+    // The cat reads the finished table and writes 2–3 sentences about what it means.
+    // Temperature 0.7 — personality, not data. The only LLM touch in the entire path.
     let coda = '';
     try {
-      // Build metadata context string for the coda if available
-      const metaContext = state.seedMetricMeta?.rows?.length
-        ? `\nData source notes (for narration only — do not repeat in coda output):\n` +
-          state.seedMetricMeta.rows.map(r =>
-            `  ${r.city} ${r.period}: price=${r.priceType || 'unknown'} income=${r.incomeType || 'unknown'}`
-          ).join('\n') + '\n'
-        : '';
-
       const codaSystemPrompt = `${NYAN_PROTOCOL_SYSTEM_PROMPT}
-${metaContext}
+
 You are given a Seed Metric table (income = median single earner; price = built residential where available, land as fallback).
 Write a coda: 2–3 sentences about what these specific numbers reveal about the people living in these specific cities.
 
@@ -1390,13 +1390,13 @@ Rules:
 - This must be unrepeatable — written only for these cities, this gap, this moment. Not a generic housing statement.
 - No preamble, no "In conclusion", no sign-off. Just the coda.`;
 
-      const round3Response = await this.groqWithRetry({
+      const round2Response = await this.groqWithRetry({
         url: this.llmUrl,
         data: {
           model: this.llmModel,
           messages: [
             { role: 'system', content: codaSystemPrompt },
-            { role: 'user', content: round2Text }
+            { role: 'user', content: tableWithSources }
           ],
           temperature: 0.7,
           max_tokens: 300
@@ -1410,17 +1410,14 @@ Rules:
         }
       }, 2, 'text');
 
-      coda = round3Response.data.choices[0]?.message?.content?.trim() || '';
+      coda = round2Response.data.choices[0]?.message?.content?.trim() || '';
       console.log(`🐱 Seed Metric coda: ${coda.length} chars`);
     } catch (err) {
-      console.warn(`⚠️ Seed Metric coda (round3) failed: ${err.message} — skipping coda`);
+      console.warn(`⚠️ Seed Metric coda failed: ${err.message} — skipping coda`);
     }
 
-    // Persist coda on state — survives any downstream format-fix that rewrites draftAnswer
     state.seedMetricCoda = coda;
-
-    // Insert coda before Sources section (preserving: table → summary → legend → coda → sources)
-    state.draftAnswer = this._insertSeedMetricCoda(round2Text, coda);
+    state.draftAnswer = this._insertSeedMetricCoda(tableWithSources, coda);
   }
 
   // Helper: splice coda before sources block, or append if no sources found
