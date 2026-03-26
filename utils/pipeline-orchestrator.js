@@ -55,7 +55,7 @@ const PIPELINE_STEPS = {
 const { AttachmentIngestion } = require('./attachment-ingestion');
 const { analyzeImageWithGroqVision, processChemistryContent, classifyScholasticDomain } = require('./attachment-cascade');
 const { createQueryTimestamp, buildTemporalContent } = require('./time-format');
-const { parseSeedMetricData, parsePurifyOutput, buildSeedMetricTable, validateSeedMetricOutput } = require('./seed-metric-calculator');
+const { parseSeedMetricData, parsePurifyOutput, buildSeedMetricTable, validateSeedMetricOutput, parseTFR } = require('./seed-metric-calculator');
 
 function extractVisionSearchTerms(visionDescription) {
   if (!visionDescription || visionDescription.length < 20) return null;
@@ -1076,15 +1076,13 @@ User query: ${query}`;
   /**
    * stepSeedMetricToolCall — "Walk the Dog" seed metric computation.
    *
-   * Architecture (server-direct when cities are known):
-   *   Gather: server builds 4 queries per city (current land price, current TFR,
-   *           historical land price, historical TFR) and executes Brave calls directly.
-   *           No LLM Round 1 — Groq Llama 3.3 70B has a hard 6-call ceiling which
-   *           starves the companion city when 2 cities × 4 queries = 8 are needed.
-   *   Fallback: when cities are unknown at preflight, LLM Round 1 still runs
-   *             (tool_choice:'required') to discover city names from context.
-   *   PURIFY: LLM reads labelled Brave summaries → outputs one structured line per
-   *           (city, period). Server parses → buildSeedMetricTable.
+   * Architecture (LLM Round 1 for all cases):
+   *   Gather: LLM fires 4 tool_calls per city (land + income × current + historical).
+   *           Query format: "{city} apartment sale price {currency word} {year}"
+   *           No "per sqm" in queries — listings return total price + area naturally.
+   *           No TFR — handled by server bypass after Round 1.
+   *   Parse: parseSeedMetricData → resolvePrice (triangulation first, direct quote fallback)
+   *   TFR bypass: 1 server Brave call per city, merged into parsedData before table.
    *   Coda: ~nyan voice layer — 2-3 sentences, temperature 0.7.
    *
    * Rate-limit: 1100ms between Brave calls (just under 1 req/s hard limit).
@@ -1128,278 +1126,100 @@ User query: ${query}`;
     function _smCurrency(city) { return _CITY_CURRENCY[city] || 'local currency'; }
     function _smProvince(city) { return _CITY_PROVINCE[city] || city; }
 
-    // Per-city query templates. Substitution: {yr}=currentYear, {hy}=histYear.
-    // Language policy (empirically derived):
-    //   land (current + historical) → local language: real estate portals (rumah123, athome.co.jp,
-    //     kr.land) return richer listing data when queried in the market's primary language.
-    //   income → English: Numbeo/WorldBank/Reddit salary threads are consistently parseable;
-    //     local stats offices (BPS, KOSTAT) return monthly figures in formats PURIFY struggles with.
-    //   TFR (current + historical) → English: "total fertility rate" is academic jargon that maps
-    //     to WHO/WorldBank/Wikipedia pages regardless of locale; local translation ("kesuburan",
-    //     "dzietności") returns government PDF archives PURIFY cannot extract structured numbers from.
-    const _CITY_QUERIES = {
-      jakarta: {
-        landCurrent: `tanah dijual jakarta {yr} harga luas`,
-        income:      `jakarta median annual income rupiah {yr}`,
-        tfrCurrent:  `DKI Jakarta total fertility rate {yr}`,
-        landHist:    `harga tanah jakarta {hy} laporan statistik`,
-        tfrHist:     `DKI Jakarta total fertility rate {hy}`,
-      },
-      bangkok: {
-        landCurrent: `ที่ดินขาย กรุงเทพ {yr} ราคา`,
-        income:      `bangkok median annual income baht {yr}`,
-        tfrCurrent:  `Bangkok Metro total fertility rate {yr}`,
-        landHist:    `ราคาที่ดิน กรุงเทพ {hy} สถิติ`,
-        tfrHist:     `Bangkok Metro total fertility rate {hy}`,
-      },
-      'kuala lumpur': {
-        landCurrent: `tanah dijual kuala lumpur {yr} harga luas`,
-        income:      `kuala lumpur median annual income ringgit {yr}`,
-        tfrCurrent:  `Kuala Lumpur total fertility rate {yr}`,
-        landHist:    `harga tanah kuala lumpur {hy} statistik laporan`,
-        tfrHist:     `Kuala Lumpur total fertility rate {hy}`,
-      },
-      'ho chi minh': {
-        landCurrent: `đất bán thành phố hồ chí minh {yr} giá diện tích`,
-        income:      `ho chi minh city median annual income dong {yr}`,
-        tfrCurrent:  `Ho Chi Minh City total fertility rate {yr}`,
-        landHist:    `giá đất thành phố hồ chí minh {hy} thống kê`,
-        tfrHist:     `Ho Chi Minh City total fertility rate {hy}`,
-      },
-      hanoi: {
-        landCurrent: `đất bán hà nội {yr} giá diện tích`,
-        income:      `hanoi median annual income dong {yr}`,
-        tfrCurrent:  `Hanoi total fertility rate {yr}`,
-        landHist:    `giá đất hà nội {hy} thống kê`,
-        tfrHist:     `Hanoi total fertility rate {hy}`,
-      },
-      tokyo: {
-        landCurrent: `東京 土地 売却 {yr} 価格 面積`,
-        income:      `tokyo median annual income yen {yr}`,
-        tfrCurrent:  `Tokyo Metro total fertility rate {yr}`,
-        landHist:    `東京 土地 価格 {hy} 統計`,
-        tfrHist:     `Tokyo Metro total fertility rate {hy}`,
-      },
-      osaka: {
-        landCurrent: `大阪 土地 売却 {yr} 価格 面積`,
-        income:      `osaka median annual income yen {yr}`,
-        tfrCurrent:  `Osaka Prefecture total fertility rate {yr}`,
-        landHist:    `大阪 土地 価格 {hy} 統計`,
-        tfrHist:     `Osaka Prefecture total fertility rate {hy}`,
-      },
-      seoul: {
-        landCurrent: `서울 토지 매매 {yr} 가격 면적`,
-        income:      `seoul median annual income won {yr}`,
-        tfrCurrent:  `Seoul Metro total fertility rate {yr}`,
-        landHist:    `서울 토지 가격 {hy} 통계`,
-        tfrHist:     `Seoul Metro total fertility rate {hy}`,
-      },
-      beijing: {
-        landCurrent: `北京 土地 出售 {yr} 价格 面积`,
-        income:      `beijing median annual income yuan {yr}`,
-        tfrCurrent:  `Beijing total fertility rate {yr}`,
-        landHist:    `北京 土地 价格 {hy} 统计`,
-        tfrHist:     `Beijing total fertility rate {hy}`,
-      },
-      shanghai: {
-        landCurrent: `上海 土地 出售 {yr} 价格 面积`,
-        income:      `shanghai median annual income yuan {yr}`,
-        tfrCurrent:  `Shanghai total fertility rate {yr}`,
-        landHist:    `上海 土地 价格 {hy} 统计`,
-        tfrHist:     `Shanghai total fertility rate {hy}`,
-      },
-      warsaw: {
-        landCurrent: `działka na sprzedaż warszawa {yr} cena powierzchnia`,
-        income:      `warsaw median annual income zloty {yr}`,
-        tfrCurrent:  `Warsaw total fertility rate {yr}`,
-        landHist:    `cena gruntu warszawa {hy} statystyki`,
-        tfrHist:     `Warsaw total fertility rate {hy}`,
-      },
-      'sao paulo': {
-        landCurrent: `terreno à venda são paulo {yr} preço área`,
-        income:      `sao paulo median annual income reais {yr}`,
-        tfrCurrent:  `Sao Paulo total fertility rate {yr}`,
-        landHist:    `preço terreno são paulo {hy} estatísticas`,
-        tfrHist:     `Sao Paulo total fertility rate {hy}`,
-      },
-      istanbul: {
-        landCurrent: `arsa satılık istanbul {yr} fiyat alan`,
-        income:      `istanbul median annual income lira {yr}`,
-        tfrCurrent:  `Istanbul total fertility rate {yr}`,
-        landHist:    `arsa fiyatı istanbul {hy} istatistik`,
-        tfrHist:     `Istanbul total fertility rate {hy}`,
-      },
-      cairo: {
-        landCurrent: `أرض للبيع القاهرة {yr} سعر مساحة`,
-        income:      `cairo median annual income pounds {yr}`,
-        tfrCurrent:  `Cairo Governorate total fertility rate {yr}`,
-        landHist:    `أسعار الأراضي القاهرة {hy} إحصاءات`,
-        tfrHist:     `Cairo Governorate total fertility rate {hy}`,
-      },
+    // ── Gather: LLM Round 1 — always runs, all cities via tool_calls ──────
+    const braveSearchTool = {
+      type: 'function',
+      function: {
+        name: 'brave_search',
+        description: 'Search for residential real estate sale prices and individual income statistics.',
+        parameters: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query']
+        }
+      }
     };
 
-    // Build the 5 queries for a city — local language if known, English fallback.
-    function _smQ(city) {
-      const t = _CITY_QUERIES[city];
-      const yr = String(currentYear);
-      const hy = String(histYear);
-      const sub = s => s.replace('{yr}', yr).replace('{hy}', hy);
-      if (t) return [ sub(t.landCurrent), sub(t.income), sub(t.tfrCurrent), sub(t.landHist), sub(t.tfrHist) ];
-      const prov = _smProvince(city);
-      const cur  = _smCurrency(city);
-      return [
-        `${city} land for sale ${cur} ${yr}`,
-        `${city} median annual income ${cur} ${yr}`,
-        `${prov} total fertility rate ${yr}`,
-        `${city} land sale price ${hy} ${cur} statistics report`,
-        `${prov} total fertility rate ${hy}`,
-      ];
-    }
+    // Tell the LLM which cities to search with their local currency word
+    const citiesWithCurrency = gatherCities
+      ? gatherCities.map(c => `${c} (${_smCurrency(c)})`).join(', ')
+      : 'unknown — determine from user query';
 
-    // ── 5 queries per city, server-direct (no LLM ceiling) ───────────────
-    // current: land listing, income, TFR  |  historical: land price report, TFR
-    // Historical income dropped — consistently N/A; stats offices index land but not wages.
-    // Server-direct means all 10 calls (5×2 cities) are guaranteed to run.
-    const searchTodoList = gatherCities ? gatherCities.flatMap(city => _smQ(city)) : null;
-
-    // ── PURIFY prompt ──────────────────────────────────────────────────────
-    // LLM reads labelled Brave summaries → one structured line per (city, period).
-    // Server handles all arithmetic and formatting (buildSeedMetricTable).
-    const purifyPrompt = `${NYAN_PROTOCOL_COMPRESSED}
-
---- SEED METRIC: PURIFY ONLY ---
-You have been given raw Brave search results, one block per query. Extract numbers only.
-Do NOT compute Years. Do NOT output a table. Do NOT write prose.
-
-For each (city, period) pair, output EXACTLY ONE LINE:
-[City] [Period]: sqm=VALUE CURRENCY | income=VALUE CURRENCY | TFR=VALUE | type=land/built/N/A
-
-BRACKETS ARE MANDATORY: "[Jakarta] [2025]: ..." NOT "Jakarta 2025: ..."
-
-Rules for sqm (price per square metre, local currency only — never USD):
-• $/sqm or $/m² stated directly → use it.
-• Total price + floor area both stated → divide: e.g. Rp2.1B for 150sqm → sqm=14000000 IDR
-• Total price stated but NO area → sqm=N/A (cannot derive without area).
-• Rent (per month/year) → sqm=N/A. Only purchase price counts.
-• Multiple snippets → collect every derived sqm, take the MEDIAN.
-
-Rules for income (annual, single earner, local currency):
-• Monthly → ×12. Household/dual-earner → N/A.
-• If not present → income=N/A.
-
-Rules for TFR:
-• Prefer city/province level (DKI Jakarta > Indonesia, Maharashtra > India).
-• Single decimal (e.g. 1.04). N/A if not in results — do not guess.
-
-Rules for type: land (vacant plot) or built (apartment/condo). Prefer land. N/A if unknown.
-
-NOMINAL ONLY: reject "real terms", "inflation-adjusted", "in today's money".
-HISTORICAL: only use a value if the source explicitly states it was the price in that year.
-  If the source is a modern article that does not explicitly anchor the number to that year → N/A.
-
-One line per (city, period). No other output.
-
-Example:
-[Jakarta] [2025]: sqm=8500000 IDR | income=104000000 IDR | TFR=2.13 | type=land
-[Jakarta] [1995]: sqm=N/A IDR | income=N/A IDR | TFR=2.8 | type=N/A
-[Singapore] [2025]: sqm=1840 SGD | income=66000 SGD | TFR=1.04 | type=land`;
-
-    // ── Gather: server-direct when cities known, LLM fallback otherwise ────
-    // directRuns: [{ query, raw }] where raw is the JSON string from searchBrave
-    let directRuns = null;
-
-    if (gatherCities && searchTodoList) {
-      // SERVER-DIRECT: bypass LLM Round 1 entirely — no 6-call ceiling
-      directRuns = [];
-      console.log(`🐕 Seed Metric: server-direct — ${searchTodoList.length} Brave calls (${gatherCities.join(' + ')})`);
-      for (let i = 0; i < searchTodoList.length; i++) {
-        const q = searchTodoList[i];
-        console.log(`🦁 brave_search #${i + 1}: "${q}"`);
-        let raw = await this.searchBrave(q, clientIp, { format: 'json' });
-        if (raw === null) {
-          await new Promise(r => setTimeout(r, 1500));
-          raw = await this.searchBrave(q, clientIp, { format: 'json' });
-        }
-        directRuns.push({ query: q, raw: raw || '[]' });
-        if (i < searchTodoList.length - 1) {
-          await new Promise(r => setTimeout(r, 1100));
-        }
-      }
-    } else {
-      // LLM FALLBACK: cities unknown — let Groq discover them via tool_calls
-      const braveSearchTool = {
-        type: 'function',
-        function: {
-          name: 'brave_search',
-          description: 'Search for real estate land prices, TFR, income statistics.',
-          parameters: {
-            type: 'object',
-            properties: { query: { type: 'string' } },
-            required: ['query']
-          }
-        }
-      };
-      const gatherPrompt = `${NYAN_PROTOCOL_COMPRESSED}
+    const gatherPrompt = `${NYAN_PROTOCOL_COMPRESSED}
 
 --- SEED METRIC: GATHER ---
-Cities mentioned in the query: unknown. Use brave_search to find land prices and TFR.
-Per city, per period (current ${currentYear} and historical ${histDecade}):
-  1. "${'{city}'} land price per sqm ${'{local currency}'} ${currentYear}"
-  2. "${'{province}'} total fertility rate ${currentYear}"
-  3. "${'{city}'} land price per sqm ${'{local currency}'} ${histYear}"
-  4. "${'{province}'} total fertility rate ${histYear}"
-Run all searches. Do NOT compute or output text.`;
+Cities: ${citiesWithCurrency}
+Current year: ${currentYear} | Historical period: ${histDecade} (approx ${histYear})
 
-      let round1Response;
-      try {
-        round1Response = await this.groqWithRetry({
-          url: this.llmUrl,
-          data: {
-            model: this.llmModel,
-            messages: [
-              { role: 'system', content: gatherPrompt },
-              { role: 'user', content: query }
-            ],
-            tools: [braveSearchTool],
-            tool_choice: 'required',
-            temperature: 0.1,
-            max_tokens: 2000
-          },
-          config: {
-            headers: { 'Authorization': `Bearer ${this.groqToken}`, 'Content-Type': 'application/json' },
-            timeout: this.llmTimeouts.toolCall
-          }
-        }, 3, 'text');
-      } catch (err) {
-        console.error(`❌ stepSeedMetricToolCall LLM fallback failed: ${err.message}`);
-        throw err;
-      }
+For EACH city, for EACH period (current + historical), run exactly 2 searches = 4 searches per city:
+  1. "{city} apartment sale price {currency word} ${currentYear}"
+  2. "{city} median single earner annual income {currency word} ${currentYear}"
+  3. "{city} apartment sale price {currency word} ${histYear} OR ${histDecade}"
+  4. "{city} median single earner annual income {currency word} ${histYear} OR ${histDecade}"
 
-      const round1Msg = round1Response.data.choices[0]?.message;
-      const toolCalls = round1Msg?.tool_calls || [];
-      const finishReason = round1Response.data.choices[0]?.finish_reason;
-      console.log(`🐕 Round 1 (LLM fallback): finish_reason=${finishReason}, tool_calls=${toolCalls.length}`);
+{currency word} = the actual word (not symbol): "yen", "rupiah", "Singapore dollars", "baht", "won", "zloty", "reais", "lira", "ringgit", "dong", "yuan", "pounds", "euros", "dollars", etc.
 
-      if (toolCalls.length === 0 || finishReason !== 'tool_calls') {
-        state.draftAnswer = round1Msg?.content || '';
-        state.didSearch = false;
-        return;
-      }
+Example queries for Singapore:
+  "Singapore apartment sale price Singapore dollars ${currentYear}"
+  "Singapore median single earner annual income Singapore dollars ${currentYear}"
+  "Singapore apartment sale price Singapore dollars ${histYear} OR ${histDecade}"
+  "Singapore median single earner annual income Singapore dollars ${histYear} OR ${histDecade}"
 
-      directRuns = [];
-      for (let i = 0; i < toolCalls.slice(0, 12).length; i++) {
-        const tc = toolCalls[i];
-        let args;
-        try { args = JSON.parse(tc.function.arguments); } catch { args = { query: String(tc.function.arguments) }; }
-        console.log(`🦁 brave_search #${i + 1}: "${args.query}"`);
-        let raw = await this.searchBrave(args.query, clientIp, { format: 'json' });
-        if (raw === null) {
-          await new Promise(r => setTimeout(r, 1500));
-          raw = await this.searchBrave(args.query, clientIp, { format: 'json' });
+STRICT RULES:
+- Do NOT include "per sqm" in any query — listings naturally contain total price and area
+- Do NOT search TFR or fertility rates — the server handles TFR separately
+- Use the local currency WORD to return local market results, not USD international aggregators
+- Run ALL searches. Do NOT compute or output any text.`;
+
+    let round1Response;
+    try {
+      round1Response = await this.groqWithRetry({
+        url: this.llmUrl,
+        data: {
+          model: this.llmModel,
+          messages: [
+            { role: 'system', content: gatherPrompt },
+            { role: 'user', content: query }
+          ],
+          tools: [braveSearchTool],
+          tool_choice: 'required',
+          temperature: 0.1,
+          max_tokens: 2000
+        },
+        config: {
+          headers: { 'Authorization': `Bearer ${this.groqToken}`, 'Content-Type': 'application/json' },
+          timeout: this.llmTimeouts.toolCall
         }
-        directRuns.push({ query: args.query, raw: raw || '[]' });
-        if (i < toolCalls.length - 1) await new Promise(r => setTimeout(r, 1100));
+      }, 3, 'text');
+    } catch (err) {
+      console.error(`❌ stepSeedMetricToolCall gather failed: ${err.message}`);
+      throw err;
+    }
+
+    const round1Msg = round1Response.data.choices[0]?.message;
+    const toolCalls = round1Msg?.tool_calls || [];
+    const finishReason = round1Response.data.choices[0]?.finish_reason;
+    console.log(`🐕 Round 1: finish_reason=${finishReason}, tool_calls=${toolCalls.length}`);
+
+    if (toolCalls.length === 0 || finishReason !== 'tool_calls') {
+      state.draftAnswer = round1Msg?.content || '';
+      state.didSearch = false;
+      return;
+    }
+
+    const directRuns = [];
+    for (let i = 0; i < toolCalls.slice(0, 12).length; i++) {
+      const tc = toolCalls[i];
+      let args;
+      try { args = JSON.parse(tc.function.arguments); } catch { args = { query: String(tc.function.arguments) }; }
+      console.log(`🦁 brave_search #${i + 1}: "${args.query}"`);
+      let raw = await this.searchBrave(args.query, clientIp, { format: 'json' });
+      if (raw === null) {
+        await new Promise(r => setTimeout(r, 1500));
+        raw = await this.searchBrave(args.query, clientIp, { format: 'json' });
       }
+      directRuns.push({ query: args.query, raw: raw || '[]' });
+      if (i < toolCalls.length - 1) await new Promise(r => setTimeout(r, 1100));
     }
 
     // ── Build PURIFY input: labelled text blocks, one per search ──────────
@@ -1414,48 +1234,52 @@ Run all searches. Do NOT compute or output text.`;
     }).join('\n\n');
 
     // ── Cities for parser ──────────────────────────────────────────────────
+    // Primary: preflight-detected cities. Fallback: extract from LLM query strings.
     const smCities = state.preflight?.seedMetricCities?.length
       ? state.preflight.seedMetricCities
-      : [...new Set((state.preflight?.seedMetricSearchQueries || []).map(q => {
-          const m = q.match(/^([a-z\s]+)\s+(?:residential|median|housing)/i);
-          return m ? m[1].trim().toLowerCase() : null;
-        }).filter(Boolean))];
+      : (() => {
+          const fromQueries = [...new Set(directRuns.map(({ query: q }) => {
+            const m = q.match(/^([a-z][a-z\s]{1,30}?)\s+(?:apartment|median|income|land|housing|residential)/i);
+            return m ? m[1].trim().toLowerCase() : null;
+          }).filter(Boolean))];
+          return fromQueries.length ? fromQueries : (gatherCities || []);
+        })();
 
     const smHistDecade = histDecade;
     const smCurrentYear = state.preflight?.currentYear || currentYear;
 
-    // ── PURIFY: LLM extracts structured data from Brave summaries ─────────
-    let purifyText = '';
-    try {
-      const purifyResponse = await this.groqWithRetry({
-        url: this.llmUrl,
-        data: {
-          model: this.llmModel,
-          messages: [
-            { role: 'system', content: purifyPrompt },
-            { role: 'user', content: braveResultsSummary }
-          ],
-          temperature: 0.0,
-          max_tokens: 400
-        },
-        config: {
-          headers: { 'Authorization': `Bearer ${this.groqToken}`, 'Content-Type': 'application/json' },
-          timeout: this.llmTimeouts.toolCall
-        }
-      }, 2, 'text');
-      purifyText = purifyResponse.data.choices[0]?.message?.content?.trim() || '';
-      console.log(`🔬 PURIFY output (${purifyText.length} chars):\n${purifyText}`);
-    } catch (err) {
-      console.warn(`⚠️ PURIFY round failed: ${err.message} — falling back to regex parser`);
+    // ── TFR bypass: 1 server Brave call per city (never passed to LLM) ────
+    const stripDia = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const tfrBypass = {};
+    const tfrCities = smCities.length ? smCities : (gatherCities || []);
+    for (const city of tfrCities) {
+      const province = _smProvince(city);
+      const tfrQuery = `${province} total fertility rate ${smCurrentYear}`;
+      console.log(`🧬 TFR bypass: "${tfrQuery}"`);
+      let tfrRaw = await this.searchBrave(tfrQuery, clientIp);
+      if (tfrRaw === null) {
+        await new Promise(r => setTimeout(r, 1500));
+        tfrRaw = await this.searchBrave(tfrQuery, clientIp);
+      }
+      const tfrVal = parseTFR(tfrRaw || '');
+      tfrBypass[stripDia(city.toLowerCase())] = tfrVal;
+      console.log(`🧬 TFR bypass: ${city} → ${tfrVal ?? 'N/A'}`);
     }
 
+    // ── Parse: server-side regex (triangulation first, direct quote fallback) ─
     console.log(`🏗️ Seed Metric: parsing ${smCities.join(', ')}`);
-
-    const parsedData = purifyText
-      ? parsePurifyOutput(purifyText, smCities, smHistDecade, smCurrentYear)
-      : parseSeedMetricData(braveResultsSummary, smCities, smHistDecade, smCurrentYear);
-
+    const parsedData = parseSeedMetricData(braveResultsSummary, smCities, smHistDecade, smCurrentYear);
     parsedData.parseLog?.forEach(l => console.log(`  📋 ${l}`));
+
+    // ── Merge TFR bypass into parsedData (current period only) ────────────
+    for (const [key, tfrVal] of Object.entries(tfrBypass)) {
+      if (tfrVal == null) continue;
+      const cityKey = Object.keys(parsedData.cities).find(c => stripDia(c.toLowerCase()) === key);
+      if (cityKey) {
+        parsedData.cities[cityKey].current.tfr = tfrVal;
+        console.log(`  🧬 TFR merged: ${cityKey} current.tfr = ${tfrVal}`);
+      }
+    }
 
     const tableText = buildSeedMetricTable(parsedData, smHistDecade, smCurrentYear);
 
