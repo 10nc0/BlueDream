@@ -262,7 +262,7 @@ function triangulateFromTotalPrice(text, city = '') {
  * direct /sqm quote as bonus fallback (rare but authoritative when present).
  */
 function resolvePrice(text, city = '') {
-  return triangulateFromTotalPrice(text, city) || parsePricePerSqm(text, city);
+  return parsePricePerSqm(text, city) || triangulateFromTotalPrice(text, city);
 }
 
 // ─── Income parser ────────────────────────────────────────────────────────────
@@ -313,8 +313,10 @@ function parseIncome(text, city = '', preferSingleEarner = true) {
         const valueStr = originalNum.replace(/,/g, '');
         if (!valueStr) continue;
         if (/^(19|20)\d{2}$/.test(valueStr) && !originalNum.includes(',')) {
-          const hasMoneyContext = /[\$€£¥₩₹₫₱฿₺₦]|per\s*month|monthly|\/month|\/mo|per\s*year|annually|\/year|\/yr/i.test(raw);
-          if (!hasMoneyContext) continue;
+          const precedesYear = new RegExp(`(?:in|of|since|from|by|year)\\s+${valueStr}`, 'i').test(raw);
+          if (precedesYear) continue;
+          const hasCurrencySymbol = /[\$€£¥₩₹₫₱฿₺₦]/.test(raw);
+          if (!hasCurrencySymbol) continue;
         }
         let value = applyMultiplier(parseFloat(valueStr), raw) * multiplier;
         if (!isFinite(value) || value <= 0) continue;
