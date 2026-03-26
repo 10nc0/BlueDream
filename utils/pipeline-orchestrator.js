@@ -1099,6 +1099,11 @@ User query: ${query}`;
   async stepSeedMetricToolCall(state, input) {
     const { query, clientIp } = input;
     const currentYear = new Date().getFullYear();
+    // Use the decade the preflight already extracted from the user's query.
+    // Preflight detects "1970s", "1980s", explicit years like "1975" etc.
+    // Fallback: 50 years ago rounded to nearest decade.
+    const histDecade = state.preflight?.historicalDecade || (String(currentYear - 50).slice(0, 3) + '0s');
+    const histYear   = state.preflight?.historicalYear   || String(currentYear - 50);
 
     // ── Groq tool definition for Brave Search ─────────────────────────────
     // The LLM calls this tool instead of us pre-fetching; it picks queries itself.
@@ -1137,14 +1142,17 @@ Distribute your search budget evenly across all cities — do not exhaust search
       If search returns only rent or monthly figures → search again: "{city} median home sale price per sqft ${currentYear}"
     • Income: "{city} median single earner annual income {local currency name} ${currentYear}"
 
-  Historical (~50yr ago, if relevant):
-    • Price: "{city} residential purchase price per sqm {local currency name} 1975 OR 1970s"
+  Historical (${histDecade} era):
+    • Price: "{city} residential purchase price per sqm {local currency name} ${histYear} OR ${histDecade} nominal"
+      NOMINAL price — the actual face value in ${histDecade} currency, NOT "in today's money", NOT "real terms", NOT inflation-adjusted.
       If search returns a total home price (e.g. "$105,000") without explicit sqm or sqft area → search again for the typical floor area in sqft for that property type and era, then compute $/sqft = total ÷ area.
-    • Income: "{city} median single earner annual income {local currency name} 1975 OR 1970s"
+    • Income: "{city} median single earner annual earnings {local currency name} ${histYear} nominal wages"
+      NOMINAL wages — the actual pounds/marks/etc paid in ${histYear}, NOT a modern purchasing-power equivalent.
+      Reject any figure described as "equivalent today", "in real terms", "adjusted for inflation", or "in ${currentYear} money". If a result only offers inflation-adjusted figures → treat income as N/A.
 
   TFR (Total Fertility Rate) — search once per country per period:
     • Current: "{country} total fertility rate ${currentYear}" or "{country} TFR ${currentYear}"
-    • Historical: "{country} total fertility rate 1975"
+    • Historical: "{country} total fertility rate ${histYear} OR ${histDecade}"
     TFR is a national statistic — use the country name, not the city name.
 
   Replace {local currency name} with the actual currency word — e.g. "rupees" for India, "kronor" for Sweden,
@@ -1182,10 +1190,9 @@ GATE 2A — PURIFY (standardize units — output this block first):
   • RENT REJECTION: if raw value contains "/mo", "/month", "per month", "monthly rent" → it is rent, NOT purchase price → price = N/A. Rent ≠ purchase price.
   • LCU = local currency of that city/period. Never convert to USD. price_sqm and income must share the same LCU.
   • Income must be annual single-earner. Monthly → ×12. Household → N/A (do not use).
+  • NOMINAL only: if the source describes a historical value as "in today's money", "real terms", "adjusted for inflation", or "equivalent to ${currentYear} £/€/$" → reject it, write N/A. Only nominal face-value of that era is valid.
   • TFR = single decimal from search results (e.g. 0.97). N/A if not in results — do not guess.
-  • Sanity check (US): city sqm prices should be $5,000–15,000 USD/sqm. If < $2,000, unit error — convert sqft to sqm or recheck.
-  • Sanity check (Japan): Tokyo/Osaka sqm prices must be > 100,000 JPY/sqm. If result shows < 10,000 JPY/sqm, the source used 万円 units (×10,000 each) — multiply by 10,000.
-  • Sanity check (general): if years > 1,000 or years < 0.01, arithmetic is wrong — recheck sqm and income are in the same LCU and same time unit.
+  • Sanity check: if years > 1,000 or years < 0.01, the arithmetic is wrong — recheck that sqm price and income are in the same LCU and both annual (not monthly vs annual mismatch).
   • Missing price or income → write N/A for that field.
   • Deduplication: one line per (city, period) pair. Use the most recent/reliable value if duplicates exist.
 
