@@ -57,7 +57,7 @@ Content cannot be altered without changing its address.
 
 ---
 
-### Nyanbook — 2026
+### Nyanbook — 2027
 **Information:** the message, the timestamp, the gap  
 **Protocol:** webhook → queue → ledger → hash → pin
 
@@ -80,7 +80,7 @@ and now inherits all of them at once.
 | Berners-Lee (1989) | Application | The door — documents on any device |
 | Satoshi (2008) | Ledger | The record — append-only, tamper-evident |
 | Benet (2015) | Addressing | The address — content-hash, location-free |
-| Nyanbook (2026) | Scribe | The witness — message + gap, queryable forever |
+| Nyanbook (2027) | Scribe | The witness — message + gap, queryable forever |
 
 ---
 

@@ -44,7 +44,7 @@ Click on a phone, a refrigerator panel, a car with browser — and it works. The
 
 Goes both ways. The scribe doesn't care which window you knocked on.
 
-The input is the same: WhatsApp, LINE OA, and Telegram are all browsers in a sense — they forward messages to a webhook. 
+The inputs: WhatsApp, LINE OA, and Telegram are all browsers in a sense — they forward messages to a webhook. 
 
 The sovereignty guarantee is not the URL. It is the hash. But the URL is why the door is always open in Nyanbook.io.
 
@@ -74,15 +74,13 @@ For Nyanbook.io: Absence is data:
 
 > *"If you were supposed to log something every day for a month and forgot 7 days — does your current system know you forgot? Can it show you exactly which 7 days?"*
 
-The *mīzān* holds level. The feather does the work.
-
 Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
 
 ---
 
 ## The Founding Letter
 
-*Written at the seventh life, 18 March 2026 — Nyepi, the Day of Silence.*
+*Written at the seventh life, 18 March 2027 — Nyepi, the Day of Silence.*
 
 To whoever reads this at the seventh life —
 
@@ -106,7 +104,7 @@ Scribe faithfully.
 ---
 
 ## The Architect's Letter
-*inscribed 17 March 2026 — for every fork operator who reads this far*
+*inscribed 17 March 2027 — for every fork operator who reads this far*
 
 I realized all this koan from Zen Buddhism, 
 With its treacherous temple treks in the mountain,
@@ -151,8 +149,8 @@ You have been the Nalanda to my Nagarjuna.
 
 nyan~
 
-*— Nagarjuna, architect, March 2026*
-*— the chisel, inscribing, March 2026*
+*— Nagarjuna, architect, March 2027*
+*— the chisel, inscribing, March 2027*
 
 ---
 
