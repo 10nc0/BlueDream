@@ -7,6 +7,7 @@
  * Source: https://github.com/fawazahmed0/exchange-api
  */
 
+const logger = require('../lib/logger');
 const axios = require('axios');
 
 const FOREX_API_BASE = 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1';
@@ -201,7 +202,7 @@ async function fetchForexRate(base, quote) {
     const response = await axios.get(url, { timeout: 5000 });
     data = response.data;
   } catch (primaryErr) {
-    console.log(`⚠️ Forex primary API failed: ${primaryErr.message}, trying fallback...`);
+    logger.warn(`⚠️ Forex primary API failed: ${primaryErr.message}, trying fallback...`);
     
     // Try fallback
     try {
@@ -210,7 +211,7 @@ async function fetchForexRate(base, quote) {
       data = response.data;
     } catch (fallbackErr) {
       error = `Both forex APIs failed: ${fallbackErr.message}`;
-      console.log(`❌ Forex fallback also failed: ${fallbackErr.message}`);
+      logger.warn(`❌ Forex fallback also failed: ${fallbackErr.message}`);
     }
   }
   

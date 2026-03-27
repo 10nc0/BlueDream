@@ -16,6 +16,7 @@
  * - Personality formatting is handled by regex in pipeline-orchestrator.applyPersonalityFormat()
  */
 
+const logger = require('../lib/logger');
 const axios = require('axios');
 const { buildAuditPrompt, buildCorrectivePrompt } = require('../prompts/audit-protocol');
 const { getAuditBackend } = require('../config/constants');
@@ -98,7 +99,7 @@ Perform the dialectical audit and output JSON only.`;
       }
     );
     const _auditElapsed = ((Date.now() - _auditStart) / 1000).toFixed(1);
-    console.log(`🧠 ${isReasoner ? 'DeepSeek R1' : 'Groq Llama'} audit responded in ${_auditElapsed}s`);
+    logger.debug(`🧠 ${isReasoner ? 'DeepSeek R1' : 'Groq Llama'} audit responded in ${_auditElapsed}s`);
 
     let rawContent = response.data.choices?.[0]?.message?.content || '{}';
 

@@ -16,6 +16,7 @@
  *   S3 Deliver    → Capsule.getStatus() + Capsule.destroy()
  */
 
+const logger = require('../lib/logger');
 const PLATE_REGEX = /\b([A-Z]{1,2})\s*(\d{1,4})\s*([A-Z]{1,3})\b/gi;
 const COUNT_PATTERN = /(\d+)\s*(?:kali|times?|x)\b/gi;
 const ENTITY_COUNT_PATTERN_SEPARATOR = /([A-Z]{1,2}\s*\d{1,4}\s*[A-Z]{1,3})\s*[-–:]\s*(\d+)\s*(?:kali|times?|perbaikan|repair)/gi;
@@ -269,7 +270,7 @@ class AuditCapsule {
         this.claimsExtracted = [];
         
         const status = this.getStatus();
-        console.log(`🔥 AuditCapsule destroyed: ${this.requestId} (${status.latencyMs}ms)`);
+        logger.debug(`🔥 AuditCapsule destroyed: ${this.requestId} (${status.latencyMs}ms)`);
         return status;
     }
     

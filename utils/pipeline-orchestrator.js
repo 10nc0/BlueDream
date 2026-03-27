@@ -32,6 +32,7 @@
  * - Audit = Verification (two-pass-verification.js::runAuditPass)
  */
 
+const logger = require('../lib/logger');
 const { preflightRouter, buildSystemContext } = require('./preflight-router');
 const { extractContext, extractContextWithMemory, mergeContextForTickerDetection, isSessionFirstQuery, markSessionNyanBooted } = require('./context-extractor');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT, NYAN_PROTOCOL_COMPRESSED } = require('../prompts/nyan-protocol');
@@ -141,7 +142,7 @@ class PipelineState {
   }
   
   transition(nextStep) {
-    console.log(`🔄 Pipeline: ${this.step} → ${nextStep}`);
+    logger.debug(`🔄 Pipeline: ${this.step} → ${nextStep}`);
     this.step = nextStep;
   }
   
@@ -242,7 +243,7 @@ class PipelineOrchestrator {
     if (photos.length > 0) {
       const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
       if (PLAYGROUND_GROQ_VISION_TOKEN) {
-        console.log(`🔬 S-1: Processing ${photos.length} photo(s) with Groq Vision...`);
+        logger.debug(`🔬 S-1: Processing ${photos.length} photo(s) with Groq Vision...`);
         for (const photo of photos.slice(0, 5)) { // Max 5 photos
           try {
             // Extract base64 and content type from data URL
@@ -253,27 +254,27 @@ class PipelineOrchestrator {
             let contentType = 'image/jpeg'; // Default fallback
             
             // Debug: log incoming data format
-            console.log(`📷 S-1: Photo ${photoName} data length: ${photoData.length}, starts with: ${photoData.substring(0, 50)}...`);
+            logger.debug(`📷 S-1: Photo ${photoName} data length: ${photoData.length}, starts with: ${photoData.substring(0, 50)}...`);
             
             // Parse data URL to get actual content type (frontend may convert PNG to JPEG during resize)
             const dataUrlMatch = photoData.match(/^data:([^;]+);base64,(.+)$/s);
             if (dataUrlMatch) {
               contentType = dataUrlMatch[1]; // Actual MIME type from data URL
               base64 = dataUrlMatch[2];      // Raw base64 without prefix
-              console.log(`📷 S-1: Regex matched - contentType: ${contentType}, base64 length: ${base64.length}`);
+              logger.debug(`📷 S-1: Regex matched - contentType: ${contentType}, base64 length: ${base64.length}`);
             } else if (photoData.includes('base64,')) {
               // Fallback: just extract base64 portion
               const parts = photoData.split('base64,');
               base64 = parts[1] || '';
-              console.log(`📷 S-1: Fallback split - base64 length: ${base64.length}`);
+              logger.debug(`📷 S-1: Fallback split - base64 length: ${base64.length}`);
             } else {
-              console.log(`📷 S-1: No base64 marker found in photoData`);
+              logger.debug(`📷 S-1: No base64 marker found in photoData`);
             }
             
             // Sanitize base64: remove whitespace, newlines
             base64 = (base64 || '').replace(/[\s\r\n]/g, '');
             
-            console.log(`📷 S-1: Photo ${photoName} detected as ${contentType} (${base64.length} chars after sanitize)`);
+            logger.debug(`📷 S-1: Photo ${photoName} detected as ${contentType} (${base64.length} chars after sanitize)`);
             
             const visionResult = await analyzeImageWithGroqVision(
               base64, contentType, PLAYGROUND_GROQ_VISION_TOKEN, photoName
@@ -287,7 +288,7 @@ class PipelineOrchestrator {
               // Use schema matching AttachmentIngestion output
               normalizedInput.extractedContent.push(visionText);
               visionSuccessCount++;
-              console.log(`✅ S-1: Vision analysis complete for ${photoName}`);
+              logger.info(`✅ S-1: Vision analysis complete for ${photoName}`);
               
               // Collect chemical results for enrichment
               if (visionResult.contentType === 'chemical') {
@@ -307,7 +308,7 @@ class PipelineOrchestrator {
           const allVisionText = chemicalVisionResults.map(r => r.description || '').join(' ');
           const scholasticCheck = classifyScholasticDomain(allVisionText);
           if (scholasticCheck.domain !== 'chemistry' && scholasticCheck.domain !== 'general') {
-            console.log(`🚫 S-1: Chemistry pipeline GATED — scholastic domain is "${scholasticCheck.domain}" (override: ${scholasticCheck.override || 'none'}), not chemistry`);
+            logger.debug(`🚫 S-1: Chemistry pipeline GATED — scholastic domain is "${scholasticCheck.domain}" (override: ${scholasticCheck.override || 'none'}), not chemistry`);
             gatedVisionDescriptions = chemicalVisionResults.map(r => r.description || '').filter(d => d.length > 0);
             chemicalVisionResults.length = 0; // Clear to skip chemistry and trigger vision search fallback
             chemistryGated = true;
@@ -316,7 +317,7 @@ class PipelineOrchestrator {
             for (let i = 0; i < normalizedInput.extractedContent.length; i++) {
               if (typeof normalizedInput.extractedContent[i] === 'string' && normalizedInput.extractedContent[i].includes('🧪 Chemical Structure')) {
                 normalizedInput.extractedContent[i] = normalizedInput.extractedContent[i].replace('🧪 Chemical Structure', domainLabel);
-                console.log(`📝 S-1: Relabeled vision content from "🧪 Chemical Structure" to "${domainLabel}"`);
+                logger.debug(`📝 S-1: Relabeled vision content from "🧪 Chemical Structure" to "${domainLabel}"`);
               }
             }
           }
@@ -325,11 +326,11 @@ class PipelineOrchestrator {
         // If chemical structures detected (and passed scholastic gate), run chemistry enrichment pipeline
         if (chemicalVisionResults.length > 0) {
           try {
-            console.log(`🧪 S-1: Running chemistry enrichment for ${chemicalVisionResults.length} chemical structure(s)...`);
+            logger.debug(`🧪 S-1: Running chemistry enrichment for ${chemicalVisionResults.length} chemical structure(s)...`);
             const chemistryResult = await processChemistryContent(chemicalVisionResults);
             if (chemistryResult && chemistryResult.enrichedText) {
               normalizedInput.extractedContent.push(chemistryResult.enrichedText);
-              console.log(`✅ S-1: Chemistry enrichment complete - ${chemistryResult.stage || 'unknown stage'}`);
+              logger.info(`✅ S-1: Chemistry enrichment complete - ${chemistryResult.stage || 'unknown stage'}`);
               
               if (chemistryResult.compoundInfo && chemistryResult.compoundInfo.name) {
                 const ci = chemistryResult.compoundInfo;
@@ -344,9 +345,9 @@ class PipelineOrchestrator {
                   header += `\n**Source:** ${ci.source || 'DDG/Wikipedia'}`;
                   if (ci.note) header += `\n**Note:** ${ci.note}`;
                   state.chemistryHeader = header;
-                  console.log(`📋 S-1: Chemistry header saved for S6 output (${Math.round(confidence * 100)}%)`);
+                  logger.debug(`📋 S-1: Chemistry header saved for S6 output (${Math.round(confidence * 100)}%)`);
                 } else {
-                  console.log(`📋 S-1: Chemistry header SUPPRESSED (confidence=${Math.round(confidence * 100)}%, name="${ci.name}" generic=${isGenericName})`);
+                  logger.debug(`📋 S-1: Chemistry header SUPPRESSED (confidence=${Math.round(confidence * 100)}%, name="${ci.name}" generic=${isGenericName})`);
                 }
               }
             }
@@ -387,7 +388,7 @@ class PipelineOrchestrator {
               const keyTerms = extractVisionSearchTerms(visionDesc);
               
               if (keyTerms) {
-                console.log(`🔎 S-1: Vision search enrichment [${trigger}] — querying "${keyTerms}" (scholastic: ${scholastic.domain})`);
+                logger.debug(`🔎 S-1: Vision search enrichment [${trigger}] — querying "${keyTerms}" (scholastic: ${scholastic.domain})`);
                 let searchResult = await this.searchBrave(keyTerms, normalizedInput.clientIp);
                 if (!searchResult) {
                   searchResult = await this.searchDuckDuckGo(keyTerms);
@@ -398,9 +399,9 @@ class PipelineOrchestrator {
                     `\n### 🔍 Image Identification (Web Search):\n${searchResult}`
                   );
                   state.didSearch = true;
-                  console.log(`✅ S-1: Vision search enrichment complete (${searchResult.length} chars)`);
+                  logger.info(`✅ S-1: Vision search enrichment complete (${searchResult.length} chars)`);
                 } else {
-                  console.log(`⚠️ S-1: Vision search returned no results for "${keyTerms}"`);
+                  logger.warn(`⚠️ S-1: Vision search returned no results for "${keyTerms}"`);
                 }
               }
             }
@@ -409,7 +410,7 @@ class PipelineOrchestrator {
           }
         }
       } else {
-        console.log(`⚠️ S-1: PLAYGROUND_GROQ_VISION_TOKEN not configured - skipping vision analysis`);
+        logger.warn(`⚠️ S-1: PLAYGROUND_GROQ_VISION_TOKEN not configured - skipping vision analysis`);
       }
     }
 
@@ -423,7 +424,7 @@ class PipelineOrchestrator {
         return /\.(jpg|jpeg|png|gif|webp|bmp)$/.test(name) || mime.startsWith('image/');
       });
     if (state.hasImageAttachment) {
-      console.log(`🖼️ S-1: Image content ready (vision=${visionSuccessCount}) - search retry will be skipped`);
+      logger.debug(`🖼️ S-1: Image content ready (vision=${visionSuccessCount}) - search retry will be skipped`);
     }
 
     // Track if this is first query for NYAN boot optimization
@@ -468,14 +469,14 @@ class PipelineOrchestrator {
       });
       
       if (state.contextResult.inferredTicker) {
-        console.log(`📜 Stage -1: Context extracted - inferred ticker: ${state.contextResult.inferredTicker}`);
+        logger.debug(`📜 Stage -1: Context extracted - inferred ticker: ${state.contextResult.inferredTicker}`);
       } else if (state.contextResult.hasFinancialContext) {
-        console.log(`📜 Stage -1: Financial context detected, no specific ticker`);
+        logger.debug(`📜 Stage -1: Financial context detected, no specific ticker`);
       }
       
       // Log memory-based context if available
       if (state.contextResult.attachmentContext) {
-        console.log(`📎 Stage -1: Attachment side-door active - "${state.contextResult.attachmentContext.name}"`);
+        logger.debug(`📎 Stage -1: Attachment side-door active - "${state.contextResult.attachmentContext.name}"`);
       }
       
       // Merge context with current query for enhanced detection
@@ -488,7 +489,7 @@ class PipelineOrchestrator {
       if (normalizedInput.preComputedPreflight) {
         state.preflight = normalizedInput.preComputedPreflight;
         state.mode = state.preflight.mode;
-        console.log(`📊 Preflight (pre-computed): mode=${state.mode}, ticker=${state.preflight.ticker || 'none'}`);
+        logger.debug(`📊 Preflight (pre-computed): mode=${state.mode}, ticker=${state.preflight.ticker || 'none'}`);
         
         // WRITE to DataPackage: Stage S0 preflight result (pre-computed path)
         state.writeToPackage(STAGE_IDS.PREFLIGHT, {
@@ -508,7 +509,7 @@ class PipelineOrchestrator {
       
       // FAST-PATH: Ψ-EMA mode but no ticker found → return "no data" message (saves tokens)
       if (state.mode === 'psi-ema' && !state.preflight.ticker) {
-        console.log(`⚡ Fast-path: Ψ-EMA mode but no ticker - returning no-data message`);
+        logger.debug(`⚡ Fast-path: Ψ-EMA mode but no ticker - returning no-data message`);
         state.finalAnswer = `📊 **No Stock Data Available**\n\nI detected a financial analysis request, but couldn't identify a valid public stock ticker.\n\n**Tips:**\n• Use explicit ticker format: "$AAPL", "$NVDA", "$META"\n• Note: Some companies are private (e.g., Bloomberg LP) and have no public stock data\n• Commodities (gold, oil) and crypto require different analysis tools\n\n🔥 ~nyan`;
         state.auditResult = { verdict: 'BYPASS', confidence: 100, reason: 'No ticker - fast path' };
         // transition to output but don't mark booted mid-way
@@ -621,7 +622,7 @@ class PipelineOrchestrator {
     });
     
     state.mode = state.preflight.mode;
-    console.log(`📊 Preflight: mode=${state.mode}, ticker=${state.preflight.ticker || 'none'}`);
+    logger.debug(`📊 Preflight: mode=${state.mode}, ticker=${state.preflight.ticker || 'none'}`);
     
     // WRITE to DataPackage: Stage S0 preflight result
     state.writeToPackage(STAGE_IDS.PREFLIGHT, {
@@ -638,7 +639,7 @@ class PipelineOrchestrator {
     // Triggered by preflight.routingFlags.needsRealtimeSearch
     // ========================================
     if (state.preflight.routingFlags?.needsRealtimeSearch && query) {
-      console.log(`🌐 Real-time cascade: DDG → Brave for general query`);
+      logger.debug(`🌐 Real-time cascade: DDG → Brave for general query`);
       
       const searchQuery = await this.extractCoreQuestion(query);
       let searchResult = null;
@@ -648,7 +649,7 @@ class PipelineOrchestrator {
       
       // Brave fallback if DDG fails
       if (!searchResult) {
-        console.log(`🦁 DDG returned no results, trying Brave...`);
+        logger.debug(`🦁 DDG returned no results, trying Brave...`);
         searchResult = await this.searchBrave(searchQuery, clientIp);
       }
       
@@ -664,9 +665,9 @@ MANDATORY INSTRUCTIONS:
 5. Each result includes a "Source: <url>" — cite it inline as a markdown link [title](url) after each fact you use
 6. End with a **Sources:** section listing all cited URLs as markdown links — no bare URLs, no placeholders`;
         state.didSearch = true;
-        console.log(`✅ Real-time search successful, context injected`);
+        logger.info(`✅ Real-time search successful, context injected`);
       } else {
-        console.log(`⚠️ Real-time search failed - will rely on training data`);
+        logger.warn(`⚠️ Real-time search failed - will rely on training data`);
       }
     }
   }
@@ -701,7 +702,7 @@ MANDATORY INSTRUCTIONS:
       systemMessageCount: state.systemMessages.length
     });
     
-    console.log(`📝 Context: ${state.systemMessages.length} system messages built (temporal + NYAN: ${state.isFirstQuery ? 'full' : 'compressed'})`);
+    logger.debug(`📝 Context: ${state.systemMessages.length} system messages built (temporal + NYAN: ${state.isFirstQuery ? 'full' : 'compressed'})`);
   }
   
   async stepReasoning(state, input) {
@@ -742,7 +743,7 @@ MANDATORY INSTRUCTIONS:
     let memoryPrefix = '';
     if (hasMemory) {
       memoryPrefix = state.contextResult.memoryPrompt + '\n[CURRENT QUERY]\n';
-      console.log(`📝 Memory injected: ${state.contextResult.memoryPrompt.length} chars`);
+      logger.debug(`📝 Memory injected: ${state.contextResult.memoryPrompt.length} chars`);
     }
     
     // Build Ψ-EMA instruction for user prompt (ensures LLM outputs wave analysis)
@@ -808,7 +809,7 @@ MANDATORY INSTRUCTIONS:
       if (hasExplicitPathogen || !pathogenResult.healthy) {
         state.clinicalReportTriggered = true;
         state.useClinicalReport = true; // Flag for output formatting, preserves psi-ema routing
-        console.log(`🦠 [psi-ema] Clinical report activated for ${ticker} (explicit=${!!hasExplicitPathogen}, detected=${!pathogenResult.healthy})`);
+        logger.debug(`🦠 [psi-ema] Clinical report activated for ${ticker} (explicit=${!!hasExplicitPathogen}, detected=${!pathogenResult.healthy})`);
       }
       
       // Physical Audit Disclaimer: "See to believe" infrastructure verification (Dec 23, 2025)
@@ -927,7 +928,7 @@ ${weeklySection}
 ${clinicalSection}
 ${physicalAuditDisclaimer}
 `;
-      console.log(`📊 Ψ-EMA dual-timeframe instruction injected for ${ticker} (daily + ${analysisWeekly ? 'weekly' : 'weekly unavailable'})`);
+      logger.debug(`📊 Ψ-EMA dual-timeframe instruction injected for ${ticker} (daily + ${analysisWeekly ? 'weekly' : 'weekly unavailable'})`);
     }
     
     const MAX_ATTACHMENT_CHARS = MAX_CONTENT_CHARS;
@@ -987,7 +988,7 @@ ${physicalAuditDisclaimer}
     
     if (hasAttachments && hasSearch) {
       // BOTH: Combine attachments + search context (rare: retry during doc analysis)
-      console.log(`📎 Combining attachments (${processedContent.length}) + search context`);
+      logger.debug(`📎 Combining attachments (${processedContent.length}) + search context`);
       finalPrompt = `${memoryPrefix}UPLOADED ATTACHMENTS (PRIMARY SOURCE - analyze these first):
 ${processedContent.join('\n\n')}
 
@@ -997,7 +998,7 @@ ${state.searchContext}
 User query: ${query || 'Analyze this content.'}`;
     } else if (hasAttachments) {
       // Attachments only (closed-loop document analysis)
-      console.log(`📎 Attachment-only mode: ${processedContent.length} items`);
+      logger.debug(`📎 Attachment-only mode: ${processedContent.length} items`);
       finalPrompt = `${memoryPrefix}Attachments analyzed:\n${processedContent.join('\n\n')}\n\nUser query: ${query || 'Analyze this content.'}`;
     } else if (hasSearch) {
       // Search only (general queries with web augmentation)
@@ -1017,10 +1018,10 @@ User query: ${query}`;
     // The preflight stockContext + psiEmaInstruction IS the response - no LLM reinterpretation needed
     // Set draftAnswer directly but DON'T return - let stepAudit/stepOutput run for signature
     if (psiEmaInstruction && isPsiEma && state.preflight?.stockContext) {
-      console.log(`📊 Ψ-EMA: Direct structured output (bypassing LLM reformatting)`);
+      logger.debug(`📊 Ψ-EMA: Direct structured output (bypassing LLM reformatting)`);
       state.draftAnswer = `${state.preflight.stockContext}\n${psiEmaInstruction}`;
       state.psiEmaDirectOutput = true; // Flag to skip audit but let output stage run
-      console.log(`🧠 Direct output: ${state.draftAnswer.length} chars (no LLM call)`);
+      logger.debug(`🧠 Direct output: ${state.draftAnswer.length} chars (no LLM call)`);
       return; // Exit stepReasoning - run() will continue to stepAudit/stepOutput
     }
     
@@ -1067,7 +1068,7 @@ User query: ${query}`;
       }, 3, 'text');
       
       state.draftAnswer = response.data.choices[0]?.message?.content || 'No response generated.';
-      console.log(`🧠 Reasoning: ${state.draftAnswer.length} chars generated`);
+      logger.debug(`🧠 Reasoning: ${state.draftAnswer.length} chars generated`);
     } catch (err) {
       // Groq API failure after all retries - propagate error, return early to skip audit on junk
       console.error(`❌ [stepReasoning] Groq API failed after 3 retries: ${err.message}`);
@@ -1145,7 +1146,7 @@ Rules:
       { role: 'user', content: query }
     ];
 
-    console.log(`🐕 Seed Metric: Walking the dog — LLM-driven Brave tool calls`);
+    logger.debug(`🐕 Seed Metric: Walking the dog — LLM-driven Brave tool calls`);
 
     let round1Response;
     try {
@@ -1178,13 +1179,13 @@ Rules:
     const toolCalls  = round1Msg?.tool_calls || [];
     const finishReason = round1Response.data.choices[0]?.finish_reason;
 
-    console.log(`🐕 Round 1: finish_reason=${finishReason}, tool_calls=${toolCalls.length}`);
+    logger.debug(`🐕 Round 1: finish_reason=${finishReason}, tool_calls=${toolCalls.length}`);
 
     // LLM answered without needing tools → use directly
     if (toolCalls.length === 0 || finishReason !== 'tool_calls') {
       state.draftAnswer = round1Msg?.content || '';
       state.didSearch = false;
-      console.log(`🐕 Seed Metric: direct answer (no tool calls), ${state.draftAnswer.length} chars`);
+      logger.debug(`🐕 Seed Metric: direct answer (no tool calls), ${state.draftAnswer.length} chars`);
       return;
     }
 
@@ -1232,12 +1233,12 @@ Rules:
       catch { args = { query: String(tc.function.arguments) }; }
 
       const searchQuery = args.query || '';
-      console.log(`🦁 brave_search #${i + 1}: "${searchQuery}"`);
+      logger.debug(`🦁 brave_search #${i + 1}: "${searchQuery}"`);
 
       let result = await this.searchBrave(searchQuery, clientIp, { format: 'json' });
 
       if (result === null) {
-        console.log(`🦁 brave_search #${i + 1}: null result, retrying after 1500ms...`);
+        logger.debug(`🦁 brave_search #${i + 1}: null result, retrying after 1500ms...`);
         await new Promise(r => setTimeout(r, 1500));
         result = await this.searchBrave(searchQuery, clientIp, { format: 'json' });
       }
@@ -1331,12 +1332,12 @@ Rules:
                 } else {
                   bucket[resolvedType] = { value: extracted.value, currency };
                 }
-                console.log(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} = ${extracted.value} ${currency}`);
+                logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} = ${extracted.value} ${currency}`);
               } else {
-                console.log(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} already filled, skipping`);
+                logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${resolvedType} already filled, skipping`);
               }
             } else {
-              console.log(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${metricType} = null`);
+              logger.debug(`👁️ Extract #${i + 1}: ${matchedCity}/${period}/${metricType} = null`);
             }
           } catch (err) {
             console.warn(`⚠️ Extract #${i + 1} failed: ${err.message}`);
@@ -1345,7 +1346,7 @@ Rules:
 
         pendingExtractions.push(extractionPromise);
       } else {
-        console.log(`👁️ Extract #${i + 1}: no city match or empty result, skipping`);
+        logger.debug(`👁️ Extract #${i + 1}: no city match or empty result, skipping`);
       }
 
       if (i < callsToRun.length - 1) {
@@ -1364,7 +1365,7 @@ Rules:
         if (data[period]?.income) continue;
         const yearToken = period === 'current' ? String(currentYear) : histDecade;
         const fallbackQuery = `${country} average income ${yearToken}`;
-        console.log(`🔄 Income fallback: ${city}/${period} → "${fallbackQuery}"`);
+        logger.debug(`🔄 Income fallback: ${city}/${period} → "${fallbackQuery}"`);
 
         incomeFallbacks.push((async () => {
           try {
@@ -1400,10 +1401,10 @@ Rules:
               const currency = extracted.currency || 'USD';
               if (!data[period].income) {
                 data[period].income = { value: extracted.value, currency, type: 'single' };
-                console.log(`🔄 Fallback hit: ${city}/${period}/income = ${extracted.value} ${currency} (via ${country})`);
+                logger.debug(`🔄 Fallback hit: ${city}/${period}/income = ${extracted.value} ${currency} (via ${country})`);
               }
             } else {
-              console.log(`🔄 Fallback miss: ${city}/${period}/income still null (${country})`);
+              logger.debug(`🔄 Fallback miss: ${city}/${period}/income still null (${country})`);
             }
           } catch (err) {
             console.warn(`⚠️ Income fallback failed for ${city}/${period}: ${err.message}`);
@@ -1426,7 +1427,7 @@ Rules:
     }
 
     for (const line of parsedData.parseLog) {
-      console.log(`📊 ${line}`);
+      logger.debug(`📊 ${line}`);
     }
 
     // ── TFR: fetch and inject before building table ──────────────────────────
@@ -1436,7 +1437,7 @@ Rules:
         const tfrCities = cities.map(c => c.charAt(0).toUpperCase() + c.slice(1));
         tfrCapsule = await this._fetchTFRData(tfrCities, histDecade, input.clientIp || '127.0.0.1', CITY_TO_COUNTRY);
         state.tfrCapsule = tfrCapsule;
-        console.log(`🐣 TFR fetched for ${tfrCities.length} cities`);
+        logger.debug(`🐣 TFR fetched for ${tfrCities.length} cities`);
       } catch (err) {
         console.warn(`⚠️ TFR fetch failed: ${err.message}`);
       }
@@ -1461,7 +1462,7 @@ Rules:
     state.didSearch = true;
     state.seedMetricDirectOutput = true;
     state.seedMetricSourceUrls = sourceUrls;
-    console.log(`🐕 Seed Metric: ${callsToRun.length} Brave calls → LLM extract → server table (${fullOutput.length} chars)`);
+    logger.debug(`🐕 Seed Metric: ${callsToRun.length} Brave calls → LLM extract → server table (${fullOutput.length} chars)`);
 
     // ── Coda: LLM voice layer ────────────────────────────────────────────────
     let coda = '';
@@ -1500,7 +1501,7 @@ Rules:
       }, 2, 'text');
 
       coda = codaResponse.data.choices[0]?.message?.content?.trim() || '';
-      console.log(`🐱 Seed Metric coda: ${coda.length} chars`);
+      logger.debug(`🐱 Seed Metric coda: ${coda.length} chars`);
     } catch (err) {
       console.warn(`⚠️ Seed Metric coda failed: ${err.message} — skipping coda`);
     }
@@ -1519,7 +1520,7 @@ Rules:
 
       try {
         const currentQuery = `"${city}" total fertility rate ${currentYear}`;
-        console.log(`🐣 TFR search: "${currentQuery}"`);
+        logger.debug(`🐣 TFR search: "${currentQuery}"`);
         const currentResult = await this.searchBrave(currentQuery, clientIp);
         tfrCapsule[cityKey].current = parseTFR(currentResult, city, currentYear);
 
@@ -1527,18 +1528,18 @@ Rules:
           const country = cityToCountry[cityKey];
           await new Promise(r => setTimeout(r, 1100));
           const countryQuery = `${country} total fertility rate ${currentYear}`;
-          console.log(`🐣 TFR country fallback: "${countryQuery}"`);
+          logger.debug(`🐣 TFR country fallback: "${countryQuery}"`);
           const countryResult = await this.searchBrave(countryQuery, clientIp);
           tfrCapsule[cityKey].current = parseTFR(countryResult, country, currentYear);
           if (tfrCapsule[cityKey].current) {
-            console.log(`🐣 TFR fallback hit: ${city} current = ${tfrCapsule[cityKey].current} (via ${country})`);
+            logger.debug(`🐣 TFR fallback hit: ${city} current = ${tfrCapsule[cityKey].current} (via ${country})`);
           }
         }
 
         await new Promise(r => setTimeout(r, 1100));
 
         const histQuery = `"${city}" total fertility rate ${historicalDecade}`;
-        console.log(`🐣 TFR search: "${histQuery}"`);
+        logger.debug(`🐣 TFR search: "${histQuery}"`);
         const histResult = await this.searchBrave(histQuery, clientIp);
         const histTargetYear = historicalDecade.replace(/s$/, '');
         tfrCapsule[cityKey].historical = parseTFR(histResult, city, histTargetYear);
@@ -1547,11 +1548,11 @@ Rules:
           const country = cityToCountry[cityKey];
           await new Promise(r => setTimeout(r, 1100));
           const countryHistQuery = `${country} total fertility rate ${historicalDecade}`;
-          console.log(`🐣 TFR country fallback: "${countryHistQuery}"`);
+          logger.debug(`🐣 TFR country fallback: "${countryHistQuery}"`);
           const countryHistResult = await this.searchBrave(countryHistQuery, clientIp);
           tfrCapsule[cityKey].historical = parseTFR(countryHistResult, country, histTargetYear);
           if (tfrCapsule[cityKey].historical) {
-            console.log(`🐣 TFR fallback hit: ${city} historical = ${tfrCapsule[cityKey].historical} (via ${country})`);
+            logger.debug(`🐣 TFR fallback hit: ${city} historical = ${tfrCapsule[cityKey].historical} (via ${country})`);
           }
         }
 
@@ -1559,7 +1560,7 @@ Rules:
       } catch (err) {
         console.warn(`⚠️ TFR fetch failed for ${city}: ${err.message}`);
       }
-      console.log(`🐣 TFR ${city}: current=${tfrCapsule[cityKey].current}, historical=${tfrCapsule[cityKey].historical}`);
+      logger.debug(`🐣 TFR ${city}: current=${tfrCapsule[cityKey].current}, historical=${tfrCapsule[cityKey].historical}`);
     }
     return tfrCapsule;
   }
@@ -1654,14 +1655,14 @@ Rules:
     
     // Ψ-EMA direct output: bypass audit (data already pre-verified from yfinance + SEC EDGAR)
     if (state.psiEmaDirectOutput) {
-      console.log(`📊 Ψ-EMA direct output - bypassing audit (pre-verified data)`);
+      logger.debug(`📊 Ψ-EMA direct output - bypassing audit (pre-verified data)`);
       state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Pre-verified yfinance + SEC EDGAR data' };
       return;
     }
     
     // Seed Metric direct output: bypass audit (data calculated with deterministic proxy rules)
     if (state.seedMetricDirectOutput) {
-      console.log(`🏠 Seed Metric direct output - bypassing audit (proxy math applied)`);
+      logger.debug(`🏠 Seed Metric direct output - bypassing audit (proxy math applied)`);
       state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Deterministic $/sqm × 700 proxy calculation' };
       return;
     }
@@ -1672,12 +1673,12 @@ Rules:
       const smHistDecade = state.preflight?.historicalDecade || (String(new Date().getFullYear() - 25).slice(0, 3) + '0s');
       const validation = validateSeedMetricOutput(state.draftAnswer, smHistDecade);
       if (!validation.valid) {
-        console.log(`⚠️ Seed Metric format validation FAILED: ${validation.issues.join(', ')}`);
+        logger.warn(`⚠️ Seed Metric format validation FAILED: ${validation.issues.join(', ')}`);
 
         // Try to fix with a format-only prompt
         if (!state.seedMetricFormatRetried) {
           state.seedMetricFormatRetried = true;
-          console.log(`🔧 Attempting Seed Metric format fix...`);
+          logger.debug(`🔧 Attempting Seed Metric format fix...`);
 
           try {
             const histYear = state.preflight?.historicalYear || String(new Date().getFullYear() - 25);
@@ -1739,7 +1740,7 @@ Output ONLY the corrected table and summary lines:`;
             if (fixedAnswer) {
               const reValidation = validateSeedMetricOutput(fixedAnswer, smHistDecade);
               if (reValidation.valid) {
-                console.log(`✅ Seed Metric format fix successful`);
+                logger.info(`✅ Seed Metric format fix successful`);
                 let fixedNormalized = this._normalizeSeedMetricRegimes(fixedAnswer);
                 if (state.tfrCapsule) {
                   fixedNormalized = injectTFRColumn(fixedNormalized, state.tfrCapsule);
@@ -1747,26 +1748,26 @@ Output ONLY the corrected table and summary lines:`;
                 const fixedWithSources = this._reattachSeedMetricSources(fixedNormalized, state.seedMetricSourceUrls);
                 state.draftAnswer = this._insertSeedMetricCoda(fixedWithSources, state.seedMetricCoda || '');
               } else {
-                console.log(`❌ Seed Metric format fix still invalid: ${reValidation.issues.join(', ')} — keeping original`);
+                logger.warn(`❌ Seed Metric format fix still invalid: ${reValidation.issues.join(', ')} — keeping original`);
               }
             }
           } catch (err) {
-            console.log(`⚠️ Seed Metric format fix failed: ${err.message}`);
+            logger.warn(`⚠️ Seed Metric format fix failed: ${err.message}`);
           }
         }
       } else {
-        console.log(`✅ Seed Metric format validation passed`);
+        logger.info(`✅ Seed Metric format validation passed`);
       }
     }
     
     // Log attachment preservation for debugging
     const attachmentCount = extractedContent?.length || 0;
     if (attachmentCount > 0) {
-      console.log(`📎 Audit: ${attachmentCount} attachment(s) preserved for STRICT verification`);
+      logger.debug(`📎 Audit: ${attachmentCount} attachment(s) preserved for STRICT verification`);
     }
     
     if (this.isIdentityQuery(query)) {
-      console.log(`🐱 Identity query - bypassing audit`);
+      logger.debug(`🐱 Identity query - bypassing audit`);
       state.auditResult = { verdict: 'BYPASS', confidence: 95, reason: 'Identity question' };
       return;
     }
@@ -1852,7 +1853,7 @@ Output ONLY the corrected table and summary lines:`;
       const _auditLabel = 'Llama';
       const _confStr = state.auditResult.confidence !== null && state.auditResult.confidence !== undefined
         ? `${state.auditResult.confidence}%` : 'unverified';
-      console.log(`🔍 Audit [${_auditLabel}]: ${state.auditResult.verdict} (${_confStr})`);
+      logger.debug(`🔍 Audit [${_auditLabel}]: ${state.auditResult.verdict} (${_confStr})`);
       
       // WRITE to DataPackage: Stage S3 audit MARKERS only (read-only mode)
       // Audit cannot write corrections - only marks issues for retry stage to fix
@@ -1865,7 +1866,7 @@ Output ONLY the corrected table and summary lines:`;
         correctionNeeded: state.auditResult.verdict === 'REJECTED'
       });
     } catch (err) {
-      console.log(`⚠️ Audit error: ${err.message}`);
+      logger.warn(`⚠️ Audit error: ${err.message}`);
       state.auditResult = { verdict: 'BYPASS', confidence: null, reason: 'Audit failed — second pass never ran' };
     }
   }
@@ -1892,12 +1893,12 @@ Output ONLY the corrected table and summary lines:`;
     // SKIP SEARCH RETRY for identity modes - internal documentation is the ground truth
     const isIdentityMode = state.mode && state.mode.includes('identity');
     if (isIdentityMode) {
-      console.log(`⏭️ Identity mode: Skip retry (internal docs are ground truth)`);
+      logger.debug(`⏭️ Identity mode: Skip retry (internal docs are ground truth)`);
       return;
     }
     
     if (state.mode === 'psi-ema') {
-      console.log(`⏭️ Ψ-EMA: Skip retry (yfinance data pre-verified)`);
+      logger.debug(`⏭️ Ψ-EMA: Skip retry (yfinance data pre-verified)`);
       return;
     }
     
@@ -1929,13 +1930,13 @@ Output ONLY the corrected table and summary lines:`;
     
     if (hasImage) {
       // Image attachments: skip web search, re-run reasoning with vision context only
-      console.log(`🖼️ Retry ${state.retryCount}: Image attachment - re-reasoning with vision context (no web search)`);
+      logger.debug(`🖼️ Retry ${state.retryCount}: Image attachment - re-reasoning with vision context (no web search)`);
       await this.stepReasoning(state, reasoningInput);
       await this.stepAudit(state, reasoningInput);
       return;
     }
     
-    console.log(`🔄 Retry ${state.retryCount}: Searching for better data...`);
+    logger.debug(`🔄 Retry ${state.retryCount}: Searching for better data...`);
     
     const searchQuery = await this.extractCoreQuestion(safeQuery);
     state.searchContext = await this.searchBrave(searchQuery, clientIp);
@@ -1999,7 +2000,7 @@ Output ONLY the corrected table and summary lines:`;
     // Prepend chemistry compound header if available (source/confidence visible to user)
     if (state.chemistryHeader) {
       state.finalAnswer = state.chemistryHeader + '\n\n---\n\n' + state.finalAnswer;
-      console.log(`📋 S6: Chemistry header prepended to output`);
+      logger.debug(`📋 S6: Chemistry header prepended to output`);
     }
     
     // WRITE to DataPackage: Stage S6 output (personality-formatted)
@@ -2015,7 +2016,7 @@ Output ONLY the corrected table and summary lines:`;
     state.dataPackage.finalize();
     globalPackageStore.storePackage(state.dataPackage.tenantId, state.dataPackage);
     
-    console.log(`✅ Output: ${state.finalAnswer.length} chars, mode=${state.mode}`);
+    logger.info(`✅ Output: ${state.finalAnswer.length} chars, mode=${state.mode}`);
   }
   
   /**
@@ -2242,7 +2243,7 @@ async function fastStreamPersonality(res, answer, auditMetadata, chunkSize = 50,
     res.end();
   }
   
-  console.log(`⚡ Fast personality: ${formatted.length} chars (regex, no LLM)`);
+  logger.debug(`⚡ Fast personality: ${formatted.length} chars (regex, no LLM)`);
   return formatted;
 }
 

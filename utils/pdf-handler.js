@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -17,7 +18,7 @@ async function groqWithRetry(axiosCall, maxRetries = GROQ_RETRY.TEXT_MAX_RETRIES
             
             if ((status === 429 || status >= 500) && attempt < maxRetries) {
                 const delayMs = Math.min(GROQ_RETRY.BASE_DELAY_MS * Math.pow(2, attempt), GROQ_RETRY.PDF_MAX_DELAY_MS);
-                console.log(`⏳ Groq ${status}: Retry ${attempt + 1}/${maxRetries} in ${delayMs}ms`);
+                logger.debug(`⏳ Groq ${status}: Retry ${attempt + 1}/${maxRetries} in ${delayMs}ms`);
                 await new Promise(resolve => setTimeout(resolve, delayMs));
             } else {
                 throw error;
@@ -38,7 +39,7 @@ async function parsePDFHybrid(buffer, fileName) {
         truncated: false
     };
     
-    console.log(`📄 Hybrid PDF parser: Processing ${fileName}`);
+    logger.debug(`📄 Hybrid PDF parser: Processing ${fileName}`);
     
     const MAX_TEXT_CHARS = MAX_CONTENT_CHARS;
     
@@ -50,18 +51,18 @@ async function parsePDFHybrid(buffer, fileName) {
         result.pageCount = data.numpages || 1;
         let fullText = data.text || '';
         
-        console.log(`📄 Text extraction: ${fullText.length} chars from ${result.pageCount} pages`);
+        logger.debug(`📄 Text extraction: ${fullText.length} chars from ${result.pageCount} pages`);
         
         // Truncate if exceeds token limit (preserve Groq context window)
         if (fullText.length > MAX_TEXT_CHARS) {
             result.text = fullText.substring(0, MAX_TEXT_CHARS);
             result.truncated = true;
-            console.log(`⚠️ PDF truncated: ${fullText.length} → ${MAX_TEXT_CHARS} chars (${result.pageCount} pages)`);
+            logger.warn(`⚠️ PDF truncated: ${fullText.length} → ${MAX_TEXT_CHARS} chars (${result.pageCount} pages)`);
         } else {
             result.text = fullText;
         }
     } catch (textError) {
-        console.log(`⚠️ Text extraction failed: ${textError.message}`);
+        logger.warn(`⚠️ Text extraction failed: ${textError.message}`);
     }
     
     try {
@@ -70,10 +71,10 @@ async function parsePDFHybrid(buffer, fileName) {
             result.tables = tables;
             result.hasStructuredData = true;
             result.extractionMethod = 'tables';
-            console.log(`📊 Table extraction: ${tables.length} tables found`);
+            logger.debug(`📊 Table extraction: ${tables.length} tables found`);
         }
     } catch (tableError) {
-        console.log(`⚠️ Table extraction skipped: ${tableError.message}`);
+        logger.warn(`⚠️ Table extraction skipped: ${tableError.message}`);
     }
     
     return result;
@@ -127,7 +128,7 @@ async function extractTablesWithTabula(buffer) {
             }
         }
     } catch (e) {
-        console.log(`⚠️ Tabula extraction error: ${e.message}`);
+        logger.warn(`⚠️ Tabula extraction error: ${e.message}`);
     } finally {
         try {
             if (fs.existsSync(tempFile)) {
@@ -180,14 +181,14 @@ async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
             const infoOutput = execSync(`pdfinfo "${tempPdfPath}" 2>/dev/null | grep "^Pages:" | awk '{print $2}'`, { encoding: 'utf8' });
             totalPages = parseInt(infoOutput.trim()) || 1;
         } catch (e) {
-            console.log(`⚠️ pdfinfo failed, assuming 1 page`);
+            logger.warn(`⚠️ pdfinfo failed, assuming 1 page`);
         }
         
         const pagesToRender = Math.min(totalPages, parseInt(options.maxPages, 10) || 5);
         if (!Number.isInteger(pagesToRender) || pagesToRender < 1 || pagesToRender > 100) {
             throw new Error('Invalid page count');
         }
-        console.log(`🖼️ PDF Poppler: Rendering ${pagesToRender}/${totalPages} pages...`);
+        logger.debug(`🖼️ PDF Poppler: Rendering ${pagesToRender}/${totalPages} pages...`);
         
         // Render pages to JPEG using pdftoppm
         // -jpeg: output format, -r 225: 225 DPI (high-res for atom clarity), -f/-l: first/last page
@@ -225,13 +226,13 @@ async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
                 // Cleanup temp image
                 try { fs.unlinkSync(imgPath); } catch (e) {}
                 
-                console.log(`  📄 Page ${i}: rendered (JPEG)`);
+                logger.debug(`  📄 Page ${i}: rendered (JPEG)`);
             } else {
-                console.log(`  ⚠️ Page ${i}: output file not found`);
+                logger.warn(`  ⚠️ Page ${i}: output file not found`);
             }
         }
         
-        console.log(`🖼️ PDF Poppler: ${images.length} pages rendered successfully`);
+        logger.debug(`🖼️ PDF Poppler: ${images.length} pages rendered successfully`);
     } catch (error) {
         console.error(`❌ PDF Poppler: Rendering failed - ${error.message}`);
     } finally {
@@ -363,7 +364,7 @@ async function analyzePDFVisualContent(buffer, fileName, options = {}) {
     const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
     
     if (!PLAYGROUND_GROQ_VISION_TOKEN) {
-        console.log('⚠️ PLAYGROUND_GROQ_VISION_TOKEN not configured - skipping PDF visual analysis');
+        logger.warn('⚠️ PLAYGROUND_GROQ_VISION_TOKEN not configured - skipping PDF visual analysis');
         return { success: false, error: 'Vision token not configured', visualContent: [] };
     }
     
@@ -378,7 +379,7 @@ async function analyzePDFVisualContent(buffer, fileName, options = {}) {
     };
     
     try {
-        console.log(`🔬 PDF Visual: Analyzing ${fileName} for charts, structures, diagrams...`);
+        logger.debug(`🔬 PDF Visual: Analyzing ${fileName} for charts, structures, diagrams...`);
         
         // Render PDF pages to images
         const images = await renderPDFPagesToImages(buffer, { maxPages });
@@ -415,7 +416,7 @@ async function analyzePDFVisualContent(buffer, fileName, options = {}) {
         
         result.success = result.visualContent.length > 0;
         
-        console.log(`🔬 PDF Visual: Found ${result.charts.length} charts, ${result.chemicalStructures.length} chemical structures, ${result.diagrams.length} diagrams`);
+        logger.debug(`🔬 PDF Visual: Found ${result.charts.length} charts, ${result.chemicalStructures.length} chemical structures, ${result.diagrams.length} diagrams`);
         
     } catch (error) {
         console.error(`❌ PDF Visual analysis failed: ${error.message}`);

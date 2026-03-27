@@ -13,6 +13,7 @@
  * Only fluff (intros, verbose explanations) is stripped.
  */
 
+const logger = require('../lib/logger');
 const crypto = require('crypto');
 
 const STAGE_IDS = {
@@ -82,7 +83,7 @@ class DocumentExtractionCache {
     }
     
     if (expired > 0) {
-      console.log(`🧹 DocCache: Proactive cleanup removed ${expired} expired entries`);
+      logger.debug(`🧹 DocCache: Proactive cleanup removed ${expired} expired entries`);
     }
   }
 
@@ -108,7 +109,7 @@ class DocumentExtractionCache {
     const entry = this.cache.get(key);
     
     if (entry && Date.now() - entry.timestamp < this.ttl) {
-      console.log(`📦 DocCache HIT: ${contentHash.slice(0, 8)}...`);
+      logger.debug(`📦 DocCache HIT: ${contentHash.slice(0, 8)}...`);
       return entry.result;
     }
     
@@ -138,10 +139,10 @@ class DocumentExtractionCache {
       const deleteCount = Math.floor(this.maxSize * 0.2);
       const keys = Array.from(this.cache.keys()).slice(0, deleteCount);
       keys.forEach(k => this.cache.delete(k));
-      console.log(`📦 DocCache: Pruned ${deleteCount} entries`);
+      logger.debug(`📦 DocCache: Pruned ${deleteCount} entries`);
     }
     
-    console.log(`📦 DocCache SET: ${contentHash.slice(0, 8)}... (${this.cache.size}/${this.maxSize})`);
+    logger.debug(`📦 DocCache SET: ${contentHash.slice(0, 8)}... (${this.cache.size}/${this.maxSize})`);
   }
 
   /**
@@ -162,7 +163,7 @@ class DocumentExtractionCache {
     }
     
     if (expired > 0) {
-      console.log(`🧹 DocCache: Cleaned ${expired} expired entries`);
+      logger.debug(`🧹 DocCache: Cleaned ${expired} expired entries`);
     }
   }
 
@@ -184,7 +185,7 @@ class DocumentExtractionCache {
   clear() {
     const count = this.cache.size;
     this.cache.clear();
-    console.log(`🧹 DocCache: Cleared ${count} entries`);
+    logger.debug(`🧹 DocCache: Cleared ${count} entries`);
     return count;
   }
 }
@@ -220,7 +221,7 @@ class DataPackage {
     };
     
     this.currentStage = stageId;
-    console.log(`📦 DataPackage [${this.id.slice(0,8)}]: WRITE ${stageId}`);
+    logger.debug(`📦 DataPackage [${this.id.slice(0,8)}]: WRITE ${stageId}`);
   }
   
   /**
@@ -232,7 +233,7 @@ class DataPackage {
     const stage = this.stages[stageId];
     if (!stage) return null;
     
-    console.log(`📦 DataPackage [${this.id.slice(0,8)}]: READ ${stageId}`);
+    logger.debug(`📦 DataPackage [${this.id.slice(0,8)}]: READ ${stageId}`);
     return JSON.parse(JSON.stringify(stage.data));
   }
   
@@ -260,7 +261,7 @@ class DataPackage {
   finalize() {
     this.finalized = true;
     this.finalizedAt = new Date().toISOString();
-    console.log(`📦 DataPackage [${this.id.slice(0,8)}]: FINALIZED`);
+    logger.debug(`📦 DataPackage [${this.id.slice(0,8)}]: FINALIZED`);
   }
   
   /**
@@ -405,7 +406,7 @@ class TenantPackageStore {
     }
     
     if (expired > 0) {
-      console.log(`🧹 DataPackage: Cleaned ${expired} expired tenant sessions`);
+      logger.debug(`🧹 DataPackage: Cleaned ${expired} expired tenant sessions`);
     }
   }
   
@@ -423,7 +424,7 @@ class TenantPackageStore {
     }
     
     const safeId = tenantId.slice(0, 8);
-    console.log(`📦 TenantStore [${safeId}...]: Stored package ${pkg.id.slice(0,8)} (${packages.length}/${this.maxPackagesPerTenant})`);
+    logger.debug(`📦 TenantStore [${safeId}...]: Stored package ${pkg.id.slice(0,8)} (${packages.length}/${this.maxPackagesPerTenant})`);
   }
   
   /**
@@ -453,7 +454,7 @@ class TenantPackageStore {
    */
   clearTenant(tenantId) {
     this.tenants.delete(tenantId);
-    console.log(`📦 TenantStore: Cleared tenant ${tenantId}`);
+    logger.debug(`📦 TenantStore: Cleared tenant ${tenantId}`);
   }
   
   /**
@@ -471,7 +472,7 @@ class TenantPackageStore {
    */
   nukeTenant(tenantId) {
     this.tenants.delete(tenantId);
-    console.log(`🗑️ NUKE: Tenant ${tenantId} data cleared - fresh session`);
+    logger.debug(`🗑️ NUKE: Tenant ${tenantId} data cleared - fresh session`);
     return { cleared: true, tenantId };
   }
   
@@ -481,7 +482,7 @@ class TenantPackageStore {
   nukeAll() {
     const count = this.tenants.size;
     this.tenants.clear();
-    console.log(`🗑️ NUKE ALL: ${count} tenants cleared`);
+    logger.debug(`🗑️ NUKE ALL: ${count} tenants cleared`);
     return { cleared: count };
   }
 }

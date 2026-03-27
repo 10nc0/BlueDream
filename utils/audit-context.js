@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 const { AUDIT } = require('../config/constants');
 const { CapsuleChain } = require('./capsule-chain');
 
@@ -23,7 +24,7 @@ function buildCapsuleChain(allMessages, query) {
     
     chain.c3_aggregates(c2.output);
     
-    console.log(`📦 CapsuleChain: ${chain.getTraceCompact()} | ${chain.getTrace()}`);
+    logger.debug(`📦 CapsuleChain: ${chain.getTraceCompact()} | ${chain.getTrace()}`);
     
     return chain;
 }
@@ -106,7 +107,7 @@ function applyQueryAwareFilter(messages, query, options = {}) {
         return false;
     });
     
-    console.log(`🔍 Audit filter: datePatterns=${JSON.stringify(datePatterns)}, keywords=${JSON.stringify(keywords)}, matched=${relevantMsgs.length}/${messages.length}`);
+    logger.debug(`🔍 Audit filter: datePatterns=${JSON.stringify(datePatterns)}, keywords=${JSON.stringify(keywords)}, matched=${relevantMsgs.length}/${messages.length}`);
     
     let contextNote = '';
     let sampledMessages;

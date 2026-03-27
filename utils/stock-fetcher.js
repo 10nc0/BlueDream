@@ -4,6 +4,7 @@
  * Replaced Python/yfinance spawn with direct JS equivalent (same output shape)
  */
 
+const logger = require('../lib/logger');
 const axios = require('axios');
 const YahooFinance = require('yahoo-finance2').default;
 const yahooFinance = new YahooFinance({ suppressNotices: ['ripHistorical', 'yahooSurvey'] });
@@ -230,7 +231,7 @@ function detectPsiEMAKeys(query) {
     keys.push({ type: 'adjective', value: 'analysis' });
     usedWords.add('PSI');
     usedWords.add('EMA');
-    console.log(`🔑 Compound verb detected: "psi ema" → verb + adjective (strong context)`);
+    logger.debug(`🔑 Compound verb detected: "psi ema" → verb + adjective (strong context)`);
   }
   
   // Push KEY 1: Verb (skip if compound already provided one)
@@ -274,12 +275,12 @@ function detectPsiEMAKeys(query) {
   
   // Log with helpful $format hint for limbo junk cases
   if (shouldTrigger) {
-    console.log(`🔑 Ψ-EMA Keys: [${keys.map(k => `${k.type}:${k.value}`).join(', ')}] → ✅ UNLOCK`);
+    logger.debug(`🔑 Ψ-EMA Keys: [${keys.map(k => `${k.type}:${k.value}`).join(', ')}] → ✅ UNLOCK`);
   } else if (keys.length >= 1 && !hasTickerKey) {
     // Has verb/adj but no ticker → limbo junk
-    console.log(`🔑 Ψ-EMA Keys: [${keys.map(k => `${k.type}:${k.value}`).join(', ')}] → ❌ LIMBO JUNK (no ticker - try $TICKER format like $NVDA)`);
+    logger.warn(`🔑 Ψ-EMA Keys: [${keys.map(k => `${k.type}:${k.value}`).join(', ')}] → ❌ LIMBO JUNK (no ticker - try $TICKER format like $NVDA)`);
   } else {
-    console.log(`🔑 Ψ-EMA Keys: [${keys.map(k => `${k.type}:${k.value}`).join(', ')}] → ❌ locked`);
+    logger.warn(`🔑 Ψ-EMA Keys: [${keys.map(k => `${k.type}:${k.value}`).join(', ')}] → ❌ locked`);
   }
   
   return { keys, ticker, shouldTrigger };
@@ -301,7 +302,7 @@ function detectPotentialTickerWithContext(query, excludeWords) {
   if (prepMatch) {
     const candidate = prepMatch[1].toUpperCase();
     if (!COMMON_NON_TICKERS.has(candidate) && !excludeWords.has(candidate) && !COMMON_SHORT_WORDS.has(candidate)) {
-      console.log(`🔧 Context rescue: lowercase "${prepMatch[1]}" → ${candidate} (after preposition)`);
+      logger.debug(`🔧 Context rescue: lowercase "${prepMatch[1]}" → ${candidate} (after preposition)`);
       return candidate;
     }
   }
@@ -557,7 +558,7 @@ function calculateDataAge(endDate) {
 async function extractTickerWithAI(query) {
   if (!query || typeof query !== 'string') return null;
   if (!process.env.NYANBOOK_AI_KEY && !process.env.GROQ_API_KEY) {
-    console.log('⚠️ AI ticker extraction skipped: No NYANBOOK_AI_KEY');
+    logger.warn('⚠️ AI ticker extraction skipped: No NYANBOOK_AI_KEY');
     return null;
   }
   
@@ -606,7 +607,7 @@ EXAMPLES:
     // Parse JSON response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.log(`⚠️ AI ticker extraction: No JSON in response`);
+      logger.warn(`⚠️ AI ticker extraction: No JSON in response`);
       return null;
     }
     
@@ -616,20 +617,20 @@ EXAMPLES:
       const ticker = result.ticker.toUpperCase().replace(/[^A-Z]/g, '');
       // Validate: non-empty, 1-5 chars, only letters
       if (ticker && ticker.length >= 1 && ticker.length <= 8 && /^[A-Z]+$/.test(ticker)) {
-        console.log(`🤖 AI extracted ticker: ${ticker} (${result.confidence}) - ${result.reason}`);
+        logger.debug(`🤖 AI extracted ticker: ${ticker} (${result.confidence}) - ${result.reason}`);
         return { ticker, confidence: result.confidence || 'medium', reason: result.reason || '' };
       } else {
-        console.log(`⚠️ AI returned invalid ticker format: "${result.ticker}" → "${ticker}"`);
+        logger.warn(`⚠️ AI returned invalid ticker format: "${result.ticker}" → "${ticker}"`);
       }
     }
     
     if (result.reason) {
-      console.log(`🤖 AI ticker extraction: No ticker - ${result.reason}`);
+      logger.debug(`🤖 AI ticker extraction: No ticker - ${result.reason}`);
     }
     return null;
     
   } catch (err) {
-    console.log(`⚠️ AI ticker extraction failed: ${err.message}`);
+    logger.warn(`⚠️ AI ticker extraction failed: ${err.message}`);
     return null;
   }
 }
@@ -642,7 +643,7 @@ async function smartDetectTicker(query) {
   // Try rule-based detection first (fast, no API call)
   const ruleTicker = detectStockTicker(query);
   if (ruleTicker) {
-    console.log(`📊 Rule-based ticker: ${ruleTicker}`);
+    logger.debug(`📊 Rule-based ticker: ${ruleTicker}`);
     return ruleTicker;
   }
   

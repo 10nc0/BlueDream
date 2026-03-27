@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
 const { parsePDFHybrid } = require('./pdf-handler');
@@ -12,7 +13,7 @@ async function extractTextFromDocument(base64Data, fileName, options = {}) {
     const buffer = Buffer.from(base64Data, 'base64');
     const ext = (fileName || '').toLowerCase().split('.').pop();
     
-    console.log(`📄 Document parser: Processing ${fileName} (${ext})`);
+    logger.debug(`📄 Document parser: Processing ${fileName} (${ext})`);
     
     try {
         let text = '';
@@ -46,7 +47,7 @@ async function extractTextFromDocument(base64Data, fileName, options = {}) {
         }
         
         const truncated = truncateToTokenLimit(text, fileName);
-        console.log(`📄 Extracted ${text.length} chars → ${truncated.length} chars (after truncation)`);
+        logger.debug(`📄 Extracted ${text.length} chars → ${truncated.length} chars (after truncation)`);
         
         return truncated;
         

@@ -69,6 +69,7 @@ function getTemporalContext() {
     };
 }
 
+const logger = require('../lib/logger');
 const FINANCIAL_PHYSICS_SEED = `
 ===== FINANCIAL PHYSICS EXTENSION (Builds on NYAN PROTOCOL) =====
 In addition to NYAN PROTOCOL (Step 0), apply these specialized rules when analyzing financial documents.
@@ -224,7 +225,7 @@ function quickNonFinancialCheck(extractedData) {
     const isLogData = hasTimestamps && hasIdColumns && !hasFinancialKeywords;
     
     if (isLogData) {
-        console.log('⏭️  Skipped: Non-financial data (log/transaction format detected)');
+        logger.debug('⏭️  Skipped: Non-financial data (log/transaction format detected)');
     }
     
     return isLogData;
@@ -245,7 +246,7 @@ function detectDocumentType(extractedData) {
     const profitKeywords = (text.match(/(laba|profit|margin|ebitda|ebit)/gi) || []).length;
     
     if (incomeKeywords >= 2 && costKeywords >= 2 && profitKeywords >= 1) {
-        console.log(`📋 Document Type: income_statement (income=${incomeKeywords}, cost=${costKeywords}, profit=${profitKeywords})`);
+        logger.debug(`📋 Document Type: income_statement (income=${incomeKeywords}, cost=${costKeywords}, profit=${profitKeywords})`);
         return { type: 'income_statement', confidence: 0.85 };
     }
     
@@ -254,11 +255,11 @@ function detectDocumentType(extractedData) {
     const totalKeywords = (text.match(/(total|subtotal|net|gross)/gi) || []).length;
     
     if (driverKeywords >= 3 && totalKeywords < 2) {
-        console.log(`📋 Document Type: assumptions (drivers=${driverKeywords}, totals=${totalKeywords})`);
+        logger.debug(`📋 Document Type: assumptions (drivers=${driverKeywords}, totals=${totalKeywords})`);
         return { type: 'assumptions', confidence: 0.75 };
     }
     
-    console.log(`📋 Document Type: unknown (trying classification anyway)`);
+    logger.debug(`📋 Document Type: unknown (trying classification anyway)`);
     return { type: 'unknown', confidence: 0.5 };
 }
 
@@ -550,9 +551,9 @@ function validateFinancialPhysics(classifiedRows, docType) {
     
     const valid = variance_pct < 5;
     
-    console.log(`📊 VALIDATION: Income=${income.toFixed(0)}, Cost=${cost.toFixed(0)}, Profit=${profit.toFixed(0)}`);
-    console.log(`📊 EQUATION: ${income.toFixed(0)} − ${cost.toFixed(0)} = ${calculated_profit.toFixed(0)} (stated: ${profit.toFixed(0)})`);
-    console.log(`📊 VARIANCE: ${variance_pct.toFixed(2)}% ${valid ? '✓ PASS' : '✗ FAIL'}`);
+    logger.debug(`📊 VALIDATION: Income=${income.toFixed(0)}, Cost=${cost.toFixed(0)}, Profit=${profit.toFixed(0)}`);
+    logger.debug(`📊 EQUATION: ${income.toFixed(0)} − ${cost.toFixed(0)} = ${calculated_profit.toFixed(0)} (stated: ${profit.toFixed(0)})`);
+    logger.debug(`📊 VARIANCE: ${variance_pct.toFixed(2)}% ${valid ? '✓ PASS' : '✗ FAIL'}`);
     
     return {
         valid,
@@ -637,13 +638,13 @@ function parseTextToRows(text) {
         }
     }
     
-    console.log(`📝 Text Parser: Extracted ${rows.length} potential financial rows from text`);
+    logger.debug(`📝 Text Parser: Extracted ${rows.length} potential financial rows from text`);
     return rows;
 }
 
 // ===== MAIN ENTRY POINT =====
 async function analyzeFinancialDocument(extractedData) {
-    console.log('🧠 FINANCIAL PHYSICS ENGINE: Starting analysis...');
+    logger.debug('🧠 FINANCIAL PHYSICS ENGINE: Starting analysis...');
     
     // GUARD: Skip obvious non-financial data (5-line check)
     if (quickNonFinancialCheck(extractedData)) {
@@ -657,7 +658,7 @@ async function analyzeFinancialDocument(extractedData) {
     
     // TIER 0: Detect document type (15-line check)
     const docClassification = detectDocumentType(extractedData);
-    console.log('');
+    logger.debug('');
     
     // Get all rows from tables or text
     let allRows = [];
@@ -671,11 +672,11 @@ async function analyzeFinancialDocument(extractedData) {
     
     // Detect currency from document context
     const currency = detectCurrency(extractedData);
-    console.log(`💰 Currency detected: ${currency}`);
+    logger.debug(`💰 Currency detected: ${currency}`);
     
     // ===== TEMPORAL VALIDATION: Check for future "Actual" data =====
     const temporal = getTemporalContext();
-    console.log(`📅 Temporal context: ${temporal.formatted}\n`);
+    logger.debug(`📅 Temporal context: ${temporal.formatted}\n`);
     
     const temporalErrors = [];
     const seenErrors = new Set(); // Deduplicate errors
@@ -694,7 +695,7 @@ async function analyzeFinancialDocument(extractedData) {
                     seenErrors.add(errorKey);
                     const warning = `⚠️ TEMPORAL ERROR: "${cellStr.slice(0, 50)}" references year ${year} as Actual (current: ${temporal.year}) — IMPOSSIBLE`;
                     temporalErrors.push(warning);
-                    console.log(warning);
+                    logger.debug(warning);
                 }
             }
         }
@@ -712,7 +713,7 @@ async function analyzeFinancialDocument(extractedData) {
                 seenErrors.add(errorKey);
                 const warning = `⚠️ TEMPORAL ERROR: Column header "${match[0]}" is future year ${year} labeled as Actual`;
                 temporalErrors.push(warning);
-                console.log(warning);
+                logger.debug(warning);
             }
         }
     }
@@ -768,7 +769,7 @@ async function analyzeFinancialDocument(extractedData) {
                         seenErrors.add(errorKey);
                         const warning = `⚠️ TEMPORAL ERROR: Column ${parseInt(colIdx) + 1} has "${year}" + "Actual" in multi-row headers — ${year} data CANNOT be Actual in ${temporal.year}`;
                         temporalErrors.push(warning);
-                        console.log(warning);
+                        logger.debug(warning);
                     }
                 }
             });
@@ -777,17 +778,17 @@ async function analyzeFinancialDocument(extractedData) {
             const futureYearCols = Object.entries(columnYears).filter(([_, y]) => y > temporal.year);
             const actualCols = Object.keys(columnActuals);
             if (futureYearCols.length > 0 || actualCols.length > 0) {
-                console.log(`📊 Table ${tableIdx + 1} header scan: ${futureYearCols.length} future-year columns, ${actualCols.length} Actual-labeled columns`);
+                logger.debug(`📊 Table ${tableIdx + 1} header scan: ${futureYearCols.length} future-year columns, ${actualCols.length} Actual-labeled columns`);
             }
         });
     }
     
     if (temporalErrors.length > 0) {
-        console.log(`🚨 Found ${temporalErrors.length} temporal classification error(s)\n`);
+        logger.debug(`🚨 Found ${temporalErrors.length} temporal classification error(s)\n`);
     }
     
     // TIER 1: Classify each row by nature (+Income, −Cost, =Profit)
-    console.log('🔬 TIER 1: Classifying rows by financial nature...\n');
+    logger.debug('🔬 TIER 1: Classifying rows by financial nature...\n');
     const classifiedRows = [];
     let lowConfidenceCount = 0;
     
@@ -804,7 +805,7 @@ async function analyzeFinancialDocument(extractedData) {
         }
     });
     
-    console.log(`✅ Classified ${classifiedRows.length} rows (${lowConfidenceCount} with low confidence 30-60%)\n`);
+    logger.info(`✅ Classified ${classifiedRows.length} rows (${lowConfidenceCount} with low confidence 30-60%)\n`);
     
     // TIER 3: Validate physics (Income - Cost = Profit)
     const validation = validateFinancialPhysics(classifiedRows, docClassification.type);

@@ -11,6 +11,7 @@
  * Security: Uses hashed session IDs, enforces message size limits
  */
 
+const logger = require('../lib/logger');
 const axios = require('axios');
 const crypto = require('crypto');
 
@@ -69,7 +70,7 @@ class LocalMemoryManager {
    */
   markNyanBooted() {
     this.nyanBooted = true;
-    console.log('🐱 NYAN Protocol booted for session');
+    logger.debug('🐱 NYAN Protocol booted for session');
   }
 
   /**
@@ -204,7 +205,7 @@ Write the summary as natural prose, not a list. Focus on what a helpful assistan
       this.messages = this.messages.slice(-keepCount);
       this.queryCount = 0;
 
-      console.log(`📝 Memory summarized: ${this.currentSummary.length} chars, kept ${keepCount} recent messages`);
+      logger.debug(`📝 Memory summarized: ${this.currentSummary.length} chars, kept ${keepCount} recent messages`);
       
       return this.currentSummary;
     } catch (error) {
@@ -289,7 +290,7 @@ Write the summary as natural prose, not a list. Focus on what a helpful assistan
           content: relevantAtt.extractedText.slice(0, maxChars),
           truncated: relevantAtt.extractedText.length > maxChars
         };
-        console.log(`📎 Side-door: Injecting attachment "${relevantAtt.name}" (${result.attachmentContext.content.length} chars)`);
+        logger.debug(`📎 Side-door: Injecting attachment "${relevantAtt.name}" (${result.attachmentContext.content.length} chars)`);
       }
     }
 
@@ -422,7 +423,7 @@ setInterval(() => {
     }
   }
   if (cleaned > 0) {
-    console.log(`🧹 Auto-cleaned ${cleaned} expired memory sessions (TTL: ${SESSION_TTL_MS / 60000} min)`);
+    logger.debug(`🧹 Auto-cleaned ${cleaned} expired memory sessions (TTL: ${SESSION_TTL_MS / 60000} min)`);
   }
 }, 5 * 60 * 1000);
 
@@ -466,7 +467,7 @@ function cleanupOldSessions(maxAgeMs = 60 * 60 * 1000) {
     );
     if (now - lastActivity > maxAgeMs) {
       sessionMemories.delete(sessionId);
-      console.log(`🧹 Cleaned up stale memory session: ${sessionId}`);
+      logger.debug(`🧹 Cleaned up stale memory session: ${sessionId}`);
     }
   }
 }

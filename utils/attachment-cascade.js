@@ -1,3 +1,4 @@
+const logger = require('../lib/logger');
 const { parsePDFHybrid, analyzePDFVisualContent, groqWithRetry } = require('./pdf-handler');
 const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
@@ -54,7 +55,7 @@ function intelligentChunking(text, maxTokens = 1000) {
         chunks.push(currentChunk.trim());
     }
     
-    console.log(`📦 Chunking: Split into ${chunks.length} chunks (max ${maxTokens} tokens each)`);
+    logger.debug(`📦 Chunking: Split into ${chunks.length} chunks (max ${maxTokens} tokens each)`);
     return chunks;
 }
 
@@ -116,7 +117,7 @@ function buildMultiDocContext(extractedItems) {
         context = indexHeader + context;
     }
     
-    console.log(`📦 Multi-Doc Merge: Combined ${extractedItems.length} documents into unified context`);
+    logger.debug(`📦 Multi-Doc Merge: Combined ${extractedItems.length} documents into unified context`);
     return context.trim();
 }
 
@@ -280,7 +281,7 @@ function extractFormulaAndKnownName(text) {
     if (knownName) {
         const garbageNames = /^(not\s+applicable|n\/?a|unknown|none|unidentified|not\s+available|not\s+specified|no\s+name|no\s+data|image|photo|picture|diagram|figure|scientific\s+data|general|visual|text|document|file)$/i;
         if (garbageNames.test(knownName.trim())) {
-            console.log(`🧪 extractFormulaAndKnownName: Rejected garbage name "${knownName}"`);
+            logger.debug(`🧪 extractFormulaAndKnownName: Rejected garbage name "${knownName}"`);
             knownName = null;
         }
     }
@@ -432,7 +433,7 @@ function classifyScholasticDomain(description) {
     
     const activeDomains = sorted.filter(([, s]) => s.score > 0);
     if (activeDomains.length > 1) {
-        console.log(`📚 Scholastic signals: ${activeDomains.map(([d, s]) => `${d}(S:${s.subjectHits}[${s.matchedSubjects.join(',')}] T:${s.toolHits}[${s.matchedTools.join(',')}] =${s.score.toFixed(1)})`).join(' | ')}`);
+        logger.debug(`📚 Scholastic signals: ${activeDomains.map(([d, s]) => `${d}(S:${s.subjectHits}[${s.matchedSubjects.join(',')}] T:${s.toolHits}[${s.matchedTools.join(',')}] =${s.score.toFixed(1)})`).join(' | ')}`);
     }
     
     if (top[1].score === 0) {
@@ -451,7 +452,7 @@ function classifyScholasticDomain(description) {
         // Override only when: math has subject hits AND chemistry subject hits are weak (<=2)
         // This protects legitimate chemistry (molecular, benzene, reagent etc. = high subject hits)
         if (mathScore.subjectHits > 0 && chemScore.subjectHits <= 2) {
-            console.log(`📚 Scholastic OVERRIDE: chemistry → pure-math (math subjects=${mathScore.subjectHits}, chem subjects=${chemScore.subjectHits} — chemistry too weak to dominate)`);
+            logger.debug(`📚 Scholastic OVERRIDE: chemistry → pure-math (math subjects=${mathScore.subjectHits}, chem subjects=${chemScore.subjectHits} — chemistry too weak to dominate)`);
             const confidence = Math.min(0.99, 0.5 + mathScore.subjectHits * 0.1);
             return {
                 domain: 'pure-math',
@@ -524,7 +525,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         knownCompoundName = knownName;
     }
     
-    console.log(`🔬 Chemistry Enrichment: Running parallel DDG queries...${knownCompoundName ? ` (compound hint: ${knownCompoundName})` : ''}`);
+    logger.debug(`🔬 Chemistry Enrichment: Running parallel DDG queries...${knownCompoundName ? ` (compound hint: ${knownCompoundName})` : ''}`);
     
     // Build parallel promises
     const promises = [];
@@ -532,7 +533,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
     // Query 1: Formula-based search
     if (formula) {
         const formulaQuery = `${formula} compound molecule chemical`;
-        console.log(`🔬 DDG Query 1: "${formulaQuery}"`);
+        logger.debug(`🔬 DDG Query 1: "${formulaQuery}"`);
         
         const formulaPromise = axios.get(`https://api.duckduckgo.com/?${new URLSearchParams({
             q: formulaQuery,
@@ -542,7 +543,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
             t: 'nyanbook'
         })}`, { timeout: 5000 }).then(res => {
             if (res.data.AbstractText) {
-                console.log(`🔬 DDG Query 1: ✓ Found context for formula`);
+                logger.debug(`🔬 DDG Query 1: ✓ Found context for formula`);
                 return {
                     type: 'formula',
                     name: res.data.Heading || '',
@@ -553,7 +554,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
             }
             return null;
         }).catch(err => {
-            console.log(`🔬 DDG Query 1: Failed - ${err.message}`);
+            logger.debug(`🔬 DDG Query 1: Failed - ${err.message}`);
             return null;
         });
         
@@ -574,7 +575,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         
         if (structureTerms.length >= 2) {
             const structureQuery = `${structureTerms.join(' ')} compound molecule`;
-            console.log(`🔬 DDG Query 2: "${structureQuery}"`);
+            logger.debug(`🔬 DDG Query 2: "${structureQuery}"`);
             
             const structurePromise = axios.get(`https://api.duckduckgo.com/?${new URLSearchParams({
                 q: structureQuery,
@@ -584,7 +585,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
                 t: 'nyanbook'
             })}`, { timeout: 5000 }).then(res => {
                 if (res.data.AbstractText) {
-                    console.log(`🔬 DDG Query 2: ✓ Found context for structure`);
+                    logger.debug(`🔬 DDG Query 2: ✓ Found context for structure`);
                     return {
                         type: 'structure',
                         name: res.data.Heading || '',
@@ -595,7 +596,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
                 }
                 return null;
             }).catch(err => {
-                console.log(`🔬 DDG Query 2: Failed - ${err.message}`);
+                logger.debug(`🔬 DDG Query 2: Failed - ${err.message}`);
                 return null;
             });
             
@@ -611,7 +612,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         // Extra safety: reject verbose phrases that slipped through extraction
         const verboseCheck = /^(the\s+(compound|structure|molecule)|this|it|appears\s+to|seems\s+to|likely|possibly|probably|compound\s+appears)/i;
         if (verboseCheck.test(cleanName)) {
-            console.log(`🔬 DDG Query 3: Skipped - verbose phrase detected: "${cleanName}"`);
+            logger.debug(`🔬 DDG Query 3: Skipped - verbose phrase detected: "${cleanName}"`);
             cleanName = null;
         }
         
@@ -634,7 +635,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         const fullName = chemicalNameMap[cleanName.toLowerCase()] || null;
         const queryName = fullName || cleanName;
         
-        console.log(`🔬 DDG Query 3: "${queryName}"${fullName ? ` (expanded from ${cleanName})` : ''}`);
+        logger.debug(`🔬 DDG Query 3: "${queryName}"${fullName ? ` (expanded from ${cleanName})` : ''}`);
         
         const compoundPromise = axios.get(`https://api.duckduckgo.com/?${new URLSearchParams({
             q: queryName,
@@ -644,7 +645,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
             t: 'nyanbook'
         })}`, { timeout: 5000 }).then(async res => {
             if (res.data.AbstractText) {
-                console.log(`🔬 DDG Query 3: ✓ Found context for compound name`);
+                logger.debug(`🔬 DDG Query 3: ✓ Found context for compound name`);
                 return {
                     type: 'compound',
                     name: res.data.Heading || cleanName,
@@ -655,7 +656,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
             }
             // Fallback: try abbreviation if we expanded
             if (fullName && cleanName !== queryName) {
-                console.log(`🔬 DDG Query 3b: Trying "${cleanName}" as fallback`);
+                logger.debug(`🔬 DDG Query 3b: Trying "${cleanName}" as fallback`);
                 const fallbackRes = await axios.get(`https://api.duckduckgo.com/?${new URLSearchParams({
                     q: cleanName,
                     format: 'json',
@@ -664,7 +665,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
                     t: 'nyanbook'
                 })}`, { timeout: 5000 });
                 if (fallbackRes.data.AbstractText) {
-                    console.log(`🔬 DDG Query 3b: ✓ Found context via fallback`);
+                    logger.debug(`🔬 DDG Query 3b: ✓ Found context via fallback`);
                     return {
                         type: 'compound',
                         name: fallbackRes.data.Heading || cleanName,
@@ -676,7 +677,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
             }
             return null;
         }).catch(err => {
-            console.log(`🔬 DDG Query 3: Failed - ${err.message}`);
+            logger.debug(`🔬 DDG Query 3: Failed - ${err.message}`);
             return null;
         });
         
@@ -723,7 +724,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
                 .trim()
                 .replace(/\s+/g, '_'); // Replace spaces with underscores
             
-            console.log(`📚 Wikipedia API: Fetching full context for "${cleanWikiName}"...`);
+            logger.debug(`📚 Wikipedia API: Fetching full context for "${cleanWikiName}"...`);
             
             try {
                 // Use Action API with prop=extracts for longer content (up to 2000 chars)
@@ -764,15 +765,15 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
                             source: page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, '_'))}`,
                             type: 'standard'
                         };
-                        console.log(`📚 Wikipedia API: ✓ Retrieved ${wikipediaContext.extract.length} chars for "${wikipediaContext.title}"`);
+                        logger.debug(`📚 Wikipedia API: ✓ Retrieved ${wikipediaContext.extract.length} chars for "${wikipediaContext.title}"`);
                     } else if (page.missing) {
-                        console.log(`📚 Wikipedia API: Page not found for "${cleanWikiName}"`);
+                        logger.debug(`📚 Wikipedia API: Page not found for "${cleanWikiName}"`);
                     } else {
-                        console.log(`📚 Wikipedia API: No extract for "${cleanWikiName}"`);
+                        logger.debug(`📚 Wikipedia API: No extract for "${cleanWikiName}"`);
                     }
                 }
             } catch (wikiErr) {
-                console.log(`📚 Wikipedia API: Failed - ${wikiErr.message}`);
+                logger.debug(`📚 Wikipedia API: Failed - ${wikiErr.message}`);
                 // Fallback: Wikipedia context remains null, DDG context still available
             }
         }
@@ -804,13 +805,13 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         const fallbackName = knownCompoundName || formula;
         const isGenericFallback = /^(unknown|unverified|unidentified|puzzle|grid|geometric|figure|pattern|more related)/i.test(fallbackName);
         if (!isGenericFallback && !options.suppressTemplate) {
-            console.log(`🧪 Chemistry Enrichment: DDG/Wikipedia failed, using template fallback for "${fallbackName}"`);
+            logger.debug(`🧪 Chemistry Enrichment: DDG/Wikipedia failed, using template fallback for "${fallbackName}"`);
             contextText += createChemistryEnrichmentTemplate(fallbackName);
             contextText += `\n### 🔬 Compound Analysis (${fallbackName}):\n`;
             contextText += `Vision identified this compound but external verification was unavailable.\n`;
             contextText += `Use your chemistry knowledge to provide the information requested above.\n`;
         } else {
-            console.log(`🧪 Chemistry Enrichment: Skipping template for generic/suppressed name "${fallbackName}"`);
+            logger.debug(`🧪 Chemistry Enrichment: Skipping template for generic/suppressed name "${fallbackName}"`);
         }
     }
     
@@ -847,7 +848,7 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         const canonicalMatch = results.compoundContext.description.match(/C\d+H\d+(?:O\d*)?(?:N\d*)?/);
         if (canonicalMatch) {
             verifiedCompound.canonicalFormula = canonicalMatch[0];
-            console.log(`🔬 Canonical formula from DDG: ${canonicalMatch[0]}`);
+            logger.debug(`🔬 Canonical formula from DDG: ${canonicalMatch[0]}`);
         }
     } else if (results.formulaContext) {
         verifiedCompound = {
@@ -860,11 +861,11 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         const canonicalMatch = results.formulaContext.description.match(/C\d+H\d+(?:O\d*)?(?:N\d*)?/);
         if (canonicalMatch) {
             verifiedCompound.canonicalFormula = canonicalMatch[0];
-            console.log(`🔬 Canonical formula from DDG: ${canonicalMatch[0]}`);
+            logger.debug(`🔬 Canonical formula from DDG: ${canonicalMatch[0]}`);
         }
     }
     
-    console.log(`🔬 Chemistry Enrichment: Complete (formula: ${results.formulaContext ? '✓' : '✗'}, structure: ${results.structureContext ? '✓' : '✗'}, compound: ${results.compoundContext ? '✓' : '✗'}, wikipedia: ${wikipediaContext ? '✓' : '✗'})`);
+    logger.debug(`🔬 Chemistry Enrichment: Complete (formula: ${results.formulaContext ? '✓' : '✗'}, structure: ${results.structureContext ? '✓' : '✗'}, compound: ${results.compoundContext ? '✓' : '✗'}, wikipedia: ${wikipediaContext ? '✓' : '✗'})`);
     
     // Return enrichment data - context will be cleared after Groq finishes
     return {
@@ -891,7 +892,7 @@ async function processChemistryContent(visionObservations) {
         if (obs.contentType !== 'chemical') return false;
         const scholastic = classifyScholasticDomain(obs.description);
         if (scholastic.domain !== 'chemistry' && scholastic.domain !== 'general') {
-            console.log(`🧪 Chemistry Pipeline: Rejected observation — scholastic domain is "${scholastic.domain}" not chemistry`);
+            logger.debug(`🧪 Chemistry Pipeline: Rejected observation — scholastic domain is "${scholastic.domain}" not chemistry`);
             return false;
         }
         return true;
@@ -901,7 +902,7 @@ async function processChemistryContent(visionObservations) {
         return null;
     }
     
-    console.log(`🧪 Chemistry Pipeline: Processing ${chemicalObservations.length} chemical observation(s)`);
+    logger.debug(`🧪 Chemistry Pipeline: Processing ${chemicalObservations.length} chemical observation(s)`);
     
     // Combine all descriptions for extraction
     const allDescriptions = chemicalObservations.map(obs => obs.description || '').join('\n\n');
@@ -910,11 +911,11 @@ async function processChemistryContent(visionObservations) {
     const { formula, knownName } = extractFormulaAndKnownName(allDescriptions);
     
     if (!formula && !knownName) {
-        console.log(`🧪 Chemistry Pipeline: No formula or compound name detected`);
+        logger.debug(`🧪 Chemistry Pipeline: No formula or compound name detected`);
         return null;
     }
     
-    console.log(`🧪 Chemistry Pipeline: Formula=${formula || 'unknown'}, VisionName=${knownName || 'unknown'}`);
+    logger.debug(`🧪 Chemistry Pipeline: Formula=${formula || 'unknown'}, VisionName=${knownName || 'unknown'}`);
     
     // ===== STAGE 0: SETTLED SCIENCE CHECK (instant, no DDG) =====
     const settledScience = lookupSettledScience(formula);
@@ -944,7 +945,7 @@ async function processChemistryContent(visionObservations) {
             const finalName = isKnownIsomer && knownName ? knownName : settledScience.name;
             const isomerNote = isKnownIsomer && knownName ? ` (Vision identified isomer: ${knownName})` : '';
             
-            console.log(`⚡ Stage 0: SETTLED SCIENCE → ${finalName} (0.4s, 99% confidence)${isomerNote}`);
+            logger.debug(`⚡ Stage 0: SETTLED SCIENCE → ${finalName} (0.4s, 99% confidence)${isomerNote}`);
             stage = 'stage-0-settled';
             
             compoundInfo = {
@@ -960,8 +961,8 @@ async function processChemistryContent(visionObservations) {
             
         } else {
             // ===== STAGE 0.5: CONFLICT DETECTED (Vision ≠ Settled) =====
-            console.log(`🚨 Stage 0.5: CONFLICT → Vision="${knownName}" vs Settled="${settledScience.name}"`);
-            console.log(`🔍 Stage 0.5: Triggering DDG arbitration...`);
+            logger.debug(`🚨 Stage 0.5: CONFLICT → Vision="${knownName}" vs Settled="${settledScience.name}"`);
+            logger.debug(`🔍 Stage 0.5: Triggering DDG arbitration...`);
             stage = 'stage-0.5-conflict';
             
             // Run DDG to arbitrate the conflict
@@ -972,7 +973,7 @@ async function processChemistryContent(visionObservations) {
                 const visionWins = ddgName.includes(visionNameLower) || visionNameLower.includes(ddgName.split(' ')[0]);
                 
                 if (visionWins) {
-                    console.log(`✅ Stage 0.5: DDG ARBITRATION → Vision wins (${knownName})`);
+                    logger.info(`✅ Stage 0.5: DDG ARBITRATION → Vision wins (${knownName})`);
                     compoundInfo = {
                         name: knownName,
                         confidence: 0.85,
@@ -982,7 +983,7 @@ async function processChemistryContent(visionObservations) {
                         note: `Settled science suggested "${settledScience.name}" but DDG verified Vision claim`
                     };
                 } else {
-                    console.log(`✅ Stage 0.5: DDG ARBITRATION → Settled wins (${settledScience.name})`);
+                    logger.info(`✅ Stage 0.5: DDG ARBITRATION → Settled wins (${settledScience.name})`);
                     compoundInfo = {
                         name: settledScience.name,
                         confidence: 0.95,
@@ -994,7 +995,7 @@ async function processChemistryContent(visionObservations) {
                 }
             } else {
                 // DDG inconclusive - trust settled science with lower confidence
-                console.log(`⚠️ Stage 0.5: DDG inconclusive → Defaulting to Settled (${settledScience.name})`);
+                logger.warn(`⚠️ Stage 0.5: DDG inconclusive → Defaulting to Settled (${settledScience.name})`);
                 compoundInfo = {
                     name: settledScience.name,
                     confidence: 0.75,
@@ -1007,7 +1008,7 @@ async function processChemistryContent(visionObservations) {
         }
     } else {
         // ===== STAGE 1+: DISCOVERY CASCADE (no settled science match) =====
-        console.log(`🔬 Stage 1+: DISCOVERY CASCADE → No settled science for ${formula || knownName}`);
+        logger.debug(`🔬 Stage 1+: DISCOVERY CASCADE → No settled science for ${formula || knownName}`);
         stage = 'stage-1-discovery';
         
         // Full DDG enrichment for novel compounds
@@ -1019,7 +1020,7 @@ async function processChemistryContent(visionObservations) {
                 confidence: 0.85,
                 matchType: 'ddg-discovered'
             };
-            console.log(`✅ Stage 1: DDG DISCOVERED → ${compoundInfo.name} (85% confidence)`);
+            logger.info(`✅ Stage 1: DDG DISCOVERED → ${compoundInfo.name} (85% confidence)`);
         } else if (knownName) {
             compoundInfo = {
                 name: `${knownName} (unverified)`,
@@ -1028,7 +1029,7 @@ async function processChemistryContent(visionObservations) {
                 matchedFormula: formula,
                 matchType: 'vision-hypothesis'
             };
-            console.log(`⚠️ Stage 1: UNVERIFIED → ${knownName} (50% confidence, needs human verification)`);
+            logger.warn(`⚠️ Stage 1: UNVERIFIED → ${knownName} (50% confidence, needs human verification)`);
         }
     }
     
@@ -1163,7 +1164,7 @@ async function executeExtractionCascade(buffer, fileType, fileName, options = {}
     const cached = globalDocCache.get(cacheKey, tenantId);
     
     if (cached) {
-        console.log(`📦 Cache HIT for ${fileName} (${cacheKey.slice(0, 8)}...)`);
+        logger.debug(`📦 Cache HIT for ${fileName} (${cacheKey.slice(0, 8)}...)`);
         return { ...cached, fromCache: true };
     }
     
@@ -1180,8 +1181,8 @@ async function executeExtractionCascade(buffer, fileType, fileName, options = {}
         fromCache: false
     };
     
-    console.log(`🔄 Cascade: Starting extraction for ${fileName} (${fileType.type})`);
-    console.log(`🔄 Cascade: Pipeline = [${pipeline.map(p => p.tool).join(' → ')}]`);
+    logger.debug(`🔄 Cascade: Starting extraction for ${fileName} (${fileType.type})`);
+    logger.debug(`🔄 Cascade: Pipeline = [${pipeline.map(p => p.tool).join(' → ')}]`);
     
     const cascadeOptions = { ...options };
     
@@ -1192,7 +1193,7 @@ async function executeExtractionCascade(buffer, fileType, fileName, options = {}
         }
         
         try {
-            console.log(`⚙️ Cascade: Executing ${step.tool} (tier ${step.tier})`);
+            logger.debug(`⚙️ Cascade: Executing ${step.tool} (tier ${step.tier})`);
             const stepResult = await executeTool(step.tool, buffer, fileName, cascadeOptions);
             
             if (stepResult.success) {
@@ -1205,17 +1206,17 @@ async function executeExtractionCascade(buffer, fileType, fileName, options = {}
                 
                 if (stepResult.data?.embeddedImages) {
                     cascadeOptions.extractedImages = stepResult.data.embeddedImages;
-                    console.log(`📷 Cascade: Captured ${stepResult.data.embeddedImages.length} images for vision analysis`);
+                    logger.debug(`📷 Cascade: Captured ${stepResult.data.embeddedImages.length} images for vision analysis`);
                 }
                 
-                console.log(`✅ Cascade: ${step.tool} succeeded`);
+                logger.info(`✅ Cascade: ${step.tool} succeeded`);
             } else {
                 result.cascadeLog.push({ tool: step.tool, success: false, error: stepResult.error });
-                console.log(`⚠️ Cascade: ${step.tool} failed - ${stepResult.error}`);
+                logger.warn(`⚠️ Cascade: ${step.tool} failed - ${stepResult.error}`);
             }
         } catch (error) {
             result.cascadeLog.push({ tool: step.tool, success: false, error: error.message });
-            console.log(`❌ Cascade: ${step.tool} error - ${error.message}`);
+            logger.warn(`❌ Cascade: ${step.tool} error - ${error.message}`);
         }
     }
     
@@ -1283,10 +1284,10 @@ async function extractPDFText(buffer, fileName) {
                 const financialAnalysis = await analyzeFinancialDocument({ text: pdfData.text });
                 if (financialAnalysis && financialAnalysis.documentType?.type !== 'non_financial') {
                     pdfData.financialAnalysis = financialAnalysis;
-                    console.log(`📊 PDF Financial Physics: ${financialAnalysis.documentType.type} (${financialAnalysis.classifications?.length || 0} items classified)`);
+                    logger.debug(`📊 PDF Financial Physics: ${financialAnalysis.documentType.type} (${financialAnalysis.classifications?.length || 0} items classified)`);
                 }
             } catch (finErr) {
-                console.log(`⚠️ PDF Financial Physics skipped: ${finErr.message}`);
+                logger.warn(`⚠️ PDF Financial Physics skipped: ${finErr.message}`);
             }
         }
         
@@ -1477,10 +1478,10 @@ async function extractExcelData(buffer, fileName) {
         };
         
         if (totalComputedValues > 0) {
-            console.log(`✅ Excel: ${totalComputedValues} pre-computed values (cached by Excel)`);
+            logger.info(`✅ Excel: ${totalComputedValues} pre-computed values (cached by Excel)`);
         }
         if (totalFormulaWarnings.length > 0) {
-            console.log(`⚠️ Excel: ${totalFormulaWarnings.length} formulas without cached values (shown as text)`);
+            logger.warn(`⚠️ Excel: ${totalFormulaWarnings.length} formulas without cached values (shown as text)`);
         }
         
         const excelData = { tables: sheets, type: 'excel', enhanced: true, stats: excelStats };
@@ -1489,11 +1490,11 @@ async function extractExcelData(buffer, fileName) {
         try {
             const financialAnalysis = await analyzeFinancialDocument({ tables: sheets });
             if (financialAnalysis && financialAnalysis.documentType?.type !== 'non_financial') {
-                console.log(`🧠 Financial Physics: ${financialAnalysis.documentType.type} (${(financialAnalysis.documentType.confidence * 100).toFixed(1)}%)`);
+                logger.debug(`🧠 Financial Physics: ${financialAnalysis.documentType.type} (${(financialAnalysis.documentType.confidence * 100).toFixed(1)}%)`);
                 excelData.financialAnalysis = financialAnalysis;
             }
         } catch (physicsErr) {
-            console.log(`⚠️ Financial physics skipped: ${physicsErr.message}`);
+            logger.warn(`⚠️ Financial physics skipped: ${physicsErr.message}`);
         }
         
         return { success: true, data: excelData };
@@ -1531,11 +1532,11 @@ async function extractWordImages(buffer, options = {}) {
                 })
             });
         } catch (mammothErr) {
-            console.log(`⚠️ Mammoth convertToHtml failed: ${mammothErr.message}`);
+            logger.warn(`⚠️ Mammoth convertToHtml failed: ${mammothErr.message}`);
         }
         
         if (images.length === 0) {
-            console.log('🔍 Mammoth found no images, trying direct DOCX media extraction...');
+            logger.debug('🔍 Mammoth found no images, trying direct DOCX media extraction...');
             const JSZip = require('jszip');
             const zip = await JSZip.loadAsync(buffer);
             
@@ -1561,7 +1562,7 @@ async function extractWordImages(buffer, options = {}) {
                             size: imgBuffer.length,
                             source: 'docx-media-folder'
                         });
-                        console.log(`📷 Extracted from word/media: ${path} (${imgBuffer.length} bytes)`);
+                        logger.debug(`📷 Extracted from word/media: ${path} (${imgBuffer.length} bytes)`);
                     }
                 }
             }
@@ -1571,7 +1572,7 @@ async function extractWordImages(buffer, options = {}) {
             return { success: false, error: 'No embedded images found in document' };
         }
         
-        console.log(`📷 Extracted ${images.length} embedded image(s) from Word document`);
+        logger.debug(`📷 Extracted ${images.length} embedded image(s) from Word document`);
         
         options.extractedImages = images;
         return { 
@@ -1592,7 +1593,7 @@ async function analyzeDocumentVisuals(buffer, fileName, options = {}) {
     const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
     
     if (!PLAYGROUND_GROQ_VISION_TOKEN) {
-        console.log('⚠️ PLAYGROUND_GROQ_VISION_TOKEN not configured - skipping document visual analysis');
+        logger.warn('⚠️ PLAYGROUND_GROQ_VISION_TOKEN not configured - skipping document visual analysis');
         return { success: false, error: 'Vision token not configured' };
     }
     
@@ -1601,7 +1602,7 @@ async function analyzeDocumentVisuals(buffer, fileName, options = {}) {
     if (images.length === 0) {
         const ext = (fileName || '').toLowerCase().split('.').pop();
         if (['pptx', 'ppt', 'xlsx', 'xls'].includes(ext)) {
-            console.log(`🔬 Doc Visual: Converting ${fileName} to images for analysis...`);
+            logger.debug(`🔬 Doc Visual: Converting ${fileName} to images for analysis...`);
             const convertedImages = await convertDocumentToImages(buffer, fileName);
             if (convertedImages.length > 0) {
                 images.push(...convertedImages);
@@ -1613,7 +1614,7 @@ async function analyzeDocumentVisuals(buffer, fileName, options = {}) {
         return { success: false, error: 'No images to analyze' };
     }
     
-    console.log(`🔬 Doc Visual: Analyzing ${images.length} image(s) with Groq Vision...`);
+    logger.debug(`🔬 Doc Visual: Analyzing ${images.length} image(s) with Groq Vision...`);
     
     const visualDescriptions = [];
     const axios = require('axios');
@@ -1687,7 +1688,7 @@ Be specific and technical. This is for scientific document analysis.`
                 if (/\b(chart|graph|plot|histogram)\b/i.test(descLow)) contentType = 'chart';
                 else if (/\b(diagram|schematic|flowchart)\b/i.test(descLow)) contentType = 'diagram';
             }
-            console.log(`📚 Scholastic: ${scholastic.domain} (confidence: ${scholastic.confidence}, subject: ${scholastic.subjectHits || 0}, tool: ${scholastic.toolHits || 0})`);
+            logger.debug(`📚 Scholastic: ${scholastic.domain} (confidence: ${scholastic.confidence}, subject: ${scholastic.subjectHits || 0}, tool: ${scholastic.toolHits || 0})`);
             
             visualDescriptions.push({
                 index: i + 1,
@@ -1695,7 +1696,7 @@ Be specific and technical. This is for scientific document analysis.`
                 description
             });
             
-            console.log(`✅ Analyzed image ${i + 1}/${maxImages} (${contentType})`);
+            logger.info(`✅ Analyzed image ${i + 1}/${maxImages} (${contentType})`);
             
         } catch (error) {
             console.error(`❌ Failed to analyze image ${i + 1}: ${error.message}`);
@@ -1742,12 +1743,12 @@ async function convertDocumentToImages(buffer, fileName) {
     
     try {
         if (['xlsx', 'xls'].includes(ext)) {
-            console.log(`📊 Excel file detected - extracting charts/images not directly supported, relying on table data`);
+            logger.debug(`📊 Excel file detected - extracting charts/images not directly supported, relying on table data`);
             return images;
         }
         
         if (['pptx', 'ppt'].includes(ext)) {
-            console.log(`📽️ PowerPoint file detected - attempting slide extraction via JSZip...`);
+            logger.debug(`📽️ PowerPoint file detected - attempting slide extraction via JSZip...`);
             const JSZip = require('jszip');
             const zip = await JSZip.loadAsync(buffer);
             
@@ -1768,7 +1769,7 @@ async function convertDocumentToImages(buffer, fileName) {
                         const contentType = ext === 'png' ? 'image/png' : 
                                            ext === 'gif' ? 'image/gif' : 'image/jpeg';
                         images.push({ base64, contentType, size: imgBuffer.length });
-                        console.log(`📷 Extracted PPT image: ${path}`);
+                        logger.debug(`📷 Extracted PPT image: ${path}`);
                     } catch (e) {
                         console.error(`Failed to extract ${path}: ${e.message}`);
                     }
@@ -1823,7 +1824,7 @@ async function extractPDFVisualContent(buffer, fileName, options = {}) {
         
         if (isImage) {
             // Handle standalone images directly
-            console.log(`🖼️ Image Visual: Analyzing ${fileName} with Groq Vision...`);
+            logger.debug(`🖼️ Image Visual: Analyzing ${fileName} with Groq Vision...`);
             const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN;
             
             if (!PLAYGROUND_GROQ_VISION_TOKEN) {
@@ -1960,7 +1961,7 @@ Respond with a clear description of what you observe.`;
             }
         }
         
-        console.log(`📚 Scholastic: ${scholastic.domain} (confidence: ${scholastic.confidence}, subject: ${scholastic.subjectHits || 0}, tool: ${scholastic.toolHits || 0}) → ${contentType_result}`);
+        logger.debug(`📚 Scholastic: ${scholastic.domain} (confidence: ${scholastic.confidence}, subject: ${scholastic.subjectHits || 0}, tool: ${scholastic.toolHits || 0}) → ${contentType_result}`);
         
         return {
             description,
@@ -2180,7 +2181,7 @@ async function processDocumentForAI(buffer, fileName, mimeType, options = {}) {
             extension: (fileName || '').split('.').pop() || 'txt',
             mime: mimeType || 'text/plain'
         };
-        console.log(`📄 Processing document: ${fileName} (type: ${fileType.type})`);
+        logger.debug(`📄 Processing document: ${fileName} (type: ${fileType.type})`);
         
         // HARMONIZED: Pass tenantId through for cache scoping
         const result = await executeExtractionCascade(dataBuffer, fileType, fileName, { 

@@ -11,6 +11,7 @@
  * keeping NYAN Protocol pure (reasoning only) and reducing code bloat.
  */
 
+const logger = require('../lib/logger');
 const { detectStockTicker, detectPsiEMAKeys, smartDetectTicker, fetchStockPrices, calculateDataAge } = require('./stock-fetcher');
 const { getPsiEMAContext, PsiEMADashboard, PSI_EMA_DOCUMENTATION } = require('./psi-EMA');
 const { getFinancialPhysicsSeed } = require('./financial-physics');
@@ -138,7 +139,7 @@ function extractMainQuery(text) {
   const mainSentences = [...new Set([...firstN, ...lastN])];
   const mainQuery = mainSentences.join(' ');
   
-  console.log(`📦 BLOB DETECTED: ${text.length} chars, ${sentences.length} sentences → extracted ${mainSentences.length} main sentences for classification`);
+  logger.debug(`📦 BLOB DETECTED: ${text.length} chars, ${sentences.length} sentences → extracted ${mainSentences.length} main sentences for classification`);
   
   return { mainQuery, isBlob: true, fullText: text };
 }
@@ -246,7 +247,7 @@ async function preflightRouter(options) {
     // Guard: seed-metric CALCULATION intent takes priority over design/code explanation
     const designContext = getSystemContextForDesign(classificationQuery);
     if (designContext && !detectSeedMetricIntent(classificationQuery)) {
-      console.log(`🔧 Preflight: Design question detected → injecting source code for: ${designContext.topics.join(', ')}`);
+      logger.debug(`🔧 Preflight: Design question detected → injecting source code for: ${designContext.topics.join(', ')}`);
       result.mode = 'design';
       result.routingFlags.isDesignQuestion = true;
       result.codeContext = designContext.systemMessage;
@@ -259,7 +260,7 @@ async function preflightRouter(options) {
     const isPsiEmaIdentity = !hasTicker && PSI_EMA_IDENTITY_PATTERNS.some(p => p.test(classificationQuery.trim()));
     
     if (isPsiEmaIdentity) {
-      console.log(`📚 Preflight: Ψ-EMA identity query detected → injecting documentation`);
+      logger.debug(`📚 Preflight: Ψ-EMA identity query detected → injecting documentation`);
       result.mode = 'psi-ema-identity';
       result.routingFlags.isPsiEmaIdentity = true;
       result.psiEmaIdentityContext = PSI_EMA_DOCUMENTATION;
@@ -274,7 +275,7 @@ async function preflightRouter(options) {
       const cryptoParts = rawTicker.match(/^([A-Z]{2,6})(USDT?)$/);
       if (cryptoParts) {
         result.ticker = `${cryptoParts[1]}-USD`;
-        console.log(`₿ Preflight: Crypto cross-rate ${rawTicker} → ${result.ticker} (psi-ema)`);
+        logger.debug(`₿ Preflight: Crypto cross-rate ${rawTicker} → ${result.ticker} (psi-ema)`);
       }
     }
 
@@ -287,18 +288,18 @@ async function preflightRouter(options) {
       result.routingFlags.usesForex = true;
       
       if (forexPair) {
-        console.log(`💱 Preflight: Detected forex pair ${forexPair.base}/${forexPair.quote}`);
+        logger.debug(`💱 Preflight: Detected forex pair ${forexPair.base}/${forexPair.quote}`);
         
         try {
           result.forexData = await fetchForexRate(forexPair.base, forexPair.quote);
           result.forexContext = buildForexContext(result.forexData);
-          console.log(`💱 Preflight: Fetched ${forexPair.pair} rate: ${result.forexData.rate}`);
+          logger.debug(`💱 Preflight: Fetched ${forexPair.pair} rate: ${result.forexData.rate}`);
         } catch (forexErr) {
-          console.log(`⚠️ Preflight: Forex fetch failed: ${forexErr.message}`);
+          logger.warn(`⚠️ Preflight: Forex fetch failed: ${forexErr.message}`);
           result.error = `Forex fetch failed: ${forexErr.message}`;
         }
       } else {
-        console.log(`💱 Preflight: Forex query detected but no specific pair extracted`);
+        logger.debug(`💱 Preflight: Forex query detected but no specific pair extracted`);
       }
     }
     // 1. SEED METRIC: Check FIRST before Ψ-EMA (city names like LA/NY shouldn't be tickers)
@@ -346,15 +347,15 @@ async function preflightRouter(options) {
         result.historicalDecade = historicalDecade;
         result.historicalYear = historicalYear;
         result.currentYear = currentYear;
-        console.log(`🏠 Preflight: SEED_METRIC detected for cities: ${cities.join(', ')}, historical: ${historicalDecade}, current: ${currentYear}`);
-        console.log(`🔍 Preflight: Will search for: ${result.seedMetricSearchQueries.slice(0, 3).join(' | ')}...`);
+        logger.debug(`🏠 Preflight: SEED_METRIC detected for cities: ${cities.join(', ')}, historical: ${historicalDecade}, current: ${currentYear}`);
+        logger.debug(`🔍 Preflight: Will search for: ${result.seedMetricSearchQueries.slice(0, 3).join(' | ')}...`);
       } else {
         const fb = buildFallbackSearchQueries({ currentYear, histDecade: historicalDecade });
         result.seedMetricSearchQueries = [fb.currentPrice, fb.currentIncome, fb.historicalPrice, fb.historicalIncome];
         result.historicalDecade = historicalDecade;
         result.historicalYear = historicalYear;
         result.currentYear = currentYear;
-        console.log(`🏠 Preflight: SEED_METRIC detected (no specific city), historical: ${historicalDecade}, current: ${currentYear}`);
+        logger.debug(`🏠 Preflight: SEED_METRIC detected (no specific city), historical: ${historicalDecade}, current: ${currentYear}`);
       }
     }
     // 2. Ψ-EMA: Push-based 2/3 key detection (Lego-style Turing test)
@@ -372,7 +373,7 @@ async function preflightRouter(options) {
       const ndMatch = classificationQuery.match(/\b(\d+)([dwmy])\b/i);
       if (ndMatch) {
         customPeriod = ndMatch[1] + ndMatch[2].toLowerCase();
-        console.log(`📊 Preflight: Detected custom data period: ${customPeriod}`);
+        logger.debug(`📊 Preflight: Detected custom data period: ${customPeriod}`);
       }
     
       // Context fallback: Bloomberg-spec — reuse inferred ticker if:
@@ -402,7 +403,7 @@ async function preflightRouter(options) {
       
       // If geo-intent detected AND no explicit ticker cue AND no ticker already detected, force Seed Metric
       if (hasGeoIntent && !hasExplicitStockCue && !psiEmaDetection.ticker) {
-        console.log(`🌍 GEO-VETO: City abbreviations + comparison detected → forcing Seed Metric mode`);
+        logger.debug(`🌍 GEO-VETO: City abbreviations + comparison detected → forcing Seed Metric mode`);
         result.mode = 'seed-metric';
         result.routingFlags.isSeedMetric = true;
         result.routingFlags.geoVetoApplied = true;
@@ -443,7 +444,7 @@ async function preflightRouter(options) {
           result.historicalDecade = gvHistoricalDecade;
           result.historicalYear = gvHistoricalYear;
           result.currentYear = gvCurrentYear;
-          console.log(`🏠 GEO-VETO: Seed Metric for cities: ${gvCities.join(', ')}, historical: ${gvHistoricalDecade}, current: ${gvCurrentYear}`);
+          logger.debug(`🏠 GEO-VETO: Seed Metric for cities: ${gvCities.join(', ')}, historical: ${gvHistoricalDecade}, current: ${gvCurrentYear}`);
         }
         
         // Skip rest of Ψ-EMA processing - return early handled by mode check below
@@ -460,7 +461,7 @@ async function preflightRouter(options) {
       
       // SKIP AI-PUSH if geo-intent already triggered Seed Metric
       if (result.mode === 'seed-metric') {
-        console.log(`🌍 GEO-VETO: Skipping AI-PUSH (Seed Metric mode active)`);
+        logger.debug(`🌍 GEO-VETO: Skipping AI-PUSH (Seed Metric mode active)`);
       }
       
       let aiRescuedTicker = null;
@@ -472,28 +473,28 @@ async function preflightRouter(options) {
       // Scenario 1: Has verb + adjective but no ticker → try AI ticker extraction
       // BLOCKED if geo-intent detected
       if (!psiEmaDetection.shouldTrigger && hasVerb && hasAdjective && !hasTicker && result.mode !== 'seed-metric') {
-        console.log(`🔧 AI-PUSH: verb + adjective detected, missing ticker → extracting...`);
+        logger.debug(`🔧 AI-PUSH: verb + adjective detected, missing ticker → extracting...`);
         aiRescuedTicker = await smartDetectTicker(classificationQuery);
         if (aiRescuedTicker) {
-          console.log(`✅ AI-PUSH: Rescued ticker: ${aiRescuedTicker}`);
+          logger.info(`✅ AI-PUSH: Rescued ticker: ${aiRescuedTicker}`);
         }
       }
       
       // Scenario 2: Has ticker + verb, missing adjective → infer adjective
       if (!psiEmaDetection.shouldTrigger && hasTicker && hasVerb && !hasAdjective) {
-        console.log(`🔧 AI-PUSH: ticker + verb detected, inferring adjective (implied: price/trend)`);
+        logger.debug(`🔧 AI-PUSH: ticker + verb detected, inferring adjective (implied: price/trend)`);
         aiInferredAdjective = true;
       }
       
       // Scenario 3: Has ticker + adjective, missing verb → infer verb
       if (!psiEmaDetection.shouldTrigger && hasTicker && hasAdjective && !hasVerb) {
-        console.log(`🔧 AI-PUSH: ticker + adjective detected, inferring verb (implied: analyze)`);
+        logger.debug(`🔧 AI-PUSH: ticker + adjective detected, inferring verb (implied: analyze)`);
         aiInferredVerb = true;
       }
       
       // Scenario 4: Has ticker only + explicit stock context → infer both
       if (!psiEmaDetection.shouldTrigger && hasTicker && !hasVerb && !hasAdjective && hasExplicitStockCue) {
-        console.log(`🔧 AI-PUSH: ticker + stock keyword detected, inferring verb + adjective`);
+        logger.debug(`🔧 AI-PUSH: ticker + stock keyword detected, inferring verb + adjective`);
         aiInferredVerb = true;
         aiInferredAdjective = true;
       }
@@ -511,7 +512,7 @@ async function preflightRouter(options) {
         ((effectiveKeyCount >= 2 && effectiveHasTicker) || psiEmaDetection.shouldTrigger || hasExplicitModeKeyword || !!result.ticker);
       
       if (shouldUnlock) {
-        console.log(`🔑 AI-PUSH: ${effectiveKeyCount}/3 keys [ticker=${effectiveHasTicker}, verb=${effectiveHasVerb}, adj=${effectiveHasAdjective}] OR keyword=${hasExplicitModeKeyword} → ✅ UNLOCK`);
+        logger.debug(`🔑 AI-PUSH: ${effectiveKeyCount}/3 keys [ticker=${effectiveHasTicker}, verb=${effectiveHasVerb}, adj=${effectiveHasAdjective}] OR keyword=${hasExplicitModeKeyword} → ✅ UNLOCK`);
       }
     
       // DEFERRED MODE: Only commit to psi-ema AFTER verifying ticker is valid
@@ -526,7 +527,7 @@ async function preflightRouter(options) {
         // If no ticker from current query, use context-inferred ticker
         if (!result.ticker && contextResult?.inferredTicker) {
           result.ticker = contextResult.inferredTicker;
-          console.log(`📜 Preflight: Using context-inferred ticker ${result.ticker}`);
+          logger.debug(`📜 Preflight: Using context-inferred ticker ${result.ticker}`);
         }
         
         // Normalize crypto cross-rate tickers to yfinance format before fetch
@@ -535,13 +536,13 @@ async function preflightRouter(options) {
           const cryptoNorm = result.ticker.match(/^([A-Z]{2,6})(USDT?)$/);
           if (cryptoNorm) {
             const normalized = `${cryptoNorm[1]}-USD`;
-            console.log(`🔄 Preflight: Crypto ticker normalized ${result.ticker} → ${normalized}`);
+            logger.debug(`🔄 Preflight: Crypto ticker normalized ${result.ticker} → ${normalized}`);
             result.ticker = normalized;
           }
         }
 
         if (result.ticker) {
-          console.log(`🎯 Preflight: Attempting ticker verification for ${result.ticker}`);
+          logger.debug(`🎯 Preflight: Attempting ticker verification for ${result.ticker}`);
           
           // Fetch stock data (exact periods: 3mo daily, 15mo weekly)
           try {
@@ -553,7 +554,7 @@ async function preflightRouter(options) {
             const weeklyBars = result.stockData?.weekly?.barCount || 0;
             const weeklyUnavailableReason = result.stockData?.weekly?.unavailableReason;
             
-            console.log(`📈 Preflight: Fetched ${dailyBars} daily bars + ${weeklyBars} weekly bars for ${result.ticker}`);
+            logger.debug(`📈 Preflight: Fetched ${dailyBars} daily bars + ${weeklyBars} weekly bars for ${result.ticker}`);
             
             // TICKER VERIFIED: Any bars > 0 means valid stock ticker (even if insufficient for full analysis)
             tickerVerified = dailyBars > 0;
@@ -569,7 +570,7 @@ async function preflightRouter(options) {
                 const dailyCloses = dailyClosesRaw.filter(v => v != null && !isNaN(v));
                 result.psiEmaAnalysis = dailyDashboard.analyze({ stocks: dailyCloses });
                 result.psiEmaAnalysis.timeframe = 'daily';
-                console.log(`📊 Preflight: Ψ-EMA daily analysis complete for ${result.ticker}`);
+                logger.debug(`📊 Preflight: Ψ-EMA daily analysis complete for ${result.ticker}`);
                 
                 // Weekly analysis - run if we have any data, fidelity grade handles quality
                 // No hard gate: even 13 bars produces real θ, z, R (just lower fidelity)
@@ -581,9 +582,9 @@ async function preflightRouter(options) {
                   result.psiEmaAnalysisWeekly = weeklyDashboard.analyze({ stocks: weeklyCloses });
                   result.psiEmaAnalysisWeekly.timeframe = 'weekly';
                   const fidelityInfo = result.psiEmaAnalysisWeekly.fidelity?.breakdown || 'N/A';
-                  console.log(`📊 Preflight: Ψ-EMA weekly analysis complete for ${result.ticker} (${fidelityInfo})`);
+                  logger.debug(`📊 Preflight: Ψ-EMA weekly analysis complete for ${result.ticker} (${fidelityInfo})`);
                 } else if (weeklyUnavailableReason) {
-                  console.log(`⚠️ Preflight: Weekly Ψ-EMA unavailable: ${weeklyUnavailableReason}`);
+                  logger.warn(`⚠️ Preflight: Weekly Ψ-EMA unavailable: ${weeklyUnavailableReason}`);
                   result.weeklyUnavailableReason = weeklyUnavailableReason;
                 }
                 
@@ -591,22 +592,22 @@ async function preflightRouter(options) {
                 result.stockContext = buildStockContext(result);
                 
                 if (!result.stockContext) {
-                  console.log(`⚠️ Preflight: buildStockContext returned null, falling back to limited`);
+                  logger.warn(`⚠️ Preflight: buildStockContext returned null, falling back to limited`);
                   result.stockContext = buildLimitedStockContext(result, 'Analysis returned null (possible data quality issue)');
                 }
               } catch (analysisErr) {
-                console.log(`⚠️ Preflight: Ψ-EMA analysis failed: ${analysisErr.message}`);
+                logger.warn(`⚠️ Preflight: Ψ-EMA analysis failed: ${analysisErr.message}`);
                 result.stockContext = buildLimitedStockContext(result, analysisErr.message);
               }
             } else if (dailyBars > 0) {
-              console.log(`⚠️ Preflight: Insufficient data for ${result.ticker} (${dailyBars} bars, need 55 for Ψ-EMA)`);
+              logger.warn(`⚠️ Preflight: Insufficient data for ${result.ticker} (${dailyBars} bars, need 55 for Ψ-EMA)`);
               result.stockContext = buildLimitedStockContext(result, `Insufficient data (${dailyBars} days, need 55+ for EMA-55)`);
             } else {
-              console.log(`❌ Preflight: No data returned for ${result.ticker}`);
+              logger.warn(`❌ Preflight: No data returned for ${result.ticker}`);
               result.stockContext = buildFallbackStockContext(result.ticker);
             }
           } catch (fetchErr) {
-            console.log(`⚠️ Preflight: Stock fetch failed for ${result.ticker}: ${fetchErr.message}`);
+            logger.warn(`⚠️ Preflight: Stock fetch failed for ${result.ticker}: ${fetchErr.message}`);
             result.error = `Stock fetch failed: ${fetchErr.message}`;
             // Don't set tickerVerified - fetch failed, ticker is invalid
           }
@@ -616,7 +617,7 @@ async function preflightRouter(options) {
         if (tickerVerified) {
           result.mode = 'psi-ema';
           result.routingFlags.usesPsiEMA = true;
-          console.log(`✅ Preflight: Ticker ${result.ticker} verified → mode=psi-ema`);
+          logger.info(`✅ Preflight: Ticker ${result.ticker} verified → mode=psi-ema`);
         } else if (result.ticker) {
           // Ticker pattern matched but no data — check if it's actually a city/country
           const _failedTicker = result.ticker;
@@ -626,7 +627,7 @@ async function preflightRouter(options) {
 
           if ((_cityHit || _countryHit) && !hasExplicitStockCue) {
             // GEOGRAPHIC GUARD: geographic entity failed YF → redirect to seed-metric
-            console.log(`🌍 GEOGRAPHIC GUARD: "${_failedTicker}" failed YF + geo entity detected → seed-metric`);
+            logger.debug(`🌍 GEOGRAPHIC GUARD: "${_failedTicker}" failed YF + geo entity detected → seed-metric`);
             result.ticker = null;
             result.stockData = null;
             result.stockContext = null;
@@ -664,14 +665,14 @@ async function preflightRouter(options) {
                 result.seedMetricSearchQueries.push(`${cn} national average property price per sqm ${_smCurrentYearFinal}`);
                 result.seedMetricSearchQueries.push(`${cn} minimum wage annual ${_smCurrentYearFinal}`);
               }
-              console.log(`🌍 GEOGRAPHIC GUARD: Seed Metric for cities: ${_smCities.join(', ')}, historical: ${_smHistoricalDecade}`);
+              logger.debug(`🌍 GEOGRAPHIC GUARD: Seed Metric for cities: ${_smCities.join(', ')}, historical: ${_smHistoricalDecade}`);
             } else {
               const fb = buildFallbackSearchQueries({ currentYear: _smCurrentYearFinal, histDecade: _smHistoricalDecade });
               result.seedMetricSearchQueries = [fb.currentPrice, fb.currentIncome, fb.historicalPrice, fb.historicalIncome];
             }
           } else {
             // Not a geographic entity — genuine invalid ticker
-            console.log(`❌ Preflight: Ticker ${_failedTicker} invalid (no data) → mode=general`);
+            logger.warn(`❌ Preflight: Ticker ${_failedTicker} invalid (no data) → mode=general`);
             result.ticker = null;
             result.stockData = null;
             result.stockContext = null;
@@ -721,7 +722,7 @@ async function preflightRouter(options) {
         result.ticker = null;
         result.forexPair = null;
         result.routingFlags.usesPsiEma = false;
-        console.log(`🔄 Preflight: Clearing forex state for code-audit override`);
+        logger.debug(`🔄 Preflight: Clearing forex state for code-audit override`);
       }
       result.mode = 'code-audit';
       result.routingFlags.usesCodeAudit = true;
@@ -729,7 +730,7 @@ async function preflightRouter(options) {
         fileName: codeDetection.fileName,
         language: codeDetection.language
       };
-      console.log(`🔍 Preflight: CODE_AUDIT detected for ${codeDetection.fileName} (${codeDetection.language})`);
+      logger.debug(`🔍 Preflight: CODE_AUDIT detected for ${codeDetection.fileName} (${codeDetection.language})`);
     }
     
   } catch (err) {
@@ -746,10 +747,10 @@ async function preflightRouter(options) {
   if (result.mode === 'general' && detectRealtimeIntent(classificationQuery)) {
     result.routingFlags.needsRealtimeSearch = true;
     result.searchStrategy = 'duckduckgo';
-    console.log(`🔍 Preflight: Real-time intent detected → DDG→Brave cascade enabled`);
+    logger.debug(`🔍 Preflight: Real-time intent detected → DDG→Brave cascade enabled`);
   }
   
-  console.log(`🚦 Preflight: mode=${result.mode}, ticker=${result.ticker || 'none'}, search=${result.searchStrategy}, realtime=${result.routingFlags.needsRealtimeSearch}`);
+  logger.debug(`🚦 Preflight: mode=${result.mode}, ticker=${result.ticker || 'none'}, search=${result.searchStrategy}, realtime=${result.routingFlags.needsRealtimeSearch}`);
   return result;
 }
 
@@ -937,10 +938,10 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
   // Subsequent = compressed reference (~200 tokens) for token efficiency
   if (isFirstQuery || !nyanCompressed) {
     messages.push({ role: 'system', content: nyanProtocolPrompt });
-    console.log('📜 NYAN: Full protocol injected (session boot)');
+    logger.debug('📜 NYAN: Full protocol injected (session boot)');
   } else {
     messages.push({ role: 'system', content: nyanCompressed });
-    console.log('📜 NYAN: Compressed reference injected (session active)');
+    logger.debug('📜 NYAN: Compressed reference injected (session active)');
   }
   
   // Stage 1+: Extension seeds based on mode and flags
@@ -955,13 +956,13 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
   // Ψ-EMA identity context (H0 ground truth for "what is psi ema" queries)
   if (preflight.routingFlags.isPsiEmaIdentity && preflight.psiEmaIdentityContext) {
     messages.push({ role: 'system', content: preflight.psiEmaIdentityContext });
-    console.log('📚 Ψ-EMA identity documentation injected (H0 ground truth)');
+    logger.debug('📚 Ψ-EMA identity documentation injected (H0 ground truth)');
   }
   
   // Design/Architecture question context (H0 ground truth - actual source code)
   if (preflight.routingFlags.isDesignQuestion && preflight.codeContext) {
     messages.push({ role: 'system', content: preflight.codeContext });
-    console.log(`🔧 Code context injected for topics: ${preflight.codeTopics?.join(', ') || 'unknown'}`);
+    logger.debug(`🔧 Code context injected for topics: ${preflight.codeTopics?.join(', ') || 'unknown'}`);
   }
   
   // Ψ-EMA context
@@ -977,7 +978,7 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
   // Forex context - inject real exchange rate data to prevent hallucination
   if (preflight.routingFlags.usesForex && preflight.forexContext) {
     messages.push({ role: 'system', content: preflight.forexContext });
-    console.log(`💱 Forex context injected: ${preflight.forexData?.pair || 'unknown'}`);
+    logger.debug(`💱 Forex context injected: ${preflight.forexData?.pair || 'unknown'}`);
   }
   
   // Seed Metric proxy cascade - conditional injection (saves ~300 tokens when not triggered)
@@ -987,7 +988,7 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
       historicalYear: preflight.historicalYear,
       currentYear: preflight.currentYear
     }) });
-    console.log(`🏠 Seed Metric proxy cascade injected (scavenger hunt map)`);
+    logger.debug(`🏠 Seed Metric proxy cascade injected (scavenger hunt map)`);
   }
   
   return messages;
@@ -1096,9 +1097,9 @@ function detectCompoundQuery(query, hasPhotos = false, hasDocuments = false) {
     }
   }
 
-  console.log(`🔀 COMPOUND QUERY DETECTED: Split into ${subQueries.length} sub-queries`);
+  logger.debug(`🔀 COMPOUND QUERY DETECTED: Split into ${subQueries.length} sub-queries`);
   subQueries.forEach((sq, i) => {
-    console.log(`   ${i + 1}. [${sq.label}] "${sq.query.slice(0, 60)}..." photos=${sq.includePhotos}`);
+    logger.debug(`   ${i + 1}. [${sq.label}] "${sq.query.slice(0, 60)}..." photos=${sq.includePhotos}`);
   });
 
   return subQueries;
