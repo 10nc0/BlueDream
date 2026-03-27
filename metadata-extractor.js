@@ -1,3 +1,4 @@
+const logger = require("./lib/logger");
 /**
  * Metadata Extractor - Universal tagging system
  * 
@@ -131,7 +132,7 @@ class MetadataExtractor {
     static test() {
         const extractor = new MetadataExtractor();
         
-        console.log('\n🧪 Testing Universal Metadata Extractor\n');
+        logger.debug('\n🧪 Testing Universal Metadata Extractor\n');
         
         const testCases = [
             'bug hello yes',
@@ -147,10 +148,10 @@ class MetadataExtractor {
         
         testCases.forEach((text, i) => {
             const result = extractor.extract(text);
-            console.log(`Test ${i + 1}: "${text}"`);
-            console.log(`  Tags: ${JSON.stringify(result.tags)}`);
-            console.log(`  Dates: ${JSON.stringify(result.dates)}`);
-            console.log('');
+            logger.debug(`Test ${i + 1}: "${text}"`);
+            logger.debug(`  Tags: ${JSON.stringify(result.tags)}`);
+            logger.debug(`  Dates: ${JSON.stringify(result.dates)}`);
+            logger.debug('');
         });
     }
 }
