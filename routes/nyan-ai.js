@@ -1,6 +1,5 @@
 const axios = require('axios');
 const crypto = require('crypto');
-const JSZip = require('jszip');
 const rateLimit = require('express-rate-limit');
 const logger = require('../lib/logger');
 const { createPipelineOrchestrator, fastStreamPersonality, applyPersonalityFormat } = require('../utils/pipeline-orchestrator');
@@ -931,6 +930,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             
             if (zipData) {
                 try {
+                    const JSZip = require('jszip');
                     const zipBuffer = Buffer.from(zipData, 'base64');
                     const zip = await JSZip.loadAsync(zipBuffer);
                     const manifestFile = zip.file('manifest.json');
@@ -1176,6 +1176,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             
             if (zipData) {
                 try {
+                    const JSZip = require('jszip');
                     const zipBuffer = Buffer.from(zipData, 'base64');
                     const zip = await JSZip.loadAsync(zipBuffer);
                     const manifestFile = zip.file('manifest.json');

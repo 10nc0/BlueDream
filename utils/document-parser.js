@@ -1,6 +1,4 @@
 const logger = require('../lib/logger');
-const ExcelJS = require('exceljs');
-const mammoth = require('mammoth');
 const { parsePDFHybrid } = require('./pdf-handler');
 const { getCodeReviewPrompt } = require('../prompts/code-analysis');
 const { isLikelyCode } = require('./file-types');
@@ -58,6 +56,7 @@ async function extractTextFromDocument(base64Data, fileName, options = {}) {
 }
 
 async function extractExcel(buffer, ext) {
+    const ExcelJS = require('exceljs');
     const workbook = new ExcelJS.Workbook();
     
     if (ext === 'xlsx') {
@@ -124,6 +123,7 @@ async function extractExcel(buffer, ext) {
 }
 
 async function extractWord(buffer) {
+    const mammoth = require('mammoth');
     const result = await mammoth.extractRawText({ buffer });
     return result.value || '';
 }

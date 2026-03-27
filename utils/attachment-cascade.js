@@ -1,7 +1,5 @@
 const logger = require('../lib/logger');
 const { parsePDFHybrid, analyzePDFVisualContent, groqWithRetry } = require('./pdf-handler');
-const ExcelJS = require('exceljs');
-const mammoth = require('mammoth');
 const crypto = require('crypto');
 const axios = require('axios');
 const { analyzeFinancialDocument, formatPhysicsAnalysis, getFinancialPhysicsSeed, quickNonFinancialCheck } = require('./financial-physics');
@@ -1311,6 +1309,7 @@ async function extractPDFTables(buffer, fileName) {
 
 async function extractExcelData(buffer, fileName) {
     try {
+        const ExcelJS = require('exceljs');
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.load(buffer);
         
@@ -1505,6 +1504,7 @@ async function extractExcelData(buffer, fileName) {
 
 async function extractWordText(buffer) {
     try {
+        const mammoth = require('mammoth');
         const result = await mammoth.extractRawText({ buffer });
         return { success: true, data: { text: result.value || '' } };
     } catch (error) {
@@ -1514,6 +1514,7 @@ async function extractWordText(buffer) {
 
 async function extractWordImages(buffer, options = {}) {
     try {
+        const mammoth = require('mammoth');
         const images = [];
         
         try {
