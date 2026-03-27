@@ -500,6 +500,13 @@ app.get('/', (req, res) => {
     res.redirect('/AI');
 });
 
+app.get('/api/client-constants.js', (req, res) => {
+    const { BOOK_ID_PATTERN } = require('./lib/validators');
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(`window.Nyan=window.Nyan||{};window.Nyan.BOOK_ID_PATTERN=${BOOK_ID_PATTERN};`);
+});
+
 // Serve main dashboard - client-side JWT auth will handle access control
 app.get('/dashboard', (req, res) => {
     // Cache-busting headers to ensure UI updates are immediately visible
