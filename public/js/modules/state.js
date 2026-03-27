@@ -1,5 +1,7 @@
 window.Nyan = window.Nyan || {};
 
+window.Nyan.BOOK_ID_PATTERN = /^(?:dev_)?(bridge|book|msg)_t\d+_[a-f0-9]+$|^twilio_book_\d+_\d+$/;
+
 window.Nyan.StateService = (function() {
     const _state = {
         books: [],

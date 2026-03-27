@@ -3882,8 +3882,7 @@
         // SECURITY: bookId MUST be fractal_id to maintain tenant isolation
         function getMessageSearchText(bookId) {
             // SECURITY: Validate fractal_id format before cache access
-            // Format: [dev_](bridge|book|msg)_t{N}_{HASH} or twilio_book_{PHONE}_{TIMESTAMP}
-            if (!bookId || !/^(?:dev_)?(bridge|book|msg)_t\d+_[a-f0-9]+$|^twilio_book_\d+_\d+$/.test(bookId)) {
+            if (!bookId || !window.Nyan.BOOK_ID_PATTERN.test(bookId)) {
                 console.error('🚨 SECURITY: Attempted cache access with invalid book ID');
                 return '';
             }
