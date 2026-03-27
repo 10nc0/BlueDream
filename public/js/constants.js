@@ -11,5 +11,3 @@ const PLAYGROUND = {
                         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                         'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
 };
-
-const MEDIA_CACHE_TTL_MS = 90 * 60 * 1000; // 90 minutes
