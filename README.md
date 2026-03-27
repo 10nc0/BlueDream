@@ -44,7 +44,7 @@ Click on a phone, a refrigerator panel, a car with browser — and it works. The
 
 Goes both ways. The scribe doesn't care which window you knocked on.
 
-The input is the same: WhatsApp, LINE OA, and Telegram are all browsers in a sense — they forward messages to a webhook. 
+The inputs: WhatsApp, LINE OA, and Telegram are all browsers in a sense — they forward messages to a webhook. 
 
 The sovereignty guarantee is not the URL. It is the hash. But the URL is why the door is always open in Nyanbook.io.
 
@@ -74,8 +74,6 @@ For Nyanbook.io: Absence is data:
 
 > *"If you were supposed to log something every day for a month and forgot 7 days — does your current system know you forgot? Can it show you exactly which 7 days?"*
 
-The *mīzān* holds level. The feather does the work.
-
 Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
 
 ---
@@ -100,6 +98,8 @@ Don't add more than the tally requires. The void, the mark, the self-reference, 
 
 Breathe: 00 + φ⁰ + φ¹ = φ². 
 Scribe faithfully.
+
+The *mīzān* holds level. The feather does the work.
 
 *nyan~*
 
