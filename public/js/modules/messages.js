@@ -10,7 +10,7 @@
     async function fetchMessages(bookId, options = {}) {
         const { before = null, limit = 50, source = 'all' } = options;
         
-        if (!bookId || !window.Nyan.BOOK_ID_PATTERN.test(bookId)) {
+        if (!bookId || !(window.Nyan.BOOK_ID_PATTERN || /^(?:dev_)?(bridge|book|msg)_t\d+_[a-f0-9]+$|^twilio_book_\d+_\d+$/).test(bookId)) {
             console.error('MessagesModule: Invalid book ID format:', bookId);
             return { success: false, error: 'Invalid book ID' };
         }
