@@ -2114,7 +2114,7 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
         }
     });
 
-    return {};
+    return { endpoints: 29 };
 }
 
 module.exports = { registerBooksRoutes };

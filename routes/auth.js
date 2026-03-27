@@ -1328,7 +1328,7 @@ function registerAuthRoutes(app, deps) {
         }
     });
 
-    return { requireAuth, requireRole };
+    return { requireAuth, requireRole, endpoints: 23 };
 }
 
 module.exports = { registerAuthRoutes, createAuthMiddleware };

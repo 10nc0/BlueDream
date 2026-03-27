@@ -174,13 +174,13 @@ function registerInpipeRoutes(app, deps) {
         }
     }).catch(err => logger.error({ err }, 'TelegramChannel init failed'));
 
-    logger.info('📥 Registering inpipe routes: POST /api/twilio/webhook, POST /api/line/webhook, POST /api/email/inpipe, POST /api/telegram/webhook (if configured)');
-
     const channelRegistry = { twilio: twilioChannel, line: lineChannel, email: emailChannel, telegram: telegramChannel };
     startQueueProcessor({ ...deps, channelRegistry });
     
     setInterval(() => cleanupIdempotencyCache(pool, logger), 60 * 1000);
     setInterval(() => cleanupDoneMessages(pool, logger), 60 * 60 * 1000);
+
+    const registeredRoutes = ['POST /api/twilio/webhook'];
     
     app.post('/api/twilio/webhook', async (req, res) => {
         try {
@@ -259,6 +259,7 @@ function registerInpipeRoutes(app, deps) {
     // No reply sent back to Line sender (sendReply is no-op).
     // Skip route registration if LINE_CHANNEL_SECRET is absent.
     if (lineChannel.isConfigured()) {
+        registeredRoutes.push('POST /api/line/webhook');
         app.post('/api/line/webhook', async (req, res) => {
             try {
                 const sigResult = lineChannel.validateSignature(req);
@@ -323,6 +324,7 @@ function registerInpipeRoutes(app, deps) {
     // MX record + provider webhook must be configured externally.
     // Secret validation: X-Inpipe-Secret header must match EMAIL_INPIPE_SECRET.
     if (emailChannel.isConfigured()) {
+        registeredRoutes.push('POST /api/email/inpipe');
         app.post('/api/email/inpipe', async (req, res) => {
             try {
                 const secretResult = emailChannel.validateSecret(req);
@@ -388,6 +390,7 @@ function registerInpipeRoutes(app, deps) {
     // WhatsApp/LINE continue using book_engaged_phones (legacy).
     // Skip route registration if TELEGRAM_BOT_TOKEN is absent.
     if (telegramChannel.isConfigured()) {
+        registeredRoutes.push('POST /api/telegram/webhook');
         app.post('/api/telegram/webhook', async (req, res) => {
             try {
                 const sigResult = telegramChannel.validateSignature(req);
@@ -443,6 +446,9 @@ function registerInpipeRoutes(app, deps) {
         logger.warn('⚠️ TELEGRAM_BOT_TOKEN not set — /api/telegram/webhook not registered');
     }
 
+    logger.info('📥 Inpipe routes registered: %s', registeredRoutes.join(', '));
+
+    return { endpoints: registeredRoutes.length };
 }
 
 // Adaptive async queue processor — channel-agnostic

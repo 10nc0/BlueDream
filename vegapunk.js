@@ -1341,37 +1341,58 @@ app.listen(PORT, '0.0.0.0', async () => {
     });
     
     // === SATELLITE REGISTRATION (inlined from route-registry) ===
-    const SATELLITE_META = {
-        'auth': { emoji: '🔐', desc: 'lifecycle, sessions, JWT, audit trail', endpoints: 19 },
-        'books': { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export', endpoints: 26 },
-        'inpipe': { emoji: '📥', desc: 'WhatsApp + LINE + email + Telegram inpipe, per-channel webhooks', endpoints: 4 },
-        'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit, book history, psi-ema data, diagnostics', endpoints: 9 }
+    const SATELLITE_LABELS = {
+        'auth':    { emoji: '🔐', desc: 'lifecycle, sessions, JWT, audit trail' },
+        'books':   { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export' },
+        'inpipe':  { emoji: '📥' },
+        'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit, book history, psi-ema data, diagnostics' }
     };
-    
+
     const formatPulseLog = (satellites, phiStatus = 'online') => {
         const _d = new Date();
         const timestamp = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')} ${String(_d.getHours()).padStart(2,'0')}:${String(_d.getMinutes()).padStart(2,'0')}:${String(_d.getSeconds()).padStart(2,'0')}`;
         const lines = [`🫀 PULSE │ ${timestamp} │ Vegapunk`];
         const lastIdx = satellites.length - 1;
-        satellites.forEach((name, idx) => {
-            const meta = SATELLITE_META[name] || { emoji: '📦', desc: 'unknown', endpoints: '?' };
+        let totalEndpoints = 0;
+        satellites.forEach((sat, idx) => {
+            const label = SATELLITE_LABELS[sat.name] || { emoji: '📦' };
+            const desc = sat.desc || label.desc || 'unknown';
             const prefix = idx === lastIdx ? '└─' : '├─';
-            lines.push(`${prefix} ${meta.emoji} ${name.padEnd(10)} (${String(meta.endpoints).padStart(2)}) → ${meta.desc}`);
+            lines.push(`${prefix} ${label.emoji} ${sat.name.padEnd(10)} (${String(sat.endpoints).padStart(2)}) → ${desc}`);
+            totalEndpoints += sat.endpoints;
         });
-        const satelliteEndpoints = satellites.reduce((sum, name) => sum + (SATELLITE_META[name]?.endpoints || 0), 0);
-        lines.push(`📊 VITALS: ${satelliteEndpoints + 11} endpoints │ ${satellites.length} satellites + kernel(11) │ O(1) │ φ-rhythm: ${phiStatus}`);
+        lines.push(`📊 VITALS: ${totalEndpoints + 14} endpoints │ ${satellites.length} satellites + kernel(14) │ O(1) │ φ-rhythm: ${phiStatus}`);
         return lines.join('\n');
     };
     
     // Register all satellites in priority order
+    const registeredSatellites = [];
+
     const authResult = registerAuthRoutes(app, deps);
     setDepsMiddleware(authResult.requireAuth, authResult.requireRole);
-    registerBooksRoutes(app, deps);
-    registerInpipeRoutes(app, deps);
-    registerNyanAIRoutes(app, deps);
+    registeredSatellites.push({ name: 'auth', endpoints: authResult.endpoints });
+
+    const booksResult = registerBooksRoutes(app, deps);
+    registeredSatellites.push({ name: 'books', endpoints: booksResult.endpoints });
+
+    const inpipeResult = registerInpipeRoutes(app, deps);
+    const activeChannels = [
+        'WhatsApp',
+        process.env.LINE_CHANNEL_SECRET ? 'LINE' : null,
+        process.env.EMAIL_INPIPE_SECRET ? 'email' : null,
+        process.env.TELEGRAM_BOT_TOKEN  ? 'Telegram' : null
+    ].filter(Boolean);
+    registeredSatellites.push({
+        name: 'inpipe',
+        endpoints: inpipeResult.endpoints,
+        desc: `${activeChannels.join(' + ')} inpipe, per-channel webhooks`
+    });
+
+    const nyanAIResult = registerNyanAIRoutes(app, deps);
+    registeredSatellites.push({ name: 'nyan-ai', endpoints: nyanAIResult.endpoints });
     
     // NOTE: intentional console.log — multi-line ASCII art; logger would escape newlines
-    console.log('\n' + formatPulseLog(['auth', 'books', 'inpipe', 'nyan-ai']) + '\n');
+    console.log('\n' + formatPulseLog(registeredSatellites) + '\n');
 
     // PRODUCTION SAFETY: Hard-fail if critical secrets are still .env.example placeholders.
     // Placeholder SESSION_SECRET → JWTs are trivially forgeable (known string, public repo).
