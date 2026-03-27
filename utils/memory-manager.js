@@ -15,7 +15,8 @@ const logger = require('../lib/logger');
 const axios = require('axios');
 const crypto = require('crypto');
 
-const { MAX_CONTENT_CHARS, MAX_MESSAGE_SIZE, GROQ_API_URL } = require('./config-constants');
+const { MAX_CONTENT_CHARS, MAX_MESSAGE_SIZE } = require('./config-constants');
+const { GROQ_API_URL } = require('../config/constants');
 
 /**
  * Hash session ID for privacy

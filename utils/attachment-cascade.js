@@ -2,6 +2,7 @@ const logger = require('../lib/logger');
 const { parsePDFHybrid, analyzePDFVisualContent, groqWithRetry } = require('./pdf-handler');
 const crypto = require('crypto');
 const axios = require('axios');
+const { GROQ_API_URL, GROQ_AUDIO_URL } = require('../config/constants');
 const { analyzeFinancialDocument, formatPhysicsAnalysis, getFinancialPhysicsSeed, quickNonFinancialCheck } = require('./financial-physics');
 // Harmonized imports from data-package for shared caching
 const { globalDocCache, computeDocHash, FILE_TYPES: DP_FILE_TYPES } = require('./data-package');
@@ -1630,7 +1631,7 @@ async function analyzeDocumentVisuals(buffer, fileName, options = {}) {
         
         try {
             const response = await axios.post(
-                'https://api.groq.com/openai/v1/chat/completions',
+                GROQ_API_URL,
                 {
                     model: 'meta-llama/llama-4-scout-17b-16e-instruct',
                     messages: [
@@ -1799,7 +1800,7 @@ async function transcribeAudio(buffer, fileName, options) {
         form.append('model', 'whisper-large-v3-turbo');
         
         const response = await axios.post(
-            'https://api.groq.com/openai/v1/audio/transcriptions',
+            GROQ_AUDIO_URL,
             form,
             {
                 headers: {
@@ -1922,7 +1923,7 @@ Respond with a clear description of what you observe.`;
     try {
         const response = await groqWithRetry(async () => {
             return await axios.post(
-                'https://api.groq.com/openai/v1/chat/completions',
+                GROQ_API_URL,
                 {
                     model: AI_MODELS.VISION,
                     messages: [

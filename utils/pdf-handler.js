@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { MAX_CONTENT_CHARS } = require('./config-constants');
-const { TIMEOUTS, GROQ_RETRY } = require('../config/constants');
+const { TIMEOUTS, GROQ_RETRY, GROQ_API_URL } = require('../config/constants');
 
 async function groqWithRetry(axiosCall, maxRetries = GROQ_RETRY.TEXT_MAX_RETRIES) {
     const axios = require('axios');
@@ -256,7 +256,7 @@ async function analyzePageWithGroqVision(imageBase64, pageNum, GROQ_TOKEN) {
         
         // Use retry wrapper for resilient API calls
         const response = await groqWithRetry(() => axios.post(
-            'https://api.groq.com/openai/v1/chat/completions',
+            GROQ_API_URL,
             {
                 model: 'meta-llama/llama-4-scout-17b-16e-instruct',
                 messages: [

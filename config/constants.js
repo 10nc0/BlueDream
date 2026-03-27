@@ -112,6 +112,10 @@ const DISCORD = {
   THREAD_PAGINATION_LIMIT: 100     // Messages per fetch (Discord max: 100)
 };
 
+// ==================== Groq API URLs ====================
+const GROQ_API_URL   = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_AUDIO_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+
 // ==================== LLM Backend Router ====================
 // Drafter  → always Groq Llama 3.3 70B (fast, expressive, used for S2/S4/tool-calls)
 // Auditor  → DeepSeek R1 if DEEPSEEK_API set (reasoning chain catches confabulation),
@@ -119,7 +123,7 @@ const DISCORD = {
 // Both are OpenAI-compatible; swap URL + model + token at the call site.
 const LLM_BACKENDS = {
   drafter: {
-    url: 'https://api.groq.com/openai/v1/chat/completions',
+    url: GROQ_API_URL,
     model: 'llama-3.3-70b-versatile',
     timeouts: {
       reasoning: 15000,
@@ -278,6 +282,8 @@ module.exports = {
   SESSION,
   DISCORD,
   AI_MODELS,
+  GROQ_API_URL,
+  GROQ_AUDIO_URL,
   GROQ_RETRY,
   REPUTATION,
   FILE_UPLOAD,

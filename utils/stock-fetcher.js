@@ -6,6 +6,7 @@
 
 const logger = require('../lib/logger');
 const axios = require('axios');
+const { GROQ_API_URL } = require('../config/constants');
 const YahooFinance = require('yahoo-finance2').default;
 const yahooFinance = new YahooFinance({ suppressNotices: ['ripHistorical', 'yahooSurvey'] });
 
@@ -564,7 +565,7 @@ async function extractTickerWithAI(query) {
   
   try {
     const response = await axios.post(
-      'https://api.groq.com/openai/v1/chat/completions',
+      GROQ_API_URL,
       {
         model: 'llama-3.1-8b-instant',
         messages: [
