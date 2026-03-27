@@ -2,28 +2,11 @@ const ExcelJS = require('exceljs');
 const mammoth = require('mammoth');
 const { parsePDFHybrid } = require('./pdf-handler');
 const { getCodeReviewPrompt } = require('../prompts/code-analysis');
+const { isLikelyCode } = require('./file-types');
 
 const MAX_TOKENS = 6000;
 const CHARS_PER_TOKEN = 4;
 const MAX_CHARS = MAX_TOKENS * CHARS_PER_TOKEN;
-
-// ===== CODE DETECTION HEURISTICS =====
-function isLikelyCode(text, fileName) {
-    const ext = (fileName || '').toLowerCase().split('.').pop();
-    const codeExts = ['js', 'ts', 'py', 'go', 'java', 'cpp', 'c', 'cs', 'php', 'rb', 'rs', 'swift', 'sh', 'sql', 'html', 'css'];
-    if (codeExts.includes(ext)) return true;
-    
-    if (ext === 'txt' || !ext) {
-        const codePatterns = [
-            /function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=/,
-            /import\s+.*\s+from|require\s*\(|module\.exports\s*=/,
-            /class\s+\w+|def\s+\w+\s*\(|if\s+__name__\s*==\s*['"]__main__['"]/,
-            /interface\s+\w+|enum\s+\w+|type\s+\w+\s*=/
-        ];
-        return codePatterns.some(p => p.test(text.substring(0, 2000)));
-    }
-    return false;
-}
 
 async function extractTextFromDocument(base64Data, fileName, options = {}) {
     const buffer = Buffer.from(base64Data, 'base64');

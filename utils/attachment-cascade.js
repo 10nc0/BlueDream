@@ -6,7 +6,7 @@ const axios = require('axios');
 const { analyzeFinancialDocument, formatPhysicsAnalysis, getFinancialPhysicsSeed, quickNonFinancialCheck } = require('./financial-physics');
 // Harmonized imports from data-package for shared caching
 const { globalDocCache, computeDocHash, FILE_TYPES: DP_FILE_TYPES } = require('./data-package');
-const { FILE_TYPES, identifyFileType, CODE_EXTENSIONS } = require('./file-types');
+const { FILE_TYPES, identifyFileType } = require('./file-types');
 
 // ===== INTELLIGENT CHUNKING (GroundX-inspired) =====
 // Splits text by sections without cutting mid-table or mid-paragraph
@@ -164,26 +164,6 @@ function lookupSettledScience(formula) {
     if (!formula) return null;
     const normalized = formula.toUpperCase().replace(/\s+/g, '');
     return CHEMICAL_CONSTANTS[normalized] || null;
-}
-
-// ===== CODE DETECTION HEURISTICS =====
-// Determines if a text file likely contains code
-function isLikelyCode(text, fileName) {
-    if (CODE_EXTENSIONS.test(fileName || '')) return true;
-    const ext = (fileName || '').toLowerCase().split('.').pop();
-    
-    // Heuristics for .txt files
-    if (ext === 'txt') {
-        const codePatterns = [
-            /function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=/,
-            /import\s+.*\s+from|require\s*\(|module\.exports\s*=/,
-            /class\s+\w+|def\s+\w+\s*\(|if\s+__name__\s*==\s*['"]__main__['"]/,
-            /interface\s+\w+|enum\s+\w+|type\s+\w+\s*=/
-        ];
-        return codePatterns.some(p => p.test(text.substring(0, 2000)));
-    }
-    
-    return false;
 }
 
 // ===== COMPOUND IDENTIFICATION =====

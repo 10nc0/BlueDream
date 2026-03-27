@@ -53,10 +53,28 @@ function detectAttachmentType(filename) {
 
 const AUDIO_MIME_EXT_MAP = { 'audio/webm': 'webm', 'audio/mp4': 'm4a', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/flac': 'flac' };
 
+function isLikelyCode(text, fileName) {
+    if (CODE_EXTENSIONS.test(fileName || '')) return true;
+    const ext = (fileName || '').toLowerCase().split('.').pop();
+
+    if (ext === 'txt' || !ext) {
+        const codePatterns = [
+            /function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=/,
+            /import\s+.*\s+from|require\s*\(|module\.exports\s*=/,
+            /class\s+\w+|def\s+\w+\s*\(|if\s+__name__\s*==\s*['"]__main__['"]/,
+            /interface\s+\w+|enum\s+\w+|type\s+\w+\s*=/
+        ];
+        return codePatterns.some(p => p.test(text.substring(0, 2000)));
+    }
+
+    return false;
+}
+
 module.exports = {
     CODE_EXTENSIONS,
     FILE_TYPES,
     identifyFileType,
     detectAttachmentType,
+    isLikelyCode,
     AUDIO_MIME_EXT_MAP,
 };
