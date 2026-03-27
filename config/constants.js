@@ -45,6 +45,8 @@ const TIMEOUTS = {
   // @verified: 2026-01-10
   WHISPER_AUDIO: 30000,            // Groq Whisper audio transcription (large files)
   
+  EXTRACTION: 30000,               // Document extraction timeout (protects against hung file parsing)
+  PDF_PROCESS: 30000,              // PDF rendering/Groq vision call timeout
   COMPRESSION_TASK: 3000,          // Image/file compression
   
   // @source: Twilio API
@@ -178,7 +180,8 @@ const GROQ_RETRY = {
   TEXT_MAX_RETRIES: 3,             // Text queries: 3 retry attempts
   VISION_MAX_RETRIES: 2,           // Vision queries: 2 retry attempts (more expensive)
   BASE_DELAY_MS: 1000,             // Initial 1s delay (Groq retry-after typically 1-5s)
-  MAX_DELAY_MS: 4000               // Cap at 4s (1s → 2s → 4s)
+  MAX_DELAY_MS: 4000,              // Cap at 4s (1s → 2s → 4s)
+  PDF_MAX_DELAY_MS: 8000           // Cap at 8s for PDF vision retry (1s → 2s → 4s → 8s)
 };
 
 // ==================== Reputation System ====================

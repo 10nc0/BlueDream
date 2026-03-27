@@ -2,9 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { MAX_CONTENT_CHARS } = require('./config-constants');
+const { TIMEOUTS, GROQ_RETRY } = require('../config/constants');
 
-// Retry helper with exponential backoff for Groq API calls
-async function groqWithRetry(axiosCall, maxRetries = 3) {
+async function groqWithRetry(axiosCall, maxRetries = GROQ_RETRY.TEXT_MAX_RETRIES) {
     const axios = require('axios');
     let lastError;
     
@@ -15,9 +15,8 @@ async function groqWithRetry(axiosCall, maxRetries = 3) {
             lastError = error;
             const status = error.response?.status;
             
-            // Retry on 429 (rate limit) or 5xx (server errors)
             if ((status === 429 || status >= 500) && attempt < maxRetries) {
-                const delayMs = Math.min(1000 * Math.pow(2, attempt), 8000);
+                const delayMs = Math.min(GROQ_RETRY.BASE_DELAY_MS * Math.pow(2, attempt), GROQ_RETRY.PDF_MAX_DELAY_MS);
                 console.log(`⏳ Groq ${status}: Retry ${attempt + 1}/${maxRetries} in ${delayMs}ms`);
                 await new Promise(resolve => setTimeout(resolve, delayMs));
             } else {
@@ -193,7 +192,7 @@ async function renderPDFPagesToImages(buffer, options = { maxPages: 5 }) {
         // Render pages to JPEG using pdftoppm
         // -jpeg: output format, -r 225: 225 DPI (high-res for atom clarity), -f/-l: first/last page
         const cmd = `pdftoppm -jpeg -r 225 -f 1 -l ${pagesToRender} "${tempPdfPath}" "${tempOutputPrefix}"`;
-        execSync(cmd, { timeout: 30000 });
+        execSync(cmd, { timeout: TIMEOUTS.PDF_PROCESS });
         
         // Load rendered images as base64
         for (let i = 1; i <= pagesToRender; i++) {
@@ -317,7 +316,7 @@ VERIFICATION: After counting, verify by recount. If complex tricyclic, explain r
                     'Authorization': `Bearer ${GROQ_TOKEN}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 30000
+                timeout: TIMEOUTS.PDF_PROCESS
             }
         ));
         

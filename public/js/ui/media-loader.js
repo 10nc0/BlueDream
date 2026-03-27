@@ -6,7 +6,8 @@
  * - Prevents constant re-downloading
  */
 
-// Memory cache for instant access
+const MEDIA_CACHE_TTL_MS = 90 * 60 * 1000; // 90 minutes
+
 const mediaMemoryCache = new Map();
 
 // IndexedDB setup for persistent caching
@@ -42,7 +43,7 @@ async function cleanExpiredCache() {
     const transaction = mediaDB.transaction(['media'], 'readwrite');
     const objectStore = transaction.objectStore('media');
     const index = objectStore.index('timestamp');
-    const expiryTime = Date.now() - (90 * 60 * 1000); // 90 minutes ago
+    const expiryTime = Date.now() - MEDIA_CACHE_TTL_MS;
     
     const request = index.openCursor();
     request.onsuccess = (event) => {
@@ -79,7 +80,7 @@ async function getCachedMedia(messageId) {
             if (cached) {
                 // Check if expired (90 minutes)
                 const age = Date.now() - cached.timestamp;
-                if (age < 90 * 60 * 1000) {
+                if (age < MEDIA_CACHE_TTL_MS) {
                     // Cache in memory for faster access
                     mediaMemoryCache.set(messageId, cached.data);
                     resolve(cached.data);

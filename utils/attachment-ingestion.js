@@ -4,9 +4,7 @@
  */
 const { executeExtractionCascade } = require('./attachment-cascade');
 const { FILE_TYPES } = require('./data-package');
-
-// 30-second timeout for extraction operations (protects against hung file parsing)
-const EXTRACTION_TIMEOUT_MS = 30 * 1000;
+const { TIMEOUTS } = require('../config/constants');
 
 class AttachmentIngestion {
   /**
@@ -53,7 +51,7 @@ class AttachmentIngestion {
       // Wrap extraction cascade with 30s timeout to prevent hung file parsing
       extractionResult = await this._withTimeout(
         executeExtractionCascade(attachments, { tenantId }),
-        EXTRACTION_TIMEOUT_MS,
+        TIMEOUTS.EXTRACTION,
         'File extraction'
       );
     } catch (err) {
