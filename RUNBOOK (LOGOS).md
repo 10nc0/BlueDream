@@ -14,6 +14,16 @@ It’s a protocol shift, not an app.
 
 ---
 
+## Optional Extra Features
+
+| Feature | Secret | Cost |
+|---------|--------|------|
+| Web search in Playground | `PLAYGROUND_BRAVE_API` — [brave.com/search/api](https://brave.com/search/api) | Free (2k queries/mo) |
+| Email outpipe | `RESEND_API_KEY` — [resend.com](https://resend.com) | Free tier |
+| Per-book webhooks | *(configured in dashboard → Outpipes)* | — |
+
+---
+
 ## Queue Processor Architecture
 
 The README's core loop mentions a "queue processor." This maps to two separate systems in the codebase — not a traditional Redis/BullMQ queue.

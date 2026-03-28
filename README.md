@@ -11,7 +11,10 @@ A versatile AI endpoint is provided to make your data queryable & interactive.
 
 **After**:  WhatsApp screenshot / photo / video to Nyanbook.io (no need Forms) → Auto-sorted by date → Search "receipt" or use AI queries → Interact with your files
 
-**Try it first:** → [nyanbook.io](https://nyanbook.io) — see the ledger, ask the Nyan AI. Sovereignty is a choice, not a requirement.
+**Try it first:** → [nyanbook.io](https://nyanbook.io) — see the ledger, ask the AI. Sovereignty is a choice, not a requirement.
+
+![Playground UI](Playground%20UI_2.png)
+![Nyanbook UI](Nyanbook%20UI.png)
 
 ---
 
@@ -62,7 +65,7 @@ For them: The gap is the silence, and absence is not data.
 
 For Nyanbook.io: Absence is data:
 
-- **Append-only** — there is no backdate entries
+- **Append-only** — entries cannot be backdated
 - **IPFS pin** — there is no delete / edit
 - **PostgreSQL** — the missing entries cannot lie
 - **Discord thread** — also all copied by default to your Discord channel
@@ -307,16 +310,6 @@ Each channel is independent. Deploy first (Deploy → Autoscale) to get a persis
 | Key | Value |
 |-----|-------|
 | `PINATA_JWT` | [Pinata](https://pinata.cloud) → free account (1 GB) → API key JWT |
-
----
-
-### Optional extras
-
-| Feature | Secret | Cost |
-|---------|--------|------|
-| Web search in Playground | `PLAYGROUND_BRAVE_API` — [brave.com/search/api](https://brave.com/search/api) | Free (2k queries/mo) |
-| Email outpipe | `RESEND_API_KEY` — [resend.com](https://resend.com) | Free tier |
-| Per-book webhooks | *(configured in dashboard → Outpipes)* | — |
 
 ---
 
