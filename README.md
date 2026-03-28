@@ -224,149 +224,97 @@ Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arr
 
 ---
 
-## Quick Start (5 minutes)
+## Quick Start
 
-Minimum to get running:
-
-1. **[Replit](https://replit.com)** — create account, import from GitHub
-2. **[Supabase](https://supabase.com)** — new project, copy `DATABASE_URL`
-3. **[Discord](https://discord.com/developers/applications)** — create 4 bots, copy tokens into Secrets
-
-That's it. The app starts. WhatsApp, LINE, Telegram, IPFS, email — all optional, all addable later.
-
----
-
-## Setup
-
-> Everything runs on free tiers. No terminal required.
+> Everything runs on free tiers. No terminal required. The startup log tells you what's active.
 >
 > **Operators:** see [`RUNBOOK (LOGOS).md`](RUNBOOK%20(LOGOS).md) for secret rotation, incident response, and post-deploy checklist.
 
-### 1. Accounts
+| Tier | You get | Time | Cost |
+|------|---------|------|------|
+| **0 — Cold Start** | AI Playground + Dashboard UI (books are empty) | ~2 min | $0 |
+| **1 — Connect AI & Bots** | Discord ledger + AI audit on book history | ~10 min | $0 |
+| **2 — Inpipe** | Messages flow in — books become read/writable | ~5 min each | $0 |
+| **3 — Sovereignty** | IPFS pins every message immutably | ~2 min | $0 |
 
-One Google / GitHub / Microsoft login works across all services below.
+Stop at any tier. Each one is functional on its own.
 
-| Service | What it's for | Cost |
-|---|---|---|
-| [Replit](https://replit.com) | Runs the app | Free |
-| [Supabase](https://supabase.com) | Database | Free |
-| [Discord](https://discord.com) | Ledger storage | Free |
-| [Groq](https://console.groq.com) | AI (Playground + Audit) | Free |
+---
 
-### 2. Import into Replit
+### Tier 0 — Cold Start (~2 min, $0)
 
-1. Go to [replit.com](https://replit.com) → **Create Repl** → **Import from GitHub**
-2. Paste: `https://github.com/10nc0/BlueDream`
-3. Click **Import** — Replit installs all dependencies automatically. No terminal needed.
+*UI runs. AI works. Books exist but nothing flows in until Tier 2.*
 
-### 3. Database (Supabase)
+[Replit](https://replit.com) → Create Repl → Import from GitHub → `https://github.com/10nc0/BlueDream`
 
-1. Go to [supabase.com](https://supabase.com) → **New Project** → pick a region close to you
-2. Once created: **Settings** → **Database** → **Connection pooling**
-3. Copy the **URI** (port should be `6543`)
-4. This becomes your `DATABASE_URL` secret in the next step
-
-All database tables are created automatically on first run — no commands needed.
-
-### 4. Secrets
-
-In your Repl: click the **🔒 Secrets** panel (padlock icon) → add each key below.
-
-**Core (required):**
+Add secrets (🔒 Secrets panel → padlock icon):
 
 | Key | Value |
-|---|---|
-| `DATABASE_URL` | Supabase connection URI from step 3 |
-| `SESSION_SECRET` | Any random string, 32+ characters |
-| `NYAN_OUTBOUND_API` | Any random string, 32+ characters |
-
-**AI (required for Playground and Audit):**
-
-| Key | Where to get it |
-|---|---|
-| `NYANBOOK_AI_KEY` | [console.groq.com](https://console.groq.com) → API Keys → Create |
+|-----|-------|
+| `DATABASE_URL` | [Supabase](https://supabase.com) → New Project → Settings → Database → Connection pooling URI (port `6543`) |
+| `SESSION_SECRET` | Any random string, 32+ chars |
+| `NYANBOOK_AI_KEY` | [Groq](https://console.groq.com) → API Keys → Create |
 | `PLAYGROUND_AI_KEY` | Same Groq key (or a second one) |
-| `PLAYGROUND_BRAVE_API` | [brave.com/search/api](https://brave.com/search/api) → Free tier (2,000 queries/month) |
 
-**Discord ledger (required for message archiving):**
+Click ▶ Run. Tables are created automatically on first start.
 
-| Key | Where to get it |
-|---|---|
-| `HERMES_TOKEN` | Discord Developer Portal → Hermes bot → Token |
-| `THOTH_TOKEN` | Discord Developer Portal → Thoth bot → Token |
-| `IDRIS_TOKEN` | Discord Developer Portal → Idris bot → Token |
-| `HORUS_TOKEN` | Discord Developer Portal → Horus bot → Token |
-| `NYANBOOK_WEBHOOK_URL` | Discord channel → Edit → Integrations → Webhooks → copy URL |
-| `DISCORD_LOG_CHANNEL_ID` | Right-click your log channel → Copy Channel ID |
+---
 
-Everything else (WhatsApp, LINE, Telegram, email, IPFS) is optional — the app starts cleanly without them and the startup log tells you exactly what's active and what's missing.
+### Tier 1 — Connect AI & Bots (~10 min, $0)
 
-### 5. Discord Bots
+*Discord threads mirror book activity. AI audit can query book history. Books still empty — no inpipe yet.*
 
-Create 4 bots at [discord.com/developers/applications](https://discord.com/developers/applications):
+Create 4 bots at [discord.com/developers](https://discord.com/developers/applications):
 
-| Bot name | Role |
-|---|---|
+| Bot | Role |
+|-----|------|
 | Hermes | Writes messages to ledger threads |
 | Thoth | Mirrors messages |
 | Idris | Writes AI audit results |
 | Horus | Reads AI audit results |
 
-For each: **New Application** → **Bot** → **Reset Token** → copy into Secrets above.
-Invite all 4 to your Discord server with **Send Messages** + **Read Message History** permissions.
+For each: New Application → Bot → Reset Token → copy. Invite all 4 to your server with Send Messages + Read Message History.
 
-### 6. Run
-
-- **Development:** Click the green **▶ Run** button in Replit
-- **Production:** Click **Deploy** → **Autoscale** — gives you a persistent `https://yourapp.replit.app` URL (required for WhatsApp / LINE / Telegram webhooks)
-
-The startup log shows which features are active and which secrets are still missing.
+| Key | Value |
+|-----|-------|
+| `HERMES_TOKEN` / `THOTH_TOKEN` / `IDRIS_TOKEN` / `HORUS_TOKEN` | Each bot's token |
+| `NYANBOOK_WEBHOOK_URL` | Discord channel → Edit → Integrations → Webhooks → copy URL |
+| `DISCORD_LOG_CHANNEL_ID` | Right-click log channel → Copy Channel ID |
+| `NYAN_OUTBOUND_API` | Any random string, 32+ chars |
 
 ---
 
-### Optional: WhatsApp (Twilio)
+### Tier 2 — Inpipe (~5 min each, $0)
 
-1. Create a [Twilio](https://twilio.com) account → enable WhatsApp Business API
-2. Set webhook URL: `https://your-app.replit.app/api/twilio/webhook`
-3. Add `TWILIO_AUTH_TOKEN` to Secrets
+*This is when Nyanbook comes alive — messages flow in, books become readable and writable.*
 
-### Optional: LINE OA
+Each channel is independent. Add any or none. Deploy first (Deploy → Autoscale) to get a persistent `https://yourapp.replit.app` URL for webhooks.
 
-1. Create a [LINE Developer](https://developers.line.biz) account → Messaging API channel
-2. Set webhook URL: `https://your-app.replit.app/api/line/webhook`
-3. Add `LINE_CHANNEL_SECRET` and `LINE_CHANNEL_ACCESS_TOKEN` to Secrets
+**WhatsApp** — [Twilio](https://twilio.com) → WhatsApp Business API → webhook `https://yourapp.replit.app/api/twilio/webhook` → add `TWILIO_AUTH_TOKEN`
 
-LINE is listen-only — Nyanbook.io receives but does not reply.
+**LINE** — [LINE Developers](https://developers.line.biz) → Messaging API → webhook `https://yourapp.replit.app/api/line/webhook` → add `LINE_CHANNEL_SECRET` + `LINE_CHANNEL_ACCESS_TOKEN` *(listen-only — receives but does not reply)*
 
-### Optional: Telegram
+**Telegram** — [@BotFather](https://t.me/botfather) → `/newbot` → webhook `https://yourapp.replit.app/api/telegram/webhook` → add `TELEGRAM_BOT_TOKEN` → users join via `t.me/YourBot?start=JOINCODE`
 
-1. Message [@BotFather](https://t.me/botfather) → `/newbot` → copy the token
-2. Add `TELEGRAM_BOT_TOKEN` to Secrets
-3. Set webhook URL: `https://your-app.replit.app/api/telegram/webhook`
-4. Users join a book via: `https://t.me/YourBot?start=JOINCODE`
+---
 
-### Optional: IPFS (Pinata)
+### Tier 3 — Sovereignty (~2 min, $0)
 
-1. Create a free account at [pinata.cloud](https://pinata.cloud) — 1 GB free
-2. Generate an API key JWT → add as `PINATA_JWT` to Secrets
+*Every message gets an immutable IPFS pin. The ledger works without it — IPFS makes it sovereign.*
 
-Every inpipe message gets pinned permanently to IPFS. The ledger works without it — IPFS makes it sovereign.
+| Key | Value |
+|-----|-------|
+| `PINATA_JWT` | [Pinata](https://pinata.cloud) → free account (1 GB) → API key JWT |
 
-### Optional: Email outpipe (Resend)
+---
 
-1. Create a [Resend](https://resend.com) account → API Keys
-2. Add `RESEND_API_KEY` to Secrets
-3. Configure per-book email delivery in the dashboard's book edit modal
+### Optional extras
 
-### Optional: Per-book webhooks
-
-Each book can deliver messages to zero or more output targets in parallel — configured in the dashboard's **Outpipes** section per book.
-
-| Type | What it does |
-|---|---|
-| `discord` | Posts to any Discord channel or webhook URL |
-| `email` | Sends via Resend to any address |
-| `webhook` | HTTPS JSON POST with optional HMAC-SHA256 signature |
+| Feature | Secret | Cost |
+|---------|--------|------|
+| Web search in Playground | `PLAYGROUND_BRAVE_API` — [brave.com/search/api](https://brave.com/search/api) | Free (2k queries/mo) |
+| Email outpipe | `RESEND_API_KEY` — [resend.com](https://resend.com) | Free tier |
+| Per-book webhooks | *(configured in dashboard → Outpipes)* | — |
 
 ---
 
