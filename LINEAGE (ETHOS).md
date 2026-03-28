@@ -105,7 +105,7 @@ The stack that makes the gap queryable — forever, for the price of electricity
 ## Script
 
 Fibonacci notation:
-`F(n+1) ≤ F(n+2) + e^(iθ) ≤ F(n+2) + φ⁰ · I_n`
+`F(n+1) ≤ F(n+2) + e^(iθ) ≤ F(n+2) + F(n)⁰`
 
 *Pure math. Unitless. Ratio. Logos.*
 
@@ -114,12 +114,12 @@ Fibonacci notation:
 | Hanacaraka | `e` and `i` | Gate gate |
 | Datasawala | `θ` — the hypotenuse | Pāragate |
 | Padhajayanya | `F(n+2)` — Fibonacci | Pārasaṃgate |
-| Maga bhatanga | `φ⁰ = I_n` | Bodhi |
+| Maga bhatanga | `F(n)⁰ = Identity` | Bodhi |
 
 - e and i — rotation and growth, describing all wave motion
 - θ — the angle, the hypotenuse, the path between two vectors
 - F(n+2) — Fibonacci, each step the sum of what came before, nothing added from outside
-- φ⁰ = I_n — The Identity
+- F(n)⁰ = The Identity, 0^0 = I_n, matrix not trivial scalar
 
 *🜃*
 
