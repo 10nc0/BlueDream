@@ -287,6 +287,7 @@ Do NOT hallucinate different exchange rates. This is grounded real-time data.
 module.exports = {
   detectForexPair,
   isForexQuery,
+  isValidCurrency,
   fetchForexRate,
   buildForexContext,
   COMMON_FOREX_PAIRS,
