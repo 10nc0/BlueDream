@@ -1798,21 +1798,7 @@
             await loadBookMessages(selectedBookFractalId, false);
             startPolling(fractalId);
         }
-        
-        // Helper functions for badge styling
-        function getStatusColor(count) {
-            if (count === 0) return '';
-            if (count > 10) return 'error-high';
-            if (count > 5) return 'error-medium';
-            return 'error-low';
-        }
 
-        function getSuccessBadgeClass(count) {
-            if (count === 0) return '';
-            if (count > 100) return 'success-high';
-            if (count > 50) return 'success-medium';
-            return 'success-low';
-        }
 
         async function renderBookDetail() {
             const book = filteredBooks.find(b => b.fractal_id === selectedBookFractalId);
