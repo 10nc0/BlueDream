@@ -314,7 +314,7 @@ async function processAndCacheDocList(docList, cachedFileHashes, clientIp, extra
 }
 
 loadTools();
-const searchDuckDuckGo = (...args) => getTool('duckduckgo').execute(...args);
+const searchDuckDuckGo = (...args) => { const t = getTool('duckduckgo'); return t ? t.execute(...args) : null; };
 
 async function extractCoreQuestion(message) {
     if (!message || typeof message !== 'string') {
@@ -377,7 +377,7 @@ async function extractCoreQuestion(message) {
     }
 }
 
-const searchBrave = (...args) => getTool('brave-search').execute(...args);
+const searchBrave = (...args) => { const t = getTool('brave-search'); return t ? t.execute(...args) : null; };
 
 async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') {
     let lastError;
