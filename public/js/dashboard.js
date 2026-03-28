@@ -1368,6 +1368,8 @@
             detail.replaceChildren(headerBar, msgContainer);
         }
 
+        let _backgroundBooksDone = false;
+
         async function _initPriorityLoad() {
             const cached = _readCachedBook();
             const fidParam = cached.id ? `?fid=${encodeURIComponent(cached.id)}` : '';
@@ -1377,6 +1379,8 @@
                 const data = await resp.json();
                 const topBook = data.book;
                 if (!topBook) return;
+
+                if (_backgroundBooksDone) return;
 
                 selectedBookFractalId = topBook.fractal_id;
                 _persistSelectedBook(topBook.fractal_id, topBook.name);
@@ -1405,6 +1409,7 @@
             if (!result.success) return;
             books = _S.getBooks();
             filteredBooks = _S.getFilteredBooks();
+            _backgroundBooksDone = true;
 
             if (_priorityBookLoaded && filteredBooks.find(b => b.fractal_id === selectedBookFractalId)) {
                 renderBooks(true);
