@@ -457,39 +457,65 @@ function buildDocAttachmentMeta(docList, extractedContent) {
     };
 }
 
-function extractPsiEmaFromAnalysis(analysis) {
-    const reading = analysis.reading || {};
-    const phase = analysis.dimensions?.phase || {};
-    const anomaly = analysis.dimensions?.anomaly || {};
-    const convergence = analysis.dimensions?.convergence || {};
-    const fidelity = analysis.fidelity || {};
+function extractPsiEmaFields(src) {
+    if (!src) return null;
+    if (src.dimensions) {
+        const reading = src.reading || {};
+        const phase = src.dimensions.phase || {};
+        const anomaly = src.dimensions.anomaly || {};
+        const convergence = src.dimensions.convergence || {};
+        const fidelity = src.fidelity || {};
+        return {
+            theta: phase.current ?? null,
+            z: anomaly.current ?? null,
+            R: convergence.currentDisplay ?? convergence.current ?? null,
+            reading: reading.reading || src.summary?.reading || null,
+            emoji: reading.emoji || src.summary?.readingEmoji || null,
+            description: reading.description || null,
+            fidelity: fidelity.breakdown || null,
+            regime: src.summary?.regime || null
+        };
+    }
     return {
-        theta: phase.current ?? null,
-        z: anomaly.current ?? null,
-        R: convergence.currentDisplay ?? convergence.current ?? null,
-        reading: reading.reading || analysis.summary?.reading || null,
-        emoji: reading.emoji || analysis.summary?.readingEmoji || null,
-        description: reading.description || null,
-        fidelity: fidelity.breakdown || null,
-        regime: analysis.summary?.regime || null
-    };
-}
-
-function extractPsiEma(preflight) {
-    if (!preflight?.psiEmaAnalysis) return null;
-    const daily = preflight.psiEmaAnalysis;
-    const weekly = preflight.psiEmaAnalysisWeekly;
-    const pick = (src) => ({
         reading: src.reading ?? null,
         emoji: src.emoji ?? null,
         theta: src.theta ?? null,
         z: src.z ?? null,
         R: src.R ?? null,
         fidelity: src.fidelity ?? null
-    });
-    const result = { daily: pick(daily) };
-    if (weekly) result.weekly = pick(weekly);
+    };
+}
+
+function extractPsiEmaFromAnalysis(analysis) {
+    return extractPsiEmaFields(analysis);
+}
+
+function extractPsiEma(preflight) {
+    if (!preflight?.psiEmaAnalysis) return null;
+    const result = { daily: extractPsiEmaFields(preflight.psiEmaAnalysis) };
+    if (preflight.psiEmaAnalysisWeekly) result.weekly = extractPsiEmaFields(preflight.psiEmaAnalysisWeekly);
     return result;
+}
+
+function splitMultiTicker(message) {
+    const trimmed = message.trim();
+    const tickerMatches = trimmed.match(/\$[A-Z]{1,5}\b/g);
+    const isComparison = /\b(compare|vs\.?|versus|correlation|relative|against|ratio|between)\b/i.test(trimmed);
+    if (!tickerMatches || tickerMatches.length <= 1 || isComparison) return null;
+    const uniqueTickers = [...new Set(tickerMatches)];
+    if (uniqueTickers.length <= 1) return null;
+    const baseQuery = trimmed
+        .replace(/\$[A-Z]{1,5}\b/g, '')
+        .replace(/\b(and|,|&|also|plus)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (baseQuery.length > 0) {
+        return uniqueTickers.slice(0, 5).map(ticker => ({ query: `${ticker} ${baseQuery}`, label: ticker }));
+    }
+    const { detectPsiEMAKeys } = require('../utils/stock-fetcher');
+    const hasPsiEmaIntent = detectPsiEMAKeys(trimmed).shouldTrigger;
+    const suffix = hasPsiEmaIntent ? 'psi-ema' : 'analysis';
+    return uniqueTickers.slice(0, 5).map(ticker => ({ query: `${ticker} ${suffix}`, label: ticker }));
 }
 
 loadTools();
@@ -1409,33 +1435,10 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             let compoundParts = detectCompoundQuery(message.trim(), false, false);
 
             if (!compoundParts || compoundParts.length <= 1) {
-                const trimmedMsg = message.trim();
-                const tickerMatches = trimmedMsg.match(/\$[A-Z]{1,5}\b/g);
-                const isComparison = /\b(compare|vs\.?|versus|correlation|relative|against|ratio|between)\b/i.test(trimmedMsg);
-                if (tickerMatches && tickerMatches.length > 1 && !isComparison) {
-                    const uniqueTickers = [...new Set(tickerMatches)];
-                    if (uniqueTickers.length > 1) {
-                        const baseQuery = trimmedMsg
-                            .replace(/\$[A-Z]{1,5}\b/g, '')
-                            .replace(/\b(and|,|&|also|plus)\b/gi, '')
-                            .replace(/\s+/g, ' ')
-                            .trim();
-                        if (baseQuery.length > 0) {
-                            compoundParts = uniqueTickers.slice(0, 5).map(ticker => ({
-                                query: `${ticker} ${baseQuery}`,
-                                label: ticker
-                            }));
-                        } else {
-                            const { detectPsiEMAKeys } = require('../utils/stock-fetcher');
-                            const hasPsiEmaIntent = detectPsiEMAKeys(trimmedMsg).shouldTrigger;
-                            const suffix = hasPsiEmaIntent ? 'psi-ema' : 'analysis';
-                            compoundParts = uniqueTickers.slice(0, 5).map(ticker => ({
-                                query: `${ticker} ${suffix}`,
-                                label: ticker
-                            }));
-                        }
-                        logger.debug({ tickers: uniqueTickers }, '🔌 Nyan API v1: Multi-ticker split');
-                    }
+                const tickerParts = splitMultiTicker(message);
+                if (tickerParts) {
+                    compoundParts = tickerParts;
+                    logger.debug({ tickers: tickerParts.map(p => p.label) }, '🔌 Nyan API v1: Multi-ticker split');
                 }
             }
 
