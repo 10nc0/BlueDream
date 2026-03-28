@@ -1333,7 +1333,84 @@
             container.appendChild(loader);
         }
 
-        // Book CRUD Functions - delegates to BooksModule for data operations
+        let selectedBookFractalId = null;
+        let _priorityBookLoaded = false;
+
+        function _persistSelectedBook(fractalId, bookName) {
+            try {
+                localStorage.setItem('nyan_lastBook', fractalId);
+                if (bookName) localStorage.setItem('nyan_lastBookName', bookName);
+            } catch (_) {}
+        }
+
+        function _readCachedBook() {
+            try {
+                return {
+                    id: localStorage.getItem('nyan_lastBook'),
+                    name: localStorage.getItem('nyan_lastBookName')
+                };
+            } catch (_) { return { id: null, name: null }; }
+        }
+
+        function _renderMinimalHeader(fractalId, bookName) {
+            const detail = document.getElementById('bookDetail');
+            if (!detail) return;
+            const headerBar = document.createElement('div');
+            headerBar.id = 'priority-header';
+            headerBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.75rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(148, 163, 184, 0.1);';
+            const nameEl = document.createElement('div');
+            nameEl.style.cssText = 'color: #e2e8f0; font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+            nameEl.textContent = bookName || fractalId;
+            headerBar.appendChild(nameEl);
+            const msgContainer = document.createElement('div');
+            msgContainer.id = `discord-messages-${fractalId}`;
+            msgContainer.style.cssText = 'flex: 1; overflow-y: auto;';
+            detail.replaceChildren(headerBar, msgContainer);
+        }
+
+        async function _initPriorityLoad() {
+            const cached = _readCachedBook();
+            if (!cached.id) return;
+
+            selectedBookFractalId = cached.id;
+            _renderMinimalHeader(cached.id, cached.name);
+            _showMsgLoader(cached.id);
+
+            if (isMobile()) {
+                const bookSidebar = document.getElementById('bookSidebar');
+                const bookDetail = document.getElementById('bookDetail');
+                if (bookSidebar) bookSidebar.style.display = 'none';
+                if (bookDetail) bookDetail.style.display = 'flex';
+            }
+
+            messagePageState[cached.id] = { isLoading: false, hasOlder: true, seenIds: new Set(), oldestId: null };
+            await loadBookMessages(cached.id, false);
+            _priorityBookLoaded = true;
+            startPolling(cached.id);
+        }
+
+        async function _initBackgroundBooks() {
+            _showBookSkeletons();
+            const result = await _B.loadBooks(true);
+            if (!result.success) return;
+            books = _S.getBooks();
+            filteredBooks = _S.getFilteredBooks();
+
+            if (_priorityBookLoaded && filteredBooks.find(b => b.fractal_id === selectedBookFractalId)) {
+                renderBooks(true);
+                renderBookDetail();
+            } else if (_priorityBookLoaded) {
+                localStorage.removeItem('nyan_lastBook');
+                localStorage.removeItem('nyan_lastBookName');
+                selectedBookFractalId = filteredBooks.length ? filteredBooks[0].fractal_id : null;
+                renderBooks();
+            } else {
+                renderBooks();
+            }
+            updatePlatformFilter();
+            if (isMobile()) renderThumbsZone();
+        }
+
         async function loadBooks() {
             _showBookSkeletons();
             const result = await _B.loadBooks();
@@ -1345,17 +1422,6 @@
                 if (isMobile()) renderThumbsZone();
             }
         }
-
-        async function loadBooksQuietly() {
-            const result = await _B.loadBooks(true);
-            if (result.success) {
-                books = _S.getBooks();
-                filteredBooks = _S.getFilteredBooks();
-                renderBooks(true);
-            }
-        }
-
-        let selectedBookFractalId = null;
 
         function createBookListItem(book, selectedFractalId) {
             const searchBox = document.getElementById('searchBox');
@@ -1424,6 +1490,7 @@
             const wasAutoSelected = !selectedBookFractalId || !filteredBooks.find(b => b.fractal_id === selectedBookFractalId);
             if (wasAutoSelected) {
                 selectedBookFractalId = filteredBooks[0].fractal_id;
+                _persistSelectedBook(selectedBookFractalId, filteredBooks[0].name);
             }
             
             const fragment = document.createDocumentFragment();
@@ -1496,6 +1563,7 @@
             selectedBookFractalId = fractalId;
             
             const selectedBook = filteredBooks.find(b => b.fractal_id === fractalId);
+            _persistSelectedBook(fractalId, selectedBook?.name);
             if (selectedBook && selectedBook._matchType === 'message' && selectedBook._searchQuery) {
                 bookSearchContext = {
                     query: selectedBook._searchQuery,
@@ -7344,18 +7412,13 @@
             }
         }
 
-        // Initialize
         handleOAuthCallback();
-        console.log('🔐 Checking authentication...');
         _showBookSkeletons();
         checkAuth().then(authenticated => {
-            console.log('🔐 Auth result:', authenticated);
-            if (authenticated) {
-                loadBooks();
-                initHopAnimation();
-            } else {
-                console.warn('⚠️ Not authenticated - skipping cat animation');
-            }
+            if (!authenticated) return;
+            initHopAnimation();
+            _initPriorityLoad();
+            _initBackgroundBooks();
         });
         // ===== SYSTEM STATUS BAR =====
         let startTime = Date.now();
