@@ -972,17 +972,26 @@ async function handlePendingBookAsync(channel, msg, bookRecord, deps) {
     // phone_number stores E.164 only — null for non-phone channels (Line, Telegram, email).
     const phoneToStore = PHONE_CHANNELS.has(msg.channel) ? msg.phone : null;
 
-    await pool.query(`
-        UPDATE core.book_registry 
-        SET phone_number = $1, creator_phone = $1, status = 'active', activated_at = NOW(), updated_at = NOW()
-        WHERE id = $2
-    `, [phoneToStore, bookRecord.id]);
-    
-    await pool.query(`
-        UPDATE ${tenantSchema}.books 
-        SET status = 'active'
-        WHERE id = $1
-    `, [bookId]);
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query(`
+            UPDATE core.book_registry 
+            SET phone_number = $1, creator_phone = $1, status = 'active', activated_at = NOW(), updated_at = NOW()
+            WHERE id = $2
+        `, [phoneToStore, bookRecord.id]);
+        await client.query(`
+            UPDATE ${tenantSchema}.books 
+            SET status = 'active'
+            WHERE id = $1
+        `, [bookId]);
+        await client.query('COMMIT');
+    } catch (txErr) {
+        await client.query('ROLLBACK');
+        throw txErr;
+    } finally {
+        client.release();
+    }
     
     logger.info({ fractalId: bookRecord.fractal_id, bookId, phone: msg.phone, channel: msg.channel }, 'Async: Activated book');
     

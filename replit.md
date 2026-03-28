@@ -179,6 +179,8 @@ The invite token flow (`/api/invites`, `generateInviteToken`, `validateInviteTok
 - Password reset tokens: stored as SHA256 hash, looked up by hash — raw token only in email link
 - `user_settings` queries: schema-qualified (`${tenantSchema}.user_settings`) — prevents cross-tenant reads via default search_path
 - `+62` country code default: RUNBOOK comment added documenting Indonesia assumption, mitigation path for other regions
+- Book activation atomicity: `handlePendingBookAsync` two UPDATEs (core.book_registry + tenant.books) wrapped in BEGIN/COMMIT transaction
+- `playground-capacity.js`: `crypto` require hoisted to top-level; `dbQueryLimiter` cleanup added to stale-IP sweep interval
 - `isAudioRecordingSupported()`: inverted condition fixed (`!== 'function'` → `=== 'function'`)
 - `localStorage.clear()` in playground: replaced with surgical `removeItem('nyan_history')` — no longer nukes unrelated origin data
 - Warm-up retry loop: capped at 3 retries (was infinite)

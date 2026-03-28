@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const logger = require('../lib/logger');
 const ACTIVITY_WINDOW_MS = 180 * 60 * 1000; // 180 minutes (3 hours)
 const REFILL_INTERVAL_MS = 60 * 1000; // Minimum interval between refill checks
@@ -115,7 +116,6 @@ async function getReputationMultiplier(ip) {
 }
 
 function hashIP(ip) {
-    const crypto = require('crypto');
     return crypto.createHash('sha256').update(ip + '_nyan_salt_v1').digest('hex').substring(0, 32);
 }
 
@@ -485,6 +485,7 @@ setInterval(() => {
             ipBuckets.delete(ip);
             promptHistory.delete(ip);
             burstTrackers.delete(ip);
+            dbQueryLimiter.delete(ip);
         }
     }
     
