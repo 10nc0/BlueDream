@@ -2056,66 +2056,7 @@ Output ONLY the corrected table and summary lines:`;
    * @param {string} signatureTs - Pre-formatted timestamp from unified queryTimestamp
    */
   applyPersonalityFormat(answer, mode, signatureTs) {
-    if (!answer) return answer;
-    
-    const { getPersonalityConfig, hasAnySignature } = require('../lib/mode-registry');
-    const config = getPersonalityConfig(mode);
-    
-    let cleaned = answer;
-    
-    // Registry-driven: skip intro/outro stripping for modes that need it
-    if (config.skipIntroOutro) {
-      if (config.appendSignature && !hasAnySignature(cleaned)) {
-        cleaned = cleaned.trimEnd() + '\n\n' + config.signatureText + `\n[${signatureTs}]`;
-      }
-      return cleaned.trim();
-    }
-    
-    const introFluffPatterns = [
-      /^##?\s*Summary[^\n]*\n+[^\n]*(?:comprehensive|detailed|provides|uncertain)[^\n]*\n+/i,
-      /^##?\s*Summary[^\n]*\n+[^\n]*following[^\n]*\n+/i,
-      /^##?\s*Summary\s*\n+[^\n]+\n+/i,
-      /^##?\s*Summary\s*\n+/i,
-      /^##?\s*Introduction to[^\n]*\n+(?:[^\n]+\n+)?/i,
-      /^(?:A |The )?(?:comprehensive|detailed|current) (?:analysis|view|overview|price trend) of[^\n]*\n+/i,
-      /^The (?:following|current|NVDA|stock)[^\n]*(?:is|can be|provides)[^\n]*\n+/i,
-      /^Here (?:is|are)[^\n]*analysis[^\n]*\n+/i,
-      /^Let me provide[^\n]*\n+/i,
-      /^I'll analyze[^\n]*\n+/i,
-      /^This analysis provides[^\n]*\n+/i,
-      /^To analyze[^\n]*\n+/i,
-      /^As of my knowledge[^\n]*\n+/i,
-    ];
-    
-    for (const pattern of introFluffPatterns) {
-      cleaned = cleaned.replace(pattern, '');
-    }
-    
-    // OUTRO FLUFF: Remove verbose confidence grading sections (95%/80%/<50% tiers)
-    const outroFluffPatterns = [
-      /###?\s*Confidence Grading\s*\n+(?:[\s\S]*?(?:\*\s*\*\*95%\*\*|\*\s*\*\*80%\*\*|\*\s*\*\*<50%\*\*)[\s\S]*?)+(?=\n*(?:🔥|$))/i,
-      /The confidence (?:grading|levels?) (?:for this analysis )?(?:is|are) as follows:\s*\n+(?:\*[^\n]+\n+)+/i,
-      /The current analysis has a confidence grade of[^\n]*\n+/i,
-    ];
-    
-    for (const pattern of outroFluffPatterns) {
-      cleaned = cleaned.replace(pattern, '');
-    }
-    
-    // Use unified timestamp from queryTimestamp (single source of truth)
-    const signatureWithTs = `${config.signatureText}\n[${signatureTs}]`;
-
-    // Use regex to detect any existing nyan signature and replace it with the timestamped version
-    // Catches 🔥 (canonical) and 🐱 (LLM hallucinated cat emoji variant)
-    const anyNyanSigPattern = /(?:🔥|🐱)\s*(?:~nyan|nyan~)(?:\s*\[.*?\])?/i;
-
-    if (anyNyanSigPattern.test(cleaned)) {
-      cleaned = cleaned.replace(anyNyanSigPattern, signatureWithTs);
-    } else {
-      cleaned = cleaned.trimEnd() + '\n\n' + signatureWithTs;
-    }
-
-    return cleaned.trim();
+    return applyPersonalityFormat(answer, mode, signatureTs);
   }
 
   deriveSource(state) {
