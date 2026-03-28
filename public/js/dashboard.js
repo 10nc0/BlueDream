@@ -1352,20 +1352,186 @@
             } catch (_) { return { id: null, name: null }; }
         }
 
-        function _renderMinimalHeader(fractalId, bookName) {
+        let _detailShellReady = false;
+
+        function _buildDetailShell() {
             const detail = document.getElementById('bookDetail');
-            if (!detail) return;
+            if (!detail || _detailShellReady) return;
+            _detailShellReady = true;
+
             const headerBar = document.createElement('div');
-            headerBar.id = 'priority-header';
+            headerBar.id = 'detail-header';
             headerBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.75rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(148, 163, 184, 0.1);';
+
+            const headerLeft = document.createElement('div');
+            headerLeft.style.cssText = 'display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;';
             const nameEl = document.createElement('div');
+            nameEl.id = 'detail-book-name';
             nameEl.style.cssText = 'color: #e2e8f0; font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
-            nameEl.textContent = bookName || fractalId;
-            headerBar.appendChild(nameEl);
+            nameEl.textContent = '\u00A0';
+            headerLeft.appendChild(nameEl);
+            const statusSlot = document.createElement('span');
+            statusSlot.id = 'detail-wa-status';
+            statusSlot.style.cssText = 'display: none;';
+            headerLeft.appendChild(statusSlot);
+            headerBar.appendChild(headerLeft);
+
+            const headerRight = document.createElement('div');
+            headerRight.id = 'detail-header-btns';
+            headerRight.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+            const createIconBtn = (dataAttr, title, bgColor, textColor, icon) => {
+                const btn = document.createElement('button');
+                btn.className = 'btn-icon';
+                btn.dataset[dataAttr] = '';
+                btn.title = title;
+                btn.style.cssText = `background: ${bgColor}; color: ${textColor}; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;`;
+                btn.textContent = icon;
+                return btn;
+            };
+            headerRight.appendChild(createIconBtn('showBookInfo', 'Book Information', 'rgba(148, 163, 184, 0.15)', '#94a3b8', 'ℹ️'));
+            if (!isDevPanelView) {
+                const waBtn = createIconBtn('showWhatsappActivation', 'WhatsApp Activation', 'rgba(34, 197, 94, 0.15)', '#22c55e', '📱');
+                waBtn.id = 'detail-wa-btn';
+                waBtn.style.cssText += 'display: none;';
+                headerRight.appendChild(waBtn);
+                headerRight.appendChild(createIconBtn('editBook', 'Edit', 'rgba(251, 191, 36, 0.15)', '#fbbf24', '✏️'));
+                headerRight.appendChild(createIconBtn('downloadEntireBook', 'Download Entire Book', 'rgba(34, 197, 94, 0.15)', '#22c55e', '⬇️'));
+                headerRight.appendChild(createIconBtn('deleteBook', 'Delete', 'rgba(239, 68, 68, 0.15)', '#ef4444', '🗑️'));
+            }
+            headerBar.appendChild(headerRight);
+
+            const activationSlot = document.createElement('div');
+            activationSlot.id = 'detail-activation';
+            activationSlot.style.cssText = 'display: none;';
+
+            const toolbar = document.createElement('div');
+            toolbar.id = 'detail-toolbar';
+            toolbar.style.cssText = 'display: flex; gap: 0.3rem; padding: 0.3rem 0.5rem; background: rgba(30, 41, 59, 0.4); border-radius: 6px; margin-bottom: 0.375rem; flex-shrink: 0; align-items: center;';
+
+            const selectAllLabel = document.createElement('label');
+            selectAllLabel.style.cssText = 'display: flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.75rem; cursor: pointer; white-space: nowrap; flex-shrink: 0;';
+            const selectAllCheckbox = document.createElement('input');
+            selectAllCheckbox.type = 'checkbox';
+            selectAllCheckbox.id = 'detail-select-all';
+            selectAllCheckbox.style.cssText = 'cursor: pointer;';
+            selectAllLabel.appendChild(selectAllCheckbox);
+            selectAllLabel.appendChild(document.createTextNode('All'));
+            toolbar.appendChild(selectAllLabel);
+
+            const searchInput = document.createElement('input');
+            searchInput.type = 'text';
+            searchInput.id = 'detail-msg-search';
+            searchInput.placeholder = '\uD83D\uDD0D Search...';
+            searchInput.style.cssText = 'padding: 0.25rem 0.5rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.8rem; flex: 1 1 80px; min-width: 60px;';
+            toolbar.appendChild(searchInput);
+
+            const statusSelect = document.createElement('select');
+            statusSelect.id = 'detail-status-filter';
+            statusSelect.style.cssText = 'padding: 0.25rem 0.375rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.75rem; flex-shrink: 0;';
+            [['all', 'All'], ['success', '\u2713'], ['failed', '\u2717']].forEach(([val, txt]) => {
+                const opt = document.createElement('option');
+                opt.value = val;
+                opt.textContent = txt;
+                statusSelect.appendChild(opt);
+            });
+            toolbar.appendChild(statusSelect);
+
+            const downloadBtn = document.createElement('button');
+            downloadBtn.id = 'detail-download-sel';
+            downloadBtn.disabled = true;
+            downloadBtn.style.cssText = 'padding: 0.25rem 0.5rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.7rem; cursor: pointer; white-space: nowrap; opacity: 0.5; flex-shrink: 0;';
+            downloadBtn.textContent = '\u2B07\uFE0F Attachment';
+            toolbar.appendChild(downloadBtn);
+
+            const tagBtn = document.createElement('button');
+            tagBtn.id = 'detail-tag-sel';
+            tagBtn.disabled = true;
+            tagBtn.style.cssText = 'padding: 0.25rem 0.5rem; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 0.375rem; color: #a855f7; font-size: 0.7rem; cursor: pointer; white-space: nowrap; opacity: 0.5; flex-shrink: 0;';
+            tagBtn.textContent = '\uD83C\uDFF7\uFE0F Tag';
+            toolbar.appendChild(tagBtn);
+
+            const searchIndicator = document.createElement('div');
+            searchIndicator.id = 'detail-search-indicator';
+            searchIndicator.style.cssText = 'display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between; margin-bottom: 0.5rem; flex-shrink: 0;';
+            const indicatorText = document.createElement('span');
+            indicatorText.textContent = '\uD83D\uDD0D Filtered from book search';
+            searchIndicator.appendChild(indicatorText);
+            const clearBtn = document.createElement('button');
+            clearBtn.id = 'detail-clear-filter';
+            clearBtn.style.cssText = 'background: none; border: none; color: #22c55e; cursor: pointer; font-size: 1.25rem; padding: 0; line-height: 1; font-weight: bold;';
+            clearBtn.title = 'Clear filter';
+            clearBtn.textContent = '\u00D7';
+            searchIndicator.appendChild(clearBtn);
+
+            const messagesWrapper = document.createElement('div');
+            messagesWrapper.id = 'detail-messages-wrapper';
+            messagesWrapper.style.cssText = 'display: flex; flex-direction: column; flex: 1; margin-top: 0.5rem; min-height: 0;';
+            messagesWrapper.appendChild(toolbar);
+            messagesWrapper.appendChild(searchIndicator);
+
             const msgContainer = document.createElement('div');
-            msgContainer.id = `discord-messages-${fractalId}`;
-            msgContainer.style.cssText = 'flex: 1; overflow-y: auto;';
-            detail.replaceChildren(headerBar, msgContainer);
+            msgContainer.id = 'detail-msg-container';
+            msgContainer.className = 'discord-messages-container';
+            msgContainer.style.cssText = 'flex: 1; overflow-y: auto; background: rgba(30, 41, 59, 0.3); border-radius: 6px; padding: 0.75rem; min-height: 0;';
+            messagesWrapper.appendChild(msgContainer);
+
+            detail.replaceChildren(headerBar, activationSlot, messagesWrapper);
+        }
+
+        let _boundBookId = null;
+
+        function _bindShellToBook(fractalId, bookName) {
+            const prev = _boundBookId;
+            _boundBookId = fractalId;
+
+            const nameEl = document.getElementById('detail-book-name');
+            if (nameEl) nameEl.textContent = bookName || fractalId;
+
+            const statusSlot = document.getElementById('detail-wa-status');
+            if (statusSlot) { statusSlot.style.display = 'none'; statusSlot.textContent = ''; }
+
+            const btns = document.getElementById('detail-header-btns');
+            if (btns) {
+                btns.querySelectorAll('[data-show-book-info]').forEach(b => b.dataset.showBookInfo = fractalId);
+                btns.querySelectorAll('[data-show-whatsapp-activation]').forEach(b => b.dataset.showWhatsappActivation = fractalId);
+                btns.querySelectorAll('[data-edit-book]').forEach(b => b.dataset.editBook = fractalId);
+                btns.querySelectorAll('[data-download-entire-book]').forEach(b => b.dataset.downloadEntireBook = fractalId);
+                btns.querySelectorAll('[data-delete-book]').forEach(b => b.dataset.deleteBook = fractalId);
+            }
+
+            const remap = [
+                ['select-all', prev ? `select-all-${prev}` : 'detail-select-all', `select-all-${fractalId}`, 'selectAll'],
+                ['msg-search', prev ? `msg-search-${prev}` : 'detail-msg-search', `msg-search-${fractalId}`, 'filterMessages'],
+                ['status-filter', prev ? `status-filter-${prev}` : 'detail-status-filter', `status-filter-${fractalId}`, 'statusFilter'],
+                ['download-selected', prev ? `download-selected-${prev}` : 'detail-download-sel', `download-selected-${fractalId}`, 'downloadBook'],
+                ['tag-selected', prev ? `tag-selected-${prev}` : 'detail-tag-sel', `tag-selected-${fractalId}`, 'tagBook'],
+                ['search-indicator', prev ? `search-indicator-${prev}` : 'detail-search-indicator', `search-indicator-${fractalId}`, null],
+                ['discord-messages', prev ? `discord-messages-${prev}` : 'detail-msg-container', `discord-messages-${fractalId}`, null],
+            ];
+
+            remap.forEach(([, oldId, newId, dataKey]) => {
+                const el = document.getElementById(oldId);
+                if (!el) return;
+                el.id = newId;
+                if (dataKey) el.dataset[dataKey] = fractalId;
+            });
+
+            const cf = prev
+                ? document.querySelector(`[data-clear-filter="${prev}"]`)
+                : document.getElementById('detail-clear-filter');
+            if (cf) { cf.removeAttribute('id'); cf.dataset.clearFilter = fractalId; }
+        }
+
+        function _updateShellVisibility(book) {
+            if (!book) return;
+            const platform = (book.input_platform || book.platform || '').toLowerCase();
+            const waBtn = document.getElementById('detail-wa-btn');
+            if (waBtn) waBtn.style.display = (platform === 'whatsapp') ? 'inline-flex' : 'none';
+
+            const editBtns = document.querySelectorAll('#detail-header-btns [data-edit-book]');
+            const delBtns = document.querySelectorAll('#detail-header-btns [data-delete-book]');
+            editBtns.forEach(b => b.style.display = book.canEdit ? '' : 'none');
+            delBtns.forEach(b => b.style.display = book.canEdit ? '' : 'none');
         }
 
         let _backgroundBooksDone = false;
@@ -1384,8 +1550,8 @@
 
                 selectedBookFractalId = topBook.fractal_id;
                 _persistSelectedBook(topBook.fractal_id, topBook.name);
-                _renderMinimalHeader(topBook.fractal_id, topBook.name);
-                _showMsgLoader(topBook.fractal_id);
+                _bindShellToBook(topBook.fractal_id, topBook.name);
+                _updateShellVisibility(topBook);
 
                 if (isMobile()) {
                     const bookSidebar = document.getElementById('bookSidebar');
@@ -1413,7 +1579,9 @@
 
             if (_priorityBookLoaded && filteredBooks.find(b => b.fractal_id === selectedBookFractalId)) {
                 renderBooks(true);
-                _upgradeHeader();
+                const book = filteredBooks.find(b => b.fractal_id === selectedBookFractalId);
+                _updateShellVisibility(book);
+                _fetchWhatsAppStatus(book);
             } else if (_priorityBookLoaded) {
                 localStorage.removeItem('nyan_lastBook');
                 localStorage.removeItem('nyan_lastBookName');
@@ -1426,55 +1594,20 @@
             if (isMobile()) renderThumbsZone();
         }
 
-        function _upgradeHeader() {
-            const book = filteredBooks.find(b => b.fractal_id === selectedBookFractalId);
+        async function _fetchWhatsAppStatus(book) {
             if (!book) return;
-            const oldHeader = document.getElementById('priority-header');
-            if (!oldHeader) return;
-            const detail = document.getElementById('bookDetail');
-            if (!detail) return;
-
             const platform = (book.input_platform || book.platform || '').toLowerCase();
-
-            const headerBar = document.createElement('div');
-            headerBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.75rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(148, 163, 184, 0.1);';
-
-            const headerLeft = document.createElement('div');
-            headerLeft.style.cssText = 'display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;';
-            const bookName = document.createElement('div');
-            bookName.style.cssText = 'color: #e2e8f0; font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
-            bookName.textContent = book.name || `${platform} → Discord`;
-            headerLeft.appendChild(bookName);
-            headerBar.appendChild(headerLeft);
-
-            const headerRight = document.createElement('div');
-            headerRight.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
-            const createIconBtn = (dataAttr, value, title, bgColor, textColor, icon) => {
-                const btn = document.createElement('button');
-                btn.className = 'btn-icon';
-                btn.dataset[dataAttr] = value;
-                btn.title = title;
-                btn.style.cssText = `background: ${bgColor}; color: ${textColor}; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;`;
-                btn.textContent = icon;
-                return btn;
-            };
-            headerRight.appendChild(createIconBtn('showBookInfo', book.fractal_id, 'Book Information', 'rgba(148, 163, 184, 0.15)', '#94a3b8', 'ℹ️'));
-            if (!isDevPanelView && platform === 'whatsapp') {
-                const waBtn = createIconBtn('showWhatsappActivation', book.fractal_id, 'WhatsApp Activation', 'rgba(34, 197, 94, 0.15)', '#22c55e', '📱');
-                waBtn.style.cssText += 'display: inline-flex; align-items: center; justify-content: center;';
-                headerRight.appendChild(waBtn);
-            }
-            if (!isDevPanelView) {
-                if (book.canEdit) {
-                    headerRight.appendChild(createIconBtn('editBook', book.fractal_id, 'Edit', 'rgba(251, 191, 36, 0.15)', '#fbbf24', '✏️'));
+            if (platform !== 'whatsapp') return;
+            try {
+                const resp = await window.authFetch(`/api/books/${book.fractal_id}/status`);
+                if (!resp.ok) return;
+                const whatsappStatus = await resp.json();
+                const slot = document.getElementById('detail-wa-status');
+                if (slot) {
+                    slot.style.cssText = `background: ${whatsappStatus.status === 'ready' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(251, 191, 36, 0.2)'}; color: ${whatsappStatus.status === 'ready' ? '#10b981' : '#fbbf24'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; display: inline;`;
+                    slot.textContent = whatsappStatus.status === 'ready' ? '\u2705' : '\u23F3';
                 }
-                headerRight.appendChild(createIconBtn('downloadEntireBook', book.fractal_id, 'Download Entire Book', 'rgba(34, 197, 94, 0.15)', '#22c55e', '⬇️'));
-                if (book.canEdit) {
-                    headerRight.appendChild(createIconBtn('deleteBook', book.fractal_id, 'Delete', 'rgba(239, 68, 68, 0.15)', '#ef4444', '🗑️'));
-                }
-            }
-            headerBar.appendChild(headerRight);
-            detail.replaceChild(headerBar, oldHeader);
+            } catch (e) { /* silent */ }
         }
 
         async function loadBooks() {
@@ -1684,267 +1817,14 @@
         async function renderBookDetail() {
             const book = filteredBooks.find(b => b.fractal_id === selectedBookFractalId);
             if (!book) return;
-            
-            const failedClass = getStatusColor(book.failed_count || 0);
-            const successClass = getSuccessBadgeClass(book.forwarded_count || 0);
-            
-            let whatsappStatus = null;
-            const platform = (book.input_platform || book.platform || '').toLowerCase();
-            if (platform === 'whatsapp') {
-                try {
-                    const statusResponse = await window.authFetch(`/api/books/${book.fractal_id}/status`);
-                    if (statusResponse.ok) {
-                        whatsappStatus = await statusResponse.json();
-                    }
-                } catch (error) {
-                    console.error('Error fetching WhatsApp status:', error);
-                }
-            }
-            
-            const detail = document.getElementById('bookDetail');
-            const fragment = document.createDocumentFragment();
-            
-            const headerBar = document.createElement('div');
-            headerBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.75rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(148, 163, 184, 0.1);';
-            
-            const headerLeft = document.createElement('div');
-            headerLeft.style.cssText = 'display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;';
-            
-            const bookName = document.createElement('div');
-            bookName.style.cssText = 'color: #e2e8f0; font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
-            bookName.textContent = book.name || `${platform} → Discord`;
-            headerLeft.appendChild(bookName);
-            
-            if (platform === 'whatsapp' && whatsappStatus) {
-                const statusBadge = document.createElement('span');
-                statusBadge.style.cssText = `background: ${whatsappStatus.status === 'ready' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(251, 191, 36, 0.2)'}; color: ${whatsappStatus.status === 'ready' ? '#10b981' : '#fbbf24'}; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;`;
-                statusBadge.textContent = whatsappStatus.status === 'ready' ? '✅' : '⏳';
-                headerLeft.appendChild(statusBadge);
-            }
-            headerBar.appendChild(headerLeft);
-            
-            const headerRight = document.createElement('div');
-            headerRight.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
-            
-            const createIconBtn = (dataAttr, value, title, bgColor, textColor, icon) => {
-                const btn = document.createElement('button');
-                btn.className = 'btn-icon';
-                btn.dataset[dataAttr] = value;
-                btn.title = title;
-                btn.style.cssText = `background: ${bgColor}; color: ${textColor}; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;`;
-                btn.textContent = icon;
-                return btn;
-            };
-            
-            headerRight.appendChild(createIconBtn('showBookInfo', book.fractal_id, 'Book Information', 'rgba(148, 163, 184, 0.15)', '#94a3b8', 'ℹ️'));
-            if (!isDevPanelView && platform === 'whatsapp') {
-                const waBtn = createIconBtn('showWhatsappActivation', book.fractal_id, 'WhatsApp Activation', 'rgba(34, 197, 94, 0.15)', '#22c55e', '📱');
-                waBtn.style.cssText += 'display: inline-flex; align-items: center; justify-content: center;';
-                headerRight.appendChild(waBtn);
-            }
-            if (!isDevPanelView) {
-                // Only show edit/delete buttons if canEdit is true (owner only)
-                if (book.canEdit) {
-                    headerRight.appendChild(createIconBtn('editBook', book.fractal_id, 'Edit', 'rgba(251, 191, 36, 0.15)', '#fbbf24', '✏️'));
-                }
-                headerRight.appendChild(createIconBtn('downloadEntireBook', book.fractal_id, 'Download Entire Book', 'rgba(34, 197, 94, 0.15)', '#22c55e', '⬇️'));
-                if (book.canEdit) {
-                    headerRight.appendChild(createIconBtn('deleteBook', book.fractal_id, 'Delete', 'rgba(239, 68, 68, 0.15)', '#ef4444', '🗑️'));
-                }
-            }
-            headerBar.appendChild(headerRight);
-            fragment.appendChild(headerBar);
-            
-            if (!book.output_credentials?.output_01?.thread_id) {
-                const warningBox = document.createElement('div');
-                warningBox.style.cssText = 'margin: 0.75rem; padding: 0.75rem 1rem; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px;';
-                
-                const contentRow = document.createElement('div');
-                contentRow.style.cssText = 'display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.75rem;';
-                
-                const iconDiv = document.createElement('div');
-                iconDiv.style.cssText = 'font-size: 1.5rem;';
-                iconDiv.textContent = '📱';
-                contentRow.appendChild(iconDiv);
-                
-                const textDiv = document.createElement('div');
-                textDiv.style.cssText = 'flex: 1;';
-                
-                const title = document.createElement('div');
-                title.style.cssText = 'color: #22c55e; font-weight: 600; font-size: 0.9375rem; margin-bottom: 0.5rem;';
-                title.textContent = 'Connect Your WhatsApp';
-                textDiv.appendChild(title);
-                
-                const desc = document.createElement('div');
-                desc.style.cssText = 'color: #cbd5e1; font-size: 0.8125rem; line-height: 1.5; margin-bottom: 0.5rem;';
-                desc.textContent = 'Follow 2 steps to activate. Each code works only once for security.';
-                textDiv.appendChild(desc);
-                
-                const warningNote = document.createElement('div');
-                warningNote.style.cssText = 'color: #fbbf24; font-size: 0.75rem; margin-bottom: 0.75rem; font-weight: 600;';
-                warningNote.textContent = '⚠️ Send as 2 separate messages!';
-                textDiv.appendChild(warningNote);
-                
-                contentRow.appendChild(textDiv);
-                warningBox.appendChild(contentRow);
-                
-                const joinCode = (book.contact_info || '').replace(/^join baby-ability\s+/i, '').trim() || book.fractal_id?.slice(0, 12);
-                
-                if (platform === 'whatsapp') {
-                    const step1Box = document.createElement('div');
-                    step1Box.style.cssText = 'background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem;';
-                    
-                    const step1Label = document.createElement('div');
-                    step1Label.style.cssText = 'color: #60a5fa; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;';
-                    step1Label.textContent = '📝 Message 1: Join sandbox';
-                    step1Box.appendChild(step1Label);
-                    
-                    const step1Row = document.createElement('div');
-                    step1Row.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
-                    
-                    const step1Code = document.createElement('code');
-                    step1Code.style.cssText = 'flex: 1; font-family: monospace; color: #60a5fa; font-size: 0.875rem; font-weight: 600; user-select: all;';
-                    step1Code.textContent = 'join baby-ability';
-                    step1Row.appendChild(step1Code);
-                    
-                    const copy1Btn = document.createElement('button');
-                    copy1Btn.className = 'copy-code-btn';
-                    copy1Btn.dataset.copyText = 'join baby-ability';
-                    copy1Btn.style.cssText = 'background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; padding: 0.375rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 600;';
-                    copy1Btn.textContent = 'Copy';
-                    step1Row.appendChild(copy1Btn);
-                    
-                    step1Box.appendChild(step1Row);
-                    
-                    const waLink = document.createElement('a');
-                    waLink.href = 'https://wa.me/14155238886?text=join%20baby-ability';
-                    waLink.target = '_blank';
-                    waLink.rel = 'noopener noreferrer';
-                    waLink.style.cssText = 'display: inline-flex; align-items: center; gap: 0.375rem; margin-top: 0.5rem; background: rgba(34, 197, 94, 0.2); border: 1px solid rgba(34, 197, 94, 0.4); color: #22c55e; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.8125rem; font-weight: 600; text-decoration: none;';
-                    waLink.textContent = '📱 Open WhatsApp';
-                    step1Box.appendChild(waLink);
-                    
-                    warningBox.appendChild(step1Box);
-                    
-                    const step2Box = document.createElement('div');
-                    step2Box.style.cssText = 'background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 6px; padding: 0.75rem;';
-                    
-                    const step2Label = document.createElement('div');
-                    step2Label.style.cssText = 'color: #c084fc; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem;';
-                    step2Label.textContent = '🔐 Message 2: Your book code';
-                    step2Box.appendChild(step2Label);
-                    
-                    const step2Row = document.createElement('div');
-                    step2Row.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
-                    
-                    const step2Code = document.createElement('code');
-                    step2Code.style.cssText = 'flex: 1; font-family: monospace; color: #a78bfa; font-size: 0.875rem; font-weight: 600; user-select: all;';
-                    step2Code.textContent = joinCode;
-                    step2Row.appendChild(step2Code);
-                    
-                    const copy2Btn = document.createElement('button');
-                    copy2Btn.className = 'copy-code-btn';
-                    copy2Btn.dataset.copyText = joinCode;
-                    copy2Btn.style.cssText = 'background: rgba(168, 85, 247, 0.2); border: 1px solid rgba(168, 85, 247, 0.4); color: #c084fc; padding: 0.375rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: 600;';
-                    copy2Btn.textContent = 'Copy';
-                    step2Row.appendChild(copy2Btn);
-                    
-                    step2Box.appendChild(step2Row);
-                    warningBox.appendChild(step2Box);
-                }
-                
-                fragment.appendChild(warningBox);
-            }
-            
-            if (book.output_credentials?.output_01?.thread_id) {
-                const messagesWrapper = document.createElement('div');
-                messagesWrapper.style.cssText = 'display: flex; flex-direction: column; flex: 1; margin-top: 0.5rem; min-height: 0;';
-                
-                const toolbar = document.createElement('div');
-                toolbar.style.cssText = 'display: flex; gap: 0.3rem; padding: 0.3rem 0.5rem; background: rgba(30, 41, 59, 0.4); border-radius: 6px; margin-bottom: 0.375rem; flex-shrink: 0; align-items: center;';
-                
-                const selectAllLabel = document.createElement('label');
-                selectAllLabel.style.cssText = 'display: flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.75rem; cursor: pointer; white-space: nowrap; flex-shrink: 0;';
-                const selectAllCheckbox = document.createElement('input');
-                selectAllCheckbox.type = 'checkbox';
-                selectAllCheckbox.id = `select-all-${book.fractal_id}`;
-                selectAllCheckbox.dataset.selectAll = book.fractal_id;
-                selectAllCheckbox.style.cssText = 'cursor: pointer;';
-                selectAllLabel.appendChild(selectAllCheckbox);
-                selectAllLabel.appendChild(document.createTextNode('All'));
-                toolbar.appendChild(selectAllLabel);
-                
-                const searchInput = document.createElement('input');
-                searchInput.type = 'text';
-                searchInput.id = `msg-search-${book.fractal_id}`;
-                searchInput.placeholder = '🔍 Search...';
-                searchInput.style.cssText = 'padding: 0.25rem 0.5rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.8rem; flex: 1 1 80px; min-width: 60px;';
-                searchInput.dataset.filterMessages = book.fractal_id;
-                toolbar.appendChild(searchInput);
-                
-                const statusSelect = document.createElement('select');
-                statusSelect.id = `status-filter-${book.fractal_id}`;
-                statusSelect.dataset.statusFilter = book.fractal_id;
-                statusSelect.style.cssText = 'padding: 0.25rem 0.375rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 0.375rem; color: #e2e8f0; font-size: 0.75rem; flex-shrink: 0;';
-                [['all', 'All'], ['success', '✓'], ['failed', '✗']].forEach(([val, txt]) => {
-                    const opt = document.createElement('option');
-                    opt.value = val;
-                    opt.textContent = txt;
-                    statusSelect.appendChild(opt);
-                });
-                toolbar.appendChild(statusSelect);
-                
-                const downloadBtn = document.createElement('button');
-                downloadBtn.id = `download-selected-${book.fractal_id}`;
-                downloadBtn.dataset.downloadBook = book.fractal_id;
-                downloadBtn.disabled = true;
-                downloadBtn.style.cssText = 'padding: 0.25rem 0.5rem; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; color: #22c55e; font-size: 0.7rem; cursor: pointer; white-space: nowrap; opacity: 0.5; flex-shrink: 0;';
-                downloadBtn.textContent = '⬇️ Attachment';
-                toolbar.appendChild(downloadBtn);
-                
-                const tagBtn = document.createElement('button');
-                tagBtn.id = `tag-selected-${book.fractal_id}`;
-                tagBtn.dataset.tagBook = book.fractal_id;
-                tagBtn.disabled = true;
-                tagBtn.style.cssText = 'padding: 0.25rem 0.5rem; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 0.375rem; color: #a855f7; font-size: 0.7rem; cursor: pointer; white-space: nowrap; opacity: 0.5; flex-shrink: 0;';
-                tagBtn.textContent = '🏷️ Tag';
-                toolbar.appendChild(tagBtn);
-                
-                messagesWrapper.appendChild(toolbar);
-                
-                const searchIndicator = document.createElement('div');
-                searchIndicator.id = `search-indicator-${book.fractal_id}`;
-                searchIndicator.style.cssText = 'display: none; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #22c55e; align-items: center; gap: 0.5rem; justify-content: space-between; margin-bottom: 0.5rem; flex-shrink: 0;';
-                const indicatorText = document.createElement('span');
-                indicatorText.textContent = '🔍 Filtered from book search';
-                searchIndicator.appendChild(indicatorText);
-                const clearBtn = document.createElement('button');
-                clearBtn.dataset.clearFilter = book.fractal_id;
-                clearBtn.style.cssText = 'background: none; border: none; color: #22c55e; cursor: pointer; font-size: 1.25rem; padding: 0; line-height: 1; font-weight: bold;';
-                clearBtn.title = 'Clear filter';
-                clearBtn.textContent = '×';
-                searchIndicator.appendChild(clearBtn);
-                messagesWrapper.appendChild(searchIndicator);
-                
-                const messagesContainer = document.createElement('div');
-                messagesContainer.id = `discord-messages-${book.fractal_id}`;
-                messagesContainer.className = 'discord-messages-container';
-                messagesContainer.style.cssText = 'flex: 1; overflow-y: auto; background: rgba(30, 41, 59, 0.3); border-radius: 6px; padding: 0.75rem; min-height: 0;';
-                const loaderDiv = document.createElement('div');
-                loaderDiv.className = 'nyan-msg-loader';
-                const ring = document.createElement('div');
-                ring.className = 'loader-ring';
-                const lbl = document.createElement('div');
-                lbl.textContent = 'Loading messages\u2026';
-                loaderDiv.appendChild(ring);
-                loaderDiv.appendChild(lbl);
-                messagesContainer.appendChild(loaderDiv);
-                messagesWrapper.appendChild(messagesContainer);
-                
-                fragment.appendChild(messagesWrapper);
-            }
-            
-            detail.replaceChildren(fragment);
+
+            _buildDetailShell();
+            _bindShellToBook(book.fractal_id, book.name);
+            _updateShellVisibility(book);
+            _fetchWhatsAppStatus(book);
+
+            const mc = document.getElementById(`discord-messages-${book.fractal_id}`);
+            if (mc) mc.innerHTML = '';
         }
 
         // Helper function to format timestamp with timezone
@@ -7483,6 +7363,7 @@
         checkAuth().then(authenticated => {
             if (!authenticated) return;
             initHopAnimation();
+            _buildDetailShell();
             _initPriorityLoad();
             _initBackgroundBooks();
         });
