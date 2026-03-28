@@ -1871,7 +1871,7 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
                 version: '1.0',
                 format: 'nyanbook-export',
                 provenance: {
-                    source: config.replit.primaryDomain,
+                    source: process.env.REPLIT_DEV_DOMAIN || process.env.REPL_SLUG || 'nyanbook',
                     exported_at: exportTimestamp,
                     book_id: book_id,
                     book_name: book.name
