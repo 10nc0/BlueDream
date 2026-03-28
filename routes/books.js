@@ -1651,7 +1651,19 @@ function registerBooksRoutes(app, deps) {
         
         try {
             const client = req.dbClient || pool;
-            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            let tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            const isDev = req.tenantContext?.userRole === 'dev';
+            
+            if (isDev) {
+                const registryLookup = await client.query(
+                    `SELECT tenant_schema FROM core.book_registry WHERE fractal_id = $1 LIMIT 1`,
+                    [book_id]
+                );
+                if (registryLookup.rows.length > 0) {
+                    tenantSchema = registryLookup.rows[0].tenant_schema;
+                }
+            }
+            
             const bookResult = await client.query(
                 `SELECT id, name, output_credentials FROM ${tenantSchema}.books WHERE fractal_id = $1`,
                 [book_id]
