@@ -299,25 +299,11 @@ No P/I ratio fallback. N/A is the honest answer when data is unavailable.
 
 ## Testing
 
-### Integration (requires live server)
-
-Start the server first (`npm start`), then:
-
-```bash
-npm test
-```
-
-Tests the 2-pass hallucination correction pipeline — sends time-sensitive queries to the AI playground and verifies that the search-retry and re-audit stages trigger correctly (`tests/test-search-retry.js`).
-
-### Unit (browser)
-
-Open the dashboard and run in the browser console:
-
-```js
-Nyan.BooksModuleTests.runTests()
-```
-
-Tests BooksModule — book deduplication, selection, and API loading logic (`public/js/modules/books.test.js`).
+| Suite | Command | Covers |
+|-------|---------|--------|
+| **Core flow** | `npm run test:core` (server must be running) | Auth, JWT lifecycle, books CRUD, tenant isolation, capsule/inpipe, outpipe routing, validators |
+| **AI search-retry** | `npm test` (server must be running) | 2-pass hallucination correction pipeline, search-retry + re-audit stages |
+| **BooksModule (browser)** | `Nyan.BooksModuleTests.runTests()` in console | Book deduplication, selection, API loading logic |
 
 Discord threads are the observability layer — every inpipe message is a timestamped, human-readable audit trail. No Grafana required.
 
