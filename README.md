@@ -121,14 +121,17 @@ utils/
 ├── markdown-table-formatter.js   — Column-aligned markdown table formatting
 └── language-detector.js          — Trigram + script-based language detection (ISO 639-1)
 
-lib/tools/ (auto-discovered registry — drop a .js file to add a tool):
+lib/tools/ (auto-discovered registry — drop a .js file to add a tool, 9 tools):
 ├── registry.js          — Auto-discovers tools on startup, exposes getTool() + getManifest()
 ├── brave-search.js      — Web search via Brave API (cached, capacity-throttled)
 ├── duckduckgo.js        — Instant answers via DDG API (cached, fallback search)
 ├── url-fetcher.js       — Fetch + extract readable content from any URL (cached)
 ├── github-reader.js     — Read GitHub repos, blobs, trees, raw files, and Gists
 ├── pdf-analyzer.js      — PDF document analysis via attachment-cascade pipeline
-└── entity-extractor.js  — Structured entity extraction (plates, currency, dates, emails, phones)
+├── entity-extractor.js  — Structured entity extraction (plates, currency, dates, emails, phones)
+├── geo-lookup.js        — City↔country, abbreviation expansion, currency→region (static, no network)
+├── forex.js             — Currency exchange rates via fawazahmed0 API
+└── language-detector.js  — Language detection (ISO 639-1 code + confidence + FTS config)
 
 lib/fetch-cache.js       — TTL-based fetch cache (braveCache 3min, duckduckgoCache 5min, urlCache 10min)
 
