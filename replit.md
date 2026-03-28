@@ -1,129 +1,157 @@
-# NyanBook~
+# replit.md — Internal LLM Memory
+> Replit-internal only. Never pushed. Not a public document.
+> For the public-facing readme → see README.md (tracked in git; pushes to `bluedream` automatically). Full git procedure → `.local/GIT_INSTRUCTIONS.md`.
 
-## Overview
-NyanBook~ is a multi-tenant archiving notebook application designed to help users archive messages from various communication platforms (WhatsApp, LINE, Telegram) into personal "books." The project aims to provide a robust, scalable, and AI-powered solution for personal data management and analysis, with a focus on privacy and verifiable data integrity.
+---
 
-**Business Vision:** To become the leading personal archiving solution, empowering users with control over their digital communication history and leveraging AI for insightful analysis without compromising privacy.
-**Market Potential:** Individuals and professionals seeking to consolidate and analyze their digital conversations from disparate messaging apps.
-**Project Ambitions:** To offer a seamless, secure, and intelligent archiving experience, evolving into a comprehensive personal knowledge management system.
+## What this is
+NyanBook~ — multi-tenant archiving notebook. Users send messages (WhatsApp / LINE / Telegram) to a personal "book". Backend: Node.js + Express. Frontend: vanilla JS SPA. DB: PostgreSQL (multi-tenant schemas). AI: Groq Llama 3.3 70B. Discord: 4 bots (Hermes/Thoth/Idris/Horus).
 
-## User Preferences
-- **Communication Style:** I prefer simple language and direct explanations.
-- **Workflow:** I want iterative development with clear communication at each step.
-- **Interaction:** Please ask for confirmation before making any major architectural changes or significant code refactors.
-- **Codebase Changes:** Do not make changes to files in the `.local/` folder, including `GIT_INSTRUCTIONS.md`. Do not modify `replit.md` or `notebook.md`.
-- **No Code Bloat:** Before creating any new lookup table, map, constant, or shared resource, check if one already exists in the codebase. Reuse and extend existing resources — never duplicate. If a resource is used by multiple modules, hoist it to a shared location (e.g., a utils module or the module that owns the data). When adding fallback/retry logic, check if the same data source is already queried elsewhere and unify.
+---
 
-## System Architecture
+## UI Implementation Rules — AUTHORITATIVE (do not guess, do not revert)
+
+### Mobile/Desktop parity
+Every UI size/spacing/layout change: check BOTH the base CSS rule AND the `@media (max-width: 599px)` override — they are independent `!important` blocks. A fix to one silently leaves the other broken. Body classes `mobile-mode` / `desktop-mode` are set by JS `LayoutController`.
+- **Mobile threshold**: `viewport width < 600px` — pure width, no aspect-ratio check. `detectDevice()` in `layout-controller.js` is a single line.
+- **CSS breakpoints**: `@media (max-width: 599px)` = mobile; `@media (min-width: 600px)` = desktop row layout.
+
+### Dashboard cat (#catContainer)
+- `position: relative; margin: 0 -22px` — unified, identical to `playground.html`. No mobile/desktop split.
+- Flex item inside header flex row; `align-items: center` on parent vertically centers the 100px canvas in the 60px header.
+- `margin: 0 -22px` compensates the 32px blank canvas on each side of the cat face so face aligns left edge.
+- `LayoutController` does NOT resize the canvas.
+- Canvas HTML attrs: `width="100" height="100"`. Drawing scale = `(canvas.width / 125) × 2.8`.
+- Cat face at canvas y≈28–72. Blank canvas above y=28 is hidden above viewport. z-index: 20. `pointer-events: none`.
+
+### Auth page cat (.character-canvas)
+- 250px buffer canvas displayed at 200px CSS (desktop) / 240px (mobile).
+- ~55px transparent blank above cat ears and ~55px below feet.
+- Fixed via `margin-top: -50px; margin-bottom: -50px` on `.character-canvas`.
+- Container height: 130px (desktop) / 150px (mobile).
+- Do NOT revert to height: 200/240px without restoring the negative margins.
+
+### Adam/Eve UI hierarchy
+- **Adam** (message pane) = primary, always spawns first, dominates visually at all breakpoints.
+- **Eve** (book sidebar) = secondary, static navigation. Mobile: hidden by default. Tablet/desktop: spawns via `eveSpawn` slide-in (translateX -18px → 0) after Adam is ready.
+- Eve width: `clamp(160px, 22vw, 240px)` — set in base `.book-sidebar` rule, no per-breakpoint overrides. Scales with viewport (160px min at threshold, ~240px cap on Mac). Do NOT add fixed-px width in media queries.
+- Header (cat + title) is eternal — present at all resolutions, above Adam and Eve.
+
+---
+
+## Architecture
 
 ### Backend — Vegapunk Kernel
-The backend is built with Node.js and Express, utilizing a factory pattern with dependency injection for modularity. It comprises four main satellites:
-- `auth`: Handles JWT, email/password authentication, role-based access, and audit trails.
-- `books`: Manages CRUD operations for books, messages, search, tags, and verifiable SHA256 manifest exports.
-- `inpipe`: Provides an abstract interface for integrating various messaging channels like Twilio (WhatsApp), LINE, and Telegram.
-- `nyan-ai`: Offers AI functionalities including a playground, vision capabilities, audit features, book history analysis, and diagnostics.
-A Phi Breathe Orchestrator handles background tasks such as memory cleanup and media purging.
+Factory pattern with dependency injection. 4 modular satellites:
+- `auth` — JWT, email/password, role-based access, audit trail, password reset
+- `books` — CRUD, messages, search, tags, export (verifiable SHA256 manifest)
+- `inpipe` — abstract channel interface; `twilio` (WhatsApp, reply-capable) + `line` (LINE OA, listen-only) + `telegram` (Bot API, reply-capable, deep-link join)
+- `nyan-ai` — playground, vision, audit, book history, psi-ema, diagnostics
+
+Phi Breathe Orchestrator: background scheduler (memory cleanup, media purge, share expiry, pending book expiry).
 
 ### Database
-PostgreSQL is used as the primary database, employing a multi-tenant architecture where each user has an isolated schema. A `core` schema stores shared tables like authentication, ledger, and shares.
+PostgreSQL multi-tenant: each user gets an isolated schema. `core` schema for shared tables (auth, ledger, shares).
 
 ### Frontend
-The frontend is a vanilla JavaScript Single Page Application (SPA). It uses `Nyan.StateService` and `Nyan.AuthService` for state and authentication management. `LayoutController` manages UI responsiveness, device detection, and animations. The application is a Progressive Web App (PWA) with a network-first cache strategy and is compatible with Safari/iPad, storing JWT in localStorage.
+Vanilla JS SPA. `Nyan.StateService` + `Nyan.AuthService` patterns. `LayoutController` manages device detection, UI mode switching, animations. PWA: `public/manifest.json` + `public/sw.js` (network-first cache). Safari/iPad compatible (JWT in localStorage).
 
-#### Dashboard Detail Shell (Level 0 Architecture)
-The book detail panel uses a permanent shell pattern — structural UI elements (header bar, action buttons, toolbar, search/filter row, messages container) are built once at init via `_buildDetailShell()` and never destroyed. Data binding updates only the dynamic content:
-- `_bindShellToBook(fractalId, name)` — re-targets all dataset attributes and element IDs to the current book. Tracks `_boundBookId` for clean re-binding on book switch.
-- `_updateShellVisibility(book)` — toggles platform-specific (WhatsApp) and permission-gated (edit/delete) buttons.
-- `_fetchWhatsAppStatus(book)` — async status badge update.
-- `renderBookDetail()` is now a thin wrapper (~8 lines) that calls shell functions.
+### AI Pipeline — 7-stage state machine (S-1 → S6)
+Single Nyan AI engine shared by public playground and authenticated dashboard audit.
+- **Preflight router** classifies query → mode: `forex` / `seed-metric` / `psi-ema` / `legal` / `code-audit` / default
+- **Mode registry** plug-and-play config per mode
+- **AuditCapsule** session-scoped entity extraction + tally cache
+- **Executive Formatter** post-processing for audit responses
+- **Nyan Protocol** (`prompts/nyan-protocol.js`) — identity + epistemic rules, canonical for all paths
+- **Walk-the-Dog** seed metric path: Groq tool-calling API, LLM drives Brave searches (Round 1 = tool_calls, Round 2 = synthesis)
 
-#### Priority Loading (Gaming Logic)
-Init sequence after auth: `_buildDetailShell()` → `_initPriorityLoad()` ∥ `_initBackgroundBooks()`.
-- `_initPriorityLoad()` hits `GET /api/books/top` (single-row LIMIT 1, ~100ms) with optional `?fid=` for cached book. Binds shell + loads messages (~2s). Sets `_priorityBookLoaded` flag.
-- `_initBackgroundBooks()` hits `GET /api/books` (full list, slow). Fills sidebar only, calls `_updateShellVisibility` — never destroys messages.
-- Race protection: `_backgroundBooksDone` flag prevents priority path from overwriting if background finishes first (warm cache scenario).
-- localStorage keys: `nyan_lastBook` (fractalId), `nyan_lastBookName` (display name). Persisted on every `selectBook()`.
-- First visit (no cache): `/api/books/top` returns first book by sort_order. Subsequent visits: uses cached fractal_id.
+### Messaging
+- **WhatsApp**: Twilio Business API inpipe → book archival. Media uploads to Discord.
+- **LINE**: LINE OA listen-only channel. QR onboarding in create-book modal.
+- **Telegram**: Bot API inpipe → book archival. `/start JOINCODE` deep-link activation. Reply-capable. `phone_number = null` (non-phone channel, same as LINE — password reset disabled). `book_engaged_phones` stores Telegram userId as routing key.
+- **Discord bots**: Hermes (thread creation), Thoth (message mirroring), Idris (AI audit write), Horus (AI audit read).
 
-### AI Pipeline
-A 7-stage state machine (S-1 → S6) orchestrates AI operations, used by both the public playground and authenticated audit features. Key components include:
-- **Preflight Router:** Classifies queries into specific modes (e.g., `forex`, `seed-metric`, `psi-ema`, `legal`, `code-audit`).
-- **Mode Registry:** Provides plug-and-play configuration for each AI mode.
-- **AuditCapsule:** Extracts and tallies session-scoped entities.
-- **Executive Formatter:** Post-processes audit responses.
-- **Nyan Protocol:** Defines the AI's identity and epistemic rules, canonical for all paths.
-- **Seed Metric (Agent Swarm Architecture):** A 3-stage pipeline replaces the old bulk regex/LLM extraction:
-    1. **Round 1 (SEARCH):** LLM drives Brave tool_calls to pick search queries (unchanged).
-    2. **Per-search EXTRACT:** Each Brave result gets its own micro-LLM call (~50 token system prompt, no Nyan Protocol) returning `{"value": <number>, "type": "pricePerSqm"|"income", "currency": "XXX"}` or `{"value": null}`. Fires async during Brave rate-limit wait for net-zero added latency. Zero cross-city contamination by design — one result, one city.
-    3. **Server MATH:** Collects extractions → `buildSeedMetricTable` (deterministic). `parseSeedMetricData` retained as emergency fallback but not called in main flow.
-    4. **CODA:** LLM writes narrative (unchanged).
-  **City matching:** Word-boundary regex (not substring `includes`) prevents false positives (e.g., `la` matching `salary`). 2-char abbreviations only match via expanded form (la→los angeles, ny→new york, etc.). **Historical detection:** Parses year tokens numerically; primary check `[histDecadeNum, histDecadeNum+15]` range, fallback `hasAnyOldYear` (< currentYear-5) catches LLM queries targeting decades outside the default range. Default historical period is `currentYear - 25` (2000s), user can override with explicit year. **TFR capsule:** Orchestrator runs dedicated Brave searches per city for both current and historical TFR, stores in `tfrCapsule`, merges into `parsedData.cities[city].*.tfr` after parsing — avoids regex cross-city contamination. **Country-level fallback:** When city-level TFR or income searches return null, the system falls back to country-level queries using a `_CITY_TO_COUNTRY` map (e.g., Berlin→Germany, Tokyo→Japan). TFR fallback fires immediately after a city-level miss; income fallback fires after all primary extractions complete, only for slots that remain null.
-
-### Messaging Integrations
-- **WhatsApp:** Integrated via Twilio Business API for message archiving, with media uploaded to Discord.
-- **LINE:** A listen-only channel for LINE Official Accounts, with QR onboarding.
-- **Telegram:** Uses the Bot API for message archiving, supporting reply capabilities and deep-link activation.
-
-### Fractal Outpipe
-A flexible output system (`lib/outpipes/`) allows for invariant output layers:
-- **Output #01 (Ledger):** Always Discord-only, ensuring immutability.
-- **Output #0n (User):** Configurable per-book JSONB array (`books.outpipes_user`) for parallel delivery to multiple targets:
-    - `discord`: Posts to user-specified Discord channels/webhooks.
-    - `email`: Sends transactional emails via Resend.
-    - `webhook`: Sends HTTPS JSON POST requests with optional HMAC-SHA256 signatures.
+### Fractal Outpipe (`lib/outpipes/`)
+Two invariant output layers per message:
+- **Output #01 (Ledger)**: always Discord-only — bot append-only nature IS the immutability guarantee. Never fractal.
+- **Output #0n (User)**: fractal — per-book JSONB array `books.outpipes_user` configures 0-N parallel delivery targets.
+  - `discord` type: posts to a user-specified Discord channel/webhook
+  - `email` type: sends via Resend (`RESEND_API_KEY` env var; `RESEND_FROM_EMAIL` optional)
+  - `webhook` type: HTTPS JSON POST with optional HMAC-SHA256 `X-Nyan-Signature` header
+  - Router (`lib/outpipes/router.js`) dispatches all configured outpipes in parallel; falls back to legacy `output_credentials.webhooks` if `outpipes_user` is empty (backward-compatible migration).
+  - API: `PATCH /api/books/:id/outpipes` — typed upsert with password guard for URL-based types.
+  - UI: Outpipes section appears in edit-book modal only; hidden on create.
 
 ### Security
-Comprehensive security measures include Sybil prevention, JWT hardening, robust session management, tenant key hashing, prevention of command injection and XSS, LLM prompt sanitization, and a strict Content Security Policy (`script-src: 'self'`).
-
-### Tool Registry (`lib/tools/`)
-A portable, auto-discovered tool registry following the outpipe factory pattern. Each tool in `lib/tools/` exports `{ name, description, parameters, execute }`. The central `registry.js` auto-discovers all tool modules on startup and exposes them via `getTool(name)` and `getManifest()`. Current tools (9):
-- **brave-search:** Web search via Brave API (text or JSON format, capacity-throttled, cached 3min)
-- **duckduckgo:** Instant answers via DDG API (fallback search, cached 5min). Also exports `ddgRawQuery()` for structured access (used by attachment-cascade chemistry enrichment)
-- **url-fetcher:** Fetch and extract readable content from any web URL (cached 10min)
-- **github-reader:** Read GitHub repos, blobs, trees, raw files, and Gists
-- **pdf-analyzer:** PDF document analysis via attachment-cascade pipeline
-- **entity-extractor:** Structured entity extraction (license plates, currency amounts, dates, emails, phone numbers, URLs) — stateless, read-only
-- **geo-lookup:** Geographic metadata lookup — city→country, country→cities, city abbreviation expansion, currency→region mapping. Pure static data, no network calls
-- **forex:** Currency exchange rates via fawazahmed0 API
-- **language-detector:** Language detection wrapping `utils/language-detector.js` — returns ISO 639-1 code + confidence + FTS config
-Fork operators can add a tool by dropping a `.js` file in `lib/tools/` with the standard shape — zero other file changes needed. Remove a tool by deleting its file.
-
-### URL Fetcher + GitHub Reader (implementation: `lib/url-fetcher.js`)
-The system automatically injects web content into `extractedContent` when URLs are present in messages. It supports various URL types, including GitHub repositories, blobs, trees, raw files, Gists, and general web pages. The tool registry wraps these as `url-fetcher` and `github-reader` tools.
-
-### Language Detection (`utils/language-detector.js`)
-Lightweight, pure-JS language detection using script analysis (CJK, Hangul, Cyrillic, Arabic, Devanagari, Thai) and Latin-script trigram frequency matching. Returns ISO 639-1 codes with confidence scores. Integrated into:
-- **Inpipe:** Every incoming message is tagged with `detected_lang` in `core.message_ledger` (confidence threshold ≥ 0.3).
-- **Drops search:** FTS config is dynamically selected based on query language (e.g., `german` for German queries, `simple` for CJK).
-- **Message search:** Unicode NFKC normalization and CJK full-width→half-width conversion applied to search terms and content.
+Sybil prevention, JWT hardening, session management, tenant key hashing, command injection prevention, LLM prompt sanitization, XSS prevention, CSP (`script-src: 'self'` — all external scripts must be vendored to `/public/vendor/`).
 
 ### Message Capsule + IPFS Ledger
-Every incoming message is converted into a cryptographic provenance capsule containing body text, sender proof, content hash, and attachment metadata. This capsule is pinned to IPFS via Pinata, with the CID stored in `core.message_ledger` for verifiable disclosure.
+Every inpipe message → cryptographic provenance capsule (body text, HMAC sender proof, SHA256 content hash, per-attachment metadata). Capsule pinned to IPFS via Pinata. CID stored in `core.message_ledger`. Supports full/partial/selective binary disclosure.
 
-## Testing
+---
 
-### Test Commands
-- `npm run test:unit` — Preflight router + capsule integrity (standalone, no DB)
-- `npm run test:core` — Core flow integration tests against live PostgreSQL (50 tests covering auth/JWT, books CRUD, tenant isolation, capsule/inpipe, validators, book registry/ledger). Creates ephemeral test schemas and tears them down.
-- `npm run test:smoke` — HTTP endpoint smoke tests (requires running server)
+## Architectural Philosophies
 
-### Test Architecture
-- `tests/test-core.js` — Integration tests that create isolated `test_<timestamp>_a` / `test_<timestamp>_b` schemas, provision users/tenants, exercise the full auth-service, books CRUD, multi-tenant isolation boundaries, capsule v2 building, Twilio normalization, message queue ordering/retry, idempotency guards, validators, book registry, and message ledger uniqueness. Self-contained teardown on exit.
-- `tests/test-capsule.js` — Pure crypto tests for `buildCapsule()` (SHA256, HMAC, attachment hashing).
-- `tests/test-preflight-router.js` — AI preflight routing logic (geo-veto, forex, seed-metric detection).
-- `tests/smoke.js` — HTTP-level health and auth-gate checks.
+**Axiom of Choice** — self-governing, scalable components via dependency injection.
+
+**Live API over Dogma** — hardcoded lists permitted ONLY for routing/classification (e.g. `KNOWN_CITIES_REGEX` ~200 cities, ticker patterns, forex regex). Once entity type is known, ALL data comes from live APIs. Prices → Brave Search. Stocks → Yahoo Finance. FX rates → fawazahmed0. Conflating routing guards with data = dogma.
+
+**The Totem (Triangulation-First)** — Seed Metric $/sqm is derived by triangulation (total_price ÷ area_sqm) as the primary path, not a fallback. Real search results express total prices + unit sizes, not pre-computed $/sqm. Parse log annotates `(triangulated)` to audit which path fired.
+
+**Walk the Dog (LLM Tool Calling)** — Seed Metric uses Groq function-calling. LLM decides what to search (city-aware, language-aware), reads raw Brave JSON results `[{title, url, description, age}]`, triangulates $/sqm, produces table + coda. `tool_choice: 'required'` forces searches — prevents training-data dogma. 2 round-trips: Round 1 (tool_calls) + Round 2 (synthesis). Rate-limit: 1100ms between Brave calls, max 8 searches, 1500ms retry on 429.
+
+**Adam/Eve UI Hierarchy** — see UI Implementation Rules above.
+
+---
 
 ## External Dependencies
 
-- **PostgreSQL:** Primary multi-tenant database.
-- **Twilio:** Used for WhatsApp Business API integration.
-- **Groq:** Provides LLM inference (Llama 3.3 70B) as a fallback.
-- **DeepSeek API:** Primary LLM inference (DeepSeek R1).
-- **Brave Search:** For live web search, particularly for seed metric calculations and general queries.
-- **DuckDuckGo:** Used for Instant Answer API.
-- **fawazahmed0:** Provides currency exchange rates.
-- **Telegram Bot API:** For Telegram messaging integration.
-- **Resend:** For sending transactional emails.
-- **Pinata:** For IPFS pinning of message capsules.
-- **Discord:** Used for bot message threading and AI audit logging.
-- **`pdf-parse`, `tabula-js`, `exceljs`, `mammoth`:** Libraries for document parsing.
+| Service | Purpose |
+|---|---|
+| PostgreSQL | Multi-tenant database |
+| Twilio | WhatsApp Business API |
+| Groq | LLM inference (Llama 3.3 70B) |
+| Brave Search | Live web search for seed metric + general search |
+| DuckDuckGo | Instant answer API |
+| fawazahmed0 | Currency exchange rates |
+| Telegram Bot API | Telegram inpipe (`TELEGRAM_BOT_TOKEN` required; `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_BOT_USERNAME` optional) |
+| Resend | Transactional email |
+| Pinata | IPFS pinning for message capsule ledger |
+| Discord | Bot message threading + AI audit logging |
+| `pdf-parse`, `tabula-js`, `exceljs`, `mammoth` | Document parsing |
+
+---
+
+## Code Conventions — Shared Resources (NEVER REPLICATE)
+
+**~nyan identity** → `prompts/nyan-protocol.js` exports `NYAN_PROTOCOL_SYSTEM_PROMPT` (full) and `NYAN_PROTOCOL_COMPRESSED` (ultra-terse seed). Every pipeline path that needs ~nyan's identity MUST import from here. Never write `"You are ~nyan..."` inline. Domain-specific instructions (search steps, table rules, coda directions) go alongside the injected compressed identity, not instead of it.
+
+**Forex detection** → `utils/forex-fetcher.js` → `detectForexPair()` / `isForexQuery()`. Currency alias matching uses word-boundary regex (`\bfranc\b`) — NOT `String.includes()`. Substring match causes false positives ("franc" in "Francisco" → CHF false-positive for USD/CHF).
+
+**Seed Metric detection** → `prompts/seed-metric.js` → `detectSeedMetricIntent()`. `SEED_METRIC_TOPIC_KEYWORDS` uses word-boundary regex (`\bland\b`) — NOT `String.includes()`. Same substring class as forex: "landscape" → "land" false-positive. Keyword regexes are pre-compiled in `SEED_METRIC_KEYWORD_REGEXES` at module load.
+
+**Seed Metric formula** → canonical in `NYAN_PROTOCOL_COMPRESSED`. `stepSeedMetricToolCall()` in `pipeline-orchestrator.js` inherits from it — do not redeclare the formula separately.
+
+**Schema validation** → `lib/validators.js` exports `assertValidSchemaName(schema)` (throws) and `VALID_SCHEMA_PATTERN` (regex predicate). Every file that validates a tenant schema name MUST import from here — never inline `/^[a-z_][a-z0-9_]*$/i`.
+
+**AI API keys** → `config/index.js` centralizes all env var lookups:
+- `config.ai.dashboardAiKey` = `NYANBOOK_AI_KEY || GROQ_API_KEY` (book audit / dashboard)
+- `config.ai.groqToken` = `PLAYGROUND_AI_KEY || PLAYGROUND_GROQ_TOKEN` (playground)
+- `config.ai.groqVisionToken` = vision model key
+- Never write `process.env.NYANBOOK_AI_KEY || process.env.GROQ_API_KEY` inline — use `config.ai.dashboardAiKey`.
+
+**Logging** → `lib/logger.js` (pino, msg-only stream). All server files MUST use `logger.info/warn/error/debug`. `console.*` is permitted ONLY in pre-logger startup paths (guarded by `// NOTE: intentional`) or standalone test harnesses (`require.main === module`). `utils/` is excluded from migration (401 calls, user decision).
+
+**Any string or constant used in >1 file** → extract to a shared module in `utils/` or `prompts/`. Code bloat = drift risk.
+
+**Git remotes** — two separate push targets with different content rules:
+- `origin` → `10nc3/Nyan` (private, PAT=`GITHUB_PAT_10NC3`) — ALL code + `replit.md` (force-add: `git add -f replit.md`). Push here first.
+- `bluedream` → `10nc0/BlueDream` (public) — ALL code + `README.md`. NEVER include: `replit.md`, `notebook.md`, `.env`, secrets. These are already gitignored.
+- `gitsafe-backup` → Replit internal git — push all code (same as origin minus replit.md).
+- Always use PAT-embedded remote URL: `git remote set-url origin "https://${GITHUB_PAT_10NC3}@github.com/10nc3/Nyan.git"`. Redact in logs: `sed 's/https:\/\/[^@]*@/https:\/\/[REDACTED]@/g'`
+- `replit.md` push sequence: `git add -f replit.md && git commit -m "..." && git push origin main` — then do NOT push that commit to bluedream (push bluedream from the preceding commit hash or just skip replit.md commits to bluedream).
+
+**Git commit discipline** — one logical change = one commit, pushed once.
+- Before the first push: check the task's "Done looks like" against the diff. Catch all gaps locally.
+- Do NOT push then fix then push again — squashing after a public push requires force-push on all remotes.
+- Multiple fix commits on a single task = avijja. Review first, push once.
