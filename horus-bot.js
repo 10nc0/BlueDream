@@ -107,9 +107,10 @@ class HorusBot {
                             const answerField = firstEmbed.fields.find(f => f.name === '💬 Answer');
                             const bookField = firstEmbed.fields.find(f => f.name === '📚 Book Context');
 
+                            const rawConf = confidenceField ? parseInt(confidenceField.value) : null;
                             log.parsed = {
                                 status: statusField ? statusField.value.replace(/\*/g, '') : null,
-                                confidence: confidenceField ? parseInt(confidenceField.value) : null,
+                                confidence: Number.isNaN(rawConf) ? null : rawConf,
                                 query: queryField ? queryField.value : null,
                                 answer: answerField ? answerField.value : null,
                                 bookContext: bookField ? bookField.value : null
@@ -192,9 +193,10 @@ class HorusBot {
                 const answerField = firstEmbed.fields.find(f => f.name === '💬 Answer');
                 const bookField = firstEmbed.fields.find(f => f.name === '📚 Book Context');
 
+                const rawConf = confidenceField ? parseInt(confidenceField.value) : null;
                 log.parsed = {
                     status: statusField ? statusField.value.replace(/\*/g, '') : null,
-                    confidence: confidenceField ? parseInt(confidenceField.value) : null,
+                    confidence: Number.isNaN(rawConf) ? null : rawConf,
                     query: queryField ? queryField.value : null,
                     answer: answerField ? answerField.value : null,
                     bookContext: bookField ? bookField.value : null
@@ -234,7 +236,7 @@ class HorusBot {
                     else if (status === 'WARNING') stats.warning++;
                     else if (status === 'REVIEW') stats.review++;
 
-                    if (log.parsed.confidence) {
+                    if (log.parsed.confidence !== null && log.parsed.confidence !== undefined) {
                         totalConfidence += log.parsed.confidence;
                         confidenceCount++;
                     }

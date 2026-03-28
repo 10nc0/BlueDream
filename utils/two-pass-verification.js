@@ -144,7 +144,7 @@ Perform the dialectical audit and output JSON only.`;
 
     return {
       verdict: verdict,
-      confidence: parsed.confidence || 80,
+      confidence: parsed.confidence ?? 80,
       checksPass: parsed.checksPass || [],
       issues: parsed.issues || [],
       suggestedFixes: parsed.suggestedFixes || [],
@@ -238,9 +238,10 @@ Refusing to answer is better than giving wrong information.
 }
 
 function formatAuditBadge(badge, confidence) {
+  const confLabel = confidence !== null && confidence !== undefined ? `${confidence}%` : 'unverified';
   const badges = {
-    verified: `🟢 Verified (${confidence}% confidence)`,
-    corrected: `🟡 Corrected (${confidence}% confidence)`,
+    verified: `🟢 Verified (${confLabel} confidence)`,
+    corrected: `🟡 Corrected (${confLabel} confidence)`,
     refused: `🔴 Refused`,
     unverified: `⚪ Unverified`,
     bypass: `⚪ Bypass`

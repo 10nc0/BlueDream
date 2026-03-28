@@ -179,8 +179,10 @@ class IdrisBot {
         const statusEmoji = AUDIT.STATUS_EMOJI;
 
         const emoji = statusEmoji[auditResult.status] || '❓';
-        const confidence = auditResult.confidence || 0;
-        const confidenceBar = this.getConfidenceBar(confidence);
+        const confidence = auditResult.confidence ?? null;
+        const confidenceDisplay = confidence !== null
+            ? `${confidence}% ${this.getConfidenceBar(confidence)}`
+            : 'unverified';
 
         const embed = {
             title: `${emoji} AI Audit Result`,
@@ -198,7 +200,7 @@ class IdrisBot {
                 },
                 {
                     name: '🎯 Confidence',
-                    value: `${confidence}% ${confidenceBar}`,
+                    value: confidenceDisplay,
                     inline: true
                 }
             ],
