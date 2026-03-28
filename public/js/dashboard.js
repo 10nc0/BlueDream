@@ -5715,81 +5715,62 @@
             }
         }
 
-        let pollingTimer = null;
-        let pollingDelay = 5000;
-        const POLL_MIN = 5000;
-        const POLL_MAX = 60000;
-        const POLL_STEP = 5000;
+        let _pollTimer = null;
+        let _pollBookId = null;
 
         function startPolling(bookId) {
             stopPolling();
-            pollingDelay = POLL_MIN;
-            schedulePoll(bookId);
+            _pollBookId = bookId;
+            _pollTimer = setInterval(() => _pollTick(), 15000);
         }
 
-        function schedulePoll(bookId) {
-            pollingTimer = setTimeout(() => pollMessages(bookId), pollingDelay);
-        }
-
-        async function pollMessages(bookId) {
-            if (document.hidden) { schedulePoll(bookId); return; }
+        async function _pollTick() {
+            if (document.hidden || !_pollBookId) return;
+            const bookId = _pollBookId;
             try {
-                const messages = document.querySelectorAll(`#discord-messages-${bookId} .discord-message`);
-                if (messages.length === 0) { schedulePoll(bookId); return; }
-                const lastMsg = messages[messages.length - 1];
-                const lastMsgId = lastMsg?.getAttribute('data-msg-id');
-                if (!lastMsgId) { schedulePoll(bookId); return; }
+                const container = document.getElementById(`discord-messages-${bookId}`);
+                if (!container) return;
+                const msgs = container.querySelectorAll('.discord-message');
+                if (msgs.length === 0) return;
+                const lastMsgId = msgs[msgs.length - 1]?.getAttribute('data-msg-id');
+                if (!lastMsgId) return;
 
                 const response = await window.authFetch(`/api/books/${bookId}/messages?after=${lastMsgId}&source=${currentViewSource}`);
-                if (!response.ok) { schedulePoll(bookId); return; }
+                if (!response.ok) return;
 
                 const data = await response.json();
                 const newMessages = data.messages || [];
+                if (newMessages.length === 0) return;
 
-                if (newMessages.length > 0) {
-                    pollingDelay = POLL_MIN;
-                    console.log(`🔄 Polling: ${newMessages.length} new message(s)`);
+                console.log(`🔄 Poll: ${newMessages.length} new`);
 
-                    const filter = lensFilterState[bookId] || { searchText: '', statusFilter: 'all' };
-                    const filteredNewMessages = newMessages.filter(msg => {
-                        const msgText = (msg.author?.username || '') + ' ' + (msg.content || '') + ' ' +
-                                       (msg.embeds?.map(e => (e.title || '') + ' ' + (e.description || '')).join(' ') || '');
-                        if (msg.content === "_(No text content)_") return false;
-                        const matchesSearch = window.searchState.performSearch(filter.searchText, msgText);
-                        const matchesStatus = filter.statusFilter === 'all' || msg.status === filter.statusFilter;
-                        return matchesSearch && matchesStatus;
-                    });
+                const filter = lensFilterState[bookId] || { searchText: '', statusFilter: 'all' };
+                const filteredNewMessages = newMessages.filter(msg => {
+                    const msgText = (msg.author?.username || '') + ' ' + (msg.content || '') + ' ' +
+                                   (msg.embeds?.map(e => (e.title || '') + ' ' + (e.description || '')).join(' ') || '');
+                    if (msg.content === "_(No text content)_") return false;
+                    const matchesSearch = window.searchState.performSearch(filter.searchText, msgText);
+                    const matchesStatus = filter.statusFilter === 'all' || msg.status === filter.statusFilter;
+                    return matchesSearch && matchesStatus;
+                });
 
-                    if (messageCache[bookId]) {
-                        messageCache[bookId] = [...newMessages, ...messageCache[bookId]];
+                if (messageCache[bookId]) {
+                    messageCache[bookId] = [...newMessages, ...messageCache[bookId]];
+                }
+
+                for (const msg of filteredNewMessages) {
+                    if (!container.querySelector(`.discord-message[data-msg-id="${msg.id}"]`)) {
+                        await insertContextMessages([msg], msg.id, bookId);
                     }
-
-                    for (const msg of filteredNewMessages) {
-                        const existing = document.querySelector(`.discord-message[data-msg-id="${msg.id}"]`);
-                        if (!existing) {
-                            await insertContextMessages([msg], msg.id, bookId);
-                        }
-                    }
-
-                    if (filter.searchText || filter.statusFilter !== 'all') {
-                        console.log(`🔄 Polling: ${filteredNewMessages.length}/${newMessages.length} messages match current filter`);
-                    }
-                } else {
-                    pollingDelay = Math.min(pollingDelay + POLL_STEP, POLL_MAX);
                 }
             } catch (error) {
-                console.error('Polling error:', error);
-                pollingDelay = Math.min(pollingDelay + POLL_STEP, POLL_MAX);
+                console.error('Poll error:', error);
             }
-            schedulePoll(bookId);
         }
 
         function stopPolling() {
-            if (pollingTimer) {
-                clearTimeout(pollingTimer);
-                pollingTimer = null;
-            }
-            pollingDelay = POLL_MIN;
+            if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+            _pollBookId = null;
         }
 
         // URL hash support for shareable links
