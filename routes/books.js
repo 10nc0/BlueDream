@@ -12,7 +12,7 @@ const BOOK_LIST_COLS = `b.id, b.name, b.input_platform, b.output_platform, b.out
     b.created_by_admin_id, b.created_at, b.updated_at, b.sort_order`;
 
 const BOOKS_CACHE = new Map();
-const BOOKS_CACHE_TTL_MS = 5000;
+const BOOKS_CACHE_TTL_MS = 30000;
 
 function _cacheKey(tenantSchema, userId) {
     return `${tenantSchema}:${userId}`;
