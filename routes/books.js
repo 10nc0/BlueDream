@@ -1809,7 +1809,7 @@ function registerBooksRoutes(app, deps) {
                             });
                             
                             const ext = attachment.filename.split('.').pop();
-                            const renamedFile = `${formattedTime} - ${tzString} - ${msg.id}.${ext}`;
+                            const renamedFile = `${formattedTime} - ${msg.id}.${ext}`;
                             const folderPath = `attachments/${renamedFile}`;
                             
                             const attachmentBuffer = Buffer.from(response.data);
