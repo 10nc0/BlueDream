@@ -383,7 +383,7 @@ The question, the answer, the pondering.
 The donkey that died. 
 The gold and ingots forfeited at the river crossing. 
 The supplies that could not be maintained. 
-The Candide beneath the Candut.
+The Candide beneath the Canute.
 
 The ding between the ding ding.
 
