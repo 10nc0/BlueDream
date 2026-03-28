@@ -1295,8 +1295,47 @@
             }
         }
 
+        function _showBookSkeletons() {
+            const sidebar = document.getElementById('bookListContainer');
+            if (!sidebar) return;
+            const frag = document.createDocumentFragment();
+            for (let i = 0; i < 4; i++) {
+                const item = document.createElement('div');
+                item.className = 'book-skeleton-item';
+                const wrap = document.createElement('div');
+                wrap.style.cssText = 'flex:1;min-width:0;';
+                const nameLine = document.createElement('div');
+                nameLine.className = 'sk-line sk-name';
+                nameLine.style.animationDelay = `${i * 0.15}s`;
+                const countLine = document.createElement('div');
+                countLine.className = 'sk-line sk-count';
+                countLine.style.animationDelay = `${i * 0.15 + 0.08}s`;
+                wrap.appendChild(nameLine);
+                wrap.appendChild(countLine);
+                item.appendChild(wrap);
+                frag.appendChild(item);
+            }
+            sidebar.replaceChildren(frag);
+        }
+
+        function _showMsgLoader(bookId) {
+            const container = document.getElementById(`discord-messages-${bookId}`);
+            if (!container) return;
+            container.innerHTML = '';
+            const loader = document.createElement('div');
+            loader.className = 'nyan-msg-loader';
+            const ring = document.createElement('div');
+            ring.className = 'loader-ring';
+            const label = document.createElement('div');
+            label.textContent = 'Loading messages\u2026';
+            loader.appendChild(ring);
+            loader.appendChild(label);
+            container.appendChild(loader);
+        }
+
         // Book CRUD Functions - delegates to BooksModule for data operations
         async function loadBooks() {
+            _showBookSkeletons();
             const result = await _B.loadBooks();
             if (result.success) {
                 books = _S.getBooks();
@@ -1767,10 +1806,15 @@
                 messagesContainer.id = `discord-messages-${book.fractal_id}`;
                 messagesContainer.className = 'discord-messages-container';
                 messagesContainer.style.cssText = 'flex: 1; overflow-y: auto; background: rgba(30, 41, 59, 0.3); border-radius: 6px; padding: 0.75rem; min-height: 0;';
-                const loadingMsg = document.createElement('div');
-                loadingMsg.className = 'no-messages';
-                loadingMsg.textContent = 'Loading messages...';
-                messagesContainer.appendChild(loadingMsg);
+                const loaderDiv = document.createElement('div');
+                loaderDiv.className = 'nyan-msg-loader';
+                const ring = document.createElement('div');
+                ring.className = 'loader-ring';
+                const lbl = document.createElement('div');
+                lbl.textContent = 'Loading messages\u2026';
+                loaderDiv.appendChild(ring);
+                loaderDiv.appendChild(lbl);
+                messagesContainer.appendChild(loaderDiv);
                 messagesWrapper.appendChild(messagesContainer);
                 
                 fragment.appendChild(messagesWrapper);
@@ -5131,16 +5175,15 @@
         // Bidirectional scrolling removed for simplicity - use "Return to latest" after jump
         async function loadBookMessages(bookId, append = false) {
             try {
-                // Initialize page state if needed
                 if (!messagePageState[bookId]) {
                     messagePageState[bookId] = { isLoading: false, hasOlder: false, seenIds: new Set(), oldestId: null };
                 }
                 
-                // Prevent concurrent loads
                 if (messagePageState[bookId].isLoading) return;
                 messagePageState[bookId].isLoading = true;
+
+                if (!append) _showMsgLoader(bookId);
                 
-                // SAFEGUARD: Append mode requires valid cursor, otherwise fall back to fresh load
                 const effectiveAppend = append && messagePageState[bookId].oldestId;
                 
                 // Delegate API call to MessagesModule
@@ -7335,6 +7378,7 @@
         // Initialize
         handleOAuthCallback();
         console.log('🔐 Checking authentication...');
+        _showBookSkeletons();
         checkAuth().then(authenticated => {
             console.log('🔐 Auth result:', authenticated);
             if (authenticated) {

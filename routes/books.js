@@ -7,6 +7,45 @@ const { validate, schemas, assertValidSchemaName } = require('../lib/validators'
 const { validateOutpipeConfig } = require('../lib/outpipes/router');
 const { detectLanguage, getFtsConfig, normalizeForSearch } = require('../utils/language-detector');
 
+const BOOK_LIST_COLS = `b.id, b.name, b.input_platform, b.output_platform, b.output_credentials,
+    b.output_0n_url, b.outpipes_user, b.status, b.contact_info, b.tags, b.archived, b.fractal_id,
+    b.created_by_admin_id, b.created_at, b.updated_at, b.sort_order`;
+
+const BOOKS_CACHE = new Map();
+const BOOKS_CACHE_TTL_MS = 5000;
+
+function _cacheKey(tenantSchema, userId) {
+    return `${tenantSchema}:${userId}`;
+}
+
+function _getCachedBooks(tenantSchema, userId) {
+    const key = _cacheKey(tenantSchema, userId);
+    const entry = BOOKS_CACHE.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.ts > BOOKS_CACHE_TTL_MS) {
+        BOOKS_CACHE.delete(key);
+        return null;
+    }
+    return entry.data;
+}
+
+function _setCachedBooks(tenantSchema, userId, data) {
+    const key = _cacheKey(tenantSchema, userId);
+    BOOKS_CACHE.set(key, { data, ts: Date.now() });
+    setTimeout(() => BOOKS_CACHE.delete(key), BOOKS_CACHE_TTL_MS);
+}
+
+function _invalidateBooksCache(tenantSchema, userId) {
+    BOOKS_CACHE.delete(_cacheKey(tenantSchema, userId));
+}
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [uid, entry] of BOOKS_CACHE.entries()) {
+        if (now - entry.ts > BOOKS_CACHE_TTL_MS) BOOKS_CACHE.delete(uid);
+    }
+}, 60000);
+
 // In-memory rate limiter for book sharing (10 shares/hour per user)
 const shareRateLimiter = new Map();
 const SHARE_RATE_LIMIT = 10;
@@ -73,6 +112,7 @@ function registerBooksRoutes(app, deps) {
                     [sort_order, fractal_id]
                 )
             ));
+            _invalidateBooksCache(tenantSchema, req.userId);
             res.json({ ok: true });
         } catch (err) {
             logger.error({ err }, 'Error in PATCH /api/books/reorder');
@@ -98,6 +138,11 @@ function registerBooksRoutes(app, deps) {
             if (!tenantSchema) {
                 logger.error({ userId: req.userId }, 'No tenant schema set');
                 return res.status(500).json({ error: 'Tenant context not found' });
+            }
+
+            const cached = _getCachedBooks(tenantSchema, req.userId);
+            if (cached) {
+                return res.json(cached);
             }
             
             const userResult = await pool.query(
@@ -135,14 +180,14 @@ function registerBooksRoutes(app, deps) {
                         `);
                         books.push(...schemaResult.rows);
                     } catch (error) {
-                        logger.warn({ err: error }, 'Query error');
+                        logger.warn({ err: error, schema: schemaName }, 'Query error');
                     }
                 }
                 
                 logger.debug({ count: books.length }, 'Books retrieved');
             } else {
                 const result = await pool.query(`
-                    SELECT b.*
+                    SELECT ${BOOK_LIST_COLS}
                     FROM ${tenantSchema}.books b
                     WHERE b.archived = false
                       AND b.status != 'expired'
@@ -180,59 +225,52 @@ function registerBooksRoutes(app, deps) {
                         ORDER BY ep.last_engaged_at DESC
                     `, [userPhones, user.email]);
                     
-                    for (const contrib of contributedBooksResult.rows) {
+                    const contribBySchema = {};
+                    for (const c of contributedBooksResult.rows) {
+                        (contribBySchema[c.tenant_schema] ||= []).push(c.fractal_id);
+                    }
+                    for (const [schema, fids] of Object.entries(contribBySchema)) {
                         try {
-                            const bookResult = await pool.query(`
-                                SELECT b.*, '${contrib.tenant_schema}'::text as tenant_schema,
+                            const batchResult = await pool.query(`
+                                SELECT b.*, '${schema}'::text as tenant_schema,
                                        true as is_contributed
-                                FROM ${contrib.tenant_schema}.books b
-                                WHERE b.fractal_id = $1 AND b.archived = false
-                            `, [contrib.fractal_id]);
-                            
-                            if (bookResult.rows.length > 0) {
-                                books.push(bookResult.rows[0]);
-                            }
+                                FROM ${schema}.books b
+                                WHERE b.fractal_id = ANY($1::text[]) AND b.archived = false
+                            `, [fids]);
+                            books.push(...batchResult.rows);
                         } catch (error) {
-                            logger.warn({ fractalId: contrib.fractal_id, err: error }, 'Could not fetch contributed book');
+                            logger.warn({ schema, err: error }, 'Could not fetch contributed books batch');
                         }
                     }
                     
                     logger.debug({ count: books.length }, 'Books retrieved');
                 }
                 
-                // Fetch books shared with this user via email
+                const existingFids = new Set(books.map(b => b.fractal_id));
+
                 const sharedBooksResult = await pool.query(`
-                    SELECT DISTINCT book_fractal_id
-                    FROM core.book_shares
-                    WHERE shared_with_email = $1 AND revoked_at IS NULL
+                    SELECT DISTINCT bs.book_fractal_id, br.tenant_schema
+                    FROM core.book_shares bs
+                    JOIN core.book_registry br ON br.fractal_id = bs.book_fractal_id AND br.status = 'active'
+                    WHERE bs.shared_with_email = $1 AND bs.revoked_at IS NULL
                 `, [user.email.toLowerCase()]);
-                
-                for (const shared of sharedBooksResult.rows) {
-                    // Skip if already in list
-                    if (books.some(b => b.fractal_id === shared.book_fractal_id)) continue;
-                    
+
+                const sharedBySchema = {};
+                for (const s of sharedBooksResult.rows) {
+                    if (existingFids.has(s.book_fractal_id)) continue;
+                    (sharedBySchema[s.tenant_schema] ||= []).push(s.book_fractal_id);
+                }
+                for (const [schema, fids] of Object.entries(sharedBySchema)) {
                     try {
-                        // Look up the book via book_registry
-                        const regResult = await pool.query(`
-                            SELECT tenant_schema FROM core.book_registry
-                            WHERE fractal_id = $1 AND status = 'active'
-                        `, [shared.book_fractal_id]);
-                        
-                        if (regResult.rows.length > 0) {
-                            const sharedSchema = regResult.rows[0].tenant_schema;
-                            const bookResult = await pool.query(`
-                                SELECT b.*, '${sharedSchema}'::text as tenant_schema,
-                                       true as is_shared
-                                FROM ${sharedSchema}.books b
-                                WHERE b.fractal_id = $1 AND b.archived = false
-                            `, [shared.book_fractal_id]);
-                            
-                            if (bookResult.rows.length > 0) {
-                                books.push(bookResult.rows[0]);
-                            }
-                        }
+                        const batchResult = await pool.query(`
+                            SELECT b.*, '${schema}'::text as tenant_schema,
+                                   true as is_shared
+                            FROM ${schema}.books b
+                            WHERE b.fractal_id = ANY($1::text[]) AND b.archived = false
+                        `, [fids]);
+                        books.push(...batchResult.rows);
                     } catch (error) {
-                        logger.warn({ fractalId: shared.book_fractal_id, err: error }, 'Could not fetch shared book');
+                        logger.warn({ schema, err: error }, 'Could not fetch shared books batch');
                     }
                 }
             }
@@ -297,7 +335,9 @@ function registerBooksRoutes(app, deps) {
             });
             
             const sanitized = sanitizeForRole ? sanitizeForRole(booksWithFractalIds, user.role) : booksWithFractalIds;
-            res.json({ books: sanitized });
+            const response = { books: sanitized };
+            _setCachedBooks(tenantSchema, req.userId, response);
+            res.json(response);
         } catch (error) {
             logger.error({ err: error, userId: req.userId }, 'Error in /api/books');
             res.status(500).json({ error: 'An internal error occurred. Please try again.' });
@@ -369,6 +409,7 @@ function registerBooksRoutes(app, deps) {
                 WHERE id = $1
             `, [id]);
             
+            _invalidateBooksCache(req.tenantSchema, req.userId);
             res.json({ success: true });
         } catch (error) {
             logger.error({ err: error }, 'Error archiving book');
@@ -391,6 +432,7 @@ function registerBooksRoutes(app, deps) {
                 WHERE id = $1
             `, [id]);
             
+            _invalidateBooksCache(req.tenantSchema, req.userId);
             res.json({ success: true });
         } catch (error) {
             logger.error({ err: error }, 'Error unarchiving book');
@@ -579,6 +621,7 @@ function registerBooksRoutes(app, deps) {
             
             const sanitized = sanitizeForRole ? sanitizeForRole(book, userRole) : book;
             logger.info({ fractalId: generatedFractalId }, 'Created book');
+            _invalidateBooksCache(tenantSchema, req.userId);
             res.json(sanitized);
         } catch (error) {
             logger.error({ err: error }, 'Error in POST /api/books');
@@ -673,6 +716,7 @@ function registerBooksRoutes(app, deps) {
             }
             
             const sanitized = sanitizeForRole ? sanitizeForRole(result.rows[0], userRole) : result.rows[0];
+            _invalidateBooksCache(tenantSchema, req.userId);
             res.json(sanitized);
         } catch (error) {
             logger.error({ err: error }, 'Error in PUT /api/books/:id');
@@ -768,6 +812,7 @@ function registerBooksRoutes(app, deps) {
             }
 
             logger.info({ bookId: id, count: outpipes.length }, 'Outpipes updated');
+            _invalidateBooksCache(tenantSchema, req.userId);
             res.json({ success: true, outpipes_user: updateResult.rows[0].outpipes_user });
         } catch (error) {
             logger.error({ err: error }, 'Error in PATCH /api/books/:id/outpipes');
@@ -816,6 +861,7 @@ function registerBooksRoutes(app, deps) {
             }
             
             logger.info({ bookId: id, userId: req.userId }, 'Book archived successfully');
+            _invalidateBooksCache(tenantSchema, req.userId);
             res.json({ success: true, message: 'Book deleted successfully' });
             
             if (logAudit) {
