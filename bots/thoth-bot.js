@@ -4,7 +4,7 @@
 // Security: Can only read messages, cannot create/modify/delete
 
 const { Client, GatewayIntentBits } = require('discord.js');
-const logger = require('./lib/logger');
+const logger = require('../lib/logger');
 
 class ThothBot {
     constructor() {

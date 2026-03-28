@@ -4,7 +4,7 @@
 // Security: Cannot read messages, only create/manage threads
 
 const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
-const logger = require('./lib/logger');
+const logger = require('../lib/logger');
 
 class HermesBot {
     constructor() {

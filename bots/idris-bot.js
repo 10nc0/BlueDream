@@ -6,8 +6,8 @@
 
 const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
 const axios = require('axios');
-const { AUDIT } = require('./config/constants');
-const logger = require('./lib/logger');
+const { AUDIT } = require('../config/constants');
+const logger = require('../lib/logger');
 
 class IdrisBot {
     constructor() {

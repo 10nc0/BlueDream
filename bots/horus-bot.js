@@ -5,7 +5,7 @@
 // Purpose: Read-only bot for fetching Nyan AI audit logs
 
 const { Client, GatewayIntentBits } = require('discord.js');
-const logger = require('./lib/logger');
+const logger = require('../lib/logger');
 
 class HorusBot {
     constructor() {
