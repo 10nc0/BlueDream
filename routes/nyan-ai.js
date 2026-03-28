@@ -17,6 +17,12 @@ const { fetchUrl, extractUrls } = require('../lib/url-fetcher');
 const { loadTools, getTool } = require('../lib/tools/registry');
 const { AUDIO_MIME_EXT_MAP } = require('../utils/file-types');
 
+function resolveAIToken(context) {
+    if (context === 'audit') return config.ai.dashboardAiKey;
+    if (context === 'vision') return process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
+    return process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
+}
+
 const API_UNITS = {
     'psi-ema': {
         theta: '°',
@@ -48,8 +54,8 @@ const API_UNITS = {
     }
 };
 
-const PLAYGROUND_GROQ_TOKEN = process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
-const PLAYGROUND_GROQ_VISION_TOKEN = process.env.PLAYGROUND_GROQ_VISION_TOKEN || process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
+const PLAYGROUND_GROQ_TOKEN = resolveAIToken('playground');
+const PLAYGROUND_GROQ_VISION_TOKEN = resolveAIToken('vision');
 const H0_TEMPERATURE = AI_MODELS.TEMPERATURE_REASONING;
 
 const IDENTITY_PATTERNS = [
@@ -313,6 +319,188 @@ async function processAndCacheDocList(docList, cachedFileHashes, clientIp, extra
     }
 }
 
+function setupSSE(res) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    const isClientDisconnected = () => res.writableEnded || res.destroyed || !res.writable;
+    const sseStage = (event) => {
+        if (!isClientDisconnected()) res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+    return { isClientDisconnected, sseStage };
+}
+
+function normalizePhotoList(photos, photo) {
+    const photoList = [];
+    if (photos && Array.isArray(photos)) {
+        photos.forEach((p, idx) => {
+            if (typeof p === 'string') {
+                photoList.push({ name: `photo-${idx}`, data: p, type: 'photo' });
+            } else if (p && p.data) {
+                photoList.push(p);
+            }
+        });
+    }
+    if (photo) {
+        photoList.push({ name: 'image', data: photo, type: 'image' });
+    }
+    return photoList;
+}
+
+function normalizeDocList(documents, document, documentName) {
+    const docList = [];
+    if (documents && documents.length > 0) {
+        docList.push(...documents.map(d => ({ name: d.name, data: d.data, type: d.type })));
+    }
+    if (document) {
+        docList.push({ name: documentName || 'document', data: document, type: 'document' });
+    }
+    return docList;
+}
+
+async function extractZipAttachments(zipData) {
+    const extracted = { photos: [], audios: [], documents: [] };
+    if (!zipData) return extracted;
+    try {
+        const JSZip = require('jszip');
+        const zipBuffer = Buffer.from(zipData, 'base64');
+        const zip = await JSZip.loadAsync(zipBuffer);
+        const manifestFile = zip.file('manifest.json');
+        if (manifestFile) {
+            const manifestContent = await manifestFile.async('string');
+            const manifest = JSON.parse(manifestContent);
+            for (const entry of manifest) {
+                const file = zip.file(entry.filename || entry.path);
+                if (file) {
+                    const data = await file.async('base64');
+                    const itemName = entry.originalName || entry.name || 'file';
+                    const itemCat  = entry.type || entry.category || '';
+                    const item = { name: itemName, data, type: itemCat };
+                    if (itemCat === 'photo') extracted.photos.push(item);
+                    else if (itemCat === 'audio') extracted.audios.push(item);
+                    else if (itemCat === 'document') extracted.documents.push(item);
+                }
+            }
+        }
+    } catch (zipError) {
+        logger.error({ err: zipError }, '❌ ZIP extraction error');
+    }
+    return extracted;
+}
+
+function collectAudioList(audios, audio) {
+    const audioList = [];
+    if (audios && Array.isArray(audios)) audioList.push(...audios);
+    if (audio) audioList.push({ name: 'voice-recording', data: audio, type: 'audio' });
+    return audioList;
+}
+
+async function transcribeAudioList(audioItems, clientIp, opts = {}) {
+    if (audioItems.length === 0) return [];
+    const { sseStage, isClientDisconnected } = opts;
+    const { processDocumentForAI } = require('../utils/attachment-cascade');
+    const transcripts = [];
+    for (const aud of audioItems) {
+        if (isClientDisconnected?.()) break;
+        if (sseStage) sseStage({ type: 'thinking', stage: '🎙️ Transcribing audio...' });
+        try {
+            let audName = aud.name || '';
+            if (!audName || !audName.includes('.')) {
+                const mimeM = typeof aud.data === 'string' && aud.data.match(/^data:([^;]+);base64,/);
+                const ext = mimeM ? (AUDIO_MIME_EXT_MAP[mimeM[1]] || 'webm') : 'webm';
+                audName = `audio.${ext}`;
+            }
+            const result = await processDocumentForAI(aud.data, audName, aud.type || 'audio', { tenantId: clientIp });
+            if (result && result.text) {
+                transcripts.push(result.text);
+                logger.info({ name: aud.name, chars: result.text.length }, '🎙️ Audio transcribed');
+            }
+        } catch (audErr) {
+            logger.warn({ name: aud.name, err: audErr.message }, '🎙️ Audio transcription failed');
+        }
+    }
+    return transcripts;
+}
+
+async function fetchUrlsFromMessage(message, extractedContent, opts = {}) {
+    const { sseStage, isClientDisconnected } = opts;
+    const detectedUrls = extractUrls(message || '');
+    for (const rawUrl of detectedUrls.slice(0, 3)) {
+        if (isClientDisconnected?.()) break;
+        if (sseStage) {
+            const shortUrl = rawUrl.length > 60 ? rawUrl.slice(0, 57) + '...' : rawUrl;
+            sseStage({ type: 'thinking', stage: `🔗 Reading ${shortUrl}` });
+        }
+        try {
+            const fetched = await fetchUrl(rawUrl);
+            const block = `[URL Context — ${fetched.title}]\nSource: ${fetched.sourceLabel}\n\n${fetched.text}`;
+            extractedContent.push(block);
+            logger.info({ url: rawUrl, chars: fetched.text.length }, '🔗 URL fetched');
+        } catch (urlErr) {
+            logger.warn({ url: rawUrl, err: urlErr.message }, '🔗 URL fetch failed');
+            if (sseStage) {
+                extractedContent.push(`[URL Context — fetch failed]\nSource: ${rawUrl}\nReason: ${urlErr.message}`);
+            }
+        }
+    }
+}
+
+function buildDocAttachmentMeta(docList, extractedContent) {
+    if (docList.length === 0) return null;
+    return {
+        name: docList[0].name,
+        type: docList[0].type || 'document',
+        processedText: extractedContent.join('\n\n').slice(0, 2000),
+        shortSummary: `${docList.length} document(s): ${docList.map(d => d.name).join(', ')}`
+    };
+}
+
+function extractPsiEmaFromAnalysis(analysis) {
+    const reading = analysis.reading || {};
+    const phase = analysis.dimensions?.phase || {};
+    const anomaly = analysis.dimensions?.anomaly || {};
+    const convergence = analysis.dimensions?.convergence || {};
+    const fidelity = analysis.fidelity || {};
+    return {
+        theta: phase.current ?? null,
+        z: anomaly.current ?? null,
+        R: convergence.currentDisplay ?? convergence.current ?? null,
+        reading: reading.reading || analysis.summary?.reading || null,
+        emoji: reading.emoji || analysis.summary?.readingEmoji || null,
+        description: reading.description || null,
+        fidelity: fidelity.breakdown || null,
+        regime: analysis.summary?.regime || null
+    };
+}
+
+function extractPsiEma(preflight) {
+    if (!preflight?.psiEmaAnalysis) return null;
+    const daily = preflight.psiEmaAnalysis;
+    const weekly = preflight.psiEmaAnalysisWeekly;
+    const result = {
+        daily: {
+            reading: daily.reading,
+            emoji: daily.emoji,
+            theta: daily.theta,
+            z: daily.z,
+            R: daily.R,
+            fidelity: daily.fidelity
+        }
+    };
+    if (weekly) {
+        result.weekly = {
+            reading: weekly.reading,
+            emoji: weekly.emoji,
+            theta: weekly.theta,
+            z: weekly.z,
+            R: weekly.R,
+            fidelity: weekly.fidelity
+        };
+    }
+    return result;
+}
+
 loadTools();
 const searchDuckDuckGo = (...args) => { const t = getTool('duckduckgo'); return t ? t.execute(...args) : null; };
 
@@ -326,8 +514,7 @@ async function extractCoreQuestion(message) {
         return 'general query';
     }
     
-    const GROQ_TOKEN = process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN;
-    if (!GROQ_TOKEN || trimmed.length < 100) {
+    if (!PLAYGROUND_GROQ_TOKEN || trimmed.length < 100) {
         return trimmed.substring(0, 200);
     }
     
@@ -353,7 +540,7 @@ async function extractCoreQuestion(message) {
             },
             {
                 headers: {
-                    'Authorization': `Bearer ${GROQ_TOKEN}`,
+                    'Authorization': `Bearer ${PLAYGROUND_GROQ_TOKEN}`,
                     'Content-Type': 'application/json'
                 },
                 timeout: _llm.timeouts.extract
@@ -427,9 +614,9 @@ async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') 
 }
 
 const orchestrator = createPipelineOrchestrator({
-    groqToken: process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
-    auditToken: process.env.PLAYGROUND_AI_KEY || process.env.PLAYGROUND_GROQ_TOKEN,
-    groqVisionToken: process.env.PLAYGROUND_GROQ_VISION_TOKEN,
+    groqToken: resolveAIToken('playground'),
+    auditToken: resolveAIToken('playground'),
+    groqVisionToken: resolveAIToken('vision'),
     searchBrave,
     searchDuckDuckGo,
     extractCoreQuestion,
@@ -444,11 +631,128 @@ const { runDashboardAuditPipeline } = require('../utils/dashboard-audit-pipeline
 const { formatExecutiveResponse } = require('../utils/executive-formatter');
 const { buildExecutiveAuditPrompt, buildRetryPrompt } = require('../prompts/executive-audit');
 
+async function executeCompoundQuery(compoundParts, opts) {
+    const { extractedContent, photoList, docList, history, clientIp, contextAttachments, sseStage, isClientDisconnected } = opts;
+
+    const sections = [];
+    let worstBadge = 'verified';
+    let totalConfidence = 0;
+    let confidenceCount = 0;
+    let anySearchRetry = false;
+
+    for (let i = 0; i < compoundParts.length; i++) {
+        const part = compoundParts[i];
+        if (isClientDisconnected?.()) break;
+
+        if (sseStage) {
+            sseStage({ type: 'status', message: `Processing part ${i + 1}/${compoundParts.length}: ${part.label}...` });
+        }
+
+        const subInput = {
+            message: part.query,
+            photos: part.includePhotos ? (photoList || []) : [],
+            documents: part.includeDocuments ? (docList || []) : [],
+            extractedContent: part.includeDocuments ? (extractedContent || []) : [],
+            history: history || [],
+            clientIp,
+            isVisionRequest: !!(part.includePhotos && photoList?.length > 0),
+            ...(sseStage && { streaming: true, onStageChange: sseStage }),
+            ...(contextAttachments && (part.includePhotos || part.includeDocuments) && { contextAttachments })
+        };
+
+        const subResult = await orchestrator.execute(subInput);
+
+        if (subResult.success && subResult.answer) {
+            const section = {
+                label: part.label,
+                answer: subResult.answer,
+                response: subResult.answer,
+                mode: subResult.mode || 'general',
+                badge: subResult.badge || 'unverified',
+                confidence: subResult.audit?.confidence ?? null,
+                didSearchRetry: subResult.didSearchRetry || false,
+                passCount: subResult.passCount || 1,
+                fastPath: subResult.fastPath || false
+            };
+            if (subResult.preflight?.ticker) section.ticker = subResult.preflight.ticker;
+            const psiEma = extractPsiEma(subResult.preflight);
+            if (psiEma) section.psiEma = psiEma;
+            sections.push(section);
+
+            if (subResult.badge === 'unverified') worstBadge = 'unverified';
+            if (subResult.audit?.confidence != null) {
+                totalConfidence += subResult.audit.confidence;
+                confidenceCount++;
+            }
+            if (subResult.didSearchRetry) anySearchRetry = true;
+        } else {
+            sections.push({
+                label: part.label,
+                answer: '*Could not process this part. Please try asking separately.*',
+                response: 'Could not process this part. Please try asking separately.',
+                mode: 'error',
+                badge: 'unverified',
+                confidence: null,
+                didSearchRetry: false,
+                passCount: 0,
+                fastPath: false
+            });
+            worstBadge = 'unverified';
+        }
+    }
+
+    const mergedAnswer = sections.map((s, i) => {
+        const header = `## ${i + 1}. ${s.label}`;
+        const separator = i < sections.length - 1 ? '\n\n---\n\n' : '';
+        return `${header}\n\n${s.answer}${separator}`;
+    }).join('');
+
+    const avgConfidence = confidenceCount > 0 ? Math.round(totalConfidence / confidenceCount) : null;
+
+    return {
+        sections,
+        mergedAnswer,
+        worstBadge,
+        avgConfidence,
+        anySearchRetry,
+        totalPassCount: sections.reduce((sum, s) => sum + (s.passCount || 0), 0)
+    };
+}
+
 function registerNyanAIRoutes(app, deps) {
     const { pool, middleware, bots } = deps;
     const requireAuth = middleware?.requireAuth;
     const thothBot = bots?.thoth;
     const idrisBot = bots?.idris;
+
+    const AI_API_KEYS = [
+        { env: 'NYAN_OUTBOUND_API', label: 'prod' },
+        { env: 'NYAN_OUTBOUND_API_DEV', label: 'dev' },
+        { env: 'AI_API_TOKEN', label: 'prod-legacy' },
+        { env: 'AI_API_TOKEN_DEV', label: 'dev-legacy' }
+    ].filter(k => process.env[k.env]).map(k => ({
+        hash: crypto.createHash('sha256').update(process.env[k.env]).digest(),
+        label: k.label
+    }));
+    if (AI_API_KEYS.length > 0) {
+        logger.info({ count: AI_API_KEYS.length, keys: AI_API_KEYS.map(k => k.label) }, '🔌 Nyan API v1: keys loaded');
+    }
+
+    function authenticateApiKey(req) {
+        if (AI_API_KEYS.length === 0) return { error: 503, message: 'AI API not configured. Set NYAN_OUTBOUND_API secret.' };
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) return { error: 401, message: 'Unauthorized. Provide valid Bearer token.' };
+        const providedToken = authHeader.slice(7);
+        const providedHash = crypto.createHash('sha256').update(providedToken).digest();
+        let matchedLabel = null;
+        for (const key of AI_API_KEYS) {
+            if (crypto.timingSafeEqual(key.hash, providedHash)) {
+                matchedLabel = matchedLabel || key.label;
+            }
+        }
+        if (!matchedLabel) return { error: 401, message: 'Unauthorized. Provide valid Bearer token.' };
+        return { label: matchedLabel };
+    }
 
     const auditLimiter = rateLimit({
         windowMs: 60 * 1000,
@@ -535,7 +839,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 },
                 config: {
                     headers: {
-                        'Authorization': `Bearer ${config.ai.dashboardAiKey}`,
+                        'Authorization': `Bearer ${resolveAIToken('audit')}`,
                         'Content-Type': 'application/json'
                     }
                 }
@@ -568,7 +872,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         },
                         config: {
                             headers: {
-                                'Authorization': `Bearer ${config.ai.dashboardAiKey}`,
+                                'Authorization': `Bearer ${resolveAIToken('audit')}`,
                                 'Content-Type': 'application/json'
                             }
                         }
@@ -793,149 +1097,26 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             let { message, photo, audio, document, documentName, photos, audios, documents, history, zipData, contextAttachments, cachedFileHashes } = req.body;
             let finalPrompt = message || '';
             let extractedContent = [];
-            
             const responseFileHashes = [];
             
-            if (zipData) {
-                try {
-                    const JSZip = require('jszip');
-                    const zipBuffer = Buffer.from(zipData, 'base64');
-                    const zip = await JSZip.loadAsync(zipBuffer);
-                    const manifestFile = zip.file('manifest.json');
-                    
-                    if (manifestFile) {
-                        const manifestContent = await manifestFile.async('string');
-                        const manifest = JSON.parse(manifestContent);
-                        
-                        photos = photos || [];
-                        audios = audios || [];
-                        documents = documents || [];
-                        
-                        for (const entry of manifest) {
-                            const file = zip.file(entry.filename || entry.path);
-                            if (file) {
-                                const data = await file.async('base64');
-                                const itemName = entry.originalName || entry.name || 'file';
-                                const itemCat  = entry.type || entry.category || '';
-                                const item = { name: itemName, data, type: itemCat };
-                                
-                                if (itemCat === 'photo') photos.push(item);
-                                else if (itemCat === 'audio') audios.push(item);
-                                else if (itemCat === 'document') documents.push(item);
-                            }
-                        }
-                    }
-                } catch (zipError) {
-                    logger.error({ err: zipError }, '❌ ZIP extraction error');
-                }
+            const zipExtracted = await extractZipAttachments(zipData);
+            photos = (photos || []).concat(zipExtracted.photos);
+            audios = (audios || []).concat(zipExtracted.audios);
+            documents = (documents || []).concat(zipExtracted.documents);
+            
+            const docList = normalizeDocList(documents, document, documentName);
+            await processAndCacheDocList(docList, cachedFileHashes, clientIp, extractedContent, responseFileHashes);
+            
+            const audioList = collectAudioList(audios, audio);
+            const transcripts = await transcribeAudioList(audioList, clientIp);
+            if (transcripts.length > 0) {
+                const spoken = transcripts.join(' ');
+                finalPrompt = finalPrompt ? `${finalPrompt} ${spoken}` : spoken;
             }
             
-            const docList = [];
-            if (documents && documents.length > 0) {
-                docList.push(...documents.map(d => ({ name: d.name, data: d.data, type: d.type })));
-            }
-            if (document) {
-                docList.push({ name: documentName || 'document', data: document, type: 'document' });
-            }
+            await fetchUrlsFromMessage(message, extractedContent);
             
-            for (const doc of docList) {
-                const fileHash = getDocumentHash(doc.data, doc.name);
-                incrementDocumentUpload(fileHash);
-                
-                const cached = getCachedDocumentContext(fileHash, clientIp);
-                if (cached && cached.extractedText) {
-                    logger.debug({ name: doc.name }, '📂 Using cached document context');
-                    extractedContent.push(cached.extractedText);
-                    responseFileHashes.push({ name: doc.name, hash: fileHash });
-                    continue;
-                }
-                
-                try {
-                    const { processDocumentForAI } = require('../utils/attachment-cascade');
-                    // HARMONIZED: Pass tenantId for shared cache scoping
-                    const result = await processDocumentForAI(doc.data, doc.name, doc.type, { tenantId: clientIp });
-                    if (result && result.text) {
-                        extractedContent.push(result.text);
-                        setCachedDocumentContext(fileHash, { extractedText: result.text }, clientIp);
-                        responseFileHashes.push({ name: doc.name, hash: fileHash });
-                    }
-                } catch (docError) {
-                    logger.error({ name: doc.name, err: docError }, '❌ Document processing error');
-                }
-            }
-
-            // ── Audio Transcription (non-stream handler) ──────────────────────────────
-            const _audioList = [];
-            if (audios && Array.isArray(audios)) _audioList.push(...audios);
-            if (audio) _audioList.push({ name: 'voice-recording', data: audio, type: 'audio' });
-
-            if (_audioList.length > 0) {
-                const { processDocumentForAI } = require('../utils/attachment-cascade');
-                const _transcripts = [];
-                for (const aud of _audioList) {
-                    try {
-                        let audName = aud.name || '';
-                        if (!audName || !audName.includes('.')) {
-                            const mimeM = typeof aud.data === 'string' && aud.data.match(/^data:([^;]+);base64,/);
-                            const ext = mimeM ? (AUDIO_MIME_EXT_MAP[mimeM[1]] || 'webm') : 'webm';
-                            audName = `audio.${ext}`;
-                        }
-                        const result = await processDocumentForAI(aud.data, audName, aud.type || 'audio', { tenantId: clientIp });
-                        if (result && result.text) {
-                            _transcripts.push(result.text);
-                            logger.info({ name: aud.name, chars: result.text.length }, '🎙️ Audio transcribed (non-stream)');
-                        }
-                    } catch (audErr) {
-                        logger.warn({ name: aud.name, err: audErr.message }, '🎙️ Audio transcription failed (non-stream)');
-                    }
-                }
-                if (_transcripts.length > 0) {
-                    const spoken = _transcripts.join(' ');
-                    finalPrompt = finalPrompt ? `${finalPrompt} ${spoken}` : spoken;
-                }
-            }
-            // ─────────────────────────────────────────────────────────────────────────
-            
-            if (cachedFileHashes && Array.isArray(cachedFileHashes)) {
-                for (const hashEntry of cachedFileHashes) {
-                    const cached = getCachedDocumentByHash(hashEntry.hash, clientIp);
-                    if (cached && cached.extractedText) {
-                        logger.debug({ name: hashEntry.name }, '📂 Restored cached context');
-                        extractedContent.push(cached.extractedText);
-                    }
-                }
-            }
-            
-
-            // ── URL Auto-Fetch (non-stream handler) ──────────────────────────────────
-            const _detectedUrls = extractUrls(message || '');
-            if (_detectedUrls.length > 0) {
-                for (const rawUrl of _detectedUrls.slice(0, 3)) {
-                    try {
-                        const fetched = await fetchUrl(rawUrl);
-                        const block = `[URL Context — ${fetched.title}]\nSource: ${fetched.sourceLabel}\n\n${fetched.text}`;
-                        extractedContent.push(block);
-                        logger.info({ url: rawUrl, chars: fetched.text.length }, '🔗 URL fetched (non-stream)');
-                    } catch (urlErr) {
-                        logger.warn({ url: rawUrl, err: urlErr.message }, '🔗 URL fetch failed (non-stream)');
-                    }
-                }
-            }
-            // ─────────────────────────────────────────────────────────────────────────
-
-            const photoList = [];
-            if (photos && Array.isArray(photos)) {
-                photos.forEach((p, idx) => {
-                    if (typeof p === 'string') {
-                        photoList.push({ name: `photo-${idx}`, data: p, type: 'photo' });
-                    } else if (p && p.data) {
-                        photoList.push(p);
-                    }
-                });
-            }
-            if (photo) {
-                photoList.push({ name: 'image', data: photo, type: 'image' });
-            }
+            const photoList = normalizePhotoList(photos, photo);
             
             const capacityCheck = await capacityManager.consumeToken(clientIp, photoList.length > 0 ? 'vision' : 'text');
             if (!capacityCheck.allowed) {
@@ -963,17 +1144,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             const pipelineResult = await orchestrator.execute(pipelineInput);
             
             if (pipelineResult.success && pipelineResult.answer) {
-                recordInMemory(
-                    clientIp,
-                    message || '',
-                    pipelineResult.answer,
-                    docList.length > 0 ? {
-                        name: docList[0].name,
-                        type: docList[0].type || 'document',
-                        processedText: extractedContent.join('\n\n').slice(0, 2000),
-                        shortSummary: `${docList.length} document(s): ${docList.map(d => d.name).join(', ')}`
-                    } : null
-                );
+                recordInMemory(clientIp, message || '', pipelineResult.answer, buildDocAttachmentMeta(docList, extractedContent));
             }
             
             res.json({
@@ -1024,175 +1195,32 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         
         capacityManager.recordActivity(clientIp);
         
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.setHeader('X-Accel-Buffering', 'no');
-        
-        const isClientDisconnected = () => {
-            return res.writableEnded || res.destroyed || !res.writable;
-        };
-        const sseStage = (event) => {
-            if (!isClientDisconnected()) res.write(`data: ${JSON.stringify(event)}\n\n`);
-        };
+        const { isClientDisconnected, sseStage } = setupSSE(res);
         
         try {
             let { message, photo, photos, document, documentName, documents, audio, audios, history, zipData, contextAttachments, cachedFileHashes } = req.body;
             let extractedContent = [];
-            
             const responseFileHashes = [];
             
-            if (zipData) {
-                try {
-                    const JSZip = require('jszip');
-                    const zipBuffer = Buffer.from(zipData, 'base64');
-                    const zip = await JSZip.loadAsync(zipBuffer);
-                    const manifestFile = zip.file('manifest.json');
-                    
-                    if (manifestFile) {
-                        const manifestContent = await manifestFile.async('string');
-                        const manifest = JSON.parse(manifestContent);
-                        
-                        photos = photos || [];
-                        audios = audios || [];
-                        documents = documents || [];
-                        
-                        for (const entry of manifest) {
-                            const file = zip.file(entry.filename || entry.path);
-                            if (file) {
-                                const data = await file.async('base64');
-                                const itemName = entry.originalName || entry.name || 'file';
-                                const itemCat  = entry.type || entry.category || '';
-                                const item = { name: itemName, data, type: itemCat };
-                                
-                                if (itemCat === 'photo') photos.push(item);
-                                else if (itemCat === 'audio') audios.push(item);
-                                else if (itemCat === 'document') documents.push(item);
-                            }
-                        }
-                    }
-                } catch (zipError) {
-                    logger.error({ err: zipError }, '❌ ZIP extraction error');
-                }
+            const zipExtracted = await extractZipAttachments(zipData);
+            photos = (photos || []).concat(zipExtracted.photos);
+            audios = (audios || []).concat(zipExtracted.audios);
+            documents = (documents || []).concat(zipExtracted.documents);
+            
+            const docList = normalizeDocList(documents, document, documentName);
+            await processAndCacheDocList(docList, cachedFileHashes, clientIp, extractedContent, responseFileHashes);
+            
+            const audioList = collectAudioList(audios, audio);
+            const transcripts = await transcribeAudioList(audioList, clientIp, { sseStage, isClientDisconnected });
+            if (transcripts.length > 0) {
+                const spoken = transcripts.join(' ');
+                message = message ? `${message} ${spoken}` : spoken;
+                logger.info({ chars: spoken.length }, '🎙️ Transcript prepended to message');
             }
             
-            const docList = [];
-            if (documents && documents.length > 0) {
-                docList.push(...documents.map(d => ({ name: d.name, data: d.data, type: d.type })));
-            }
-            if (document) {
-                docList.push({ name: documentName || 'document', data: document, type: 'document' });
-            }
+            await fetchUrlsFromMessage(message, extractedContent, { sseStage, isClientDisconnected });
             
-            for (const doc of docList) {
-                const fileHash = getDocumentHash(doc.data, doc.name);
-                incrementDocumentUpload(fileHash);
-                
-                const cached = getCachedDocumentContext(fileHash, clientIp);
-                if (cached && cached.extractedText) {
-                    logger.debug({ name: doc.name }, '📂 Using cached document context');
-                    extractedContent.push(cached.extractedText);
-                    responseFileHashes.push({ name: doc.name, hash: fileHash });
-                    continue;
-                }
-                
-                try {
-                    const { processDocumentForAI } = require('../utils/attachment-cascade');
-                    // HARMONIZED: Pass tenantId for shared cache scoping
-                    const result = await processDocumentForAI(doc.data, doc.name, doc.type, { tenantId: clientIp });
-                    if (result && result.text) {
-                        extractedContent.push(result.text);
-                        setCachedDocumentContext(fileHash, { extractedText: result.text }, clientIp);
-                        responseFileHashes.push({ name: doc.name, hash: fileHash });
-                    }
-                } catch (docError) {
-                    logger.error({ name: doc.name, err: docError }, '❌ Document processing error');
-                }
-            }
-
-            // ── Audio Transcription (stream handler) ─────────────────────────────────
-            // Transcribe any audio recordings/uploads via Groq Whisper.
-            // Spoken audio IS the user's query — prepend transcript to message.
-            const audioList = [];
-            if (audios && Array.isArray(audios)) audioList.push(...audios);
-            if (audio) audioList.push({ name: 'voice-recording', data: audio, type: 'audio' });
-
-            if (audioList.length > 0) {
-                const { processDocumentForAI } = require('../utils/attachment-cascade');
-                const transcripts = [];
-                for (const aud of audioList) {
-                    if (isClientDisconnected()) break;
-                    sseStage({ type: 'thinking', stage: '🎙️ Transcribing audio...' });
-                    try {
-                        let audName = aud.name || '';
-                        if (!audName || !audName.includes('.')) {
-                            const mimeM = typeof aud.data === 'string' && aud.data.match(/^data:([^;]+);base64,/);
-                            const ext = mimeM ? (AUDIO_MIME_EXT_MAP[mimeM[1]] || 'webm') : 'webm';
-                            audName = `audio.${ext}`;
-                        }
-                        const result = await processDocumentForAI(aud.data, audName, aud.type || 'audio', { tenantId: clientIp });
-                        if (result && result.text) {
-                            transcripts.push(result.text);
-                            logger.info({ name: aud.name, chars: result.text.length }, '🎙️ Audio transcribed');
-                        }
-                    } catch (audErr) {
-                        logger.warn({ name: aud.name, err: audErr.message }, '🎙️ Audio transcription failed');
-                    }
-                }
-                if (transcripts.length > 0) {
-                    const spoken = transcripts.join(' ');
-                    message = message ? `${message} ${spoken}` : spoken;
-                    logger.info({ chars: spoken.length }, '🎙️ Transcript prepended to message');
-                }
-            }
-            // ─────────────────────────────────────────────────────────────────────────
-            
-            if (cachedFileHashes && Array.isArray(cachedFileHashes)) {
-                for (const hashEntry of cachedFileHashes) {
-                    const cached = getCachedDocumentByHash(hashEntry.hash, clientIp);
-                    if (cached && cached.extractedText) {
-                        logger.debug({ name: hashEntry.name }, '📂 Restored cached context');
-                        extractedContent.push(cached.extractedText);
-                    }
-                }
-            }
-            
-
-            // ── URL Auto-Fetch (stream handler) ──────────────────────────────────────
-            // Detect URLs in the message, fetch and inject as extractedContent.
-            // GitHub URLs use the GitHub API; all others fetch and strip HTML.
-            const detectedUrls = extractUrls(message || '');
-            if (detectedUrls.length > 0) {
-                for (const rawUrl of detectedUrls.slice(0, 3)) {
-                    if (isClientDisconnected()) break;
-                    const shortUrl = rawUrl.length > 60 ? rawUrl.slice(0, 57) + '...' : rawUrl;
-                    sseStage({ type: 'thinking', stage: `🔗 Reading ${shortUrl}` });
-                    try {
-                        const fetched = await fetchUrl(rawUrl);
-                        const block = `[URL Context — ${fetched.title}]\nSource: ${fetched.sourceLabel}\n\n${fetched.text}`;
-                        extractedContent.push(block);
-                        logger.info({ url: rawUrl, chars: fetched.text.length }, '🔗 URL fetched and injected');
-                    } catch (urlErr) {
-                        logger.warn({ url: rawUrl, err: urlErr.message }, '🔗 URL fetch failed — skipping');
-                        extractedContent.push(`[URL Context — fetch failed]\nSource: ${rawUrl}\nReason: ${urlErr.message}`);
-                    }
-                }
-            }
-            // ─────────────────────────────────────────────────────────────────────────
-
-            const photoList = [];
-            if (photos && Array.isArray(photos)) {
-                photos.forEach((p, idx) => {
-                    if (typeof p === 'string') {
-                        photoList.push({ name: `photo-${idx}`, data: p, type: 'photo' });
-                    } else if (p && p.data) {
-                        photoList.push(p);
-                    }
-                });
-            }
-            if (photo) {
-                photoList.push({ name: 'image', data: photo, type: 'image' });
-            }
+            const photoList = normalizePhotoList(photos, photo);
             
             const capacityCheck = await capacityManager.consumeToken(clientIp, photoList.length > 0 ? 'vision' : 'text');
             if (!capacityCheck.allowed) {
@@ -1210,11 +1238,6 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             // L1 Perception Ingestion
             const perception = await AttachmentIngestion.ingest(docList, clientIp);
             
-            // ========================================
-            // COMPOUND QUERY DETECTION
-            // Split multi-intent messages into separate pipeline runs
-            // e.g., "$SPY price? also what does this image say?" → 2 runs
-            // ========================================
             const compoundParts = detectCompoundQuery(
                 message || '',
                 photoList.length > 0,
@@ -1223,105 +1246,29 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             
             if (compoundParts && compoundParts.length > 1) {
                 logger.debug({ parts: compoundParts.length }, '🔀 Compound query: sub-queries detected');
-                res.write(`data: ${JSON.stringify({ type: 'status', message: `Analyzing ${compoundParts.length} parts...` })}\n\n`);
+                sseStage({ type: 'status', message: `Analyzing ${compoundParts.length} parts...` });
                 
-                const sectionResults = [];
-                let worstBadge = 'verified';
-                let totalConfidence = 0;
-                let anySearchRetry = false;
-                
-                for (let i = 0; i < compoundParts.length; i++) {
-                    const part = compoundParts[i];
-                    if (isClientDisconnected()) return;
-                    
-                    res.write(`data: ${JSON.stringify({ type: 'status', message: `Processing part ${i + 1}/${compoundParts.length}: ${part.label}...` })}\n\n`);
-                    
-                    const subInput = {
-                        message: part.query,
-                        photos: part.includePhotos ? photoList : [],
-                        documents: part.includeDocuments ? docList : [],
-                        extractedContent: part.includeDocuments ? extractedContent : 
-                                          part.includePhotos ? [] : [],
-                        history: history || [],
-                        clientIp,
-                        isVisionRequest: part.includePhotos && photoList.length > 0,
-                        contextAttachments: part.includePhotos || part.includeDocuments ? contextAttachments : undefined,
-                        streaming: true,
-                        onStageChange: sseStage
-                    };
-                    
-                    const subResult = await orchestrator.execute(subInput);
-                    
-                    if (subResult.success && subResult.answer) {
-                        sectionResults.push({
-                            label: part.label,
-                            answer: subResult.answer,
-                            badge: subResult.badge || 'unverified',
-                            confidence: subResult.audit?.confidence || 0,
-                            didSearchRetry: subResult.didSearchRetry || false,
-                            passCount: subResult.passCount || 1,
-                            fastPath: subResult.fastPath || false
-                        });
-                        
-                        if (subResult.badge === 'unverified') worstBadge = 'unverified';
-                        totalConfidence += (subResult.audit?.confidence || 0);
-                        if (subResult.didSearchRetry) anySearchRetry = true;
-                    } else {
-                        sectionResults.push({
-                            label: part.label,
-                            answer: `*Could not process this part. Please try asking separately.*`,
-                            badge: 'unverified',
-                            confidence: 0,
-                            didSearchRetry: false,
-                            passCount: 0,
-                            fastPath: false
-                        });
-                        worstBadge = 'unverified';
-                    }
-                }
+                const compound = await executeCompoundQuery(compoundParts, {
+                    extractedContent, photoList, docList, history, clientIp, contextAttachments, sseStage, isClientDisconnected
+                });
                 
                 if (isClientDisconnected()) return;
                 
-                const mergedSections = sectionResults.map((section, i) => {
-                    const num = i + 1;
-                    const header = `## ${num}. ${section.label}`;
-                    const separator = i < sectionResults.length - 1 ? '\n\n---\n\n' : '';
-                    return `${header}\n\n${section.answer}${separator}`;
-                }).join('');
-                
-                const avgConfidence = sectionResults.length > 0 
-                    ? Math.round(totalConfidence / sectionResults.length) 
-                    : 0;
-                
                 const mergedAudit = {
-                    badge: worstBadge,
-                    confidence: avgConfidence,
-                    reason: `Compound query: ${sectionResults.length} sections processed`,
-                    didSearchRetry: anySearchRetry,
-                    passCount: sectionResults.reduce((sum, s) => sum + s.passCount, 0),
+                    badge: compound.worstBadge,
+                    confidence: compound.avgConfidence,
+                    reason: `Compound query: ${compound.sections.length} sections processed`,
+                    didSearchRetry: compound.anySearchRetry,
+                    passCount: compound.totalPassCount,
                     isCompound: true,
-                    sectionCount: sectionResults.length
+                    sectionCount: compound.sections.length
                 };
                 
-                await fastStreamPersonality(res, mergedSections, mergedAudit);
+                await fastStreamPersonality(res, compound.mergedAnswer, mergedAudit);
+                recordInMemory(clientIp, message || '', compound.mergedAnswer || '', buildDocAttachmentMeta(docList, extractedContent));
                 
-                recordInMemory(
-                    clientIp,
-                    message || '',
-                    mergedSections || '',
-                    docList.length > 0 ? {
-                        name: docList[0].name,
-                        type: docList[0].type || 'document',
-                        processedText: extractedContent.join('\n\n').slice(0, 2000),
-                        shortSummary: `${docList.length} document(s): ${docList.map(d => d.name).join(', ')}`
-                    } : null
-                );
-                
-                logger.info({ ip: clientIp, badge: worstBadge, sections: sectionResults.length }, '🌊 Compound streaming complete');
+                logger.info({ ip: clientIp, badge: compound.worstBadge, sections: compound.sections.length }, '🌊 Compound streaming complete');
             } else {
-                // ========================================
-                // SINGLE QUERY PATH (original behavior)
-                // ========================================
                 const pipelineInput = {
                     message: message || '',
                     photos: photoList,
@@ -1346,7 +1293,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     const userMessage = failReason.includes('Groq API')
                         ? 'The AI service is temporarily busy. Please try again in a moment.'
                         : 'Something went wrong processing your request. Please try again.';
-                    res.write(`data: ${JSON.stringify({ type: 'error', message: userMessage })}\n\n`);
+                    sseStage({ type: 'error', message: userMessage });
                     res.end();
                     return;
                 }
@@ -1357,7 +1304,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 
                 const auditMetadata = {
                     badge,
-                    confidence: pipelineResult.audit?.confidence || 0,
+                    confidence: pipelineResult.audit?.confidence ?? null,
                     reason: pipelineResult.audit?.reason || '',
                     didSearchRetry,
                     passCount: pipelineResult.passCount || 1
@@ -1366,33 +1313,22 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 if (pipelineResult.fastPath) {
                     logger.debug('⚡ Fast-path: Skipping personality pass (pre-crafted message)');
                     auditMetadata.passCount = 0;
-                    res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
-                    res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
-                    res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
+                    sseStage({ type: 'audit', audit: auditMetadata });
+                    sseStage({ type: 'token', content: verifiedAnswer });
+                    sseStage({ type: 'done', fullContent: verifiedAnswer });
                     res.end();
                 } else if (badge === 'verified' || badge === 'unverified') {
                     if (isClientDisconnected()) return;
-                    
                     await fastStreamPersonality(res, verifiedAnswer, auditMetadata);
                 } else {
-                    res.write(`data: ${JSON.stringify({ type: 'audit', audit: auditMetadata })}\n\n`);
-                    res.write(`data: ${JSON.stringify({ type: 'token', content: verifiedAnswer })}\n\n`);
-                    res.write(`data: ${JSON.stringify({ type: 'done', fullContent: verifiedAnswer })}\n\n`);
+                    sseStage({ type: 'audit', audit: auditMetadata });
+                    sseStage({ type: 'token', content: verifiedAnswer });
+                    sseStage({ type: 'done', fullContent: verifiedAnswer });
                     res.end();
                 }
                 
                 if (pipelineResult.success) {
-                    recordInMemory(
-                        clientIp,
-                        message || '',
-                        verifiedAnswer || '',
-                        docList.length > 0 ? {
-                            name: docList[0].name,
-                            type: docList[0].type || 'document',
-                            processedText: extractedContent.join('\n\n').slice(0, 2000),
-                            shortSummary: `${docList.length} document(s): ${docList.map(d => d.name).join(', ')}`
-                        } : null
-                    );
+                    recordInMemory(clientIp, message || '', verifiedAnswer || '', buildDocAttachmentMeta(docList, extractedContent));
                 }
                 
                 logger.info({ ip: clientIp, badge, searchRetry: didSearchRetry }, '🌊 Streaming complete');
@@ -1404,24 +1340,6 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             res.end();
         }
     });
-
-    // ========================================================================
-    // Nyan API v1 — Internal JSON endpoint for agent-to-agent communication
-    // Usage: POST /api/v1/nyan { message, mode? }
-    // Auth: Bearer token (multi-key: NYAN_OUTBOUND_API, NYAN_OUTBOUND_API_DEV)
-    // ========================================================================
-    const AI_API_KEYS = [
-        { env: 'NYAN_OUTBOUND_API', label: 'prod' },
-        { env: 'NYAN_OUTBOUND_API_DEV', label: 'dev' },
-        { env: 'AI_API_TOKEN', label: 'prod-legacy' },
-        { env: 'AI_API_TOKEN_DEV', label: 'dev-legacy' }
-    ].filter(k => process.env[k.env]).map(k => ({
-        hash: crypto.createHash('sha256').update(process.env[k.env]).digest(),
-        label: k.label
-    }));
-    if (AI_API_KEYS.length > 0) {
-        logger.info({ count: AI_API_KEYS.length, keys: AI_API_KEYS.map(k => k.label) }, '🔌 Nyan API v1: keys loaded');
-    }
 
     const nyanApiLimiter = rateLimit({
         windowMs: 60 * 1000,
@@ -1435,26 +1353,9 @@ Analyze the data and answer the user's question. Count carefully when asked abou
     const nyanApiBodyParser = express.json({ limit: '50mb' });
 
     app.post('/api/v1/nyan', nyanApiBodyParser, nyanApiLimiter, async (req, res) => {
-        if (AI_API_KEYS.length === 0) {
-            return res.status(503).json({ error: 'AI API not configured. Set NYAN_OUTBOUND_API secret.' });
-        }
-
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
-        }
-        const providedToken = authHeader.slice(7);
-        const providedHash = crypto.createHash('sha256').update(providedToken).digest();
-
-        let matchedLabel = null;
-        for (const key of AI_API_KEYS) {
-            if (crypto.timingSafeEqual(key.hash, providedHash)) {
-                matchedLabel = matchedLabel || key.label;
-            }
-        }
-        if (!matchedLabel) {
-            return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
-        }
+        const auth = authenticateApiKey(req);
+        if (auth.error) return res.status(auth.error).json({ error: auth.message });
+        const matchedLabel = auth.label;
 
         const { message, mode, photos, documents } = req.body || {};
         if (!message || typeof message !== 'string' || message.trim().length === 0) {
@@ -1501,33 +1402,6 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         const startTime = Date.now();
         const clientIp = req.ip || '127.0.0.1';
 
-        function extractPsiEma(preflight) {
-            if (!preflight?.psiEmaAnalysis) return null;
-            const daily = preflight.psiEmaAnalysis;
-            const weekly = preflight.psiEmaAnalysisWeekly;
-            const result = {
-                daily: {
-                    reading: daily.reading,
-                    emoji: daily.emoji,
-                    theta: daily.theta,
-                    z: daily.z,
-                    R: daily.R,
-                    fidelity: daily.fidelity
-                }
-            };
-            if (weekly) {
-                result.weekly = {
-                    reading: weekly.reading,
-                    emoji: weekly.emoji,
-                    theta: weekly.theta,
-                    z: weekly.z,
-                    R: weekly.R,
-                    fidelity: weekly.fidelity
-                };
-            }
-            return result;
-        }
-
         try {
             const mediaInfo = [];
             if (photoList.length > 0) mediaInfo.push(`${photoList.length} photo(s)`);
@@ -1535,25 +1409,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             const mediaTag = mediaInfo.length > 0 ? ` [media=${mediaInfo.join(', ')}]` : '';
             logger.info({ message: message.slice(0, 80), mode: mode || 'auto', key: matchedLabel, media: mediaTag || null }, '🔌 Nyan API v1: query');
 
-            for (const doc of docList) {
-                try {
-                    const fileHash = getDocumentHash(doc.data, doc.name);
-                    incrementDocumentUpload(fileHash);
-                    const cached = getCachedDocumentContext(fileHash, clientIp);
-                    if (cached && cached.extractedText) {
-                        extractedContent.push(cached.extractedText);
-                        continue;
-                    }
-                    const { processDocumentForAI } = require('../utils/attachment-cascade');
-                    const result = await processDocumentForAI(doc.data, doc.name, doc.type, { tenantId: clientIp });
-                    if (result && result.text) {
-                        extractedContent.push(result.text);
-                        setCachedDocumentContext(fileHash, { extractedText: result.text }, clientIp);
-                    }
-                } catch (docError) {
-                    logger.error({ name: doc.name, err: docError }, '❌ Nyan API v1: Document processing error');
-                }
-            }
+            await processAndCacheDocList(docList, null, clientIp, extractedContent, []);
 
             if (docList.length > 0) {
                 await AttachmentIngestion.ingest(docList, clientIp);
@@ -1595,71 +1451,20 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             if (compoundParts && compoundParts.length > 1) {
                 logger.debug({ parts: compoundParts.length }, '🔌 Nyan API v1: Compound query');
 
-                const sections = [];
-                let worstBadge = 'verified';
-                let totalConfidence = 0;
+                const compound = await executeCompoundQuery(compoundParts, {
+                    extractedContent: [], photoList: [], docList: [], history: [], clientIp
+                });
 
-                for (let i = 0; i < compoundParts.length; i++) {
-                    const part = compoundParts[i];
-                    const subInput = {
-                        message: part.query,
-                        photos: [],
-                        documents: [],
-                        extractedContent: [],
-                        history: [],
-                        clientIp,
-                        isVisionRequest: false
-                    };
-
-                    const subResult = await orchestrator.execute(subInput);
-
-                    if (subResult.success && subResult.answer) {
-                        const section = {
-                            label: part.label,
-                            response: subResult.answer,
-                            mode: subResult.mode || 'general',
-                            badge: subResult.badge || 'unverified',
-                            confidence: subResult.audit?.confidence || 0
-                        };
-                        if (subResult.preflight?.ticker) section.ticker = subResult.preflight.ticker;
-                        const psiEma = extractPsiEma(subResult.preflight);
-                        if (psiEma) section.psiEma = psiEma;
-                        sections.push(section);
-
-                        if (subResult.badge === 'unverified') worstBadge = 'unverified';
-                        totalConfidence += (subResult.audit?.confidence || 0);
-                    } else {
-                        sections.push({
-                            label: part.label,
-                            response: 'Could not process this part. Please try asking separately.',
-                            mode: 'error',
-                            badge: 'unverified',
-                            confidence: 0
-                        });
-                        worstBadge = 'unverified';
-                    }
-                }
-
-                const mergedResponse = sections.map((s, i) => {
-                    const header = `## ${i + 1}. ${s.label}`;
-                    const separator = i < sections.length - 1 ? '\n\n---\n\n' : '';
-                    return `${header}\n\n${s.response}${separator}`;
-                }).join('');
-
-                const avgConfidence = sections.length > 0
-                    ? Math.round(totalConfidence / sections.length)
-                    : 0;
-
-                logger.info({ sections: sections.length, processingMs: Date.now() - startTime }, '🔌 Nyan API v1: Compound complete');
+                logger.info({ sections: compound.sections.length, processingMs: Date.now() - startTime }, '🔌 Nyan API v1: Compound complete');
                 return res.json({
                     success: true,
-                    response: mergedResponse,
+                    response: compound.mergedAnswer,
                     mode: 'compound',
-                    badge: worstBadge,
-                    confidence: avgConfidence,
+                    badge: compound.worstBadge,
+                    confidence: compound.avgConfidence,
                     processingMs: Date.now() - startTime,
                     compound: true,
-                    sections
+                    sections: compound.sections
                 });
             }
 
@@ -1684,17 +1489,18 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             }
 
             const responseMode = pipelineResult.mode || 'general';
+            const confidence = pipelineResult.audit?.confidence ?? null;
             const response = {
                 success: true,
                 response: pipelineResult.answer,
                 mode: responseMode,
                 source: pipelineResult.source || 'llm',
                 badge: pipelineResult.badge || 'unverified',
-                confidence: pipelineResult.audit?.confidence || 0,
+                confidence,
                 processingMs: Date.now() - startTime,
                 units: API_UNITS[responseMode] || API_UNITS.common,
                 audit: {
-                    confidence: pipelineResult.audit?.confidence || 0,
+                    confidence,
                     verdict: pipelineResult.auditResult?.verdict || 'unknown',
                     passCount: pipelineResult.passCount || 0,
                     didSearchRetry: pipelineResult.didSearchRetry || false
@@ -1762,26 +1568,9 @@ Analyze the data and answer the user's question. Count carefully when asked abou
     });
 
     app.post('/api/v1/nyan/psi-ema', express.json(), psiEmaLimiter, async (req, res) => {
-        if (AI_API_KEYS.length === 0) {
-            return res.status(503).json({ error: 'AI API not configured. Set NYAN_OUTBOUND_API secret.' });
-        }
-
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
-        }
-        const providedToken = authHeader.slice(7);
-        const providedHash = crypto.createHash('sha256').update(providedToken).digest();
-
-        let matchedLabel = null;
-        for (const key of AI_API_KEYS) {
-            if (crypto.timingSafeEqual(key.hash, providedHash)) {
-                matchedLabel = matchedLabel || key.label;
-            }
-        }
-        if (!matchedLabel) {
-            return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
-        }
+        const auth = authenticateApiKey(req);
+        if (auth.error) return res.status(auth.error).json({ error: auth.message });
+        const matchedLabel = auth.label;
 
         const { ticker, tickers } = req.body || {};
         const tickerList = tickers || (ticker ? [ticker] : []);
@@ -1821,24 +1610,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
 
                 const dailyDashboard = new PsiEMADashboard();
                 const dailyAnalysis = dailyDashboard.analyze({ stocks: dailyCloses });
-
-                const dailyReading = dailyAnalysis.reading || {};
-                const dailyPhase = dailyAnalysis.dimensions?.phase || {};
-                const dailyAnomaly = dailyAnalysis.dimensions?.anomaly || {};
-                const dailyConvergence = dailyAnalysis.dimensions?.convergence || {};
-                const dailyFidelity = dailyAnalysis.fidelity || {};
-
-                const daily = {
-                    theta: dailyPhase.current ?? null,
-                    z: dailyAnomaly.current ?? null,
-                    R: dailyConvergence.currentDisplay ?? dailyConvergence.current ?? null,
-                    reading: dailyReading.reading || dailyAnalysis.summary?.reading || null,
-                    emoji: dailyReading.emoji || dailyAnalysis.summary?.readingEmoji || null,
-                    description: dailyReading.description || null,
-                    fidelity: dailyFidelity.breakdown || null,
-                    regime: dailyAnalysis.summary?.regime || null,
-                    bars: dailyCloses.length
-                };
+                const daily = { ...extractPsiEmaFromAnalysis(dailyAnalysis), bars: dailyCloses.length };
 
                 let weekly = null;
                 const weeklyClosesRaw = stockData?.weekly?.closes || [];
@@ -1847,24 +1619,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                 if (weeklyCloses.length >= 13) {
                     const weeklyDashboard = new PsiEMADashboard();
                     const weeklyAnalysis = weeklyDashboard.analyze({ stocks: weeklyCloses });
-
-                    const weeklyReading = weeklyAnalysis.reading || {};
-                    const weeklyPhase = weeklyAnalysis.dimensions?.phase || {};
-                    const weeklyAnomaly = weeklyAnalysis.dimensions?.anomaly || {};
-                    const weeklyConvergence = weeklyAnalysis.dimensions?.convergence || {};
-                    const weeklyFidelity = weeklyAnalysis.fidelity || {};
-
-                    weekly = {
-                        theta: weeklyPhase.current ?? null,
-                        z: weeklyAnomaly.current ?? null,
-                        R: weeklyConvergence.currentDisplay ?? weeklyConvergence.current ?? null,
-                        reading: weeklyReading.reading || weeklyAnalysis.summary?.reading || null,
-                        emoji: weeklyReading.emoji || weeklyAnalysis.summary?.readingEmoji || null,
-                        description: weeklyReading.description || null,
-                        fidelity: weeklyFidelity.breakdown || null,
-                        regime: weeklyAnalysis.summary?.regime || null,
-                        bars: weeklyCloses.length
-                    };
+                    weekly = { ...extractPsiEmaFromAnalysis(weeklyAnalysis), bars: weeklyCloses.length };
                 }
 
                 const fundamentals = stockData.fundamentals || {};
@@ -1922,26 +1677,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
     const horusBot = bots?.horus;
 
     app.get('/api/v1/nyan/diagnostics', async (req, res) => {
-        if (AI_API_KEYS.length === 0) {
-            return res.status(503).json({ error: 'AI API not configured. Set NYAN_OUTBOUND_API secret.' });
-        }
-
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
-        }
-        const providedToken = authHeader.slice(7);
-        const providedHash = crypto.createHash('sha256').update(providedToken).digest();
-
-        let matchedLabel = null;
-        for (const key of AI_API_KEYS) {
-            if (crypto.timingSafeEqual(key.hash, providedHash)) {
-                matchedLabel = matchedLabel || key.label;
-            }
-        }
-        if (!matchedLabel) {
-            return res.status(401).json({ error: 'Unauthorized. Provide valid Bearer token.' });
-        }
+        const auth = authenticateApiKey(req);
+        if (auth.error) return res.status(auth.error).json({ error: auth.message });
 
         const startTime = Date.now();
         const diagnostics = {
