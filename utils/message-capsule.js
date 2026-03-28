@@ -49,7 +49,7 @@ function buildCapsule({ bookFractalId, tenantId, phone, body, media, timestamp }
             mime: media.contentType || 'application/octet-stream',
             size_bytes: media.buffer.length,
             hash: attachHash,
-            discord_url: null
+            attachment_url: null
         });
     }
 

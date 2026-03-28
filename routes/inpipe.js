@@ -850,10 +850,9 @@ async function processCapsule(book, bookRecord, msg, media, discordResponse, dep
         media,
         timestamp: new Date().toISOString()
     });
-    // Fill discord_url on capsule attachment before async pin fires
     if (media && capsule.attachments.length > 0) {
         const cdnUrl = discordResponse?.data?.attachments?.[0]?.url;
-        if (cdnUrl) capsule.attachments[0].discord_url = cdnUrl;
+        if (cdnUrl) capsule.attachments[0].attachment_url = cdnUrl;
     }
     ;(async () => {
         try {
@@ -883,11 +882,11 @@ async function processCapsule(book, bookRecord, msg, media, discordResponse, dep
                     [jsonResult.cid, capsule.message_fractal_id]
                 );
             }
-            if (media?.buffer && capsule.attachments[0]?.discord_url) {
+            if (media?.buffer && capsule.attachments[0]?.attachment_url) {
                 if (pool) {
                     await pool.query(
                         `UPDATE core.message_ledger SET attachment_cid = $1 WHERE message_fractal_id = $2`,
-                        [capsule.attachments[0].discord_url, capsule.message_fractal_id]
+                        [capsule.attachments[0].attachment_url, capsule.message_fractal_id]
                     );
                 }
             }
