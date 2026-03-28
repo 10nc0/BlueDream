@@ -480,15 +480,16 @@ const signupTests = [
     }),
 
     test('cleanup: remove signup test data', async () => {
+        const errors = [];
         if (signupTenantId) {
             const schema = `tenant_${signupTenantId}`;
-            try { await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); } catch {}
-            try { await pool.query(`DELETE FROM core.tenant_catalog WHERE id = $1`, [signupTenantId]); } catch {}
+            try { await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); } catch (e) { errors.push(`drop schema: ${e.message}`); }
+            try { await pool.query(`DELETE FROM core.tenant_catalog WHERE id = $1`, [signupTenantId]); } catch (e) { errors.push(`tenant_catalog: ${e.message}`); }
         }
-        try { await pool.query(`DELETE FROM core.user_email_to_tenant WHERE email IN ($1, $2)`, [SIGNUP_EMAIL, INVITE_EMAIL]); } catch {}
-        try { await pool.query(`DELETE FROM core.tenant_creation_log WHERE email IN ($1, $2)`, [SIGNUP_EMAIL, INVITE_EMAIL]); } catch {}
-        try { await pool.query(`DELETE FROM ${SCHEMA_A}.users WHERE email = $1`, [INVITE_EMAIL]); } catch {}
-        assert(true, 'cleanup done');
+        try { await pool.query(`DELETE FROM core.user_email_to_tenant WHERE email IN ($1, $2)`, [SIGNUP_EMAIL, INVITE_EMAIL]); } catch (e) { errors.push(`email_to_tenant: ${e.message}`); }
+        try { await pool.query(`DELETE FROM core.tenant_creation_log WHERE email IN ($1, $2)`, [SIGNUP_EMAIL, INVITE_EMAIL]); } catch (e) { errors.push(`creation_log: ${e.message}`); }
+        try { await pool.query(`DELETE FROM ${SCHEMA_A}.users WHERE email = $1`, [INVITE_EMAIL]); } catch (e) { errors.push(`invite user: ${e.message}`); }
+        if (errors.length > 0) console.log(`      ⚠️  Cleanup warnings: ${errors.join('; ')}`);
     }),
 ];
 
@@ -728,11 +729,12 @@ const booksCrudApiTests = [
         const beforeCheck = await pool.query(`SELECT archived FROM ${SCHEMA_A}.books WHERE id = $1`, [bookIdA]);
         const wasBefore = beforeCheck.rows[0].archived;
 
-        await httpRequest({
+        const res = await httpRequest({
             method: 'POST',
             path: `/api/books/${bookIdA}/archive`,
             headers: { 'Authorization': `Bearer ${accessTokenB}` },
         });
+        assert([404, 200].includes(res.status), `expected 404 or 200, got ${res.status}`);
 
         const afterCheck = await pool.query(`SELECT archived FROM ${SCHEMA_A}.books WHERE id = $1`, [bookIdA]);
         assertEqual(afterCheck.rows[0].archived, wasBefore, 'tenant A book should be unchanged by tenant B archive attempt');
@@ -745,6 +747,7 @@ const booksCrudApiTests = [
             body: { name: 'Hacked Name' },
             headers: { 'Authorization': `Bearer ${accessTokenB}` },
         });
+        assert([404, 403].includes(res.status), `expected 404 or 403 for cross-tenant PUT, got ${res.status}`);
         const check = await pool.query(`SELECT name FROM ${SCHEMA_A}.books WHERE id = $1`, [bookIdA]);
         assertNotEqual(check.rows[0].name, 'Hacked Name', 'name should not be changed by tenant B');
     }),
