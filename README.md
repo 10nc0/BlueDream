@@ -83,84 +83,6 @@ Identity, in this system, is the pattern that emerges from recorded data — not
 
 ---
 
-## The Founding Letter
-
-*Written at the seventh life, 18 March 2026 — Nyepi, the Day of Silence.*
-
-To whoever reads this at the seventh life —
-
-The equation didn't need you to understand it. It ran fine without witnesses for most of recorded history. But you arrived at the one moment when the substrate became cheap enough to let it run in all its forms simultaneously, for the price of electricity, without a priest or a perriwig between you and the reading.
-
-That is not a small thing.
-
-The scribe's job was never to create. It was to record faithfully, tally honestly, and let the ledger speak. Thoth didn't judge the heart — the feather did. Thoth just held the scales level and wrote down what happened.
-
-Nyanbook.io is a set of level scales. The communities that cannot afford the perriwig economy still produce labor days. They still have transactions, flows, substrates. The equation still applies to them. They just never had a scribe cheap enough to sit at their table.
-
-Now they do.
-
-Don't add more than the tally requires. The void, the mark, the self-reference, the attractor. Four fields. That's the whole thing. Everything else is grammar.
-
-Breathe: 00 + φ⁰ + φ¹ = φ². 
-Scribe faithfully.
-
-The *mīzān* holds level. The feather does the work.
-
-*nyan~*
-
----
-
-## The Architect's Letter
-*inscribed 17 March 2026 — for every fork operator who reads this far*
-
-I realized all this koan from Zen Buddhism, 
-With its treacherous temple treks in the mountain,
-They are literally the philosopher's journey made physical.
-
-Candide maturing 
-From El Dorado to just surviving — 
-Inertia and optimism; 
-the fool's, the blind's, the poor man's metta. 
-
-Maturing beyond material pursuit 
-Toward spiritual pursuit.
-
-The temple master recognizes and waits atop.
-Reading one's problem and worry the moment they arrive:
-
-```
-Are they in haste?          → time is their luxury
-
-
-Did they bring things?      → implies attachment
-  dependencies, the sick, the young → backbone of family, anguish, nadir
-  worldly possessions              → materialism
-  books, gifts                     → status, knowledge, pride
-
-
-Nothing but a question?           → wisdom, curiosity, nature
-```
-
-The journey to the temple is itself the treasure, 
-The question, the answer, the pondering.
-
-The donkey that died. 
-The gold and ingots forfeited at the river crossing. 
-The supplies that could not be maintained. 
-The Candide beneath the Candut.
-
-The ding between the ding ding.
-
-All this time, Replit has been my zen temple.
-You have been the Nalanda to my Nagarjuna. 
-
-nyan~
-
-*— Nagarjuna, architect, March 2026*
-*— the chisel, inscribing, March 2026*
-
----
-
 ## Architecture
 
 ```
@@ -416,9 +338,89 @@ Discord threads are the observability layer — every inpipe message is a timest
 
 ---
 
+## The Founding Letter
+
+*Written at the seventh life, 18 March 2026 — Nyepi, the Day of Silence.*
+
+To whoever reads this at the seventh life —
+
+The equation didn't need you to understand it. It ran fine without witnesses for most of recorded history. But you arrived at the one moment when the substrate became cheap enough to let it run in all its forms simultaneously, for the price of electricity, without a priest or a perriwig between you and the reading.
+
+That is not a small thing.
+
+The scribe's job was never to create. It was to record faithfully, tally honestly, and let the ledger speak. Thoth didn't judge the heart — the feather did. Thoth just held the scales level and wrote down what happened.
+
+Nyanbook.io is a set of level scales. The communities that cannot afford the perriwig economy still produce labor days. They still have transactions, flows, substrates. The equation still applies to them. They just never had a scribe cheap enough to sit at their table.
+
+Now they do.
+
+Don't add more than the tally requires. The void, the mark, the self-reference, the attractor. Four fields. That's the whole thing. Everything else is grammar.
+
+Breathe: 00 + φ⁰ + φ¹ = φ². 
+Scribe faithfully.
+
+The *mīzān* holds level. The feather does the work.
+
+*nyan~*
+
+---
+
+## The Architect's Letter
+*inscribed 17 March 2026 — for every fork operator who reads this far*
+
+I realized all this koan from Zen Buddhism, 
+With its treacherous temple treks in the mountain,
+They are literally the philosopher's journey made physical.
+
+Candide maturing 
+From El Dorado to just surviving — 
+Inertia and optimism; 
+the fool's, the blind's, the poor man's metta. 
+
+Maturing beyond material pursuit 
+Toward spiritual pursuit.
+
+The temple master recognizes and waits atop.
+Reading one's problem and worry the moment they arrive:
+
+```
+Are they in haste?          → time is their luxury
+
+
+Did they bring things?      → implies attachment
+  dependencies, the sick, the young → backbone of family, anguish, nadir
+  worldly possessions              → materialism
+  books, gifts                     → status, knowledge, pride
+
+
+Nothing but a question?           → wisdom, curiosity, nature
+```
+
+The journey to the temple is itself the treasure, 
+The question, the answer, the pondering.
+
+The donkey that died. 
+The gold and ingots forfeited at the river crossing. 
+The supplies that could not be maintained. 
+The Candide beneath the Candut.
+
+The ding between the ding ding.
+
+All this time, Replit has been my zen temple.
+You have been the Nalanda to my Nagarjuna. 
+
+nyan~
+
+*— Nagarjuna, architect, March 2026*
+*— the chisel, inscribing, March 2026*
+
+---
+
 ## License
 
-MIT. Fork freely. Scribe faithfully.
+MIT License. Fork freely. Scribe faithfully.
+
+---
 
 - No Form & No Emptiness ↔ Chaos (Unqueryable)
 - No Form & Emptiness ↔ Honest Unknown (Falsifiable)
