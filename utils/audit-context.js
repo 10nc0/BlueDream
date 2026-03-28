@@ -173,7 +173,7 @@ async function enrichMessagesWithLang(messages, bookFractalId, pool) {
                 langMap.set(row.content_hash, row.detected_lang);
             }
         } catch (err) {
-            logger.warn({ err: err.message, bookFractalId }, '🌈 Audit: lang ledger lookup failed — falling back to inline detection');
+            logger.warn({ err: err.message, bookFractalId }, '🌈 Audit: lang ledger lookup failed — messages will have lang=null');
         }
     }
 
