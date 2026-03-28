@@ -649,7 +649,8 @@ app.listen(PORT, '0.0.0.0', async () => {
         }
     };
 
-    const { initializeDatabase, initUsageTable } = createDbInit(pool, tenantManager);
+    const { initializeDatabase, initUsageTable, migrationRunner } = createDbInit(pool, tenantManager);
+    tenantManager.setMigrationRunner(migrationRunner);
 
     const initDb = async () => {
         await initializeDatabase();
