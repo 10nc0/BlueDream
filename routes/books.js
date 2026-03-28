@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 const MetadataExtractor = require('../metadata-extractor');
 const { validate, schemas, assertValidSchemaName } = require('../lib/validators');
 const { validateOutpipeConfig } = require('../lib/outpipes/router');
+const { detectLanguage, getFtsConfig, normalizeForSearch } = require('../utils/language-detector');
 
 // In-memory rate limiter for book sharing (10 shares/hour per user)
 const shareRateLimiter = new Map();
@@ -1023,13 +1024,15 @@ function registerBooksRoutes(app, deps) {
                 return res.status(404).json({ error: 'Book not found' });
             }
             
+            const queryLang = detectLanguage(query);
+            const ftsConfig = getFtsConfig(queryLang.lang);
             const searchResult = await client.query(`
-                SELECT *, ts_rank(search_vector, plainto_tsquery('english', $1)) as rank
+                SELECT *, ts_rank(search_vector, plainto_tsquery($3, $1)) as rank
                 FROM ${tenantSchema}.drops
-                WHERE book_id = $2 AND search_vector @@ plainto_tsquery('english', $1)
+                WHERE book_id = $2 AND search_vector @@ plainto_tsquery($3, $1)
                 ORDER BY rank DESC, created_at DESC
                 LIMIT 100
-            `, [query, bookResult.rows[0].id]);
+            `, [query, bookResult.rows[0].id, ftsConfig]);
             
             res.json({ query, results: searchResult.rows, count: searchResult.rows.length });
         } catch (error) {
@@ -1375,7 +1378,7 @@ function registerBooksRoutes(app, deps) {
             return res.status(400).json({ error: 'Search term is required' });
         }
         
-        const searchTerm = term.toLowerCase().trim();
+        const searchTerm = normalizeForSearch(term);
         
         try {
             const tenantSchema = req.tenantSchema;
@@ -1526,22 +1529,22 @@ function registerBooksRoutes(app, deps) {
                     for (const msg of allMessages) {
                         if (msg.createdAt < bookCreatedAt) continue;
                         
-                        let searchableText = (msg.content || '').toLowerCase();
+                        let searchableText = normalizeForSearch(msg.content || '');
                         
                         for (const embed of msg.embeds) {
-                            if (embed.description) searchableText += ' ' + embed.description.toLowerCase();
-                            if (embed.title) searchableText += ' ' + embed.title.toLowerCase();
+                            if (embed.description) searchableText += ' ' + normalizeForSearch(embed.description);
+                            if (embed.title) searchableText += ' ' + normalizeForSearch(embed.title);
                             if (embed.fields) {
                                 for (const field of embed.fields) {
-                                    searchableText += ' ' + (field.name || '').toLowerCase();
-                                    searchableText += ' ' + (field.value || '').toLowerCase();
+                                    searchableText += ' ' + normalizeForSearch(field.name || '');
+                                    searchableText += ' ' + normalizeForSearch(field.value || '');
                                 }
                             }
                         }
                         
                         for (const attachment of msg.attachments.values()) {
-                            if (attachment.name) searchableText += ' ' + attachment.name.toLowerCase();
-                            if (attachment.contentType) searchableText += ' ' + attachment.contentType.toLowerCase();
+                            if (attachment.name) searchableText += ' ' + normalizeForSearch(attachment.name);
+                            if (attachment.contentType) searchableText += ' ' + normalizeForSearch(attachment.contentType);
                         }
                         
                         if (searchableText.includes(searchTerm)) {

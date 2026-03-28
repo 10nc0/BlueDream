@@ -764,6 +764,7 @@ async function _initMessageLedger() {
     `);
 
     await pool.query(`ALTER TABLE core.message_ledger ADD COLUMN IF NOT EXISTS env TEXT NOT NULL DEFAULT 'prod'`);
+    await pool.query(`ALTER TABLE core.message_ledger ADD COLUMN IF NOT EXISTS detected_lang TEXT`);
 
     await Promise.all([
         pool.query(`CREATE INDEX IF NOT EXISTS idx_message_ledger_book ON core.message_ledger(book_fractal_id)`),

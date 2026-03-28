@@ -8,6 +8,7 @@ const { buildCapsule } = require('../utils/message-capsule');
 const { pinJson, pinBuffer } = require('../utils/ipfs-pinner');
 const { routeUserOutput } = require('../lib/outpipes/router');
 const { assertValidSchemaName } = require('../lib/validators');
+const { detectLanguage } = require('../utils/language-detector');
 
 // Phone-bearing channels; all others store phone_number = null (Telegram, LINE, email).
 // Password reset is gated on phone activation — non-phone users silent-fail on reset.
@@ -719,6 +720,8 @@ async function processCapsule(book, bookRecord, msg, media, discordResponse, dep
     const { pool, logger } = deps;
     const tenantIdMatch = bookRecord.tenant_schema?.match(/tenant_(\d+)/);
     const capsuleTenantId = tenantIdMatch ? parseInt(tenantIdMatch[1]) : 0;
+    const langResult = msg.body ? detectLanguage(msg.body) : { lang: null, confidence: 0 };
+    const detectedLang = langResult.confidence >= 0.3 ? langResult.lang : null;
     const capsule = buildCapsule({
         bookFractalId: book.fractal_id,
         tenantId: capsuleTenantId,
@@ -739,8 +742,8 @@ async function processCapsule(book, bookRecord, msg, media, discordResponse, dep
                 await pool.query(
                     `INSERT INTO core.message_ledger
                      (message_fractal_id, book_fractal_id, sender_hash, content_hash,
-                      has_attachment, attachment_disclosed, env)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7)
+                      has_attachment, attachment_disclosed, env, detected_lang)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
                      ON CONFLICT (message_fractal_id) DO NOTHING`,
                     [
                         capsule.message_fractal_id,
@@ -749,7 +752,8 @@ async function processCapsule(book, bookRecord, msg, media, discordResponse, dep
                         capsule.content_hash,
                         capsule.attachments.length > 0,
                         capsule.attachments[0]?.disclosed ?? true,
-                        env
+                        env,
+                        detectedLang
                     ]
                 );
             }
