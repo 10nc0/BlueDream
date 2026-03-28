@@ -129,6 +129,35 @@ function registerBooksRoutes(app, deps) {
         });
     });
 
+    app.get('/api/books/top', requireAuth, async (req, res) => {
+        try {
+            const tenantSchema = req.tenantSchema;
+            if (!tenantSchema) return res.status(500).json({ error: 'Tenant context not found' });
+
+            const cachedFid = req.query.fid;
+            let query, params;
+            if (cachedFid) {
+                query = `SELECT ${BOOK_LIST_COLS} FROM ${tenantSchema}.books b
+                         WHERE b.fractal_id = $1 AND b.archived = false AND b.status != 'expired' LIMIT 1`;
+                params = [cachedFid];
+            } else {
+                query = `SELECT ${BOOK_LIST_COLS} FROM ${tenantSchema}.books b
+                         WHERE b.archived = false AND b.status != 'expired' AND b.fractal_id IS NOT NULL
+                         ORDER BY b.sort_order ASC NULLS LAST, b.created_at DESC LIMIT 1`;
+                params = [];
+            }
+            const result = await pool.query(query, params);
+            if (result.rows.length === 0) return res.json({ book: null });
+
+            const book = { ...result.rows[0], isOwner: true, canEdit: true, canView: true };
+            delete book.output_01_url;
+            res.json({ book });
+        } catch (error) {
+            logger.error({ err: error }, 'Error in /api/books/top');
+            res.status(500).json({ error: 'Failed to load book' });
+        }
+    });
+
     app.get('/api/books', requireAuth, async (req, res) => {
         logger.debug({ userId: req.userId }, '/api/books called');
         

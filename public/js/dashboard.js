@@ -1370,23 +1370,33 @@
 
         async function _initPriorityLoad() {
             const cached = _readCachedBook();
-            if (!cached.id) return;
+            const fidParam = cached.id ? `?fid=${encodeURIComponent(cached.id)}` : '';
+            try {
+                const resp = await window.authFetch(`/api/books/top${fidParam}`);
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const topBook = data.book;
+                if (!topBook) return;
 
-            selectedBookFractalId = cached.id;
-            _renderMinimalHeader(cached.id, cached.name);
-            _showMsgLoader(cached.id);
+                selectedBookFractalId = topBook.fractal_id;
+                _persistSelectedBook(topBook.fractal_id, topBook.name);
+                _renderMinimalHeader(topBook.fractal_id, topBook.name);
+                _showMsgLoader(topBook.fractal_id);
 
-            if (isMobile()) {
-                const bookSidebar = document.getElementById('bookSidebar');
-                const bookDetail = document.getElementById('bookDetail');
-                if (bookSidebar) bookSidebar.style.display = 'none';
-                if (bookDetail) bookDetail.style.display = 'flex';
+                if (isMobile()) {
+                    const bookSidebar = document.getElementById('bookSidebar');
+                    const bookDetail = document.getElementById('bookDetail');
+                    if (bookSidebar) bookSidebar.style.display = 'none';
+                    if (bookDetail) bookDetail.style.display = 'flex';
+                }
+
+                messagePageState[topBook.fractal_id] = { isLoading: false, hasOlder: true, seenIds: new Set(), oldestId: null };
+                await loadBookMessages(topBook.fractal_id, false);
+                _priorityBookLoaded = true;
+                startPolling(topBook.fractal_id);
+            } catch (err) {
+                console.error('Priority load failed:', err);
             }
-
-            messagePageState[cached.id] = { isLoading: false, hasOlder: true, seenIds: new Set(), oldestId: null };
-            await loadBookMessages(cached.id, false);
-            _priorityBookLoaded = true;
-            startPolling(cached.id);
         }
 
         async function _initBackgroundBooks() {
@@ -1398,7 +1408,7 @@
 
             if (_priorityBookLoaded && filteredBooks.find(b => b.fractal_id === selectedBookFractalId)) {
                 renderBooks(true);
-                renderBookDetail();
+                _upgradeHeader();
             } else if (_priorityBookLoaded) {
                 localStorage.removeItem('nyan_lastBook');
                 localStorage.removeItem('nyan_lastBookName');
@@ -1409,6 +1419,57 @@
             }
             updatePlatformFilter();
             if (isMobile()) renderThumbsZone();
+        }
+
+        function _upgradeHeader() {
+            const book = filteredBooks.find(b => b.fractal_id === selectedBookFractalId);
+            if (!book) return;
+            const oldHeader = document.getElementById('priority-header');
+            if (!oldHeader) return;
+            const detail = document.getElementById('bookDetail');
+            if (!detail) return;
+
+            const platform = (book.input_platform || book.platform || '').toLowerCase();
+
+            const headerBar = document.createElement('div');
+            headerBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.75rem; background: rgba(30, 41, 59, 0.6); border-bottom: 1px solid rgba(148, 163, 184, 0.1);';
+
+            const headerLeft = document.createElement('div');
+            headerLeft.style.cssText = 'display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 0;';
+            const bookName = document.createElement('div');
+            bookName.style.cssText = 'color: #e2e8f0; font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+            bookName.textContent = book.name || `${platform} → Discord`;
+            headerLeft.appendChild(bookName);
+            headerBar.appendChild(headerLeft);
+
+            const headerRight = document.createElement('div');
+            headerRight.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+            const createIconBtn = (dataAttr, value, title, bgColor, textColor, icon) => {
+                const btn = document.createElement('button');
+                btn.className = 'btn-icon';
+                btn.dataset[dataAttr] = value;
+                btn.title = title;
+                btn.style.cssText = `background: ${bgColor}; color: ${textColor}; border: none; padding: 0.375rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem;`;
+                btn.textContent = icon;
+                return btn;
+            };
+            headerRight.appendChild(createIconBtn('showBookInfo', book.fractal_id, 'Book Information', 'rgba(148, 163, 184, 0.15)', '#94a3b8', 'ℹ️'));
+            if (!isDevPanelView && platform === 'whatsapp') {
+                const waBtn = createIconBtn('showWhatsappActivation', book.fractal_id, 'WhatsApp Activation', 'rgba(34, 197, 94, 0.15)', '#22c55e', '📱');
+                waBtn.style.cssText += 'display: inline-flex; align-items: center; justify-content: center;';
+                headerRight.appendChild(waBtn);
+            }
+            if (!isDevPanelView) {
+                if (book.canEdit) {
+                    headerRight.appendChild(createIconBtn('editBook', book.fractal_id, 'Edit', 'rgba(251, 191, 36, 0.15)', '#fbbf24', '✏️'));
+                }
+                headerRight.appendChild(createIconBtn('downloadEntireBook', book.fractal_id, 'Download Entire Book', 'rgba(34, 197, 94, 0.15)', '#22c55e', '⬇️'));
+                if (book.canEdit) {
+                    headerRight.appendChild(createIconBtn('deleteBook', book.fractal_id, 'Delete', 'rgba(239, 68, 68, 0.15)', '#ef4444', '🗑️'));
+                }
+            }
+            headerBar.appendChild(headerRight);
+            detail.replaceChild(headerBar, oldHeader);
         }
 
         async function loadBooks() {
