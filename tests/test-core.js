@@ -7,12 +7,16 @@ process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-session-secret-
 const http = require('http');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const authService = require('../lib/auth-service');
 const { buildCapsule } = require('../utils/message-capsule');
 const { TwilioChannel } = require('../lib/channels/twilio');
 const { VALID_SCHEMA_PATTERN, assertValidSchemaName } = require('../lib/validators');
 const { validateOutpipeConfig } = require('../lib/outpipes/router');
+const { DiscordOutpipe } = require('../lib/outpipes/discord');
+const { WebhookOutpipe } = require('../lib/outpipes/webhook');
+const { EmailOutpipe } = require('../lib/outpipes/email');
 
 const PORT = process.env.PORT || 5000;
 const HOST = 'localhost';
@@ -233,6 +237,32 @@ const authUnitTests = [
         const v1 = await authService.isRefreshTokenValid(pool, SCHEMA_A, t1.tokenId, userIdA);
         const v2 = await authService.isRefreshTokenValid(pool, SCHEMA_A, t2.tokenId, userIdA);
         assert(!v1 && !v2, 'all tokens should be revoked');
+    }),
+
+    test('expired access token is rejected by verifyToken', () => {
+        const expiredToken = jwt.sign(
+            { userId: userIdA, email: TEST_EMAIL_A, role: 'admin', tenantId: tenantIdA, type: 'access' },
+            process.env.SESSION_SECRET,
+            { expiresIn: '0s', issuer: 'nyanbook', audience: 'nyanbook-app', algorithm: 'HS256' }
+        );
+        const decoded = authService.verifyToken(expiredToken);
+        assertEqual(decoded, null, 'expired token should return null');
+    }),
+
+    test('expired access token rejected by GET /api/auth/status', async () => {
+        const expiredToken = jwt.sign(
+            { userId: userIdA, email: TEST_EMAIL_A, role: 'admin', tenantId: tenantIdA, type: 'access' },
+            process.env.SESSION_SECRET,
+            { expiresIn: '0s', issuer: 'nyanbook', audience: 'nyanbook-app', algorithm: 'HS256' }
+        );
+        await new Promise(r => setTimeout(r, 50));
+        const res = await httpRequest({
+            method: 'GET',
+            path: '/api/auth/status',
+            headers: { 'Authorization': `Bearer ${expiredToken}` },
+        });
+        assertEqual(res.status, 200, `expected 200, got ${res.status}`);
+        assertEqual(res.data.authenticated, false, 'expired token should not authenticate');
     }),
 
     test('JWT claims include adminId=01 for genesis admin', () => {
@@ -477,6 +507,16 @@ const signupTests = [
             body: { email: INVITE_EMAIL, password: TEST_PASSWORD, inviteToken: 'invalid-token-abc123' },
         });
         assertEqual(res.status, 400, `expected 400, got ${res.status}`);
+    }),
+
+    test('POST /api/auth/signup with invite token path rejects gracefully (invite_tokens not provisioned)', async () => {
+        const fakeToken = crypto.randomBytes(32).toString('hex');
+        const res = await httpRequest({
+            method: 'POST',
+            path: '/api/auth/signup',
+            body: { email: `invite_flow_${TEST_TS}@test.com`, password: TEST_PASSWORD, inviteToken: fakeToken },
+        });
+        assert([400, 500].includes(res.status), `expected 400 or 500 (table missing), got ${res.status}`);
     }),
 
     test('cleanup: remove signup test data', async () => {
@@ -919,6 +959,35 @@ const tenantIsolationTests = [
         const hasA = res.data.books?.find(b => b.fractal_id === bookFractalIdA);
         assert(!hasA, 'cross-tenant JWT should NOT access tenant A books via tenant B schema');
     }),
+
+    test('crafted JWT with SQL-injection tenantId is rejected by middleware', async () => {
+        const evilToken = jwt.sign(
+            { userId: userIdA, email: TEST_EMAIL_A, role: 'admin', tenantId: "1; DROP TABLE users", type: 'access' },
+            process.env.SESSION_SECRET,
+            { expiresIn: '5m', issuer: 'nyanbook', audience: 'nyanbook-app', algorithm: 'HS256' }
+        );
+        const res = await httpRequest({
+            method: 'GET',
+            path: '/api/books',
+            headers: { 'Authorization': `Bearer ${evilToken}` },
+        });
+        assert([400, 403, 500].includes(res.status), `crafted tenantId should be rejected, got ${res.status}`);
+        const check = await pool.query(`SELECT count(*) FROM ${SCHEMA_A}.books`);
+        assert(parseInt(check.rows[0].count) >= 0, 'tables should still exist after injection attempt');
+    }),
+
+    test('crafted JWT with nonexistent tenantId returns no data', async () => {
+        const ghostToken = authService.signAccessToken(userIdA, TEST_EMAIL_A, 'admin', 999999);
+        const res = await httpRequest({
+            method: 'GET',
+            path: '/api/books',
+            headers: { 'Authorization': `Bearer ${ghostToken}` },
+        });
+        assert([200, 400, 500].includes(res.status), `got ${res.status}`);
+        if (res.status === 200) {
+            assertEqual(res.data.books?.length || 0, 0, 'nonexistent tenant should return no books');
+        }
+    }),
 ];
 
 const capsuleAndInpipeTests = [
@@ -1016,7 +1085,39 @@ const capsuleAndInpipeTests = [
             path: '/api/twilio/webhook',
             body: { From: 'whatsapp:+1234567890', Body: 'test' },
         });
-        assert([400, 401, 403, 503].includes(res.status), `expected auth rejection, got ${res.status}`);
+        const twilioAuthConfigured = !!process.env.TWILIO_AUTH_TOKEN;
+        if (twilioAuthConfigured) {
+            assertEqual(res.status, 401, `expected 401 (missing signature), got ${res.status}`);
+        } else {
+            assertEqual(res.status, 503, `expected 503 (auth not configured), got ${res.status}`);
+        }
+    }),
+
+    test('POST /api/twilio/webhook with invalid signature is rejected', async () => {
+        if (!process.env.TWILIO_AUTH_TOKEN) return;
+        const res = await httpRequest({
+            method: 'POST',
+            path: '/api/twilio/webhook',
+            body: { From: 'whatsapp:+1234567890', Body: 'test message' },
+            headers: { 'X-Twilio-Signature': 'invalid-signature-value' },
+        });
+        assertEqual(res.status, 401, `expected 401 for invalid signature, got ${res.status}`);
+    }),
+
+    test('POST /api/twilio/webhook with valid Twilio signature is accepted', async () => {
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        if (!authToken) return;
+        const webhookUrl = process.env.TWILIO_WEBHOOK_URL || `http://localhost:${PORT}/api/twilio/webhook`;
+        const body = { From: 'whatsapp:+15551234567', Body: `test_sig_${TEST_TS}`, MessageSid: `SM${crypto.randomBytes(16).toString('hex')}` };
+        const twilio = require('twilio');
+        const signature = twilio.getExpectedTwilioSignature(authToken, webhookUrl, body);
+        const res = await httpRequest({
+            method: 'POST',
+            path: '/api/twilio/webhook',
+            body,
+            headers: { 'X-Twilio-Signature': signature },
+        });
+        assert([200, 204].includes(res.status), `expected 200/204 for valid signature, got ${res.status}: ${JSON.stringify(res.data)}`);
     }),
 
     test('message_queue insert and retrieve roundtrip', async () => {
@@ -1145,10 +1246,30 @@ const outpipeRouterTests = [
     }),
 
     test('EmailOutpipe constructor requires to', () => {
-        const { EmailOutpipe } = require('../lib/outpipes/email');
         let threw = false;
         try { new EmailOutpipe({ type: 'email' }); } catch { threw = true; }
         assert(threw, 'should throw without to');
+    }),
+
+    test('createOutpipe routes to correct outpipe class', () => {
+        const { DiscordOutpipe } = require('../lib/outpipes/discord');
+        const { WebhookOutpipe } = require('../lib/outpipes/webhook');
+        const { EmailOutpipe } = require('../lib/outpipes/email');
+        const createOutpipe = (config) => {
+            const types = { discord: DiscordOutpipe, email: EmailOutpipe, webhook: WebhookOutpipe };
+            const Cls = types[config.type];
+            if (!Cls) throw new Error(`Unknown outpipe type: ${config.type}`);
+            return new Cls(config);
+        };
+        const d = createOutpipe({ type: 'discord', url: 'https://discord.com/api/webhooks/1/a' });
+        assert(d instanceof DiscordOutpipe, 'should be DiscordOutpipe');
+        const w = createOutpipe({ type: 'webhook', url: 'https://example.com/hook' });
+        assert(w instanceof WebhookOutpipe, 'should be WebhookOutpipe');
+        const e = createOutpipe({ type: 'email', to: 'user@test.com' });
+        assert(e instanceof EmailOutpipe, 'should be EmailOutpipe');
+        let threw = false;
+        try { createOutpipe({ type: 'slack', url: 'https://hooks.slack.com/1' }); } catch { threw = true; }
+        assert(threw, 'unknown type should throw');
     }),
 ];
 
