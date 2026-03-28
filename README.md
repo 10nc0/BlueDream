@@ -3,15 +3,15 @@
 
 Nyanbook.io is a post-folder information protocol. 
 
-Instead of messy folders and hierarchies, you send screenshot messages / attachments — via WhatsApp, LINE, or any SNS — and they are automatically stored and sorted chronologically. 
+Instead of messy folders and hierarchies, you send screenshot messages / attachments — via WhatsApp, LINE, or any SNS. Nyanbook.io save and sort them by time. 
 
-A versatile AI endpoint is provided to make contents queryable & interactive.
+A versatile AI endpoint is provided to make your data queryable & interactive.
 
-**Before**: Receipt → Reimbursement Forms for Receipt → Create folder "2026/Taxes" → Rename file → Wrong Input in Forms → Forget where you saved it → ...
+**Before**: Receipt → Fill Reimbursement Forms for Receipt → Create folder "2026/Taxes" → Rename file → Wrong Input in Forms → Forget where you saved it → ...
 
 **After**:  WhatsApp screenshot / photo / video to Nyanbook.io (no need Forms) → Auto-sorted by date → Search "receipt" or use AI queries → Interact with your files
 
-**Try it first:** → [nyanbook.io](https://nyanbook.io) — see the ledger, ask the AI. Sovereignty is a choice, not a requirement.
+**Try it first:** → [nyanbook.io](https://nyanbook.io) — see the ledger, ask the Nyan AI. Sovereignty is a choice, not a requirement.
 
 ---
 
@@ -19,18 +19,18 @@ A versatile AI endpoint is provided to make contents queryable & interactive.
 
 | Scale | Deployment | Use Case |
 |---|---|---|
-| Individual | Replit free tier | Personal archiving |
-| Family | Replit Autoscale | Household records |
-| Community | Self-hosted | Mutual aid, neighbourhood records |
-| Municipal | Fork + customize | Local government transparency |
+| Individual | Replit free tier | Personal / work data |
+| Family | Replit Autoscale | Family notes, memories / photos |
+| Community | Replit Autoscale | Neighbourhood records, festival moments, shared skills/knowledge |
+| Municipal | Fork + customize | Local government transparency, node-to-node verification of events |
 
-**What people actually use it for:**
+**What people use it for:**
 
-- **Receipts & reimbursements** — photo to WhatsApp, auto-dated, searchable forever. No folder, no rename, no lost file.
-- **Household** — repairs, groceries list, maintenance logs. The AC service was last *when*, exactly.
-- **Small business** — client messages, deliveries, invoices. The thread is the paper trail.
-- **Community** — sightings, reports, pollings, surveys, mutual aid requests, meeting notes. The gap between entries is data too.
-- **Personal** — memories, medical history, important conversations. Things you'll need in ten years that you can't predict today.
+- **Reimbursements** — photo to WhatsApp, auto-dated, searchable forever. No folder, no rename, no lost file.
+- **Household** — repairs, groceries list, photo / video albums.
+- **Small business** — customer messages, deliveries, invoices. The book is the paper trail evidence.
+- **Community** — sightings, reports, pollings, surveys, requests, announcements, shared skills/knowledge. 
+- **Personal** — memories, medical history, important conversations, important files / photos / videos. Things you'll need in ten years that you can't predict today.
 
 Open source means anyone can verify the feather is level. No priest. No perriwig. No proprietary black box.
 
@@ -38,12 +38,14 @@ Open source means anyone can verify the feather is level. No priest. No perriwig
 
 ## Why URL-First
 
-Nyanbook.io has no app to install.
+Nyanbook.io has no app to install. The scribe doesn't care which window you knocked on.
 
+**Viewing**:
 Click on a phone, a refrigerator panel, a car with browser — and it works. The link is the access point. No App Store. No Play Store. No permission from Apple or Google. No update that breaks your work at 11pm.
 
-Goes both ways. The scribe doesn't care which window you knocked on.
+**Goes both ways.**
 
+**Posting**:
 The inputs: WhatsApp, LINE OA, and Telegram are all browsers in a sense — they forward messages to a webhook. 
 
 The sovereignty guarantee is not the URL. It is the hash. But the URL is why the door is always open in Nyanbook.io.
@@ -60,10 +62,10 @@ For them: The gap is the silence, and absence is not data.
 
 For Nyanbook.io: Absence is data:
 
-- **Append-only** — you cannot retroactively fill the gap
-- **IPFS pin** — what was written cannot be unwritten
-- **PostgreSQL** — the gap between entries is queryable
-- **Discord thread** — the human-readable witness layer sees the gap too 
+- **Append-only** — there is no backdate entries
+- **IPFS pin** — there is no delete / edit
+- **PostgreSQL** — the missing entries cannot lie
+- **Discord thread** — also all copied by default to your Discord channel
 
 | System | Absence queryable? | Append-only? | Content-addressed? |
 |---|---|---|---|
@@ -72,9 +74,9 @@ For Nyanbook.io: Absence is data:
 | Slack | ✗ | ✗ | ✗ |
 | Nyanbook.io | ✓ | ✓ | ✓ (IPFS) |
 
-> *"If you were supposed to log something every day for a month and forgot 7 days — does your current system know you forgot? Can it show you exactly which 7 days?"*
+> *"If you need to log something for a month and forgot 7 days — Can your system show you exactly the 7 days you forgot?"*
 
-Identity, in this system, is the pattern that emerges from what was recorded — not a claim, but a ledger.
+Identity, in this system, is the pattern that emerges from recorded data — not a claim, but a ledger.
 
 ---
 
@@ -226,7 +228,7 @@ Set `PINATA_JWT` and every inpipe message is automatically pinned to IPFS on arr
 
 ## Quick Start
 
-> Everything runs on free tiers. No terminal required. The startup log tells you what's active.
+> Everything runs on free tiers. No coding skills required, No terminal required. The **console log** tells you what's active.
 >
 > **Operators:** see [`RUNBOOK (LOGOS).md`](RUNBOOK%20(LOGOS).md) for secret rotation, incident response, and post-deploy checklist.
 
@@ -243,7 +245,7 @@ Stop at any tier. Each one is functional on its own.
 
 ### Tier 0 — Cold Start (~2 min, $0)
 
-*UI runs. AI works. Books exist but nothing flows in until Tier 2.*
+*Result: UI runs. AI works. Books exist but nothing flows in until Tier 2.*
 
 [Replit](https://replit.com) → Create Repl → Import from GitHub → `https://github.com/10nc0/BlueDream`
 
@@ -260,9 +262,9 @@ Click ▶ Run. Tables are created automatically on first start.
 
 ---
 
-### Tier 1 — Connect AI & Bots (~10 min, $0)
+### Tier 1 — Connect books to AI & Bots (~10 min, $0)
 
-*Discord threads mirror book activity. AI audit can query book history. Books still empty — no inpipe yet.*
+*Result: Discord threads mirror book activity. AI audit can query book history. Note: Books still empty — no inpipe yet.*
 
 Create 4 bots at [discord.com/developers](https://discord.com/developers/applications):
 
@@ -286,9 +288,9 @@ For each: New Application → Bot → Reset Token → copy. Invite all 4 to your
 
 ### Tier 2 — Inpipe (~5 min each, $0)
 
-*This is when Nyanbook comes alive — messages flow in, books become readable and writable.*
+*Result: This is when Nyanbook comes alive — messages flow in, books become readable and writable.*
 
-Each channel is independent. Add any or none. Deploy first (Deploy → Autoscale) to get a persistent `https://yourapp.replit.app` URL for webhooks.
+Each channel is independent. Deploy first (Deploy → Autoscale) to get a persistent `https://yourapp.replit.app` URL for webhooks.
 
 **WhatsApp** — [Twilio](https://twilio.com) → WhatsApp Business API → webhook `https://yourapp.replit.app/api/twilio/webhook` → add `TWILIO_AUTH_TOKEN`
 
@@ -352,7 +354,7 @@ Set `PINATA_JWT` to enable automatic IPFS pinning via Pinata (free 1GB tier). Th
 ### Playground (public, no login)
 - Multimodal: text + images + documents
 - Document parsing: PDF, Excel, DOCX
-- Real-time web search (Brave API)
+- Real-time web search (Brave API required)
 - Powered by Groq Llama 3.3 70B
 
 ### Dashboard Audit (authenticated)
