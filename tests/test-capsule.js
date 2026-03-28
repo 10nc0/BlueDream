@@ -68,14 +68,9 @@ test('capsule has field: v', () => {
     assert('v' in c, 'missing field: v');
 });
 
-test('capsule.v === 1 (current schema version)', () => {
+test('capsule.v === 2 (current schema version)', () => {
     const c = buildCapsule(BASE);
-    assertEqual(c.v, 1, `expected v=1, got v=${c.v}`);
-});
-
-test('capsule has field: body', () => {
-    const c = buildCapsule(BASE);
-    assert('body' in c, 'missing field: body');
+    assertEqual(c.v, 2, `expected v=2, got v=${c.v}`);
 });
 
 test('capsule has field: content_hash', () => {

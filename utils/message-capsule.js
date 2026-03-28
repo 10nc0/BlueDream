@@ -11,12 +11,11 @@ const FRACTAL_SALT = process.env.FRACTAL_SALT || (() => {
 
 /**
  * Build a cryptographic provenance capsule (HMAC sender proof + SHA256 content hash).
- * Contains the actual message content — same payload as Discord, structured for
- * verifiability and selective disclosure.
  *
- * Selective disclosure semantics:
- *   disclosed: true  → body + attachment binary both pinned to IPFS (full copy)
- *   disclosed: false → only hash + reference stored (existence proven, content not revealed)
+ * The capsule is a lightweight proof envelope — it contains hashes and references,
+ * not the full content. The actual message body lives in PostgreSQL and Discord.
+ * IPFS stores only the cryptographic proof (hashes + CDN references) so Pinata
+ * usage stays minimal.
  *
  * @param {object} opts
  * @param {string} opts.bookFractalId        - Parent book's fractal ID
@@ -25,12 +24,9 @@ const FRACTAL_SALT = process.env.FRACTAL_SALT || (() => {
  * @param {string} opts.body                 - Message text body
  * @param {object|null} opts.media           - { buffer, contentType } or null
  * @param {string} opts.timestamp            - ISO timestamp string
- * @param {boolean} [opts.disclosedAttachments=true] - Whether attachment binaries are disclosed.
- *   true  → binary pinned to IPFS in full (default; inpipe messages are fully disclosed).
- *   false → hash-only reference; binary not pinned (use for privacy-sensitive re-attestations).
  * @returns {object} capsule
  */
-function buildCapsule({ bookFractalId, tenantId, phone, body, media, timestamp, disclosedAttachments = true }) {
+function buildCapsule({ bookFractalId, tenantId, phone, body, media, timestamp }) {
     const ts = timestamp || new Date().toISOString();
     const bodyText = body || '';
 
@@ -53,19 +49,16 @@ function buildCapsule({ bookFractalId, tenantId, phone, body, media, timestamp, 
             mime: media.contentType || 'application/octet-stream',
             size_bytes: media.buffer.length,
             hash: attachHash,
-            discord_url: null,
-            attachment_cid: null,
-            disclosed: disclosedAttachments
+            discord_url: null
         });
     }
 
     return {
-        v: 1,
+        v: 2,
         message_fractal_id: messageFractalId,
         book_fractal_id: bookFractalId,
         sender_hash: senderHash,
         timestamp: ts,
-        body: bodyText,
         content_hash: contentHash,
         content_length: bodyText.length,
         attachments

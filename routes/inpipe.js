@@ -5,7 +5,7 @@ const { LineChannel } = require('../lib/channels/line');
 const { EmailChannel } = require('../lib/channels/email');
 const { TelegramChannel } = require('../lib/channels/telegram');
 const { buildCapsule } = require('../utils/message-capsule');
-const { pinJson, pinBuffer } = require('../utils/ipfs-pinner');
+const { pinJson } = require('../utils/ipfs-pinner');
 const { routeUserOutput } = require('../lib/outpipes/router');
 const { assertValidSchemaName, VALID_SCHEMA_PATTERN } = require('../lib/validators');
 const { detectLanguage } = require('../utils/language-detector');
@@ -862,8 +862,8 @@ async function processCapsule(book, bookRecord, msg, media, discordResponse, dep
                 await pool.query(
                     `INSERT INTO core.message_ledger
                      (message_fractal_id, book_fractal_id, sender_hash, content_hash,
-                      has_attachment, attachment_disclosed, env, detected_lang)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                      has_attachment, env, detected_lang)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7)
                      ON CONFLICT (message_fractal_id) DO NOTHING`,
                     [
                         capsule.message_fractal_id,
@@ -871,7 +871,6 @@ async function processCapsule(book, bookRecord, msg, media, discordResponse, dep
                         capsule.sender_hash,
                         capsule.content_hash,
                         capsule.attachments.length > 0,
-                        capsule.attachments[0]?.disclosed ?? true,
                         env,
                         detectedLang
                     ]
@@ -884,16 +883,12 @@ async function processCapsule(book, bookRecord, msg, media, discordResponse, dep
                     [jsonResult.cid, capsule.message_fractal_id]
                 );
             }
-            if (media?.buffer && capsule.attachments[0]?.disclosed) {
-                const fileResult = await pinBuffer(media.buffer, media.contentType);
-                if (fileResult?.cid) {
-                    capsule.attachments[0].attachment_cid = fileResult.cid;
-                    if (pool) {
-                        await pool.query(
-                            `UPDATE core.message_ledger SET attachment_cid = $1 WHERE message_fractal_id = $2`,
-                            [fileResult.cid, capsule.message_fractal_id]
-                        );
-                    }
+            if (media?.buffer && capsule.attachments[0]?.discord_url) {
+                if (pool) {
+                    await pool.query(
+                        `UPDATE core.message_ledger SET attachment_cid = $1 WHERE message_fractal_id = $2`,
+                        [capsule.attachments[0].discord_url, capsule.message_fractal_id]
+                    );
                 }
             }
             logger.info({

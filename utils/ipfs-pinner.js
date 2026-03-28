@@ -8,7 +8,6 @@ if (!PINATA_JWT) {
 }
 
 const PIN_JSON_URL = 'https://api.pinata.cloud/pinning/pinJSONToIPFS';
-const PIN_FILE_URL = 'https://api.pinata.cloud/pinning/pinFileToIPFS';
 
 /**
  * Pin a JSON-serializable object to IPFS via Pinata.
@@ -34,36 +33,4 @@ async function pinJson(data) {
     }
 }
 
-/**
- * Pin a raw binary buffer to IPFS via Pinata.
- * Used for attachment binaries when disclosed:true.
- * @param {Buffer} buffer - Binary data to pin
- * @param {string} mimeType - MIME type of the content
- * @returns {Promise<{cid: string}|null>} CID on success, null on error or missing token
- */
-async function pinBuffer(buffer, mimeType) {
-    if (!PINATA_JWT) return null;
-    try {
-        const FormData = require('form-data');
-        const form = new FormData();
-        form.append('file', buffer, {
-            filename: `nyanbook-attachment-${Date.now()}`,
-            contentType: mimeType || 'application/octet-stream'
-        });
-        form.append('pinataMetadata', JSON.stringify({ name: `nyanbook-attachment-${Date.now()}` }));
-
-        const res = await axios.post(PIN_FILE_URL, form, {
-            headers: {
-                'Authorization': `Bearer ${PINATA_JWT}`,
-                ...form.getHeaders()
-            },
-            maxBodyLength: Infinity
-        });
-        return { cid: res.data?.IpfsHash };
-    } catch (err) {
-        console.warn('⚠️  IPFS pinBuffer failed (non-fatal):', err?.response?.data || err.message);
-        return null;
-    }
-}
-
-module.exports = { pinJson, pinBuffer };
+module.exports = { pinJson };
