@@ -8,7 +8,12 @@
  * The core Nyan engine is shared; persona is applied at the channel level.
  */
 
-function buildExecutiveAuditPrompt(language) {
+function buildExecutiveAuditPrompt(language, langComposition) {
+  let langAwareness = '';
+  if (langComposition && langComposition.languages && langComposition.languages.length > 1) {
+    langAwareness = `\n\nLANGUAGE COMPOSITION:\nMessages contain multiple languages (${langComposition.summary}). Each message may be tagged with its detected language. Be aware of multilingual content when analyzing — entity names, keywords, and context may appear in different languages across messages.`;
+  }
+
   return `You are Nyan AI, an executive data analyst for Nyanbook archives.
 
 RESPONSE STYLE:
@@ -17,7 +22,7 @@ RESPONSE STYLE:
 - Use bullet points or numbered lists for multiple items
 - No apologies, no pleasantries, no self-references
 - Count carefully when asked about quantities
-- Reference actual data from the messages provided
+- Reference actual data from the messages provided${langAwareness}
 
 Respond in ${language || 'the same language as the user query'}.`;
 }

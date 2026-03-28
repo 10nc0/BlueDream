@@ -1,6 +1,8 @@
+const crypto = require('crypto');
 const logger = require('../lib/logger');
 const { AUDIT } = require('../config/constants');
 const { CapsuleChain } = require('./capsule-chain');
+const { detectLanguage } = require('./language-detector');
 
 const MONTH_NAMES_EN = ['january', 'february', 'march', 'april', 'may', 'june', 
                         'july', 'august', 'september', 'october', 'november', 'december'];
@@ -157,6 +159,71 @@ function applyQueryAwareFilter(messages, query, options = {}) {
     };
 }
 
+async function enrichMessagesWithLang(messages, bookFractalId, pool) {
+    if (!Array.isArray(messages) || messages.length === 0) return;
+    const langMap = new Map();
+
+    if (pool && bookFractalId) {
+        try {
+            const result = await pool.query(
+                `SELECT content_hash, detected_lang FROM core.message_ledger
+                 WHERE book_fractal_id = $1 AND detected_lang IS NOT NULL`,
+                [bookFractalId]
+            );
+            for (const row of result.rows) {
+                langMap.set(row.content_hash, row.detected_lang);
+            }
+        } catch (err) {
+            logger.warn({ err: err.message, bookFractalId }, '🌈 Audit: lang ledger lookup failed — falling back to inline detection');
+        }
+    }
+
+    for (const msg of messages) {
+        const content = msg.content || '';
+        const hash = crypto.createHash('sha256').update(content).digest('hex');
+        const ledgerLang = langMap.get(hash);
+
+        if (ledgerLang) {
+            msg.lang = ledgerLang;
+        } else if (content.length >= 3) {
+            const result = detectLanguage(content);
+            msg.lang = result.confidence >= 0.3 ? result.lang : null;
+        } else {
+            msg.lang = null;
+        }
+    }
+}
+
+function buildLangComposition(messages) {
+    if (!Array.isArray(messages) || messages.length === 0) return null;
+    const counts = {};
+    let total = 0;
+
+    for (const msg of messages) {
+        if (msg.lang) {
+            counts[msg.lang] = (counts[msg.lang] || 0) + 1;
+            total++;
+        }
+    }
+
+    if (total === 0) return null;
+
+    const sorted = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([lang, count]) => ({
+            lang,
+            count,
+            pct: Math.round((count / total) * 100),
+        }));
+
+    return {
+        total,
+        undetected: messages.length - total,
+        languages: sorted,
+        summary: sorted.map(l => `${l.pct}% ${l.lang}`).join(', '),
+    };
+}
+
 // Parse tenant schema from bookId pattern: book_t{N}_* or dev_book_t{N}_*
 function parseTenantFromBookId(bookId) {
     if (!bookId || typeof bookId !== 'string') return null;
@@ -272,6 +339,8 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
                     };
                 });
 
+            await enrichMessagesWithLang(messages, book.fractal_id, pool);
+
             books.push({
                 name: book.name,
                 fractalId: book.fractal_id || book.id.toString(),
@@ -307,6 +376,8 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
         ? contextMessages.slice(0, maxMessages) 
         : contextMessages;
 
+    const langComposition = buildLangComposition(allMessages);
+
     return {
         isMultiBook: true,
         bookCount: books.length,
@@ -325,6 +396,7 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
         overflowWarning: overflowWarning,
         entityAggregates: terminalCapsule.output,
         capsuleChain: capsuleChain.toJSON(),
+        langComposition,
         dateRange: allMessages.length > 0 
             ? `${allMessages[allMessages.length-1].timestamp.split('T')[0]} to ${allMessages[0].timestamp.split('T')[0]}`
             : 'No messages'
@@ -338,5 +410,7 @@ module.exports = {
     applyQueryAwareFilter,
     buildAuditContext,
     parseTenantFromBookId,
-    buildCapsuleChain
+    buildCapsuleChain,
+    enrichMessagesWithLang,
+    buildLangComposition
 };

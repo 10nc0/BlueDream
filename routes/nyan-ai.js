@@ -813,16 +813,23 @@ function registerNyanAIRoutes(app, deps) {
                     const bookSummary = bookContext.books.map(b => `- ${b.name}: ${b.totalMessages} messages`).join('\n');
                     const contextNote = bookContext.contextNote || '';
                     const overflowWarning = bookContext.overflowWarning ? `\n\n⚠️ IMPORTANT: ${bookContext.overflowWarning}` : '';
+                    const langLine = bookContext.langComposition
+                        ? `\nLanguage distribution: ${bookContext.langComposition.summary}`
+                        : '';
                     
                     const messagesText = bookContext.recentMessages
-                        .map(m => `[${m.bookName}] ${m.timestamp.split('T')[0]}: ${m.content}`)
+                        .map(m => {
+                            const date = m.timestamp.split('T')[0];
+                            const langTag = m.lang ? ` [${m.lang}]` : '';
+                            return `[${m.bookName}] ${date}${langTag}: ${m.content}`;
+                        })
                         .join('\n');
                     
                     contextPrompt = `
 You have access to the user's book data from their Nyanbook ledger.
 
 BOOKS IN CONTEXT (${bookContext.bookCount} book(s), ${bookContext.totalMessages} total messages):
-${bookSummary}
+${bookSummary}${langLine}
 (${contextNote})
 
 MESSAGES FROM THESE BOOKS:
@@ -847,7 +854,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     messages: [
                         {
                             role: 'system',
-                            content: buildExecutiveAuditPrompt(language)
+                            content: buildExecutiveAuditPrompt(language, bookContext?.langComposition)
                         },
                         { role: 'user', content: contextPrompt }
                     ],
