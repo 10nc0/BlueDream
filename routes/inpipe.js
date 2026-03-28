@@ -7,8 +7,11 @@ const { TelegramChannel } = require('../lib/channels/telegram');
 const { buildCapsule } = require('../utils/message-capsule');
 const { pinJson, pinBuffer } = require('../utils/ipfs-pinner');
 const { routeUserOutput } = require('../lib/outpipes/router');
-const { assertValidSchemaName } = require('../lib/validators');
+const { assertValidSchemaName, VALID_SCHEMA_PATTERN } = require('../lib/validators');
 const { detectLanguage } = require('../utils/language-detector');
+const format = require('pg-format');
+const rateLimit = require('express-rate-limit');
+const { z } = require('zod');
 
 // Phone-bearing channels; all others store phone_number = null (Telegram, LINE, email).
 // Password reset is gated on phone activation — non-phone users silent-fail on reset.
@@ -446,6 +449,123 @@ function registerInpipeRoutes(app, deps) {
     } else {
         logger.warn('⚠️ TELEGRAM_BOT_TOKEN not set — /api/telegram/webhook not registered');
     }
+
+    const webhookLimiter = rateLimit({
+        windowMs: 60 * 1000,
+        max: 60,
+        validate: { xForwardedForHeader: false },
+        handler: (req, res) => {
+            logger.warn({ ip: req.ip }, 'Webhook rate limit exceeded');
+            res.status(429).json({ error: 'Too many requests, please try again later.' });
+        }
+    });
+
+    const webhookPayloadSchema = z.object({
+        text: z.string().max(10000, 'Message too long').optional().default(''),
+        username: z.string().max(100, 'Username too long').optional().default('External'),
+        avatar_url: z.string().url('Invalid avatar URL').optional().nullable(),
+        media_url: z.string().url('Invalid media URL').optional().nullable(),
+        phone: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone format').optional().nullable(),
+        email: z.string().email('Invalid email format').optional().nullable()
+    });
+
+    app.post('/api/webhook/:fractalId', webhookLimiter, async (req, res) => {
+        try {
+            const fractalIdParam = req.params.fractalId;
+            const fractalIdPattern = /^bridge_[a-z][0-9a-z]_[a-zA-Z0-9]{6,32}$/;
+            if (!fractalIdParam || !fractalIdPattern.test(fractalIdParam)) {
+                return res.status(400).json({ error: 'Invalid book ID format' });
+            }
+            const payloadResult = webhookPayloadSchema.safeParse(req.body);
+            if (!payloadResult.success) {
+                return res.status(400).json({
+                    error: 'Invalid payload',
+                    details: payloadResult.error.issues.map(i => i.message)
+                });
+            }
+            const { text, username, avatar_url, media_url, phone, email } = payloadResult.data;
+            const fractalIdMod = require('../utils/fractal-id');
+            const parsed = fractalIdMod.parse(fractalIdParam);
+            if (!parsed || !parsed.tenantId) {
+                return res.status(400).json({ error: 'Invalid book ID format' });
+            }
+            if (!Number.isInteger(parsed.tenantId) || parsed.tenantId <= 0 || parsed.tenantId > 999999) {
+                return res.status(400).json({ error: 'Invalid tenant ID' });
+            }
+            const tenantSchema = `tenant_${parsed.tenantId}`;
+            if (!VALID_SCHEMA_PATTERN.test(tenantSchema)) {
+                return res.status(400).json({ error: 'Invalid tenant schema' });
+            }
+            const client = await pool.connect();
+            try {
+                await client.query('BEGIN');
+                const bookResult = await client.query(
+                    format(`SELECT id, fractal_id, name, output_01_url, output_0n_url, output_credentials, outpipes_user FROM %I.books WHERE fractal_id = $1`, tenantSchema),
+                    [fractalIdParam]
+                );
+                if (bookResult.rows.length === 0) {
+                    await client.query('ROLLBACK');
+                    client.release();
+                    return res.status(404).json({ error: 'Book not found' });
+                }
+                const book = bookResult.rows[0];
+                if (book && typeof book.output_credentials === 'string') {
+                    try {
+                        book.output_credentials = JSON.parse(book.output_credentials);
+                    } catch (jsonError) {
+                        logger.error({ bookId: fractalIdParam, err: jsonError }, 'Corrupted output_credentials for book');
+                        book.output_credentials = {};
+                    }
+                }
+                const senderName = username || phone || email || 'External';
+                const discordPayload = {
+                    username: senderName,
+                    avatar_url: avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png',
+                    content: text || '',
+                    embeds: []
+                };
+                if (media_url) {
+                    discordPayload.embeds.push({ image: { url: media_url } });
+                }
+                const threadName = book.output_credentials?.thread_name;
+                const threadId = book.output_credentials?.thread_id;
+                const sendToLedger = helpers?.sendToLedger;
+                if (sendToLedger) {
+                    await sendToLedger(discordPayload, {
+                        isMedia: !!media_url,
+                        threadName,
+                        threadId
+                    }, book);
+                }
+                const capsule = {
+                    sender: senderName,
+                    text: text || '',
+                    media_url: media_url || null,
+                    avatar_url: avatar_url || null,
+                    book_name: book.name || null,
+                    timestamp: new Date().toISOString()
+                };
+                await routeUserOutput(capsule, { isMedia: !!media_url }, book);
+                await client.query('COMMIT');
+                client.release();
+                logger.info({ sender: senderName, bookId: fractalIdParam }, 'Webhook: forwarded message to book');
+                res.json({ success: true, message: 'Message forwarded to Webhook' });
+            } catch (error) {
+                try {
+                    await client.query('ROLLBACK');
+                } catch (rollbackError) {
+                    logger.error({ err: rollbackError }, 'ROLLBACK failed (connection likely broken)');
+                } finally {
+                    client.release();
+                }
+                throw error;
+            }
+        } catch (error) {
+            logger.error({ err: error }, 'Webhook: error processing request');
+            res.status(500).json({ error: error.message });
+        }
+    });
+    registeredRoutes.push('POST /api/webhook/:fractalId');
 
     logger.info('📥 Inpipe routes registered: %s', registeredRoutes.join(', '));
 

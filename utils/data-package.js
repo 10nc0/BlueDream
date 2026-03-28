@@ -15,6 +15,7 @@
 
 const logger = require('../lib/logger');
 const crypto = require('crypto');
+const { FILE_TYPES } = require('./file-types');
 
 const STAGE_IDS = {
   CONTEXT_EXTRACT: 'S-1',
@@ -25,22 +26,6 @@ const STAGE_IDS = {
   RETRY: 'S4',
   PERSONALITY: 'S5',
   OUTPUT: 'S6'
-};
-
-/**
- * FILE_TYPES - Shared constants for document classification
- * Harmonized from attachment-cascade.js for unified interface
- */
-const FILE_TYPES = {
-  PDF: 'pdf',
-  EXCEL: 'excel',
-  WORD: 'word',
-  PRESENTATION: 'presentation',
-  IMAGE: 'image',
-  TEXT: 'text',
-  CODE: 'code',
-  AUDIO: 'audio',
-  UNKNOWN: 'unknown'
 };
 
 /**

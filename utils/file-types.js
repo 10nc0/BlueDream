@@ -7,6 +7,7 @@ const FILE_TYPES = {
     PRESENTATION: 'presentation',
     TEXT: 'text',
     IMAGE: 'image',
+    CODE: 'code',
     AUDIO: 'audio',
     UNKNOWN: 'unknown'
 };

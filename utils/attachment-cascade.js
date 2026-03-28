@@ -5,8 +5,9 @@ const axios = require('axios');
 const { GROQ_API_URL, GROQ_AUDIO_URL } = require('../config/constants');
 const { analyzeFinancialDocument, formatPhysicsAnalysis, getFinancialPhysicsSeed, quickNonFinancialCheck } = require('./financial-physics');
 // Harmonized imports from data-package for shared caching
-const { globalDocCache, computeDocHash, FILE_TYPES: DP_FILE_TYPES } = require('./data-package');
+const { globalDocCache, computeDocHash } = require('./data-package');
 const { FILE_TYPES, identifyFileType } = require('./file-types');
+const { ddgRawQuery } = require('../lib/tools/duckduckgo');
 
 // ===== INTELLIGENT CHUNKING (GroundX-inspired) =====
 // Splits text by sections without cutting mid-table or mid-paragraph
@@ -534,26 +535,17 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         const formulaQuery = `${formula} compound molecule chemical`;
         logger.debug(`🔬 DDG Query 1: "${formulaQuery}"`);
         
-        const formulaPromise = axios.get(`https://api.duckduckgo.com/?${new URLSearchParams({
-            q: formulaQuery,
-            format: 'json',
-            no_html: 1,
-            skip_disambig: 1,
-            t: 'nyanbook'
-        })}`, { timeout: 5000 }).then(res => {
-            if (res.data.AbstractText) {
+        const formulaPromise = ddgRawQuery(formulaQuery).then(res => {
+            if (res?.abstractText) {
                 logger.debug(`🔬 DDG Query 1: ✓ Found context for formula`);
                 return {
                     type: 'formula',
-                    name: res.data.Heading || '',
-                    description: res.data.AbstractText,
-                    source: res.data.AbstractURL || 'DuckDuckGo',
+                    name: res.heading,
+                    description: res.abstractText,
+                    source: res.abstractURL || 'DuckDuckGo',
                     formula: formula
                 };
             }
-            return null;
-        }).catch(err => {
-            logger.debug(`🔬 DDG Query 1: Failed - ${err.message}`);
             return null;
         });
         
@@ -576,26 +568,17 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
             const structureQuery = `${structureTerms.join(' ')} compound molecule`;
             logger.debug(`🔬 DDG Query 2: "${structureQuery}"`);
             
-            const structurePromise = axios.get(`https://api.duckduckgo.com/?${new URLSearchParams({
-                q: structureQuery,
-                format: 'json',
-                no_html: 1,
-                skip_disambig: 1,
-                t: 'nyanbook'
-            })}`, { timeout: 5000 }).then(res => {
-                if (res.data.AbstractText) {
+            const structurePromise = ddgRawQuery(structureQuery).then(res => {
+                if (res?.abstractText) {
                     logger.debug(`🔬 DDG Query 2: ✓ Found context for structure`);
                     return {
                         type: 'structure',
-                        name: res.data.Heading || '',
-                        description: res.data.AbstractText,
-                        source: res.data.AbstractURL || 'DuckDuckGo',
+                        name: res.heading,
+                        description: res.abstractText,
+                        source: res.abstractURL || 'DuckDuckGo',
                         searchTerms: structureTerms
                     };
                 }
-                return null;
-            }).catch(err => {
-                logger.debug(`🔬 DDG Query 2: Failed - ${err.message}`);
                 return null;
             });
             
@@ -636,47 +619,31 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         
         logger.debug(`🔬 DDG Query 3: "${queryName}"${fullName ? ` (expanded from ${cleanName})` : ''}`);
         
-        const compoundPromise = axios.get(`https://api.duckduckgo.com/?${new URLSearchParams({
-            q: queryName,
-            format: 'json',
-            no_html: 1,
-            skip_disambig: 1,
-            t: 'nyanbook'
-        })}`, { timeout: 5000 }).then(async res => {
-            if (res.data.AbstractText) {
+        const compoundPromise = ddgRawQuery(queryName).then(async res => {
+            if (res?.abstractText) {
                 logger.debug(`🔬 DDG Query 3: ✓ Found context for compound name`);
                 return {
                     type: 'compound',
-                    name: res.data.Heading || cleanName,
-                    description: res.data.AbstractText,
-                    source: res.data.AbstractURL || 'DuckDuckGo',
+                    name: res.heading || cleanName,
+                    description: res.abstractText,
+                    source: res.abstractURL || 'DuckDuckGo',
                     searchedName: queryName
                 };
             }
-            // Fallback: try abbreviation if we expanded
             if (fullName && cleanName !== queryName) {
                 logger.debug(`🔬 DDG Query 3b: Trying "${cleanName}" as fallback`);
-                const fallbackRes = await axios.get(`https://api.duckduckgo.com/?${new URLSearchParams({
-                    q: cleanName,
-                    format: 'json',
-                    no_html: 1,
-                    skip_disambig: 1,
-                    t: 'nyanbook'
-                })}`, { timeout: 5000 });
-                if (fallbackRes.data.AbstractText) {
+                const fallbackRes = await ddgRawQuery(cleanName);
+                if (fallbackRes?.abstractText) {
                     logger.debug(`🔬 DDG Query 3b: ✓ Found context via fallback`);
                     return {
                         type: 'compound',
-                        name: fallbackRes.data.Heading || cleanName,
-                        description: fallbackRes.data.AbstractText,
-                        source: fallbackRes.data.AbstractURL || 'DuckDuckGo',
+                        name: fallbackRes.heading || cleanName,
+                        description: fallbackRes.abstractText,
+                        source: fallbackRes.abstractURL || 'DuckDuckGo',
                         searchedName: cleanName
                     };
                 }
             }
-            return null;
-        }).catch(err => {
-            logger.debug(`🔬 DDG Query 3: Failed - ${err.message}`);
             return null;
         });
         

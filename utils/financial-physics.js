@@ -29,26 +29,61 @@ function flattenToStrings(obj) {
     return [String(obj)];
 }
 
-// ===== CURRENCY DETECTION =====
+const { CURRENCY_REGISTRY } = require('./geo-data');
+
+const _CURRENCY_DISPLAY = {
+    IDR: 'Rp', CNY: '¥', JPY: '¥', EUR: '€', USD: '$', GBP: '£',
+    KRW: '₩', SGD: 'S$', HKD: 'HK$', AUD: 'A$', CAD: 'C$',
+    CHF: 'Fr', INR: '₹', VND: '₫', THB: '฿', MYR: 'RM',
+    PHP: '₱', AED: 'AED', BRL: 'R$', NZD: 'NZ$', ZAR: 'R',
+    MXN: 'MX$', TRY: '₺'
+};
+
+function _buildSymbolRegex(sym) {
+    const escaped = sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (/^[A-Z]{3}$/.test(sym)) {
+        return new RegExp(`\\b${escaped}\\b`, 'i');
+    }
+    if (/^[a-zA-Z]{1,2}$/i.test(sym)) {
+        return new RegExp(`(?:^|[\\s(])${escaped}\\s*[\\d.,]`, 'i');
+    }
+    if (/^[^a-zA-Z0-9]$/.test(sym)) {
+        return new RegExp(`${escaped}\\s*[\\d.,]|[\\d.,]\\s*${escaped}`, 'i');
+    }
+    return new RegExp(escaped, 'i');
+}
+
+let _symbolPatterns = null;
+function _getSymbolPatterns() {
+    if (_symbolPatterns) return _symbolPatterns;
+    _symbolPatterns = [];
+    for (const [code, entry] of Object.entries(CURRENCY_REGISTRY)) {
+        for (const sym of entry.symbols) {
+            _symbolPatterns.push({ code, sym, regex: _buildSymbolRegex(sym) });
+        }
+    }
+    return _symbolPatterns;
+}
+
 function detectCurrency(extractedData) {
     let text = extractedData.text || '';
     if (!text && extractedData.tables) {
         const tables = extractedData.tables || extractedData.sheets || [];
         text = flattenToStrings(tables.flatMap(t => t.rows || t.data || [])).join(' ');
     }
-    
-    // Indonesian Rupiah
-    if (/(rp\s*[\d.,]|idr|rupiah|juta|miliar|triliun)/i.test(text)) return 'Rp';
-    // Chinese Yuan (check before Japanese to prioritize CNY markers)
-    if (/(cny|rmb|元|万元|亿元|¥\s*[\d.,])/i.test(text)) return '¥';
-    // Japanese Yen
-    if (/(jpy|円|万円|億円|￥)/i.test(text)) return '¥';
-    // Euro
-    if (/(eur|€)/i.test(text)) return '€';
-    // US Dollar (check last to avoid false positives)
-    if (/(usd|\$\s*[\d.,])/i.test(text)) return '$';
-    
-    return 'LCU'; // Local Currency Units (default)
+    if (!text) return 'LCU';
+
+    for (const { code, regex } of _getSymbolPatterns()) {
+        if (regex.test(text)) {
+            return _CURRENCY_DISPLAY[code] || code;
+        }
+    }
+
+    if (/(juta|miliar|triliun)/i.test(text)) return 'Rp';
+    if (/(万元|亿元)/i.test(text)) return '¥';
+    if (/(万円|億円)/i.test(text)) return '¥';
+
+    return 'LCU';
 }
 
 // Generate temporal context for financial analysis

@@ -3,7 +3,7 @@
  * Bridge between attachment-cascade (Perception) and data-package (Substrate)
  */
 const { executeExtractionCascade } = require('./attachment-cascade');
-const { FILE_TYPES } = require('./data-package');
+const { FILE_TYPES } = require('./file-types');
 const { TIMEOUTS } = require('../config/constants');
 
 class AttachmentIngestion {
