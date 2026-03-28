@@ -328,7 +328,8 @@ function setupSSE(res) {
     const sseStage = (event) => {
         if (!isClientDisconnected()) res.write(`data: ${JSON.stringify(event)}\n\n`);
     };
-    return { isClientDisconnected, sseStage };
+    const cleanup = () => { if (!res.writableEnded) res.end(); };
+    return { isClientDisconnected, sseStage, cleanup };
 }
 
 function normalizePhotoList(photos, photo) {
@@ -478,26 +479,16 @@ function extractPsiEma(preflight) {
     if (!preflight?.psiEmaAnalysis) return null;
     const daily = preflight.psiEmaAnalysis;
     const weekly = preflight.psiEmaAnalysisWeekly;
-    const result = {
-        daily: {
-            reading: daily.reading,
-            emoji: daily.emoji,
-            theta: daily.theta,
-            z: daily.z,
-            R: daily.R,
-            fidelity: daily.fidelity
-        }
-    };
-    if (weekly) {
-        result.weekly = {
-            reading: weekly.reading,
-            emoji: weekly.emoji,
-            theta: weekly.theta,
-            z: weekly.z,
-            R: weekly.R,
-            fidelity: weekly.fidelity
-        };
-    }
+    const pick = (src) => ({
+        reading: src.reading ?? null,
+        emoji: src.emoji ?? null,
+        theta: src.theta ?? null,
+        z: src.z ?? null,
+        R: src.R ?? null,
+        fidelity: src.fidelity ?? null
+    });
+    const result = { daily: pick(daily) };
+    if (weekly) result.weekly = pick(weekly);
     return result;
 }
 
@@ -1195,7 +1186,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         
         capacityManager.recordActivity(clientIp);
         
-        const { isClientDisconnected, sseStage } = setupSSE(res);
+        const { isClientDisconnected, sseStage, cleanup } = setupSSE(res);
         
         try {
             let { message, photo, photos, document, documentName, documents, audio, audios, history, zipData, contextAttachments, cachedFileHashes } = req.body;
@@ -1294,7 +1285,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         ? 'The AI service is temporarily busy. Please try again in a moment.'
                         : 'Something went wrong processing your request. Please try again.';
                     sseStage({ type: 'error', message: userMessage });
-                    res.end();
+                    cleanup();
                     return;
                 }
                 
@@ -1316,7 +1307,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     sseStage({ type: 'audit', audit: auditMetadata });
                     sseStage({ type: 'token', content: verifiedAnswer });
                     sseStage({ type: 'done', fullContent: verifiedAnswer });
-                    res.end();
+                    cleanup();
                 } else if (badge === 'verified' || badge === 'unverified') {
                     if (isClientDisconnected()) return;
                     await fastStreamPersonality(res, verifiedAnswer, auditMetadata);
@@ -1324,7 +1315,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     sseStage({ type: 'audit', audit: auditMetadata });
                     sseStage({ type: 'token', content: verifiedAnswer });
                     sseStage({ type: 'done', fullContent: verifiedAnswer });
-                    res.end();
+                    cleanup();
                 }
                 
                 if (pipelineResult.success) {
@@ -1336,8 +1327,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             
         } catch (error) {
             logger.error({ err: error }, '❌ Streaming error');
-            res.write(`data: ${JSON.stringify({ type: 'error', message: 'An error occurred. Please try again.' })}\n\n`);
-            res.end();
+            sseStage({ type: 'error', message: 'An error occurred. Please try again.' });
+            cleanup();
         }
     });
 
