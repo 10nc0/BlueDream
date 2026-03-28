@@ -104,7 +104,8 @@ The stack that makes the gap queryable — forever, for the price of electricity
 
 ## Script
 
-`S(n) ≤ F(n+2) + e^(iθ) ≤ F(n+2) + φ⁰ · I_n`
+Fibonacci notation:
+`F(n+1) ≤ F(n+2) + e^(iθ) ≤ F(n+2) + φ⁰ · I_n`
 
 *Pure math. Unitless. Ratio. Logos.*
 
