@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const logger = require('../lib/logger');
 const { createPipelineOrchestrator, fastStreamPersonality, applyPersonalityFormat } = require('../utils/pipeline-orchestrator');
+const { globalCheckpointStore } = require('../utils/pipeline-checkpoint');
 const { AttachmentIngestion } = require('../utils/attachment-ingestion');
 const { recordInMemory, clearSessionMemory } = require('../utils/context-extractor');
 const { getMemoryManager, cleanupOldSessions } = require('../utils/memory-manager');
@@ -1727,7 +1728,8 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                     currentSlots: capacityManager.getCurrentSlotCount?.() ?? null,
                     maxSlots: capacityManager.maxSlots ?? null
                 } : null
-            }
+            },
+            pipelineCheckpoint: globalCheckpointStore.getStats()
         };
 
         try {

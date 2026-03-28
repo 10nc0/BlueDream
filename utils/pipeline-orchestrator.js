@@ -40,6 +40,7 @@ const { runAuditPass } = require('./two-pass-verification');
 const { isFalseDichotomy } = require('../prompts/audit-protocol');
 const { detectPathogens, generateClinicalReport, generatePhysicalAuditDisclaimer } = require('./psi-EMA');
 const { DataPackage, globalPackageStore, STAGE_IDS } = require('./data-package');
+const { globalCheckpointStore, buildResumableSnapshot, applySnapshot } = require('./pipeline-checkpoint');
 const { getLLMBackend, getAuditBackend } = require('../config/constants');
 const { CITY_EXPAND, COUNTRY_TO_CITY, CITY_TO_COUNTRY } = require('./geo-data');
 const { MAX_CONTENT_CHARS } = require('./config-constants');
@@ -215,6 +216,16 @@ class PipelineOrchestrator {
       conversationHistory: input.conversationHistory || input.history || [],
       extractedContent: input.extractedContent || []
     };
+
+    const checkpointQuery = normalizedInput.query;
+    const checkpoint = globalCheckpointStore.restore(checkpointQuery, tenantId);
+    let resumeFromStage = null;
+
+    if (checkpoint && checkpoint.snapshot) {
+      applySnapshot(state, checkpoint.snapshot);
+      resumeFromStage = checkpoint.stageId;
+      logger.info(`♻️ Pipeline resuming from checkpoint after ${resumeFromStage}`);
+    }
 
     // ========================================
     // STAGE -1: Context Extraction with φ-Compressed Memory
@@ -485,13 +496,13 @@ class PipelineOrchestrator {
       // ========================================
       // STAGE 0: Preflight (mode detection, external data)
       // ========================================
-      // Support pre-computed preflight (avoids duplicate calls when endpoint already ran it)
-      if (normalizedInput.preComputedPreflight) {
+      if (resumeFromStage && ['S0', 'S1', 'S2', 'S3'].includes(resumeFromStage)) {
+        logger.debug(`⏩ Skipping S0 (preflight) — restored from checkpoint (mode=${state.mode})`);
+      } else if (normalizedInput.preComputedPreflight) {
         state.preflight = normalizedInput.preComputedPreflight;
         state.mode = state.preflight.mode;
         logger.debug(`📊 Preflight (pre-computed): mode=${state.mode}, ticker=${state.preflight.ticker || 'none'}`);
         
-        // WRITE to DataPackage: Stage S0 preflight result (pre-computed path)
         state.writeToPackage(STAGE_IDS.PREFLIGHT, {
           mode: state.mode,
           ticker: state.preflight.ticker || null,
@@ -500,14 +511,10 @@ class PipelineOrchestrator {
           preComputed: true
         });
         
-      // Seed-metric searches are now handled in stepSeedMetricToolCall (walk the dog).
-      // LLM calls brave_search itself with city-aware queries — no pre-fetch needed here.
       } else {
-        // Pass context-aware query and context result to preflight
         await this.stepPreflight(state, { ...input, query: contextAwareQuery, contextResult: state.contextResult });
       }
       
-      // FAST-PATH: Ψ-EMA mode but no ticker found → return "no data" message (saves tokens)
       if (state.mode === 'psi-ema' && !state.preflight.ticker) {
         logger.debug(`⚡ Fast-path: Ψ-EMA mode but no ticker - returning no-data message`);
         state.finalAnswer = `📊 **No Stock Data Available**\n\nI detected a financial analysis request, but couldn't identify a valid public stock ticker.\n\n**Tips:**\n• Use explicit ticker format: "$AAPL", "$NVDA", "$META"\n• Note: Some companies are private (e.g., Bloomberg LP) and have no public stock data\n• Commodities (gold, oil) and crypto require different analysis tools\n\n🔥 ~nyan`;
@@ -530,9 +537,9 @@ class PipelineOrchestrator {
           fastPath: true
         });
         
-        // FINALIZE: Store in tenant's φ-8 window
         state.dataPackage.finalize();
         globalPackageStore.storePackage(state.dataPackage.tenantId, state.dataPackage);
+        globalCheckpointStore.clear(checkpointQuery, tenantId);
         
         return {
           success: true,
@@ -553,9 +560,30 @@ class PipelineOrchestrator {
         };
       }
       
-      await this.stepContextBuild(state, normalizedInput);
-      await this.stepReasoning(state, normalizedInput);
-      await this.stepAudit(state, normalizedInput);
+      if (!resumeFromStage || resumeFromStage === 'S0') {
+        globalCheckpointStore.save(checkpointQuery, tenantId, 'S0', buildResumableSnapshot(state));
+      }
+
+      if (resumeFromStage && ['S1', 'S2', 'S3'].includes(resumeFromStage)) {
+        logger.debug(`⏩ Skipping S1 (context build) — restored from checkpoint`);
+      } else {
+        await this.stepContextBuild(state, normalizedInput);
+      }
+
+      if (resumeFromStage && ['S2', 'S3'].includes(resumeFromStage)) {
+        logger.debug(`⏩ Skipping S2 (reasoning) — restored from checkpoint`);
+      } else {
+        globalCheckpointStore.save(checkpointQuery, tenantId, 'S1', buildResumableSnapshot(state));
+        await this.stepReasoning(state, normalizedInput);
+        globalCheckpointStore.save(checkpointQuery, tenantId, 'S2', buildResumableSnapshot(state));
+      }
+
+      if (resumeFromStage === 'S3') {
+        logger.debug(`⏩ Skipping S3 (audit) — restored from checkpoint`);
+      } else {
+        await this.stepAudit(state, normalizedInput);
+        globalCheckpointStore.save(checkpointQuery, tenantId, 'S3', buildResumableSnapshot(state));
+      }
       
       if (state.auditResult?.verdict === 'REJECTED' && state.retryCount < state.maxRetries) {
         await this.stepRetry(state, normalizedInput);
@@ -569,8 +597,8 @@ class PipelineOrchestrator {
         markSessionNyanBooted(normalizedInput.sessionId);
       }
       
-      // Derive badge from audit verdict
-      // APPROVED/ACCEPTED/BYPASS → verified, FIXABLE → corrected, REJECTED → unverified
+      globalCheckpointStore.clear(checkpointQuery, tenantId);
+
       const badge = this.deriveBadge(state.auditResult);
       const source = this.deriveSource(state);
       
