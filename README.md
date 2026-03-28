@@ -108,48 +108,19 @@ Discord Bots (4 specialized, least-privilege):
 Each bot holds only the permissions its role requires.
 Hermes and Thoth write. Idris writes audit entries. Horus reads. Compromise one — the others remain clean.
 
-```
-utils/
-├── message-capsule.js            — Cryptographic provenance capsule builder
-├── ipfs-pinner.js                — Pinata IPFS pinning
-├── psi-EMA.js                    — φ-derived time series analysis
-├── fetch-stock-prices.py         — Psi-EMA data fetcher (yfinance / pandas)
-├── pipeline-orchestrator.js      — 7-stage AI pipeline state machine (S-1 → S6)
-├── two-pass-verification.js      — 2-pass hallucination correction (null-aware confidence)
-├── dashboard-audit-pipeline.js   — 4-stage hallucination correction
-├── seed-metric-calculator.js     — Real estate affordability (Seed Metric)
-├── markdown-table-formatter.js   — Column-aligned markdown table formatting
-└── language-detector.js          — Trigram + script-based language detection (ISO 639-1)
+### Internals
 
-lib/tools/ (auto-discovered registry — drop a .js file to add a tool, 9 tools):
-├── registry.js          — Auto-discovers tools on startup, exposes getTool() + getManifest()
-├── brave-search.js      — Web search via Brave API (cached, capacity-throttled)
-├── duckduckgo.js        — Instant answers via DDG API (cached, fallback search)
-├── url-fetcher.js       — Fetch + extract readable content from any URL (cached)
-├── github-reader.js     — Read GitHub repos, blobs, trees, raw files, and Gists
-├── pdf-analyzer.js      — PDF document analysis via attachment-cascade pipeline
-├── entity-extractor.js  — Structured entity extraction (plates, currency, dates, emails, phones)
-├── geo-lookup.js        — City↔country, abbreviation expansion, currency→region (static, no network)
-├── forex.js             — Currency exchange rates via fawazahmed0 API
-└── language-detector.js  — Language detection (ISO 639-1 code + confidence + FTS config)
+| Layer | Count | Highlights |
+|-------|-------|------------|
+| `utils/` | 10 modules | Capsule builder, IPFS pinner, AI pipeline (7-stage), Seed Metric, language detection |
+| `lib/tools/` | 9 tools | Auto-discovered registry — Brave, DDG, URL fetcher, GitHub reader, PDF, entity extraction, geo, forex, language |
+| `lib/outpipes/` | 4 modules | Discord, email, webhook (HMAC-SHA256), parallel router |
+| `lib/fetch-cache.js` | 1 | TTL-based cache (3min / 5min / 10min per source) |
 
-lib/fetch-cache.js       — TTL-based fetch cache (braveCache 3min, duckduckgoCache 5min, urlCache 10min)
+Adding a new inpipe channel: one file in `lib/channels/`, two lines in `routes/inpipe.js`.
+Adding a new tool: one `.js` file in `lib/tools/` — auto-discovered on startup.
 
-lib/outpipes/
-├── router.js            — Dispatches all configured outpipes in parallel; legacy webhook fallback
-├── discord.js           — Discord webhook delivery
-├── email.js             — Email delivery via Resend
-└── webhook.js           — HTTPS JSON POST with optional HMAC-SHA256 signature
-```
-
-Adding a new inpipe channel (Signal, Matrix, etc.) requires only:
-- A new file in `lib/channels/` implementing the `BaseChannel` interface
-- 2 lines in `routes/inpipe.js` to register the route
-- Zero changes to queue, handlers, DB, or Discord outpipe.
-
-Adding a new tool requires only:
-- A new `.js` file in `lib/tools/` exporting `{ name, description, parameters, execute }`
-- Zero other file changes — the registry auto-discovers it on startup.
+> Full file inventory → [`RUNBOOK (LOGOS).md`](RUNBOOK%20(LOGOS).md)
 
 ---
 

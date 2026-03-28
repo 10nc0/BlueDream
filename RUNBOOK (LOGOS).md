@@ -24,6 +24,56 @@ It’s a protocol shift, not an app.
 
 ---
 
+## File Inventory
+
+### `utils/`
+
+```
+utils/
+├── message-capsule.js            — Cryptographic provenance capsule builder
+├── ipfs-pinner.js                — Pinata IPFS pinning
+├── psi-EMA.js                    — φ-derived time series analysis
+├── fetch-stock-prices.py         — Psi-EMA data fetcher (yfinance / pandas)
+├── pipeline-orchestrator.js      — 7-stage AI pipeline state machine (S-1 → S6)
+├── two-pass-verification.js      — 2-pass hallucination correction (null-aware confidence)
+├── dashboard-audit-pipeline.js   — 4-stage hallucination correction
+├── seed-metric-calculator.js     — Real estate affordability (Seed Metric)
+├── markdown-table-formatter.js   — Column-aligned markdown table formatting
+└── language-detector.js          — Trigram + script-based language detection (ISO 639-1)
+```
+
+### `lib/tools/` (auto-discovered registry — drop a `.js` file to add a tool)
+
+```
+lib/tools/ (9 tools):
+├── registry.js          — Auto-discovers tools on startup, exposes getTool() + getManifest()
+├── brave-search.js      — Web search via Brave API (cached, capacity-throttled)
+├── duckduckgo.js        — Instant answers via DDG API (cached, fallback search)
+├── url-fetcher.js       — Fetch + extract readable content from any URL (cached)
+├── github-reader.js     — Read GitHub repos, blobs, trees, raw files, and Gists
+├── pdf-analyzer.js      — PDF document analysis via attachment-cascade pipeline
+├── entity-extractor.js  — Structured entity extraction (plates, currency, dates, emails, phones)
+├── geo-lookup.js        — City↔country, abbreviation expansion, currency→region (static, no network)
+├── forex.js             — Currency exchange rates via fawazahmed0 API
+└── language-detector.js  — Language detection (ISO 639-1 code + confidence + FTS config)
+```
+
+### `lib/outpipes/`
+
+```
+lib/outpipes/
+├── router.js            — Dispatches all configured outpipes in parallel; legacy webhook fallback
+├── discord.js           — Discord webhook delivery
+├── email.js             — Email delivery via Resend
+└── webhook.js           — HTTPS JSON POST with optional HMAC-SHA256 signature
+```
+
+### `lib/fetch-cache.js`
+
+TTL-based fetch cache: `braveCache` 3min, `duckduckgoCache` 5min, `urlCache` 10min.
+
+---
+
 ## Queue Processor Architecture
 
 The README's core loop mentions a "queue processor." This maps to two separate systems in the codebase — not a traditional Redis/BullMQ queue.
