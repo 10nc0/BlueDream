@@ -166,7 +166,7 @@ function registerAuthRoutes(app, deps) {
         
         const { email, password } = req.validated;
         
-        logger.info({ email, ip: req.ip }, 'Login attempt');
+        logger.info({ email, ip: req.ip }, '🔑 Login attempt');
         
         try {
             const normalizedEmail = email.toLowerCase().trim();
@@ -242,7 +242,7 @@ function registerAuthRoutes(app, deps) {
                     authType: 'jwt+cookie'
                 }, tenant_schema);
                 
-                logger.info({ email: user.email, sessionId: req.sessionID }, 'Login successful');
+                logger.info({ email: user.email, sessionId: req.sessionID }, '✅ Login successful');
                 
                 res.json({ 
                     success: true,
@@ -274,9 +274,9 @@ function registerAuthRoutes(app, deps) {
     });
 
     app.post('/api/auth/signup', validate(schemas.signup), async (req, res) => {
-        const { email, password, inviteToken } = req.validated;
+        const { email, password } = req.validated;
         
-        logger.info({ email, ip: req.ip, hasInvite: !!inviteToken }, 'Signup attempt');
+        logger.info({ email, ip: req.ip }, '📝 Signup attempt');
         
         try {
             const normalizedEmail = email.toLowerCase().trim();
@@ -286,7 +286,7 @@ function registerAuthRoutes(app, deps) {
                 [normalizedEmail]
             );
             if (emailCheck.rows.length > 0) {
-                logger.info({ email }, 'Signup blocked - email exists');
+                logger.info({ email }, '⚠️ Signup blocked - email exists');
                 return res.status(409).json({ error: 'Email already registered' });
             }
             
@@ -295,36 +295,7 @@ function registerAuthRoutes(app, deps) {
             let tenantId = null;
             let tenantUserId = null;
             
-            if (inviteToken) {
-                const validation = await tenantManager.validateInviteToken(inviteToken);
-                if (!validation.valid) {
-                    return res.status(400).json({ error: validation.reason });
-                }
-                
-                const invite = validation.invite;
-                const passwordHash = await bcrypt.hash(password, 10);
-                
-                const schemaName = `tenant_${invite.tenant_id}`;
-                const result = await pool.query(`
-                    INSERT INTO ${schemaName}.users (email, password_hash, role, tenant_id, is_genesis_admin)
-                    VALUES ($1, $2, $3, $4, false)
-                    RETURNING id, email, role, tenant_id, is_genesis_admin
-                `, [normalizedEmail, passwordHash, invite.target_role, invite.tenant_id]);
-                
-                newUser = result.rows[0];
-                tenantUserId = newUser.id;
-                tenantId = invite.tenant_id;
-                
-                await pool.query(`
-                    INSERT INTO core.user_email_to_tenant (email, tenant_id, tenant_schema, user_id)
-                    VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (email) DO NOTHING
-                `, [normalizedEmail, tenantId, schemaName, tenantUserId]);
-                
-                await tenantManager.consumeInviteToken(inviteToken);
-                
-                logger.info({ email, tenantId, role: invite.target_role }, 'User joined tenant via invite');
-            } else {
+            {
                 const tenantCountResult = await pool.query('SELECT COUNT(*) as count FROM core.tenant_catalog');
                 const isFirstUser = parseInt(tenantCountResult.rows[0].count) === 0;
                 
@@ -432,8 +403,7 @@ function registerAuthRoutes(app, deps) {
                 logAudit(pool, req, 'SIGNUP', 'USER', newUser.id.toString(), newUser.email, {
                     role: newUser.role,
                     is_genesis_admin: isGenesisAdmin,
-                    tenant_id: tenantId,
-                    via_invite: !!inviteToken
+                    tenant_id: tenantId
                 }, `tenant_${tenantId}`);
                 
                 res.json({
@@ -682,13 +652,13 @@ function registerAuthRoutes(app, deps) {
         const sessionId = req.sessionID;
         const tenantSchema = req.tenantSchema || `tenant_${req.tenantId}`;
         
-        logger.info({ userId, sessionId, tenantSchema }, 'Logout request');
+        logger.info({ userId, sessionId, tenantSchema }, '🚪 Logout request');
         
         try {
             if (userId && tenantSchema) {
                 try {
                     await authService.revokeAllUserTokens(pool, tenantSchema, userId);
-                    logger.info('Tokens revoked');
+                    logger.info('🔒 Tokens revoked');
                 } catch (tokenError) {
                     logger.warn({ err: tokenError }, 'Token revocation failed');
                 }
@@ -700,7 +670,7 @@ function registerAuthRoutes(app, deps) {
                             SET is_active = FALSE
                             WHERE user_id = $1 AND session_id = $2
                         `, [userId, sessionId]);
-                        logger.info('Session marked inactive');
+                        logger.info('💤 Session marked inactive');
                     } catch (sessionError) {
                         logger.warn({ err: sessionError }, 'Session marking failed');
                     }
@@ -753,126 +723,6 @@ function registerAuthRoutes(app, deps) {
         }
     });
 
-    app.post('/api/invites', requireAuth, async (req, res) => {
-        try {
-            if (req.userRole !== 'admin' && req.userRole !== 'dev') {
-                return res.status(403).json({ error: 'Only admins can create invites' });
-            }
-            
-            const { targetRole = 'read-only', expiresInDays = 7, maxUses = 1 } = req.body;
-            
-            if (!['admin', 'read-only', 'write-only'].includes(targetRole)) {
-                return res.status(400).json({ error: 'Invalid target role' });
-            }
-            
-            if (!req.tenantId) {
-                return res.status(400).json({ error: 'User not associated with a tenant' });
-            }
-            
-            const token = await tenantManager.generateInviteToken(
-                req.tenantId,
-                req.userId,
-                targetRole,
-                expiresInDays,
-                maxUses
-            );
-            
-            logAudit(pool, req, 'CREATE_INVITE', 'INVITE', token, req.userEmail, {
-                tenant_id: req.tenantId,
-                target_role: targetRole,
-                expires_in_days: expiresInDays,
-                max_uses: maxUses
-            }, req.tenantSchema);
-            
-            const baseUrl = `https://${req.get('host')}`;
-            const inviteUrl = `${baseUrl}/signup.html?invite=${token}`;
-            
-            res.json({ 
-                success: true, 
-                token,
-                inviteUrl,
-                expiresInDays,
-                maxUses,
-                targetRole
-            });
-        } catch (error) {
-            logger.error({ err: error }, 'Create invite error');
-            res.status(500).json({ error: error.message });
-        }
-    });
-
-    app.get('/api/invites/validate/:token', async (req, res) => {
-        try {
-            const { token } = req.params;
-            const validation = await tenantManager.validateInviteToken(token);
-            
-            if (validation.valid) {
-                res.json({
-                    valid: true,
-                    targetRole: validation.invite.target_role,
-                    remainingUses: validation.invite.max_uses - validation.invite.current_uses,
-                    expiresAt: validation.invite.expires_at
-                });
-            } else {
-                res.json({
-                    valid: false,
-                    reason: validation.reason
-                });
-            }
-        } catch (error) {
-            res.status(500).json({ error: error.message });
-        }
-    });
-
-    app.get('/api/invites', requireAuth, async (req, res) => {
-        try {
-            if (req.userRole !== 'admin' && req.userRole !== 'dev') {
-                return res.status(403).json({ error: 'Only admins can list invites' });
-            }
-            
-            if (!req.tenantId) {
-                return res.status(400).json({ error: 'User not associated with a tenant' });
-            }
-            
-            const result = await pool.query(`
-                SELECT id, token, created_by_user_id, expires_at, max_uses, current_uses, 
-                       target_role, status, created_at
-                FROM core.invites
-                WHERE tenant_id = $1
-                ORDER BY created_at DESC
-            `, [req.tenantId]);
-            
-            res.json({ invites: result.rows });
-        } catch (error) {
-            logger.error({ err: error }, 'List invites error');
-            res.status(500).json({ error: error.message });
-        }
-    });
-
-    app.delete('/api/invites/:id', requireAuth, async (req, res) => {
-        try {
-            if (req.userRole !== 'admin' && req.userRole !== 'dev') {
-                return res.status(403).json({ error: 'Only admins can revoke invites' });
-            }
-            
-            const { id } = req.params;
-            
-            await pool.query(`
-                UPDATE core.invites
-                SET status = 'revoked'
-                WHERE id = $1 AND tenant_id = $2
-            `, [id, req.tenantId]);
-            
-            logAudit(pool, req, 'REVOKE_INVITE', 'INVITE', id, req.userEmail, {
-                tenant_id: req.tenantId
-            }, req.tenantSchema);
-            
-            res.json({ success: true });
-        } catch (error) {
-            logger.error({ err: error }, 'Revoke invite error');
-            res.status(500).json({ error: error.message });
-        }
-    });
 
     // ===========================
     // ONBOARDING API (User lifecycle)

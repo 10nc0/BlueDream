@@ -447,7 +447,7 @@ app.use((req, res, next) => {
         const duration = Date.now() - req.startTime;
         // Log response time for monitoring (header already sent, so use finish event)
         if (duration > 1000) {
-            logger.warn({ durationMs: duration }, `Slow request: ${req.method} ${req.path} (${duration}ms)`);
+            logger.warn({ durationMs: duration }, `🐢 Slow request: ${req.method} ${req.path} (${duration}ms)`);
         }
     });
     next();

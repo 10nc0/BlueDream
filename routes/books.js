@@ -213,7 +213,7 @@ function registerBooksRoutes(app, deps) {
                     }
                 }
                 
-                logger.debug({ count: books.length }, 'Books retrieved');
+                logger.debug({ count: books.length }, '📚 Books retrieved');
             } else {
                 const result = await pool.query(`
                     SELECT ${BOOK_LIST_COLS}
@@ -226,7 +226,7 @@ function registerBooksRoutes(app, deps) {
                 `);
                 books = result.rows;
                 
-                logger.debug({ count: books.length }, 'Books retrieved');
+                logger.debug({ count: books.length }, '📚 Books retrieved');
                 
                 const userPhonesResult = await pool.query(`
                     SELECT DISTINCT ep.phone
@@ -272,7 +272,7 @@ function registerBooksRoutes(app, deps) {
                         }
                     }
                     
-                    logger.debug({ count: books.length }, 'Books retrieved');
+                    logger.debug({ count: books.length }, '📚 Books retrieved');
                 }
                 
                 const existingFids = new Set(books.map(b => b.fractal_id));

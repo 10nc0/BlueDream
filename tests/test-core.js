@@ -416,7 +416,6 @@ const authEndpointTests = [
 ];
 
 const SIGNUP_EMAIL = `signup_${TEST_TS}@test.com`;
-const INVITE_EMAIL = `invite_${TEST_TS}@test.com`;
 let signupTenantId, signupAccessToken, signupRefreshToken;
 
 const signupTests = [
@@ -480,45 +479,6 @@ const signupTests = [
         assertEqual(res.status, 400, `expected 400, got ${res.status}`);
     }),
 
-    test('POST /api/invites requires admin role', async () => {
-        const readOnlyToken = authService.signAccessToken(userIdB, TEST_EMAIL_B, 'read-only', tenantIdB);
-        const res = await httpRequest({
-            method: 'POST',
-            path: '/api/invites',
-            body: { targetRole: 'read-only' },
-            headers: { 'Authorization': `Bearer ${readOnlyToken}` },
-        });
-        assertEqual(res.status, 403, `expected 403, got ${res.status}`);
-    }),
-
-    test('POST /api/invites without auth returns 401', async () => {
-        const res = await httpRequest({
-            method: 'POST',
-            path: '/api/invites',
-            body: { targetRole: 'read-only' },
-        });
-        assertEqual(res.status, 401, `expected 401, got ${res.status}`);
-    }),
-
-    test('POST /api/auth/signup with invalid invite token returns 400', async () => {
-        const res = await httpRequest({
-            method: 'POST',
-            path: '/api/auth/signup',
-            body: { email: INVITE_EMAIL, password: TEST_PASSWORD, inviteToken: 'invalid-token-abc123' },
-        });
-        assertEqual(res.status, 400, `expected 400, got ${res.status}`);
-    }),
-
-    test('POST /api/auth/signup with invite token path rejects gracefully (invite_tokens not provisioned)', async () => {
-        const fakeToken = crypto.randomBytes(32).toString('hex');
-        const res = await httpRequest({
-            method: 'POST',
-            path: '/api/auth/signup',
-            body: { email: `invite_flow_${TEST_TS}@test.com`, password: TEST_PASSWORD, inviteToken: fakeToken },
-        });
-        assert([400, 500].includes(res.status), `expected 400 or 500 (table missing), got ${res.status}`);
-    }),
-
     test('cleanup: remove signup test data', async () => {
         const errors = [];
         if (signupTenantId) {
@@ -526,9 +486,8 @@ const signupTests = [
             try { await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); } catch (e) { errors.push(`drop schema: ${e.message}`); }
             try { await pool.query(`DELETE FROM core.tenant_catalog WHERE id = $1`, [signupTenantId]); } catch (e) { errors.push(`tenant_catalog: ${e.message}`); }
         }
-        try { await pool.query(`DELETE FROM core.user_email_to_tenant WHERE email IN ($1, $2)`, [SIGNUP_EMAIL, INVITE_EMAIL]); } catch (e) { errors.push(`email_to_tenant: ${e.message}`); }
-        try { await pool.query(`DELETE FROM core.tenant_creation_log WHERE email IN ($1, $2)`, [SIGNUP_EMAIL, INVITE_EMAIL]); } catch (e) { errors.push(`creation_log: ${e.message}`); }
-        try { await pool.query(`DELETE FROM ${SCHEMA_A}.users WHERE email = $1`, [INVITE_EMAIL]); } catch (e) { errors.push(`invite user: ${e.message}`); }
+        try { await pool.query(`DELETE FROM core.user_email_to_tenant WHERE email = $1`, [SIGNUP_EMAIL]); } catch (e) { errors.push(`email_to_tenant: ${e.message}`); }
+        try { await pool.query(`DELETE FROM core.tenant_creation_log WHERE email = $1`, [SIGNUP_EMAIL]); } catch (e) { errors.push(`creation_log: ${e.message}`); }
         if (errors.length > 0) console.log(`      ⚠️  Cleanup warnings: ${errors.join('; ')}`);
     }),
 ];
@@ -1352,7 +1311,7 @@ async function run() {
     const sections = [
         { name: '🔐 Auth Unit Tests', tests: authUnitTests },
         { name: '🌐 Auth Endpoint Tests', tests: authEndpointTests },
-        { name: '🔑 Signup & Invite', tests: signupTests },
+        { name: '🔑 Signup', tests: signupTests },
         { name: '🚪 Post-Logout Denial', tests: postLogoutDenialTests },
         { name: '📦 Books Data Setup', tests: booksSetupTests },
         { name: '📚 Books API & Sharing', tests: booksEndpointTests },
