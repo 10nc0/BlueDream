@@ -1344,7 +1344,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     // === SATELLITE REGISTRATION (inlined from route-registry) ===
     const SATELLITE_LABELS = {
         'auth':    { emoji: '🔐', desc: 'lifecycle, sessions, JWT, audit trail' },
-        'books':   { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export' },
+        'books':   { emoji: '📚', desc: 'CRUD, drops, messages, search, tags, export, closings' },
         'inpipe':  { emoji: '📥' },
         'nyan-ai': { emoji: '🌈', desc: 'playground, vision, audit, book history, psi-ema data, diagnostics' }
     };

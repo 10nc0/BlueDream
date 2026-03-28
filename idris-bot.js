@@ -244,6 +244,67 @@ class IdrisBot {
         logger.info({ threadId }, '📝 Idris posted audit result');
     }
 
+    async postMonthlyClosing(threadId, tally) {
+        const fields = [
+            { name: '📬 Total Messages', value: `${tally.total_messages}`, inline: true },
+            { name: '💬 Text', value: `${tally.text_messages}`, inline: true },
+            { name: '🖼️ Media', value: `${tally.media_messages}`, inline: true },
+            { name: '👥 Contributors', value: `${tally.contributor_count}`, inline: true }
+        ];
+
+        if (tally.total_attachment_bytes > 0) {
+            const sizeStr = tally.total_attachment_bytes > 1048576
+                ? `${(tally.total_attachment_bytes / 1048576).toFixed(1)} MB`
+                : `${(tally.total_attachment_bytes / 1024).toFixed(1)} KB`;
+            fields.push({ name: '📎 Attachment Size', value: sizeStr, inline: true });
+        }
+
+        const entityTypes = Object.keys(tally.entities || {});
+        if (entityTypes.length > 0) {
+            const entityStr = entityTypes.map(t => `${t}: ${tally.entities[t]}`).join(', ');
+            fields.push({ name: '🔍 Entities', value: entityStr.length > 500 ? entityStr.substring(0, 497) + '...' : entityStr, inline: false });
+        }
+
+        const langKeys = Object.keys(tally.languages || {});
+        if (langKeys.length > 0) {
+            const total = langKeys.reduce((s, k) => s + tally.languages[k], 0);
+            const langStr = langKeys
+                .sort((a, b) => tally.languages[b] - tally.languages[a])
+                .map(k => `${k}: ${((tally.languages[k] / total) * 100).toFixed(0)}%`)
+                .join(', ');
+            fields.push({ name: '🌐 Languages', value: langStr, inline: false });
+        }
+
+        const tagKeys = Object.keys(tally.tags || {});
+        if (tagKeys.length > 0) {
+            const tagStr = tagKeys
+                .sort((a, b) => tally.tags[b] - tally.tags[a])
+                .slice(0, 15)
+                .map(k => `${k} (${tally.tags[k]})`)
+                .join(', ');
+            fields.push({ name: '🏷️ Tags', value: tagStr, inline: false });
+        }
+
+        if (tally.time_range) {
+            fields.push({
+                name: '🕐 Time Range',
+                value: `${new Date(tally.time_range.earliest).toUTCString()} → ${new Date(tally.time_range.latest).toUTCString()}`,
+                inline: false
+            });
+        }
+
+        const embed = {
+            title: `📊 Monthly Book Closing — ${tally.month}`,
+            color: 0x3b82f6,
+            fields,
+            footer: { text: `Book: ${tally.book_name} (${tally.book_fractal_id})` },
+            timestamp: tally.generated_at
+        };
+
+        await this.postToThread(threadId, { embeds: [embed] });
+        logger.info({ threadId, month: tally.month, bookName: tally.book_name }, '📊 Idris posted monthly closing');
+    }
+
     getStatusColor(status) {
         const colors = {
             'PASS': 0x10b981,

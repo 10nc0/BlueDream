@@ -252,7 +252,9 @@ const PHI_BREATHE = {
   MEDIA_PURGE_INTERVAL_MS: TIME.DAY, // 24 hours
   DORMANCY_CLEANUP_INTERVAL_MS: TIME.DAY, // 24 hours
   SHARE_INVITE_CLEANUP_INTERVAL_MS: TIME.DAY, // 24 hours
-  USAGE_CLEANUP_INTERVAL_MS: TIME.HOUR // 1 hour
+  USAGE_CLEANUP_INTERVAL_MS: TIME.HOUR, // 1 hour
+  MONTHLY_CLOSING_INTERVAL_MS: TIME.DAY, // 24 hours — checks daily, fires on 1st
+  MONTHLY_CLOSING_INACTIVITY_DAYS: 60 // Skip books with 0 drops in this window
 };
 
 // ==================== IP Geolocation Cache ====================

@@ -1915,6 +1915,57 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
     app.get('/api/books/:book_id/export', ...exportMiddleware, exportBookHandler);
     app.post('/api/books/:book_id/export', ...exportMiddleware, exportBookHandler);
 
+    // ==================== MONTHLY CLOSING ENDPOINTS ====================
+
+    app.get('/api/books/:book_id/closings', requireAuth, setTenantContext, async (req, res) => {
+        const { book_id } = req.params;
+        const rawLimit = parseInt(req.query.limit) || 12;
+        const fetchLimit = Math.min(Math.max(rawLimit, 1), 100);
+
+        try {
+            const horusBot = bots?.horus;
+            if (!horusBot || !horusBot.isReady()) {
+                return res.status(503).json({ error: 'Audit log reader not available' });
+            }
+
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            if (!tenantSchema) {
+                return res.status(400).json({ error: 'Tenant context required' });
+            }
+
+            const bookCheck = await pool.query(
+                `SELECT 1 FROM ${tenantSchema}.books WHERE fractal_id = $1 LIMIT 1`,
+                [book_id]
+            );
+            if (bookCheck.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found' });
+            }
+
+            const tenantInfo = await pool.query(
+                `SELECT ai_log_thread_id FROM core.tenant_catalog WHERE tenant_schema = $1`,
+                [tenantSchema]
+            );
+            const threadId = tenantInfo.rows[0]?.ai_log_thread_id;
+            if (!threadId) {
+                return res.json({ success: true, closings: [], message: 'No audit log thread exists yet' });
+            }
+
+            const result = await horusBot.fetchAuditLogsPaginated(threadId, { limit: fetchLimit });
+            const closings = result.logs
+                .filter(log => log.type === 'closing')
+                .filter(log => {
+                    if (!log.parsed?.bookInfo) return false;
+                    const idMatch = log.parsed.bookInfo.match(/\(([^)]+)\)$/);
+                    return idMatch && idMatch[1] === book_id;
+                });
+
+            res.json({ success: true, closings });
+        } catch (err) {
+            logger.error({ bookId: book_id, err }, 'Closings fetch error');
+            res.status(500).json({ error: 'An internal error occurred. Please try again.' });
+        }
+    });
+
     // ==================== BOOK SHARING ENDPOINTS ====================
     
     // Helper: Verify book ownership via book_registry (cross-tenant secure)
@@ -2129,7 +2180,7 @@ To verify file integrity, compare SHA256 hashes in manifest.json:
         }
     });
 
-    return { endpoints: 29 };
+    return { endpoints: 30 };
 }
 
 module.exports = { registerBooksRoutes };

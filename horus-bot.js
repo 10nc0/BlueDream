@@ -194,12 +194,30 @@ class HorusBot {
                 const bookField = firstEmbed.fields.find(f => f.name === '📚 Book Context');
 
                 const rawConf = confidenceField ? parseInt(confidenceField.value) : null;
+                log.type = 'audit';
                 log.parsed = {
                     status: statusField ? statusField.value.replace(/\*/g, '') : null,
                     confidence: Number.isNaN(rawConf) ? null : rawConf,
                     query: queryField ? queryField.value : null,
                     answer: answerField ? answerField.value : null,
                     bookContext: bookField ? bookField.value : null
+                };
+            } else if (firstEmbed.title && firstEmbed.title.includes('Monthly Book Closing')) {
+                log.type = 'closing';
+                const monthMatch = firstEmbed.title.match(/Monthly Book Closing\s*—\s*(.+)$/);
+                const getClosingField = (name) => firstEmbed.fields.find(f => f.name === name)?.value ?? null;
+                log.parsed = {
+                    month: monthMatch ? monthMatch[1].trim() : null,
+                    totalMessages: parseInt(getClosingField('📬 Total Messages')) || 0,
+                    textMessages: parseInt(getClosingField('💬 Text')) || 0,
+                    mediaMessages: parseInt(getClosingField('🖼️ Media')) || 0,
+                    contributors: parseInt(getClosingField('👥 Contributors')) || 0,
+                    attachmentSize: getClosingField('📎 Attachment Size'),
+                    entities: getClosingField('🔍 Entities'),
+                    languages: getClosingField('🌐 Languages'),
+                    tags: getClosingField('🏷️ Tags'),
+                    timeRange: getClosingField('🕐 Time Range'),
+                    bookInfo: firstEmbed.footer?.text ?? null
                 };
             }
         }
