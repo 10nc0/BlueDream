@@ -14,6 +14,7 @@ const { config } = require('../config');
 const { PsiEMADashboard, deriveReading } = require('../utils/psi-EMA');
 const { fetchStockPrices, calculateDataAge, sanitizeTicker } = require('../utils/stock-fetcher');
 const { fetchUrl, extractUrls } = require('../lib/url-fetcher');
+const { loadTools, getTool } = require('../lib/tools/registry');
 const { AUDIO_MIME_EXT_MAP } = require('../utils/file-types');
 
 const API_UNITS = {
@@ -312,59 +313,8 @@ async function processAndCacheDocList(docList, cachedFileHashes, clientIp, extra
     }
 }
 
-async function searchDuckDuckGo(query) {
-    if (!query || typeof query !== 'string' || query.trim().length === 0) {
-        return null;
-    }
-    const sanitizedQuery = query.trim().substring(0, 500);
-    
-    const params = {
-        q: sanitizedQuery,
-        format: 'json',
-        no_html: 1,
-        skip_disambig: 1,
-        t: 'nyanbook'
-    };
-    const url = `https://api.duckduckgo.com/?${new URLSearchParams(params).toString()}`;
-    
-    try {
-        const response = await axios.get(url, { timeout: 5000, responseType: 'json' });
-        const data = response.data;
-        
-        if (!data || typeof data !== 'object') {
-            logger.debug({ query: sanitizedQuery.substring(0, 40) }, '🔍 DDG: non-JSON response, skipping');
-            return null;
-        }
-        
-        const context = [];
-        if (data.AbstractText) {
-            const src = data.AbstractSource ? ` [${data.AbstractSource}]` : '';
-            const srcUrl = data.AbstractURL ? ` — ${data.AbstractURL}` : '';
-            context.push(`📚 ${data.AbstractText}${src}${srcUrl}`);
-            logger.debug({ query: sanitizedQuery.substring(0, 40) }, '🔍 DDG: instant answer found');
-        }
-        if (data.RelatedTopics && Array.isArray(data.RelatedTopics) && data.RelatedTopics.length > 0) {
-            const relevantTopics = data.RelatedTopics.filter(t => t && t.Text && !t.FirstURL).slice(0, 3);
-            if (relevantTopics.length > 0) {
-                context.push('Related information:');
-                relevantTopics.forEach(topic => {
-                    if (topic.Text) context.push(`  • ${topic.Text}`);
-                });
-            }
-        }
-        
-        if (context.length > 0) {
-            logger.debug({ count: context.length }, '🔍 DDG: injecting results');
-            return context.join('\n');
-        } else {
-            logger.debug({ query: sanitizedQuery.substring(0, 40) }, '🔍 DDG: no results, using base knowledge');
-            return null;
-        }
-    } catch (err) {
-        logger.error({ err }, '🔍 DDG search error');
-        return null;
-    }
-}
+loadTools();
+const searchDuckDuckGo = (...args) => getTool('duckduckgo').execute(...args);
 
 async function extractCoreQuestion(message) {
     if (!message || typeof message !== 'string') {
@@ -427,89 +377,7 @@ async function extractCoreQuestion(message) {
     }
 }
 
-/**
- * searchBrave — Web search via Brave Search API.
- *
- * @param {string}  query     Search query (max 500 chars).
- * @param {string}  clientIp  Caller IP for capacity throttling (optional).
- * @param {Object}  opts      Options:
- *   opts.format  'text' (default) — numbered list string for general prompts
- *                'json' — structured JSON array for LLM tool-call paths (e.g. seed metric walk-the-dog)
- *                         Each item: { title, url, description, age }
- *                         Gives the LLM machine-readable quantity to triangulate prices from.
- *
- * Architecture note — "Live API over Dogma":
- *   This function is a pure data transport. It returns what Brave says — no filtering,
- *   no value extraction, no heuristics. The caller (LLM or parser) interprets the data.
- *   Routing decisions (is this a price query? is this a city?) happen BEFORE this call.
- */
-async function searchBrave(query, clientIp = null, opts = {}) {
-    if (!query || typeof query !== 'string' || query.trim().length === 0) {
-        return null;
-    }
-    const sanitizedQuery = query.trim().substring(0, 500);
-    const format = opts.format || 'text'; // 'text' | 'json'
-    
-    const BRAVE_API_KEY = process.env.PLAYGROUND_BRAVE_API;
-    if (!BRAVE_API_KEY) {
-        logger.debug('🦁 Brave: API key not configured, skipping');
-        return null;
-    }
-    
-    if (clientIp) {
-        const braveCapacity = await capacityManager.consumeToken(clientIp, 'brave');
-        if (!braveCapacity.allowed) {
-            logger.debug({ ip: clientIp, reason: braveCapacity.reason }, '🦁 Brave: capacity exhausted');
-            return null;
-        }
-    }
-    
-    try {
-        logger.debug({ query: sanitizedQuery.substring(0, 40) }, '🦁 Brave: searching for real-time context');
-        const response = await axios.get('https://api.search.brave.com/res/v1/web/search', {
-            headers: {
-                'Accept': 'application/json',
-                'X-Subscription-Token': BRAVE_API_KEY
-            },
-            params: {
-                q: sanitizedQuery,
-                count: 5,
-                text_decorations: false,
-                safesearch: 'moderate'
-            },
-            timeout: 5000
-        });
-        
-        const results = response.data?.web?.results || [];
-        if (results.length === 0) {
-            logger.debug({ query: sanitizedQuery.substring(0, 40) }, '🦁 Brave: no results found');
-            return null;
-        }
-        
-        logger.debug({ count: results.length, format }, '🦁 Brave: injecting results into prompt');
-
-        if (format === 'json') {
-            // Raw JSON — gives LLM structured quantity to extract prices from.
-            // "Walk the dog" philosophy: LLM reads raw results and derives $/sqm itself.
-            const structured = results.slice(0, 5).map(r => ({
-                title: r.title || '',
-                url: r.url || '',
-                description: r.description || '',
-                age: r.age || null  // publish date if available — helps distinguish historical vs current
-            }));
-            return JSON.stringify(structured);
-        }
-
-        // Default: formatted text for general prompts — include URL so LLM can cite source
-        const context = results.slice(0, 5).map((r, i) =>
-            `${i + 1}. ${r.title || 'Untitled'}\n   ${r.description || ''}\n   Source: ${r.url || ''}`
-        ).join('\n\n');
-        return `🌐 Web search results:\n${context}`;
-    } catch (err) {
-        logger.error({ err }, 'Brave search error');
-        return null;
-    }
-}
+const searchBrave = (...args) => getTool('brave-search').execute(...args);
 
 async function groqWithRetry(axiosConfig, maxRetries = 3, serviceType = 'text') {
     let lastError;
