@@ -1518,8 +1518,7 @@ app.listen(PORT, '0.0.0.0', async () => {
         phiBreathe.setCleanupFunctions({ cleanupOldSessions });
 
         phiBreathe.setHeartbeatCallback((breathCount) => {
-            const satellites = ['auth', 'books', 'inpipe', 'nyan-ai'];
-            console.log('\n' + formatPulseLog(satellites, 'online') + '\n');
+            console.log('\n' + formatPulseLog(registeredSatellites, 'online') + '\n');
         });
 
         await phiBreathe.startPhiBreathe();
