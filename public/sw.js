@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nyanbook-v5';
+const CACHE_NAME = 'nyanbook-v6';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -8,8 +8,20 @@ const STATIC_ASSETS = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
+  '/css/dashboard.css',
+  '/css/auth.css',
   '/css/components/cat-animation.css',
-  '/css/auth.css'
+  '/css/components/enhancements.css',
+  '/css/components/media-modal.css',
+  '/css/components/tooltips.css',
+  '/css/components/analytics.css',
+  '/js/dashboard.js',
+  '/js/sw-register.js',
+  '/js/modules/auth.js',
+  '/js/modules/books.js',
+  '/js/modules/state.js',
+  '/js/modules/messages.js',
+  '/js/modules/data-sync.js'
 ];
 
 self.addEventListener('install', (event) => {

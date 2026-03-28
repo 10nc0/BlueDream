@@ -2,7 +2,7 @@
   "name": "Your Nyanbook",
   "short_name": "Nyanbook",
   "description": "Zero-friction document archiving with AI-powered search and Ψ-EMA analysis",
-  "start_url": "/playground.html",
+  "start_url": "/index.html",
   "display": "standalone",
   "background_color": "#0a0a1a",
   "theme_color": "#8b5cf6",
