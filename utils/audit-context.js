@@ -2,7 +2,6 @@ const crypto = require('crypto');
 const logger = require('../lib/logger');
 const { AUDIT } = require('../config/constants');
 const { CapsuleChain } = require('./capsule-chain');
-const { detectLanguage } = require('./language-detector');
 
 const MONTH_NAMES_EN = ['january', 'february', 'march', 'april', 'may', 'june', 
                         'july', 'august', 'september', 'october', 'november', 'december'];
@@ -181,16 +180,7 @@ async function enrichMessagesWithLang(messages, bookFractalId, pool) {
     for (const msg of messages) {
         const content = msg.content || '';
         const hash = crypto.createHash('sha256').update(content).digest('hex');
-        const ledgerLang = langMap.get(hash);
-
-        if (ledgerLang) {
-            msg.lang = ledgerLang;
-        } else if (content.length >= 3) {
-            const result = detectLanguage(content);
-            msg.lang = result.confidence >= 0.3 ? result.lang : null;
-        } else {
-            msg.lang = null;
-        }
+        msg.lang = langMap.get(hash) || null;
     }
 }
 
@@ -376,7 +366,7 @@ async function buildAuditContext(bookIds, fallbackTenantSchema, query, options =
         ? contextMessages.slice(0, maxMessages) 
         : contextMessages;
 
-    const langComposition = buildLangComposition(allMessages);
+    const langComposition = buildLangComposition(sampledMessages);
 
     return {
         isMultiBook: true,
