@@ -13,8 +13,8 @@ A versatile AI endpoint is provided to make your data queryable & interactive.
 
 **Try it first:** → [nyanbook.io](https://nyanbook.io) — see the ledger, ask the AI. Sovereignty is a choice, not a requirement.
 
-![Playground UI](Playground%20UI_2.png)
-![Nyanbook UI](Nyanbook%20UI.png)
+![Playground UI](playground-ui.png)
+![Nyanbook UI](nyanbook-ui.png)
 
 ---
 
