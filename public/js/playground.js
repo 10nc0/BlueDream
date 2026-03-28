@@ -298,7 +298,7 @@ function getAudioExtension(mimeType) {
 function isAudioRecordingSupported() {
     return typeof navigator !== 'undefined' && 
            typeof navigator.mediaDevices !== 'undefined' && 
-           typeof navigator.mediaDevices.getUserMedia !== 'function';
+           typeof navigator.mediaDevices.getUserMedia === 'function';
 }
 
 // Audio recording via microphone
@@ -1092,6 +1092,8 @@ function addUncompressedAttachments(payload, attachmentsList) {
     if (documents.length > 0) payload.documents = documents;
 }
 
+const MAX_WARMUP_RETRIES = 3;
+
 async function sendMessage(_retryPayload = null) {
     if (isProcessing) return;
 
@@ -1171,9 +1173,17 @@ async function sendMessage(_retryPayload = null) {
             if (streamingEl) streamingEl.remove();
             const errorData = await res.json().catch(() => ({}));
             if (res.status === 503 && errorData.code === 'warming_up') {
-                addMessage('assistant', '🐱 Still warming up — will retry automatically in 5 seconds...');
-                isProcessing = false;
-                setTimeout(() => sendMessage(payload), 5000);
+                const retryCount = (payload._retryCount || 0) + 1;
+                if (retryCount > MAX_WARMUP_RETRIES) {
+                    addMessage('assistant', '🐱 Server is still warming up. Please try again in a moment.');
+                    isProcessing = false;
+                    sendBtn.disabled = false;
+                } else {
+                    addMessage('assistant', `🐱 Still warming up — will retry automatically in 5 seconds... (${retryCount}/${MAX_WARMUP_RETRIES})`);
+                    isProcessing = false;
+                    payload._retryCount = retryCount;
+                    setTimeout(() => sendMessage(payload), 5000);
+                }
             } else {
                 addMessage('assistant', errorData.reply || 'An error occurred. Please try again.');
                 isProcessing = false;
@@ -1275,18 +1285,11 @@ async function clearNyanHistory() {
     attachments = [];
     cachedFileHashes = [];  // Clear cached file hashes too
     
-    // Clear localStorage completely
     try {
-        localStorage.clear();
-        console.log('✅ localStorage cleared');
+        localStorage.removeItem('nyan_history');
+        console.log('✅ nyan_history removed');
     } catch (e) {
-        console.warn('⚠️ localStorage.clear() failed:', e.message);
-        try {
-            localStorage.removeItem('nyan_history');
-            console.log('✅ nyan_history removed');
-        } catch (e2) {
-            console.error('❌ Could not clear localStorage:', e2.message);
-        }
+        console.warn('⚠️ Could not clear localStorage:', e.message);
     }
     
     // Explicitly remove all child nodes from messages container

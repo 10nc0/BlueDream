@@ -43,7 +43,7 @@ Every UI size/spacing/layout change: check BOTH the base CSS rule AND the `@medi
 
 ### Backend — Vegapunk Kernel
 Factory pattern with dependency injection. 4 modular satellites:
-- `auth` — JWT, email/password, role-based access, audit trail, password reset, sybil rate-limiting
+- `auth` — JWT, email/password, role-based access, audit trail, password reset, sybil rate-limiting, login rate-limiting (in-memory, 10/15min per email+IP), SHA256-hashed reset tokens
 - `books` — CRUD, messages, search, tags, export (verifiable SHA256 manifest)
 - `inpipe` — abstract channel interface; `twilio` (WhatsApp, reply-capable) + `line` (LINE OA, listen-only) + `telegram` (Bot API, reply-capable, deep-link join)
 - `nyan-ai` — playground, vision, audit, book history, psi-ema, diagnostics
@@ -161,7 +161,7 @@ Every inpipe message → cryptographic provenance capsule (body text, HMAC sende
 ## Testing
 
 `npm run test:core` → `tests/test-core.js` — 107 tests covering:
-- **Auth**: JWT lifecycle, token expiry, login/logout endpoints, signup, sybil rate-limiting, session creation/destruction
+- **Auth**: JWT lifecycle, token expiry, login/logout endpoints, signup, sybil + login rate-limiting, session creation/destruction, SHA256 reset tokens
 - **Books**: CRUD via API (create, update via fractalId, archive/unarchive, share), DB operations, cross-tenant denial (explicit HTTP status assertions + DB state verification)
 - **Tenant isolation**: schema-scoped data, JWT-based API isolation, crafted schema injection rejection
 - **Capsule/Inpipe**: capsule v2 build, Twilio webhook signature validation (valid/invalid/missing), message queue lifecycle
@@ -172,6 +172,16 @@ Test runs create temporary schemas (`tenant_<N>`) and clean up after. In-memory 
 
 ### Removed: Invite/Referral System
 The invite token flow (`/api/invites`, `generateInviteToken`, `validateInviteToken`, `consumeInviteToken`) was dead code — the `core.invite_tokens` table was never provisioned, and the `generateInviteToken` function signature mismatched the route call (targetRole passed as expiresInDays → NaN timestamp). All invite code removed. Book sharing via `POST /api/books/:fractalId/share` remains the active sharing mechanism.
+
+### Security Hardening (auth.js + playground.js)
+- `MIN_PASSWORD_LENGTH = 8` constant — unified across reset-password (was 6), admin set-password, and validators
+- Login rate limiting: in-memory Map, 10 attempts per 15-min window per email + per IP; clears on success
+- Password reset tokens: stored as SHA256 hash, looked up by hash — raw token only in email link
+- `user_settings` queries: schema-qualified (`${tenantSchema}.user_settings`) — prevents cross-tenant reads via default search_path
+- `+62` country code default: RUNBOOK comment added documenting Indonesia assumption, mitigation path for other regions
+- `isAudioRecordingSupported()`: inverted condition fixed (`!== 'function'` → `=== 'function'`)
+- `localStorage.clear()` in playground: replaced with surgical `removeItem('nyan_history')` — no longer nukes unrelated origin data
+- Warm-up retry loop: capped at 3 retries (was infinite)
 
 ### Database Migrations
 `npm run migrate` → `lib/migration-runner.js` — fail-fast migration system.

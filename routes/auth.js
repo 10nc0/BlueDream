@@ -3,6 +3,50 @@ const crypto = require('crypto');
 const { validate, schemas, assertValidSchemaName } = require('../lib/validators');
 const { config } = require('../config');
 
+const MIN_PASSWORD_LENGTH = 8;
+
+const loginAttempts = new Map();
+const LOGIN_RATE_LIMIT = { maxAttempts: 10, windowMs: 15 * 60 * 1000 };
+
+function checkLoginRateLimit(namespace, key) {
+    const compositeKey = `${namespace}:${key}`;
+    const now = Date.now();
+    const entry = loginAttempts.get(compositeKey);
+    if (!entry || now - entry.firstAttempt > LOGIN_RATE_LIMIT.windowMs) {
+        return { allowed: true };
+    }
+    if (entry.count >= LOGIN_RATE_LIMIT.maxAttempts) {
+        return { allowed: false };
+    }
+    return { allowed: true };
+}
+
+function recordFailedLogin(namespace, key) {
+    const compositeKey = `${namespace}:${key}`;
+    const now = Date.now();
+    const entry = loginAttempts.get(compositeKey);
+    if (!entry || now - entry.firstAttempt > LOGIN_RATE_LIMIT.windowMs) {
+        loginAttempts.set(compositeKey, { count: 1, firstAttempt: now });
+    } else {
+        entry.count++;
+    }
+}
+
+function clearLoginAttempts(namespace, key) {
+    loginAttempts.delete(`${namespace}:${key}`);
+}
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of loginAttempts.entries()) {
+        if (now - entry.firstAttempt > LOGIN_RATE_LIMIT.windowMs) loginAttempts.delete(key);
+    }
+}, 60000);
+
+function hashToken(token) {
+    return crypto.createHash('sha256').update(token).digest('hex');
+}
+
 function createAuthMiddleware(pool, authService, logger) {
     async function requireAuth(req, res, next) {
         const authHeader = req.headers.authorization;
@@ -171,15 +215,22 @@ function registerAuthRoutes(app, deps) {
         try {
             const normalizedEmail = email.toLowerCase().trim();
             
+            const emailLimit = checkLoginRateLimit('email', normalizedEmail);
+            const ipLimit = checkLoginRateLimit('ip', req.ip);
+            if (!emailLimit.allowed || !ipLimit.allowed) {
+                logger.warn({ email, ip: req.ip }, '⏱️ Login rate limit exceeded');
+                return res.status(429).json({ error: 'Too many login attempts. Please try again in 15 minutes.' });
+            }
+            
             const mappingResult = await pool.query(
                 'SELECT tenant_id, tenant_schema, user_id FROM core.user_email_to_tenant WHERE LOWER(email) = $1',
                 [normalizedEmail]
             );
             
             if (mappingResult.rows.length === 0) {
-                // Constant-time response: prevent user-existence enumeration via timing side-channel.
-                // bcrypt.compare takes ~100ms regardless; without this, absent-user returns ~0ms.
                 await bcrypt.compare(password, '$2b$10$timingguardXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
+                recordFailedLogin('email', normalizedEmail);
+                recordFailedLogin('ip', req.ip);
                 return res.status(401).json({ error: 'Invalid credentials' });
             }
             
@@ -192,6 +243,8 @@ function registerAuthRoutes(app, deps) {
             );
             
             if (result.rows.length === 0) {
+                recordFailedLogin('email', normalizedEmail);
+                recordFailedLogin('ip', req.ip);
                 return res.status(401).json({ error: 'Invalid credentials' });
             }
             
@@ -199,8 +252,12 @@ function registerAuthRoutes(app, deps) {
             const validPassword = await bcrypt.compare(password, user.password_hash);
             
             if (!validPassword) {
+                recordFailedLogin('email', normalizedEmail);
+                recordFailedLogin('ip', req.ip);
                 return res.status(401).json({ error: 'Invalid credentials' });
             }
+            
+            clearLoginAttempts('email', normalizedEmail);
             
             req.session.userId = user.id;
             req.session.userEmail = user.email;
@@ -441,6 +498,9 @@ function registerAuthRoutes(app, deps) {
             const normalizedEmail = email.toLowerCase().trim();
             
             let standardizedPhone = phone.replace(/[\s\-\(\)\.]/g, '');
+            // RUNBOOK: +62 (Indonesia) is the default country code for bare local numbers.
+            // To support other regions, replace this with a configurable default or
+            // accept E.164 format only (require leading '+' from the client).
             if (standardizedPhone.startsWith('0')) {
                 standardizedPhone = '+62' + standardizedPhone.substring(1);
             }
@@ -479,6 +539,7 @@ function registerAuthRoutes(app, deps) {
             }
             
             const resetToken = crypto.randomBytes(32).toString('hex');
+            const tokenHash = hashToken(resetToken);
             const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
             
             await pool.query(`
@@ -488,7 +549,7 @@ function registerAuthRoutes(app, deps) {
             await pool.query(`
                 INSERT INTO core.password_reset_tokens (token, user_email, tenant_schema, phone, expires_at)
                 VALUES ($1, $2, $3, $4, $5)
-            `, [resetToken, normalizedEmail, tenant_schema, standardizedPhone, expiresAt]);
+            `, [tokenHash, normalizedEmail, tenant_schema, standardizedPhone, expiresAt]);
             
             const domain = config.replit.primaryDomain;
             const resetLink = `https://${domain}/reset-password.html?token=${resetToken}`;
@@ -548,15 +609,15 @@ function registerAuthRoutes(app, deps) {
                 return res.status(400).json({ error: 'Token and password are required' });
             }
             
-            if (password.length < 6) {
-                return res.status(400).json({ error: 'Password must be at least 6 characters' });
+            if (password.length < MIN_PASSWORD_LENGTH) {
+                return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
             }
             
             const tokenResult = await pool.query(`
                 SELECT id, user_email, tenant_schema, expires_at, used
                 FROM core.password_reset_tokens
                 WHERE token = $1
-            `, [token]);
+            `, [hashToken(token)]);
             
             if (tokenResult.rows.length === 0) {
                 logger.info('Password reset: invalid token');
@@ -731,7 +792,7 @@ function registerAuthRoutes(app, deps) {
     app.get('/api/onboarding/status', requireAuth, async (req, res) => {
         try {
             const result = await pool.query(
-                'SELECT onboarding_completed, settings FROM user_settings WHERE user_id = $1',
+                `SELECT onboarding_completed, settings FROM ${assertValidSchemaName(req.tenantSchema)}.user_settings WHERE user_id = $1`,
                 [req.userId]
             );
             
@@ -753,7 +814,7 @@ function registerAuthRoutes(app, deps) {
         
         try {
             await pool.query(`
-                INSERT INTO user_settings (user_id, onboarding_completed, settings)
+                INSERT INTO ${assertValidSchemaName(req.tenantSchema)}.user_settings (user_id, onboarding_completed, settings)
                 VALUES ($1, $2, $3)
                 ON CONFLICT (user_id)
                 DO UPDATE SET 
@@ -1106,8 +1167,8 @@ function registerAuthRoutes(app, deps) {
                 return res.status(400).json({ error: 'Password is required' });
             }
             
-            if (password.length < 8) {
-                return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+            if (password.length < MIN_PASSWORD_LENGTH) {
+                return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
             }
             
             const userData = await pool.query(`SELECT email FROM ${tenantSchema}.users WHERE id = $1`, [id]);
