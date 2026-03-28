@@ -248,12 +248,13 @@ function buildSeedMetricTable(parsedData, historicalDecade = String(new Date().g
     summaries.push(`**${cityTitle}**: ${histSummary} → ${currSummary} = ${currMetric.emoji} ${currMetric.regime} (${direction})`);
   }
   
-  const table = rows.join('\n');
+  const { reformatMarkdownTable } = require('./markdown-table-formatter');
+  const alignedTable = reformatMarkdownTable(rows.join('\n'));
   const summaryBlock = summaries.join('\n');
   
   const legend = `\n---\nFormula: **Years = (LCU/sqm × 700) ÷ Average Single Earner Income (same LCU)**`;
   
-  return `${table}\n\n${summaryBlock}\n${legend}`;
+  return `${alignedTable}\n\n${summaryBlock}\n${legend}`;
 }
 
 /**

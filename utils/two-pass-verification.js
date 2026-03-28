@@ -134,7 +134,7 @@ Perform the dialectical audit and output JSON only.`;
       console.warn(`⚠️ Invalid audit verdict detected: "${verdict}" - falling back to REJECTED`);
       return {
         verdict: 'REJECTED',
-        confidence: parsed.confidence || 0,
+        confidence: parsed.confidence ?? 0,
         checksPass: parsed.checksPass || [],
         issues: [...(parsed.issues || []), { severity: 'CRITICAL', reason: 'Invalid verification verdict returned' }],
         suggestedFixes: parsed.suggestedFixes || [],
