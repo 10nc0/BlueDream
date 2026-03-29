@@ -28,7 +28,7 @@ const { NYAN_IDENTITY_DOCUMENTATION, REGISTRY_VERSION } = require('../prompts/ny
 
 const NYAN_IDENTITY_PATTERNS = [
   /^(?:who|what)\s+(?:are|is)\s+(?:you|nyan)\s*\??$/i,
-  /^who\s+(?:made|built|created)\s+(?:you|this|nyanbook|nyan)\s*\??$/i,
+  /^who\s+(?:made|built|created)\s+(?:you|nyanbook|nyan)\s*\??$/i,
   /^(?:what\s+is|tell\s+me\s+about|explain)\s+(?:the\s+)?nyanbook\s*\??$/i,
   /^(?:what\s+is|tell\s+me\s+about|explain)\s+(?:the\s+)?nyan\s*protocol\s*\??$/i,
   /^what\s+(?:can\s+you\s+do|are\s+your\s+capabilities)\s*\??$/i,
