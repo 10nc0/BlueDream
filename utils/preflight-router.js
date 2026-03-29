@@ -778,7 +778,7 @@ async function preflightRouter(options) {
   // ========================================
   // DDG DIALECTIC ENRICHMENT (applies to general mode)
   // Default-on: DDG-first for all general queries as external antithesis (H₀).
-  // Opt-out: abstract/philosophical/math/code/creative/greeting queries skip search.
+  // Opt-out: math/code/creative/greeting/translate/summarize queries skip search.
   // Realtime-intent patterns always force search regardless of opt-out.
   // ========================================
   if (result.mode === 'general' && shouldSearchDDG(classificationQuery)) {
