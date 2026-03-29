@@ -144,7 +144,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function registerInpipeRoutes(app, deps) {
     const { pool, bots, helpers, constants, logger } = deps;
-    const { hermes: hermesBot } = bots || {};
+    const { hermes: hermesBot, thoth: thothBot } = bots || {};
     const NYANBOOK_LEDGER_WEBHOOK = constants?.NYANBOOK_LEDGER_WEBHOOK;
     const LIMBO_THREAD_ID = constants?.LIMBO_THREAD_ID;
     const HERMES_TOKEN = constants?.HERMES_TOKEN || process.env.HERMES_TOKEN;
@@ -566,6 +566,126 @@ function registerInpipeRoutes(app, deps) {
         }
     });
     registeredRoutes.push('POST /api/webhook/:fractalId');
+
+    app.get('/api/webhook/:fractalId/messages', webhookLimiter, async (req, res) => {
+        try {
+            const fractalIdParam = req.params.fractalId;
+            const fractalIdPattern = /^bridge_[a-z][0-9a-z]_[a-zA-Z0-9]{6,32}$/;
+            if (!fractalIdParam || !fractalIdPattern.test(fractalIdParam)) {
+                return res.status(400).json({ error: 'Invalid book ID format' });
+            }
+
+            const fractalIdMod = require('../utils/fractal-id');
+            const parsed = fractalIdMod.parse(fractalIdParam);
+            if (!parsed || !parsed.tenantId) {
+                return res.status(400).json({ error: 'Invalid book ID format' });
+            }
+            if (!Number.isInteger(parsed.tenantId) || parsed.tenantId <= 0 || parsed.tenantId > 999999) {
+                return res.status(400).json({ error: 'Invalid tenant ID' });
+            }
+
+            const tenantSchema = `tenant_${parsed.tenantId}`;
+            if (!VALID_SCHEMA_PATTERN.test(tenantSchema)) {
+                return res.status(400).json({ error: 'Invalid tenant schema' });
+            }
+
+            const bookResult = await pool.query(
+                format(`SELECT id, name, output_credentials, created_at FROM %I.books WHERE fractal_id = $1`, tenantSchema),
+                [fractalIdParam]
+            );
+            if (bookResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Book not found' });
+            }
+
+            const book = bookResult.rows[0];
+            const bookCreatedAt = new Date(book.created_at);
+            let outputCredentials = book.output_credentials;
+            if (typeof outputCredentials === 'string') {
+                try { outputCredentials = JSON.parse(outputCredentials); } catch { outputCredentials = {}; }
+            }
+
+            const outputData = outputCredentials?.output_01;
+            if (!outputData || !outputData.thread_id) {
+                return res.json({ messages: [], total: 0, hasMore: false, note: 'No ledger thread configured' });
+            }
+
+            if (!thothBot || !thothBot.client || !thothBot.ready) {
+                return res.status(503).json({ error: 'Message reader not ready' });
+            }
+
+            const thread = await thothBot.client.channels.fetch(outputData.thread_id);
+            if (!thread) {
+                return res.json({ messages: [], total: 0, hasMore: false, note: 'Thread not found' });
+            }
+
+            const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
+            const after = req.query.after;
+            const before = req.query.before;
+
+            if (after && !/^\d{17,20}$/.test(after)) {
+                return res.status(400).json({ error: 'Invalid after cursor (must be a Discord message ID)' });
+            }
+            if (before && !/^\d{17,20}$/.test(before)) {
+                return res.status(400).json({ error: 'Invalid before cursor (must be a Discord message ID)' });
+            }
+            if (after && before) {
+                return res.status(400).json({ error: 'Cannot use both after and before cursors' });
+            }
+
+            const options = { force: true, limit };
+            if (after) options.after = after;
+            else if (before) options.before = before;
+
+            const discordMessages = await thread.messages.fetch(options);
+
+            const messages = Array.from(discordMessages.values())
+                .filter(msg => msg.createdAt >= bookCreatedAt)
+                .map(msg => {
+                    const attachment = msg.attachments.size > 0 ? msg.attachments.first() : null;
+                    let mediaFromEmbed = null;
+                    let senderContact = null;
+                    for (const embed of msg.embeds) {
+                        const mediaField = embed.fields?.find(f => f.name === '📎 Media');
+                        if (mediaField?.value) {
+                            const match = mediaField.value.match(/\[(.*?)\]\((.*?)\)/);
+                            if (match) mediaFromEmbed = { url: match[2], contentType: match[1] };
+                        }
+                        const phoneField = embed.fields?.find(f =>
+                            f.name && (/[📞📱]/.test(f.name) || f.name.toLowerCase().includes('phone'))
+                        );
+                        if (phoneField?.value) senderContact = phoneField.value;
+                    }
+
+                    return {
+                        id: msg.id,
+                        sender: msg.author.username,
+                        sender_contact: senderContact || null,
+                        text: msg.content || (msg.embeds[0]?.description !== '_(No text content)_' ? msg.embeds[0]?.description : '') || '',
+                        timestamp: msg.createdAt.toISOString(),
+                        has_media: msg.attachments.size > 0 || !!mediaFromEmbed,
+                        media_url: attachment ? attachment.url : (mediaFromEmbed ? mediaFromEmbed.url : null),
+                        media_type: attachment ? attachment.contentType : (mediaFromEmbed ? mediaFromEmbed.contentType : null)
+                    };
+                });
+
+            res.json({
+                book: book.name,
+                messages,
+                total: messages.length,
+                hasMore: discordMessages.size >= limit,
+                cursor: {
+                    newest: messages.length > 0 ? messages[0].id : null,
+                    oldest: messages.length > 0 ? messages[messages.length - 1].id : null
+                }
+            });
+
+            logger.info({ bookId: fractalIdParam, count: messages.length }, 'Webhook read: messages fetched');
+        } catch (error) {
+            logger.error({ err: error }, 'Webhook read: error fetching messages');
+            res.status(500).json({ error: 'Failed to fetch messages' });
+        }
+    });
+    registeredRoutes.push('GET /api/webhook/:fractalId/messages');
 
     logger.info('📥 Inpipe routes registered: %s', registeredRoutes.join(', '));
 
