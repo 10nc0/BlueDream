@@ -34,7 +34,8 @@ A 7-stage state machine orchestrates AI interactions, featuring:
 -   **Mode Registry:** Plug-and-play configuration for different AI modes.
 -   **AuditCapsule:** Manages session-scoped entity extraction and tally caching.
 -   **Executive Formatter:** Post-processes audit responses.
--   **Nyan Protocol:** Defines canonical identity and epistemic rules for all AI paths.
+-   **Nyan Protocol:** Defines canonical identity and epistemic rules for all AI paths. ROUTING section: 0=NYAN_IDENTITY, 1=SEED_METRIC, 2=PSI_EMA, 3=ALL_OTHER.
+-   **Nyan Identity (`prompts/nyan-identity.js`):** Internal registry map for self-referential questions ("who are you?", "what is nyanbook?"). `NYAN_IDENTITY_DOCUMENTATION` (system message) + `REGISTRY_VERSION` (cache version). Mode `nyan-identity` in preflight-router — skips DDG/Brave search, answers from registry. Source attribution: `Nyan Identity Registry v{VERSION} — https://github.com/10nc0/BlueDream`. Follows same pattern as Ψ-EMA identity mode.
 -   **Source Ascriber (`utils/source-ascriber.js`):** Single canonical authority for 📚 Sources attribution. Exports `stripLLMSources()`, `ascribeSource()`, `injectSourceLine()`. Orchestrator delegates here at S5; LLM never writes its own sources line. Labels distinguish DDG-only (`DuckDuckGo (live web)`) from Brave (`Brave Search (live web)`).
 -   **Search Cascade (`lib/tools/search-cascade.js`):** Unified search entry point. `cascade({ query, strategy, clientIp })` returns `{ result, provider }`. Strategies: `ddg-first` (general queries) or `brave-first` (vision/retry). `cascadeMulti()` for batch queries with rate limiting. New providers plug into the cascade with zero orchestrator changes. Seed-metric paths remain Brave-only (specialized).
 -   **Walk-the-Dog:** A seed metric path using Groq's tool-calling API to drive Brave searches for data triangulation.

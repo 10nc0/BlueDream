@@ -24,6 +24,24 @@ const { getSeedMetricProxy, detectSeedMetricIntent, buildSearchQueries, buildFal
 const { detectCodeMode, getLanguageFromExtension } = require('../lib/mode-registry');
 const { isDesignQuestion, getSystemContextForDesign } = require('./code-context');
 const { COUNTRY_CITY_MAP, KNOWN_CITIES_REGEX, CITY_EXPAND, COUNTRY_CITY_MAP_KEYS_PATTERN } = require('./geo-data');
+const { NYAN_IDENTITY_DOCUMENTATION, REGISTRY_VERSION } = require('../prompts/nyan-identity');
+
+const NYAN_IDENTITY_PATTERNS = [
+  /^(?:who|what)\s+(?:are|is)\s+(?:you|nyan)\s*\??$/i,
+  /^who\s+(?:made|built|created)\s+(?:you|nyanbook|nyan)\s*\??$/i,
+  /^(?:what\s+is|tell\s+me\s+about|explain)\s+(?:the\s+)?nyanbook\s*\??$/i,
+  /^(?:what\s+is|tell\s+me\s+about|explain)\s+(?:the\s+)?nyan\s*protocol\s*\??$/i,
+  /^what\s+(?:can\s+you\s+do|are\s+your\s+capabilities)\s*\??$/i,
+  /^how\s+does\s+(?:nyanbook|nyan)\s+work\s*\??$/i,
+  /^what\s+is\s+(?:this\s+)?(?:nyanbook\s+)?playground\s*\??$/i,
+  /^(?:what\s+is\s+)?blue\s*dream\s*\??$/i,
+  /\bnyanbook\b.*\b(?:source\s*code|github|repo(?:sitory)?)\b/i,
+  /\b(?:source\s*code|github|repo(?:sitory)?)\b.*\bnyanbook\b/i,
+  /^(?:where\s+is\s+(?:the\s+)?(?:source|code|repo))\s*\??$/i,
+  /^siapa\s+(?:kamu|anda)\s*\??$/i,
+  /^(?:kamu|anda)\s+siapa\s*\??$/i,
+  /^apa\s+(?:itu|ini)\s+nyanbook\s*\??$/i,
+];
 
 const PSI_EMA_IDENTITY_PATTERNS = [
   /^what\s+is\s+(?:the\s+)?(?:psi|ψ)[\s\-]?ema\??$/i,
@@ -231,11 +249,13 @@ async function preflightRouter(options) {
     stockData: null,
     psiEmaAnalysis: null,
     psiEmaIdentityContext: null,
+    nyanIdentityContext: null,
     dataAge: null,
     searchStrategy: 'none',
     routingFlags: {
       usesPsiEMA: false,
       isPsiEmaIdentity: false,
+      isNyanIdentity: false,
       isSeedMetric: false,
       usesFinancialPhysics: false,
       usesLegalAnalysis: false,
@@ -268,6 +288,17 @@ async function preflightRouter(options) {
       result.routingFlags.isDesignQuestion = true;
       result.codeContext = designContext.systemMessage;
       result.codeTopics = designContext.topics;
+      return result;
+    }
+    
+    // -1.5. NYAN IDENTITY: "Who are you?" / "What is nyanbook?" → answer from internal registry
+    const isNyanIdentity = NYAN_IDENTITY_PATTERNS.some(p => p.test(classificationQuery.trim()));
+    
+    if (isNyanIdentity) {
+      logger.debug(`🐱 Preflight: Nyan identity query detected → injecting registry v${REGISTRY_VERSION}`);
+      result.mode = 'nyan-identity';
+      result.routingFlags.isNyanIdentity = true;
+      result.nyanIdentityContext = NYAN_IDENTITY_DOCUMENTATION;
       return result;
     }
     
@@ -999,6 +1030,12 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
     if (preflight.chemistryEnrichment) {
       messages.push({ role: 'system', content: preflight.chemistryEnrichment });
     }
+  }
+  
+  // Nyan identity context (H0 ground truth for "who are you" / "what is nyanbook" queries)
+  if (preflight.routingFlags.isNyanIdentity && preflight.nyanIdentityContext) {
+    messages.push({ role: 'system', content: preflight.nyanIdentityContext });
+    logger.debug('🐱 Nyan identity registry injected (H0 ground truth)');
   }
   
   // Ψ-EMA identity context (H0 ground truth for "what is psi ema" queries)
