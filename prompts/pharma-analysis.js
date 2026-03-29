@@ -60,8 +60,8 @@ SOURCE ATTRIBUTION (critical — do not restrict your knowledge):
 - External reference data may be provided below with inline "Source: [URL]" markers.
 - Use that data as enrichment — but ALWAYS also apply your full training knowledge to complete every section.
 - Do NOT repeat the source inline — cite all sources ONCE at the end in 📚 **Sources:**
-- Format when external data is present: "📚 **Sources:** [Title](URL), Llama 3.3 70B training data"
-- Format when NO external data: "📚 **Sources:** Llama 3.3 70B training data"
+- Format when external data is present: "📚 **Sources:** [Title](URL), {MODEL}"
+- Format when NO external data: "📚 **Sources:** {MODEL}"
 - Never write "Insufficient established data" for well-known compounds — use your training knowledge.
 `;
 
@@ -95,12 +95,41 @@ const CHEMISTRY_KEYWORDS_REGEX = new RegExp(
     'i'
 );
 
-function getChemistryAnalysisSeed() {
-    return CHEMISTRY_SEED;
+/**
+ * Map a raw model ID (from LLM_BACKENDS / AI_MODELS) to a human-readable
+ * attribution label for the 📚 Sources line.
+ *
+ * Forkers: add your own model IDs here. The fallback is the raw model string
+ * so an unmapped model still produces a valid (if verbose) citation.
+ */
+function modelIdToLabel(modelId = '') {
+    const MAP = {
+        'llama-3.3-70b-versatile':                   'Llama 3.3 70B',
+        'llama-3.1-70b-versatile':                   'Llama 3.1 70B',
+        'llama-3.1-8b-instant':                      'Llama 3.1 8B',
+        'meta-llama/llama-4-scout-17b-16e-instruct': 'Llama 4 Scout 17B',
+        'deepseek-reasoner':                         'DeepSeek R1',
+        'deepseek-chat':                             'DeepSeek V3',
+        'mistral-saba-24b':                          'Mistral Saba 24B',
+        'gemma2-9b-it':                              'Gemma 2 9B',
+        'mixtral-8x7b-32768':                        'Mixtral 8×7B',
+    };
+    return MAP[modelId] || modelId || 'LLM';
+}
+
+/**
+ * Returns the chemistry analysis seed with dynamic model attribution.
+ * @param {string} [modelLabel] - Human-readable model name (e.g. "Llama 3.3 70B").
+ *   Defaults to 'LLM' if omitted — callers should pass modelIdToLabel(getLLMBackend().model).
+ */
+function getChemistryAnalysisSeed(modelLabel = 'LLM') {
+    return CHEMISTRY_SEED
+        .replace(/\{MODEL\}/g, `${modelLabel} training data`);
 }
 
 module.exports = {
     CHEMISTRY_SEED,
     CHEMISTRY_KEYWORDS_REGEX,
+    modelIdToLabel,
     getChemistryAnalysisSeed
 };

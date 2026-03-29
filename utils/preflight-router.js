@@ -16,7 +16,8 @@ const { detectStockTicker, detectPsiEMAKeys, smartDetectTicker, fetchStockPrices
 const { getPsiEMAContext, PsiEMADashboard, PSI_EMA_DOCUMENTATION } = require('./psi-EMA');
 const { getFinancialPhysicsSeed } = require('./financial-physics');
 const { getLegalAnalysisSeed, LEGAL_KEYWORDS_REGEX } = require('../prompts/legal-analysis');
-const { getChemistryAnalysisSeed, CHEMISTRY_KEYWORDS_REGEX } = require('../prompts/pharma-analysis');
+const { getChemistryAnalysisSeed, CHEMISTRY_KEYWORDS_REGEX, modelIdToLabel } = require('../prompts/pharma-analysis');
+const { getLLMBackend } = require('../config/constants');
 const { processChemistryContent } = require('./attachment-cascade');
 const { detectForexPair, isForexQuery, fetchForexRate, buildForexContext } = require('./forex-fetcher');
 const { getSeedMetricProxy, detectSeedMetricIntent, buildSearchQueries, buildFallbackSearchQueries } = require('../prompts/seed-metric');
@@ -976,7 +977,8 @@ function buildSystemContext(preflight, nyanProtocolPrompt, options = {}) {
   }
 
   if (preflight.routingFlags.usesChemistryAnalysis) {
-    messages.push({ role: 'system', content: getChemistryAnalysisSeed() });
+    const modelLabel = modelIdToLabel(getLLMBackend().model);
+    messages.push({ role: 'system', content: getChemistryAnalysisSeed(modelLabel) });
     // DDG enrichment: injected here when fetched by preflightRouter (text/PDF path).
     // Vision path: attachment-cascade injects enrichment directly into the attachment context.
     if (preflight.chemistryEnrichment) {
