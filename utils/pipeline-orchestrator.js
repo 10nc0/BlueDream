@@ -33,7 +33,7 @@
  */
 
 const logger = require('../lib/logger');
-const { preflightRouter, buildSystemContext } = require('./preflight-router');
+const { preflightRouter, buildSystemContext, classifyTemporalVolatility } = require('./preflight-router');
 const { extractContext, extractContextWithMemory, mergeContextForTickerDetection, isSessionFirstQuery, markSessionNyanBooted } = require('./context-extractor');
 const { NYAN_PROTOCOL_SYSTEM_PROMPT, NYAN_PROTOCOL_COMPRESSED, getNyanProtocolPrompt, getNyanProtocolCompressed } = require('../prompts/nyan-protocol');
 const { modelIdToLabel } = require('../prompts/pharma-analysis');
@@ -165,6 +165,8 @@ class PipelineOrchestrator {
     this.groqVisionToken = config.groqVisionToken;
     this.searchBrave = config.searchBrave;
     this.searchDuckDuckGo = config.searchDuckDuckGo;
+    this.searchCascade = config.searchCascade;
+    this.searchCascadeMulti = config.searchCascadeMulti;
     this.extractCoreQuestion = config.extractCoreQuestion;
     this.isIdentityQuery = config.isIdentityQuery;
     this.groqWithRetry = config.groqWithRetry;
@@ -183,6 +185,10 @@ class PipelineOrchestrator {
    * @returns {Promise<string[]>} Array of search results
    */
   async searchWithRateLimit(queries, clientIp, delayMs = 350) {
+    if (this.searchCascadeMulti) {
+      const { results } = await this.searchCascadeMulti({ queries, strategy: 'brave-first', clientIp, delayMs });
+      return results;
+    }
     const results = [];
     for (let i = 0; i < queries.length; i++) {
       const sq = queries[i];
@@ -193,7 +199,6 @@ class PipelineOrchestrator {
       if (result) {
         results.push(`[${sq}]\n${result}`);
       }
-      // Add delay between requests (except after last one)
       if (i < queries.length - 1) {
         await new Promise(resolve => setTimeout(resolve, delayMs));
       }
@@ -402,20 +407,17 @@ class PipelineOrchestrator {
               
               if (keyTerms) {
                 logger.debug(`🔎 S-1: Vision search enrichment [${trigger}] — querying "${keyTerms}" (scholastic: ${scholastic.domain})`);
-                let searchResult = await this.searchBrave(keyTerms, normalizedInput.clientIp);
-                let visionProvider = searchResult ? 'brave' : null;
-                if (!searchResult) {
-                  searchResult = await this.searchDuckDuckGo(keyTerms);
-                  if (searchResult) visionProvider = 'ddg';
-                }
+                const visionSearch = this.searchCascade
+                  ? await this.searchCascade({ query: keyTerms, strategy: 'brave-first', clientIp: normalizedInput.clientIp })
+                  : { result: await this.searchBrave(keyTerms, normalizedInput.clientIp) || await this.searchDuckDuckGo(keyTerms), provider: 'brave' };
                 
-                if (searchResult) {
+                if (visionSearch.result) {
                   normalizedInput.extractedContent.push(
-                    `\n### 🔍 Image Identification (Web Search):\n${searchResult}`
+                    `\n### 🔍 Image Identification (Web Search):\n${visionSearch.result}`
                   );
                   state.didSearch = true;
-                  state.searchProvider = state.searchProvider || visionProvider;
-                  logger.info(`✅ S-1: Vision search enrichment complete (${searchResult.length} chars)`);
+                  state.searchProvider = state.searchProvider || visionSearch.provider;
+                  logger.info(`✅ S-1: Vision search enrichment complete (${visionSearch.result.length} chars)`);
                 } else {
                   logger.warn(`⚠️ S-1: Vision search returned no results for "${keyTerms}"`);
                 }
@@ -676,20 +678,13 @@ class PipelineOrchestrator {
       logger.debug(`🌐 Real-time cascade: DDG → Brave for general query`);
       
       const searchQuery = await this.extractCoreQuestion(query);
-      let searchResult = null;
-      let usedBrave = false;
+      const cascadeResult = this.searchCascade
+        ? await this.searchCascade({ query: searchQuery, strategy: 'ddg-first', clientIp })
+        : { result: await this.searchDuckDuckGo(searchQuery) || await this.searchBrave(searchQuery, clientIp), provider: 'ddg' };
       
-      searchResult = await this.searchDuckDuckGo(searchQuery);
-      
-      if (!searchResult) {
-        logger.debug(`🦁 DDG returned no results, trying Brave...`);
-        searchResult = await this.searchBrave(searchQuery, clientIp);
-        if (searchResult) usedBrave = true;
-      }
-      
-      if (searchResult) {
+      if (cascadeResult.result) {
         state.searchContext = `[REAL-TIME WEB SEARCH RESULTS - USE THIS DATA, NOT TRAINING DATA]
-${searchResult}
+${cascadeResult.result}
 
 MANDATORY INSTRUCTIONS:
 1. Base your answer primarily on the web search results above — they reflect the current state of the world
@@ -699,7 +694,7 @@ MANDATORY INSTRUCTIONS:
 5. Each result includes a "Source: <url>" — cite it inline as a markdown link [title](url) after each fact you use
 6. Do NOT write your own sources footer — the host system injects canonical 📚 Sources attribution automatically`;
         state.didSearch = true;
-        state.searchProvider = usedBrave ? 'brave' : 'ddg';
+        state.searchProvider = cascadeResult.provider;
         logger.info(`✅ Real-time search successful (provider=${state.searchProvider}), context injected`);
       } else {
         logger.warn(`⚠️ Real-time search failed - will rely on training data`);
@@ -714,9 +709,10 @@ MANDATORY INSTRUCTIONS:
     // TEMPORAL AWARENESS: Inject current date/time FIRST
     // Uses unified queryTimestamp from PipelineState (single source of truth)
     // ========================================
+    const volatility = state.didSearch ? classifyTemporalVolatility(input.query) : null;
     const temporalMessage = {
       role: 'system',
-      content: buildTemporalContent(state.queryTimestamp)
+      content: buildTemporalContent(state.queryTimestamp, volatility)
     };
     
     // NYAN Boot Optimization: Full protocol on first query, compressed on subsequent
@@ -1975,15 +1971,13 @@ Output ONLY the corrected table and summary lines:`;
     logger.debug(`🔄 Retry ${state.retryCount}: Searching for better data...`);
     
     const searchQuery = await this.extractCoreQuestion(safeQuery);
-    state.searchContext = await this.searchBrave(searchQuery, clientIp);
-    if (state.searchContext) {
-      state.searchProvider = 'brave';
-    } else {
-      state.searchContext = await this.searchDuckDuckGo(searchQuery);
-      if (state.searchContext) state.searchProvider = 'ddg';
-    }
+    const retrySearch = this.searchCascade
+      ? await this.searchCascade({ query: searchQuery, strategy: 'brave-first', clientIp })
+      : { result: await this.searchBrave(searchQuery, clientIp) || await this.searchDuckDuckGo(searchQuery), provider: 'brave' };
     
-    if (state.searchContext) {
+    if (retrySearch.result) {
+      state.searchContext = retrySearch.result;
+      state.searchProvider = retrySearch.provider;
       state.didSearch = true;
       await this.stepReasoning(state, reasoningInput);
       await this.stepAudit(state, reasoningInput);

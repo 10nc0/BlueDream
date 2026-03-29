@@ -521,6 +521,7 @@ function splitMultiTicker(message) {
 
 loadTools();
 const searchDuckDuckGo = (...args) => { const t = getTool('duckduckgo'); return t ? t.execute(...args) : null; };
+const { cascade: searchCascade, cascadeMulti: searchCascadeMulti } = require('../lib/tools/search-cascade');
 
 async function extractCoreQuestion(message) {
     if (!message || typeof message !== 'string') {
@@ -637,6 +638,8 @@ const orchestrator = createPipelineOrchestrator({
     groqVisionToken: resolveAIToken('vision'),
     searchBrave,
     searchDuckDuckGo,
+    searchCascade,
+    searchCascadeMulti,
     extractCoreQuestion,
     isIdentityQuery,
     groqWithRetry

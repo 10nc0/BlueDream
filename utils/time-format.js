@@ -88,11 +88,22 @@ function formatSignatureTimestamp(date) {
  * @param {QueryTimestamp} ts - Query timestamp from createQueryTimestamp()
  * @returns {string} System message content for temporal awareness
  */
-function buildTemporalContent(ts) {
-  return `[TEMPORAL AWARENESS - CURRENT DATE/TIME]
+function buildTemporalContent(ts, volatility = null) {
+  let content = `[TEMPORAL AWARENESS - CURRENT DATE/TIME]
 Today is ${ts.humanDateUtc}. Current time: ${ts.humanTimeUtc} UTC (${ts.isoUtc}).
 Use this timestamp to contextualize any time-sensitive queries (schedules, news, events, deadlines).
 When discussing future or past events, reference dates relative to today.`;
+
+  if (volatility) {
+    const hints = {
+      high: 'HIGH — External search results override training data. Training data for this topic is likely stale (changes in minutes/hours). Prioritize web sources.',
+      medium: 'MEDIUM — External search results supplement training data. Training data may be outdated (changes in weeks/months). Cross-reference both, prefer web sources for specifics.',
+      low: 'LOW — Training data is reliable for this topic (changes in years/centuries). Use search results to enrich context and add historical/cultural detail, not to replace.'
+    };
+    content += `\n[TEMPORAL VOLATILITY: ${volatility.toUpperCase()}] ${hints[volatility] || hints.low}`;
+  }
+
+  return content;
 }
 
 module.exports = {

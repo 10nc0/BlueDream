@@ -30,12 +30,13 @@ A vanilla JavaScript Single Page Application (SPA) utilizing `Nyan.StateService`
 
 **AI Pipeline:**
 A 7-stage state machine orchestrates AI interactions, featuring:
--   **Preflight Router:** Classifies queries into specific modes (e.g., `forex`, `seed-metric`, `psi-ema`). DDG dialectic enrichment is default-on for `mode === 'general'` (inverted gate: opt-out via `ABSTRACT_TOPIC_PATTERNS` for philosophy/math/creative/code/greetings; single-word queries also skip). `shouldSearchDDG()` is the unified entry point; `detectRealtimeIntent()` remains for explicit realtime patterns.
+-   **Preflight Router:** Classifies queries into specific modes (e.g., `forex`, `seed-metric`, `psi-ema`). DDG dialectic enrichment is default-on for `mode === 'general'` (inverted gate: opt-out via `ABSTRACT_TOPIC_PATTERNS` for math/creative/code/greetings; single-word queries also skip; philosophy is NOT opted out — gets DDG enrichment for historical/cultural context). `shouldSearchDDG()` is the unified entry point; `detectRealtimeIntent()` remains for explicit realtime patterns. `classifyTemporalVolatility(query)` returns `high/medium/low` for temporal weighting.
 -   **Mode Registry:** Plug-and-play configuration for different AI modes.
 -   **AuditCapsule:** Manages session-scoped entity extraction and tally caching.
 -   **Executive Formatter:** Post-processes audit responses.
 -   **Nyan Protocol:** Defines canonical identity and epistemic rules for all AI paths.
 -   **Source Ascriber (`utils/source-ascriber.js`):** Single canonical authority for 📚 Sources attribution. Exports `stripLLMSources()`, `ascribeSource()`, `injectSourceLine()`. Orchestrator delegates here at S5; LLM never writes its own sources line. Labels distinguish DDG-only (`DuckDuckGo (live web)`) from Brave (`Brave Search (live web)`).
+-   **Search Cascade (`lib/tools/search-cascade.js`):** Unified search entry point. `cascade({ query, strategy, clientIp })` returns `{ result, provider }`. Strategies: `ddg-first` (general queries) or `brave-first` (vision/retry). `cascadeMulti()` for batch queries with rate limiting. New providers plug into the cascade with zero orchestrator changes. Seed-metric paths remain Brave-only (specialized).
 -   **Walk-the-Dog:** A seed metric path using Groq's tool-calling API to drive Brave searches for data triangulation.
 
 **Messaging:**

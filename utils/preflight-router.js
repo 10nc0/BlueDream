@@ -66,14 +66,11 @@ const REALTIME_INTENT_PATTERNS = [
 ];
 
 const ABSTRACT_TOPIC_PATTERNS = [
-  /\b(tetralemma|nagarjuna|catuskoti|sunyata|śūnyatā|nyan\s*protocol)\b/i,
-  /\b(ontolog|epistemolog|metaphysic|phenomenolog|existentiali|nihilis|solipsis)\b/i,
   /\b(prove\s+that|proof\s+of|theorem|lemma|corollary|axiom|postulate|QED)\b/i,
   /\b(integral|derivative|eigenvalue|eigenvector|determinant|matrix\s+multiplication|polynomial\s+division)\b/i,
   /\b(solve\s+for\s+[xyz]|factor|simplif|expand\s+the\s+expression|evaluate\s+the\s+(limit|sum|integral))\b/i,
   /\b(write\s+(?:me\s+)?(?:a\s+)?(?:poem|song|story|essay|haiku|limerick|sonnet|novel|script|screenplay))\b/i,
   /\b(imagine|creative\s+writing|fictional|roleplay|pretend|hypothetical\s+scenario)\b/i,
-  /\b(meaning\s+of\s+life|free\s+will|determinism|consciousness|qualia|hard\s+problem|mind[\s\-]body)\b/i,
   /\b(hello|hi|hey|good\s+(morning|afternoon|evening)|how\s+are\s+you|what'?s?\s+up|thanks|thank\s+you)\b/i,
   /\b(explain\s+(?:this|my)\s+code|debug|refactor|code\s+review|syntax\s+error|stack\s+trace)\b/i,
   /\b(translate|convert)\s+(?:this|the\s+following)\s+(?:to|into)\b/i,
@@ -96,6 +93,28 @@ function shouldSearchDDG(query) {
   if (detectAbstractTopic(query)) return false;
   if (query.trim().split(/\s+/).length < 2) return false;
   return true;
+}
+
+const TEMPORAL_HIGH_PATTERNS = [
+  /\b(score|standings|results?|match|game|fixture|live|real[\s\-]?time|breaking|tonight|today)\b/i,
+  /\b(price|stock|market|bitcoin|crypto|btc|eth|forex|exchange\s*rate|trading)\b/i,
+  /\b(weather|forecast|temperature|humidity)\b/i,
+  /\b(election|vote|poll|ballot|primary|runoff)\b/i,
+  /\b(epl|premier\s*league|nfl|nba|mlb|ufc|f1|formula[\s\-]*1|champions\s*league)\b/i,
+];
+
+const TEMPORAL_MEDIUM_PATTERNS = [
+  /\b(who\s+is|who'?s)\s+(?:the\s+)?(?:current\s+)?(?:president|prime[\s\-]minister|ceo|mayor|governor|chancellor|leader|head\s+of)\b/i,
+  /\b(population|gdp|inflation|unemployment|interest\s*rate)\b/i,
+  /\b(latest|recent|current|new)\s+(version|release|update|policy|law|regulation)\b/i,
+  /\b(siapa|quien|qui\s+est|wer\s+ist)\b/i,
+];
+
+function classifyTemporalVolatility(query) {
+  if (!query || typeof query !== 'string') return 'low';
+  if (TEMPORAL_HIGH_PATTERNS.some(p => p.test(query))) return 'high';
+  if (TEMPORAL_MEDIUM_PATTERNS.some(p => p.test(query))) return 'medium';
+  return 'low';
 }
 
 /**
@@ -1141,5 +1160,6 @@ module.exports = {
   detectRealtimeIntent,
   detectAbstractTopic,
   shouldSearchDDG,
+  classifyTemporalVolatility,
   safeFixed
 };

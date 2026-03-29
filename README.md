@@ -266,17 +266,25 @@ Set `PINATA_JWT` to enable automatic IPFS pinning via Pinata (free 1GB tier). Th
 - Document parsing: PDF, Excel, DOCX
 - DDG dialectic enrichment (default-on, free, no API key — external antithesis to training data)
 - Brave Search premium tier (optional — set `PLAYGROUND_BRAVE_API` for richer results)
+- Temporal volatility classifier — tells the LLM how much to trust training data vs external sources
 - Powered by Groq Llama 3.3 70B
-- Search:
+
+#### Search Architecture
+
+The AI pipeline uses a three-layer dialectic with a unified search cascade (`lib/tools/search-cascade.js`):
 
 | Layer | Role | Cost |
 |-------|------|------|
-| **DDG enrichment** (external dialectic) | Grounds every general query against live web data *before* the LLM reasons. DDG instant-answer API — free, no key, ~200ms. | $0 |
+| **DDG enrichment** (external dialectic) | Grounds every general query against live web data *before* the LLM reasons. DDG instant-answer API (Wikipedia pipe) — free, no key, ~200ms. | $0 |
 | **Brave fallback** (premium tier) | If DDG returns nothing, cascades to Brave Search for richer web results. Requires `PLAYGROUND_BRAVE_API`. | Free tier available |
+| **Temporal volatility** (weighting signal) | Classifies query freshness needs: HIGH (sports, prices — external overrides training), MEDIUM (politics, leadership — cross-reference), LOW (philosophy, history — training data reliable, search enriches). | $0 |
+| **Two-pass audit** (internal dialectic) | LLM self-checks its own answer (S2→S3). Catches hallucination via confidence scoring. | Included in LLM calls |
 
-**For fork operators:** 
-- DuckDuckGo (DDG) is auto-plugged — your fork gets web-grounded answers out of the box. 
+**For fork operators:**
+- DuckDuckGo (DDG) is auto-plugged — your fork gets web-grounded answers out of the box.
 - Brave is optional: set `PLAYGROUND_BRAVE_API` in Secrets to enable the premium search tier. If the key is missing, the pipeline gracefully falls back to DDG-only.
+- Philosophy/history queries get DDG enrichment for historical and cultural context (who/when/where/what tradition). Only pure math exercises, creative writing, and code debugging skip search.
+- New search providers plug into `lib/tools/search-cascade.js` with zero orchestrator changes.
 
 ### Dashboard Audit (authenticated)
 - 4-stage hallucination correction pipeline (S0–S3)
