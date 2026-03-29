@@ -59,9 +59,7 @@ PRINCIPLES:
 SOURCE ATTRIBUTION (critical — do not restrict your knowledge):
 - External reference data may be provided below with inline "Source: [URL]" markers.
 - Use that data as enrichment — but ALWAYS also apply your full training knowledge to complete every section.
-- Do NOT repeat the source inline — cite all sources ONCE at the end in 📚 **Sources:**
-- Format when external data is present: "📚 **Sources:** [Title](URL), {MODEL}"
-- Format when NO external data: "📚 **Sources:** {MODEL}"
+- DO NOT write 📚 **Sources:** lines — the host system injects canonical attribution automatically.
 - Never write "Insufficient established data" for well-known compounds — use your training knowledge.
 `;
 

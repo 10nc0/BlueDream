@@ -1996,10 +1996,17 @@ Output ONLY the corrected table and summary lines:`;
         console.warn('⚠️ Personality: Verdict alignment check');
     }
 
-    // SOURCE ATTRIBUTION — deterministic, same canonical tier as 🔥 signature
-    // Injected here so LLM non-compliance can never suppress it
-    // Guard: /\*\*Source/i catches all variants: **Source:** **Sources:** **Source** etc.
-    if (!state.fastPath && !/\*\*Source/i.test(state.finalAnswer)) {
+    // SOURCE ATTRIBUTION — single canonical injection point
+    // The orchestrator is the SOLE authority for the 📚 Sources line.
+    // LLM-generated source lines (often garbage like "En") are stripped first;
+    // then we inject the deterministic label based on pipeline flags.
+    if (!state.fastPath) {
+      // Strip any LLM-generated sources (inline or bullet list)
+      state.finalAnswer = state.finalAnswer
+        .replace(/\n+📚?\s*\*\*Sources?:?\*\*[^\n]*/gi, '')
+        .replace(/\n\n\*\*Sources?:?\*\*\n(?:[ \t]*[*\-][^\n]*\n?)*/gi, '')
+        .replace(/\n{3,}/g, '\n\n');
+
       let sourceLabel;
       if (state.psiEmaDirectOutput)        sourceLabel = 'yfinance + SEC EDGAR (live data)';
       else if (state.seedMetricDirectOutput) sourceLabel = 'Brave Search — live $/sqm triangulation';
