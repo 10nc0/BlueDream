@@ -1151,7 +1151,7 @@
                 const urlInput = document.createElement('input');
                 urlInput.type = 'url';
                 urlInput.className = 'form-input';
-                urlInput.placeholder = 'https://discord.com/api/webhooks/...';
+                urlInput.placeholder = 'https://discord.com/api/webhooks/... or any webhook URL';
                 urlInput.value = webhook.url;
                 urlInput.dataset.webhookId = webhook.id;
                 urlInput.dataset.webhookField = 'url';
@@ -1245,6 +1245,18 @@
                     valueInput.addEventListener('input', e => { userOutpipes[idx].url = e.target.value; });
                 }
                 row.appendChild(valueInput);
+
+                const TYPE_HINTS = {
+                    discord: 'Discord: Server Settings → Integrations → Webhooks → Copy URL',
+                    webhook: 'Any HTTPS endpoint that accepts POST requests',
+                    email: ''
+                };
+                if (TYPE_HINTS[pipe.type]) {
+                    const hint = document.createElement('div');
+                    hint.style.cssText = 'color: #64748b; font-size: 0.65rem; margin-top: 0.25rem; line-height: 1.3;';
+                    hint.textContent = TYPE_HINTS[pipe.type];
+                    row.appendChild(hint);
+                }
 
                 container.appendChild(row);
             });
@@ -3272,11 +3284,12 @@
                             </div>
                             <div id="nyanAuditMirrorPanel" style="display: none; padding: 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; margin-bottom: 1rem;">
                                 <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-                                    <span style="color: #e2e8f0; font-size: 0.875rem; font-weight: 600;">🪞 Audit Mirror Outpipe</span>
+                                    <span style="color: #e2e8f0; font-size: 0.875rem; font-weight: 600;">🪞 Audit Mirror — Webhook Outpipe</span>
                                 </div>
-                                <p style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.75rem;">Mirror audit logs to your own Discord thread. Paste a Discord thread URL or thread ID below.</p>
+                                <p style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.5rem;">Mirror audit results to any webhook endpoint. Each audit log will be POSTed as JSON.</p>
+                                <p style="color: #64748b; font-size: 0.65rem; margin-bottom: 0.75rem; line-height: 1.4;">Discord: Server Settings → Integrations → Webhooks → Copy URL<br/>Generic: Any HTTPS endpoint that accepts POST requests</p>
                                 <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
-                                    <input type="text" id="nyanAuditMirrorInput" placeholder="Thread ID or Discord URL" style="flex: 1; min-width: 0; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; color: #e2e8f0; padding: 0.5rem 0.75rem; font-size: 0.8rem; outline: none;" />
+                                    <input type="url" id="nyanAuditMirrorInput" placeholder="https://discord.com/api/webhooks/... or https://yourapp.com/hook" style="flex: 1; min-width: 0; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; color: #e2e8f0; padding: 0.5rem 0.75rem; font-size: 0.8rem; outline: none;" />
                                     <button id="nyanAuditMirrorSave" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; border-radius: 6px; color: white; padding: 0.5rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: 600; white-space: nowrap;">Save</button>
                                 </div>
                                 <div id="nyanAuditMirrorStatus" style="font-size: 0.7rem; color: #64748b;"></div>
@@ -3332,10 +3345,16 @@
                 const response = await window.authFetch('/api/nyan-ai/audit-mirror');
                 if (response.ok) {
                     const data = await response.json();
-                    if (data.audit_mirror_thread_id) {
-                        inputEl.value = data.audit_mirror_thread_id;
-                        statusEl.textContent = `Active — mirroring to thread ${data.audit_mirror_thread_id}`;
+                    if (data.audit_mirror_webhook_url) {
+                        inputEl.value = data.audit_mirror_webhook_url;
+                        const isDiscord = /discord\.com\/api\/webhooks\//.test(data.audit_mirror_webhook_url);
+                        statusEl.textContent = `Active — ${isDiscord ? 'Discord webhook' : 'webhook'} configured`;
                         statusEl.style.color = '#10b981';
+                        removeBtn.style.display = 'inline-block';
+                    } else if (data.legacy_thread_only) {
+                        inputEl.value = '';
+                        statusEl.innerHTML = `Legacy mirror (thread ${data.audit_mirror_thread_id}) — <span style="color:#f59e0b">enter a webhook URL to upgrade</span>`;
+                        statusEl.style.color = '#f59e0b';
                         removeBtn.style.display = 'inline-block';
                     } else {
                         inputEl.value = '';
@@ -3353,23 +3372,16 @@
         async function saveAuditMirrorConfig() {
             const inputEl = document.getElementById('nyanAuditMirrorInput');
             const statusEl = document.getElementById('nyanAuditMirrorStatus');
-            const threadUrl = inputEl.value.trim();
-            if (!threadUrl) {
-                statusEl.textContent = 'Please enter a Discord thread URL';
+            const webhookUrl = inputEl.value.trim();
+            if (!webhookUrl) {
+                statusEl.textContent = 'Please enter a webhook URL';
                 statusEl.style.color = '#f59e0b';
                 return;
             }
-            let threadId;
-            if (/^\d+$/.test(threadUrl)) {
-                threadId = threadUrl;
-            } else {
-                const threadMatch = threadUrl.match(/\/(\d+)\s*$/);
-                if (!threadMatch) {
-                    statusEl.textContent = 'Enter a Discord thread ID or URL ending in one';
-                    statusEl.style.color = '#ef4444';
-                    return;
-                }
-                threadId = threadMatch[1];
+            if (!/^https?:\/\/.+/.test(webhookUrl)) {
+                statusEl.textContent = 'URL must start with https:// or http://';
+                statusEl.style.color = '#ef4444';
+                return;
             }
             statusEl.textContent = 'Saving...';
             statusEl.style.color = '#94a3b8';
@@ -3377,10 +3389,11 @@
                 const response = await window.authFetch('/api/nyan-ai/audit-mirror', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ thread_id: threadId })
+                    body: JSON.stringify({ webhook_url: webhookUrl })
                 });
                 if (response.ok) {
-                    statusEl.textContent = `Mirror active — thread ${threadId}`;
+                    const isDiscord = /discord\.com\/api\/webhooks\//.test(webhookUrl);
+                    statusEl.textContent = `Mirror active — ${isDiscord ? 'Discord webhook' : 'webhook'} saved`;
                     statusEl.style.color = '#10b981';
                     document.getElementById('nyanAuditMirrorRemove').style.display = 'inline-block';
                 } else {

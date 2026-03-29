@@ -943,13 +943,14 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             if (idrisBot && idrisBot.isReady() && tenantSchema && bookContext) {
                 try {
                     const tenantInfo = await pool.query(
-                        `SELECT id, ai_log_thread_id, audit_mirror_thread_id FROM core.tenant_catalog WHERE tenant_schema = $1`, 
+                        `SELECT id, ai_log_thread_id, audit_mirror_thread_id, audit_mirror_webhook_url FROM core.tenant_catalog WHERE tenant_schema = $1`, 
                         [tenantSchema]
                     );
                     if (tenantInfo.rows.length > 0) {
                         const catalogId = tenantInfo.rows[0].id;
                         let threadId = tenantInfo.rows[0]?.ai_log_thread_id;
                         const mirrorThreadId = tenantInfo.rows[0]?.audit_mirror_thread_id;
+                        const mirrorWebhookUrl = tenantInfo.rows[0]?.audit_mirror_webhook_url;
                         
                         if (!threadId) {
                             const tenantId = parseInt(tenantSchema.replace('tenant_', ''));
@@ -980,12 +981,56 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         await idrisBot.postAuditResult(threadId, auditPayload, query, primaryBookName);
                         logger.info({ threadId }, 'Nyan AI Audit logged to Discord thread');
                         
-                        if (mirrorThreadId) {
+                        if (mirrorWebhookUrl) {
+                            try {
+                                const isDiscordMirror = /discord\.com\/api\/webhooks\//.test(mirrorWebhookUrl);
+                                if (isDiscordMirror) {
+                                    const mirrorUrl = mirrorThreadId ? `${mirrorWebhookUrl}${mirrorWebhookUrl.includes('?') ? '&' : '?'}thread_id=${mirrorThreadId}` : mirrorWebhookUrl;
+                                    await axios.post(mirrorUrl, {
+                                        embeds: [{
+                                            title: `${auditPayload.status === 'NYAN' ? '🐱' : '📝'} Audit Mirror`,
+                                            color: idrisBot.getStatusColor(auditPayload.status),
+                                            fields: [
+                                                { name: '📝 Query', value: query.length > 200 ? query.substring(0, 200) + '...' : query, inline: false },
+                                                { name: '💬 Answer', value: (auditPayload.answer || '').length > 500 ? auditPayload.answer.substring(0, 500) + '...' : (auditPayload.answer || 'No answer'), inline: false },
+                                                { name: '📚 Book', value: primaryBookName, inline: true }
+                                            ],
+                                            timestamp: new Date().toISOString()
+                                        }]
+                                    }, { headers: { 'Content-Type': 'application/json' }, timeout: 10000 });
+                                } else {
+                                    const webhookHost = new URL(mirrorWebhookUrl).hostname;
+                                    const blockedPatterns = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.|169\.254\.|::1|fc|fd|fe80)/i;
+                                    if (blockedPatterns.test(webhookHost)) {
+                                        logger.warn({ host: webhookHost }, 'Audit mirror blocked: private/reserved address');
+                                    } else {
+                                        await axios.post(mirrorWebhookUrl, {
+                                            event: 'audit_result',
+                                            timestamp: new Date().toISOString(),
+                                            query: query,
+                                            answer: auditPayload.answer,
+                                            status: auditPayload.status,
+                                            confidence: auditPayload.confidence,
+                                            book: primaryBookName,
+                                            engine: auditPayload.data_extracted?.engine,
+                                            model: auditPayload.data_extracted?.model
+                                        }, {
+                                            headers: { 'Content-Type': 'application/json' },
+                                            timeout: 10000,
+                                            maxRedirects: 0
+                                        });
+                                    }
+                                }
+                                logger.info({ mirrorUrl: mirrorWebhookUrl.substring(0, 60), isDiscord: isDiscordMirror }, 'Nyan AI Audit mirrored');
+                            } catch (mirrorErr) {
+                                logger.warn({ mirrorUrl: mirrorWebhookUrl.substring(0, 60), err: mirrorErr.message }, 'Audit mirror post failed');
+                            }
+                        } else if (mirrorThreadId) {
                             try {
                                 await idrisBot.postAuditResult(mirrorThreadId, auditPayload, query, primaryBookName);
-                                logger.info({ mirrorThreadId }, 'Nyan AI Audit mirrored to user thread');
+                                logger.info({ mirrorThreadId }, 'Nyan AI Audit mirrored to legacy thread');
                             } catch (mirrorErr) {
-                                logger.warn({ mirrorThreadId, err: mirrorErr.message }, 'Audit mirror post failed');
+                                logger.warn({ mirrorThreadId, err: mirrorErr.message }, 'Legacy audit mirror post failed');
                             }
                         }
                     }
@@ -1070,13 +1115,14 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
             if (!tenantSchema) return res.status(400).json({ error: 'Tenant context required' });
             const result = await pool.query(
-                `SELECT audit_mirror_thread_id, audit_mirror_channel_id FROM core.tenant_catalog WHERE tenant_schema = $1`,
+                `SELECT audit_mirror_thread_id, audit_mirror_webhook_url FROM core.tenant_catalog WHERE tenant_schema = $1`,
                 [tenantSchema]
             );
             const row = result.rows[0] || {};
             res.json({
                 audit_mirror_thread_id: row.audit_mirror_thread_id || null,
-                audit_mirror_channel_id: row.audit_mirror_channel_id || null
+                audit_mirror_webhook_url: row.audit_mirror_webhook_url || null,
+                legacy_thread_only: !row.audit_mirror_webhook_url && !!row.audit_mirror_thread_id
             });
         } catch (error) {
             logger.error({ err: error }, 'Audit mirror config fetch error');
@@ -1088,16 +1134,22 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         try {
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
             if (!tenantSchema) return res.status(400).json({ error: 'Tenant context required' });
-            const { thread_id } = req.body;
-            if (!thread_id || !/^\d+$/.test(thread_id)) {
-                return res.status(400).json({ error: 'Valid Discord thread ID required' });
+            const { webhook_url } = req.body;
+            if (!webhook_url || !/^https?:\/\/.+/.test(webhook_url)) {
+                return res.status(400).json({ error: 'Valid webhook URL required (https://...)' });
+            }
+            const isDiscordWebhook = /discord\.com\/api\/webhooks\//.test(webhook_url);
+            let threadId = null;
+            if (isDiscordWebhook) {
+                const threadMatch = webhook_url.match(/thread_id=(\d+)/);
+                threadId = threadMatch ? threadMatch[1] : null;
             }
             await pool.query(
-                `UPDATE core.tenant_catalog SET audit_mirror_thread_id = $1 WHERE tenant_schema = $2`,
-                [thread_id, tenantSchema]
+                `UPDATE core.tenant_catalog SET audit_mirror_webhook_url = $1, audit_mirror_thread_id = $2 WHERE tenant_schema = $3`,
+                [webhook_url, threadId, tenantSchema]
             );
-            logger.info({ tenantSchema, threadId: thread_id }, 'Audit mirror configured');
-            res.json({ success: true, audit_mirror_thread_id: thread_id });
+            logger.info({ tenantSchema, webhookUrl: webhook_url.substring(0, 60), isDiscord: isDiscordWebhook }, 'Audit mirror configured');
+            res.json({ success: true, audit_mirror_webhook_url: webhook_url });
         } catch (error) {
             logger.error({ err: error }, 'Audit mirror config save error');
             res.status(500).json({ error: 'Failed to save audit mirror config' });
@@ -1109,7 +1161,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
             if (!tenantSchema) return res.status(400).json({ error: 'Tenant context required' });
             await pool.query(
-                `UPDATE core.tenant_catalog SET audit_mirror_thread_id = NULL, audit_mirror_channel_id = NULL WHERE tenant_schema = $1`,
+                `UPDATE core.tenant_catalog SET audit_mirror_webhook_url = NULL, audit_mirror_thread_id = NULL, audit_mirror_channel_id = NULL WHERE tenant_schema = $1`,
                 [tenantSchema]
             );
             logger.info({ tenantSchema }, 'Audit mirror removed');
