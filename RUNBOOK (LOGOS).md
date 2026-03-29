@@ -1,458 +1,317 @@
 # Nyanbook Operations Runbook
 
-Operational guide for Nyanbook operators. Covers the background scheduler architecture, secret rotation, incident response, and post-deploy checklist.
+Pairs with the README (pathos — *what to configure*) and LINEAGE (ethos — *why it exists*). This document is logos: *how it works, and what to do when it doesn't*.
 
-This document pairs with the README's "Fork Operator Notes" section. The README covers *what* to configure. This document covers *what happens when things go wrong* and *how to rotate credentials without downtime*.
+**Before**: User → App → Structured DB → UI
+**Now**: User → Messaging platform → Webhook → Ledger → Query layer
 
-**Before**:
-User → App → Structured DB → UI
-
-**Now**:
-User → Messaging platform → Webhook → Ledger → Query layer
-
-It’s a protocol shift, not an app.
-
----
-
-## Optional Extra Features
-
-| Feature | Secret | Cost |
-|---------|--------|------|
-| Web search in Playground | `PLAYGROUND_BRAVE_API` — [brave.com/search/api](https://brave.com/search/api) | Free (2k queries/mo) |
-| Email outpipe | `RESEND_API_KEY` — [resend.com](https://resend.com) | Free tier |
-| Per-book webhooks | *(configured in dashboard → Outpipes)* | — |
-
----
-
-## Search Architecture
-
-The AI pipeline uses a three-layer dialectic with a unified search cascade (`lib/tools/search-cascade.js`):
-
-| Layer | Role | Cost |
-|-------|------|------|
-| **DDG enrichment** (external dialectic) | Grounds every general query against live web data *before* the LLM reasons. DDG instant-answer API (Wikipedia pipe) — free, no key, ~200ms. | $0 |
-| **Brave fallback** (premium tier) | If DDG returns nothing, cascades to Brave Search for richer web results. Requires `PLAYGROUND_BRAVE_API`. | Free tier available |
-| **Temporal volatility** (weighting signal) | Classifies query freshness needs: HIGH (sports, prices — external overrides training), MEDIUM (politics, leadership — cross-reference), LOW (philosophy, history — training data reliable, search enriches). | $0 |
-| **Two-pass audit** (internal dialectic) | LLM self-checks its own answer (S2→S3). Catches hallucination via confidence scoring. | Included in LLM calls |
-
-### Search Cascade API
-
-Entry point: `lib/tools/search-cascade.js`
-
-- `cascade({ query, strategy, clientIp })` — returns `{ result, provider }`. Strategies: `ddg-first` (general queries) or `brave-first` (vision/retry).
-- `cascadeMulti()` — batch queries with rate limiting.
-- New providers plug into the cascade with zero orchestrator changes.
-
-### Temporal Volatility Classifier
-
-`classifyTemporalVolatility(query, mode)` in `utils/preflight-router.js`:
-
-- Non-general modes always return `'low'`
-- General mode classifies query freshness: HIGH (sports scores, stock prices, weather), MEDIUM (politics, leadership, current events), LOW (philosophy, history, mathematics)
-- Injected in `pipeline-orchestrator.js` at `stepContextBuild` only when `state.didSearch && state.searchContext`
-- `buildTemporalContent(ts, volatility)` in `utils/time-format.js` injects `[TEMPORAL VOLATILITY: HIGH/MEDIUM/LOW]` guidance into the system prompt
-
-### Source Ascriber
-
-`utils/source-ascriber.js` — single canonical authority for `📚 Sources` attribution.
-
-- Exports: `stripLLMSources()`, `ascribeSource()`, `injectSourceLine()`
-- Orchestrator delegates to `ascribeSource()` at S5; the LLM never writes its own sources line
-- Labels distinguish DDG-only (`DuckDuckGo (live web)`) from Brave (`Brave Search (live web)`)
-- Attribution priority: `nyan-identity` → `psiEmaDirectOutput` → `seedMetricDirectOutput` → `forex` → Brave → DDG → training data
-
-### DDG Dialectic Gating
-
-DDG enrichment is default-on for `mode === 'general'` (inverted gate):
-
-- **Opted out** via `ABSTRACT_TOPIC_PATTERNS`: pure math exercises, creative writing, code debugging, greetings
-- **Single-word queries** skip search
-- **Philosophy is NOT opted out** — gets DDG enrichment for historical/cultural context (who/when/where/what tradition)
-- `shouldSearchDDG()` is the unified entry point; `detectRealtimeIntent()` remains for explicit realtime patterns
-
-### For Fork Operators
-
-- DuckDuckGo (DDG) is auto-plugged — your fork gets web-grounded answers out of the box
-- Brave is optional: set `PLAYGROUND_BRAVE_API` in Secrets to enable the premium search tier. If the key is missing, the pipeline gracefully falls back to DDG-only
-- Philosophy/history queries get DDG enrichment for historical and cultural context. Only pure math exercises, creative writing, and code debugging skip search
-- New search providers plug into `lib/tools/search-cascade.js` with zero orchestrator changes
-
----
-
-## File Inventory
-
-### `utils/`
-
-```
-utils/
-├── message-capsule.js            — Cryptographic provenance capsule builder
-├── ipfs-pinner.js                — Pinata IPFS pinning
-├── psi-EMA.js                    — φ-derived time series analysis
-├── fetch-stock-prices.py         — Psi-EMA data fetcher (yfinance / pandas)
-├── pipeline-orchestrator.js      — 7-stage AI pipeline state machine (S-1 → S6)
-├── two-pass-verification.js      — 2-pass hallucination correction (null-aware confidence)
-├── dashboard-audit-pipeline.js   — 4-stage hallucination correction
-├── seed-metric-calculator.js     — Real estate affordability (Seed Metric)
-├── markdown-table-formatter.js   — Column-aligned markdown table formatting
-└── language-detector.js          — Trigram + script-based language detection (ISO 639-1)
-```
-
-### `lib/tools/` (auto-discovered registry — drop a `.js` file to add a tool)
-
-```
-lib/tools/ (9 tools):
-├── registry.js          — Auto-discovers tools on startup, exposes getTool() + getManifest()
-├── brave-search.js      — Web search via Brave API (cached, capacity-throttled)
-├── duckduckgo.js        — Instant answers via DDG API (cached, fallback search)
-├── url-fetcher.js       — Fetch + extract readable content from any URL (cached)
-├── github-reader.js     — Read GitHub repos, blobs, trees, raw files, and Gists
-├── pdf-analyzer.js      — PDF document analysis via attachment-cascade pipeline
-├── entity-extractor.js  — Structured entity extraction (plates, currency, dates, emails, phones)
-├── geo-lookup.js        — City↔country, abbreviation expansion, currency→region (static, no network)
-├── forex.js             — Currency exchange rates via fawazahmed0 API
-└── language-detector.js  — Language detection (ISO 639-1 code + confidence + FTS config)
-```
-
-### `lib/outpipes/`
-
-```
-lib/outpipes/
-├── router.js            — Dispatches all configured outpipes in parallel; legacy webhook fallback
-├── discord.js           — Discord webhook delivery
-├── email.js             — Email delivery via Resend
-└── webhook.js           — HTTPS JSON POST with optional HMAC-SHA256 signature
-```
-
-### `lib/fetch-cache.js`
-
-TTL-based fetch cache: `braveCache` 3min, `duckduckgoCache` 5min, `urlCache` 10min.
-
----
-
-## Queue Processor Architecture
-
-The README's core loop mentions a "queue processor." This maps to two separate systems in the codebase — not a traditional Redis/BullMQ queue.
-
-### Phi Breathe Orchestrator (`lib/phi-breathe.js`)
-
-Administrative background scheduler using φ-derived timing.
-
-**Rhythm:** Alternates between Inhale (`BASE_INTERVAL × 1.618`) and Exhale (`BASE_INTERVAL`). Base interval: 4,000 ms (config `PHI_BREATHE.BASE_INTERVAL_MS`). Effectively ~4–6s ticks.
-
-**Leader election:** In multi-instance deployments, only one instance holds `pg_try_advisory_lock(1314212174)` and fires tasks. Other instances stand by silently.
-
-**Registered tasks:**
-
-| Task | Cycle | What it does |
-|---|---|---|
-| Memory cleanup | 15 min | Purges expired sessions |
-| Media purge | 24 hr | Deletes `media_buffer` rows older than 3 days |
-| Dormancy cleanup | 24 hr | Revokes access for contributors inactive 60+ days |
-| Share invite cleanup | 24 hr | Expires unregistered invites older than 7 days |
-| Pending book expiry | 24 hr | Expires books never activated within 72 hours |
-
-**Circuit breaker:** If a task fails 3 consecutive times, it is auto-unsubscribed. After a 5-minute cooldown, one re-registration attempt is made automatically. If the task continues to fail, it will trip again. Check logs for `⚡ Circuit breaker` entries.
-
-**What to watch for in Discord/logs:**
-- `⚡ Circuit breaker: auto-unsubscribing` → a background task is failing repeatedly; investigate the specific subscriber name
-- `⚡ Circuit breaker: cooldown elapsed — attempting re-registration` → automatic recovery in progress
-
----
-
-### Heal Queue (`lib/heal-queue.js`)
-
-Specialized retry system for books whose Discord threads failed to create on initial webhook.
-
-**Trigger:** Any book where thread creation fails during the inpipe flow is marked `heal_status = 'pending'` and queued here.
-
-**Rhythm:** Runs every 20 seconds. Processes up to 20 books per cycle using `FOR UPDATE SKIP LOCKED` (safe for multi-instance).
-
-**Retry with exponential backoff:**
-```
-next_retry_minutes = min(2^attempts × 5, 1440)
-```
-- Attempt 1 → 10 min
-- Attempt 2 → 20 min
-- Attempt 3 → 40 min
-- ...
-- Attempt 7+ → 24 hr (capped)
-
-**Terminal state:** After 10 failed attempts (`MAX_HEAL_ATTEMPTS`), a book is set to `heal_status = 'failed'` and never retried again. An `ERROR`-level log entry is written with the book's `fractal_id`.
-
-**Heal statuses:**
-
-| Status | Meaning |
-|---|---|
-| `null` | Newly registered, not yet evaluated |
-| `healthy` | Thread exists and was verified |
-| `pending` | Queued for healing |
-| `healing` | Currently being processed (lease active) |
-| `failed` | Exhausted `MAX_HEAL_ATTEMPTS` — requires manual intervention |
-
-**To manually re-queue a failed book:**
-```sql
-UPDATE core.book_registry
-SET heal_status = 'pending',
-    heal_attempts = 0,
-    next_heal_at = NOW(),
-    heal_error = NULL
-WHERE fractal_id = '<the-book-fractal-id>';
-```
-
-**What to watch for in Discord/logs:**
-- `💀 Heal queue: MAX_HEAL_ATTEMPTS exhausted` → a book has permanently failed; Discord channel/thread may have been deleted
-- `⏳ Heal attempt failed, will retry` → normal retry in progress; check if Discord bot tokens are valid
-
----
-
-## Secret Rotation
-
-### SESSION_SECRET
-
-Used to sign Express sessions (cookies). Rotating immediately invalidates all active browser sessions — all users are logged out.
-
-**How to rotate (zero-downtime strategy):**
-1. Generate a new secret: `openssl rand -hex 32`
-2. Set the new value in your environment (Replit Secrets, `.env`, etc.)
-3. Restart the server — all existing sessions are immediately invalid; users must log in again
-4. JWT-based authentication is NOT affected (JWTs use their own signing path via `auth-service.js`)
-
-**Placeholder detection:** On startup, Nyanbook warns (dev) or refuses to start (production) if `SESSION_SECRET === 'change-me-to-a-long-random-string-in-production'`.
-
----
-
-### FRACTAL_SALT
-
-Used to generate HMAC-SHA256 sender proofs in the cryptographic capsule (`utils/message-capsule.js`) and fractal IDs.
-
-**Impact of rotation:** All existing capsule sender proofs will be unverifiable against the new salt. Historical records remain intact — only cross-capsule sender identity comparison breaks. The records themselves do not change or disappear.
-
-**How to rotate:**
-1. Generate a new 64-char hex salt: `openssl rand -hex 32`
-2. Document the rotation date in your operator log — essential for disclosure audits
-3. Set the new value in your environment
-4. Restart the server
-
-**Placeholder detection:** On startup, Nyanbook warns (dev) or refuses to start (production) if `FRACTAL_SALT` is unset or equals the `.env.example` placeholder. Without a stable salt, sender proofs reset on every restart (ephemeral fallback active).
-
----
-
-### Discord Bot Tokens (Hermes, Thoth, Idris, Horus)
-
-If a bot token is revoked or compromised:
-
-1. Go to [Discord Developer Portal](https://discord.com/developers/applications) → the bot's application → Bot → Reset Token
-2. Update the relevant env var (`HERMES_TOKEN`, `THOTH_TOKEN`, `IDRIS_AI_LOG_TOKEN`, `HORUS_AI_LOG_TOKEN`)
-3. Restart the server — bots reconnect automatically on startup
-
-**Least-privilege reminder:** Compromise of one token does not compromise the others. Hermes/Thoth write to threads; Idris writes AI audit; Horus reads only. Rotate only the compromised token.
-
----
-
-### NYAN_OUTBOUND_API / NYAN_OUTBOUND_API_DEV
-
-Internal API tokens gating Nyan API v1 endpoints.
-
-**How to rotate:** Generate new random strings (min 32 chars): `openssl rand -hex 20`. Update in environment. Restart server. Any external callers using the old token will receive 401 until updated.
-
----
-
-### Twilio / LINE / Telegram Tokens
-
-Rotate these directly in their respective developer portals and update the corresponding env vars. No in-app state is stored — tokens are stateless per-request validators.
-
----
-
-## Discord Incidents
-
-### Rate Limiting
-
-Discord enforces rate limits on message creation and thread creation. Nyanbook's Discord bots do not implement automatic retry-after handling — failures surface as errors in the heal queue.
-
-**Symptoms:** Inbound WhatsApp/LINE/Telegram messages are received and stored in PostgreSQL but Discord threads do not appear. Heal queue entries accumulate.
-
-**Recovery:**
-1. Check logs for `429` or `DiscordAPIError` entries
-2. If rate-limited transiently, the heal queue will retry automatically (exponential backoff)
-3. For persistent rate limits, check bot message volume against your Discord server tier limits
-
----
-
-### Discord Server or Channel Deleted
-
-If the ledger channel or Discord server is deleted:
-
-- Existing `content_hash` and `message_fractal_id` values in PostgreSQL remain valid forever — these are the sovereignty layer
-- Discord CDN URLs for attachments will return 404 — the attachment content is lost unless IPFS pinning was active
-- New inbound messages will fail to create threads (Hermes) — heal queue will accumulate failures and eventually mark books `failed`
-
-**Recovery:**
-1. Create a new Discord server/channel
-2. Update `NYANBOOK_WEBHOOK_URL` and bot permissions
-3. Manually reset failed books via the SQL above to re-trigger thread creation
-
----
-
-### Bot Token Revoked Mid-Operation
-
-The bots maintain a persistent WebSocket connection. Revocation mid-operation causes the affected bot to disconnect. Other bots continue operating.
-
-- Hermes/Thoth revoked → new messages no longer reach Discord; books enter heal queue
-- Idris revoked → AI audit write log silent; audit results not persisted (AI still responds to users)
-- Horus revoked → AI audit read disabled; prior audit history not queryable
-
-**Recovery:** See Secret Rotation → Discord Bot Tokens above.
-
----
-
-## Pinata / IPFS
-
-### Pinata JWT Expiry
-
-Pinata API JWTs do not expire by default unless you set a rotation policy. If the JWT is revoked or expires:
-
-- New inbound messages still get stored in PostgreSQL and Discord — no data is lost
-- `ipfs_cid` column in `core.message_ledger` will be NULL for new messages
-- The log line `⚠️ PINATA_JWT not set — IPFS pinning disabled` appears on startup
-
-**Recovery:**
-1. Go to [pinata.cloud](https://pinata.cloud) → API Keys → generate a new key
-2. Update `PINATA_JWT` in your environment
-3. Restart the server
-4. Historical records with NULL `ipfs_cid` are not retroactively pinned — they are permanently without an IPFS anchor unless you run a manual pin job
-
-**Important:** IPFS CIDs are permanent and content-addressed. Even if Pinata changes its service terms, any CID you've pinned can be re-pinned to any other IPFS provider using the CID alone. The CID is the sovereignty anchor — not Pinata.
-
----
-
-## PostgreSQL Backup / Restore
-
-### Backup
-
-Nyanbook uses isolated schemas per tenant (`tenant_1`, `tenant_2`, ...) plus a shared `core` schema.
-
-**Full backup (all schemas):**
-```bash
-pg_dump "$DATABASE_URL" > nyanbook_backup_$(date +%Y%m%d).sql
-```
-
-**Core schema only (auth, routing, ledger):**
-```bash
-pg_dump "$DATABASE_URL" --schema=core > core_backup_$(date +%Y%m%d).sql
-```
-
-**Single tenant:**
-```bash
-pg_dump "$DATABASE_URL" --schema=tenant_1 > tenant_1_backup_$(date +%Y%m%d).sql
-```
-
-### Restore
-
-```bash
-psql "$DATABASE_URL" < nyanbook_backup_20260101.sql
-```
-
-**On Supabase free tier:** Use the Supabase dashboard → Database → Backups for point-in-time recovery. The free tier includes daily backups.
+It's a protocol shift, not an app.
 
 ---
 
 ## Post-Deploy Checklist
 
-Run through this after every fresh deployment or major environment change.
+Run after every fresh deployment or major environment change.
 
-- [ ] `SESSION_SECRET` is set and is NOT the `.env.example` placeholder
-- [ ] `FRACTAL_SALT` is set (64-char hex), NOT the placeholder, NOT empty
+- [ ] `SESSION_SECRET` set, NOT the `.env.example` placeholder
+- [ ] `FRACTAL_SALT` set (64-char hex), NOT placeholder, NOT empty
 - [ ] All 4 bot tokens set (`HERMES_TOKEN`, `THOTH_TOKEN`, `IDRIS_AI_LOG_TOKEN`, `HORUS_AI_LOG_TOKEN`)
-- [ ] `NYANBOOK_WEBHOOK_URL` points to the correct Discord ledger webhook
-- [ ] `DATABASE_URL` connects to a reachable PostgreSQL instance
+- [ ] `NYANBOOK_WEBHOOK_URL` → correct Discord ledger webhook
+- [ ] `DATABASE_URL` → reachable PostgreSQL instance
 - [ ] Server starts without `❌ FATAL` log lines
-- [ ] Send a test message via WhatsApp/LINE/Telegram → verify it appears in the Dashboard and Discord thread
-- [ ] Open the AI Playground → send a basic query → verify response (no "AI Unavailable" message)
-- [ ] If IPFS enabled: send a message → verify `ipfs_cid` is non-NULL in `core.message_ledger`
+- [ ] Send a test message (WhatsApp/LINE/Telegram) → appears in Dashboard + Discord thread
+- [ ] AI Playground → basic query → no "AI Unavailable" error
+- [ ] If IPFS enabled: verify `ipfs_cid` is non-NULL in `core.message_ledger`
 
 ---
 
-## Observability
+## Optional Features
 
-Nyanbook does not ship with Grafana, Prometheus, or structured metrics export. The observability layer is:
+| Feature | Secret / Config | Cost |
+|---------|----------------|------|
+| Web search in Playground | `PLAYGROUND_BRAVE_API` — [brave.com/search/api](https://brave.com/search/api) | Free (2k queries/mo) |
+| Email outpipe | `RESEND_API_KEY` — [resend.com](https://resend.com) | Free tier |
+| IPFS pinning | `PINATA_JWT` — [pinata.cloud](https://pinata.cloud) | Free tier |
+| Per-book webhooks | Dashboard → Edit Book → Outpipes | — |
+| Agent read API | Dashboard → Edit Book → Agent Access Token | — |
 
-- **Discord threads**: every inpipe message is a timestamped human-readable audit trail. Gaps are visible.
-- **Server logs**: pino JSON structured logging. All background tasks, heal cycle events, and bot events are logged with context.
-- **`core.book_registry` heal columns**: `heal_status`, `heal_attempts`, `heal_error`, `next_heal_at` are queryable diagnostic fields.
+### Agent Read API (OpenClaw Integration)
 
-**Useful diagnostic queries:**
+Lets external agents read a single book's messages via bearer token. Auth is **per-tenant per-book** — a token for Book A cannot read Book B, even within the same tenant.
 
-```sql
--- Books currently in heal queue
-SELECT fractal_id, book_name, heal_status, heal_attempts, heal_error, next_heal_at
-FROM core.book_registry
-WHERE heal_status IN ('pending', 'healing', 'failed')
-ORDER BY heal_attempts DESC;
+**Setup:** Dashboard → Edit Book → Agent Access Token → Generate Token. Copy immediately; only the SHA-256 hash is stored.
 
--- Recent capsule ledger entries
-SELECT message_fractal_id, ipfs_cid, created_at
-FROM core.message_ledger
-ORDER BY created_at DESC
-LIMIT 20;
-```
-
----
-
-## OpenClaw Integration (Agent Read API)
-
-External agents (OpenClaw, custom bots, analytics pipelines) can read a book's messages via the agent pipe. Auth is per-tenant per-book: each token only grants access to the single book it was generated for.
-
-### Setup
-
-1. **Dashboard** → Edit Book → Agent Access Token → **Generate Token**
-2. Copy the token immediately — it's shown once. The backend stores only a SHA-256 hash.
-3. Configure the agent with the book's `fractal_id` and the bearer token.
-
-### Reading messages
+**Endpoint:**
 
 ```
 GET /api/webhook/:fractalId/messages
 Authorization: Bearer <agent_token>
 ```
 
-Query parameters:
-
 | Param | Type | Description |
 |-------|------|-------------|
-| `after` | string | Discord message ID — return messages after this cursor |
-| `before` | string | Discord message ID — return messages before this cursor |
+| `after` | string | Cursor — messages after this Discord message ID |
+| `before` | string | Cursor — messages before this ID (mutually exclusive with `after`) |
 | `limit` | int | 1–100 (default 50) |
 
-`after` and `before` are mutually exclusive. Response:
+Response shape: `{ book, messages[], total, hasMore, cursor: { newest, oldest } }`
 
-```json
-{
-  "book": { "name": "...", "created_at": "..." },
-  "messages": [
-    { "id": "...", "sender": "...", "text": "...", "timestamp": "...", "has_media": false }
-  ],
-  "total": 142,
-  "hasMore": true,
-  "cursor": { "newest": "...", "oldest": "..." }
-}
+Rate limit: 60 req/min per IP.
+
+**Token lifecycle:**
+
+| Action | Method | Route |
+|--------|--------|-------|
+| Check | GET | `/api/books/:fractalId/agent-token` |
+| Generate / rotate | POST | `/api/books/:fractalId/agent-token` |
+| Revoke | DELETE | `/api/books/:fractalId/agent-token` |
+
+Rotate replaces the hash in-place — old token dies instantly. Revoke sets hash to NULL; read endpoint returns 403 until a new token is generated. Token: 32 random bytes (base64url), UNIQUE index per tenant schema, timing-safe comparison.
+
+---
+
+## Secret Rotation
+
+All secrets follow the same pattern: generate → set in environment → restart. Specifics below.
+
+### SESSION_SECRET
+
+Signs Express session cookies. Rotation invalidates all browser sessions (users must re-login). JWT auth is unaffected.
+
+```bash
+openssl rand -hex 32
 ```
 
-Rate limit: 60 requests/minute per IP.
+Startup refuses to start (production) or warns (dev) if set to the `.env.example` placeholder.
 
-### Token lifecycle
+### FRACTAL_SALT
 
-| Action | Route | Method |
-|--------|-------|--------|
-| Check status | `/api/books/:fractalId/agent-token` | GET |
-| Generate / rotate | `/api/books/:fractalId/agent-token` | POST |
-| Revoke | `/api/books/:fractalId/agent-token` | DELETE |
+Generates HMAC-SHA256 sender proofs in capsules and fractal IDs. Rotation breaks cross-capsule sender identity comparison — historical records stay intact, but you can't prove "same sender" across the salt boundary. Document the rotation date for disclosure audits.
 
-Rotate replaces the old hash in-place — previous token stops working instantly. Revoke sets the hash to NULL; the messages endpoint returns 403 until a new token is generated.
+```bash
+openssl rand -hex 32
+```
 
-### Security model
+Same placeholder detection as `SESSION_SECRET`.
 
-- Token is 32 random bytes, base64url-encoded (256 bits of entropy).
-- Only the SHA-256 hash is stored. Raw token is never persisted.
-- `agent_token_hash` has a UNIQUE index per tenant schema — one token per book, no collisions across books.
-- Timing-safe comparison prevents timing attacks.
-- The messages endpoint validates the token against the specific book's hash, so a token for Book A cannot read Book B even within the same tenant.
+### Discord Bot Tokens
+
+[Discord Developer Portal](https://discord.com/developers/applications) → Bot → Reset Token → update env var → restart.
+
+Tokens are isolated per bot. Compromise of one doesn't affect the others:
+
+| Bot | Env Var | Impact if revoked |
+|-----|---------|-------------------|
+| Hermes | `HERMES_TOKEN` | New threads stop; books enter heal queue |
+| Thoth | `THOTH_TOKEN` | Message mirroring stops |
+| Idris | `IDRIS_AI_LOG_TOKEN` | AI audit writes go silent (AI still works) |
+| Horus | `HORUS_AI_LOG_TOKEN` | Audit read/history disabled |
+
+### NYAN_OUTBOUND_API / NYAN_OUTBOUND_API_DEV
+
+Internal API tokens for Nyan API v1. Generate: `openssl rand -hex 20`. External callers get 401 until updated.
+
+### Twilio / LINE / Telegram
+
+Rotate in their respective developer portals and update env vars. Stateless per-request validators — no in-app state.
+
+---
+
+## Background Systems
+
+The README mentions a "queue processor." It maps to two separate systems — not a traditional job queue.
+
+### Phi Breathe (`lib/phi-breathe.js`)
+
+Background scheduler with φ-derived timing. Alternates Inhale (base × 1.618) and Exhale (base) cycles at ~4–6s ticks.
+
+**Leader election:** `pg_try_advisory_lock(1314212174)` — only one instance fires tasks in multi-instance setups.
+
+| Task | Cycle | Purpose |
+|------|-------|---------|
+| Memory cleanup | 15 min | Purge expired sessions |
+| Media purge | 24 hr | Delete `media_buffer` rows older than 3 days |
+| Dormancy cleanup | 24 hr | Revoke inactive contributors (60+ days) |
+| Share invite cleanup | 24 hr | Expire unregistered invites (7+ days) |
+| Pending book expiry | 24 hr | Expire books never activated within 72 hours |
+
+**Circuit breaker:** 3 consecutive failures → auto-unsubscribe → 5-min cooldown → one re-registration attempt. Watch for `⚡ Circuit breaker` in logs.
+
+### Heal Queue (`lib/heal-queue.js`)
+
+Retries books whose Discord thread creation failed. Runs every 20s, processes up to 20 books per cycle (`FOR UPDATE SKIP LOCKED`).
+
+**Backoff:** `min(2^attempts × 5, 1440)` minutes. Caps at 24hr after attempt 7. Terminal after 10 attempts → `heal_status = 'failed'`.
+
+| Status | Meaning |
+|--------|---------|
+| `null` | New, not evaluated |
+| `healthy` | Thread verified |
+| `pending` | Queued for retry |
+| `healing` | Lease active |
+| `failed` | Exhausted retries — manual intervention needed |
+
+**Re-queue a failed book:**
+```sql
+UPDATE core.book_registry
+SET heal_status = 'pending', heal_attempts = 0,
+    next_heal_at = NOW(), heal_error = NULL
+WHERE fractal_id = '<fractal-id>';
+```
+
+**Log signals:**
+- `💀 Heal queue: MAX_HEAL_ATTEMPTS exhausted` → permanent failure; check if Discord channel still exists
+- `⏳ Heal attempt failed, will retry` → normal; verify bot tokens if persistent
+
+---
+
+## Incident Response
+
+### Discord Rate Limiting
+
+**Symptom:** Messages stored in PostgreSQL but no Discord threads appear. Heal queue entries accumulate.
+
+**Recovery:** Check logs for `429` / `DiscordAPIError`. Transient limits resolve via heal queue backoff. Persistent limits → check message volume against server tier.
+
+### Discord Server or Channel Deleted
+
+- Capsule hashes and fractal IDs in PostgreSQL remain valid forever (sovereignty layer)
+- Discord CDN attachment URLs return 404 — content lost unless IPFS was active
+- New messages fail → heal queue accumulates → books eventually marked `failed`
+
+**Recovery:** Create new Discord server/channel → update `NYANBOOK_WEBHOOK_URL` + bot permissions → re-queue failed books (SQL above).
+
+### Bot Token Revoked Mid-Operation
+
+Bots maintain persistent WebSocket connections. Revocation mid-operation disconnects only the affected bot; others keep running.
+
+- Hermes/Thoth revoked → messages stop reaching Discord; books enter heal queue
+- Idris revoked → AI audit writes go silent (AI still responds to users)
+- Horus revoked → audit read/history disabled
+
+**Recovery:** Rotate the token (see Secret Rotation → Discord Bot Tokens).
+
+### Pinata JWT Expiry
+
+No data loss — messages still go to PostgreSQL + Discord. New `ipfs_cid` values will be NULL. Startup log shows `⚠️ PINATA_JWT not set`.
+
+**Recovery:** [pinata.cloud](https://pinata.cloud) → API Keys → new key → update `PINATA_JWT` → restart. Historical NULL CIDs are not retroactively pinned.
+
+CIDs are content-addressed and provider-agnostic. Any CID pinned via Pinata can be re-pinned elsewhere using just the CID. The CID is the sovereignty anchor — not Pinata.
+
+---
+
+## Observability
+
+No Grafana/Prometheus. The observability stack:
+
+- **Discord threads** — every inpipe message is a timestamped audit trail. Gaps are visible.
+- **Server logs** — pino JSON. Background tasks, heal events, bot lifecycle all logged with context.
+- **`core.book_registry`** — `heal_status`, `heal_attempts`, `heal_error`, `next_heal_at` are queryable.
+
+**Diagnostic queries:**
+```sql
+SELECT fractal_id, book_name, heal_status, heal_attempts, heal_error, next_heal_at
+FROM core.book_registry
+WHERE heal_status IN ('pending', 'healing', 'failed')
+ORDER BY heal_attempts DESC;
+
+SELECT message_fractal_id, ipfs_cid, created_at
+FROM core.message_ledger
+ORDER BY created_at DESC LIMIT 20;
+```
+
+---
+
+## Backup / Restore
+
+Isolated schemas per tenant (`tenant_1`, `tenant_2`, ...) + shared `core` schema.
+
+```bash
+# Full
+pg_dump "$DATABASE_URL" > nyanbook_backup_$(date +%Y%m%d).sql
+
+# Core only
+pg_dump "$DATABASE_URL" --schema=core > core_backup_$(date +%Y%m%d).sql
+
+# Single tenant
+pg_dump "$DATABASE_URL" --schema=tenant_1 > tenant_1_backup_$(date +%Y%m%d).sql
+
+# Restore
+psql "$DATABASE_URL" < nyanbook_backup_20260101.sql
+```
+
+On Supabase free tier: Dashboard → Database → Backups for point-in-time recovery (daily backups included).
+
+---
+
+## Appendix: Search Architecture
+
+The AI pipeline uses a three-layer dialectic via `lib/tools/search-cascade.js`:
+
+| Layer | Role | Cost |
+|-------|------|------|
+| **DDG enrichment** | Grounds general queries against live web before LLM reasoning. Free, no key, ~200ms. | $0 |
+| **Brave fallback** | Cascades to Brave if DDG returns nothing. Requires `PLAYGROUND_BRAVE_API`. | Free tier |
+| **Temporal volatility** | Classifies freshness: HIGH (prices, scores), MEDIUM (politics), LOW (philosophy, history). | $0 |
+| **Two-pass audit** | LLM self-checks its answer (S2→S3). Confidence scoring catches hallucination. | In LLM calls |
+
+**For forkers:** DDG is auto-plugged — web-grounded answers out of the box. Brave is optional (set key to enable, falls back gracefully). New providers plug into the cascade with zero orchestrator changes.
+
+### Internals
+
+- `cascade({ query, strategy, clientIp })` → `{ result, provider }`. Strategies: `ddg-first` or `brave-first`.
+- `cascadeMulti()` — batch queries with rate limiting.
+- `classifyTemporalVolatility()` in `utils/preflight-router.js` — injected at `stepContextBuild` when search context exists.
+- `utils/source-ascriber.js` — canonical `📚 Sources` attribution. Priority: `nyan-identity` → `psiEmaDirectOutput` → `seedMetricDirectOutput` → `forex` → Brave → DDG → training data.
+- DDG gating: default-on for `general` mode. Opted out: math exercises, creative writing, code debugging, greetings, single-word queries. Philosophy gets enrichment.
+
+---
+
+## Appendix: File Inventory
+
+### `utils/`
+
+```
+utils/
+├── message-capsule.js            — Cryptographic capsule builder
+├── ipfs-pinner.js                — Pinata IPFS pinning
+├── psi-EMA.js                    — φ-derived time series analysis
+├── fetch-stock-prices.py         — Psi-EMA data fetcher (yfinance/pandas)
+├── pipeline-orchestrator.js      — 7-stage AI pipeline (S-1 → S6)
+├── two-pass-verification.js      — 2-pass hallucination correction
+├── dashboard-audit-pipeline.js   — 4-stage hallucination correction
+├── seed-metric-calculator.js     — Real estate affordability (Seed Metric)
+├── markdown-table-formatter.js   — Column-aligned markdown tables
+└── language-detector.js          — Trigram + script language detection (ISO 639-1)
+```
+
+### `lib/tools/` (auto-discovered — drop a `.js` file to add a tool)
+
+```
+lib/tools/ (9 tools):
+├── registry.js          — Auto-discovers on startup, getTool() + getManifest()
+├── brave-search.js      — Brave API (cached, throttled)
+├── duckduckgo.js        — DDG instant answers (cached, fallback)
+├── url-fetcher.js       — Fetch + extract readable content from URLs (cached)
+├── github-reader.js     — GitHub repos, blobs, trees, raw files, Gists
+├── pdf-analyzer.js      — PDF analysis via attachment cascade
+├── entity-extractor.js  — Structured extraction (plates, currency, dates, emails, phones)
+├── geo-lookup.js        — City↔country, abbreviations, currency→region (static)
+├── forex.js             — Exchange rates via fawazahmed0 API
+└── language-detector.js — Language detection (ISO 639-1 + confidence + FTS config)
+```
+
+### `lib/outpipes/`
+
+```
+lib/outpipes/
+├── router.js   — Dispatches all outpipes in parallel; legacy webhook fallback
+├── discord.js  — Discord webhook delivery
+├── email.js    — Email via Resend
+└── webhook.js  — HTTPS JSON POST with optional HMAC-SHA256 signature
+```
+
+### `lib/fetch-cache.js`
+
+TTL cache: `braveCache` 3min, `duckduckgoCache` 5min, `urlCache` 10min.
