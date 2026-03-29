@@ -625,41 +625,92 @@ function createAuditBadge(auditData) {
 // ── Sources footer helpers ────────────────────────────────────────────────────
 
 /**
- * Split content into body + sources string (the 📚 **Sources:** trailing line).
- * Returns { body, sources } where sources is null if the line is absent.
+ * Split content into body + sources block.
+ * Detects two formats:
+ *   1. Orchestrator-injected:  📚 **Sources:** item1, [Title](URL), item2
+ *   2. LLM bullet list:        **Sources:**\n* [Title](URL)\n* ...
+ * Returns { body, sources, format } — format is 'inline' | 'bullets' | null.
  */
 function extractSources(content) {
-    const m = content.match(/(?:\n\n|\n)📚\s*\*\*Sources:\*\*\s*([\s\S]*)$/);
-    if (!m) return { body: content, sources: null };
-    return { body: content.slice(0, m.index), sources: m[1].trim() };
+    // Format 1: 📚 **Sources:** (inline, comma-separated)
+    const m1 = content.match(/(?:\n\n|\n)📚\s*\*\*Sources:\*\*\s*([\s\S]*)$/);
+    if (m1) return { body: content.slice(0, m1.index), sources: m1[1].trim(), format: 'inline' };
+
+    // Format 2: **Sources:** bullet list (LLM / Brave Search output)
+    const m2 = content.match(/\n\n\*\*Sources:\*\*\n([\s\S]*)$/);
+    if (m2) return { body: content.slice(0, m2.index), sources: m2[1].trim(), format: 'bullets' };
+
+    return { body: content, sources: null, format: null };
 }
 
 /**
- * Parse a sources string into typed items — links and plain-text chips.
- * Handles "[Title](URL)" markdown links interspersed with comma-separated text.
+ * Extract a short brand/site name from a link title + URL.
+ * Strategy: split on " | " or " - " and take the last segment.
+ *   "Chelsea Scores, Stats and Highlights - ESPN"  → "ESPN"
+ *   "Chelsea Results List & Next Game | LiveScore" → "LiveScore"
+ * Fallback: clean hostname without www/TLD.
  */
-function parseSourceItems(sourcesStr) {
+function extractSourceLabel(title, url) {
+    // Split on " | " or " – " / " - " and grab the last non-empty segment
+    const parts = title.split(/\s*\|\s*|\s+[–—-]\s+/);
+    if (parts.length > 1) {
+        const last = parts[parts.length - 1].trim();
+        if (last.length > 0 && last.length <= 40) return last;
+    }
+    // Fallback: extract root domain, strip TLD, capitalise
+    try {
+        const host = new URL(url).hostname.replace(/^www\./, '');
+        const root = host.split('.')[0];
+        return root.charAt(0).toUpperCase() + root.slice(1);
+    } catch {
+        return title.slice(0, 30);
+    }
+}
+
+/**
+ * Parse a sources block into typed items.
+ * Handles both inline (comma-separated) and bullet-list formats.
+ * Link labels are shortened via extractSourceLabel.
+ */
+function parseSourceItems(sourcesStr, format) {
     const items = [];
     const linkRe = /\[([^\]]+)\]\(([^)]+)\)/g;
-    let lastIndex = 0;
-    let m;
-    while ((m = linkRe.exec(sourcesStr)) !== null) {
-        const before = sourcesStr.slice(lastIndex, m.index);
-        before.split(',').forEach(s => { s = s.trim(); if (s) items.push({ type: 'text', label: s }); });
-        items.push({ type: 'link', label: m[1].trim(), url: m[2].trim() });
-        lastIndex = linkRe.lastIndex;
+
+    if (format === 'bullets') {
+        // Each line may be "* [Title](URL)" or "- [Title](URL)" or plain text
+        sourcesStr.split('\n').forEach(line => {
+            const stripped = line.replace(/^[\*\-]\s*/, '').trim();
+            if (!stripped) return;
+            const m = /^\[([^\]]+)\]\(([^)]+)\)/.exec(stripped);
+            if (m) {
+                items.push({ type: 'link', label: extractSourceLabel(m[1].trim(), m[2].trim()), url: m[2].trim() });
+            } else {
+                items.push({ type: 'text', label: stripped });
+            }
+        });
+    } else {
+        // Inline: comma-separated, markdown links interspersed
+        let lastIndex = 0;
+        let m;
+        while ((m = linkRe.exec(sourcesStr)) !== null) {
+            const before = sourcesStr.slice(lastIndex, m.index);
+            before.split(',').forEach(s => { s = s.trim(); if (s) items.push({ type: 'text', label: s }); });
+            items.push({ type: 'link', label: extractSourceLabel(m[1].trim(), m[2].trim()), url: m[2].trim() });
+            lastIndex = linkRe.lastIndex;
+        }
+        sourcesStr.slice(lastIndex).split(',').forEach(s => { s = s.trim(); if (s) items.push({ type: 'text', label: s }); });
     }
-    sourcesStr.slice(lastIndex).split(',').forEach(s => { s = s.trim(); if (s) items.push({ type: 'text', label: s }); });
+
     return items;
 }
 
 /**
- * Build the pretty sources footer element.
- * Link items → blue pill anchors; text items → muted chip spans.
- * Falls back gracefully for unrecognised raw text (renders as a single chip).
+ * Build the sources footer element.
+ * Link items → compact blue pill anchors (brand name, easy-to-tap).
+ * Text items → muted chip spans.
  */
-function renderSourcesFooter(sourcesStr) {
-    const items = parseSourceItems(sourcesStr);
+function renderSourcesFooter(sourcesStr, format) {
+    const items = parseSourceItems(sourcesStr, format);
     if (!items.length) return null;
 
     const footer = document.createElement('div');
@@ -677,6 +728,7 @@ function renderSourcesFooter(sourcesStr) {
             a.href = item.url;
             a.target = '_blank';
             a.rel = 'noopener noreferrer';
+            a.title = item.url;
             a.textContent = item.label;
             footer.appendChild(a);
         } else {
@@ -696,8 +748,8 @@ function renderMarkdownContent(content) {
     const contentDiv = document.createElement('div');
     contentDiv.className = 'content';
 
-    // Split off the 📚 Sources line so it renders as styled pills, not raw prose
-    const { body, sources } = extractSources(content);
+    // Split off the Sources block so it renders as styled pills, not raw prose
+    const { body, sources, format } = extractSources(content);
     const markdownBody = sources !== null ? body : content;
 
     if (typeof marked !== 'undefined') {
@@ -730,7 +782,7 @@ function renderMarkdownContent(content) {
     }
 
     if (sources !== null) {
-        const footer = renderSourcesFooter(sources);
+        const footer = renderSourcesFooter(sources, format);
         if (footer) contentDiv.appendChild(footer);
     }
 
@@ -1010,7 +1062,7 @@ function finalizeStreamingMessage(fullContent, auditData) {
     contentEl.replaceChildren();
     
     if (contentEl) {
-        const { body: streamBody, sources: streamSources } = extractSources(fullContent);
+        const { body: streamBody, sources: streamSources, format: streamFormat } = extractSources(fullContent);
         const markdownBody = streamSources !== null ? streamBody : fullContent;
         if (typeof marked !== 'undefined') {
             try {
@@ -1037,7 +1089,7 @@ function finalizeStreamingMessage(fullContent, auditData) {
             contentEl.textContent = markdownBody;
         }
         if (streamSources !== null) {
-            const footer = renderSourcesFooter(streamSources);
+            const footer = renderSourcesFooter(streamSources, streamFormat);
             if (footer) contentEl.appendChild(footer);
         }
     }
