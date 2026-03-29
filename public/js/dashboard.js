@@ -4761,12 +4761,25 @@
             });
         }
 
+        function showAgentEndpointHint(fractalId) {
+            const el = document.getElementById('agentTokenEndpoint');
+            if (!el) return;
+            const baseUrl = window.location.origin;
+            el.style.display = 'block';
+            el.innerHTML = '<small style="color: #94a3b8; font-size: 0.7rem;">Endpoint</small>' +
+                '<div style="background: rgba(15,23,42,0.6); border: 1px solid rgba(100,116,139,0.25); border-radius: 6px; padding: 0.4rem 0.5rem; font-family: monospace; font-size: 0.7rem; color: #94a3b8; word-break: break-all; display: flex; align-items: center; gap: 0.5rem;">' +
+                '<span style="flex:1;">GET ' + baseUrl + '/api/webhook/' + fractalId + '/messages</span>' +
+                '<button type="button" onclick="navigator.clipboard.writeText(\'' + baseUrl + '/api/webhook/' + fractalId + '/messages\');showToast(\'Endpoint copied\',\'success\')" style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); color: #60a5fa; border-radius: 4px; padding: 0.2rem 0.5rem; cursor: pointer; font-size: 0.7rem; white-space: nowrap;">Copy</button>' +
+                '</div>';
+        }
+
         async function loadAgentTokenStatus(fractalId) {
             const display = document.getElementById('agentTokenDisplay');
             const actions = document.getElementById('agentTokenActions');
             if (!display || !actions) return;
             display.innerHTML = '<span style="color: #94a3b8; font-size: 0.75rem;">Checking...</span>';
             actions.innerHTML = '';
+            showAgentEndpointHint(fractalId);
             try {
                 const res = await fetch(`/api/books/${fractalId}/agent-token`, { credentials: 'include' });
                 const data = await res.json();
@@ -4868,6 +4881,8 @@
             }
             const agentTokenSection = document.getElementById('agentTokenSection');
             if (agentTokenSection) agentTokenSection.style.display = 'none';
+            const agentTokenEndpoint = document.getElementById('agentTokenEndpoint');
+            if (agentTokenEndpoint) { agentTokenEndpoint.style.display = 'none'; agentTokenEndpoint.innerHTML = ''; }
             const shareInput = document.getElementById('shareEmailInput');
             if (shareInput) shareInput.value = '';
             const sharedList = document.getElementById('sharedEmailsList');
