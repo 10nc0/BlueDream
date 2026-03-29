@@ -943,12 +943,13 @@ Analyze the data and answer the user's question. Count carefully when asked abou
             if (idrisBot && idrisBot.isReady() && tenantSchema && bookContext) {
                 try {
                     const tenantInfo = await pool.query(
-                        `SELECT id, ai_log_thread_id FROM core.tenant_catalog WHERE tenant_schema = $1`, 
+                        `SELECT id, ai_log_thread_id, audit_mirror_thread_id FROM core.tenant_catalog WHERE tenant_schema = $1`, 
                         [tenantSchema]
                     );
                     if (tenantInfo.rows.length > 0) {
                         const catalogId = tenantInfo.rows[0].id;
                         let threadId = tenantInfo.rows[0]?.ai_log_thread_id;
+                        const mirrorThreadId = tenantInfo.rows[0]?.audit_mirror_thread_id;
                         
                         if (!threadId) {
                             const tenantId = parseInt(tenantSchema.replace('tenant_', ''));
@@ -962,7 +963,7 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                         
                         const primaryBookName = bookContext.books[0]?.name || 'Unknown';
                         const bookNames = bookContext.books.map(b => b.name).join(', ');
-                        await idrisBot.postAuditResult(threadId, {
+                        const auditPayload = {
                             status: 'NYAN',
                             confidence: null,
                             answer: answer,
@@ -975,9 +976,18 @@ Analyze the data and answer the user's question. Count carefully when asked abou
                                 processingTime: processingTime
                             },
                             bookName: primaryBookName
-                        }, query, primaryBookName);
-                        
+                        };
+                        await idrisBot.postAuditResult(threadId, auditPayload, query, primaryBookName);
                         logger.info({ threadId }, 'Nyan AI Audit logged to Discord thread');
+                        
+                        if (mirrorThreadId) {
+                            try {
+                                await idrisBot.postAuditResult(mirrorThreadId, auditPayload, query, primaryBookName);
+                                logger.info({ mirrorThreadId }, 'Nyan AI Audit mirrored to user thread');
+                            } catch (mirrorErr) {
+                                logger.warn({ mirrorThreadId, err: mirrorErr.message }, 'Audit mirror post failed');
+                            }
+                        }
                     }
                 } catch (discordError) {
                     logger.error({ err: discordError }, 'Failed to post Nyan AI audit to Discord');
@@ -1052,6 +1062,61 @@ Analyze the data and answer the user's question. Count carefully when asked abou
         } catch (error) {
             logger.error({ err: error }, 'Discord history error');
             res.status(500).json({ error: 'An internal error occurred. Please try again.' });
+        }
+    });
+
+    app.get('/api/nyan-ai/audit-mirror', requireAuth, async (req, res) => {
+        try {
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            if (!tenantSchema) return res.status(400).json({ error: 'Tenant context required' });
+            const result = await pool.query(
+                `SELECT audit_mirror_thread_id, audit_mirror_channel_id FROM core.tenant_catalog WHERE tenant_schema = $1`,
+                [tenantSchema]
+            );
+            const row = result.rows[0] || {};
+            res.json({
+                audit_mirror_thread_id: row.audit_mirror_thread_id || null,
+                audit_mirror_channel_id: row.audit_mirror_channel_id || null
+            });
+        } catch (error) {
+            logger.error({ err: error }, 'Audit mirror config fetch error');
+            res.status(500).json({ error: 'Failed to fetch audit mirror config' });
+        }
+    });
+
+    app.post('/api/nyan-ai/audit-mirror', requireAuth, async (req, res) => {
+        try {
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            if (!tenantSchema) return res.status(400).json({ error: 'Tenant context required' });
+            const { thread_id } = req.body;
+            if (!thread_id || !/^\d+$/.test(thread_id)) {
+                return res.status(400).json({ error: 'Valid Discord thread ID required' });
+            }
+            await pool.query(
+                `UPDATE core.tenant_catalog SET audit_mirror_thread_id = $1 WHERE tenant_schema = $2`,
+                [thread_id, tenantSchema]
+            );
+            logger.info({ tenantSchema, threadId: thread_id }, 'Audit mirror configured');
+            res.json({ success: true, audit_mirror_thread_id: thread_id });
+        } catch (error) {
+            logger.error({ err: error }, 'Audit mirror config save error');
+            res.status(500).json({ error: 'Failed to save audit mirror config' });
+        }
+    });
+
+    app.delete('/api/nyan-ai/audit-mirror', requireAuth, async (req, res) => {
+        try {
+            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+            if (!tenantSchema) return res.status(400).json({ error: 'Tenant context required' });
+            await pool.query(
+                `UPDATE core.tenant_catalog SET audit_mirror_thread_id = NULL, audit_mirror_channel_id = NULL WHERE tenant_schema = $1`,
+                [tenantSchema]
+            );
+            logger.info({ tenantSchema }, 'Audit mirror removed');
+            res.json({ success: true });
+        } catch (error) {
+            logger.error({ err: error }, 'Audit mirror config delete error');
+            res.status(500).json({ error: 'Failed to remove audit mirror config' });
         }
     });
 

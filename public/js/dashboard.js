@@ -3266,7 +3266,22 @@
                     <div id="nyanAuditHistoryModal" class="book-fan-modal" style="z-index: 10000;">
                         <div class="book-fan-content" style="max-width: 700px; padding: 2rem; max-height: 80vh; overflow-y: auto;">
                             <button class="book-fan-close" id="nyanAuditHistoryClose">×</button>
-                            <h3 style="margin-bottom: 1.5rem; font-size: 1.5rem; background: linear-gradient(135deg, #22d3ee, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">🧠 Audit History</h3>
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;">
+                                <h3 style="font-size: 1.5rem; background: linear-gradient(135deg, #22d3ee, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin: 0;">🧠 Audit History</h3>
+                                <button id="nyanAuditMirrorToggle" style="background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; color: #94a3b8; padding: 0.375rem 0.625rem; cursor: pointer; font-size: 0.75rem; display: flex; align-items: center; gap: 0.375rem; transition: all 0.2s ease;" title="Configure audit mirror outpipe">🪞 Mirror</button>
+                            </div>
+                            <div id="nyanAuditMirrorPanel" style="display: none; padding: 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; margin-bottom: 1rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                                    <span style="color: #e2e8f0; font-size: 0.875rem; font-weight: 600;">🪞 Audit Mirror Outpipe</span>
+                                </div>
+                                <p style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.75rem;">Mirror audit logs to your own Discord thread. Paste a Discord thread URL below.</p>
+                                <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                    <input type="text" id="nyanAuditMirrorInput" placeholder="https://discord.com/channels/.../..." style="flex: 1; background: rgba(148, 163, 184, 0.1); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 6px; color: #e2e8f0; padding: 0.5rem 0.75rem; font-size: 0.8rem; outline: none;" />
+                                    <button id="nyanAuditMirrorSave" style="background: linear-gradient(135deg, #3b82f6, #2563eb); border: none; border-radius: 6px; color: white; padding: 0.5rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: 600; white-space: nowrap;">Save</button>
+                                </div>
+                                <div id="nyanAuditMirrorStatus" style="font-size: 0.7rem; color: #64748b;"></div>
+                                <button id="nyanAuditMirrorRemove" style="display: none; margin-top: 0.5rem; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; color: #ef4444; padding: 0.375rem 0.625rem; cursor: pointer; font-size: 0.7rem;">Remove Mirror</button>
+                            </div>
                             
                             <div id="nyanAuditHistoryContent" style="min-height: 200px;">
                                 <div style="text-align: center; padding: 2rem; color: #94a3b8;">
@@ -3285,6 +3300,19 @@
                     if (e.target === this) closeNyanAuditHistoryModal();
                 });
                 document.getElementById('nyanAuditHistoryClose').addEventListener('click', closeNyanAuditHistoryModal);
+                
+                const mirrorToggle = document.getElementById('nyanAuditMirrorToggle');
+                const mirrorPanel = document.getElementById('nyanAuditMirrorPanel');
+                mirrorToggle.addEventListener('click', () => {
+                    const visible = mirrorPanel.style.display !== 'none';
+                    mirrorPanel.style.display = visible ? 'none' : 'block';
+                    mirrorToggle.style.borderColor = visible ? 'rgba(148, 163, 184, 0.2)' : 'rgba(59, 130, 246, 0.4)';
+                    mirrorToggle.style.color = visible ? '#94a3b8' : '#60a5fa';
+                    if (!visible) loadAuditMirrorConfig();
+                });
+                
+                document.getElementById('nyanAuditMirrorSave').addEventListener('click', saveAuditMirrorConfig);
+                document.getElementById('nyanAuditMirrorRemove').addEventListener('click', removeAuditMirrorConfig);
             }
             
             historyModal.style.display = 'flex';
@@ -3294,6 +3322,94 @@
         function closeNyanAuditHistoryModal() {
             const modal = document.getElementById('nyanAuditHistoryModal');
             if (modal) modal.style.display = 'none';
+        }
+        
+        async function loadAuditMirrorConfig() {
+            const statusEl = document.getElementById('nyanAuditMirrorStatus');
+            const inputEl = document.getElementById('nyanAuditMirrorInput');
+            const removeBtn = document.getElementById('nyanAuditMirrorRemove');
+            try {
+                const response = await window.authFetch('/api/nyan-ai/audit-mirror');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.audit_mirror_thread_id) {
+                        inputEl.value = `https://discord.com/channels/thread/${data.audit_mirror_thread_id}`;
+                        statusEl.textContent = `Active — mirroring to thread ${data.audit_mirror_thread_id}`;
+                        statusEl.style.color = '#10b981';
+                        removeBtn.style.display = 'inline-block';
+                    } else {
+                        inputEl.value = '';
+                        statusEl.textContent = 'No mirror configured';
+                        statusEl.style.color = '#64748b';
+                        removeBtn.style.display = 'none';
+                    }
+                }
+            } catch (err) {
+                statusEl.textContent = 'Failed to load mirror config';
+                statusEl.style.color = '#ef4444';
+            }
+        }
+        
+        async function saveAuditMirrorConfig() {
+            const inputEl = document.getElementById('nyanAuditMirrorInput');
+            const statusEl = document.getElementById('nyanAuditMirrorStatus');
+            const threadUrl = inputEl.value.trim();
+            if (!threadUrl) {
+                statusEl.textContent = 'Please enter a Discord thread URL';
+                statusEl.style.color = '#f59e0b';
+                return;
+            }
+            const threadMatch = threadUrl.match(/\/(\d+)\s*$/);
+            if (!threadMatch) {
+                statusEl.textContent = 'Invalid Discord URL — needs a thread/channel ID at the end';
+                statusEl.style.color = '#ef4444';
+                return;
+            }
+            const threadId = threadMatch[1];
+            statusEl.textContent = 'Saving...';
+            statusEl.style.color = '#94a3b8';
+            try {
+                const response = await window.authFetch('/api/nyan-ai/audit-mirror', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thread_id: threadId })
+                });
+                if (response.ok) {
+                    statusEl.textContent = `Mirror active — thread ${threadId}`;
+                    statusEl.style.color = '#10b981';
+                    document.getElementById('nyanAuditMirrorRemove').style.display = 'inline-block';
+                } else {
+                    const err = await response.json();
+                    statusEl.textContent = err.error || 'Failed to save';
+                    statusEl.style.color = '#ef4444';
+                }
+            } catch (err) {
+                statusEl.textContent = 'Network error';
+                statusEl.style.color = '#ef4444';
+            }
+        }
+        
+        async function removeAuditMirrorConfig() {
+            const statusEl = document.getElementById('nyanAuditMirrorStatus');
+            const inputEl = document.getElementById('nyanAuditMirrorInput');
+            const removeBtn = document.getElementById('nyanAuditMirrorRemove');
+            statusEl.textContent = 'Removing...';
+            statusEl.style.color = '#94a3b8';
+            try {
+                const response = await window.authFetch('/api/nyan-ai/audit-mirror', { method: 'DELETE' });
+                if (response.ok) {
+                    inputEl.value = '';
+                    statusEl.textContent = 'Mirror removed';
+                    statusEl.style.color = '#64748b';
+                    removeBtn.style.display = 'none';
+                } else {
+                    statusEl.textContent = 'Failed to remove';
+                    statusEl.style.color = '#ef4444';
+                }
+            } catch (err) {
+                statusEl.textContent = 'Network error';
+                statusEl.style.color = '#ef4444';
+            }
         }
         
         async function loadNyanAuditHistory(limit = 50) {
@@ -3365,6 +3481,13 @@
                     return statsDiv;
                 };
                 
+                const isSourceTruncated = (text) => {
+                    if (!text || text === 'No answer') return false;
+                    if (text.endsWith('...')) return true;
+                    if (text.length >= 490 && !/[.!?\n]$/.test(text.trim())) return true;
+                    return false;
+                };
+
                 const buildLogItem = (log) => {
                     const parsed = log.parsed || {};
                     const status = parsed.status?.toUpperCase() || 'UNKNOWN';
@@ -3374,9 +3497,14 @@
                     const answer = parsed.answer || 'No answer';
                     const confidence = parsed.confidence;
                     const bookContext = parsed.bookContext;
+                    const queryNeedsTruncation = query.length > 150;
+                    const answerNeedsTruncation = answer.length > 200;
+                    const expandable = queryNeedsTruncation || answerNeedsTruncation;
+                    let expanded = false;
                     
                     const card = document.createElement('div');
-                    card.style.cssText = 'padding: 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; margin-bottom: 0.75rem;';
+                    card.className = 'audit-log-card';
+                    card.style.cssText = 'padding: 1rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 8px; margin-bottom: 0.75rem; transition: border-color 0.2s ease, background 0.2s ease;' + (expandable ? 'cursor: pointer;' : '');
                     
                     const headerRow = document.createElement('div');
                     headerRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;';
@@ -3396,10 +3524,20 @@
                     }
                     headerRow.appendChild(leftGroup);
                     
+                    const rightGroup = document.createElement('div');
+                    rightGroup.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
                     const dateSpan = document.createElement('span');
                     dateSpan.style.cssText = 'color: #64748b; font-size: 0.75rem;';
                     dateSpan.textContent = date;
-                    headerRow.appendChild(dateSpan);
+                    rightGroup.appendChild(dateSpan);
+                    if (expandable) {
+                        const expandIcon = document.createElement('span');
+                        expandIcon.style.cssText = 'color: #64748b; font-size: 0.65rem; transition: transform 0.2s ease;';
+                        expandIcon.textContent = '▼';
+                        expandIcon.className = 'audit-expand-icon';
+                        rightGroup.appendChild(expandIcon);
+                    }
+                    headerRow.appendChild(rightGroup);
                     card.appendChild(headerRow);
                     
                     const queryDiv = document.createElement('div');
@@ -3407,16 +3545,25 @@
                     const queryStrong = document.createElement('strong');
                     queryStrong.textContent = 'Query: ';
                     queryDiv.appendChild(queryStrong);
-                    queryDiv.appendChild(document.createTextNode(query.substring(0, 150) + (query.length > 150 ? '...' : '')));
+                    const queryText = document.createElement('span');
+                    queryText.textContent = queryNeedsTruncation ? query.substring(0, 150) + '...' : query;
+                    queryDiv.appendChild(queryText);
                     card.appendChild(queryDiv);
                     
                     const answerDiv = document.createElement('div');
-                    answerDiv.style.cssText = 'color: #e2e8f0; font-size: 0.875rem;';
+                    answerDiv.style.cssText = 'color: #e2e8f0; font-size: 0.875rem; overflow: hidden; transition: max-height 0.3s ease;';
                     const answerStrong = document.createElement('strong');
                     answerStrong.textContent = 'Answer: ';
                     answerDiv.appendChild(answerStrong);
-                    answerDiv.appendChild(document.createTextNode(answer.substring(0, 200) + (answer.length > 200 ? '...' : '')));
+                    const answerText = document.createElement('span');
+                    answerText.textContent = answerNeedsTruncation ? answer.substring(0, 200) + '...' : answer;
+                    answerDiv.appendChild(answerText);
                     card.appendChild(answerDiv);
+                    
+                    const truncatedIndicator = document.createElement('div');
+                    truncatedIndicator.style.cssText = 'display: none; color: #f59e0b; font-size: 0.7rem; margin-top: 0.375rem; font-style: italic;';
+                    truncatedIndicator.textContent = '⚠ response truncated at source';
+                    card.appendChild(truncatedIndicator);
                     
                     if (confidence) {
                         const confDiv = document.createElement('div');
@@ -3424,6 +3571,32 @@
                         confDiv.textContent = `Confidence: ${confidence}%`;
                         card.appendChild(confDiv);
                     }
+                    
+                    if (expandable) {
+                        card.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            expanded = !expanded;
+                            const icon = card.querySelector('.audit-expand-icon');
+                            if (expanded) {
+                                queryText.textContent = query;
+                                answerText.textContent = answer;
+                                card.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+                                card.style.background = 'rgba(15, 23, 42, 0.8)';
+                                if (icon) icon.style.transform = 'rotate(180deg)';
+                                if (isSourceTruncated(answer)) {
+                                    truncatedIndicator.style.display = 'block';
+                                }
+                            } else {
+                                queryText.textContent = queryNeedsTruncation ? query.substring(0, 150) + '...' : query;
+                                answerText.textContent = answerNeedsTruncation ? answer.substring(0, 200) + '...' : answer;
+                                card.style.borderColor = 'rgba(148, 163, 184, 0.15)';
+                                card.style.background = 'rgba(15, 23, 42, 0.6)';
+                                if (icon) icon.style.transform = 'rotate(0deg)';
+                                truncatedIndicator.style.display = 'none';
+                            }
+                        });
+                    }
+                    
                     return card;
                 };
                 
