@@ -602,6 +602,7 @@ let horusBot = null;
 // Initialized to explicit throwers — serverReady gate prevents real calls before assignment,
 // but this makes any mis-ordering immediately obvious rather than a silent TypeError.
 let sendToLedger = () => { throw new Error('sendToLedger called before server initialization'); };
+let stopQueueProcessor = () => {};
 
 // ===== GENESIS COUNTER API (Red Herring) =====
 // Expose counter state for debugging/monitoring
@@ -756,6 +757,7 @@ app.listen(PORT, '0.0.0.0', async () => {
     registeredSatellites.push({ name: 'books', endpoints: booksResult.endpoints });
 
     const inpipeResult = registerInpipeRoutes(app, deps);
+    stopQueueProcessor = inpipeResult.stopQueueProcessor || (() => {});
     const activeChannels = [
         'WhatsApp',
         process.env.LINE_CHANNEL_SECRET ? 'LINE' : null,
@@ -912,8 +914,14 @@ app.listen(PORT, '0.0.0.0', async () => {
     })();
 });
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-    logger.info('Shutting down gracefully...');
+// Graceful shutdown — stop the queue processor before exiting so in-flight
+// messages finish processing rather than being abandoned mid-ledger-write.
+async function gracefulShutdown(signal) {
+    logger.info({ signal }, 'Graceful shutdown: stopping queue processor...');
+    try { stopQueueProcessor(); } catch (_) {}
+    logger.info('Graceful shutdown complete');
     process.exit(0);
-});
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));

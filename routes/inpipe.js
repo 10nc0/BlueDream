@@ -25,13 +25,17 @@ const PHONE_CHANNELS = new Set(['twilio']);
 //   Drain order: media first, then text (ORDER BY priority, created_at).
 //   Atomic dequeue via UPDATE … FOR UPDATE SKIP LOCKED … RETURNING.
 //   Survives restarts: stale 'processing' rows reset to 'pending' on boot.
-//   Failed items retry up to MAX_RETRY_COUNT times before being dropped.
+//   Failed items retry up to MAX_RETRY_COUNT times; last_error stored on row.
+//   Requeue failed items: UPDATE core.message_queue SET status='pending',
+//     retry_count=0, last_error=NULL WHERE status='failed';
 //
 // Processing loop (not interval):
 //   Continuous async loop with adaptive gap between messages.
 //   Normal load: 500ms gap (safe: ~2/sec vs Discord's 5/5sec per route).
 //   Burst mode (queue > 5): 200ms gap (~5/sec globally across routes).
 //   No dead-wait: loop polls at 100ms when idle.
+//   Graceful shutdown: stopQueueProcessor() sets _queueShutdown=true and
+//     wakes the sleep so the current message finishes before the loop exits.
 //
 // Rate limits respected:
 //   Discord API: 5 req/5sec per route — we write to different threads so
@@ -51,6 +55,16 @@ let _pool = null;
 let _cachedDepth = 0;
 let _depthCacheTime = 0;
 const DEPTH_CACHE_TTL_MS = 200;
+
+let _queueShutdown = false;
+let _wakeQueue = null;
+
+function _interruptibleSleep(ms) {
+    return new Promise(resolve => {
+        const timer = setTimeout(resolve, ms);
+        _wakeQueue = () => { clearTimeout(timer); resolve(); };
+    }).finally(() => { _wakeQueue = null; });
+}
 
 const MESSAGE_QUEUE = { get length() { return _cachedDepth; } };
 
@@ -99,10 +113,16 @@ async function markQueueDone(queueId) {
     _depthCacheTime = 0;
 }
 
-async function markQueueRetry(queueId) {
+async function markQueueRetry(queueId, errorMessage) {
+    const errTrunc = errorMessage ? String(errorMessage).substring(0, 500) : null;
     const r = await _pool.query(
-        `UPDATE core.message_queue SET retry_count = retry_count + 1, updated_at = NOW(), status = CASE WHEN retry_count + 1 >= $2 THEN 'failed' ELSE 'pending' END WHERE id = $1 RETURNING status`,
-        [queueId, MAX_RETRY_COUNT]
+        `UPDATE core.message_queue
+         SET retry_count = retry_count + 1,
+             updated_at  = NOW(),
+             status      = CASE WHEN retry_count + 1 >= $2 THEN 'failed' ELSE 'pending' END,
+             last_error  = CASE WHEN retry_count + 1 >= $2 THEN $3 ELSE last_error END
+         WHERE id = $1 RETURNING status`,
+        [queueId, MAX_RETRY_COUNT, errTrunc]
     );
     _depthCacheTime = 0;
     return r.rows[0]?.status;
@@ -185,7 +205,7 @@ function registerInpipeRoutes(app, deps) {
         isConfigured: () => true
     };
     const channelRegistry = { twilio: twilioChannel, line: lineChannel, email: emailChannel, telegram: telegramChannel, webhook: webhookChannel };
-    startQueueProcessor({ ...deps, channelRegistry });
+    const queueProcessor = startQueueProcessor({ ...deps, channelRegistry });
     
     setInterval(() => cleanupIdempotencyCache(pool, logger), 60 * 1000);
     setInterval(() => cleanupDoneMessages(pool, logger), 60 * 60 * 1000);
@@ -707,7 +727,7 @@ function registerInpipeRoutes(app, deps) {
 
     logger.info('📥 Inpipe routes registered: %s', registeredRoutes.join(', '));
 
-    return { endpoints: registeredRoutes.length };
+    return { endpoints: registeredRoutes.length, stopQueueProcessor: queueProcessor.stop };
 }
 
 // Adaptive async queue processor — channel-agnostic
@@ -717,6 +737,7 @@ function registerInpipeRoutes(app, deps) {
 // Dispatches via item.channel — adding a channel requires zero changes here.
 function startQueueProcessor(deps) {
     const { logger, channelRegistry } = deps;
+    _queueShutdown = false;
 
     logger.info({
         normalGapMs: NORMAL_GAP_MS,
@@ -724,19 +745,19 @@ function startQueueProcessor(deps) {
         burstThreshold: BURST_THRESHOLD
     }, '⚙️ Queue processor started (PostgreSQL-backed, adaptive async loop)');
 
-    (async function loop() {
-        while (true) {
+    const loopDone = (async function loop() {
+        while (!_queueShutdown) {
             let item;
             try {
                 item = await dequeueItem();
             } catch (err) {
                 logger.error({ err }, 'dequeueItem failed');
-                await sleep(1000);
+                await _interruptibleSleep(1000);
                 continue;
             }
 
             if (!item) {
-                await sleep(100);
+                await _interruptibleSleep(100);
                 continue;
             }
 
@@ -755,7 +776,7 @@ function startQueueProcessor(deps) {
                 await processQueuedMessage(item.msg, item.rawPayload, channel, deps, item.channel);
                 processed = true;
             } catch (error) {
-                const newStatus = await markQueueRetry(item._queueId).catch(() => 'unknown');
+                const newStatus = await markQueueRetry(item._queueId, error.message).catch(() => 'unknown');
                 const depth = await totalQueueDepth();
                 const isFailed = newStatus === 'failed';
                 logger[isFailed ? 'warn' : 'error']({
@@ -764,7 +785,7 @@ function startQueueProcessor(deps) {
                     tier,
                     status: newStatus,
                     queueDepth: depth
-                }, isFailed ? 'Queued message permanently failed (max retries)' : 'Failed to process queued message — will retry');
+                }, isFailed ? 'Queued message permanently failed (max retries) — last_error stored on queue row' : 'Failed to process queued message — will retry');
             }
 
             if (processed) {
@@ -780,13 +801,24 @@ function startQueueProcessor(deps) {
                 }, 'Queued message processed');
             }
 
+            if (_queueShutdown) break;
+
             const depth = await totalQueueDepth();
             const gap = depth >= BURST_THRESHOLD ? BURST_GAP_MS : NORMAL_GAP_MS;
             const elapsed = Date.now() - startTime;
             const wait = Math.max(0, gap - elapsed);
-            if (wait > 0) await sleep(wait);
+            if (wait > 0) await _interruptibleSleep(wait);
         }
+        logger.info('⛔ Queue processor stopped (graceful shutdown complete)');
     })();
+
+    return {
+        stop() {
+            _queueShutdown = true;
+            if (_wakeQueue) _wakeQueue();
+        },
+        done: loopDone
+    };
 }
 
 // Process a single queued message
