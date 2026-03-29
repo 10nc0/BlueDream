@@ -498,11 +498,13 @@ function registerAuthRoutes(app, deps) {
             const normalizedEmail = email.toLowerCase().trim();
             
             let standardizedPhone = phone.replace(/[\s\-\(\)\.]/g, '');
-            // RUNBOOK: +62 (Indonesia) is the default country code for bare local numbers.
-            // To support other regions, replace this with a configurable default or
-            // accept E.164 format only (require leading '+' from the client).
+            // RUNBOOK: DEFAULT_COUNTRY_CODE controls the prefix for bare local numbers (those starting with 0).
+            // Default is +62 (Indonesia). Forks targeting other regions should set this env var
+            // (e.g. DEFAULT_COUNTRY_CODE=+1 for North America, +44 for UK).
+            // To require strict E.164 input from clients instead, remove this block entirely.
+            const defaultCountryCode = process.env.DEFAULT_COUNTRY_CODE || '+62';
             if (standardizedPhone.startsWith('0')) {
-                standardizedPhone = '+62' + standardizedPhone.substring(1);
+                standardizedPhone = defaultCountryCode + standardizedPhone.substring(1);
             }
             if (!standardizedPhone.startsWith('+') && /^\d/.test(standardizedPhone)) {
                 standardizedPhone = '+' + standardizedPhone;

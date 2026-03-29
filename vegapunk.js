@@ -602,7 +602,11 @@ let horusBot = null;
 // Initialized to explicit throwers — serverReady gate prevents real calls before assignment,
 // but this makes any mis-ordering immediately obvious rather than a silent TypeError.
 let sendToLedger = () => { throw new Error('sendToLedger called before server initialization'); };
-let stopQueueProcessor = () => {};
+let _queueProcessorReady = false;
+let stopQueueProcessor = () => {
+    if (!_queueProcessorReady) logger.warn('SIGTERM arrived before queue processor initialized — skipping wait');
+    return Promise.resolve();
+};
 
 // ===== GENESIS COUNTER API (Red Herring) =====
 // Expose counter state for debugging/monitoring
@@ -757,7 +761,8 @@ app.listen(PORT, '0.0.0.0', async () => {
     registeredSatellites.push({ name: 'books', endpoints: booksResult.endpoints });
 
     const inpipeResult = registerInpipeRoutes(app, deps);
-    stopQueueProcessor = inpipeResult.stopQueueProcessor || (() => {});
+    stopQueueProcessor = inpipeResult.stopQueueProcessor || (() => Promise.resolve());
+    _queueProcessorReady = true;
     const activeChannels = [
         'WhatsApp',
         process.env.LINE_CHANNEL_SECRET ? 'LINE' : null,
@@ -914,11 +919,17 @@ app.listen(PORT, '0.0.0.0', async () => {
     })();
 });
 
-// Graceful shutdown — stop the queue processor before exiting so in-flight
-// messages finish processing rather than being abandoned mid-ledger-write.
+// Graceful shutdown — stop the queue processor and wait for the current
+// in-flight message to finish before exiting, so mid-ledger-write Discord
+// calls are not abandoned. A 5s timeout guards against a hung item.
 async function gracefulShutdown(signal) {
     logger.info({ signal }, 'Graceful shutdown: stopping queue processor...');
-    try { stopQueueProcessor(); } catch (_) {}
+    try {
+        await Promise.race([
+            stopQueueProcessor(),
+            new Promise(resolve => setTimeout(resolve, 5000))
+        ]);
+    } catch (_) {}
     logger.info('Graceful shutdown complete');
     process.exit(0);
 }

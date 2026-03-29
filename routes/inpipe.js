@@ -816,6 +816,7 @@ function startQueueProcessor(deps) {
         stop() {
             _queueShutdown = true;
             if (_wakeQueue) _wakeQueue();
+            return loopDone;
         },
         done: loopDone
     };
