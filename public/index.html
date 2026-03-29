@@ -414,22 +414,14 @@
                     <label class="form-label">Book Name</label>
                     <input type="text" class="form-input" id="botName" placeholder="e.g., My Photo Book" required>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Input Platform (Where messages come from)</label>
-                    <select class="form-select" id="botPlatform" required>
-                        <option value="whatsapp">WhatsApp</option>
-                        <option value="telegram">Telegram</option>
-                        <option value="discord">Discord</option>
-                        <option value="slack">Slack</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Output Platform (Where messages go to)</label>
-                    <select class="form-select" id="botDestinationPlatform" required>
-                        <option value="discord">Discord</option>
-                        <option value="slack">Slack</option>
-                        <option value="telegram">Telegram</option>
-                    </select>
+                <!-- Book Code: read-only, shown in edit mode only -->
+                <div class="form-group" id="bookCodeSection" style="display: none;">
+                    <label class="form-label">Book Code</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <input type="text" class="form-input" id="bookCodeDisplay" readonly style="flex: 1; font-family: monospace; font-size: 0.85rem; color: #94a3b8; background: rgba(15,23,42,0.6); cursor: default;">
+                        <button type="button" id="copyBookCodeBtn" style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); color: #60a5fa; border-radius: 6px; padding: 0.4rem 0.75rem; cursor: pointer; white-space: nowrap; font-size: 0.8rem;">Copy</button>
+                    </div>
+                    <small class="form-help">Send this code via any supported channel to connect it to this book</small>
                 </div>
                 <!-- Share Book Section (only visible when editing) -->
                 <div class="form-group" id="shareBookSection" style="display: none;">
@@ -457,22 +449,16 @@
                     <div id="outpipesList" style="margin-bottom: 0.5rem;">
                         <!-- Outpipe rows rendered here -->
                     </div>
-                    <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
-                        <button type="button" class="btn" id="addOutpipeBtn" style="flex: 1; background: rgba(59, 130, 246, 0.1); border: 1px dashed rgba(59, 130, 246, 0.3); color: #60a5fa;">+ Add Channel</button>
-                        <button type="button" class="btn" id="saveOutpipesBtn" style="flex: 1; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981;">Save Channels</button>
+                    <div style="display: flex; gap: 0.4rem; margin-top: 0.25rem; flex-wrap: wrap;">
+                        <button type="button" class="btn add-outpipe-btn" data-outpipe-type="discord" style="flex: 1; min-width: 90px; background: rgba(88,101,242,0.12); border: 1px dashed rgba(88,101,242,0.35); color: #818cf8; font-size: 0.8rem;">🔷 Discord</button>
+                        <button type="button" class="btn add-outpipe-btn" data-outpipe-type="email" style="flex: 1; min-width: 90px; background: rgba(16,185,129,0.1); border: 1px dashed rgba(16,185,129,0.3); color: #34d399; font-size: 0.8rem;">📧 Email</button>
+                        <button type="button" class="btn add-outpipe-btn" data-outpipe-type="webhook" style="flex: 1; min-width: 90px; background: rgba(245,158,11,0.1); border: 1px dashed rgba(245,158,11,0.3); color: #fbbf24; font-size: 0.8rem;">🔗 Webhook</button>
+                        <button type="button" class="btn" id="saveOutpipesBtn" style="flex: 1; min-width: 90px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981; font-size: 0.8rem;">Save</button>
                     </div>
                 </div>
 
                 <div class="form-group" style="display: none;">
                     <div id="webhooksList"><!-- legacy compat --></div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">
-                        Contact (Phone/Username)
-                        <span class="optional-badge">Optional</span>
-                    </label>
-                    <input type="text" class="form-input optional-field" id="botContact" placeholder="e.g., +1234567890 or @username">
-                    <small class="form-help">Leave blank if you don't want to set a specific contact</small>
                 </div>
                 <div class="form-group">
                     <label class="form-label">

@@ -3538,7 +3538,7 @@
             webhookGroup.className = 'form-group';
             const webhookLabel = document.createElement('label');
             webhookLabel.className = 'form-label';
-            webhookLabel.textContent = 'Your Discord Webhook';
+            webhookLabel.textContent = 'Your Webhook';
             webhookGroup.appendChild(webhookLabel);
             const webhookValueDiv = document.createElement('div');
             webhookValueDiv.style.cssText = 'padding: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; color: #e2e8f0; word-break: break-all; font-size: 0.875rem;';
@@ -4441,10 +4441,15 @@
             setEditingBookId(fractalId);
             document.getElementById('modalTitle').textContent = 'Edit Book';
             document.getElementById('botName').value = book.name || '';
-            document.getElementById('botPlatform').value = book.input_platform;
-            document.getElementById('botDestinationPlatform').value = book.output_platform;
-            document.getElementById('botContact').value = book.contact_info || '';
             setBotTags(book.tags || []);
+
+            // Show book code (read-only, edit mode only)
+            const bookCodeSection = document.getElementById('bookCodeSection');
+            const bookCodeDisplay = document.getElementById('bookCodeDisplay');
+            if (bookCodeSection && bookCodeDisplay) {
+                bookCodeDisplay.value = book.fractal_id || '';
+                bookCodeSection.style.display = 'block';
+            }
             
             // Load webhooks from output_01_url and output_0n_url
             setBotWebhooks([]);
@@ -4566,6 +4571,10 @@
             const outpipesList = document.getElementById('outpipesList');
             if (outpipesList) outpipesList.replaceChildren();
             
+            // Hide book code section
+            const bookCodeSection = document.getElementById('bookCodeSection');
+            if (bookCodeSection) bookCodeSection.style.display = 'none';
+
             // Hide share section and clear
             const shareSection = document.getElementById('shareBookSection');
             if (shareSection) {
@@ -4639,10 +4648,7 @@
             event.preventDefault();
             
             const bookName = document.getElementById('botName').value;
-            const inputPlatform = document.getElementById('botPlatform').value;
-            const outputPlatform = document.getElementById('botDestinationPlatform').value;
-            const contact = document.getElementById('botContact').value;
-            
+
             // Filter out empty webhooks
             const validWebhooks = botWebhooks.filter(w => w.url && w.url.trim());
             
@@ -4689,22 +4695,12 @@
                     webhooks: validWebhooks.map(w => ({ name: w.name, url: w.url }))
                 };
                 
-                // If no webhooks provided, add a placeholder entry
-                if (validWebhooks.length === 0 && outputPlatform === 'discord') {
-                    outputCredentials.webhooks = [{ 
-                        name: 'Main Channel', 
-                        url: '' 
-                    }];
-                }
             }
             
             const botData = {
-                name: bookName || `${inputPlatform} → ${outputPlatform} Book`,
-                inputPlatform: inputPlatform,
-                outputPlatform: outputPlatform,
+                name: bookName || 'New Book',
                 inputCredentials: {},
                 outputCredentials: outputCredentials,
-                contactInfo: contact,
                 tags: botTags,
                 status: 'active'
             };
@@ -7876,16 +7872,31 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Outpipe buttons
-    const addOutpipeBtn = document.getElementById('addOutpipeBtn');
-    if (addOutpipeBtn) {
-        addOutpipeBtn.addEventListener('click', () => {
-            userOutpipes.push({ type: 'discord', name: '', url: '' });
+    document.querySelectorAll('.add-outpipe-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const type = btn.dataset.outpipeType || 'webhook';
+            userOutpipes.push({ type, name: '', url: '', to: '' });
             renderOutpipes();
         });
-    }
+    });
     const saveOutpipesBtn = document.getElementById('saveOutpipesBtn');
     if (saveOutpipesBtn) {
         saveOutpipesBtn.addEventListener('click', saveOutpipes);
+    }
+
+    // Book code copy button
+    const copyBookCodeBtn = document.getElementById('copyBookCodeBtn');
+    if (copyBookCodeBtn) {
+        copyBookCodeBtn.addEventListener('click', () => {
+            const code = document.getElementById('bookCodeDisplay')?.value;
+            if (code) {
+                navigator.clipboard.writeText(code).then(() => {
+                    const orig = copyBookCodeBtn.textContent;
+                    copyBookCodeBtn.textContent = 'Copied!';
+                    setTimeout(() => { copyBookCodeBtn.textContent = orig; }, 1500);
+                });
+            }
+        });
     }
 
     // Share book button handler
