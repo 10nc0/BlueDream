@@ -237,7 +237,7 @@ Every inpipe message builds a cryptographic provenance capsule:
 
 Set `PINATA_JWT` to enable automatic IPFS pinning via Pinata (free 1GB tier). The ledger works without IPFS; IPFS makes it sovereign.
 
-**Capsule schema contract**: The `v` field is a public interface. Structural changes to `buildCapsule()` MUST bump `v` (e.g. `v: 2`). Old CIDs remain permanently valid.
+**Capsule schema contract**: The version field (`v`) is a public interface. Structural changes bump the version. Old CIDs remain permanently valid.
 
 > *Deleting a Postgres row does not delete the IPFS pin. The name is erased. The weight of the heart remains on the scale.*
 
@@ -255,9 +255,9 @@ Set `PINATA_JWT` to enable automatic IPFS pinning via Pinata (free 1GB tier). Th
 **For fork operators:** Your fork gets web-grounded answers out of the box. See the [Runbook](RUNBOOK%20(LOGOS).md) for search architecture details.
 
 ### Dashboard Audit (authenticated)
-- 4-stage hallucination correction pipeline (S0–S3)
-- AuditCapsule: session-scoped entity extraction
-- Executive Formatter: strips filler from responses
+- Hallucination correction — the AI checks its own answers before you see them
+- Session-scoped entity extraction
+- Clean, filler-free responses
 
 ### Seed Metric
 
