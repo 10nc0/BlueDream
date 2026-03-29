@@ -1664,44 +1664,53 @@ function registerBooksRoutes(app, deps) {
 
     // ============ CREATE THREAD API ============
     app.post('/api/books/:id/create-thread', requireAuth, setTenantContext, async (req, res) => {
+        const { id } = req.params;
+        const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
+        const tenantId = req.tenantContext?.tenantId;
+
+        if (!tenantId) {
+            return res.status(400).json({ error: 'Tenant context required' });
+        }
+
+        if (!hermesBot || !hermesBot.isReady()) {
+            return res.status(503).json({ error: 'Discord bot not ready' });
+        }
+
+        // Use SELECT FOR UPDATE to prevent concurrent requests from both seeing
+        // thread_id = null and each calling Discord — the second request blocks
+        // until the first commits, then finds the thread_id already written.
+        const txClient = await pool.connect();
         try {
-            const { id } = req.params;
-            const client = req.dbClient || pool;
-            const tenantSchema = req.tenantContext?.tenantSchema || req.tenantSchema;
-            const tenantId = req.tenantContext?.tenantId;
-            
-            if (!tenantId) {
-                return res.status(400).json({ error: 'Tenant context required' });
-            }
-            
-            const book = await client.query(
-                `SELECT id, name, output_01_url, output_credentials, tenant_id FROM ${tenantSchema}.books WHERE fractal_id = $1`,
+            await txClient.query('BEGIN');
+
+            const book = await txClient.query(
+                `SELECT id, name, output_01_url, output_credentials, tenant_id
+                 FROM ${tenantSchema}.books WHERE fractal_id = $1 FOR UPDATE`,
                 [id]
             );
-            
+
             if (!book.rows.length) {
+                await txClient.query('ROLLBACK');
                 return res.status(404).json({ error: 'Book not found' });
             }
-            
+
             const bookData = book.rows[0];
-            
             let outputCredentials = bookData.output_credentials;
             if (typeof outputCredentials === 'string') {
                 outputCredentials = JSON.parse(outputCredentials);
             }
-            
+
+            // Re-check inside the lock — another request may have written thread_id
+            // between our pre-check and acquiring the lock.
             if (outputCredentials?.output_01?.thread_id) {
-                return res.json({ 
-                    success: true, 
+                await txClient.query('COMMIT');
+                return res.json({
+                    success: true,
                     message: 'Thread already exists',
                     threadInfo: outputCredentials.output_01
                 });
             }
-            
-            if (!hermesBot || !hermesBot.isReady()) {
-                return res.status(503).json({ error: 'Discord bot not ready' });
-            }
-            
+
             logger.info({ bookId: id, bookName: bookData.name }, 'Creating output_01 thread');
             const threadInfo = await hermesBot.createThreadForBook(
                 NYANBOOK_LEDGER_WEBHOOK,
@@ -1709,7 +1718,7 @@ function registerBooksRoutes(app, deps) {
                 bookData.name,
                 tenantId
             );
-            
+
             const updatedCredentials = {
                 ...outputCredentials,
                 output_01: {
@@ -1718,20 +1727,25 @@ function registerBooksRoutes(app, deps) {
                     parent_channel_id: threadInfo.channelId
                 }
             };
-            
-            await client.query(
+
+            await txClient.query(
                 `UPDATE ${tenantSchema}.books SET output_credentials = $1 WHERE fractal_id = $2`,
                 [JSON.stringify(updatedCredentials), id]
             );
-            
-            res.json({ 
-                success: true, 
+
+            await txClient.query('COMMIT');
+
+            res.json({
+                success: true,
                 message: 'Thread created successfully',
                 threadInfo: updatedCredentials.output_01
             });
         } catch (error) {
+            await txClient.query('ROLLBACK').catch(() => {});
             logger.error({ err: error }, 'Error creating thread');
             res.status(500).json({ error: 'An internal error occurred. Please try again.' });
+        } finally {
+            txClient.release();
         }
     });
 
