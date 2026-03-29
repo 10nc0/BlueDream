@@ -771,11 +771,12 @@ async function enrichChemistryContext(formula, structureDescription = '', knownC
         const fallbackName = knownCompoundName || formula;
         const isGenericFallback = /^(unknown|unverified|unidentified|puzzle|grid|geometric|figure|pattern|more related)/i.test(fallbackName);
         if (!isGenericFallback && !options.suppressTemplate) {
-            logger.debug(`🧪 Chemistry Enrichment: DDG/Wikipedia failed, using template fallback for "${fallbackName}"`);
+            // Vision path: DDG/Wikipedia unavailable — inject template only, no data.
+            // Do NOT instruct the LLM to use training data; let the seed + LLM synthesise.
+            logger.debug(`🧪 Chemistry Enrichment: DDG/Wikipedia unavailable for "${fallbackName}" — template only`);
             contextText += createChemistryEnrichmentTemplate(fallbackName);
             contextText += `\n### 🔬 Compound Analysis (${fallbackName}):\n`;
-            contextText += `Vision identified this compound but external verification was unavailable.\n`;
-            contextText += `Use your chemistry knowledge to provide the information requested above.\n`;
+            contextText += `External reference data unavailable. Apply established chemistry and pharmacology data for the sections above.\n`;
         } else {
             logger.debug(`🧪 Chemistry Enrichment: Skipping template for generic/suppressed name "${fallbackName}"`);
         }
@@ -864,8 +865,16 @@ async function processChemistryContent(visionObservations, textQuery = null) {
 
         logger.debug(`🧪 Chemistry Pipeline (text): Formula=${formula || 'unknown'}, Compound=${knownName || 'unknown'}`);
 
-        const chemistryEnrichment = await enrichChemistryContext(formula, '', knownName);
+        // suppressTemplate: seed already owns the structure from preflight-router.
+        // Enrichment should only inject live data (Wikipedia extract, DDG abstract) —
+        // not a second conflicting template on top of the seed.
+        const chemistryEnrichment = await enrichChemistryContext(formula, '', knownName, { suppressTemplate: true });
         const enrichedText = chemistryEnrichment?.contextText || '';
+        if (enrichedText) {
+            logger.debug(`🔬 Chemistry DDG enrichment fetched (text path, ${knownName || formula})`);
+        } else {
+            logger.debug(`🔬 Chemistry DDG enrichment empty — seed only (text path, ${knownName || formula})`);
+        }
 
         return {
             compoundInfo: (formula || knownName) ? {
