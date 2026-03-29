@@ -35,7 +35,12 @@ const PHONE_CHANNELS = new Set(['twilio']);
 //   Burst mode (queue > 5): 200ms gap (~5/sec globally across routes).
 //   No dead-wait: loop polls at 100ms when idle.
 //   Graceful shutdown: stopQueueProcessor() sets _queueShutdown=true and
-//     wakes the sleep so the current message finishes before the loop exits.
+//     wakes any in-progress sleep. The loop checks the flag (a) at the top
+//     of each iteration, (b) immediately after dequeueItem() returns, and
+//     (c) after processQueuedMessage() returns — guaranteeing at most one
+//     in-flight message completes before the loop exits (finish-then-stop,
+//     never drain). Any item dequeued during the shutdown window stays in
+//     `processing` state and is recovered by recoverStaleProcessing() on boot.
 //
 // Rate limits respected:
 //   Discord API: 5 req/5sec per route — we write to different threads so
@@ -755,6 +760,8 @@ function startQueueProcessor(deps) {
                 await _interruptibleSleep(1000);
                 continue;
             }
+
+            if (_queueShutdown) break;
 
             if (!item) {
                 await _interruptibleSleep(100);
